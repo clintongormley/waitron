@@ -11,9 +11,10 @@ import { BookingsModule } from './bookings/bookings.module';
 import { OrdersModule } from './orders/orders.module';
 import { PublicModule } from './public/public.module';
 import { KitchenModule } from './kitchen/kitchen.module';
+import { PaymentsModule } from './payments/payments.module';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, TenantModule, LocationsModule, TablesModule, MenuModule, BookingsModule, OrdersModule, PublicModule, KitchenModule],
+  imports: [DatabaseModule, AuthModule, TenantModule, LocationsModule, TablesModule, MenuModule, BookingsModule, OrdersModule, PublicModule, KitchenModule, PaymentsModule],
   controllers: [AppController],
   providers: [AppService],
 })

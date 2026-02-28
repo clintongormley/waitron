@@ -12,3 +12,4 @@ export * from "./order-items";
 export * from "./kitchen-stations";
 export * from "./kitchen-tickets";
 export * from "./menu-item-stations";
+export * from "./payments";
