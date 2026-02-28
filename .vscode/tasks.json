@@ -1,0 +1,84 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    // ── Database ────────────────────────────────────────────────────────────
+    {
+      "label": "DB: Push schema",
+      "type": "shell",
+      "command": "DATABASE_URL=postgresql://waitron:waitron@localhost:5432/waitron npx drizzle-kit push --config packages/db/drizzle.config.ts",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "none",
+      "presentation": { "reveal": "always", "panel": "shared", "focus": true },
+      "problemMatcher": []
+    },
+
+    // ── API ─────────────────────────────────────────────────────────────────
+    {
+      "label": "API: Dev server",
+      "type": "shell",
+      "command": "pnpm --filter @waitron/api dev",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "group": "none",
+      "presentation": { "reveal": "always", "panel": "dedicated", "focus": false },
+      "problemMatcher": {
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "Starting",
+          "endsPattern": "Application is running on"
+        }
+      }
+    },
+
+    // ── Web ──────────────────────────────────────────────────────────────────
+    {
+      "label": "Web: Dev server",
+      "type": "shell",
+      "command": "pnpm --filter @waitron/web dev",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "group": "none",
+      "presentation": { "reveal": "always", "panel": "dedicated", "focus": false },
+      "problemMatcher": {
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "Starting",
+          "endsPattern": "Ready in"
+        }
+      }
+    },
+
+    // ── E2E tests ────────────────────────────────────────────────────────────
+    {
+      "label": "Test: E2E",
+      "type": "shell",
+      "command": "DATABASE_URL=postgresql://waitron:waitron@localhost:5432/waitron JWT_SECRET=test-secret pnpm --filter @waitron/api test:e2e",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": { "kind": "test", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "shared", "focus": true },
+      "problemMatcher": []
+    },
+
+    // ── Compound: start everything ───────────────────────────────────────────
+    {
+      "label": "Start: API + Web",
+      "dependsOn": ["API: Dev server", "Web: Dev server"],
+      "dependsOrder": "parallel",
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "silent" },
+      "problemMatcher": []
+    },
+
+    // ── Compound: full setup (push schema then start) ────────────────────────
+    {
+      "label": "Start: Full (schema push + API + Web)",
+      "dependsOn": ["DB: Push schema", "Start: API + Web"],
+      "dependsOrder": "sequence",
+      "group": "none",
+      "presentation": { "reveal": "silent" },
+      "problemMatcher": []
+    }
+  ]
+}
