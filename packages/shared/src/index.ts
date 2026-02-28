@@ -1,2 +1,2 @@
-export * from "./types/roles.js";
-export * from "./types/tenant.js";
+export * from "./types/roles";
+export * from "./types/tenant";
