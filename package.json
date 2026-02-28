@@ -1,0 +1,18 @@
+{
+  "name": "waitron",
+  "private": true,
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "test": "turbo test",
+    "lint": "turbo lint",
+    "db:generate": "turbo db:generate --filter=@waitron/db",
+    "db:migrate": "turbo db:migrate --filter=@waitron/db",
+    "db:push": "turbo db:push --filter=@waitron/db"
+  },
+  "devDependencies": {
+    "turbo": "^2",
+    "typescript": "^5"
+  },
+  "packageManager": "pnpm@9.15.0"
+}
