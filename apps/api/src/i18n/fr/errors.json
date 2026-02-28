@@ -1,0 +1,12 @@
+{
+  "NOT_FOUND": "Ressource introuvable",
+  "UNAUTHORIZED": "Authentification requise",
+  "FORBIDDEN": "Vous n'avez pas la permission d'effectuer cette action",
+  "LOCATION_NOT_FOUND": "Établissement introuvable",
+  "TABLE_NOT_FOUND": "Table introuvable",
+  "ORDER_NOT_FOUND": "Commande introuvable",
+  "BOOKING_NOT_FOUND": "Réservation introuvable",
+  "MENU_ITEM_NOT_FOUND": "Article du menu introuvable",
+  "PAYMENT_NOT_FOUND": "Paiement introuvable",
+  "NO_TABLES_AVAILABLE": "Aucune table disponible pour la taille du groupe et l'heure demandée"
+}

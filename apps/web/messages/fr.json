@@ -1,0 +1,63 @@
+{
+  "auth": {
+    "signIn": "Connexion à Waitron",
+    "signInButton": "Se connecter",
+    "signingIn": "Connexion...",
+    "register": "Créer votre compte Waitron",
+    "registerButton": "Créer un compte",
+    "registering": "Création du compte...",
+    "email": "E-mail",
+    "password": "Mot de passe",
+    "name": "Votre nom",
+    "restaurantName": "Nom du restaurant",
+    "noAccount": "Pas encore de compte ?",
+    "haveAccount": "Déjà un compte ?",
+    "registerLink": "S'inscrire",
+    "signInLink": "Se connecter",
+    "signOut": "Déconnexion"
+  },
+  "locations": {
+    "title": "Établissements",
+    "addLocation": "Ajouter un établissement",
+    "cancel": "Annuler",
+    "namePlaceholder": "Nom",
+    "addressPlaceholder": "Adresse",
+    "save": "Enregistrer",
+    "saving": "Enregistrement...",
+    "noLocations": "Aucun établissement. Ajoutez-en un pour commencer."
+  },
+  "tables": {
+    "title": "Tables",
+    "addTable": "Ajouter une table",
+    "tableNumber": "Table n°",
+    "capacity": "Capacité",
+    "qrCode": "QR Code",
+    "status": "Statut",
+    "available": "Disponible",
+    "occupied": "Occupée",
+    "delete": "Supprimer",
+    "noTables": "Aucune table."
+  },
+  "orders": {
+    "title": "Commandes",
+    "allStatuses": "Tous les statuts",
+    "noOrders": "Aucune commande.",
+    "dineIn": "Sur place",
+    "takeaway": "À emporter"
+  },
+  "nav": {
+    "locations": "Établissements",
+    "overview": "Vue d'ensemble",
+    "tables": "Tables",
+    "menu": "Menu",
+    "bookings": "Réservations",
+    "orders": "Commandes",
+    "kitchen": "Cuisine",
+    "location": "Établissement"
+  },
+  "common": {
+    "loading": "Chargement...",
+    "error": "Une erreur s'est produite",
+    "back": "Retour"
+  }
+}

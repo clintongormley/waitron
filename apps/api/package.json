@@ -31,6 +31,7 @@
     "@waitron/shared": "workspace:^",
     "bcrypt": "^6.0.0",
     "drizzle-orm": "^0.45.1",
+    "nestjs-i18n": "^10.6.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "qrcode": "^1.5.4",

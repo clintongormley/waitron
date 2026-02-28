@@ -1,4 +1,6 @@
+import { join } from "path";
 import { Module } from '@nestjs/common';
+import { I18nModule, AcceptLanguageResolver, HeaderResolver } from "nestjs-i18n";
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
@@ -16,7 +18,17 @@ import { SearchModule } from './search/search.module';
 import { AdminModule } from './admin/admin.module';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, TenantModule, LocationsModule, TablesModule, MenuModule, BookingsModule, OrdersModule, PublicModule, KitchenModule, PaymentsModule, SearchModule, AdminModule],
+  imports: [
+    I18nModule.forRoot({
+      fallbackLanguage: "en",
+      loaderOptions: {
+        path: join(__dirname, "/i18n/"),
+        watch: false,
+      },
+      resolvers: [AcceptLanguageResolver, new HeaderResolver(["x-lang"])],
+    }),
+    DatabaseModule, AuthModule, TenantModule, LocationsModule, TablesModule, MenuModule, BookingsModule, OrdersModule, PublicModule, KitchenModule, PaymentsModule, SearchModule, AdminModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })

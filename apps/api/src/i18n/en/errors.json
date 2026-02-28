@@ -1,0 +1,12 @@
+{
+  "NOT_FOUND": "Resource not found",
+  "UNAUTHORIZED": "Authentication required",
+  "FORBIDDEN": "You do not have permission to perform this action",
+  "LOCATION_NOT_FOUND": "Location not found",
+  "TABLE_NOT_FOUND": "Table not found",
+  "ORDER_NOT_FOUND": "Order not found",
+  "BOOKING_NOT_FOUND": "Booking not found",
+  "MENU_ITEM_NOT_FOUND": "Menu item not found",
+  "PAYMENT_NOT_FOUND": "Payment not found",
+  "NO_TABLES_AVAILABLE": "No tables available for the requested party size and time"
+}

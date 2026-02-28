@@ -1,0 +1,63 @@
+{
+  "auth": {
+    "signIn": "Sign in to Waitron",
+    "signInButton": "Sign in",
+    "signingIn": "Signing in...",
+    "register": "Create your Waitron account",
+    "registerButton": "Create account",
+    "registering": "Creating account...",
+    "email": "Email",
+    "password": "Password",
+    "name": "Your name",
+    "restaurantName": "Restaurant name",
+    "noAccount": "Don't have an account?",
+    "haveAccount": "Already have an account?",
+    "registerLink": "Register",
+    "signInLink": "Sign in",
+    "signOut": "Sign out"
+  },
+  "locations": {
+    "title": "Locations",
+    "addLocation": "Add location",
+    "cancel": "Cancel",
+    "namePlaceholder": "Name",
+    "addressPlaceholder": "Address",
+    "save": "Save",
+    "saving": "Saving...",
+    "noLocations": "No locations yet. Add one to get started."
+  },
+  "tables": {
+    "title": "Tables",
+    "addTable": "Add table",
+    "tableNumber": "Table #",
+    "capacity": "Capacity",
+    "qrCode": "QR Code",
+    "status": "Status",
+    "available": "Available",
+    "occupied": "Occupied",
+    "delete": "Delete",
+    "noTables": "No tables yet."
+  },
+  "orders": {
+    "title": "Orders",
+    "allStatuses": "All statuses",
+    "noOrders": "No orders found.",
+    "dineIn": "Dine-in",
+    "takeaway": "Takeaway"
+  },
+  "nav": {
+    "locations": "Locations",
+    "overview": "Overview",
+    "tables": "Tables",
+    "menu": "Menu",
+    "bookings": "Bookings",
+    "orders": "Orders",
+    "kitchen": "Kitchen",
+    "location": "Location"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "back": "Back"
+  }
+}
