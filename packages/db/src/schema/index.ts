@@ -5,3 +5,5 @@ export * from "./tables";
 export * from "./menu-categories";
 export * from "./menu-items";
 export * from "./menu-modifiers";
+export * from "./bookings";
+export * from "./booking-tables";

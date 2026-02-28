@@ -6,6 +6,5 @@
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   },
-  "forceExit": true,
-  "runInBand": true
+  "forceExit": true
 }

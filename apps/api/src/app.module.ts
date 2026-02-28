@@ -7,9 +7,10 @@ import { TenantModule } from './tenant/tenant.module';
 import { LocationsModule } from './locations/locations.module';
 import { TablesModule } from './tables/tables.module';
 import { MenuModule } from './menu/menu.module';
+import { BookingsModule } from './bookings/bookings.module';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, TenantModule, LocationsModule, TablesModule, MenuModule],
+  imports: [DatabaseModule, AuthModule, TenantModule, LocationsModule, TablesModule, MenuModule, BookingsModule],
   controllers: [AppController],
   providers: [AppService],
 })
