@@ -16,7 +16,7 @@
     {
       "label": "API: Dev server",
       "type": "shell",
-      "command": "pnpm --filter @waitron/api dev",
+      "command": "pnpm --filter @waitron/api start:dev",
       "options": { "cwd": "${workspaceFolder}" },
       "isBackground": true,
       "group": "none",
