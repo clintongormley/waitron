@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useRef, useState } from "react";
+import { use, useState } from "react";
 import useSWR from "swr";
 import { fetcher, api } from "@/lib/api";
 

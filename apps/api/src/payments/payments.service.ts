@@ -18,7 +18,7 @@ export class PaymentsService {
     private squareProvider: SquareProvider,
     private mockProvider: MockProvider,
   ) {
-    this.providers = new Map([
+    this.providers = new Map<string, PaymentProvider>([
       ["stripe", stripeProvider],
       ["square", squareProvider],
       ["mock", mockProvider],

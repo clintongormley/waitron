@@ -15,7 +15,7 @@ export class StripeProvider implements PaymentProvider {
       this.logger.warn("STRIPE_SECRET_KEY not set — Stripe payments disabled");
       this.stripe = null as any;
     } else {
-      this.stripe = new Stripe(secretKey, { apiVersion: "2025-01-27.acacia" });
+      this.stripe = new Stripe(secretKey, { apiVersion: "2026-02-25.clover" });
     }
     this.webhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? "";
   }

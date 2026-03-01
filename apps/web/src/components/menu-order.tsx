@@ -43,8 +43,9 @@ export default function MenuOrder({ menu, onSubmit, title, subtitle }: MenuOrder
       const current = prev[item.id]?.quantity ?? 0;
       const next = Math.max(0, current + delta);
       if (next === 0) {
-        const { [item.id]: _, ...rest } = prev;
-        return rest;
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
       }
       return {
         ...prev,
@@ -77,7 +78,7 @@ export default function MenuOrder({ menu, onSubmit, title, subtitle }: MenuOrder
         <div className="bg-white rounded-xl shadow p-8 text-center max-w-sm w-full">
           <div className="text-5xl mb-4">✅</div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">Order placed!</h2>
-          <p className="text-gray-500 text-sm">We'll prepare your order shortly.</p>
+          <p className="text-gray-500 text-sm">We&apos;ll prepare your order shortly.</p>
           <button
             onClick={() => { setStep("menu"); setCart({}); setCustomerName(""); }}
             className="mt-6 bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"

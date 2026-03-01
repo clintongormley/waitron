@@ -62,8 +62,8 @@ export class OrdersService {
         : Promise.resolve([]),
     ]);
 
-    const itemMap = new Map(fetchedItems.map((i) => [i.id, i]));
-    const modifierMap = new Map(fetchedModifiers.map((m) => [m.id, m]));
+    const itemMap = new Map(fetchedItems.map((i) => [i.id, i] as [string, typeof fetchedItems[0]]));
+    const modifierMap = new Map(fetchedModifiers.map((m) => [m.id, m] as [string, typeof fetchedModifiers[0]]));
 
     let totalCents = 0;
     const lineItems: {
