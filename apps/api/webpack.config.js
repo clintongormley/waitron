@@ -1,16 +1,16 @@
 module.exports = function (options) {
   return {
     ...options,
-    externals: (context, request, callback) => {
+    externals: ({ request }) => {
       // Bundle workspace packages inline instead of externalizing them
       if (request.startsWith("@waitron/")) {
-        return callback();
+        return undefined;
       }
       // Externalize node_modules (default NestJS webpack behavior)
       if (/^[^./]/.test(request)) {
-        return callback(null, "commonjs " + request);
+        return Promise.resolve("commonjs " + request);
       }
-      callback();
+      return undefined;
     },
   };
 };
