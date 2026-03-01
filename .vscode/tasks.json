@@ -5,8 +5,8 @@
     {
       "label": "DB: Push schema",
       "type": "shell",
-      "command": "DATABASE_URL=postgresql://waitron:waitron@localhost:5432/waitron npx drizzle-kit push --config packages/db/drizzle.config.ts",
-      "options": { "cwd": "${workspaceFolder}" },
+      "command": "DATABASE_URL=postgresql://waitron:waitron@localhost:5432/waitron npx drizzle-kit push",
+      "options": { "cwd": "${workspaceFolder}/packages/db" },
       "group": "none",
       "presentation": { "reveal": "always", "panel": "shared", "focus": true },
       "problemMatcher": []
