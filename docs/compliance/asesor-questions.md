@@ -86,6 +86,13 @@ model changes substantially.
 
 ---
 
+## DEMOTED — no longer gating
+
+> **Q3 and Q4 below were demoted** when we decided to build Veri\*Factu mode only and defer
+> non-Veri\*Factu until a user actually needs it. Both questions only bite for users with no
+> usable connectivity, which no current deployment has. Worth asking if the asesor is already
+> engaged — not worth waiting on, and not worth a consulta.
+
 ## IMPORTANT — affects scope and product shape
 
 ### Q3. Is an intentionally-offline till in Verifactu mode compliant?
@@ -246,6 +253,8 @@ filing together. Given the exposure, a lawyer rather than a gestor.
 
 - **Lead with Q1 and Q2.** If the asesor cannot engage with those two, they are the wrong
   person and the rest of the meeting is not worth having.
+- **Q3 and Q4 are demoted** — ask only if time allows. We build Veri\*Factu mode only until a
+  user needs otherwise.
 - **Do not open with "can I use multiple series".** It is settled, it is boring, and it
   invites a confident answer to a question we did not need to ask. The series is not the
   mechanism — the SIF is.

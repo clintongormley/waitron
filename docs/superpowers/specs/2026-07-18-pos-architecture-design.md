@@ -132,6 +132,27 @@ Real-time submission authenticates via client certificate over mTLS. In this mod
 [asesor Q3](../../compliance/asesor-questions.md) resolves unfavourably for poorly-connected
 users, pushing them out of Veri\*Factu mode costs real work — worth effort to avoid.
 
+#### Decision: non-Veri\*Factu mode is deferred until a user needs it
+
+We build Veri\*Factu mode only. No XAdES signing, no registro de eventos, no
+requerimiento-response path. This is a substantial saving — the event log is a build in its own
+right, and qualified-certificate key management on every offline till is worse — and nothing in
+our own deployments needs it.
+
+What must remain true so this stays a deferral rather than a dead end:
+
+- **Record construction and chaining are mode-independent.** Both modes require the same huella
+  and the same chain; they differ only in signing, transmission and the event log. Keep those
+  concerns behind separate seams so a later `no verificable` adapter reuses the chain code
+  rather than forking it.
+- **Mode is a per-SIF property in the data model from the start**, even though only one value
+  is ever set. Retrofitting a mode column onto till registration is trivial; retrofitting the
+  *concept* into code that assumes continuous transmission is not.
+
+Consequently **asesor Q3 and Q4 stop gating anything we are building** — they matter only for
+future users with no usable connectivity. Still worth asking if the asesor is in the room; no
+longer worth waiting on.
+
 Mode is chosen **per SIF**, so per till, but may not be mixed *within* one SIF. Election into
 Veri\*Factu carries a **lock-in to the end of the natural year**; whether that binds per
 taxpayer or per SIF is open (asesor Q4).
@@ -648,6 +669,7 @@ Decisions closed during design:
 | Project name and repository | Reuse the existing `waitron` repository; fresh start, old code on `archive/v1` |
 | Is one invoice series per till valid? | **Wrongly posed.** The chain is keyed by (SIF; NIF); series is not a chain boundary. Superseded by Q1 and Q5 |
 | How long may AEAT submission be delayed? | **No numeric window exists.** The duties are hourly retry, chronological recovery ordering, `Incidencia="S"`, and a persistent on-screen unsent-record count |
+| Do we build non-Veri\*Factu mode? | **Deferred until a user needs it.** No XAdES, no registro de eventos, no requerimiento path. Chain code stays mode-independent and mode is a per-SIF field from the start, so it remains a deferral. Demotes Q3 and Q4 |
 
 ---
 
