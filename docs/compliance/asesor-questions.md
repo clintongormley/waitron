@@ -22,6 +22,10 @@ filing early and building on the provisional answer is defensible.
 **Also worth trying — AEAT's Verifactu technical channel for developers.** Faster than DGT
 and more likely to engage with the encadenamiento scoping directly. Non-binding.
 
+**Q9 is not for the asesor fiscal.** It concerns liability for distributing open-source
+software rather than the operation of our own SIF, and carries the largest financial exposure
+here. Take it to a lawyer, and file it as a DGT consulta vinculante alongside Q1 and Q2.
+
 ---
 
 ## BLOCKING — the architecture depends on these
@@ -184,6 +188,57 @@ provisioning.
 > **¿Qué se espera de un dispositivo que no puede sincronizar su reloj durante ese tiempo?**
 > ¿Es aceptable la deriva del reloj interno, o hay que impedir la facturación si no puede
 > garantizarse el margen de un minuto?
+
+---
+
+## SEPARATE — for a lawyer, not the asesor fiscal
+
+### Q9. Who signs the declaración responsable for open-source software?
+
+**Why it matters.** Blocks public release, not the build — but it has the largest financial
+exposure of anything here, and the answer shapes the distribution model. What is already
+settled is in [verifactu-findings.md](verifactu-findings.md) and §3 of the architecture design:
+AEAT guidance explicitly covers open source (*"ya sea o no de código abierto"*), liability
+attaches to whoever programs or integrates the code, and there is no homologación or registry.
+Our working position is `josemmo`'s — a library is a tool for building SIFs, not a SIF — with
+each deploying business signing for its own installation.
+
+Two things that position does not settle:
+
+**(a) Does publishing the source itself constitute *fabricación o comercialización*?**
+LGT art. 201 bis sanctions the production and marketing of non-compliant software at
+150.000 €/ejercicio plus 1.000 € per uncertified system sold. If publishing an open-source
+codebase intended for building SIFs falls within *fabricación*, exposure attaches to the
+project regardless of who deploys it. The `josemmo` disclaimer is a bet that it does not.
+
+> Publicamos como código abierto un sistema de punto de venta que, una vez desplegado por un
+> tercero, constituye un SIF. Nosotros no lo desplegamos para ese tercero, no lo
+> comercializamos y no cobramos por él; cada empresa lo instala y lo configura por su cuenta.
+>
+> **¿Constituye la mera publicación del código fuente "fabricación o comercialización" de
+> sistemas informáticos de facturación a efectos del artículo 201 bis de la LGT?**
+>
+> ¿Cambia la respuesta si además publicamos artefactos ejecutables (imágenes de contenedor)
+> listos para desplegar, en lugar de sólo el código fuente?
+
+**(b) Can a declaration be scoped to an immutable artifact?**
+The most defensible form of a project-wide declaration: it covers a specific container digest,
+so anyone running that exact digest runs exactly what was declared, and a rebuild is
+unambiguously outside it. Untested — no AEAT doctrine addresses it.
+
+> Estamos considerando emitir una declaración responsable referida a un artefacto concreto e
+> inmutable (una imagen de contenedor identificada por su digest criptográfico), de modo que
+> quien ejecute exactamente ese artefacto esté cubierto, y cualquier recompilación o
+> modificación quede fuera.
+>
+> **¿Es admisible una declaración responsable así delimitada, y cubriría a los terceros que
+> despliegan ese artefacto sin modificarlo?**
+>
+> ¿O debe cada obligado tributario emitir necesariamente la suya propia, con independencia de
+> que el software sea idéntico al declarado por el fabricante?
+
+**Route.** A DGT consulta vinculante is the only binding answer, and both parts are worth
+filing together. Given the exposure, a lawyer rather than a gestor.
 
 ---
 

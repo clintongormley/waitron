@@ -90,7 +90,7 @@ KDS, bookings and online ordering held firmly out of the deli launch.
 ### Deadlines
 
 | Obligated party | Deadline |
-|---|---|
+| --- | --- |
 | Contribuyentes del Impuesto sobre Sociedades | 1 January 2027 |
 | All others (autónomos/IRPF, non-residents with EP) | 1 July 2027 |
 
@@ -128,9 +128,9 @@ Real-time submission authenticates via client certificate over mTLS. In this mod
   systems. (We may keep an event log anyway as engineering practice, but it is not a
   regulatory deliverable here.)
 
-**Non-Veri\*Factu is therefore the more expensive build, not the fallback.** If the open
-questions in §13 resolve unfavourably for poorly-connected users, pushing them out of
-Veri\*Factu mode costs real work — worth effort to avoid.
+**Non-Veri\*Factu is therefore the more expensive build, not the fallback.** If
+[asesor Q3](../../compliance/asesor-questions.md) resolves unfavourably for poorly-connected
+users, pushing them out of Veri\*Factu mode costs real work — worth effort to avoid.
 
 Mode is chosen **per SIF**, so per till, but may not be mixed *within* one SIF. Election into
 Veri\*Factu carries a **lock-in to the end of the natural year**; whether that binds per
@@ -206,7 +206,7 @@ certainty, and is worth its cost against a €50,000 exposure.
 ## 4. Stack
 
 | Layer | Choice | Rationale |
-|---|---|---|
+| --- | --- | --- |
 | Language | TypeScript throughout | One language; Veri\*Factu mode removes the XAdES barrier |
 | Till + dashboard | Vite + Lit, PWA | Small runtime, standards-based, strong offline/PWA fit, existing fluency |
 | Server | Hono | Thin server; fast builds; good TS inference; portable |
@@ -257,7 +257,7 @@ server is an interior node. The cloud, when present, is the root. A local server
 the cloud uses **the same protocol** a till uses to sync to it.
 
 | Deployment | Topology |
-|---|---|
+| --- | --- |
 | Cloud SaaS, no local hardware | till → cloud |
 | Venue with local server + remote analytics | till → local server → cloud |
 | Fully self-hosted, no cloud | till → local server |
@@ -628,28 +628,26 @@ described a system considerably more complete than the code implemented.
 
 ---
 
-## 13. Open questions
+## 13. Decisions settled
 
-Regulatory questions live in
-[`asesor-questions.md`](../../compliance/asesor-questions.md), with Spanish formulations ready
-to hand over. Summarised here only by what they block:
+Unresolved **regulatory** questions are not listed here. They live in
+[`asesor-questions.md`](../../compliance/asesor-questions.md) as Q1–Q9, with context, Spanish
+formulations and routing. Their architectural consequences are stated where they bite: the Q1
+fallback and the Q2 mitigation are in §6, next to the design they affect.
 
-| Ref | Question | Blocks |
-| --- | --- | --- |
-| **Q1** | Is a till that syncs within minutes an independent SIF? | **The offline design entirely.** If no, per-till chains collapse into one chain per issuer and no sale can complete without reaching a server |
-| **Q2** | May a node other than the till transmit the till's records? | Certificate placement. If no, certificates land on every till |
-| Q3 | Is an intentionally-offline till compliant in Veri\*Factu mode? | Whether poorly-connected users need the costlier non-Veri\*Factu build |
-| Q4 | Mixed modes under one NIF; scope of the calendar-year lock-in | Per-till mode configuration |
-| Q5 | Series requirements — per-till permission, rectificativas, simplificadas | Numbering scheme |
-| Q6 | Consequences of breaching the hourly-retry duty | Retry policy risk posture |
-| Q7 | Installation-number lifecycle — which events force a new one | Till provisioning and reimage handling |
-| Q8 | Clock accuracy on devices offline for days | Whether to block selling on unverifiable clock |
-| ~~1~~ | ~~Is one invoice series per till valid?~~ **Closed — wrongly posed.** The chain is keyed by (SIF; NIF); series is not a chain boundary. Superseded by Q1/Q5 | — |
-| ~~2~~ | ~~How long may submission be delayed?~~ **Closed:** no numeric window exists. Duties are hourly retry, ordering, `Incidencia="S"`, on-screen unsent count | — |
-| 3 | Consulta vinculante on artifact-scoped declaración responsable — does a digest-scoped declaration cover downstream deployments? | Distribution model; public release |
-| ~~4~~ | ~~Sociedad or autónomo?~~ **Closed:** sociedad → **1 January 2027** | — |
-| ~~5~~ | ~~Tip distribution model?~~ **Closed:** must support both, configurable per tenant | — |
-| ~~6~~ | ~~Project name and repository?~~ **Closed:** reuse the existing `waitron` repo, fresh start | — |
+Two of them block: **Q1** (is a fast-syncing till an independent SIF) and **Q2** (may a node
+other than the till transmit its records). **Q9** — who signs the declaración responsable for
+open-source software — blocks public release rather than the build.
+
+Decisions closed during design:
+
+| Question | Resolution |
+| --- | --- |
+| Sociedad or autónomo for the deli? | **Sociedad** → Verifactu obligation begins **1 January 2027** |
+| Tip distribution model | Support **both**, configurable per tenant — the two have different withholding treatment |
+| Project name and repository | Reuse the existing `waitron` repository; fresh start, old code on `archive/v1` |
+| Is one invoice series per till valid? | **Wrongly posed.** The chain is keyed by (SIF; NIF); series is not a chain boundary. Superseded by Q1 and Q5 |
+| How long may AEAT submission be delayed? | **No numeric window exists.** The duties are hourly retry, chronological recovery ordering, `Incidencia="S"`, and a persistent on-screen unsent-record count |
 
 ---
 

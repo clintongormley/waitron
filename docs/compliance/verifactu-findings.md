@@ -111,7 +111,7 @@ facturación de la empresa."*
 But "no deadline" is not "no duties". **Orden HAC/1177/2024 art. 16.4** requires throughout:
 
 | Duty | Detail |
-|---|---|
+| --- | --- |
 | Retry | **at least once every hour** |
 | Ordering | chronological generation order on recovery |
 | Flag | `Incidencia="S"` on affected messages |
@@ -154,7 +154,7 @@ unresolved — no source addressed it. Do not read this as "delay is free".
 Both are *"igualmente válidas"*. The split:
 
 | | Verifactu | No verificable |
-|---|---|---|
+| --- | --- | --- |
 | Transmission | continuous, immediate | none; on requerimiento (art. 14.2) |
 | Hash | required | required |
 | **Electronic signature** | **exempt** (art. 16.3) | **required** (art. 12) — XAdES Enveloped / ETSI EN 319 132, qualified certificate |
@@ -288,7 +288,7 @@ incident either. No source resolved this.
 ## Sources
 
 | Source | Type |
-|---|---|
+| --- | --- |
 | BOE-A-2023-24840 — RD 1007/2023 (RRSIF), arts. 8, 12, 14, 15, 16 | primary |
 | BOE-A-2024-22138 — Orden HAC/1177/2024, arts. 2, 7, 13, 16 | primary |
 | AEAT sede FAQs — sistemas-verifactu, trazabilidad, capacidad-remisión, huella-hash | primary |
