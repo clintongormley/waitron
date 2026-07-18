@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Test / tooling caches
+coverage/
+.vitest/
+.turbo/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Fiscal — never commit certificates or keys
+*.p12
+*.pfx
+*.pem
+*.key
+certs/
+
+# Editor / OS
+.DS_Store
+*.swp
