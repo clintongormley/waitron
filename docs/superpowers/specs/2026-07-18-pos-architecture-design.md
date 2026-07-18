@@ -6,6 +6,12 @@
 This document records the architectural decisions for a new project. It is not an
 incremental revision of waitron — see [§11 Disposition of waitron](#11-disposition-of-waitron).
 
+**Regulatory facts live elsewhere.** [`docs/compliance/verifactu-findings.md`](../../compliance/verifactu-findings.md)
+is the authoritative record of what is settled, sourced from AEAT and BOE primary texts;
+[`docs/compliance/asesor-questions.md`](../../compliance/asesor-questions.md) holds the
+unresolved items. This document states only the *architectural consequences* and does not
+restate the regulation — where the two disagree, the findings document wins.
+
 ---
 
 ## 1. What we are building
@@ -44,7 +50,7 @@ display. That is a full-featured POS and too much for one cycle. Phasing:
 | 3 | Fiscal layer — standalone Verifactu library + `FiscalBackend` adapter | Deli |
 | 4 | Payment layer — `PaymentProvider` interface + Stripe Terminal adapter + offline store-and-forward | Deli |
 | 5 | Identity — users, roles, permissions, invitations | Deli |
-| 6 | Locations — venue/location model, till registration and series assignment | Deli (minimal) |
+| 6 | Locations — venue/location model, till registration (SIF identity + never-reused nº de instalación) and series assignment | Deli (minimal) |
 | 7 | Counter POS UI — offline-first till, weighed items, tender, ticket printing | Deli |
 | 8 | Reporting — daily close (Z-report), VAT summary, sales analytics | Deli (core subset) |
 | 9 | Deployment — standalone single process + multi-tenant cloud | Deli (thin) |
@@ -102,14 +108,36 @@ dates are our users' deadline; the distribution-side obligation is already live.
 - Barcelona/Catalonia is *territorio común* → Verifactu, not TicketBAI. TicketBAI covers the
   three Basque diputaciones plus Navarra. Territoriality applies per establishment.
 
-### In Veri*Factu mode, XAdES is not required
+### Penalties (LGT art. 201 bis)
 
-Real-time submission authenticates via client certificate over mTLS. The qualified
-electronic signature is only needed for the non-Veri\*Factu alternative. `josemmo/Verifactu-PHP`,
-the most-adopted implementation in any language, ships no signing code at all.
+| Conduct | Sanction |
+| --- | --- |
+| Fabricación / comercialización of non-compliant software | 150.000 €/ejercicio, plus 1.000 € per uncertified system sold |
+| Mere **tenencia** of non-conforming software | 50.000 €/ejercicio |
 
-**This is why the project can stay in TypeScript** — it removes the hardest cryptographic
-component from the build.
+There is **no delay-specific tipo** — late submission is not itself a sanctioned conduct. See
+§3 of the findings document; enforcement of an art. 16.4 retry breach is unresolved.
+
+### Veri*Factu mode is the cheaper build, in both directions
+
+Real-time submission authenticates via client certificate over mTLS. In this mode:
+
+- **XAdES is exempt** (RD 1007/2023 art. 16.3). Qualified-certificate key management on every
+  offline till is materially harder than the Verifactu path.
+- **The registro de eventos is not required** — it is obligatory only for *no verificable*
+  systems. (We may keep an event log anyway as engineering practice, but it is not a
+  regulatory deliverable here.)
+
+**Non-Veri\*Factu is therefore the more expensive build, not the fallback.** If the open
+questions in §13 resolve unfavourably for poorly-connected users, pushing them out of
+Veri\*Factu mode costs real work — worth effort to avoid.
+
+Mode is chosen **per SIF**, so per till, but may not be mixed *within* one SIF. Election into
+Veri\*Factu carries a **lock-in to the end of the natural year**; whether that binds per
+taxpayer or per SIF is open (asesor Q4).
+
+**This is also why the project can stay in TypeScript** — exemption from XAdES removes the
+hardest cryptographic component from the build.
 
 ### Declaración responsable and open source
 
@@ -284,17 +312,47 @@ record is immutable, hash-chained, and comes into existence exactly once, at ten
 completion. **Two tables, one transition between them.** Conflating them means chaining
 drafts and rectifying records that were never real sales.
 
-### One invoice series per till
+### One chain per till — and one series per till
 
-This is what makes offline and Verifactu compatible. The chain is strictly ordered per
-series; a shared chain would require asking the server for the next position before
-completing any sale, which breaks the moment the network does. Each till maintains an
-independent chain locally, at full speed, offline indefinitely.
+This is what makes offline and Verifactu compatible. A shared chain would require asking the
+server for the next position before completing any sale, which breaks the moment the network
+does. Each till maintains an independent chain locally, at full speed, offline indefinitely.
 
-> **Open question — must be confirmed before building on it.** Multiple series per issuer is
-> ordinary invoicing practice and series+number is the record identifier, so this is
-> probably sound. It is load-bearing enough to verify against the spec and with an asesor.
-> If wrong, the offline design changes shape substantially.
+**The chain is keyed by (SIF; NIF), not by series** — verified against Orden HAC/1177/2024
+art. 7.c) and AEAT's trazabilidad FAQ, which addresses the multi-till case explicitly. Per-till
+chains are lawful **because each till is its own SIF**, not because it has its own series.
+Series is a numbering concern; the chain is a device concern. A till may own several series
+(rectificativas) but has exactly one chain, and alta and anulación records interleave in it in
+generation order.
+
+See [verifactu-findings.md §1](../../compliance/verifactu-findings.md) for the data-model
+consequences — chain ordering is unrelated to invoice numbering, chains cannot be merged or
+migrated, multi-tenant partitioning must include the NIF, and each till needs a never-reused
+número de instalación.
+
+> **Open question — the SIF boundary.** Per-till chains hold only where each till genuinely
+> qualifies as an independent SIF. AEAT contrasts real-time centrally-controlled modules (one
+> SIF, one chain) against decentralised modules uploading monthly (separate SIFs); we sit
+> between them, and AEAT's wording is hedged. If it resolves against us, the offline design
+> changes shape substantially. See [asesor-questions.md Q1](../../compliance/asesor-questions.md).
+
+#### Fallback if Q1 resolves against us: the local server is the SIF
+
+This is shape-changing, not project-ending, and the fallback is worth recording now because it
+influences deployment guidance today.
+
+If tills cannot be independent SIFs, the **local server becomes the SIF** — one chain per
+venue, tills as UI clients requesting chain positions over the LAN. Consequences:
+
+- Selling survives an **internet** outage, which is the common case, since the SIF is on-site.
+- Selling does **not** survive a **LAN** outage or a till losing contact with the server.
+- Cloud-direct deployments with no local server lose offline operation entirely, and would
+  need a local node introduced.
+
+This is a further argument for the local server being the recommended deployment shape (§5)
+rather than the exotic one: it is already the answer to local-store durability, and it is also
+the hedge against Q1. A venue that has one needs no architectural change if Q1 goes badly —
+only a change in which node owns the chain.
 
 ### Values are snapshotted, never referenced
 
@@ -334,11 +392,60 @@ submitting even while a till is offline.
 
 This is a security win and an availability win at once.
 
-Submission respects AEAT's `TiempoEsperaEnvio` throttling and delivers in order per series.
+Submission respects AEAT's `TiempoEsperaEnvio` throttling and delivers **in chain order per
+till** — chronological generation order within each SIF, which is not the same as invoice
+number order.
 
-> **Open question:** how long a submission may be delayed before it becomes a problem.
-> Verifactu's framing is real-time and outages are clearly contemplated, but the tolerance
-> needs confirming with an asesor.
+**There is no submission deadline.** Verified: RD 1007/2023 art. 8.1 states the duty
+qualitatively ("instantánea"), no numeric window exists anywhere in the regime, and nothing in
+AEAT's validation layer rejects a late record. A week-old backlog submits cleanly.
+
+But "no deadline" is not "no duties". Orden art. 16.4 requires, throughout any incident:
+retry **at least hourly**, chronological ordering on recovery, `Incidencia="S"` on affected
+messages, and **a persistent on-screen count of unsent records** — a UI requirement not yet
+reflected elsewhere in this design. See
+[verifactu-findings.md §2](../../compliance/verifactu-findings.md).
+
+> **Open question — delegated submission.** This design has a node other than the till submit
+> the till's records. AEAT rejects end-of-day "volcado" of a disconnected system's records into
+> a connected one; whether that prohibition reaches a prompt relay on behalf of the till-SIF is
+> unresolved. If the SIF must transmit for itself, certificates land on every till and this
+> section's security argument collapses. See
+> [asesor-questions.md Q2](../../compliance/asesor-questions.md).
+
+#### Q1 and Q2 pull in opposite directions
+
+Worth stating explicitly, because it shapes how the asesor conversation should go. Justifying
+per-till chains (Q1) requires arguing each till is a **decentralised, autonomously-operating
+system not controlled in real time** by anything central. Justifying delegated submission (Q2)
+requires arguing the till and its upstream are **one integrated system**. We are relying on the
+favourable answer to both at once, and granting Q1 on independence grounds makes Q2 harder —
+independent systems whose records are transmitted by a connected one is the exact shape of the
+rejected FAQ.
+
+The distinguishing feature we can defend is **latency and intent**: art. 8.1 requires
+transmission *"continuada […] instantánea"*, our relay operates in seconds, and the rejected
+case defers by design to end-of-day. That argument is strong for a normally-connected till and
+weak for a deliberately-offline one (Q3) — plan on those users needing non-Veri\*Factu mode.
+
+#### Mitigation: the submitter is an interface, not a location
+
+**The AEAT submission client must not assume it runs on the server.** It sits behind an
+interface and can be hosted on either a till or an upstream node, with certificate material
+resolved from wherever it is deployed. If Q2 resolves against us, moving submission onto tills
+becomes a provisioning and configuration change — certificate distribution, key storage,
+per-till outbound access — rather than a redesign of the sync layer.
+
+This costs almost nothing to build in now and converts a blocking architectural question into
+a deployment decision.
+
+A second unresolved item touches the same code path:
+
+> **Open question — deliberate offline operation.** Users with no usable connectivity would
+> sync once daily. Outages are tolerated indefinitely with hourly retries, but offline-by-design
+> is not an outage, and AEAT's prohibition on deferred remission may push these users into
+> non-Verifactu mode — a substantially more expensive build (qualified certificates on every
+> till, plus an event log). See [asesor-questions.md Q3](../../compliance/asesor-questions.md).
 
 ---
 
@@ -448,12 +555,19 @@ avoids.
 compressed by writing code faster.
 
 - Obtain the digital certificate for AEAT submission.
-- Get AEAT preproduction sandbox access working end to end.
-- Confirm with an asesor: series-per-till validity, submission delay tolerance, and the tip
-  withholding model (direct-to-employee vs pooled *bote*).
+- Get AEAT preproduction sandbox access working end to end. **Note that production numbering
+  can never be reused, even for test invoices** — testing against a production NIF is
+  irreversible, so preproduction access is a prerequisite for integration work, not a nicety.
+- **Book the asesor conversation.** Questions, with Spanish formulations, are in
+  [`asesor-questions.md`](../../compliance/asesor-questions.md). Lead with Q1 and Q2; if they
+  cannot engage with those, they are the wrong adviser. Ask up front whether they have
+  advised on or certified a SIF.
+- **File a consulta vinculante with the DGT for Q1 and Q2.** Free, binding, and 3–6 months —
+  which means filing early and building on the provisional answer is the only workable
+  sequence. Also worth trying AEAT's Verifactu developer channel: faster, non-binding, and
+  more likely to engage with encadenamiento scoping directly.
+- Confirm the tip withholding model with the asesor (direct-to-employee vs pooled *bote*).
 - Resolve the declaración responsable position for distribution (§3).
-- Decide sociedad vs autónomo for the deli — it determines whether the deadline is
-  1 Jan or 1 Jul 2027.
 
 ---
 
@@ -516,10 +630,22 @@ described a system considerably more complete than the code implemented.
 
 ## 13. Open questions
 
-| # | Question | Blocks |
-|---|---|---|
-| 1 | Is one invoice series per till valid under Verifactu? | The offline design |
-| 2 | How long may AEAT submission be delayed during an outage? | Outbox retry policy |
+Regulatory questions live in
+[`asesor-questions.md`](../../compliance/asesor-questions.md), with Spanish formulations ready
+to hand over. Summarised here only by what they block:
+
+| Ref | Question | Blocks |
+| --- | --- | --- |
+| **Q1** | Is a till that syncs within minutes an independent SIF? | **The offline design entirely.** If no, per-till chains collapse into one chain per issuer and no sale can complete without reaching a server |
+| **Q2** | May a node other than the till transmit the till's records? | Certificate placement. If no, certificates land on every till |
+| Q3 | Is an intentionally-offline till compliant in Veri\*Factu mode? | Whether poorly-connected users need the costlier non-Veri\*Factu build |
+| Q4 | Mixed modes under one NIF; scope of the calendar-year lock-in | Per-till mode configuration |
+| Q5 | Series requirements — per-till permission, rectificativas, simplificadas | Numbering scheme |
+| Q6 | Consequences of breaching the hourly-retry duty | Retry policy risk posture |
+| Q7 | Installation-number lifecycle — which events force a new one | Till provisioning and reimage handling |
+| Q8 | Clock accuracy on devices offline for days | Whether to block selling on unverifiable clock |
+| ~~1~~ | ~~Is one invoice series per till valid?~~ **Closed — wrongly posed.** The chain is keyed by (SIF; NIF); series is not a chain boundary. Superseded by Q1/Q5 | — |
+| ~~2~~ | ~~How long may submission be delayed?~~ **Closed:** no numeric window exists. Duties are hourly retry, ordering, `Incidencia="S"`, on-screen unsent count | — |
 | 3 | Consulta vinculante on artifact-scoped declaración responsable — does a digest-scoped declaration cover downstream deployments? | Distribution model; public release |
 | ~~4~~ | ~~Sociedad or autónomo?~~ **Closed:** sociedad → **1 January 2027** | — |
 | ~~5~~ | ~~Tip distribution model?~~ **Closed:** must support both, configurable per tenant | — |
