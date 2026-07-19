@@ -1,0 +1,47 @@
+#!/usr/bin/env sh
+# Local gate run before anything reaches the remote. Mirrors the fast checks in
+# CI's static-analysis/typecheck/test jobs (see .github/workflows/ci.yml) so a
+# broken push never even makes it to GitHub.
+#
+# Deliberately excluded: coverage thresholds and mutation testing. Both are
+# enforced in CI (the `test` job runs coverage; mutation.yml runs weekly) but
+# are too slow for a hook that runs on every push.
+#
+# In a hurry / hook is wrong? Bypass with: git push --no-verify
+# Please still fix the underlying failure — CI runs the same checks and will
+# block the PR either way.
+
+# Husky invokes this script via `sh -e "<this file>" "$@"` with the working
+# directory already set to the repository root (or the current worktree's
+# root, in a `git worktree` checkout) by git itself — so this works
+# regardless of which subdirectory `git push` was run from. The explicit `cd`
+# below is a defensive no-op that keeps the script correct even if invoked
+# some other way.
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+start_ts=$(date +%s)
+
+# Runs one gate step, printing a clear failure message with the exact
+# command to reproduce it locally before blocking the push.
+run_step() {
+  step_name="$1"
+  step_cmd="$2"
+
+  echo "pre-push: running $step_name..."
+  if ! eval "$step_cmd"; then
+    echo ""
+    echo "pre-push BLOCKED: '$step_name' failed."
+    echo "  Reproduce:      $step_cmd"
+    echo "  Skip this once: git push --no-verify"
+    echo ""
+    exit 1
+  fi
+}
+
+run_step "lint" "pnpm lint"
+run_step "format check" "pnpm format:check"
+run_step "typecheck" "pnpm --filter @waitron/ui typecheck"
+run_step "tests" "pnpm --filter @waitron/ui test"
+
+end_ts=$(date +%s)
+echo "pre-push: all checks passed in $((end_ts - start_ts))s"

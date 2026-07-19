@@ -1,0 +1,107 @@
+name: CI
+
+# Three independent jobs so a failure is legible at a glance and each can be
+# required separately in branch protection. Job ids below (static-analysis,
+# typecheck, test) are what GitHub reports as each job's check name — once a
+# ruleset requires them by name, renaming a job here silently breaks that
+# ruleset. Treat these ids as a stable public interface.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Lint + format check. Cheapest job, no Playwright/Chromium involved.
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+      - run: pnpm format:check
+
+  # TypeScript project-wide type check. No Playwright/Chromium involved.
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm typecheck
+
+  # Real-Chromium browser tests plus V8 coverage thresholds. The only job
+  # that needs Playwright's browser download, so it's the only one that pays
+  # for it.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Resolve installed Playwright version
+        id: playwright-version
+        run: echo "version=$(pnpm --filter @waitron/ui exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      # `pnpm exec` at the repo root does not resolve a bin scoped to a
+      # workspace member (only `pnpm -w exec` walks up for root-level bins),
+      # so plain `pnpm exec playwright ...` fails here with "Command
+      # \"playwright\" not found". Scoping the exec to the @waitron/ui
+      # workspace (where playwright is a devDependency) resolves it
+      # correctly without needing a working-directory override.
+      #
+      # Always run, cache hit or not: Playwright's own install logic detects
+      # a matching browser binary already present under the cached
+      # ~/.cache/ms-playwright and skips re-downloading it, but the
+      # `--with-deps` OS package install still needs to happen every run —
+      # GitHub-hosted runners start from a clean VM each time, so apt state
+      # is never part of what actions/cache restored above.
+      - run: pnpm --filter @waitron/ui exec playwright install --with-deps chromium
+
+      # Runs the full suite under V8 coverage and enforces the thresholds in
+      # packages/ui/vitest.config.ts — a coverage-threshold miss fails the job
+      # the same way a failing test would. Subsumes plain `pnpm test`, so this
+      # is the only test invocation in the pipeline.
+      - run: pnpm test:coverage

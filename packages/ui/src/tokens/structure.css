@@ -1,0 +1,32 @@
+:where([data-wt-theme-root]) {
+  --wt-space-1: 4px;
+  --wt-space-2: 8px;
+  --wt-space-3: 12px;
+  --wt-space-4: 16px;
+  --wt-space-5: 24px;
+  --wt-space-6: 32px;
+
+  --wt-radius-sm: 4px;
+  --wt-radius-md: 8px;
+  --wt-radius-lg: 16px;
+
+  --wt-font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --wt-font-size-sm: 13px;
+  --wt-font-size-md: 15px;
+  --wt-font-size-lg: 19px;
+  --wt-font-size-xl: 24px;
+  --wt-font-weight-normal: 400;
+  --wt-font-weight-bold: 600;
+
+  --wt-tap-min: 44px;
+
+  --wt-opacity-disabled: 0.5;
+
+  --wt-dialog-max-width: min(90vw, 32rem);
+
+  --wt-shadow-1: 0 1px 2px rgb(0 0 0 / 0.08);
+  --wt-shadow-2: 0 8px 24px rgb(0 0 0 / 0.16);
+
+  --wt-focus-ring: 2px solid var(--wt-color-focus);
+  --wt-focus-offset: 2px;
+}

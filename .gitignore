@@ -11,6 +11,11 @@ build/
 coverage/
 .vitest/
 .turbo/
+__screenshots__/
+
+# Stryker mutation testing (sandbox copies + incremental cache + HTML report)
+.stryker-tmp/
+reports/
 
 # Environment
 .env
@@ -27,3 +32,8 @@ certs/
 # Editor / OS
 .DS_Store
 *.swp
+
+# Agent scratch
+.claude/worktrees/
+.claude/settings.local.json
+.superpowers/

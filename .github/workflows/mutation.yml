@@ -1,0 +1,65 @@
+name: Mutation testing
+
+# Mutation testing runs the full real-Chromium suite once per surviving mutant
+# (tens to low hundreds of extra Vitest invocations even with perTest coverage
+# analysis narrowing which tests run per mutant). That's cheap today at ~10
+# source files, but it does not belong gating every push the way `pnpm
+# test:coverage` does in ci.yml: it doesn't tell you "did I break something,"
+# it tells you "how good are my tests," which is a slower-moving signal worth
+# reviewing periodically rather than blocking merges on. Scheduled weekly, plus
+# on-demand via workflow_dispatch so it can be run against a specific branch
+# (e.g. from a PR) without waiting for the schedule.
+on:
+  schedule:
+    - cron: "0 5 * * 1" # Monday 05:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Resolve installed Playwright version
+        id: playwright-version
+        run: echo "version=$(pnpm --filter @waitron/ui exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - run: pnpm --filter @waitron/ui exec playwright install --with-deps chromium
+
+      # No thresholds.break is configured in stryker.config.json, so this does
+      # not fail the job on a low score — there's no agreed-on floor yet (see
+      # the coverage-mutation report). It publishes the score and the HTML
+      # report for a human to look at.
+      - run: pnpm --filter @waitron/ui mutation
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report
+          path: packages/ui/reports/mutation/
+          retention-days: 30
