@@ -211,9 +211,17 @@ four-part predecessor pointer, and never derived from or validated against the i
 One transaction, when the last tender settles:
 
 1. Lock the chain row for (tenant, till).
-2. **Art. 7.i verification** — recompute the stored predecessor's huella from its stored inputs
-   and compare against the stored huella. This is the pre-generation check the Orden requires,
-   in the write path of every sale, not in a periodic audit.
+2. **Art. 7.i verification** — the pre-generation check the Orden requires, in the write path of
+   every sale, not in a periodic audit. AEAT's FAQ defines it precisely: verify that record
+   _n−1_'s `Encadenamiento/RegistroAnterior/Huella` matches record _n−2_'s own `Huella`, i.e.
+   that the predecessor is itself correctly chained, before chaining _n_ onto it. We also
+   recompute _n−1_'s huella from its stored inputs — a strictly stronger check that additionally
+   detects tampering with _n−1_'s own content, and free, since hashing is a pure function.
+
+   **Start-of-chain case:** where _n−1_ carries `PrimerRegistro="S"` there is no _n−2_, so the
+   link check is vacuously true and only the recomputation applies. Where _n_ is itself the first
+   record there is no predecessor at all and neither check runs. Both are normal states, not
+   failures — the huella is still computed and stored in every case.
 3. Allocate the invoice number from the series.
 4. Insert `sales`, `sale_lines`, `tenders`.
 5. The module builds the registro de alta via the library, computes the huella, inserts the
@@ -229,20 +237,39 @@ several payments against one invoice. A card declined mid-tender leaves the orde
 retryable with nothing chained; the alternative chains records for sales that never happened,
 correctable only by rectificativas.
 
-### The only two states that stop selling
+### Nothing stops selling — the list is empty, deliberately
 
-**Deliberate asymmetry, and it should stay a closed list.**
+An earlier draft of this design had chain-verification failure halt the till, reasoning that
+extending a known-corrupt chain is worse than stopping. **That was wrong.** AEAT's FAQ on
+art. 7.i addresses this exact case:
 
-| State | Behaviour | Why |
-| --- | --- | --- |
-| Chain verification fails (step 2) | **Block selling on that till.** Structured error code, intervention path. | The chain is already broken. Extending a chain known to be corrupt is strictly worse than stopping. |
-| Clock confidence degraded | **Never block.** Warn only. | A precision question, not an integrity failure. AEAT: incidents *"NO suponen en ningún caso que deba interrumpirse la facturación"*. |
+> «será preciso generar el siguiente RF, ya que la facturación por este motivo **NUNCA debe
+> interrumpirse**»
 
-AEAT outages, submission failures, expired certificates and offline operation **never** block
-selling. Chaining is local and synchronous; submission is asynchronous and retryable. That
-separation is what keeps a regulatory dependency off the critical path of taking money.
+AEAT weighed the same trade-off and decided the other way, consistently with its position
+everywhere else in the regime — incidents _"NO suponen en ningún caso que deba interrumpirse la
+facturación de la empresa"_. Halting a till on a huella mismatch would not be a stricter reading
+of the rules; it would be doing the thing the rules tell us not to do.
 
-Nothing may be added to the blocking list casually.
+| Condition | Behaviour |
+| --- | --- |
+| Chain verification fails | Record the incident, **chain the next record anyway**, surface persistently to staff, alert upstream. |
+| Clock confidence degraded | Warn only. |
+| AEAT outage, submission failure, expired certificate, offline operation | No effect on selling whatsoever. |
+
+Chaining is local and synchronous; submission is asynchronous and retryable. **No _fiscal_
+condition blocks a sale**, and adding one is a design change requiring primary-source
+justification rather than a judgement call.
+
+The scope of that claim is deliberate. Ordinary operational failures still stop a sale, and
+should: a declined card leaves the order open and retryable, and a database write that fails
+rolls the transaction back. Those are the system working. What must never happen is a sale
+blocked because of the _fiscal_ layer — a chain error, an AEAT outage, an expired certificate, a
+stale clock.
+
+> In non-Veri\*Factu mode a detected chain error must additionally be written to the registro de
+> eventos (arts. 7.j, 9.1.d). We build Veri\*Factu mode only, where that log is not required — but
+> the incident is still recorded internally and surfaced, because staff and support need it.
 
 ### Corrections
 
@@ -304,6 +331,38 @@ one side and miss states that can on the other.
 `TiempoEsperaEnvio` is typed `\d{0,4}` in the official schema — **up to 9999 seconds**. It must
 therefore be held in a type wider than 8 bits. Deriving the storage type from the schema's own
 range rather than from an assumed 60-second value is the point.
+
+### Serialisation policy — the huella depends on it
+
+The huella is SHA-256 over a literal string built from the record's field values. AEAT
+recomputes from **the literal it received**, so `123.1` and `123.10` are both valid and hash
+differently. The single most important rule follows:
+
+> **Serialise once, hash that exact literal.** Never reformat a value between serialising it into
+> the XML and feeding it to the hash. Any normalisation must happen before both, not between
+> them.
+
+Six points where the specification is genuinely ambiguous. Each is resolved here by policy —
+choosing the option that is unambiguously valid under every reading, rather than by copying what
+another implementation does:
+
+| # | Ambiguity | Policy |
+| --- | --- | --- |
+| 1 | Trim semantics — Java strips `≤ U+0020`, JS `.trim()` also strips NBSP and U+FEFF | Strip `[\x00-\x20]` only, matching AEAT's own reference behaviour, **and** reject non-ASCII whitespace in `NumSerieFactura` at input validation so the divergence is unreachable |
+| 2 | Zero-decimal amounts — XSD admits `123`, the huella doc says "one or two" decimals | Always emit exactly **2 decimal places** |
+| 3 | Leading `+` on amounts — XSD permits it, huella doc is silent | **Never** emit `+`; emit `-` only for genuinely negative amounts |
+| 4 | `Z` vs `+00:00` in the timestamp — `xs:dateTime` permits both, no AEAT example uses `Z` | Always `±hh:mm`, **never** `Z` |
+| 5 | Fractional seconds — schema permits, no example uses them | **Whole seconds only** |
+| 6 | QR encoding — AEAT's reference uses form-urlencoding (space → `+`), JS `encodeURIComponent` uses `%20` | Restrict the `NumSerieFactura` charset so both encodings coincide |
+
+Items 1, 4, 5 and 6 are worth adding to
+[`asesor-questions.md`](../../compliance/asesor-questions.md) if certainty is ever needed for
+certification. Items 2 and 3 are fully neutralised by the policy above.
+
+**Note the trap in the huella input**: field `Huella` is the **previous** record's hash, taken
+from `Encadenamiento/RegistroAnterior/Huella` — not the record's own `Huella`, which is the
+output. On the first record of a chain the field is present but empty (`Huella=`), and the huella
+is still computed and stored.
 
 **Repository:** stays in the monorepo through this sub-project, extracting at first public
 release per architecture §8. The API is at its least stable precisely now, and a cross-repo
@@ -613,7 +672,9 @@ precisely where a bug survives every example-based test.
 
 **Teeth checks** — deliberately break it, watch the test fail, restore:
 
-- Corrupt a stored predecessor huella → art. 7.i must fail and selling must block.
+- Corrupt a stored predecessor huella → art. 7.i must detect it, raise the incident, and the
+  sale must **still complete**. A test asserting the sale is blocked would enforce the opposite
+  of the requirement.
 - Alter a desglose → the huella must change.
 - `UPDATE`/`DELETE` a fiscal record → the trigger must raise, **in both dialects**.
 - Decrement or reuse an invoice number → something must scream.
