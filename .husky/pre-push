@@ -40,8 +40,8 @@ run_step() {
 
 run_step "lint" "pnpm lint"
 run_step "format check" "pnpm format:check"
-run_step "typecheck" "pnpm --filter @waitron/ui typecheck"
-run_step "tests" "pnpm --filter @waitron/ui test"
+run_step "typecheck" "pnpm typecheck"
+run_step "tests" "pnpm test"
 
 end_ts=$(date +%s)
 echo "pre-push: all checks passed in $((end_ts - start_ts))s"

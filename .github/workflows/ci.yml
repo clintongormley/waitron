@@ -105,3 +105,36 @@ jobs:
       # the same way a failing test would. Subsumes plain `pnpm test`, so this
       # is the only test invocation in the pipeline.
       - run: pnpm test:coverage
+
+  # Mutation testing for packages/verifactu only. Unlike packages/ui — whose
+  # mutation run is weekly in mutation.yml because each mutant reruns the full
+  # real-Chromium suite — this package is pure Node with no browser, so a run
+  # is cheap enough to gate every PR. It is also the package where a hollow
+  # test means an unverifiable hash chain rather than a misaligned button,
+  # which is why it carries a hard threshold (break: 90) while packages/ui
+  # publishes a score without failing on it.
+  mutation-verifactu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @waitron/verifactu mutation
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report-verifactu
+          path: packages/verifactu/reports/mutation/
+          retention-days: 30
