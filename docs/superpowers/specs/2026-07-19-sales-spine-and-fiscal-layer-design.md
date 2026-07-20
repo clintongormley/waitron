@@ -21,7 +21,7 @@ disagree, the findings win.
 | Package | Delivers |
 | --- | --- |
 | `packages/verifactu` | Standalone library: record construction, huella, chain verification, XML serialisation, a SOAP/mTLS client covering both the submission and consulta operations, response parsing. Zero in-repo dependencies. Owns its AEAT conformance suite and its `PROVENANCE.md`. |
-| `packages/db` | Drizzle schema, both dialects. Generic tables plus composition of module-owned schemas. DB-level immutability triggers. |
+| `packages/db` | Drizzle schema (Postgres only — see the PGlite decision in §3). Generic tables plus composition of module-owned schemas. DB-level immutability triggers plus privilege revocation. |
 | `packages/core` | Sale write path: order settlement → number allocation → pre-generation chain verification → chain append, in one transaction. |
 | `packages/fiscal` | Generic `FiscalBackend` interface. English throughout. |
 | `packages/fiscal-verifactu` | The Verifactu module: its own tables, the adapter, the outbox drainer, reconciliation. |
@@ -94,8 +94,10 @@ was written before the package existed and verified to fire against a probe.
 ### Migration composition
 
 `packages/db` holds the generic schema; each fiscal module ships its own. Migrations must
-compose across them, in both dialects. Getting this wrong is discovered late and in the
-dual-dialect path, so it is designed and tested from the first migration, not retrofitted.
+compose **across packages** — the PGlite decision below removes the second dialect, but not this
+problem. Getting it wrong is discovered late, when a module's migration meets a core table it
+expected to already exist, so it is designed and tested from the first migration rather than
+retrofitted.
 
 ---
 
@@ -106,13 +108,58 @@ dual-dialect path, so it is designed and tested from the first migration, not re
 `tenants` (the obligado tributario: NIF, razón social) → `locations` → `tills`.
 
 Every table carries `tenant_id`. **Row-level `tenant_id` with Postgres RLS** as backstop, using
-a forced session variable. Chosen because it is the only option where the SQLite standalone path
-and the Postgres cloud path run identical schema and identical queries — the "one codebase, both
-deployment modes" requirement of §1 of the architecture. Database-per-tenant stays cheap to add
-later precisely because the self-hosted build already *is* one-database-one-tenant.
+a forced session variable. Database-per-tenant stays cheap to add later precisely because the
+self-hosted build already _is_ one-database-one-tenant.
 
-RLS exists only in the Postgres path. That is acceptable: the SQLite path is standalone and
-single-tenant, so there is no cross-tenant isolation to back up.
+> **Correction, 2026-07-20.** This section previously justified row-level tenancy as "the only
+> option where the SQLite standalone path and the Postgres cloud path run identical schema and
+> identical queries". That justification was **overstated** — see the PGlite decision below. The
+> conclusion survives on a narrower and actually-true basis: row-level `tenant_id` is the only
+> tenancy option that **collapses to a no-op in the single-tenant standalone deployment** rather
+> than forking the deployment model. Schema-per-tenant and database-per-tenant both change what a
+> standalone install _is_.
+
+### The standalone database is PGlite, not SQLite
+
+**Decided 2026-07-20**, replacing SQLite in architecture §4. Researched empirically, not assumed.
+
+"Identical schema and identical queries" across SQLite and Postgres **is not achievable with
+Drizzle**. It ships separate `pg-core` and `sqlite-core` builders with no shared supertype, and
+the maintainers locked the request for a dialect-agnostic schema, declining to add one. A survey
+of 13 well-known self-hostable applications found **zero** dual-dialect Drizzle projects; the one
+production exemplar in our shape pays parallel schema files, parallel migration pipelines, a
+dual sync/async transaction API, and `as unknown as` casts at every dialect boundary. Two
+independent teams that attempted it abandoned it, both landing on Postgres + PGlite.
+
+Three findings bear directly on **fiscal** correctness, and the third is decisive:
+
+| Finding | Consequence |
+| --- | --- |
+| `better-sqlite3` transactions are **synchronous**; an async callback resumes after rollback and its writes execute in autocommit | Silent hash-chain corruption with no error at the call site |
+| `drizzle-kit` **destroys SQLite triggers** on any table rebuild — verified end to end | Immutability silently lost on a routine migration |
+| **SQLite has no privilege system** — any writer may `DROP TRIGGER` | The audit property this design requires cannot hold |
+
+That last one is not a tax, it is the design failing. This section requires immutability to be a
+**database** property precisely so it does not depend on application code behaving. On SQLite the
+application's own connection can drop the trigger, so the guarantee reduces to "the application
+does not misbehave" — which is the thing it was supposed to replace. On Postgres, revoking
+`UPDATE`/`DELETE` from a non-owner application role delivers it for real.
+
+**PGlite** (embedded WASM Postgres, bundling a real PostgreSQL engine) satisfies the requirement
+architecture §4 chose SQLite for — single process, no compose file — while being genuine
+Postgres. It also preserves the property that matters most for multi-year fiscal retention:
+**backup is copying one data directory**, which a restaurant operator can execute correctly,
+where taking consistent dumps of a Postgres cluster across major-version upgrades is where
+well-meaning deployers end up with unrestorable backups.
+
+**Open risk, to be measured before anything is built on it:** PGlite is single-connection and
+fully serialises queries. §5 recommends a local server precisely so records reach durable storage
+quickly, which makes that node's throughput the venue's ceiling. Plan 2 opens with a benchmark
+against the local-server topology, before any schema work, so this is measured rather than
+assumed and course-correction stays cheap.
+
+RLS exists only in the multi-tenant cloud path. The standalone path is single-tenant, so there is
+no cross-tenant isolation to back up — `withTenant` becomes a no-op there.
 
 `tills` stays regime-neutral. `NúmeroInstalación` and `IdSistemaInformatico` live in a
 module-owned SIF registration table keyed by till.
@@ -676,7 +723,9 @@ precisely where a bug survives every example-based test.
   sale must **still complete**. A test asserting the sale is blocked would enforce the opposite
   of the requirement.
 - Alter a desglose → the huella must change.
-- `UPDATE`/`DELETE` a fiscal record → the trigger must raise, **in both dialects**.
+- `UPDATE`/`DELETE` a fiscal record → must fail, and **as the application role** — privilege
+  revocation is the real control, the trigger is the backstop. A test running as the owner would
+  pass while proving nothing, since an owner can disable any trigger.
 - Decrement or reuse an invoice number → something must scream.
 - **Drop the CSV write from the submission-response path** → a test must fail. The CSV is
   unrecoverable once lost (§7), so the test protecting it has to have teeth.
@@ -697,9 +746,18 @@ error"*; the threshold is deliberately unpublished and breaching it is a warning
 rejects. The 240-second figure circulating on vendor pages is unverified. Tests must not assert
 it.
 
-**Dual-dialect from the first commit** — real SQLite and real pglite, never a mocked database.
-Same reasoning as the jsdom ban in `packages/ui`: a mock cannot fail the way the real thing
-fails, so a test written against one asserts less than it appears to.
+**Real Postgres from the first commit** — PGlite in tests, never a mocked database. Same
+reasoning as the jsdom ban in `packages/ui`: a mock cannot fail the way the real thing fails.
+
+**Two traps that make database tests vacuous, both verified:**
+
+- **PGlite runs as superuser, and superusers bypass RLS — `FORCE ROW LEVEL SECURITY` does not
+  override that.** A tenant-isolation suite that does not `set local role app_user` passes green
+  while asserting nothing. Every RLS test must assume the application role.
+- **PGlite cannot test lock contention at all.** Concurrent queries serialise onto one backend, so
+  `FOR UPDATE` parses and runs but never blocks. A hand-rolled contention test appeared to pass
+  while both statements had merged into a single transaction — a false pass. The chain-append
+  concurrency properties need a real Postgres in a small separate suite.
 
 **Never a production NIF.** Numbering may never be reused, even for test invoices, so integration
 testing uses fixtures and AEAT preproduction only. Testing against a production NIF is
