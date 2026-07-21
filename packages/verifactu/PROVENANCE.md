@@ -17,6 +17,17 @@ government specification are not derivative of each other.
 | AEAT `SistemaFacturacion.wsdl`                                                                       | —                 |
 | Orden HAC/1177/2024 (BOE-A-2024-22138), arts. 7, 13, 16                                              | consolidated      |
 
+## Primary sources on disk
+
+The XSDs and the WSDL listed above are committed verbatim in [`schemas/`](schemas/), with fetch
+dates, source URLs and SHA-256 checksums in [`schemas/README.md`](schemas/README.md).
+
+They were **lost once**, on 2026-07-20, along with a gitignored `.claude/worktrees/` checkout — the
+second time material had been destroyed that way. Committing them makes the loss unrepeatable and
+`src/schemas.test.ts` makes it loud: the suite fails if a file is missing, if its `targetNamespace`
+stops matching the constant the serialiser emits, or if its content no longer matches the recorded
+checksum.
+
 ## References consulted
 
 - `borjamrd/verifactu-conformance` (MIT) — official AEAT test vectors packaged for CI.

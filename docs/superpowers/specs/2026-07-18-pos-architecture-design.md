@@ -231,10 +231,10 @@ certainty, and is worth its cost against a €50,000 exposure.
 | Language | TypeScript throughout | One language; Veri\*Factu mode removes the XAdES barrier |
 | Till + dashboard | Vite + Lit, PWA | Small runtime, standards-based, strong offline/PWA fit, existing fluency |
 | Server | Hono | Thin server; fast builds; good TS inference; portable |
-| ORM | Drizzle | Targets both dialects |
+| ORM | Drizzle | `pg-core` only — one dialect in both deployment modes |
 | DB (cloud) | Postgres | ACID, constraints, exact numerics, RLS as tenant backstop |
-| DB (standalone) | SQLite | Single process, no compose file — lowest barrier to adoption |
-| Tests | Vitest + pglite | No container needed for Postgres tests |
+| DB (standalone) | PGlite (embedded WASM Postgres) | Single process, no compose file — and genuine Postgres, so schema, queries and immutability guarantees are the ones the cloud runs |
+| Tests | Vitest + PGlite, plus Testcontainers Postgres for lock contention | No container needed for the bulk of the suite; PGlite provably cannot test `FOR UPDATE` contention, so chain-append concurrency needs a real server |
 | Payments | Stripe Terminal (first adapter) | JS SDK works with internet-connected readers; fits the PWA |
 
 ### Explicitly rejected
@@ -262,12 +262,53 @@ algorithm URI — the classic way XAdES fails third-party verification.
 the first commit, and validate end-to-end against AEAT preproduction early. Budget real
 engineering time for the submission client.
 
-### Dual database risk
+> **Corrected 2026-07-21 (Task 18 endgame, matching
+> [`2026-07-19-sales-spine-and-fiscal-layer-design.md`](2026-07-19-sales-spine-and-fiscal-layer-design.md)
+> §10's identical correction).** This paragraph said `borjamrd/verifactu-conformance` would be
+> wired "into CI from the first commit". It was not: `PROVENANCE.md` names it under "References
+> consulted", but no dependency on it exists (`package.json`) and no test file loads vectors from
+> it. What IS wired into CI, from the first commit, is `packages/verifactu/src/conformance.test.ts`:
+> three normative AEAT worked examples, hand-transcribed from the published technical
+> documentation (`packages/verifactu/test/vectors.ts`), each checked against both the canonical
+> cadena string and the resulting huella. Wiring up `borjamrd/verifactu-conformance` itself
+> remains a tracked follow-up, not something already shipped. The original text is not deleted —
+> the approach (own the fiscal layer, validate early) was sound; only the "wired from the first
+> commit" claim about this one dependency was wrong.
 
-**The fiscal test suite runs against both SQLite and Postgres in CI from the first commit.**
-Dialect divergence discovered late, in the code that chains sales records, is the expensive
-kind. RLS exists only in the Postgres path — acceptable, because the SQLite path is the
-standalone path and is single-tenant, so there is no cross-tenant isolation to back up.
+### Single dialect — how the dual-database risk was removed
+
+> **Superseded 2026-07-20.** This subsection previously read: *"The fiscal test suite runs against
+> both SQLite and Postgres in CI from the first commit."* There is no SQLite path any more, so
+> there is no dual suite to run. The decision, the empirical research behind it and the three
+> fiscal findings that forced it are recorded in
+> [`2026-07-19-sales-spine-and-fiscal-layer-design.md`](2026-07-19-sales-spine-and-fiscal-layer-design.md)
+> §3, "The standalone database is PGlite, not SQLite". The original text is not deleted, because
+> the reasoning that chose SQLite was sound on the information available at the time and knowing
+> *which* assumption broke is worth more than a document that reads as though it were always right.
+
+The risk this subsection existed to manage — dialect divergence discovered late, in the code that
+chains sales records — was **removed rather than mitigated**. There is one dialect: `pg-core` is
+the only Drizzle builder in the repo, PGlite runs a real PostgreSQL engine in the standalone
+deployment, and the same schema and the same queries run in both modes because they are the same
+database.
+
+The assumption that broke was that "identical schema and identical queries" across SQLite and
+Postgres was achievable with Drizzle. It is not — Drizzle ships separate `pg-core` and
+`sqlite-core` builders with no shared supertype, and the maintainers declined to add one. Three
+further findings bear on *fiscal* correctness specifically, and the third is decisive: SQLite has
+no privilege system, so any writer may `DROP TRIGGER`. That reduces immutability to "the
+application does not misbehave", which is the thing a database-enforced guarantee was supposed to
+replace.
+
+What survives from the original reasoning, unchanged:
+
+- **RLS exists only in the cloud path.** The standalone deployment is single-tenant, so there is no
+  cross-tenant isolation to back up and `withTenant` collapses to a no-op there.
+- **The fiscal suite still runs against more than one target**, but the split is PGlite versus a
+  real Postgres server rather than two dialects. PGlite serialises every query onto one backend, so
+  `SELECT … FOR UPDATE` parses and runs but never blocks — a contention test on PGlite is a **false
+  pass**, not a weak one, and chain-append concurrency is therefore tested against Postgres via
+  Testcontainers.
 
 ---
 
@@ -333,7 +374,13 @@ record is immutable, hash-chained, and comes into existence exactly once, at ten
 completion. **Two tables, one transition between them.** Conflating them means chaining
 drafts and rectifying records that were never real sales.
 
-### One chain per till — and one series per till
+### One chain per till
+
+> **Corrected 2026-07-21 (Task 18).** This heading previously read "One chain per till — and one
+> series per till", contradicting its own body two paragraphs below ("a till may own several
+> series (rectificativas) but has exactly one chain") and
+> [findings §1](../../compliance/verifactu-findings.md). Series is a numbering concern, not a
+> chain boundary; the heading is corrected to state only the claim the section actually supports.
 
 This is what makes offline and Verifactu compatible. A shared chain would require asking the
 server for the next position before completing any sale, which breaks the moment the network
@@ -516,7 +563,7 @@ packages/core       Domain: sales, catalogue, chain construction
 packages/verifactu  STANDALONE — publishable Verifactu library, zero project deps
 packages/fiscal     FiscalBackend interface + adapter wrapping packages/verifactu
 packages/payments   PaymentProvider interface + stripe-terminal adapter
-packages/db         Drizzle schema, both dialects
+packages/db         Drizzle schema, pg-core only — one dialect in both deployment modes
 packages/shared     Types shared across all of it
 ```
 

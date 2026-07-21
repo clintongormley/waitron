@@ -63,13 +63,39 @@ an answer. `pnpm --filter @waitron/ui mutation` is the tool this repo uses to ch
 systematically — a surviving mutant on a boolean flag, a comparison operator, or a conditional
 guard means some test suite member exercises that code without noticing when it's wrong.
 
+## Database tests that assert nothing
+
+Two traps make a database test pass while proving nothing — both hit once already, both worth
+catching again on review:
+
+- **PGlite runs as superuser, and superusers bypass RLS — even under `FORCE ROW LEVEL SECURITY`.**
+  A tenant-isolation test that never switches role passes green while asserting nothing, because
+  its query never hits a policy at all. Every RLS assertion must call `asAppUser(tx)`
+  (`packages/db/src/testing/roles.ts` — `set local role app_user`) before the query under test; an
+  RLS test that skips this checks nothing about tenant isolation regardless of what it asserts.
+- **PGlite cannot test lock contention, on any schema.** All queries serialise onto one backend
+  (`packages/fiscal-verifactu/src/chain.pglite-cannot-test-contention.test.ts` is a permanent,
+  executable demonstration of why), so `FOR UPDATE` parses and runs but never blocks — a
+  hand-rolled contention test can pass while nothing ever contended. Chain-append and allocation
+  concurrency must be tested against real Postgres via Testcontainers
+  (`packages/fiscal-verifactu/src/chain.concurrency.test.ts`), never PGlite alone.
+
 ## Workspace package boundaries
 
-`packages/verifactu` (Spain's VeriFactu/SII invoicing-compliance package — not yet created as of
-this writing, see `docs/superpowers/specs/2026-07-18-pos-architecture-design.md` §8) must never
-import from any other `packages/*` or `apps/*` workspace package, including `@waitron/ui`. It
-exists to be certified/audited in isolation; a dependency on another internal package would pull
-unrelated, non-audited code inside that boundary. This is already enforced by an
+`packages/verifactu` (Spain's Veri\*Factu invoicing-compliance library — landed in `7938e1b`, see
+`docs/superpowers/specs/2026-07-18-pos-architecture-design.md` §8) must never import from any
+other `packages/*` or `apps/*` workspace package, including `@waitron/ui`. It exists to be
+certified/audited in isolation; a dependency on another internal package would pull unrelated,
+non-audited code inside that boundary. This is already enforced by an
 `import-x/no-restricted-paths` zone in `eslint.config.js` scoped to `packages/verifactu/**/*.ts` —
 if a PR touching that package needs to loosen or work around that rule, treat it as a design
 question to raise, not a lint config nit to wave through.
+
+`packages/db`, `packages/core`, `packages/fiscal` and `@waitron/shared` are English throughout —
+identifiers and table/column names alike; `packages/verifactu` and `packages/fiscal-verifactu`
+are Spanish, mirroring AEAT's own specification, XML and conformance vectors 1:1. Both directions
+are mechanically enforced (`packages/db/src/english-only.test.ts` for the English packages,
+`packages/fiscal/src/no-regime-vocabulary.test.ts` for regime words such as "chain"/"hash" written
+in English), not left to review discipline. A PR introducing a Spanish identifier into a generic
+package, an English regime term into `packages/fiscal`, or one that widens either guard's
+exclusion list to let one through, is a design question to raise, not a nit to wave through.

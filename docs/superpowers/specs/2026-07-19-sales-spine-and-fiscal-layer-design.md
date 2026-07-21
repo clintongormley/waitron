@@ -192,8 +192,18 @@ Consequences:
 `invoice_series` — `(tenant_id, till_id, code, purpose, next_number)`. Allocation is local to
 the till; no coordination, no network.
 
-- The counter is **strictly increasing. Gaps are permitted; reuse is not.** A crash between
-  allocation and commit burns a number harmlessly.
+- The counter is **strictly increasing. Gaps are permitted; reuse is not.** A crash anywhere
+  before commit **returns** the invoice number: allocation is a transactional
+  `UPDATE ... RETURNING` under a row lock, so an aborted sale leaves `next_number` where it was
+  and no gap appears. Gaps are *permitted* by the regime, not required. The property that must
+  hold is that a number is never reused once it has been used, and that is enforced by
+  `UNIQUE (tenant_id, series_id, invoice_number)` on `sales` rather than by the allocator.
+  > **Corrected 2026-07-21 (Task 18).** Previously read "a crash between allocation and commit
+  > burns a number harmlessly" — false under a `next_number` COLUMN, where the allocating UPDATE
+  > is transactional and a rollback un-allocates. Making the old sentence literally true would
+  > need a Postgres `SEQUENCE` per series, and a sequence cannot live inside a per-row transaction
+  > the way a column can — Task 6 records why that alternative was rejected. Do not "fix" the code
+  > to match the old sentence.
 - **N series per till from day one.** Asesor Q5(b) — whether rectificativas require their own
   series — is unverified, and supporting it now is nearly free. A till may own several series
   but has exactly one chain.
@@ -228,9 +238,14 @@ them.
 
 ### Immutability is a database property
 
-Enforced by trigger in **both** dialects, not by ORM discipline. The property under audit must
-not depend on application code remembering. In Postgres, also revoke `UPDATE`/`DELETE` from the
-application role.
+Enforced by trigger, not by ORM discipline. The property under audit must not depend on
+application code remembering. Also revoke `UPDATE`/`DELETE` from the application role, so a
+non-owner role cannot rely on the trigger alone.
+
+> **Corrected 2026-07-21 (Task 18).** This previously said "enforced by trigger in **both**
+> dialects". There is one dialect — see the PGlite decision above, which is what removed the
+> second one. The claim was already stale the moment that decision landed; corrected here rather
+> than left implying a SQLite trigger path still exists.
 
 **This forces the outbox to be a sidecar.** Submission state mutates constantly, so it cannot
 live on an immutable table. A 1:1 table keyed by record id holds state, attempts,
@@ -277,7 +292,15 @@ One transaction, when the last tender settles:
 7. Commit.
 
 The receipt then renders from the sale plus the huella-derived QR. A crash anywhere before
-commit burns an invoice number — a permitted gap.
+commit **returns** the invoice number: allocation is a transactional `UPDATE ... RETURNING` under
+a row lock, so an aborted sale leaves `next_number` where it was and no gap appears. Gaps are
+*permitted* by the regime, not required. The property that must hold is that a number is never
+reused once it has been used, and that is enforced by
+`UNIQUE (tenant_id, series_id, invoice_number)` on `sales` rather than by the allocator.
+
+> **Corrected 2026-07-21 (Task 18).** Previously read "a crash anywhere before commit burns an
+> invoice number — a permitted gap", the identical stale claim §3 made, corrected there for the
+> same reason: false under a `next_number` column, and not to be "fixed" by adding a `SEQUENCE`.
 
 **The fiscal record is created when all tenders settle**, not per payment. Split tender means
 several payments against one invoice. A card declined mid-tender leaves the order open and
@@ -345,7 +368,7 @@ harder to read against the source. Verbs are English.
 buildAltaRecord(input)        → RegistroAlta
 buildAnulacionRecord(input)   → RegistroAnulacion
 computeHuella(record)         → string
-verifyHuella(record, expected)→ boolean          // art. 7.i
+verifyHuella(record)          → boolean          // art. 7.i — compares record.Huella internally
 validate(record)              → ValidationIssue[] // pre-flight
 serializeEnvio(cabecera, records) → string
 parseRespuestaSuministro(xml) → RespuestaSuministro
@@ -355,6 +378,11 @@ createClient({ cert, key, endpoint, fetch })   // both operations
 ```
 
 `fetch` is injected, so the client is runtime-agnostic and testable against the fake.
+
+> **Corrected 2026-07-21 (Task 18).** `verifyHuella` was drafted here taking `(record, expected)`
+> and returning whether they match. The shipped function (`packages/verifactu/src/huella.ts`,
+> `7938e1b`) takes the ONE record and compares `record.Huella` against its own recomputed huella
+> internally — there is no separate `expected` argument to pass.
 
 **Submission and consulta share one endpoint, portType and binding** —
 `ConsultaFactuSistemaFacturacion` is a second operation alongside
@@ -437,6 +465,16 @@ break it silently.
 `sales` additionally carries `fiscal_backend` and `fiscal_state`, written by the module in the
 same transaction. Strictly redundant, but it keeps the foreign key pointing module→core rather
 than core→module, and means a Z-report needs no cross-boundary join per row.
+
+> **Corrected 2026-07-21 (Task 18).** An earlier reading of this section described the fiscal
+> module writing `fiscal_state` on `sales` as submission progressed — mutable state, which cannot
+> coexist with §3 revoking `UPDATE` on `sales` from the application role entirely. The actual
+> property: `sales.fiscal_state` is written **once, at insert**, and never updated. Its values are
+> `recorded` and `not_applicable` — the state at issuance, which is all a Z-report needs to avoid
+> a cross-boundary join per row. It is not a submission-progress field: submission state mutates
+> constantly and lives in the module's `envios` sidecar, which is exactly why §3 puts it there.
+> The till reads it through `FiscalBackend.pendingCount`, never by joining to module tables. A
+> void does not modify the sale either — it appends a row to `sale_voids`.
 
 ---
 
@@ -693,8 +731,17 @@ above `packages/ui`'s 78.99%, because this is pure functions over plain data: th
 mutation-testable code in the project, with the least excuse for surviving mutants. Mutation
 testing is what caught the unguarded event flags that four human-directed reviews missed.
 
-**Official AEAT conformance vectors** (`borjamrd/verifactu-conformance`, MIT) wired into CI from
-the first commit — the provenance document rates this the most valuable external asset available.
+**Official AEAT conformance vectors**, exercised in CI from the first commit
+(`packages/verifactu/src/conformance.test.ts`): three normative AEAT worked examples, hand-
+transcribed from the published technical documentation (`packages/verifactu/test/vectors.ts`),
+each checked against both the canonical cadena string and the resulting huella.
+
+> **Corrected 2026-07-21 (Task 18).** This previously said `borjamrd/verifactu-conformance` (MIT)
+> was "wired into CI from the first commit". It is not: `PROVENANCE.md` names it under "References
+> consulted", but no dependency on it exists (`package.json`) and no test file loads vectors from
+> it — `conformance.test.ts` runs only the three hand-transcribed vectors above. Wiring up
+> `borjamrd/verifactu-conformance` itself remains a tracked follow-up, not something already
+> shipped; see plan 2's own Task 18 errata for the same note against the plan document.
 
 **Differential testing against `mdiago/VeriFactu` as a black-box oracle.** Generate huellas, QR
 payloads and XML from the AGPL binary and compare against ours. Comparing *behaviour* is not
@@ -722,7 +769,14 @@ precisely where a bug survives every example-based test.
 - Corrupt a stored predecessor huella → art. 7.i must detect it, raise the incident, and the
   sale must **still complete**. A test asserting the sale is blocked would enforce the opposite
   of the requirement.
-- Alter a desglose → the huella must change.
+- Alter a total (`CuotaTotal`/`ImporteTotal`) → the huella must change.
+  > **Corrected 2026-07-21 (Task 18).** This previously read "alter a desglose → the huella must
+  > change", which is false: `buildCadenaAlta` (`packages/verifactu/src/huella.ts`) hashes exactly
+  > eight fields — `IDEmisorFactura`, `NumSerieFactura`, `FechaExpedicionFactura`, `TipoFactura`,
+  > `CuotaTotal`, `ImporteTotal`, the predecessor `Huella`, and `FechaHoraHusoGenRegistro` —
+  > and `Desglose` is not one of them. A reader following the old instruction writes a teeth
+  > check that cannot fail. `CuotaTotal`/`ImporteTotal` are both huella inputs, so altering either
+  > one is the corrected, genuinely load-bearing mutation.
 - `UPDATE`/`DELETE` a fiscal record → must fail, and **as the application role** — privilege
   revocation is the real control, the trigger is the backstop. A test running as the owner would
   pass while proving nothing, since an owner can disable any trigger.

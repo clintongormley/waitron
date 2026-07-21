@@ -1,3 +1,9 @@
 packages:
   - "apps/*"
   - "packages/*"
+  # Benchmarks and spikes. Workspace members so they resolve the same pinned
+  # dependency versions the product packages do — a throughput number measured
+  # against a different PGlite build than the one we ship is not evidence about
+  # the thing we ship. They deliberately define no `test` script, so `pnpm -r
+  # test` (and therefore the CI `test` job) skips them.
+  - "bench/*"

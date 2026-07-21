@@ -12,13 +12,16 @@ import type {
 /** maxOccurs="1000" in the official XSD; exceeding it draws error 4113/4114. */
 export const MAX_REGISTROS_POR_ENVIO = 1000;
 
-// Verified against the AEAT schema files (targetNamespace of each .xsd):
-// SuministroInformacion.xsd, SuministroLR.xsd, ConsultaLR.xsd.
-const NS_SF =
+// Verified against the AEAT schema files committed in ../../schemas/ (targetNamespace of each
+// .xsd): SuministroInformacion.xsd, SuministroLR.xsd, ConsultaLR.xsd — see ./schemas.test.ts,
+// which reads those files back and asserts each targetNamespace against these exact constants.
+// Exported (Task 18) so that guard imports them rather than carrying its own, independently
+// re-declared copy that could drift from what this module actually emits.
+export const NS_SF =
   "https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd";
-const NS_LR =
+export const NS_LR =
   "https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroLR.xsd";
-const NS_LRC =
+export const NS_LRC =
   "https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/ConsultaLR.xsd";
 const NS_SOAP = "http://schemas.xmlsoap.org/soap/envelope/";
 

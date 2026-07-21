@@ -71,6 +71,29 @@ Orden art. 7.i obliges the system, **before generating each new record**, to ver
 stored predecessor huella matches the record before it. This belongs in the write path of
 every sale, not in a periodic audit.
 
+### Never-reused installation numbers rely on a global unique index, not on RLS
+
+**Added 2026-07-21, verified in implementation.** *"No puede repetirse nunca"* is a claim about
+every installation this software has ever run, across every tenant a multi-tenant deployment
+serves — not merely within one tenant's own rows. Row-level security cannot be the control for
+that: RLS filters what a role can *see*, and a UNIQUE constraint is enforced against the whole
+table regardless of what any one session's policy would let it read.
+
+**Unique constraints are NOT RLS-filtered — a hidden conflicting row still raises 23505.**
+`registro_sif_instalacion_uq` (`UNIQUE (nif, id_sistema_informatico, numero_instalacion)`,
+`packages/fiscal-verifactu/src/registro-sif.ts`) is therefore deliberately global, carrying no
+`tenant_id` in its key and enforcing across every tenant's rows even under
+`FORCE ROW LEVEL SECURITY` — verified live: a second tenant sharing the same
+(NIF, IdSistemaInformatico, NúmeroInstalación) triple still collides with 23505, even though that
+tenant's own session can never `SELECT` the conflicting row. This is the property that actually
+makes never-reuse hold, not a convention the application is trusted to keep.
+
+The identical reasoning governs the counter that mints these numbers
+(`contadores_instalacion`, same file): it carries no `tenant_id` and no RLS at all, keyed by NIF —
+the obligado tributario for this purpose — because a single writer cannot guarantee uniqueness
+over rows a policy hides from it. An RLS predicate there would silently let two tenants sharing a
+NIF allocate the same number.
+
 ### Record identity and duplicates
 
 Records are identified by the triple **IDEmisorFactura + NumSerieFactura +

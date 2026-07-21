@@ -63,3 +63,41 @@ jobs:
           name: mutation-report
           path: packages/ui/reports/mutation/
           retention-days: 30
+
+  # packages/db. Weekly rather than per-PR for the same reason packages/ui is
+  # weekly, reached by a different route: every test here boots a WASM
+  # PostgreSQL and applies a schema before it asserts anything, so Stryker pays
+  # that cost once per mutant per covering test. The handoff's "pure-Node
+  # packages can afford the per-PR gate" rule was a proxy for per-test setup
+  # cost, and this package has the setup cost without the browser.
+  #
+  # No thresholds.break is configured, so this publishes a score rather than
+  # failing. Docker is present on ubuntu-latest, so the real-Postgres target
+  # runs here too.
+  mutation-db:
+    runs-on: ubuntu-latest
+    env:
+      REQUIRE_DOCKER: "1"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @waitron/db mutation
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report-db
+          path: packages/db/reports/mutation/
+          retention-days: 30

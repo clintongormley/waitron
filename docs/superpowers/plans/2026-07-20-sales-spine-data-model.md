@@ -15033,3 +15033,107 @@ defines but does not fill.
 8. **Nothing owns migration ordering across packages at runtime.** Task 12 pins the failure to a
    clear error at migrate time rather than a missing table at first write, but the mechanism that
    guarantees core runs before module still needs an owner in a later plan.
+
+---
+
+## Execution errata
+
+This plan is the EXECUTED plan — a historical artifact of what was asked, task by task. Its task
+bodies are frozen prose and are not rewritten here, even where execution found their illustrative
+code wrong: rewriting fifteen thousand lines of already-completed instructions would erase the
+record of what was actually specified, and a later reader diffing this plan against its own
+handoffs deserves to see the original. This section exists so that anyone who ever re-runs a task
+from this plan — against a fresh checkout, in a different order, or as a template for a similar
+plan — is warned about the specific defects execution found in the plan's OWN drafted code, not
+in the regulation or the architecture it implements.
+
+- **Task 2 (Critical, two defects in the harness draft).** Both are in `packages/db/src/testing/
+  harness.ts`'s illustrative code and would reintroduce real bugs if re-run verbatim:
+  - The postgres target's `create()` drafted `await admin.execute({ sql: \`create database
+    ${name}\`, params: [] } as never)`. This throws a `TypeError` at runtime — `Database["execute"]`
+    takes a `SQL` query object (drizzle's own tagged-template type) or a raw string, never a
+    `{ sql, params }` record, and the `as never` cast only hides the mismatch from the compiler.
+    The shipped fix, verified in `packages/db/src/testing/harness.ts` today, is
+    `admin.execute(sql.raw(\`create database ${name}\`))`.
+  - The harness draft imported `CORE_MIGRATIONS` from `../migrate.js` (`import { CORE_MIGRATIONS }
+    from "../migrate.js";`) — that module never exported any such symbol (`packages/db/src/migrate.
+    ts` exports only `runMigrations`/`MigrationOptions`, per `packages/db/src/index.ts`'s own
+    export list). The shipped `harness.ts` instead defines its own private `CORE_MIGRATIONS`
+    constant, computed from `import.meta.dirname` and pointing at the package's real `../../drizzle`
+    folder; the PUBLIC `CORE_MIGRATIONS` a module package composes against lives on
+    `packages/db/src/index.ts` instead, computed the same way. Neither location is `migrate.js`.
+- **Task 12 (Critical).** The plan's own Task 12 code declared `cuota_total`/`importe_total` as
+  `numeric(12, 2)` (`cuotaTotal: numeric("cuota_total", { precision: 12, scale: 2 })` and the
+  equivalent for `importeTotal`) — this CONTRADICTS the plan's own Global Constraints section
+  (above, "Nothing formatted is ever stored — in the generic layer"), which already states these
+  columns must be `text`: the huella hashes the exact literal that was serialised, and `numeric`
+  both re-renders on read (turning "123.1" and "123.10" into the same stored value, when the
+  huella must distinguish them) and is too narrow for an 11–12 integer-digit AEAT-legal amount.
+  The shipped `packages/fiscal-verifactu/src/schema/registros.ts` correctly declares both as
+  `text`. A re-run of Task 12 that copied its own illustrative code literally would ship a
+  regression its own plan-level constraints already forbid.
+- **`VerifactuBackend` gap.** The File Structure section (near the top of this plan) names
+  `packages/fiscal-verifactu/src/backend.ts VerifactuBackend implements FiscalBackend`, but no
+  task step from 1 through 15 builds it — it does not appear as a deliverable of Task 12, 13, 14 or
+  15. It was built as part of Task 16, by project-owner decision, wiring together the pieces Tasks
+  12–15 had already shipped. Noted here so the File Structure section matches what actually
+  happened rather than implying an earlier task delivered it.
+- **The `.rejects.toThrow(/pg message/)` pattern**, used across many of this plan's task bodies to
+  assert a Postgres error's text, does not work in this repo and never did: drizzle-orm@0.45.2
+  wraps every failed query in a `DrizzleQueryError` whose own `.message` is `Failed query: <sql>
+  \nparams: <params>` — the real Postgres text lives on `.cause.message`, which `Error.prototype.
+  toThrow`'s pattern matching never inspects. Every already-shipped test in this codebase instead
+  uses `captureError`/`pgErrorCode`/`pgErrorMessage` (`packages/db/src/testing/errors.ts`, Task 5).
+  Noted once here rather than annotated at each of the many task bodies that drafted the pattern.
+- **Task 4: two teeth-check mutations are inert on PostgreSQL 18**, discovered performing the
+  task's own Step 8/9 red-phase verification:
+  - Temporarily dropping `WITH CHECK` from a `FOR ALL` policy (leaving only `USING`) does not
+    make `rejects an insert carrying another tenant's id` fail: PostgreSQL defaults a `FOR ALL`
+    policy's `WITH CHECK` to its own `USING` expression when `WITH CHECK` is omitted, so the
+    policy stays enforced under this specific mutation. The teeth check as drafted does not bite;
+    a mutation that genuinely disables the write-side check (e.g. `WITH CHECK (true)`) does.
+  - Temporarily removing `nullif(current_setting('app.tenant_id', true), '')` alone does not make
+    `returns no rows for an empty tenant id rather than raising` fail, because an empty string
+    cast to `uuid` (`''::uuid`) raises `invalid_text_representation` — the identical SQLSTATE class
+    the `EXCEPTION WHEN invalid_text_representation` handler (tested by the mutation immediately
+    before this one in the same Step 8) already catches. `nullif` therefore has NO independently
+    observable behaviour of its own under this suite: removing it is caught only because a
+    DIFFERENT, earlier-tested guard happens to catch the same failure mode. Keep `nullif` anyway
+    — it avoids a plpgsql exception (and the subtransaction cost that comes with catching one) on
+    the ordinary empty-string case — but do not treat it as separately load-bearing the way this
+    plan's Step 8 implies.
+- **Task 13/14 error codes.** The plan drafted `SIF_NOT_REGISTERED` (SCREAMING_SNAKE_CASE,
+  appended directly to `packages/shared/src/errors.ts`'s `ErrorCode` union) and `ErrorCode.
+  FISCAL_CHAIN_APPEND_CONTENTION` (an enum-style reference, same location) for Tasks 13 and 14
+  respectively. Both forms are wrong under this repo's own documented augmentation convention
+  (`packages/shared/src/errors.ts`'s design note: only codes native to `packages/shared` itself
+  belong in that file; every dependent package contributes its own via `declare module
+  "@waitron/shared"`) and under its naming convention (domain-concept, lowercase, dot-namespaced —
+  never SCREAMING_SNAKE_CASE, never the throwing package's name). The shipped codes are
+  `sif.not_registered` (`packages/fiscal-verifactu/src/registro-sif.ts`) and
+  `chain.append_contention` (`packages/fiscal-verifactu/src/chain.ts`), each documented at its own
+  `declare module` site with the reasoning for the deviation recorded inline.
+- **Task 15.** The plan's own Step 5 illustrative code for `predecessor-link-mismatch` assigns
+  `params: { expected: previous.encadenamiento_huella ?? "", found: beforePrevious.huella }` —
+  `expected` is n−1's own stored (unverified) predecessor pointer, `found` is n−2's actual huella.
+  This is backwards from the plan's OWN Step 2 test, `carries the expected and found values on a
+  link failure`, which corrupts n−2's stored `huella` to a bogus value and then asserts
+  `link.params.expected` equals that bogus value and `link.params.found` equals n−1's original,
+  uncorrupted pointer — i.e. `expected` is the actual (possibly tampered) value at the position
+  being checked, and `found` is what the predecessor's own link claims. The shipped
+  `packages/fiscal-verifactu/src/verify.ts` follows the TEST's convention (`expected:
+  beforePrevious.huella, found: previous.anterior_huella`), not Step 5's prose. The test is
+  authoritative; a re-run of Task 15 that implemented Step 5's illustrative code literally would
+  fail its own Step 2 red-phase test immediately.
+- **Task 16 draft was stale against the real `FiscalBackend`/`FakeFiscalBackend` surface.** The
+  brief's illustrative code assumed a no-argument `new FakeFiscalBackend()` (the real constructor
+  takes `db: Database`), a `.calls` spy property (does not exist — the real test-only surface is
+  `breakIntegrity`/`restoreIntegrity`/`recordsFor`/`acknowledge`), a settable
+  `backend.chainVerification` field (the real control is `breakIntegrity(tillId, issue)`, taking a
+  plain `IntegrityIssue`), and `.hash`/`.sequence`/`.qrPayload` fields on `FiscalRecordRef` (the
+  real interface has none of these — only `backend`, `recordId`, `state`, `issuedAt`,
+  `offsetMinutes`, `verificationUrl?`). Roughly 22 corrections were needed across Task 16's test
+  and implementation bodies to reconcile the draft with the surface Tasks 11 and 12–15 had
+  actually shipped by the time Task 16 ran; each is recorded as its own "Deviation from the brief"
+  comment in the committed source (`packages/core/src/record-sale.test.ts`,
+  `packages/fiscal-verifactu/src/write-path.e2e.test.ts` and neighbours) rather than repeated here.

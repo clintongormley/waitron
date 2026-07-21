@@ -1,0 +1,246 @@
+import { sql } from "drizzle-orm";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
+import type { Database } from "@waitron/db";
+import { appendToChain } from "./chain.js";
+import { FISCAL_MIGRATIONS } from "./migrations.js";
+import { verifyChain } from "./verify.js";
+import { altaFor, anulacionFor, seedSale, seedTill, type SeededTill } from "./testing/seed.js";
+
+let db: Database;
+let till: SeededTill;
+
+beforeEach(async () => {
+  db = await createPgliteDb();
+  await runMigrations(db, CORE_MIGRATIONS);
+  await runMigrations(db, FISCAL_MIGRATIONS);
+  till = await seedTill(db);
+});
+
+afterAll(async () => {
+  await db.close();
+});
+
+/** Appends `n` altas in generation order. */
+async function appendAltas(n: number): Promise<void> {
+  for (let i = 1; i <= n; i++) {
+    const saleId = await seedSale(db, till, i);
+    await db.transaction((tx) =>
+      appendToChain(tx, till.tenantId, till.tillId, altaFor(saleId, i, i)),
+    );
+  }
+}
+
+/**
+ * Overwrites one column on one stored registro.
+ *
+ * This needs the OWNER role and a disabled trigger, which is the point: the fact that corrupting
+ * a row takes both is the immutability control working. Nothing the application role can do
+ * reaches this code path — which is also why every immutability test must run as app_user, never
+ * as the owner (see inmutabilidad.test.ts). PGlite's default connection IS the owner/superuser
+ * (that file's own note), so no role switch is needed here to reach the trigger-disable step.
+ *
+ * Trigger name is `registros_facturacion_enforce_immutability`
+ * (packages/fiscal-verifactu/drizzle/0001_registros_inmutables.sql) — NOT
+ * `registros_facturacion_immutable` as an earlier draft of this file had it.
+ */
+async function corrupt(secuencia: number, column: string, value: string): Promise<void> {
+  await db.execute(
+    sql`alter table registros_facturacion disable trigger registros_facturacion_enforce_immutability`,
+  );
+  await db.execute(
+    sql`update registros_facturacion set ${sql.raw(column)} = ${value}
+        where till_id = ${till.tillId} and secuencia = ${secuencia}`,
+  );
+  await db.execute(
+    sql`alter table registros_facturacion enable trigger registros_facturacion_enforce_immutability`,
+  );
+}
+
+const BOGUS = "F".repeat(64);
+
+describe("verifyChain — normal states", () => {
+  it("reports nothing checked on an empty chain", async () => {
+    // n is itself the first record: neither check runs, and that is normal.
+    const result = await db.transaction((tx) => verifyChain(tx, till.tenantId, till.tillId));
+    expect(result).toEqual({ ok: true, checked: 0, issues: [] });
+  });
+
+  it("reports one record checked when n−1 carries PrimerRegistro=S", async () => {
+    // There is no n−2, so the link check is vacuously true; only the recomputation applies, and
+    // it passes.
+    await appendAltas(1);
+    const result = await db.transaction((tx) => verifyChain(tx, till.tenantId, till.tillId));
+    expect(result).toEqual({ ok: true, checked: 1, issues: [] });
+  });
+
+  it("reports two records checked once n−1 and n−2 both exist", async () => {
+    await appendAltas(2);
+    const result = await db.transaction((tx) => verifyChain(tx, till.tenantId, till.tillId));
+    expect(result).toEqual({ ok: true, checked: 2, issues: [] });
+  });
+
+  it("verifies across an alta/anulación boundary", async () => {
+    // One chain, both record types, generation order. The recomputation must use the anulación's
+    // five-field canonical string, not the alta's eight.
+    await appendAltas(1);
+    const saleId = await seedSale(db, till, 2);
+    await db.transaction((tx) =>
+      appendToChain(tx, till.tenantId, till.tillId, anulacionFor(saleId, 1, 5)),
+    );
+    const result = await db.transaction((tx) => verifyChain(tx, till.tenantId, till.tillId));
+    expect(result.ok).toBe(true);
+    expect(result.checked).toBe(2);
+  });
+
+  it("still stores a huella on every record it verified", async () => {
+    await appendAltas(3);
+    const { rows } = await db.execute<{ huella: string }>(sql`
+      select huella from registros_facturacion where till_id = ${till.tillId} order by secuencia
+    `);
+    expect(rows).toHaveLength(3);
+    for (const row of rows) expect(row.huella).toMatch(/^[0-9A-F]{64}$/);
+  });
+});
+
+describe("verifyChain — detection", () => {
+  it("detects tampering with n−1's own hashed content", async () => {
+    // AEAT's link check is blind to this: n−1's pointer to n−2 is untouched. Only the
+    // recomputation catches it, which is why we go beyond the letter.
+    await appendAltas(2);
+    await corrupt(2, "importe_total", "999.99");
+    const result = await db.transaction((tx) => verifyChain(tx, till.tenantId, till.tillId));
+    expect(result.ok).toBe(false);
+    expect(result.issues.map((i) => i.code)).toEqual(["predecessor-hash-mismatch"]);
+  });
+
+  it("detects a broken link from n−1 to n−2", async () => {
+    // Corrupting n−2's OWN huella leaves n−1 internally consistent, so the recomputation passes
+    // and only AEAT's link check fires. This is the case that proves the two checks are
+    // complementary rather than one covering the other.
+    await appendAltas(2);
+    await corrupt(1, "huella", BOGUS);
+    const result = await db.transaction((tx) => verifyChain(tx, till.tenantId, till.tillId));
+    expect(result.ok).toBe(false);
+    expect(result.issues.map((i) => i.code)).toEqual(["predecessor-link-mismatch"]);
+  });
+
+  it("reports both failures when n−1's predecessor pointer is rewritten", async () => {
+    // Rewriting anterior_huella breaks n−1's own hash AND its link, so both fire. `issues` is an
+    // array, not a first-failure-wins field: an incident naming one of two problems sends staff
+    // after half the story.
+    await appendAltas(2);
+    await corrupt(2, "anterior_huella", BOGUS);
+    const result = await db.transaction((tx) => verifyChain(tx, till.tenantId, till.tillId));
+    expect(result.issues.map((i) => i.code).sort()).toEqual([
+      "predecessor-hash-mismatch",
+      "predecessor-link-mismatch",
+    ]);
+  });
+
+  it("carries the expected and found values on a link failure", async () => {
+    await appendAltas(2);
+    const { rows: predecessorRows } = await db.execute<{ huella: string }>(sql`
+      select huella from registros_facturacion where till_id = ${till.tillId} and secuencia = 1
+    `);
+    const predecessor = predecessorRows[0];
+    await corrupt(1, "huella", BOGUS);
+    const result = await db.transaction((tx) => verifyChain(tx, till.tenantId, till.tillId));
+    const link = result.issues.find((i) => i.code === "predecessor-link-mismatch");
+    // expected: n−2's own huella as currently stored (the ground truth this check validates the
+    // pointer against) — now BOGUS, since that is what we just corrupted.
+    expect(link?.params.expected).toBe(BOGUS);
+    // found: n−1's stored predecessor pointer, untouched by this corruption — still the ORIGINAL
+    // value captured before corrupt() ran.
+    expect(link?.params.found).toBe(predecessor?.huella);
+  });
+
+  it("omits expected and found entirely when the predecessor row is gone", async () => {
+    // Object.hasOwn, not toBeUndefined: the latter cannot tell an absent key from a key explicitly
+    // set to undefined, and a params object serialised into an incident row records those two
+    // states differently.
+    await appendAltas(2);
+    await db.execute(
+      sql`alter table registros_facturacion disable trigger registros_facturacion_enforce_immutability`,
+    );
+    await db.execute(
+      sql`delete from registros_facturacion where till_id = ${till.tillId} and secuencia = 1`,
+    );
+    await db.execute(
+      sql`alter table registros_facturacion enable trigger registros_facturacion_enforce_immutability`,
+    );
+    const result = await db.transaction((tx) => verifyChain(tx, till.tenantId, till.tillId));
+    const missing = result.issues.find((i) => i.code === "predecessor-missing");
+    expect(missing).toBeDefined();
+    expect(Object.hasOwn(missing!.params, "expected")).toBe(false);
+    expect(Object.hasOwn(missing!.params, "found")).toBe(false);
+  });
+
+  it("locates the predecessor by chain position, never by invoice number", async () => {
+    // Invoice numbers deliberately descend. A verifier that ordered by num_serie_factura would
+    // compare the wrong pair and report a failure on an intact chain — noise indistinguishable
+    // from a real incident.
+    for (const [i, number] of [500, 44, 7].entries()) {
+      const saleId = await seedSale(db, till, number);
+      await db.transaction((tx) =>
+        appendToChain(tx, till.tenantId, till.tillId, altaFor(saleId, number, i)),
+      );
+    }
+    const result = await db.transaction((tx) => verifyChain(tx, till.tenantId, till.tillId));
+    expect(result).toEqual({ ok: true, checked: 2, issues: [] });
+  });
+});
+
+describe("verifyChain — never blocks the sale", () => {
+  it("returns rather than throws when verification fails", async () => {
+    // The single most important assertion in this file. A throw propagates out of the sale
+    // transaction and rolls the sale back, which is exactly what AEAT forbids: «la facturación
+    // por este motivo NUNCA debe interrumpirse».
+    await appendAltas(2);
+    await corrupt(2, "importe_total", "999.99");
+    const result = await db.transaction((tx) => verifyChain(tx, till.tenantId, till.tillId));
+    expect(result.ok).toBe(false);
+  });
+
+  it("chains the next record anyway after a detected corruption", async () => {
+    // The spec §10 teeth check, in full: corrupt a stored predecessor huella, art. 7.i detects
+    // it, and the sale STILL COMPLETES. A test asserting the sale is blocked would enforce the
+    // opposite of the requirement — if you find yourself writing `.rejects` here, stop and
+    // re-read spec §4.
+    await appendAltas(2);
+    await corrupt(1, "huella", BOGUS);
+
+    const saleId = await seedSale(db, till, 3);
+    const { verification, appended } = await db.transaction(async (tx) => {
+      const verification = await verifyChain(tx, till.tenantId, till.tillId);
+      const appended = await appendToChain(tx, till.tenantId, till.tillId, altaFor(saleId, 3, 3));
+      return { verification, appended };
+    });
+
+    expect(verification.ok).toBe(false);
+    expect(appended.secuencia).toBe(3);
+    const { rows } = await db.execute<{
+      secuencia: number;
+      huella: string;
+      anterior_huella: string | null;
+    }>(sql`
+      select secuencia, huella, anterior_huella
+      from registros_facturacion where till_id = ${till.tillId} order by secuencia
+    `);
+    expect(rows).toHaveLength(3);
+    // And it chained onto the record that was actually there, corruption and all — the chain
+    // continues, it does not fork or restart.
+    expect(rows[2]?.anterior_huella).toBe(rows[1]?.huella);
+    expect(rows[2]?.huella).toMatch(/^[0-9A-F]{64}$/);
+  });
+
+  it("hands the incident recorder a regime-neutral payload", async () => {
+    // What Task 18 receives. No huellas by that name, no registro rows, no chain vocabulary — it
+    // must work unchanged for a TicketBAI backend.
+    await appendAltas(2);
+    await corrupt(2, "importe_total", "999.99");
+    const result = await db.transaction((tx) => verifyChain(tx, till.tenantId, till.tillId));
+    expect(Object.keys(result).sort()).toEqual(["checked", "issues", "ok"]);
+    expect(Object.keys(result.issues[0]!).sort()).toEqual(["code", "params", "recordId"]);
+  });
+});

@@ -61,6 +61,12 @@ jobs:
   # for it.
   test:
     runs-on: ubuntu-latest
+    env:
+      # packages/db's harness skips its real-Postgres target when Docker is
+      # absent. That is right on a laptop and wrong here: the skipped target is
+      # the only one that can observe lock contention and non-superuser RLS, so
+      # a runner without Docker would report green having checked neither.
+      REQUIRE_DOCKER: "1"
     steps:
       - uses: actions/checkout@v5
 
@@ -138,3 +144,25 @@ jobs:
           name: mutation-report-verifactu
           path: packages/verifactu/reports/mutation/
           retention-days: 30
+
+  # packages/shared is pure functions over strings and BigInt: no browser, no database, no
+  # async. That makes it the cheapest mutation target in the repo — cheaper than
+  # packages/verifactu — so it gates every PR at break: 90. Contrast packages/db, where every
+  # test boots PGlite and the cost profile resembles packages/ui's weekly ungated run.
+  mutation-shared:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @waitron/shared mutation

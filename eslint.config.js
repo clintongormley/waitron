@@ -67,5 +67,79 @@ export default tseslint.config(
     },
   },
 
+  {
+    // packages/shared is the leaf of the dependency graph: every other package depends on it,
+    // so anything it depends on becomes a transitive dependency of the entire repo. A missing
+    // `dependencies` block in its package.json does NOT enforce this — `main` points at TS
+    // source with no build step, so a relative escape like `../../db/src/index.js` resolves,
+    // typechecks and runs while the manifest still reads as dependency-free. The manifest
+    // constrains bare specifiers; only this rule constrains paths.
+    files: ["packages/shared/**/*.ts"],
+    plugins: { "import-x": importX },
+    settings: {
+      "import-x/resolver": { typescript: true },
+    },
+    rules: {
+      "import-x/no-restricted-paths": [
+        "error",
+        {
+          basePath: import.meta.dirname,
+          zones: [
+            {
+              target: "./packages/shared/**/*",
+              from: ["./packages/**", "./apps/**"],
+              // Absolute and literal-prefixed, never a leading `**/`: minimatch globstars
+              // refuse to cross a dot-prefixed path segment (e.g. a checkout under
+              // `.claude/worktrees/...`), which silently broke the equivalent exception on the
+              // verifactu zone and let same-package relative imports false-positive as
+              // boundary violations.
+              except: [`${import.meta.dirname}/packages/shared/**`],
+              message:
+                "packages/shared is the leaf every other package depends on and must have zero " +
+                "dependencies on any other package in this repo. Anything it imports becomes a " +
+                "transitive dependency of the whole repo. If it needs something from another " +
+                "package, that thing belongs in packages/shared itself.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  {
+    // The generic layer is regime-neutral (spec §2). A second fiscal backend —
+    // TicketBAI, Italy, Portugal — brings its own tables and its own
+    // vocabulary and touches none of these packages. The moment packages/db
+    // imports the Veri*Factu module, "generic" becomes a comment rather than a
+    // property, and the English-only guard would be policing the vocabulary of
+    // a dependency it cannot see.
+    files: ["packages/db/**/*.ts", "packages/core/**/*.ts", "packages/fiscal/**/*.ts"],
+    plugins: { "import-x": importX },
+    settings: {
+      "import-x/resolver": { typescript: true },
+    },
+    rules: {
+      "import-x/no-restricted-paths": [
+        "error",
+        {
+          // As above: resolved from this config's own directory, never a
+          // leading `**/` — minimatch globstars refuse to cross a
+          // dot-prefixed segment such as `.claude/worktrees/`.
+          basePath: import.meta.dirname,
+          zones: [
+            {
+              target: ["./packages/db/**/*", "./packages/core/**/*", "./packages/fiscal/**/*"],
+              from: ["./packages/verifactu/**", "./packages/fiscal-verifactu/**"],
+              message:
+                "The generic layer must not depend on a fiscal module (spec §2). Only the " +
+                "FiscalBackend interface crosses that boundary — if this needs something " +
+                "from the Veri*Factu module, it belongs behind the interface.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   eslintConfigPrettier,
 );
