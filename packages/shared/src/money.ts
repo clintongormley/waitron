@@ -99,6 +99,36 @@ export function multiplyDecimal(left: Decimal, right: Decimal): Decimal {
   return fromParts({ units: a.units * b.units, scale: a.scale + b.scale });
 }
 
+/** Non-negative `numerator / denominator`, rounded half away from zero — shared by `toScale` and
+ * `divideDecimal` so the rounding rule is written once. */
+function roundedQuotient(numerator: bigint, denominator: bigint): bigint {
+  const quotient = numerator / denominator;
+  const remainder = numerator % denominator;
+  return remainder * 2n >= denominator ? quotient + 1n : quotient;
+}
+
+/**
+ * Exact quotient `dividend / divisor`, rounded half away from zero to `scale` places — the
+ * division `@waitron/shared` otherwise lacks (which is why `packages/core/src/vat.ts` used to
+ * reimplement this file's private codec). Computed entirely in BigInt: never a JS number.
+ */
+export function divideDecimal(dividend: Decimal, divisor: Decimal, scale: number): Decimal {
+  const a = partsOf(dividend);
+  const b = partsOf(divisor);
+  if (b.units === 0n) {
+    throw new AppError("shared.invalid_decimal", { value: `${dividend} / ${divisor}` });
+  }
+  // value = (a.units / 10^a.scale) / (b.units / 10^b.scale), rendered at `scale` decimals:
+  //   result.units = round( a.units * 10^b.scale * 10^scale / (b.units * 10^a.scale) )
+  const num = a.units * 10n ** BigInt(b.scale) * 10n ** BigInt(scale);
+  const den = b.units * 10n ** BigInt(a.scale);
+  const negative = num < 0n !== den < 0n;
+  const absNum = num < 0n ? -num : num;
+  const absDen = den < 0n ? -den : den;
+  const rounded = roundedQuotient(absNum, absDen);
+  return fromParts({ units: negative ? -rounded : rounded, scale });
+}
+
 export function negateDecimal(value: Decimal): Decimal {
   const { units, scale } = partsOf(value);
   return fromParts({ units: -units, scale });
@@ -136,11 +166,10 @@ export function toScale(value: Decimal, scale: number): Decimal {
   const divisor = 10n ** BigInt(current.scale - scale);
   const negative = current.units < 0n;
   const magnitude = negative ? -current.units : current.units;
-  const quotient = magnitude / divisor;
-  const remainder = magnitude % divisor;
-  // `remainder * 2n >= divisor` is exactly "at or above half", computed in integers. The
-  // familiar `remainder / divisor >= 0.5` is the same test written so that it needs a float.
-  const rounded = remainder * 2n >= divisor ? quotient + 1n : quotient;
+  // `roundedQuotient` computes "at or above half" as `remainder * 2n >= divisor`, entirely in
+  // integers. The familiar `remainder / divisor >= 0.5` is the same test written so that it
+  // needs a float.
+  const rounded = roundedQuotient(magnitude, divisor);
   return fromParts({ units: negative ? -rounded : rounded, scale });
 }
 

@@ -172,9 +172,9 @@ export class VerifactuBackend implements FiscalBackend {
     const tenant = await this.legalNameFor(tx, sale.tenantId);
 
     const desglose: DetalleDesgloseInput[] = sale.vatBreakdown.map((line) => ({
-      BaseImponibleOimporteNoSujeto: Number(line.base),
-      TipoImpositivo: Number(line.rate),
-      CuotaRepercutida: Number(line.tax),
+      BaseImponibleOimporteNoSujeto: line.base,
+      TipoImpositivo: line.rate,
+      CuotaRepercutida: line.tax,
       // "S1" — sujeta y no exenta, sin inversión del sujeto pasivo: the ordinary domestic retail
       // sale. `VatBreakdownLine`'s `surchargeRate`/`surcharge` (recargo de equivalencia) are not
       // populated by `packages/core` in this task, so every entry takes the same, most common
@@ -196,8 +196,8 @@ export class VerifactuBackend implements FiscalBackend {
       TipoFactura: sale.counterparty === null ? "F2" : "F1",
       DescripcionOperacion: sale.descriptionOfOperation,
       Desglose: desglose,
-      CuotaTotal: Number(cuotaTotal),
-      ImporteTotal: Number(sale.total),
+      CuotaTotal: cuotaTotal,
+      ImporteTotal: sale.total,
       SistemaInformatico: this.buildSistemaInformatico(sif, tenant.legalName),
       generadoEn: sale.issuedAt,
       offsetMinutes: sale.offsetMinutes,

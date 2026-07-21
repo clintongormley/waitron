@@ -41,13 +41,13 @@ export const ALTA_INPUT: AltaInput = {
   Desglose: [
     {
       CalificacionOperacion: "S1",
-      BaseImponibleOimporteNoSujeto: 111.1,
-      CuotaRepercutida: 12.35,
-      TipoImpositivo: 21,
+      BaseImponibleOimporteNoSujeto: "111.10",
+      CuotaRepercutida: "12.35",
+      TipoImpositivo: "21.00",
     },
   ],
-  CuotaTotal: 12.35,
-  ImporteTotal: 123.45,
+  CuotaTotal: "12.35",
+  ImporteTotal: "123.45",
   Encadenamiento: { PrimerRegistro: "S" },
   SistemaInformatico: SISTEMA,
   generadoEn: new Date("2024-01-01T19:20:30+01:00"),

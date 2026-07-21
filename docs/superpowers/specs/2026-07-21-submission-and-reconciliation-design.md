@@ -86,26 +86,37 @@ reason above.
 
 ### 2.3 `formatAmountExact(string)` (follow-up #3) — its own PR
 
-Split out of the prep PR (decided during planning: it is a bigger, different-package change than it
-first looked). `VerifactuBackend.recordSale` currently does `Number(sale.total)`/`Number(cuotaTotal)`
-into `AltaInput.ImporteTotal`/`CuotaTotal`, which are **`number`-typed** — safe today within
-`numeric(12,2)` range, but a latent float-boundary coupling of the plan-1 one-cent-divergence class,
-and these two are direct huella inputs. Removing it requires:
+Split out of the prep PR (a bigger, different-package change than it first looked). **Planned** at
+[`docs/superpowers/plans/2026-07-21-exact-decimal-amounts.md`](../plans/2026-07-21-exact-decimal-amounts.md).
+`VerifactuBackend.recordSale` does `Number(sale.total)`/`Number(cuotaTotal)` into `AltaInput`'s
+`number`-typed amount fields — safe today within `numeric(12,2)` range, but a latent float-boundary
+coupling of the plan-1 one-cent-divergence class; `CuotaTotal`/`ImporteTotal` are direct huella
+inputs.
 
-- `formatAmountExact(value: string): string` in `packages/verifactu/src/format.ts` (a string→2dp
-  codec that never routes through a JS `number`, unlike the existing `formatAmount(number)`);
-- changing the library's **public** `AltaInput.CuotaTotal`/`ImporteTotal` from `number` to `string`,
-  and `buildAltaRecord` to format via `formatAmountExact`;
-- re-expressing every `AltaInput`-constructing test and the **pinned AEAT conformance vectors** with
-  string amounts (same huella — `"1234.56"` formats to itself), under the library's **90% mutation
-  gate**;
-- `VerifactuBackend.recordSale` passing the exact `Decimal` strings (`sale.total`, `cuotaTotal`)
-  straight through;
-- optionally retiring `packages/core/src/vat.ts`'s duplicate BigInt decimal codec by exporting one
-  from `@waitron/shared` — a `@waitron/shared` public-surface change, separable again if wanted.
+Decisions taken during the brainstorm (2026-07-21):
 
-Independent of §2.1/§2.2 (nothing there depends on it). Sequenced right after the prep PR, or folded
-into plan 3a where submission serialises these amounts anyway.
+- **Scope: all amount and rate fields, not just the two huella-critical ones.** The financial
+  standard is that no monetary value (nor an exact-decimal VAT rate) round-trips through binary
+  floating point. So `AltaInput.CuotaTotal`/`ImporteTotal`, the `DetalleDesgloseInput` amounts and
+  rates (`BaseImponibleOimporteNoSujeto`, `CuotaRepercutida`, `TipoImpositivo` [`Tipo2.2Type`, also
+  2dp], the recargo fields), and the `DesgloseRectificacionInput` amounts all move `number → string`.
+  `buildAltaRecord` formats every one via `formatAmountExact`, and `formatAmount(number)` is
+  **removed** so the float path cannot be reintroduced.
+- **`formatAmountExact` is self-contained in `packages/verifactu`.** That package has **zero in-repo
+  dependencies** (a lint boundary), so it cannot import `@waitron/shared`'s codec — it carries its
+  own BigInt string→2dp codec, matching `formatAmount`'s output guarantees exactly.
+- **Retire the `vat.ts` codec now (not optionally), on the core side.** Add the exact `divideDecimal`
+  primitive `@waitron/shared` was missing, and route `packages/core/src/vat.ts`'s `percentOf` through
+  `multiplyDecimal` + `divideDecimal`, deleting its duplicate `partsOf`/`fromParts`. This is a
+  `@waitron/shared` public-surface addition; it does **not** help `formatAmountExact` (zero-dep
+  boundary), only the core-side duplication.
+- The **AEAT conformance vectors are unaffected** — they use `CadenaAltaInput`, whose amounts are
+  already `string`. What ripples is the `AltaInput` fixtures/constructors (`ALTA_INPUT`, `seed.ts`'s
+  `altaFor`, a handful of test files), re-expressed with exact strings — same huellas, under the 90%
+  mutation gate.
+
+Independent of §2.1/§2.2. Sequenced right after the prep PR, or folded into plan 3a where submission
+serialises these amounts anyway.
 
 ---
 

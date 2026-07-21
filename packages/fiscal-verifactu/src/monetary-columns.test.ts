@@ -22,7 +22,7 @@ afterAll(async () => {
  * `cuota_total`/`importe_total` must be `text`, not `numeric(12,2)` — this is the test that would
  * have caught the regression. `packages/verifactu/src/huella.ts`'s `buildCadena` reads
  * `record.CuotaTotal`/`record.ImporteTotal` verbatim as strings and hashes them byte-for-byte; it
- * never re-runs `formatAmount`. The stored column value therefore IS the huella's hash input, and
+ * never re-runs `formatAmountExact`. The stored column value therefore IS the huella's hash input, and
  * the bytes read back must equal the bytes written — a guarantee only `text` gives. `numeric`
  * would additionally silently re-render a non-canonical literal (e.g. drop a trailing zero, or
  * normalise `-0.00`), which would corrupt an art. 7.i re-render of a row nobody touched.

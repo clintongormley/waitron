@@ -44,6 +44,7 @@ export {
   assertMoney,
   compareDecimal,
   decimal,
+  divideDecimal,
   isZeroDecimal,
   MAX_MONEY_INTEGER_DIGITS,
   MONEY_SCALE,

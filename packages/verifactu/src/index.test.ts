@@ -40,13 +40,13 @@ describe("package public surface (./index.js)", () => {
       Desglose: [
         {
           CalificacionOperacion: "S1",
-          BaseImponibleOimporteNoSujeto: 10,
-          CuotaRepercutida: 2.1,
-          TipoImpositivo: 21,
+          BaseImponibleOimporteNoSujeto: "10",
+          CuotaRepercutida: "2.1",
+          TipoImpositivo: "21",
         },
       ],
-      CuotaTotal: 2.1,
-      ImporteTotal: 12.1,
+      CuotaTotal: "2.1",
+      ImporteTotal: "12.1",
       Encadenamiento: { PrimerRegistro: "S" },
       SistemaInformatico: sistema,
       generadoEn: new Date("2024-01-01T12:00:00Z"),

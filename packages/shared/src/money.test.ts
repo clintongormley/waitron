@@ -5,6 +5,7 @@ import {
   assertMoney,
   compareDecimal,
   decimal,
+  divideDecimal,
   isZeroDecimal,
   multiplyDecimal,
   negateDecimal,
@@ -171,6 +172,46 @@ describe("multiplyDecimal", () => {
 
   it("keeps the sign", () => {
     expect(multiplyDecimal(decimal("-2"), decimal("1.5"))).toBe("-3.0");
+  });
+});
+
+describe("divideDecimal", () => {
+  it("divides exactly and rounds half away from zero to scale", () => {
+    expect(divideDecimal(decimal("10"), decimal("3"), 2)).toBe("3.33");
+    expect(divideDecimal(decimal("2"), decimal("3"), 4)).toBe("0.6667");
+    expect(divideDecimal(decimal("1"), decimal("8"), 2)).toBe("0.13"); // 0.125 → half away → 0.13
+    expect(divideDecimal(decimal("-1"), decimal("8"), 2)).toBe("-0.13");
+  });
+
+  it("carries the sign correctly for a negative divisor", () => {
+    expect(divideDecimal(decimal("1"), decimal("-8"), 2)).toBe("-0.13");
+  });
+
+  it("handles a fractional divisor exactly", () => {
+    // Every other case uses an integer (scale-0) divisor, so the `10^b.scale` alignment factor is
+    // always ×1 and never actually exercised — a mutant dropping it would survive. A divisor with
+    // its own decimals forces that factor to matter.
+    expect(divideDecimal(decimal("1"), decimal("0.5"), 2)).toBe("2.00");
+    expect(divideDecimal(decimal("1"), decimal("0.4"), 2)).toBe("2.50");
+    expect(divideDecimal(decimal("2.5"), decimal("0.25"), 2)).toBe("10.00");
+  });
+
+  it("reproduces a VAT-style base*rate/100 to two places", () => {
+    // 111.10 * 21 / 100 = 23.331 → 23.33
+    expect(
+      divideDecimal(multiplyDecimal(decimal("111.10"), decimal("21")), decimal("100"), 2),
+    ).toBe("23.33");
+  });
+
+  it("throws on division by zero", () => {
+    expect(() => divideDecimal(decimal("1"), decimal("0"), 2)).toThrow();
+  });
+
+  it("does not produce a signed zero when a negative dividend rounds to zero", () => {
+    // -1 / 1000 = -0.001, which rounds to zero at scale 2. A sign surviving onto that zero would
+    // produce "-0.00", which does not compare equal to "0.00" as a stored literal even though the
+    // amounts are the same — the same defect `decimal()` itself guards against.
+    expect(divideDecimal(decimal("-1"), decimal("1000"), 2)).toBe("0.00");
   });
 });
 

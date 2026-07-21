@@ -165,12 +165,12 @@ describe("buildAltaRecord — optional field pass-through", () => {
           Impuesto: "01",
           ClaveRegimen: "01",
           CalificacionOperacion: "S1",
-          TipoImpositivo: 21,
-          BaseImponibleOimporteNoSujeto: 100,
-          BaseImponibleACoste: 90,
-          CuotaRepercutida: 21,
-          TipoRecargoEquivalencia: 5.2,
-          CuotaRecargoEquivalencia: 5.2,
+          TipoImpositivo: "21",
+          BaseImponibleOimporteNoSujeto: "100",
+          BaseImponibleACoste: "90",
+          CuotaRepercutida: "21",
+          TipoRecargoEquivalencia: "5.2",
+          CuotaRecargoEquivalencia: "5.2",
         },
       ],
     });
@@ -190,7 +190,7 @@ describe("buildAltaRecord — optional field pass-through", () => {
       Desglose: [
         {
           OperacionExenta: "E1",
-          BaseImponibleOimporteNoSujeto: 100,
+          BaseImponibleOimporteNoSujeto: "100",
         },
       ],
     });
@@ -288,9 +288,9 @@ describe("buildAltaRecord — TipoRectificativa, FacturasRectificadas, FacturasS
       },
     ],
     ImporteRectificacion: {
-      BaseRectificada: 100,
-      CuotaRectificada: 21,
-      CuotaRecargoRectificado: 5,
+      BaseRectificada: "100",
+      CuotaRectificada: "21",
+      CuotaRecargoRectificado: "5",
     },
   };
 
@@ -339,7 +339,7 @@ describe("buildAltaRecord — TipoRectificativa, FacturasRectificadas, FacturasS
       ...ALTA_INPUT,
       TipoFactura: "R1",
       TipoRectificativa: "S",
-      ImporteRectificacion: { BaseRectificada: 100, CuotaRectificada: 21 },
+      ImporteRectificacion: { BaseRectificada: "100", CuotaRectificada: "21" },
     });
     expect(record.ImporteRectificacion).toEqual({
       BaseRectificada: "100.00",

@@ -1,5 +1,5 @@
 // The entire public surface of @waitron/verifactu. Re-exports only — no logic here.
-export { formatAmount, formatDate, formatDateTime, trimValue } from "./format.js";
+export { formatAmountExact, formatDate, formatDateTime, trimValue } from "./format.js";
 export {
   buildCadena,
   buildCadenaAlta,

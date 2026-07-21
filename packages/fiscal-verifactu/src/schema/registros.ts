@@ -78,7 +78,7 @@ export const registrosFacturacion = pgTable(
     desglose: jsonb("desglose"),
     // `text`, NOT `numeric(12,2)` — deliberately, and load-bearing. `packages/verifactu/src/
     // huella.ts`'s `buildCadena` reads `CuotaTotal`/`ImporteTotal` verbatim as strings and hashes
-    // them byte-for-byte; it never re-runs `formatAmount`. The stored column value therefore IS
+    // them byte-for-byte; it never re-runs `formatAmountExact`. The stored column value therefore IS
     // the huella's input, and the stored bytes must equal the hashed bytes — which only `text`
     // guarantees. `numeric` would silently re-render on read (and `numeric(12,2)` is additionally
     // too narrow: `ImporteSgn12.2Type` allows 12 integer digits, i.e. up to

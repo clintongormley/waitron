@@ -1,5 +1,6 @@
+import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { formatAmount, formatDate, formatDateTime, trimValue } from "./format.js";
+import { formatAmountExact, formatDate, formatDateTime, trimValue } from "./format.js";
 
 describe("trimValue", () => {
   it("strips leading and trailing ASCII whitespace", () => {
@@ -40,93 +41,77 @@ describe("trimValue", () => {
   });
 });
 
-describe("formatAmount", () => {
-  it("always emits exactly two decimal places", () => {
-    expect(formatAmount(123)).toBe("123.00");
-    expect(formatAmount(123.1)).toBe("123.10");
-    expect(formatAmount(123.45)).toBe("123.45");
+describe("formatAmountExact", () => {
+  it("emits exactly two decimals", () => {
+    expect(formatAmountExact("123")).toBe("123.00");
+    expect(formatAmountExact("123.1")).toBe("123.10");
+    expect(formatAmountExact("123.45")).toBe("123.45");
   });
 
-  it("never emits a leading plus", () => {
-    expect(formatAmount(123.45)).not.toContain("+");
+  it("never emits a leading +, and - only for genuine negatives", () => {
+    expect(formatAmountExact("123.45")).not.toContain("+");
+    expect(formatAmountExact("-123.45")).toBe("-123.45");
+    expect(formatAmountExact("0")).toBe("0.00");
+    // AMOUNT_PATTERN accepts a leading "-" on a zero magnitude (it does not
+    // special-case zero the way it special-cases leading zeros on other
+    // integers), so both "-0" and "-0.00" reach the sign logic below, which
+    // then strips the sign because the rounded magnitude is zero — mirroring
+    // the "0"/"0.00" case above.
+    expect(formatAmountExact("-0")).toBe("0.00");
+    expect(formatAmountExact("-0.00")).toBe("0.00");
   });
 
-  it("emits a minus for negative amounts", () => {
-    expect(formatAmount(-123.45)).toBe("-123.45");
+  it("rounds half away from zero on the third decimal", () => {
+    expect(formatAmountExact("0.125")).toBe("0.13");
+    expect(formatAmountExact("-0.125")).toBe("-0.13");
+    expect(formatAmountExact("0.124")).toBe("0.12");
+    expect(formatAmountExact("0.995")).toBe("1.00"); // carry
+    expect(formatAmountExact("-0.995")).toBe("-1.00");
+    expect(formatAmountExact("-0.001")).toBe("0.00"); // rounds to zero → unsigned
   });
 
-  it("emits zero without a sign", () => {
-    expect(formatAmount(0)).toBe("0.00");
-    expect(formatAmount(-0)).toBe("0.00");
+  it("accepts the full 12 integer digits and rejects 13", () => {
+    expect(formatAmountExact("999999999999")).toBe("999999999999.00");
+    expect(() => formatAmountExact("1000000000000")).toThrow(/12/);
+    expect(() => formatAmountExact("999999999999.999")).toThrow(/12/); // carry pushes to 13
   });
 
-  it("emits no sign for a negative amount that rounds to zero", () => {
-    // The sign guard must key off the rounded cents (`scaled`), not the raw
-    // sign of `value` — otherwise a tiny negative amount that rounds to zero
-    // would print "-0.00", which AEAT's schema forbids.
-    expect(formatAmount(-0.001)).toBe("0.00");
+  it("rejects non-decimal strings", () => {
+    expect(() => formatAmountExact("abc")).toThrow(/decimal string/);
+    expect(() => formatAmountExact("+1.00")).toThrow(/decimal string/);
+    expect(() => formatAmountExact("1.2.3")).toThrow(/decimal string/);
+    expect(() => formatAmountExact("")).toThrow(/decimal string/);
   });
 
-  it("rounds half away from zero", () => {
-    // Currency rounding, not JS Math.round's half-up-toward-positive-infinity,
-    // which would round -0.125 to -0.12 and break symmetry with +0.125.
-    expect(formatAmount(0.125)).toBe("0.13");
-    expect(formatAmount(-0.125)).toBe("-0.13");
+  it("rejects trailing garbage after a valid decimal", () => {
+    // AMOUNT_PATTERN is anchored at both ends. Without the trailing `$`, `.test()` only needs to
+    // match a PREFIX of the string, so "123 " would match on "123" and silently ignore the
+    // trailing space instead of being rejected — and BigInt("123 ") itself tolerates trailing
+    // whitespace, so nothing downstream would catch it either.
+    expect(() => formatAmountExact("123 ")).toThrow(/decimal string/);
   });
 
-  it("corrects floating-point representation error at the rounding boundary", () => {
-    // 1.005 is stored as 1.00499999999999989341..., and 1.005 * 100 evaluates
-    // to 100.49999999999999 in IEEE 754 — a naive Math.round(value * 100)
-    // rounds this DOWN to "1.00". The correct result, treating the literal as
-    // a human typed it, is "1.01".
-    expect(formatAmount(1.005)).toBe("1.01");
+  it("rejects a non-string runtime value even when it stringifies to a valid decimal", () => {
+    // TypeScript prevents this at the call site, but the typeof guard is the only thing standing
+    // between a boxed String (typeof "object", inherits every String.prototype method used below)
+    // and it sailing through undetected to a silently-produced result.
+    expect(() => formatAmountExact(new String("123") as unknown as string)).toThrow(/string/i);
   });
 
-  it("corrects representation error for another value on the same boundary", () => {
-    // A second, independent case on the x.xx5 boundary, so a fix that
-    // special-cases 1.005 specifically cannot pass.
-    expect(formatAmount(1.015)).toBe("1.02");
-  });
-
-  it("corrects representation error two decimal places further out", () => {
-    // 10.075 * 100 evaluates to 1007.4999999999999 in IEEE 754.
-    expect(formatAmount(10.075)).toBe("10.08");
-  });
-
-  it("carries a cents rollover into the integer part", () => {
-    // Rounding 99 cents up must carry into the integer part rather than
-    // print an impossible "0.100" or truncate back to "0.00".
-    expect(formatAmount(0.995)).toBe("1.00");
-    expect(formatAmount(-0.995)).toBe("-1.00");
-  });
-
-  it("rejects a non-finite amount", () => {
-    expect(() => formatAmount(Number.NaN)).toThrow(/finite/i);
-    expect(() => formatAmount(Number.POSITIVE_INFINITY)).toThrow(/finite/i);
-  });
-
-  it("allows exactly 12 integer digits", () => {
-    expect(formatAmount(999_999_999_999)).toBe("999999999999.00");
-  });
-
-  it("rejects an amount beyond the 12-integer-digit schema limit", () => {
-    expect(() => formatAmount(1_000_000_000_000)).toThrow(/12/);
-  });
-
-  it("rejects a value under the 12-digit pre-check that rounds up past it", () => {
-    // 999999999999.999 is below 10**12, so the pre-check alone would let it
-    // through, but rounding its cents up carries the integer part to
-    // 1000000000000 (13 digits) — the post-rounding check below the pre-check
-    // still needs to exist to catch this case.
-    expect(() => formatAmount(999999999999.999)).toThrow(/12/);
-  });
-
-  it("rejects a magnitude so large toFixed would switch to exponential notation", () => {
-    // (1e21).toFixed(10) returns "1e+21" (no "."), which would otherwise make
-    // the code below throw a TypeError from calling .slice on undefined,
-    // instead of this function's own range error.
-    expect(() => formatAmount(1e21)).toThrow(/12/);
-    expect(() => formatAmount(-1e21)).toThrow(/12/);
+  it("property: round-trips a canonical 2dp decimal to itself", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: -999_999, max: 999_999 }),
+        fc.integer({ min: 0, max: 99 }),
+        (i, c) => {
+          const s = `${i}.${String(c).padStart(2, "0")}`;
+          // decimal(...) form the value already carries; formatAmountExact must not alter a 2dp literal
+          expect(formatAmountExact(s.replace("-0.", "0."))).toBe(
+            `${i}.${String(c).padStart(2, "0")}`.replace(/^-0\./, "0."),
+          );
+        },
+      ),
+    );
   });
 });
 

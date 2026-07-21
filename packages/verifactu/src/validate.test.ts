@@ -23,10 +23,14 @@ const INPUT: AltaInput = {
   TipoFactura: "F1",
   DescripcionOperacion: "Venta en establecimiento",
   Desglose: [
-    { CalificacionOperacion: "S1", BaseImponibleOimporteNoSujeto: 111.1, CuotaRepercutida: 12.35 },
+    {
+      CalificacionOperacion: "S1",
+      BaseImponibleOimporteNoSujeto: "111.10",
+      CuotaRepercutida: "12.35",
+    },
   ],
-  CuotaTotal: 12.35,
-  ImporteTotal: 123.45,
+  CuotaTotal: "12.35",
+  ImporteTotal: "123.45",
   Encadenamiento: { PrimerRegistro: "S" },
   SistemaInformatico: SISTEMA,
   generadoEn: new Date("2024-01-01T19:20:30+01:00"),
@@ -497,7 +501,7 @@ describe("validate", () => {
   });
 
   it("rejects a TipoImpositivo exceeding the schema's 3 integer digits", () => {
-    // Tipo2.2Type is unsigned with at most 3 integer digits; formatAmount
+    // Tipo2.2Type is unsigned with at most 3 integer digits; formatAmountExact
     // (signed, up to 12 integer digits) does not enforce that.
     const record = valid();
     record.Desglose[0]!.TipoImpositivo = "1234.50";
@@ -637,7 +641,7 @@ describe("validate — rectificativa rules (AEAT 1114/1115/1118)", () => {
       ...INPUT,
       TipoFactura: "R1",
       TipoRectificativa: "S",
-      ImporteRectificacion: { BaseRectificada: 100, CuotaRectificada: 21 },
+      ImporteRectificacion: { BaseRectificada: "100", CuotaRectificada: "21" },
     });
 
   it("returns no issues for a well-formed rectificativa por sustitución", () => {

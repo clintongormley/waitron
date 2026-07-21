@@ -178,12 +178,12 @@ export interface CadenaAnulacionInput {
 interface DetalleDesgloseInputCommon {
   Impuesto?: string;
   ClaveRegimen?: string;
-  TipoImpositivo?: number;
-  BaseImponibleOimporteNoSujeto: number;
-  BaseImponibleACoste?: number;
-  CuotaRepercutida?: number;
-  TipoRecargoEquivalencia?: number;
-  CuotaRecargoEquivalencia?: number;
+  TipoImpositivo?: string;
+  BaseImponibleOimporteNoSujeto: string;
+  BaseImponibleACoste?: string;
+  CuotaRepercutida?: string;
+  TipoRecargoEquivalencia?: string;
+  CuotaRecargoEquivalencia?: string;
 }
 
 /** Same exclusive-choice shape as DetalleDesglose above, over input types. */
@@ -198,11 +198,11 @@ export interface IDFacturaARInput {
   FechaExpedicionFactura: Date;
 }
 
-/** Input mirror of DesgloseRectificacion — amounts arrive as numbers, formatted once by the builder. */
+/** Input mirror of DesgloseRectificacion — amounts arrive as exact decimal strings. */
 export interface DesgloseRectificacionInput {
-  BaseRectificada: number;
-  CuotaRectificada: number;
-  CuotaRecargoRectificado?: number;
+  BaseRectificada: string;
+  CuotaRectificada: string;
+  CuotaRecargoRectificado?: string;
 }
 
 /** Fields shared verbatim between AltaInput and AnulacionInput. */
@@ -238,8 +238,8 @@ export interface AltaInput extends RecordInputBase {
   Macrodato?: SiNo;
   Cupon?: SiNo;
   Desglose: DetalleDesgloseInput[];
-  CuotaTotal: number;
-  ImporteTotal: number;
+  CuotaTotal: string;
+  ImporteTotal: string;
 }
 
 export interface AnulacionInput extends RecordInputBase {

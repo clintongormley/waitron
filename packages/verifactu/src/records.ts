@@ -1,4 +1,4 @@
-import { formatAmount, formatDate, formatDateTime } from "./format.js";
+import { formatAmountExact, formatDate, formatDateTime } from "./format.js";
 import { computeHuella } from "./huella.js";
 import type {
   AltaInput,
@@ -22,20 +22,20 @@ function formatDetalle(detalle: DetalleDesgloseInput): DetalleDesglose {
     ...(detalle.Impuesto !== undefined && { Impuesto: detalle.Impuesto }),
     ...(detalle.ClaveRegimen !== undefined && { ClaveRegimen: detalle.ClaveRegimen }),
     ...(detalle.TipoImpositivo !== undefined && {
-      TipoImpositivo: formatAmount(detalle.TipoImpositivo),
+      TipoImpositivo: formatAmountExact(detalle.TipoImpositivo),
     }),
-    BaseImponibleOimporteNoSujeto: formatAmount(detalle.BaseImponibleOimporteNoSujeto),
+    BaseImponibleOimporteNoSujeto: formatAmountExact(detalle.BaseImponibleOimporteNoSujeto),
     ...(detalle.BaseImponibleACoste !== undefined && {
-      BaseImponibleACoste: formatAmount(detalle.BaseImponibleACoste),
+      BaseImponibleACoste: formatAmountExact(detalle.BaseImponibleACoste),
     }),
     ...(detalle.CuotaRepercutida !== undefined && {
-      CuotaRepercutida: formatAmount(detalle.CuotaRepercutida),
+      CuotaRepercutida: formatAmountExact(detalle.CuotaRepercutida),
     }),
     ...(detalle.TipoRecargoEquivalencia !== undefined && {
-      TipoRecargoEquivalencia: formatAmount(detalle.TipoRecargoEquivalencia),
+      TipoRecargoEquivalencia: formatAmountExact(detalle.TipoRecargoEquivalencia),
     }),
     ...(detalle.CuotaRecargoEquivalencia !== undefined && {
-      CuotaRecargoEquivalencia: formatAmount(detalle.CuotaRecargoEquivalencia),
+      CuotaRecargoEquivalencia: formatAmountExact(detalle.CuotaRecargoEquivalencia),
     }),
   };
   // `!== undefined`, not `"CalificacionOperacion" in detalle`: the `in`
@@ -61,10 +61,10 @@ function formatIDFacturaAR(entry: IDFacturaARInput, offsetMinutes: number): IDFa
 /** Formats ImporteRectificacion — sf:DesgloseRectificacionType. */
 function formatImporteRectificacion(input: DesgloseRectificacionInput): DesgloseRectificacion {
   return {
-    BaseRectificada: formatAmount(input.BaseRectificada),
-    CuotaRectificada: formatAmount(input.CuotaRectificada),
+    BaseRectificada: formatAmountExact(input.BaseRectificada),
+    CuotaRectificada: formatAmountExact(input.CuotaRectificada),
     ...(input.CuotaRecargoRectificado !== undefined && {
-      CuotaRecargoRectificado: formatAmount(input.CuotaRecargoRectificado),
+      CuotaRecargoRectificado: formatAmountExact(input.CuotaRecargoRectificado),
     }),
   };
 }
@@ -129,8 +129,8 @@ export function buildAltaRecord(input: AltaInput): RegistroAlta {
     ...(input.Macrodato !== undefined && { Macrodato: input.Macrodato }),
     ...(input.Cupon !== undefined && { Cupon: input.Cupon }),
     Desglose: input.Desglose.map(formatDetalle),
-    CuotaTotal: formatAmount(input.CuotaTotal),
-    ImporteTotal: formatAmount(input.ImporteTotal),
+    CuotaTotal: formatAmountExact(input.CuotaTotal),
+    ImporteTotal: formatAmountExact(input.ImporteTotal),
     Encadenamiento: input.Encadenamiento,
     SistemaInformatico: input.SistemaInformatico,
     FechaHoraHusoGenRegistro: formatDateTime(input.generadoEn, input.offsetMinutes),

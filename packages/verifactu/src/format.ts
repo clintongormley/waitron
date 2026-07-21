@@ -37,68 +37,52 @@ export function trimValue(value: string | undefined | null): string {
   return value.slice(start, end);
 }
 
+// Anchored, no exponent, no leading plus, no leading zeros, at least one digit each side of a
+// point — the same shape @waitron/shared's Decimal uses, re-stated here because packages/verifactu
+// has ZERO in-repo dependencies and cannot import it.
+const AMOUNT_PATTERN = /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/;
+
 /**
- * Formats a monetary amount as the record literal: always two decimal places,
- * `.` separator, never a leading `+`, rounded half away from zero.
- *
- * Rounds on the decimal STRING, not by multiplying by 100. `value * 100` is a
- * second binary floating-point operation and can land the scaled value on the
- * wrong side of the rounding boundary — e.g. `1.005 * 100 === 100.49999999999999`
- * in IEEE 754, which would round down to "1.00" instead of "1.01". Rendering
- * through `toFixed(10)` first recovers the decimal digits a human actually
- * typed (correcting representation error like `1.005` being stored as
- * `1.00499999999999989341...`) without that second lossy multiplication.
+ * Formats an exact decimal STRING as the record literal: always two decimals, `.` separator,
+ * never a leading `+`, `-` only for a genuine negative, half away from zero. The value never
+ * passes through a JS number at any point, so float-representation error (e.g. `1.005 * 100 ===
+ * 100.49999999999999` in IEEE 754) cannot arise at all.
  */
-export function formatAmount(value: number): string {
-  if (!Number.isFinite(value)) {
-    throw new Error(`Amount must be finite, received ${String(value)}`);
+export function formatAmountExact(value: string): string {
+  if (typeof value !== "string" || !AMOUNT_PATTERN.test(value)) {
+    throw new Error(`Amount must be an exact decimal string, received ${JSON.stringify(value)}`);
   }
-  // Guard the magnitude before formatting. toFixed(10) switches to exponential
-  // notation ("1e+21") for |value| >= 1e21, which has no "." to split on — the
-  // code below would then throw a confusing TypeError from calling .slice on
-  // undefined, instead of the intended range error. This does NOT replace the
-  // post-rounding check below: a value just under 10 ** MAX_INTEGER_DIGITS
-  // (e.g. 999999999999.999) passes this guard but can still round up past the
-  // digit limit once cents are rounded — that carry is only known after
-  // rounding, so it needs its own check.
+  const negative = value.startsWith("-");
+  const body = negative ? value.slice(1) : value;
+  const point = body.indexOf(".");
+  const intText = point === -1 ? body : body.slice(0, point);
+  const fracText = point === -1 ? "" : body.slice(point + 1);
+
+  let integer = BigInt(intText);
+  let cents = BigInt((fracText + "00").slice(0, 2));
+  // Half away from zero, decided by the third decimal alone: "5".."9" is at or above half a cent
+  // no matter what follows it, "0".."4" is below no matter what follows it.
   //
-  // `>=` vs `>` here is mutation-tested as equivalent, not merely untested:
-  // MAX_INTEGER_DIGITS (12) is so far below the exponential-notation
-  // threshold (1e21) that the ONLY value where `>=`/`>` disagree is exactly
-  // 10**12 itself, and at exactly that value the integer part is already 13
-  // digits — the post-rounding check below always throws the identical
-  // message anyway. Verified by fuzzing 2M values plus every power-of-ten
-  // boundary from 1e8 to 1e22. No test can kill an equivalent mutant.
-  if (Math.abs(value) >= 10 ** MAX_INTEGER_DIGITS) {
-    throw new Error(
-      `Amount exceeds the ${MAX_INTEGER_DIGITS} integer digits permitted by ImporteSgn12.2Type`,
-    );
-  }
-  const [integerDigits, fractionDigits] = Math.abs(value).toFixed(10).split(".");
-  let integerPart = Number(integerDigits);
-  let cents = Number(fractionDigits.slice(0, 2));
-  // Half away from zero, decided by the third decimal digit alone: "0".."4"
-  // leaves the remainder below half a cent no matter what follows it, and
-  // "5".."9" puts it at or above half a cent no matter what follows it.
-  if (fractionDigits[2] >= "5") {
-    cents += 1;
-    if (cents === 100) {
-      cents = 0;
-      integerPart += 1;
+  // `fracText.length > 2 &&` is mutation-tested as equivalent, not merely untested: when
+  // fracText.length <= 2, `fracText[2]` is `undefined`, and `undefined >= "5"` is always `false`
+  // regardless of what the length check is replaced with (`true`, `>= 2`, etc.) — the second
+  // operand alone already forces the same result whenever the first would matter. No test can
+  // kill an equivalent mutant here.
+  if (fracText.length > 2 && fracText[2] >= "5") {
+    cents += 1n;
+    if (cents === 100n) {
+      cents = 0n;
+      integer += 1n;
     }
   }
-  if (String(integerPart).length > MAX_INTEGER_DIGITS) {
+  const integerText = integer.toString();
+  if (integerText.length > MAX_INTEGER_DIGITS) {
     throw new Error(
       `Amount exceeds the ${MAX_INTEGER_DIGITS} integer digits permitted by ImporteSgn12.2Type`,
     );
   }
-  // `value < 0` vs `value <= 0` is mutation-tested as equivalent: they only
-  // disagree at value === 0 (incl. -0), and at exactly 0 the rounding above
-  // always yields integerPart === 0 && cents === 0, which makes the second
-  // clause false regardless — so the sign is always "" there either way.
-  // Verified by fuzzing 2M values. No test can kill an equivalent mutant.
-  const sign = value < 0 && (integerPart !== 0 || cents !== 0) ? "-" : "";
-  return `${sign}${integerPart}.${String(cents).padStart(2, "0")}`;
+  const sign = negative && (integer !== 0n || cents !== 0n) ? "-" : "";
+  return `${sign}${integerText}.${cents.toString().padStart(2, "0")}`;
 }
 
 /**

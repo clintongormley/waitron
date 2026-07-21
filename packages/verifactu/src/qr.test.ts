@@ -14,10 +14,14 @@ const record = buildAltaRecord({
   TipoFactura: "F1",
   DescripcionOperacion: "Venta",
   Desglose: [
-    { CalificacionOperacion: "S1", BaseImponibleOimporteNoSujeto: 199.5, CuotaRepercutida: 41.9 },
+    {
+      CalificacionOperacion: "S1",
+      BaseImponibleOimporteNoSujeto: "199.5",
+      CuotaRepercutida: "41.9",
+    },
   ],
-  CuotaTotal: 41.9,
-  ImporteTotal: 241.4,
+  CuotaTotal: "41.9",
+  ImporteTotal: "241.4",
   Encadenamiento: { PrimerRegistro: "S" },
   SistemaInformatico: SISTEMA,
   generadoEn: new Date("2024-09-01T10:00:00+02:00"),
@@ -40,7 +44,7 @@ describe("buildQrPayload", () => {
 
   it("matches AEAT's published preproduction example verbatim, apart from the decimal-places policy", () => {
     // AEAT's own text uses importe=241.4; this fixture's ImporteTotal is
-    // "241.40" (formatAmount always emits two decimal places), so the two
+    // "241.40" (formatAmountExact always emits two decimal places), so the two
     // literals differ by a trailing zero AEAT's own formatting policy would
     // also have produced from the same value — everything else here matches
     // AEAT's published preproduction example character for character.

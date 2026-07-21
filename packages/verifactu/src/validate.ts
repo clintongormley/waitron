@@ -64,18 +64,18 @@ const NUMSERIE_PATTERN = /^[A-Za-z0-9/_.-]+$/;
 const TOTAL_TOLERANCE = 10;
 /**
  * AEAT's schema type for these fields is `(\+|-)?\d{1,12}(\.\d{0,2})?`, but
- * this project's own serialisation policy (see formatAmount) is stricter:
- * always exactly two decimal places, never a leading `+`. Records reaching
- * validate() should already conform to that policy, so anything looser is
- * treated as malformed rather than merely off-spec.
+ * this project's own serialisation policy (see formatAmountExact) is
+ * stricter: always exactly two decimal places, never a leading `+`. Records
+ * reaching validate() should already conform to that policy, so anything
+ * looser is treated as malformed rather than merely off-spec.
  */
 const AMOUNT_PATTERN = /^-?\d{1,12}\.\d{2}$/;
 /**
  * AEAT's schema type for TipoImpositivo/TipoRecargoEquivalencia is
  * `Tipo2.2Type`: `\d{1,3}(\.\d{0,2})?` — unsigned, at most 3 integer digits.
- * formatAmount always emits exactly two decimal places and never a leading
- * `+`, so the tighter (but still schema-conformant) shape reaching validate()
- * should always match this.
+ * formatAmountExact always emits exactly two decimal places and never a
+ * leading `+`, so the tighter (but still schema-conformant) shape reaching
+ * validate() should always match this.
  */
 const TIPO_PATTERN = /^\d{1,3}\.\d{2}$/;
 /**
@@ -307,7 +307,7 @@ export function validate(record: RegistroAlta | RegistroAnulacion): ValidationIs
     }
 
     // TipoImpositivo/TipoRecargoEquivalencia are Tipo2.2Type: unsigned, at
-    // most 3 integer digits. formatAmount is signed with up to 12 integer
+    // most 3 integer digits. formatAmountExact is signed with up to 12 integer
     // digits, so it happily produces literals this narrower type rejects
     // (e.g. TipoImpositivo: 1234.5 -> "1234.50").
     const tipoFields: Array<[string, string | undefined]> = [

@@ -5,6 +5,7 @@ import {
   assertMoney,
   compareDecimal,
   decimal,
+  divideDecimal,
   fiscalRecordId,
   hasCode,
   isAppError,
@@ -67,6 +68,7 @@ describe("package public surface (./index.js)", () => {
     expect(addDecimal(a, b)).toBe("3.30");
     expect(subtractDecimal(b, a)).toBe("1.10");
     expect(multiplyDecimal(a, b)).toBe("2.4200");
+    expect(divideDecimal(b, a, 2)).toBe("2.00");
     expect(negateDecimal(a)).toBe("-1.10");
     expect(isZeroDecimal(decimal("0"))).toBe(true);
     expect(compareDecimal(a, b)).toBe(-1);

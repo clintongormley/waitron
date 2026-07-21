@@ -12,7 +12,7 @@ import type { RegistroAlta } from "./types.js";
  *  - numserie: unreachable by construction — validate() restricts
  *    NumSerieFactura to a charset with no character where the two encodings
  *    differ.
- *  - fecha, importe: unreachable by construction — formatDate/formatAmount
+ *  - fecha, importe: unreachable by construction — formatDate/formatAmountExact
  *    are the only producers of these literals and never emit a space or any
  *    other character where the two encodings differ, independent of
  *    whether validate() runs.
