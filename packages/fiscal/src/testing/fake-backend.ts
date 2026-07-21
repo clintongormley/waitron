@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import type { SaleId, TillId } from "@waitron/shared";
+import type { SaleId, TenantId, TillId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type {
   FiscalBackend,
@@ -180,23 +180,25 @@ export class FakeFiscalBackend implements FiscalBackend {
     });
   }
 
-  async checkIntegrity(tx: Transaction, tillId: TillId): Promise<IntegrityReport> {
-    // `count(*)` with no `group by` always returns exactly one row, so `rows.rows[0]` is never
-    // absent — a `?? "0"` fallback here would be dead code no test could ever legitimately reach,
-    // not a defensive default.
+  async checkIntegrity(
+    tx: Transaction,
+    tenantId: TenantId,
+    tillId: TillId,
+  ): Promise<IntegrityReport> {
     const rows = await tx.execute<{ count: string }>(sql`
-      select count(*)::text as count from fake_fiscal_records where till_id = ${tillId}
+      select count(*)::text as count from fake_fiscal_records
+      where tenant_id = ${tenantId} and till_id = ${tillId}
     `);
     const checked = Number(rows.rows[0].count);
     const issues = this.injectedIssues.get(tillId) ?? [];
     return { ok: issues.length === 0, checked, issues };
   }
 
-  async pendingCount(tillId: TillId): Promise<number> {
+  async pendingCount(tenantId: TenantId, tillId: TillId): Promise<number> {
     const rows = await this.db.execute<{ count: string }>(sql`
       select count(*)::text as count
       from fake_fiscal_records
-      where till_id = ${tillId} and state = 'pending'
+      where tenant_id = ${tenantId} and till_id = ${tillId} and state = 'pending'
     `);
     return Number(rows.rows[0].count);
   }

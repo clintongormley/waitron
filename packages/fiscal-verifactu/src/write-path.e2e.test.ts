@@ -60,7 +60,7 @@ afterAll(async () => {
 beforeEach(async () => {
   ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenantWithSif(db));
   // **Deviation from the brief.** The brief constructed `new VerifactuBackend({ clock:
-  // steadyClock })`. The real constructor also requires `db`: `pendingCount(tillId)` is the one
+  // steadyClock })`. The real constructor also requires `db`: `pendingCount(tenantId, tillId)` is the one
   // `FiscalBackend` method with no `tx` parameter at all, so it cannot participate in a caller's
   // transaction and needs its own connection to query against (`backend.ts`'s own doc comment on
   // `VerifactuBackendOptions.db`).

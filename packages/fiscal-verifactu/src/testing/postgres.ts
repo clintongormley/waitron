@@ -5,6 +5,12 @@ import { FISCAL_MIGRATIONS } from "../migrations.js";
 export interface RealPostgres {
   /** A fresh Database — its own pool, therefore its own backend process. */
   connect(): Promise<Database>;
+  /**
+   * A fresh Database authenticated as `role` (which the caller must already have created). Used by
+   * RLS tests that need queries to run as a non-superuser member of `app_user` — the container's
+   * default user is a superuser and bypasses RLS, so `connect()` cannot exercise a policy.
+   */
+  connectAs(role: string, password: string): Promise<Database>;
   stop(): Promise<void>;
 }
 
@@ -48,6 +54,12 @@ export async function startRealPostgres(): Promise<RealPostgres> {
 
   return {
     connect: () => createPostgresDb(uri),
+    connectAs: (role, password) => {
+      const u = new URL(uri);
+      u.username = role;
+      u.password = password;
+      return createPostgresDb(u.toString());
+    },
     stop: async () => {
       await container.stop();
     },

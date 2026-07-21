@@ -152,7 +152,7 @@ export async function recordSale(
   // (tenant, till) chain-head row lock as its own first statement and holds it until commit, so
   // art. 7.i verification runs against exactly the state this transaction is about to extend
   // rather than a snapshot another writer may already have moved past.
-  const verification = await backend.checkIntegrity(tx, input.tillId);
+  const verification = await backend.checkIntegrity(tx, input.tenantId, input.tillId);
   // Nothing branches on `verification.ok`. A failed check records an incident (below, once
   // `saleId` exists) and the sale is chained anyway — no fiscal condition may block a sale. If a
   // later change adds `if (!verification.ok) throw ...` here, it has implemented the one

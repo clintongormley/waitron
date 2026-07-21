@@ -192,8 +192,8 @@ function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>)
     registerTill: (tx, till, params) => fake.registerTill(tx, till, params),
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
     recordVoid: (tx, saleId, reason) => fake.recordVoid(tx, saleId, reason),
-    checkIntegrity: (tx, till) => fake.checkIntegrity(tx, till),
-    pendingCount: (till) => fake.pendingCount(till),
+    checkIntegrity: (tx, tenant, till) => fake.checkIntegrity(tx, tenant, till),
+    pendingCount: (tenant, till) => fake.pendingCount(tenant, till),
     ...overrides,
   };
 }
@@ -322,7 +322,7 @@ describe("recordSale — the order of operations", () => {
     const observed: number[] = [];
     const fake = new FakeFiscalBackend(db);
     const backend = wrapBackend(fake, {
-      async checkIntegrity(tx, till) {
+      async checkIntegrity(tx, tenant, till) {
         // Read the counter from inside the verification call. If allocation had already run,
         // next_number would read 2 here. Observing only "both happened" would not discriminate
         // which came first — this is the one observation that does.
@@ -331,7 +331,7 @@ describe("recordSale — the order of operations", () => {
           .from(invoiceSeries)
           .where(eq(invoiceSeries.id, seriesId));
         observed.push(row?.n ?? -1);
-        return fake.checkIntegrity(tx, till);
+        return fake.checkIntegrity(tx, tenant, till);
       },
     });
     await run(backend);

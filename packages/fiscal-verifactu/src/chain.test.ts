@@ -12,6 +12,7 @@ import { AppError } from "@waitron/shared";
 import { buildAltaRecord, computeHuella, formatDateTime } from "@waitron/verifactu";
 import { appendToChain, isUniqueViolation, lockChainHead } from "./chain.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
+import { currentSif } from "./registro-sif.js";
 import { altaFor, anulacionFor, seedSale, seedTill, type SeededTill } from "./testing/seed.js";
 
 let db: Database;
@@ -294,6 +295,24 @@ describe("appendToChain", () => {
 
     expect(error).not.toBeInstanceOf(AppError);
     expect(error).toMatchObject({ code: "23503" });
+  });
+});
+
+describe("appendToChain — pre-fetched SIF", () => {
+  it("rejects a SIF that belongs to a different till", async () => {
+    const saleId = await seedSale(db, till, 1);
+    await expect(
+      db.transaction(async (tx) => {
+        const sif = await currentSif(tx, till.tenantId, till.tillId);
+        // A sif whose tillId does not match the (tenant, till) being appended to — a caller bug the
+        // dedup must never silently mis-attribute. A fabricated UUID stands in for another till.
+        const wrongSif = {
+          ...sif,
+          tillId: "ffffffff-0000-4000-8000-000000000000" as typeof sif.tillId,
+        };
+        return appendToChain(tx, till.tenantId, till.tillId, altaFor(saleId, 1, 1), wrongSif);
+      }),
+    ).rejects.toThrow(/SIF/i);
   });
 });
 

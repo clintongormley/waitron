@@ -145,8 +145,8 @@ function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>)
     registerTill: (tx, till, params) => fake.registerTill(tx, till, params),
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
     recordVoid: (tx, id, reason) => fake.recordVoid(tx, id, reason),
-    checkIntegrity: (tx, till) => fake.checkIntegrity(tx, till),
-    pendingCount: (till) => fake.pendingCount(till),
+    checkIntegrity: (tx, tenant, till) => fake.checkIntegrity(tx, tenant, till),
+    pendingCount: (tenant, till) => fake.pendingCount(tenant, till),
     ...overrides,
   };
 }
@@ -335,7 +335,10 @@ describe("recordVoid — error propagation", () => {
         throw new Error("recordVoid must not be reached: the insert above always rejects first");
       },
       checkIntegrity: async () => ({ ok: true, checked: 0, issues: [] }),
-      pendingCount: () => {
+      // Both params are part of FiscalBackend's real signature; this override never reads
+      // either, mirroring fake-backend.ts's identical `_reason` convention.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      pendingCount: (_tenant, _till) => {
         throw new Error("not used by this test");
       },
     };
@@ -433,9 +436,9 @@ describe("recordVoid — no fiscal condition blocks a void", () => {
     const observed: string[] = [];
     const fake = new FakeFiscalBackend(db);
     const backend = wrapBackend(fake, {
-      async checkIntegrity(tx, till) {
+      async checkIntegrity(tx, tenant, till) {
         observed.push("checkIntegrity");
-        return fake.checkIntegrity(tx, till);
+        return fake.checkIntegrity(tx, tenant, till);
       },
       async recordVoid(tx, id, reason) {
         observed.push("recordVoid");

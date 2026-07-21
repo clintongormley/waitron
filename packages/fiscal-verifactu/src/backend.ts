@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { tenants, tills } from "@waitron/db";
+import { tenants, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { AppError, sumDecimals } from "@waitron/shared";
 import type { SaleId, TenantId, TillId } from "@waitron/shared";
@@ -72,9 +72,9 @@ export interface VerifactuBackendOptions {
    * `issuedAt`/`offsetMinutes` by its caller instead and must not read the clock a second time
    * (see `record-sale.ts`'s own "one clock reading for the whole transaction" note in
    * `packages/core`). `recordVoid` has no caller-supplied timestamp on its signature at all
-   * (`recordVoid(tx, saleId, reason)`), so it reads this clock itself. `pendingCount(tillId)`
-   * takes no transaction at all, so it needs its OWN `db` handle below rather than one a caller
-   * passes in.
+   * (`recordVoid(tx, saleId, reason)`), so it reads this clock itself. `pendingCount(tenantId,
+   * tillId)` takes no transaction at all, so it needs its OWN `db` handle below rather than one a
+   * caller passes in.
    */
   clock: TrustedClock;
   /** The connection `pendingCount` queries against — the one `FiscalBackend` method with no `tx`
@@ -203,11 +203,13 @@ export class VerifactuBackend implements FiscalBackend {
       offsetMinutes: sale.offsetMinutes,
     };
 
-    const appended = await appendToChain(tx, sale.tenantId, sale.tillId, {
-      tipo: "alta",
-      saleId: sale.saleId,
-      input,
-    });
+    const appended = await appendToChain(
+      tx,
+      sale.tenantId,
+      sale.tillId,
+      { tipo: "alta", saleId: sale.saleId, input },
+      sif,
+    );
 
     // Step 6. `pendiente`, `intentos: 0`, `csv: null` are every one of this column's own
     // defaults (`./schema/envios.ts`) — nothing here has been sent anywhere, which is the whole
@@ -320,11 +322,13 @@ export class VerifactuBackend implements FiscalBackend {
       offsetMinutes: now.offsetMinutes,
     };
 
-    const appended = await appendToChain(tx, tenantId, tillId, {
-      tipo: "anulacion",
-      saleId,
-      input,
-    });
+    const appended = await appendToChain(
+      tx,
+      tenantId,
+      tillId,
+      { tipo: "anulacion", saleId, input },
+      sif,
+    );
 
     await tx.insert(envios).values({ registroId: appended.id, tenantId });
 
@@ -338,38 +342,37 @@ export class VerifactuBackend implements FiscalBackend {
   }
 
   /**
-   * Delegates to `verifyChain` (art. 7.i), resolving the `tenantId` a caller does not supply:
-   * `FiscalBackend.checkIntegrity(tx, tillId)` carries no `tenantId` at all — it is `packages/fiscal`'s
-   * own signature (Task 11), unchanged here per this task's governing context — so it is read
-   * back off `tills`, under whatever RLS scope the caller's own transaction already carries.
+   * Delegates to `verifyChain` (art. 7.i). `tenantId` is supplied by the caller (always inside a
+   * `withTenant`-scoped transaction), so there is no `tenants`/`tills` lookup to recover it.
    */
-  async checkIntegrity(tx: Transaction, tillId: TillId): Promise<IntegrityReport> {
-    const tenantId = await this.tenantIdForTill(tx, tillId);
+  async checkIntegrity(
+    tx: Transaction,
+    tenantId: TenantId,
+    tillId: TillId,
+  ): Promise<IntegrityReport> {
     return verifyChain(tx, tenantId, tillId);
   }
 
   /**
-   * How many of this till's records have not yet been confirmed by AEAT.
+   * How many of this till's records AEAT has not yet confirmed — the art. 16.4 unsent count.
    *
-   * **Unverified against real-deployment row-level security** (flagged in this task's report,
-   * not silently shipped): `envios`/`registros_facturacion` both carry `FORCE ROW LEVEL SECURITY`
-   * tenant-isolation policies (`0001_registros_inmutables.sql`), and this method's `db` handle —
-   * unlike every other method here — never runs inside a caller's `withTenant`-scoped
-   * transaction, because `FiscalBackend.pendingCount(tillId)` takes no `tx` at all. Whether this
-   * query sees any rows in a live deployment therefore depends entirely on which role/session
-   * `db` itself was constructed with — untested here, since this package's own test suite only
-   * ever runs against PGlite's default superuser connection, which bypasses RLS unconditionally
-   * regardless of role and would report the same (correct) count whether or not the scoping
-   * question above is actually solved.
+   * Filters on `tenant_id` explicitly (defense-in-depth alongside the RLS policy). `withTenant`
+   * sets `app.tenant_id` (transaction-local) so `current_tenant_id()` resolves and the RLS
+   * tenant-isolation policy matches this tenant's rows. Without it, a non-superuser deployment
+   * role sees NULL and counts zero — the art. 16.4 gap. On PGlite (superuser) the GUC is set but
+   * irrelevant; the count is correct either way, which is why only real Postgres proves this
+   * (`pending-count.rls.test.ts`).
    */
-  async pendingCount(tillId: TillId): Promise<number> {
-    const rows = await this.db.execute<{ count: string }>(sql`
-      select count(*)::text as count
-      from envios e
-      join registros_facturacion r on r.id = e.registro_id
-      where r.till_id = ${tillId} and e.estado = 'pendiente'
-    `);
-    return Number(rows.rows[0]!.count);
+  async pendingCount(tenantId: TenantId, tillId: TillId): Promise<number> {
+    return withTenant(this.db, tenantId, async (tx) => {
+      const rows = await tx.execute<{ count: string }>(sql`
+        select count(*)::text as count
+        from envios e
+        join registros_facturacion r on r.id = e.registro_id
+        where r.till_id = ${tillId} and e.tenant_id = ${tenantId} and e.estado = 'pendiente'
+      `);
+      return Number(rows.rows[0]!.count);
+    });
   }
 
   private buildSistemaInformatico(sif: SifRegistration, legalName: string): SistemaInformatico {
@@ -400,21 +403,5 @@ export class VerifactuBackend implements FiscalBackend {
     }
     /* v8 ignore stop */
     return row;
-  }
-
-  private async tenantIdForTill(tx: Transaction, tillId: TillId): Promise<TenantId> {
-    const [row] = await tx
-      .select({ tenantId: tills.tenantId })
-      .from(tills)
-      .where(eq(tills.id, tillId));
-    /* v8 ignore start */
-    if (row === undefined) {
-      // Structurally unreachable in practice: a caller always passes a `tillId` it already knows
-      // is real (its own till). Left as a plain, non-domain `Error` rather than a `sale.*`/
-      // `fiscal.*` code — this is a caller programming error, not a fiscal condition.
-      throw new Error(`VerifactuBackend.checkIntegrity: no till found for ${tillId}`);
-    }
-    /* v8 ignore stop */
-    return row.tenantId as TenantId;
   }
 }

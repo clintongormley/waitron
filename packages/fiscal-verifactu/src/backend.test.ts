@@ -236,13 +236,17 @@ describe("recordSale — invoice type selection", () => {
 
 describe("checkIntegrity", () => {
   it("reports nothing checked on a till that has never sold", async () => {
-    const report = await withTenant(db, tenantId, (tx) => backend.checkIntegrity(tx, tillId));
+    const report = await withTenant(db, tenantId, (tx) =>
+      backend.checkIntegrity(tx, tenantId, tillId),
+    );
     expect(report).toEqual({ ok: true, checked: 0, issues: [] });
   });
 
   it("verifies against the chain the same till actually has after a sale", async () => {
     await sell();
-    const report = await withTenant(db, tenantId, (tx) => backend.checkIntegrity(tx, tillId));
+    const report = await withTenant(db, tenantId, (tx) =>
+      backend.checkIntegrity(tx, tenantId, tillId),
+    );
     expect(report.ok).toBe(true);
   });
 });
@@ -250,18 +254,18 @@ describe("checkIntegrity", () => {
 describe("pendingCount", () => {
   it("counts the pending envios row a sale just created", async () => {
     await sell();
-    expect(await backend.pendingCount(tillId)).toBe(1);
+    expect(await backend.pendingCount(tenantId, tillId)).toBe(1);
   });
 
   it("does not count another till's pending records", async () => {
     await sell();
     const other = await seedTenantWithSif(db);
-    expect(await backend.pendingCount(other.tillId)).toBe(0);
+    expect(await backend.pendingCount(other.tenantId, other.tillId)).toBe(0);
   });
 
   it("drops once the sidecar row is no longer pendiente", async () => {
     await sell();
     await db.execute(sql`update envios set estado = 'aceptado' where tenant_id = ${tenantId}`);
-    expect(await backend.pendingCount(tillId)).toBe(0);
+    expect(await backend.pendingCount(tenantId, tillId)).toBe(0);
   });
 });

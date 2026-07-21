@@ -56,7 +56,11 @@ export async function recordVoid(
   // No clock-degradation incident here: unlike `recordSale`, `recordVoid` takes no `TrustedClock`
   // at all (its own `new Date()` a few lines down is not a `TrustedReading`), so there is no
   // `.warning` to forward.
-  const verification = await backend.checkIntegrity(tx, sale.tillId as TillId);
+  const verification = await backend.checkIntegrity(
+    tx,
+    sale.tenantId as TenantId,
+    sale.tillId as TillId,
+  );
   const pending = verification.issues.map((issue) => ({
     error: new AppError("chain.verification_failed", {
       tillId: sale.tillId,

@@ -133,21 +133,21 @@ describe("checkIntegrity", () => {
   it("reports how many records it checked, not merely that it is happy", async () => {
     await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
     await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 2)));
-    const report = await db.transaction((tx) => backend.checkIntegrity(tx, TILL_A));
+    const report = await db.transaction((tx) => backend.checkIntegrity(tx, TENANT, TILL_A));
     expect(report).toEqual({ ok: true, checked: 2, issues: [] });
   });
 
   it("reports zero checked on a till with no records, without complaining", async () => {
     // The start-of-chain case in generic clothing: nothing recorded is a normal state, not a
     // failure. A backend for a regime with nothing to check answers exactly this shape.
-    const report = await db.transaction((tx) => backend.checkIntegrity(tx, TILL_A));
+    const report = await db.transaction((tx) => backend.checkIntegrity(tx, TENANT, TILL_A));
     expect(report).toEqual({ ok: true, checked: 0, issues: [] });
   });
 
   it("surfaces an injected issue", async () => {
     await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
     backend.breakIntegrity(TILL_A, { code: "fake.tampered", params: { sequence: 1 } });
-    const report = await db.transaction((tx) => backend.checkIntegrity(tx, TILL_A));
+    const report = await db.transaction((tx) => backend.checkIntegrity(tx, TENANT, TILL_A));
     expect(report.ok).toBe(false);
     expect(report.issues).toEqual([{ code: "fake.tampered", params: { sequence: 1 } }]);
   });
@@ -167,7 +167,9 @@ describe("checkIntegrity", () => {
     await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
     backend.breakIntegrity(TILL_A, { code: "fake.tampered", params: { sequence: 1 } });
     backend.restoreIntegrity(TILL_A);
-    expect((await db.transaction((tx) => backend.checkIntegrity(tx, TILL_A))).ok).toBe(true);
+    expect((await db.transaction((tx) => backend.checkIntegrity(tx, TENANT, TILL_A))).ok).toBe(
+      true,
+    );
   });
 });
 
@@ -177,7 +179,7 @@ describe("pendingCount", () => {
   it("counts records that have not been acknowledged", async () => {
     await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
     await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 2)));
-    expect(await backend.pendingCount(TILL_A)).toBe(2);
+    expect(await backend.pendingCount(TENANT, TILL_A)).toBe(2);
   });
 
   it("drops when a record is acknowledged, so it is not a constant", async () => {
@@ -186,17 +188,17 @@ describe("pendingCount", () => {
     const ref = await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
     await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 2)));
     await backend.acknowledge(ref.recordId);
-    expect(await backend.pendingCount(TILL_A)).toBe(1);
+    expect(await backend.pendingCount(TENANT, TILL_A)).toBe(1);
   });
 
   it("is scoped to one till", async () => {
     await db.transaction((tx) => backend.registerTill(tx, TILL_B, { tenantId: TENANT }));
     await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
-    expect(await backend.pendingCount(TILL_B)).toBe(0);
+    expect(await backend.pendingCount(TENANT, TILL_B)).toBe(0);
   });
 
   it("is zero for a till that has never recorded anything", async () => {
-    expect(await backend.pendingCount(TILL_A)).toBe(0);
+    expect(await backend.pendingCount(TENANT, TILL_A)).toBe(0);
   });
 });
 

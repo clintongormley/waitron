@@ -137,17 +137,19 @@ export interface FiscalBackend {
 
   /**
    * Whatever this backend must check about what it has already recorded, before recording
-   * anything more. The caller records the report and surfaces it to staff; it must NEVER branch
-   * on `ok` to abandon the sale. No fiscal condition blocks a sale (spec §4), and a backend whose
-   * regime has nothing to check answers `{ ok: true, checked: 0, issues: [] }`.
+   * anything more. `tenantId` is passed explicitly — the caller is always inside a tenant-scoped
+   * transaction and already holds it, so the backend need not re-derive it. The caller records the
+   * report and surfaces it to staff; it must NEVER branch on `ok` to abandon the sale. No fiscal
+   * condition blocks a sale (spec §4), and a backend whose regime has nothing to check answers
+   * `{ ok: true, checked: 0, issues: [] }`.
    */
-  checkIntegrity(tx: Transaction, tillId: TillId): Promise<IntegrityReport>;
+  checkIntegrity(tx: Transaction, tenantId: TenantId, tillId: TillId): Promise<IntegrityReport>;
 
   /**
    * How many records this till has not yet had confirmed. The UI reads this, never the module's
-   * own tables — verification stays entirely inside the module, and a UI reaching past this
-   * method would drag both a regime vocabulary and a schema dependency into the presentation
-   * layer at once.
+   * own tables. Takes `tenantId` and NO transaction: the unsent-count read happens outside any
+   * sale transaction, and the backend needs the tenant to establish the row-level-security scope
+   * itself (a query with no tenant scope silently counts zero under RLS).
    */
-  pendingCount(tillId: TillId): Promise<number>;
+  pendingCount(tenantId: TenantId, tillId: TillId): Promise<number>;
 }

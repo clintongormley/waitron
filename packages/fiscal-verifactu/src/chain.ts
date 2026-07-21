@@ -11,6 +11,7 @@ import type { Transaction } from "@waitron/db";
 import type { AltaInput, AnulacionInput, Encadenamiento } from "@waitron/verifactu";
 import { buildAltaRecord, buildAnulacionRecord } from "@waitron/verifactu";
 import { currentSif } from "./registro-sif.js";
+import type { SifRegistration } from "./registro-sif.js";
 import { pointerTo, toRegistroRow } from "./registro-row.js";
 import { cadenas } from "./schema/cadenas.js";
 import { registrosFacturacion } from "./schema/registros.js";
@@ -139,13 +140,24 @@ async function attemptAppend(
   tenantId: TenantId,
   tillId: TillId,
   registro: PendingRegistro,
+  sif?: SifRegistration,
 ): Promise<{ id: string; secuencia: number; huella: string }> {
   const head = await lockChainHead(tx, tenantId, tillId);
   // Chain identity is sif_id, resolved independently of `secuencia` — the two must never be
   // conflated (spec's own finding: secuencia is OUR outbox ordering aid, sif_id is which SIF
   // identity actually generated the record, and neither is derived from the other or from the
   // invoice counter).
-  const sif = await currentSif(tx, tenantId, tillId);
+  //
+  // A caller that already fetched the SIF (recordSale/recordVoid) threads it in to avoid a second
+  // currentSif round trip. It is stable across the append retry loop — SIF identity does not change
+  // mid-append — so it is reused on every attempt. Guarded because a sif for a different (tenant,
+  // till) would silently mis-attribute the record's sif_id: a programming error, so a plain Error.
+  if (sif !== undefined && (sif.tenantId !== tenantId || sif.tillId !== tillId)) {
+    throw new Error(
+      `appendToChain: supplied SIF is for (${sif.tenantId}, ${sif.tillId}), not (${tenantId}, ${tillId})`,
+    );
+  }
+  const resolvedSif = sif ?? (await currentSif(tx, tenantId, tillId));
   const secuencia = head.secuencia + 1;
 
   let encadenamiento: Encadenamiento;
@@ -182,7 +194,7 @@ async function attemptAppend(
   const row = toRegistroRow(record, {
     tenantId,
     tillId,
-    sifId: sif.id,
+    sifId: resolvedSif.id,
     saleId: registro.saleId,
     secuencia,
     offsetMinutes: registro.input.offsetMinutes,
@@ -232,10 +244,13 @@ export async function appendToChain(
   tenantId: TenantId,
   tillId: TillId,
   registro: PendingRegistro,
+  sif?: SifRegistration,
 ): Promise<{ id: string; secuencia: number; huella: string }> {
   for (let attempt = 1; attempt <= MAX_APPEND_ATTEMPTS; attempt++) {
     try {
-      return await tx.transaction((nested) => attemptAppend(nested, tenantId, tillId, registro));
+      return await tx.transaction((nested) =>
+        attemptAppend(nested, tenantId, tillId, registro, sif),
+      );
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
     }
