@@ -60,9 +60,24 @@ display. That is a full-featured POS and too much for one cycle. Phasing:
 | 13 | Tips — attribution + payroll export | Restaurant |
 | 14 | Bookings | Restaurant |
 | 15 | Online ordering / click-and-collect | Later |
+| 16 | **Workforce** — time & attendance (*registro de jornada*), shift scheduling, payroll handling | Deli — **time-record at launch**; scheduling + payroll follow |
+| 17 | Accounting export — sales/VAT (and later payroll) data to the asesor's package | Deli (core subset) |
 
 Sub-projects 2 and 3 are joined at the hip — the chain *is* the sales table — and get specced
 together, immediately after the design system.
+
+**Workforce and accounting export (added 2026-07-22).** The deli employs staff from opening day,
+so the *registro de jornada* (mandatory working-time record, ET art. 34.9) is a **launch-day legal
+obligation**, not a Restaurant-phase nicety — sub-project 16's time-and-attendance piece ships with
+the deli; shift scheduling and payroll follow. Salary handling is most likely an **integration /
+export** to the asesor's package, not an in-house payroll engine (Seguridad Social cotización, IRPF
+retenciones and nóminas are normally run by a graduado social); sub-project 17 (accounting export)
+extends Reporting (#8). **Labour, payroll and social-security compliance is the domain of an *asesor
+laboral / graduado social*, distinct from the fiscal-SIF asesor** — those questions do NOT belong in
+`docs/compliance/asesor-questions.md`, which is Verifactu-scoped. Of the other requested features,
+reservations map to #14 (Bookings), table management to #11 (floor plan) + #10 (tabs), online
+ordering to #15, and table-side QR ordering is a customer-facing sibling of #15 (every QR order
+still flows through the fiscal chain, #3).
 
 ### Sequencing notes
 
