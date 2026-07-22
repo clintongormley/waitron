@@ -4,7 +4,7 @@
 // this module documents chain.verification_failed's shape (RecordIncidentInput's own doc
 // comment) without constructing one — that happens in record-sale.ts/record-void.ts.
 import "./errors.js";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { incidents } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { AppError } from "@waitron/shared";
@@ -53,6 +53,45 @@ export async function recordIncident(tx: Transaction, input: RecordIncidentInput
     severity: input.severity,
     detectedAt: input.detectedAt.toISOString(),
   });
+}
+
+/**
+ * Like `recordIncident`, but raises AT MOST ONE open incident per `(tenant_id, till_id, code,
+ * sale_id)`: a guarded insert that no-ops when an UNACKNOWLEDGED incident for that key already
+ * exists, so a periodic caller (reconcile's sweep) that re-detects a still-open condition each pass
+ * does not accumulate a duplicate row every time. Returns whether it inserted (`true`) or de-duped
+ * (`false`) — the caller counts only real raises. Once the prior incident is acknowledged, the key
+ * is free again and the next detection raises afresh (a genuinely-unresolved condition resurfaces).
+ *
+ * Single-statement `insert … where not exists` — NOT a race-free primitive: two transactions CAN
+ * both pass the `where not exists` and both insert, because no unique constraint serialises them.
+ * This relies on the caller's invocation pattern: reconcile runs once per tenant/period with no
+ * concurrent same-tenant sweep (unlike the drainer's SKIP-LOCKED contention), so a partial unique
+ * index is not needed here — and adding one would change every `recordIncident` insert, the
+ * drainer's included. A future caller that DOES issue concurrent same-key raises must add
+ * `(tenant_id, till_id, code, sale_id) where acknowledged_at is null` as a partial unique index and
+ * switch this to `on conflict do nothing`. `recordIncident` (the unconditional insert) stays for
+ * callers that intend one row per event.
+ */
+export async function recordIncidentOnce(
+  tx: Transaction,
+  input: RecordIncidentInput,
+): Promise<boolean> {
+  const saleId = input.saleId ?? null;
+  const { rows } = await tx.execute<{ id: string }>(sql`
+    insert into incidents (tenant_id, till_id, sale_id, code, params, severity, detected_at)
+    select ${input.tenantId}, ${input.tillId}, ${saleId}, ${input.error.code},
+           ${JSON.stringify(input.error.params)}::jsonb, ${input.severity},
+           ${input.detectedAt.toISOString()}
+    where not exists (
+      select 1 from incidents
+      where tenant_id = ${input.tenantId} and till_id = ${input.tillId}
+        and code = ${input.error.code} and sale_id is not distinct from ${saleId}
+        and acknowledged_at is null
+    )
+    returning id
+  `);
+  return rows.length > 0;
 }
 
 /**

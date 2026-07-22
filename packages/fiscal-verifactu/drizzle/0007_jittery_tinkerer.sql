@@ -1,0 +1,1 @@
+ALTER TABLE "envios" ADD COLUMN "reconciled_resubmit_at" timestamp with time zone;

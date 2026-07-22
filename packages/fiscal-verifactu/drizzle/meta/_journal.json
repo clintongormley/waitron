@@ -50,6 +50,20 @@
       "when": 1784735544628,
       "tag": "0006_acks_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784748448344,
+      "tag": "0007_jittery_tinkerer",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784750693354,
+      "tag": "0008_acks_delete_grant",
+      "breakpoints": true
     }
   ]
 }

@@ -54,6 +54,11 @@ export const envios = pgTable(
     mensajeError: text("mensaje_error"),
     enviadoEn: timestamp("enviado_en", { withTimezone: true }),
     confirmadoEn: timestamp("confirmado_en", { withTimezone: true }),
+    // Set by reconcile when it re-submits a `noTrace` record (reset to `pendiente`), so a later
+    // sweep can tell "already remediated once, still missing → escalate to an incident" from a
+    // first detection. Cleared once AEAT has a trace of the record again. NULL for every record
+    // reconcile has never had to remediate. See reconcile.ts's noTrace lifecycle.
+    reconciledResubmitAt: timestamp("reconciled_resubmit_at", { withTimezone: true }),
   },
   // See cadenas.ts's identical comment: this extraConfig callback is invoked lazily, only by
   // `drizzle-kit generate` (in its own process) or a `drizzle(client, { schema })` wired to this

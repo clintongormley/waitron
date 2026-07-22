@@ -1,0 +1,14 @@
+-- Hand-written, same reason as 0006_acks_rls.sql's own header: drizzle-kit diffs against its own
+-- snapshot and has no concept of privileges, so a GRANT/REVOKE would not survive a later
+-- `generate` run if it lived in a generated file — and it does not need to, because a generated
+-- migration never touches it again.
+--
+-- 0006_acks_rls.sql granted app_user SELECT, INSERT, UPDATE on acks — every privilege the
+-- drainer/reconcile write paths needed AT THE TIME. Reconcile's `noTrace` auto-remediation
+-- (plan 3b Task 4, reconcile-resolution) adds a fourth: `deleteAck` removes the stale `accepted`
+-- ack when it resets a record to `pendiente` (the acks invariant — a `pendiente` row carries no
+-- ack), so app_user now needs DELETE too. Confirmed live against a real, non-superuser role while
+-- writing reconcile.rls.test.ts: without this grant, `deleteAck` fails
+-- `permission denied for table acks` under RLS, rolling back the WHOLE reconcile T2 transaction
+-- (the estado reset included) for a condition that is otherwise silent and self-healing.
+GRANT DELETE ON "acks" TO app_user;

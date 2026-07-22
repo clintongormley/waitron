@@ -2,14 +2,15 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations, withTenant } from "@waitron/db";
+import { recordSale, recordVoid } from "@waitron/core";
+import { CORE_MIGRATIONS, asAppUser, createPgliteDb, runMigrations, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { VerifactuBackend } from "./backend.js";
 import { reconcile } from "./reconcile.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
-import { steadyClock } from "../test/write-path-fixtures.js";
+import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 
 // This file's fixtures all stamp `fecha_expedicion_factura` = 2026-07-20 (drain-fixtures' own
 // PAST_FECHA), so every seeded record falls in this one period.
@@ -82,6 +83,64 @@ async function ackStatesFor(tenantId: string): Promise<Map<string, string>> {
   return new Map(rows.map((r) => [r.registro_id, r.state]));
 }
 
+/** The committed `envios.reconciled_resubmit_at` marker for one registro — the `noTrace`
+ * remediation lifecycle's own state: null until a first `noTrace` detection stamps it, set while
+ * the remediation is outstanding, and cleared again once AEAT has a trace of the record. */
+async function reconciledResubmitAtFor(
+  tenantId: string,
+  registroId: string,
+): Promise<string | null> {
+  const { rows } = await withTenant(db, tenantId, (tx) =>
+    tx.execute<{ reconciled_resubmit_at: string | null }>(
+      sql`select reconciled_resubmit_at from envios where tenant_id = ${tenantId} and registro_id = ${registroId}`,
+    ),
+  );
+  return rows[0]?.reconciled_resubmit_at ?? null;
+}
+
+/** The alta registro's own id and its AEAT consulta key (`nif|numSerieFactura|DD-MM-YYYY`, the
+ * same triple `@waitron/verifactu`'s fake `keyOf` builds — `to_char(..., 'DD-MM-YYYY')` renders
+ * the date piece in AEAT's own form directly, so this never re-derives that formatting by hand).
+ * Looked up post-hoc by `sale_id` rather than threaded through the caller: unlike
+ * `seedPendingEnvios`'s fixture, a `recordSale`-created alta's identity is assigned by the write
+ * path itself (series/invoice-number allocation), not chosen by the test. */
+async function altaIdentityFor(
+  tenantId: string,
+  saleId: string,
+): Promise<{ id: string; facturaKey: string }> {
+  const { rows } = await withTenant(db, tenantId, (tx) =>
+    tx.execute<{ id: string; id_emisor_factura: string; num_serie_factura: string; fecha: string }>(
+      sql`
+        select id, id_emisor_factura, num_serie_factura,
+          to_char(fecha_expedicion_factura, 'DD-MM-YYYY') as fecha
+        from registros_facturacion
+        where sale_id = ${saleId} and tipo_registro = 'alta'
+      `,
+    ),
+  );
+  const row = rows[0];
+  if (row === undefined) throw new Error(`altaIdentityFor: no alta registro for sale ${saleId}`);
+  return {
+    id: row.id,
+    facturaKey: `${row.id_emisor_factura}|${row.num_serie_factura}|${row.fecha}`,
+  };
+}
+
+/** Whether a sibling anulación registro (same `sale_id`) exists for the given alta — the local
+ * mirror of `reconcile.ts`'s own `hasSiblingAnulacion`, used here only to confirm the fixture set
+ * up the state the reconcile test actually means to exercise. */
+async function hasAnulacion(tenantId: string, altaRegistroId: string): Promise<boolean> {
+  const { rows } = await withTenant(db, tenantId, (tx) =>
+    tx.execute<{ sale_id: string }>(sql`
+      select r2.sale_id from registros_facturacion r1
+      join registros_facturacion r2
+        on r2.sale_id = r1.sale_id and r2.tenant_id = r1.tenant_id and r2.tipo_registro = 'anulacion'
+      where r1.id = ${altaRegistroId} and r1.tenant_id = ${tenantId}
+    `),
+  );
+  return rows.length > 0;
+}
+
 describe("reconcile — the three audit cases", () => {
   it("clean audit: our records all match AEAT — empty lists", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
@@ -131,7 +190,11 @@ describe("reconcile — the three audit cases", () => {
     expect([...estados.values()]).toEqual(["aceptado", "aceptado", "aceptado"]);
   });
 
-  it("noTrace: we believe aceptado, AEAT has no trace (forget) → noTrace + error incident", async () => {
+  it("noTrace first detection: resets to pendiente, deletes the ack, sets the marker, no incident", async () => {
+    // Task 4 (reconcile resolution semantics): a FIRST noTrace no longer raises an incident — it is
+    // usually just consulta lag, so reconcile self-heals it silently by re-submitting (reset to
+    // `pendiente`) and dropping the stale `accepted` ack (the acks invariant — a `pendiente` row
+    // carries no ack). Only a SECOND, still-missing detection escalates (see the test below).
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
@@ -141,6 +204,7 @@ describe("reconcile — the three audit cases", () => {
     const result = await backend.reconcile(seeded.tenantId, PERIOD);
 
     expect(result.checked).toBe(1);
+    // The audit finding is still reported, from the PRE-remediation snapshot.
     expect(result.noTrace).toHaveLength(1);
     expect(result.noTrace[0]).toEqual({
       recordId: seeded.registroIds[0],
@@ -149,19 +213,112 @@ describe("reconcile — the three audit cases", () => {
     });
     expect(result.lostAck).toEqual([]);
     expect(result.drift).toEqual([]);
-    expect(result.incidentsRaised).toBe(1);
+    // No incident on first detection.
+    expect(result.incidentsRaised).toBe(0);
+    expect(await incidentsFor(seeded.tenantId)).toHaveLength(0);
+
+    // Remediated: reset to pendiente so the drainer re-submits it, and the marker is stamped.
+    const estados = await estadosFor(seeded.tenantId);
+    expect(estados.get(seeded.registroIds[0]!)).toBe("pendiente");
+    const marker = await reconciledResubmitAtFor(seeded.tenantId, seeded.registroIds[0]!);
+    expect(marker).not.toBeNull();
+
+    // The acks invariant: a `pendiente` row carries NO ack.
+    const acks = await ackStatesFor(seeded.tenantId);
+    expect(acks.has(seeded.registroIds[0]!)).toBe(false);
+  });
+
+  it("noTrace already remediated (marker set) and still missing: raises one idempotent error incident, no re-reset", async () => {
+    const aeat = createFakeAeat({ serverNow: SERVER_NOW });
+    const seeded = await seedPendingEnvios(db, { count: 1 });
+    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    await storeAllAtAeat(backend); // aceptado at us, stored at AEAT
+    aeat.forget(seeded.facturaKeys[0]!); // AEAT loses all trace of it
+
+    // Simulate an already-remediated record: the marker is set (a prior sweep's first detection),
+    // but AEAT STILL has no trace of it.
+    await withTenant(db, seeded.tenantId, (tx) =>
+      tx.execute(
+        sql`update envios set reconciled_resubmit_at = ${SERVER_NOW.toISOString()} where registro_id = ${seeded.registroIds[0]}`,
+      ),
+    );
+
+    const first = await backend.reconcile(seeded.tenantId, PERIOD);
+
+    expect(first.checked).toBe(1);
+    expect(first.noTrace).toHaveLength(1);
+    expect(first.incidentsRaised).toBe(1);
 
     const inc = await incidentsFor(seeded.tenantId);
     expect(inc).toHaveLength(1);
     expect(inc[0]?.code).toBe("fiscal.reconcile_no_trace");
     expect(inc[0]?.severity).toBe("error");
-    // The AEAT IDFactura triple rides in the incident params, never on the mismatch.
     expect(inc[0]?.params).toMatchObject({
       registroId: seeded.registroIds[0],
       idEmisorFactura: seeded.nif,
       numSerieFactura: "S1/1",
       fechaExpedicionFactura: "20-07-2026",
     });
+
+    // NOT reset again — estado stays exactly as it was (still `aceptado`, since this record was
+    // never actually remediated, only marked as if it had been).
+    const estados = await estadosFor(seeded.tenantId);
+    expect(estados.get(seeded.registroIds[0]!)).toBe("aceptado");
+
+    // Sweep 2 re-detects the SAME persistent noTrace — still classified, still escalated, but must
+    // NOT insert a second incident row (recordIncidentOnce dedup).
+    const second = await backend.reconcile(seeded.tenantId, PERIOD);
+    expect(second.noTrace).toHaveLength(1);
+    expect(second.incidentsRaised).toBe(0); // deduped — no NEW incident counted this sweep
+
+    const incidents = await incidentsFor(seeded.tenantId);
+    expect(incidents).toHaveLength(1);
+  });
+
+  it("ack↔estado invariant holds across a noTrace reset: no accepted ack for a now-pendiente row", async () => {
+    // The load-bearing property the marker-set/error-incident test above does not itself check:
+    // after a first-detection remediation, the record must carry NO acks row at all — an `accepted`
+    // ack sitting on a `pendiente` envío would disagree with the estado it is supposed to reflect
+    // (the acks invariant `acks.test.ts`'s own INVARIANT test guards from the other direction).
+    const aeat = createFakeAeat({ serverNow: SERVER_NOW });
+    const seeded = await seedPendingEnvios(db, { count: 1 });
+    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    await storeAllAtAeat(backend); // aceptado at us, with an `accepted` ack, stored at AEAT
+    aeat.forget(seeded.facturaKeys[0]!); // AEAT loses all trace of it
+
+    expect((await ackStatesFor(seeded.tenantId)).size).toBe(1); // the pre-reset accepted ack
+
+    await backend.reconcile(seeded.tenantId, PERIOD); // first detection — remediates silently
+
+    const estados = await estadosFor(seeded.tenantId);
+    expect(estados.get(seeded.registroIds[0]!)).toBe("pendiente");
+
+    const acks = await ackStatesFor(seeded.tenantId);
+    expect(acks.has(seeded.registroIds[0]!)).toBe(false); // no ack at all for the pendiente row
+  });
+
+  it("a record AEAT has a trace of clears a set marker", async () => {
+    const aeat = createFakeAeat({ serverNow: SERVER_NOW });
+    const seeded = await seedPendingEnvios(db, { count: 1 });
+    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    await storeAllAtAeat(backend); // aceptado at us, AEAT holds it Correcta
+
+    // Simulate a marker left over from an earlier noTrace remediation that has since self-healed.
+    await withTenant(db, seeded.tenantId, (tx) =>
+      tx.execute(
+        sql`update envios set reconciled_resubmit_at = ${SERVER_NOW.toISOString()} where registro_id = ${seeded.registroIds[0]}`,
+      ),
+    );
+
+    const result = await backend.reconcile(seeded.tenantId, PERIOD);
+
+    expect(result.noTrace).toEqual([]);
+    expect(result.drift).toEqual([]);
+    expect(result.incidentsRaised).toBe(0);
+    expect(await incidentsFor(seeded.tenantId)).toHaveLength(0);
+
+    const marker = await reconciledResubmitAtFor(seeded.tenantId, seeded.registroIds[0]!);
+    expect(marker).toBeNull();
   });
 
   it("drift: we believe aceptado, AEAT holds AceptadaConErrores → drift + warning incident", async () => {
@@ -196,6 +353,11 @@ describe("reconcile — the three audit cases", () => {
   });
 
   it("drift: we believe aceptado, AEAT holds Anulada → drift + error incident", async () => {
+    // Task 6 (reconcile resolution semantics): this seeds an alta with NO sibling anulación, so
+    // AEAT reporting Anulada here is the ANOMALOUS path (see `hasSiblingAnulacion` in reconcile.ts)
+    // — AEAT never annuls on its own, but the classification must still hold when it does. This
+    // test stays green unchanged; the genuine-void "clean" case and the anomalous path's
+    // cross-sweep idempotency are covered by the two tests below.
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
@@ -224,6 +386,98 @@ describe("reconcile — the three audit cases", () => {
     // (incident-only, exactly as Task 4 left it). The `correct` no-op branch must bite here.
     const estados = await estadosFor(seeded.tenantId);
     expect(estados.get(seeded.registroIds[0]!)).toBe("aceptado");
+  });
+
+  it("drift-Anulada with a local anulacion is clean — no drift entry, no incident", async () => {
+    // The genuine void path (Task 6): AEAT marks the alta Anulada once it accepts the anulación we
+    // submitted for the SAME sale, while the alta's own envío stays `aceptado` (its own state never
+    // changes — only the anulación's identity travels to AEAT via IDFacturaAnulada). Voided via the
+    // REAL `recordVoid` (packages/core), exactly as `void-path.e2e.test.ts` drives it — never a raw
+    // insert, since `registros_facturacion` is append-only and carries required chain columns.
+    //
+    // The alta itself must come from the REAL write path (`recordSale`), not `seedPendingEnvios`'s
+    // fixture: that fixture hand-writes a deterministic-but-fake `huella` (its own doc comment)
+    // purely to exercise the drainer, which is never chain-valid — `recordVoid`'s own
+    // `checkIntegrity` call recomputes the chain for real and would raise a genuine
+    // `chain.verification_failed` incident against it (confirmed live while writing this test),
+    // an artifact of the fixture that has nothing to do with reconcile's own classification. This
+    // mirrors `drain.test.ts`'s "drain — happy path, an anulación row" describe block, the one
+    // other place in this package that pairs `recordSale`+`recordVoid` instead. `steadyClock`'s
+    // fixed instant (write-path-fixtures.ts) is 2026-03-01, not this file's usual July, so this
+    // test reconciles a LOCAL March period, not the shared `PERIOD` constant.
+    const period = { year: "2026", month: "03" };
+    const { tenantId, tillId, seriesId, workingOrderId } = await seedTenantWithSif(db);
+    const aeat = createFakeAeat({ serverNow: SERVER_NOW });
+    const backend = new VerifactuBackend({ clock: steadyClock, db, client: aeat.client() });
+
+    const sale = await withTenant(db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      return recordSale(tx, backend, saleInput({ tenantId, tillId, seriesId, workingOrderId }));
+    });
+    // `recordSale`'s own envío row takes `proximo_intento_en`'s column DEFAULT (real wall-clock
+    // `now()` at insert), NOT this file's simulated `DRAIN_AT` — `seedPendingEnvios`'s fixture stamps
+    // that column itself, which is the only reason `DRAIN_AT` works for every OTHER test in this file.
+    // Pin it to `DRAIN_AT` so the drain below is deterministic rather than wall-clock-relative (a
+    // Copilot review point — clock skew / slow CI could otherwise flake a `Date.now()`-based due time).
+    await withTenant(db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      await tx.execute(
+        sql`update envios set proximo_intento_en = ${DRAIN_AT.toISOString()} where tenant_id = ${tenantId}`,
+      );
+    });
+    await backend.drain(DRAIN_AT); // alta: local aceptado, AEAT Correcta
+
+    const alta = await altaIdentityFor(tenantId, sale.saleId);
+    await withTenant(db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      await recordVoid(tx, backend, sale.saleId, "staff error");
+    });
+    // The void appends a sibling anulación registro (same sale_id) with its own pendiente envío —
+    // present in this period too (it carries the annulled invoice's own expedition date), but never
+    // submitted to AEAT here, so it stays an ordinary in-flight row, not a mismatch.
+    expect(await hasAnulacion(tenantId, alta.id)).toBe(true);
+
+    // AEAT now reports the alta itself Anulada — the expected authority state post-void.
+    aeat.setConsultaState(alta.facturaKey, "Anulada");
+
+    const result = await backend.reconcile(tenantId, period);
+
+    expect(result.checked).toBe(2); // the alta's envío + the anulación's own pendiente envío
+    expect(result.drift).toEqual([]); // agreement — the alta is NOT flagged
+    expect(result.noTrace).toEqual([]);
+    expect(result.lostAck).toEqual([]); // the anulación's own pendiente row is in-flight, not lost
+    expect(result.incidentsRaised).toBe(0);
+    expect(await incidentsFor(tenantId)).toHaveLength(0);
+
+    // No correction either — the alta's envío stays exactly as the drainer left it.
+    const estados = await estadosFor(tenantId);
+    expect(estados.get(alta.id)).toBe("aceptado");
+  });
+
+  it("drift-Anulada with NO local anulacion is idempotent across sweeps — one incident, not two", async () => {
+    // The anomalous path's OTHER property (on top of the "stays green" test above): `raiseOnce`
+    // must dedup a persistently-reported Anulada, since Anulada is never corrected (`CORRECTION`
+    // has no entry for it) and so re-detects as drift on every sweep for as long as it stays open.
+    const aeat = createFakeAeat({ serverNow: SERVER_NOW });
+    const seeded = await seedPendingEnvios(db, { count: 1 });
+    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    await storeAllAtAeat(backend);
+    aeat.setConsultaState(seeded.facturaKeys[0]!, "Anulada"); // no local anulación at all
+
+    const first = await backend.reconcile(seeded.tenantId, PERIOD);
+    expect(first.drift).toHaveLength(1);
+    expect(first.incidentsRaised).toBe(1);
+    expect(await incidentsFor(seeded.tenantId)).toHaveLength(1);
+
+    // Sweep 2 re-detects the SAME persistent Anulada — still classified as drift (there is no
+    // converged state to agree with), but must NOT insert a second incident row.
+    const second = await backend.reconcile(seeded.tenantId, PERIOD);
+    expect(second.drift).toHaveLength(1);
+    expect(second.incidentsRaised).toBe(0); // deduped — no NEW incident counted this sweep
+
+    const incidents = await incidentsFor(seeded.tenantId);
+    expect(incidents).toHaveLength(1);
+    expect(incidents[0]?.code).toBe("fiscal.reconcile_drift_anulada");
   });
 
   it("drift-AceptadaConErrores CONVERGES: a second sweep does not re-raise the incident", async () => {

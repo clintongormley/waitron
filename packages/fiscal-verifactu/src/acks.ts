@@ -87,6 +87,14 @@ export async function writeAck(tx: Transaction, registroId: string, now: Date): 
   `);
 }
 
+/** Removes a record's ack row. Used when reconcile resets an `aceptado` record to `pendiente` (a
+ * `noTrace` remediation): `ackStateOf('pendiente')` is null, so the record must carry NO ack, or the
+ * committed ack would disagree with the estado (the acks invariant). The drainer writes a fresh ack
+ * when it re-accepts the record. Idempotent — deleting an absent ack is a no-op. */
+export async function deleteAck(tx: Transaction, registroId: string): Promise<void> {
+  await tx.execute(sql`delete from acks where registro_id = ${registroId}`);
+}
+
 /** Every undelivered ack for the tenant, oldest submission first — the transport read side. Runs
  * inside `withTenant`, so the acks tenant-isolation policy matches under a non-superuser role. */
 export async function pendingAcks(db: Database, tenantId: string): Promise<Ack[]> {

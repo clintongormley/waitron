@@ -152,18 +152,28 @@ describe("appendToChain under real contention", () => {
     // writer on that chain waits until lock_timeout.
     const holder = await pg.connect();
     const waiter = await pg.connect();
+    let release: () => void = () => {};
+    let holding: Promise<unknown> | undefined;
     try {
       const saleId = await seedSale(admin, till, 1);
       await admin.transaction((tx) =>
         appendToChain(tx, till.tenantId, till.tillId, altaFor(saleId, 1, 1)),
       );
 
-      let release!: () => void;
       const held = new Promise<void>((resolve) => (release = resolve));
-      const holding = holder.transaction(async (tx) => {
+      // Wait until the holder has ACTUALLY taken the lock before racing the waiter. Without this the
+      // waiter can win the race under load, acquire the still-free lock and SUCCEED — which fails the
+      // assertion below AND leaves `holding` open forever (stuck on `await held`), so the finally's
+      // holder.close() blocks on a transaction that never returns. That is the 120s hang this test
+      // flaked with on CI (reproduced locally by delaying the holder's own lock acquisition).
+      let acquire!: () => void;
+      const acquired = new Promise<void>((resolve) => (acquire = resolve));
+      holding = holder.transaction(async (tx) => {
         await tx.execute(sql`select 1 from cadenas where till_id = ${till.tillId} for update`);
+        acquire();
         await held;
       });
+      await acquired;
 
       const second = await seedSale(admin, till, 2);
       const error = await captureError(() =>
@@ -175,10 +185,11 @@ describe("appendToChain under real contention", () => {
       // captureError + pgErrorCode, not `.rejects.toMatchObject({ code: "55P03" })` — the same
       // DrizzleQueryError-wrapping reason chain.test.ts's own bypass-insert test documents.
       expect(pgErrorCode(error)).toBe("55P03");
-
-      release();
-      await holding;
     } finally {
+      // Always release the holder and settle its transaction BEFORE closing — an assertion failure
+      // (or any throw) above must never leave the head-lock transaction open, or close() hangs.
+      release();
+      if (holding) await holding.catch(() => {});
       await holder.close();
       await waiter.close();
     }
@@ -189,18 +200,26 @@ describe("appendToChain under real contention", () => {
     // advisory key: a busy till must never stall a quiet one.
     const holder = await pg.connect();
     const writer = await pg.connect();
+    let release: () => void = () => {};
+    let holding: Promise<unknown> | undefined;
     try {
       const first = await seedSale(admin, till, 1);
       await admin.transaction((tx) =>
         appendToChain(tx, till.tenantId, till.tillId, altaFor(first, 1, 1)),
       );
 
-      let release!: () => void;
       const held = new Promise<void>((resolve) => (release = resolve));
-      const holding = holder.transaction(async (tx) => {
+      // Wait until the holder actually holds till A's lock before the writer touches till B —
+      // otherwise this proves nothing (no lock was held), and a throw before release() would leave
+      // `holding` open and hang the finally's close() (see the sibling test above).
+      let acquire!: () => void;
+      const acquired = new Promise<void>((resolve) => (acquire = resolve));
+      holding = holder.transaction(async (tx) => {
         await tx.execute(sql`select 1 from cadenas where till_id = ${till.tillId} for update`);
+        acquire();
         await held;
       });
+      await acquired;
 
       const elsewhere = await seedSale(admin, other, 1);
       const result = await writer.transaction(async (tx) => {
@@ -208,10 +227,9 @@ describe("appendToChain under real contention", () => {
         return appendToChain(tx, other.tenantId, other.tillId, altaFor(elsewhere, 1, 1));
       });
       expect(result.secuencia).toBe(1);
-
-      release();
-      await holding;
     } finally {
+      release();
+      if (holding) await holding.catch(() => {});
       await holder.close();
       await writer.close();
     }

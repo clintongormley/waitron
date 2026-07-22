@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { recordIncident } from "@waitron/core";
+import { recordIncident, recordIncidentOnce } from "@waitron/core";
 import type { IncidentSeverity } from "@waitron/core";
 import { AppError } from "@waitron/shared";
 import type { SaleId, TenantId, TillId } from "@waitron/shared";
@@ -12,7 +12,7 @@ import type {
   EstadoRegistroConsulta,
   VerifactuClient,
 } from "@waitron/verifactu";
-import { writeAck } from "./acks.js";
+import { deleteAck, writeAck } from "./acks.js";
 
 export interface ReconcileDeps {
   db: Database;
@@ -38,6 +38,7 @@ type PeriodRow = {
   till_id: string;
   sale_id: string;
   estado: string;
+  reconciled_resubmit_at: string | null;
   id_emisor_factura: string;
   nombre_razon_emisor: string;
   num_serie_factura: string;
@@ -208,18 +209,50 @@ export async function reconcile(
       // We believe accepted.
       if (reported === null) {
         result.noTrace.push(mismatchOf(row, null));
-        await raise(tx, row, "error", "fiscal.reconcile_no_trace", detectedAt);
-        result.incidentsRaised += 1;
+        if (row.reconciled_resubmit_at === null) {
+          // First detection — remediate silently: re-submit (reset to pendiente) and drop the stale
+          // ack. Usually just consulta lag; self-heals on the next drain. No incident yet.
+          await remediateNoTrace(tx, row, detectedAt);
+        } else {
+          // Already re-submitted once and STILL absent → a genuine, un-self-healing gap → escalate
+          // to an idempotent error incident; do NOT reset again (no loop).
+          if (await raiseOnce(tx, row, "error", "fiscal.reconcile_no_trace", detectedAt)) {
+            result.incidentsRaised += 1;
+          }
+        }
         continue;
       }
+
+      // reported !== null: AEAT has a trace of this record, so any prior noTrace remediation
+      // succeeded — clear the marker so a future recurrence remediates afresh.
+      if (row.reconciled_resubmit_at !== null) {
+        await clearReconciledMarker(tx, row);
+      }
+
       const drift = REPORTED_DRIFT[reported];
       if (drift !== undefined && isDrift(row.estado, reported)) {
+        if (reported === "Anulada" && (await hasSiblingAnulacion(tx, row))) {
+          // The expected state of a voided sale: AEAT marks the alta Anulada once it accepts the
+          // anulación we submitted, while the alta's own envío stays `aceptado`. We hold the local
+          // anulación, so this is agreement, not drift — no entry, no incident, no correction.
+          continue;
+        }
         result.drift.push(mismatchOf(row, reported));
-        await raise(tx, row, drift.severity, drift.code, detectedAt);
-        result.incidentsRaised += 1;
-        // Correct toward AEAT (AceptadaConErrores → aceptado_con_errores) and re-ack; Anulada
-        // no-ops in `correct`, staying incident-only.
-        await correct(tx, row, reported, detectedAt);
+        if (reported === "Anulada") {
+          // Anomalous: AEAT reports Anulada with NO local anulación (near-impossible — AEAT never
+          // annuls on its own). Idempotent, since a persistent Anulada would re-detect each sweep.
+          if (
+            await raiseOnce(tx, row, drift.severity, "fiscal.reconcile_drift_anulada", detectedAt)
+          ) {
+            result.incidentsRaised += 1;
+          }
+        } else {
+          // drift-AceptadaConErrores: converges (isDrift makes it agree after correction), so it is
+          // raised at most once per genuine clean→errors transition — the unconditional `raise`.
+          await raise(tx, row, drift.severity, drift.code, detectedAt);
+          result.incidentsRaised += 1;
+          await correct(tx, row, reported, detectedAt);
+        }
       }
       // Clean agreement, nothing to do (the drainer already acked it — never re-ack a record that
       // was not a mismatch): `reported === "Correcta"` on a local `aceptado` row, OR
@@ -246,7 +279,7 @@ async function rowsForPeriod(
   const { rows } = await tx.execute<PeriodRow>(sql`
     select
       r.id, r.tenant_id, r.till_id, r.sale_id,
-      e.estado,
+      e.estado, e.reconciled_resubmit_at,
       r.id_emisor_factura, r.nombre_razon_emisor, r.num_serie_factura,
       to_char(r.fecha_expedicion_factura, 'DD-MM-YYYY') as fecha_expedicion_factura
     from envios e
@@ -344,6 +377,37 @@ async function correct(
   await writeAck(tx, row.id, now);
 }
 
+/** First-detection `noTrace` remediation: reset the record to `pendiente` so the drainer re-submits
+ * it (idempotent via error-3000 — see design §2.2), clearing the delivery columns and stamping
+ * `reconciled_resubmit_at` so a later sweep can tell this from a first detection. Deletes the stale
+ * `accepted` ack in the same tx (the acks invariant — a `pendiente` row carries no ack). No incident:
+ * a first `noTrace` is usually just consulta lag, and this self-heals silently. */
+async function remediateNoTrace(tx: Transaction, row: PeriodRow, now: Date): Promise<void> {
+  await tx.execute(sql`
+    update envios set
+      estado = 'pendiente',
+      csv = null,
+      confirmado_en = null,
+      codigo_error = null,
+      mensaje_error = null,
+      proximo_intento_en = ${now.toISOString()},
+      reconciled_resubmit_at = ${now.toISOString()}
+    where registro_id = ${row.id} and tenant_id = ${row.tenant_id}
+  `);
+  await deleteAck(tx, row.id);
+}
+
+/** Clears the `noTrace` remediation marker once AEAT has a trace of the record again — the
+ * re-submission worked, so a FUTURE recurrence should remediate afresh rather than escalate. Guarded
+ * by the caller on `reconciled_resubmit_at !== null`, so this only runs on a record that was
+ * remediated. */
+async function clearReconciledMarker(tx: Transaction, row: PeriodRow): Promise<void> {
+  await tx.execute(sql`
+    update envios set reconciled_resubmit_at = null
+    where registro_id = ${row.id} and tenant_id = ${row.tenant_id}
+  `);
+}
+
 /**
  * Raises one reconciliation incident on THIS transaction (never a fresh connection — an incident
  * must never commit while the sweep it describes rolls back), via `@waitron/core`'s
@@ -362,6 +426,44 @@ async function raise(
   detectedAt: Date,
 ): Promise<void> {
   await recordIncident(tx, {
+    tenantId: row.tenant_id as TenantId,
+    tillId: row.till_id as TillId,
+    saleId: row.sale_id as SaleId,
+    error: new AppError(code, {
+      registroId: row.id,
+      idEmisorFactura: row.id_emisor_factura,
+      numSerieFactura: row.num_serie_factura,
+      fechaExpedicionFactura: row.fecha_expedicion_factura,
+    }),
+    severity,
+    detectedAt,
+  });
+}
+
+/** True when a local anulación registro exists for this record's sale — the expected state after a
+ * `recordVoid` (the anulación shares the alta's `sale_id`, `tipo_registro='anulacion'`). Not
+ * period-scoped: an anulación's expedition date may differ from its alta's. */
+async function hasSiblingAnulacion(tx: Transaction, row: PeriodRow): Promise<boolean> {
+  const { rows } = await tx.execute<{ one: number }>(sql`
+    select 1 as one from registros_facturacion
+    where sale_id = ${row.sale_id} and tenant_id = ${row.tenant_id} and tipo_registro = 'anulacion'
+    limit 1
+  `);
+  return rows.length > 0;
+}
+
+/** `raise`, but idempotent per open `(till, code, sale)` via `recordIncidentOnce`. Returns whether a
+ * new incident was actually inserted, so the caller only counts real raises. Used for the two
+ * residual reconcile incidents (anomalous drift-`Anulada`, persistent `noTrace`) that a sweep can
+ * re-detect while still open. */
+async function raiseOnce(
+  tx: Transaction,
+  row: PeriodRow,
+  severity: IncidentSeverity,
+  code: "fiscal.reconcile_no_trace" | "fiscal.reconcile_drift_anulada",
+  detectedAt: Date,
+): Promise<boolean> {
+  return recordIncidentOnce(tx, {
     tenantId: row.tenant_id as TenantId,
     tillId: row.till_id as TillId,
     saleId: row.sale_id as SaleId,

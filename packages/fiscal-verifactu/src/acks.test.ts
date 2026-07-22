@@ -9,6 +9,7 @@ import { VerifactuBackend } from "./backend.js";
 import {
   ackStateOf,
   applyAck,
+  deleteAck,
   markDelivered,
   newProjection,
   pendingAcks,
@@ -220,6 +221,22 @@ describe("acks — durable transport (pendingAcks / markDelivered)", () => {
     // no ack is produced. Mirrors the projection's cert-expired case one layer down.
     const seeded = await seedPendingEnvios(db, { count: 1 });
     await withTenant(db, seeded.tenantId, (tx) => writeAck(tx, seeded.registroIds[0]!, DRAIN_AT));
+    expect(await acksFor(seeded.tenantId)).toHaveLength(0);
+  });
+
+  it("deleteAck removes a record's ack row, and is a no-op when there is none", async () => {
+    const aeat = createFakeAeat({ serverNow: SERVER_NOW });
+    const seeded = await seedPendingEnvios(db, { count: 1 });
+    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    await backend.drain(DRAIN_AT); // writes an `accepted` ack
+
+    expect(await acksFor(seeded.tenantId)).toHaveLength(1);
+
+    await withTenant(db, seeded.tenantId, (tx) => deleteAck(tx, seeded.registroIds[0]!));
+    expect(await acksFor(seeded.tenantId)).toHaveLength(0);
+
+    // Idempotent: deleting an already-absent ack does not throw.
+    await withTenant(db, seeded.tenantId, (tx) => deleteAck(tx, seeded.registroIds[0]!));
     expect(await acksFor(seeded.tenantId)).toHaveLength(0);
   });
 });

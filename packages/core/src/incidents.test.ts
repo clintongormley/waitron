@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import type { SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
@@ -18,7 +18,8 @@ import {
   withTenant,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { openIncidents, recordIncident } from "./incidents.js";
+import { openIncidents, recordIncident, recordIncidentOnce } from "./incidents.js";
+import type { RecordIncidentInput } from "./incidents.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { seedTenant } from "../test/fixtures.js";
@@ -336,5 +337,151 @@ describe("openIncidents", () => {
       }),
     );
     expect(pgErrorMessage(error)).toMatch(/permission denied for table incidents/);
+  });
+});
+
+describe("recordIncidentOnce", () => {
+  // **Deviation from the brief.** The brief's sketch raised `fiscal.reconcile_no_trace` /
+  // `fiscal.reconcile_drift_anulada` — codes that `packages/fiscal-verifactu/src/errors.ts` adds
+  // to the shared `ErrorParams` registry by declaration merging. `packages/core` does not (and
+  // must not) depend on `@waitron/fiscal-verifactu` — see record-sale.test.ts's own beforeAll
+  // comment on the eslint boundary zone that forbids it even from a test file — so those codes
+  // are not members of `ErrorCode` in this package's own typecheck program and using them here
+  // would not compile. Using `chain.verification_failed` (registered in `./errors.ts`, this
+  // package's own contribution) and `clock.degraded` (registered by `@waitron/fiscal`, already
+  // reachable here — see the `warning` fixture above) instead: two real, distinct, in-boundary
+  // codes are all `recordIncidentOnce`'s dedup key cares about, and every other test in this file
+  // already builds incidents from exactly these two.
+  //
+  // The brief also seeded `saleId`/`otherSaleId` fixtures that do not exist in this file. Every
+  // real write path (`recordSale`/`recordVoid`) always has a `saleId`, so the null-`saleId` case
+  // is only exercised by `recordIncident` (see "no sale attached" above) and — for
+  // `recordIncidentOnce` — by the dedup/ack/different-code tests below, which pass
+  // `saleId: undefined` precisely because they don't need a real `sales` row (no FK to satisfy)
+  // to prove the key. The "different sale" case gets its own test with two REAL sales via `sell`,
+  // since `incidents.sale_id` has an FK to `sales.id`.
+
+  function chainFailed(): RecordIncidentInput["error"] {
+    return new AppError("chain.verification_failed", {
+      tillId,
+      issueCode: "predecessor-hash-mismatch",
+      recordId: null,
+      issueParams: { sequence: 7, expected: "ABC" },
+    });
+  }
+
+  it("inserts the first time and returns true", async () => {
+    await withTenant(db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const inserted = await recordIncidentOnce(tx, {
+        tenantId,
+        tillId,
+        saleId: undefined,
+        error: chainFailed(),
+        severity: "error",
+        detectedAt: BASE,
+      });
+      expect(inserted).toBe(true);
+      expect(await openIncidents(tx, tillId)).toHaveLength(1);
+    });
+  });
+
+  it("de-dups a second raise for the same open (till, code, sale) and returns false", async () => {
+    await withTenant(db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const input: RecordIncidentInput = {
+        tenantId,
+        tillId,
+        saleId: undefined,
+        error: chainFailed(),
+        severity: "error",
+        detectedAt: BASE,
+      };
+      const first = await recordIncidentOnce(tx, input);
+      expect(first).toBe(true);
+      const second = await recordIncidentOnce(tx, {
+        ...input,
+        detectedAt: new Date(BASE.getTime() + 3_600_000),
+      });
+      expect(second).toBe(false);
+      expect(await openIncidents(tx, tillId)).toHaveLength(1);
+    });
+  });
+
+  it("raises a fresh one after the prior incident is acknowledged", async () => {
+    await withTenant(db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const input: RecordIncidentInput = {
+        tenantId,
+        tillId,
+        saleId: undefined,
+        error: chainFailed(),
+        severity: "error",
+        detectedAt: BASE,
+      };
+      await recordIncidentOnce(tx, input);
+      await tx.execute(sql`update incidents set acknowledged_at = now() where till_id = ${tillId}`);
+      const again = await recordIncidentOnce(tx, {
+        ...input,
+        detectedAt: new Date(BASE.getTime() + 2 * 3_600_000),
+      });
+      expect(again).toBe(true);
+      // The acknowledged row stays acknowledged; only the fresh raise is open.
+      expect(await openIncidents(tx, tillId)).toHaveLength(1);
+    });
+  });
+
+  it("does not de-dup a different code for the same till", async () => {
+    await withTenant(db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const base = {
+        tenantId,
+        tillId,
+        saleId: undefined,
+        severity: "error" as const,
+        detectedAt: BASE,
+      };
+      const first = await recordIncidentOnce(tx, { ...base, error: chainFailed() });
+      expect(first).toBe(true);
+      const otherCode = await recordIncidentOnce(tx, {
+        ...base,
+        error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
+      });
+      expect(otherCode).toBe(true);
+      expect(await openIncidents(tx, tillId)).toHaveLength(2);
+    });
+  });
+
+  it("does not de-dup the same code for a different sale", async () => {
+    // Two REAL sales (the FK on incidents.sale_id requires it), each raising the same
+    // `clock.degraded` code — proving `sale_id is not distinct from` scopes the key per sale
+    // rather than deduping across the whole till.
+    const backend = new FakeFiscalBackend(db);
+    const { saleId: saleA } = await sell(backend);
+    const { saleId: saleB } = await sell(backend);
+
+    await withTenant(db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const error = new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 });
+      const forSaleA = await recordIncidentOnce(tx, {
+        tenantId,
+        tillId,
+        saleId: saleA,
+        error,
+        severity: "warning",
+        detectedAt: BASE,
+      });
+      expect(forSaleA).toBe(true);
+      const forSaleB = await recordIncidentOnce(tx, {
+        tenantId,
+        tillId,
+        saleId: saleB,
+        error,
+        severity: "warning",
+        detectedAt: BASE,
+      });
+      expect(forSaleB).toBe(true);
+      expect(await openIncidents(tx, tillId)).toHaveLength(2);
+    });
   });
 });

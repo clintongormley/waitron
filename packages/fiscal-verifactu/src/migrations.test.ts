@@ -239,6 +239,19 @@ describe("acks migration", () => {
   });
 });
 
+describe("envios.reconciled_resubmit_at migration", () => {
+  it("adds envios.reconciled_resubmit_at (nullable)", async () => {
+    const db = await emptyDb();
+    await runMigrations(db, CORE_MIGRATIONS);
+    await runMigrations(db, FISCAL_MIGRATIONS);
+    const cols = await db.execute<{ column_name: string; is_nullable: string }>(sql`
+      select column_name, is_nullable from information_schema.columns
+      where table_name = 'envios' and column_name = 'reconciled_resubmit_at'`);
+    expect(cols.rows).toEqual([{ column_name: "reconciled_resubmit_at", is_nullable: "YES" }]);
+    await db.close();
+  });
+});
+
 describe("envios drainer enumeration seam (migration 0004)", () => {
   it("owns the cross-tenant enumeration with a SECURITY DEFINER function on a non-superuser, non-BYPASSRLS role", async () => {
     const db = await emptyDb();
