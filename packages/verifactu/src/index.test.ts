@@ -3,10 +3,13 @@ import {
   buildAltaRecord,
   buildQrPayload,
   createClient,
+  parseConsulta,
+  parseEnvio,
+  serializeConsulta,
   serializeEnvio,
   validate,
 } from "./index.js";
-import type { SistemaInformatico } from "./index.js";
+import type { Cabecera, SistemaInformatico } from "./index.js";
 
 /**
  * A coherence check on the package root, not a duplicate of the per-module
@@ -55,12 +58,15 @@ describe("package public surface (./index.js)", () => {
 
     expect(validate(record)).toEqual([]);
 
-    const xml = serializeEnvio(
-      { ObligadoEmision: { NombreRazon: sistema.NombreRazon, NIF: "B12345678" } },
-      [{ RegistroAlta: record }],
-    );
+    const cabecera: Cabecera = {
+      ObligadoEmision: { NombreRazon: sistema.NombreRazon, NIF: "B12345678" },
+    };
+    const xml = serializeEnvio(cabecera, [{ RegistroAlta: record }]);
     expect(xml).toContain("<sf:RegistroAlta>");
     expect(xml).toContain(record.Huella);
+
+    // parseEnvio is re-exported too — prove it inverts serializeEnvio via the package root.
+    expect(parseEnvio(xml)).toEqual({ cabecera, registros: [{ RegistroAlta: record }] });
 
     const qr = buildQrPayload(record, "production");
     expect(qr).toBe(
@@ -76,5 +82,15 @@ describe("package public surface (./index.js)", () => {
     });
     expect(typeof client.submit).toBe("function");
     expect(typeof client.consultar).toBe("function");
+  });
+
+  it("serialises and parses a consulta via the package root", () => {
+    const cabecera: Cabecera = {
+      ObligadoEmision: { NombreRazon: sistema.NombreRazon, NIF: "B12345678" },
+    };
+    const filtro = { Ejercicio: "2024", Periodo: "01" };
+    const xml = serializeConsulta(cabecera, filtro);
+    expect(xml).toContain("<sfLRC:FiltroConsulta>");
+    expect(parseConsulta(xml)).toEqual({ cabecera, filtro });
   });
 });

@@ -3,6 +3,7 @@ import { AppError } from "@waitron/shared";
 import type { SaleId, TenantId, TillId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type {
+  DrainResult,
   FiscalBackend,
   FiscalRecordRef,
   IntegrityIssue,
@@ -203,10 +204,38 @@ export class FakeFiscalBackend implements FiscalBackend {
     return Number(rows.rows[0].count);
   }
 
+  /**
+   * Minimal-but-honest: every `pending` fake record, across every tenant and till, is marked
+   * `acknowledged` in one pass — there is no external submission target here to reject or delay
+   * anything, so "submitted" and "accepted" are the same event and `recordsHalted`/`incidentsRaised`
+   * stay zero. `nextDueAt` is always `null`: a fake with nothing left to retry has nothing to
+   * schedule. `now` is unused — this fake has no retry-scheduling concept to consult — and kept
+   * only so callers on the concrete class are still typechecked against the real one-argument
+   * signature, matching `recordVoid`'s identical `_reason` convention above.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- see comment above
+  async drain(_now: Date): Promise<DrainResult> {
+    const pending = await this.db.execute<{ count: string }>(sql`
+      select count(*)::text as count from fake_fiscal_records where state = 'pending'
+    `);
+    const accepted = Number(pending.rows[0].count);
+    await this.db.execute(sql`
+      update fake_fiscal_records set state = 'acknowledged' where state = 'pending'
+    `);
+    return {
+      nextDueAt: null,
+      batchesSent: accepted > 0 ? 1 : 0,
+      recordsSubmitted: accepted,
+      recordsAccepted: accepted,
+      recordsHalted: 0,
+      incidentsRaised: 0,
+    };
+  }
+
   // ---- test-only affordances ------------------------------------------------------------
 
   /** Makes `checkIntegrity` report a failure. Without this the "records the next sale anyway"
-   * requirement — the one AEAT states outright — could not be exercised at all. */
+   * requirement — the one spec §4 states outright — could not be exercised at all. */
   breakIntegrity(tillId: TillId, issue: IntegrityIssue): void {
     this.injectedIssues.set(tillId, [...(this.injectedIssues.get(tillId) ?? []), issue]);
   }

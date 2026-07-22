@@ -61,8 +61,14 @@ function toIsoDate(ddMmYyyy: string): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-/** The inverse of toIsoDate, for reading a stored predecessor back into a RegistroAnterior pointer. */
-function toAeatDate(isoDate: string): string {
+/**
+ * The inverse of toIsoDate, for reading a stored predecessor back into a RegistroAnterior pointer.
+ * Exported (Task 10) for ./drain.ts's `routeB`, which needs the identical `YYYY-MM-DD` ->
+ * `DD-MM-YYYY` flip to build a consulta's `FechaExpedicionFactura` filter off a stored row's own
+ * `fecha_expedicion_factura` — the same transformation this file already owns, not a second,
+ * independently-drifting copy in drain.ts.
+ */
+export function toAeatDate(isoDate: string): string {
   const [yyyy, mm, dd] = isoDate.split("-");
   return `${dd}-${mm}-${yyyy}`;
 }

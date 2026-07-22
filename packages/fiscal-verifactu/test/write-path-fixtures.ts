@@ -1,8 +1,22 @@
 import type { RecordSaleInput } from "@waitron/core";
 import type { TrustedClock } from "@waitron/fiscal";
 import type { SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
+import type { VerifactuClient } from "@waitron/verifactu";
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
+
+/**
+ * `VerifactuBackendOptions.client` (Task 5) is required by the constructor, even though not one
+ * test in this package calls `drain` — the only method that reads it. A single module-scope fake
+ * AEAT transport, shared across every `new VerifactuBackend(...)` site in this package, is
+ * therefore enough: nothing here submits anything, so which fake instance answers is irrelevant,
+ * and minting a fresh `createFakeAeat()` per test would be decoration with no consumer. Deep
+ * import mirrors this package's own `FakeFiscalBackend` convention (`@waitron/fiscal/src/testing/
+ * fake-backend.js`, imported by `packages/core`'s tests): `@waitron/verifactu` exports no test
+ * doubles from its own package surface either.
+ */
+export const fakeClient: VerifactuClient = createFakeAeat().client();
 
 /**
  * Confident, fixed, +01:00. `anchor`/`currentAnchor` are stubs — `recordSale` never calls either

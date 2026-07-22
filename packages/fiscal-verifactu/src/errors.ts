@@ -77,5 +77,71 @@ declare module "@waitron/shared" {
      * language.
      */
     "chain.append_contention": { tenantId: string; tillId: string; attempts: number };
+
+    /**
+     * Task 9's drainer (`./drain.ts`, `applyOutcome`). AEAT rejected this record outright
+     * (`resolveEstadoEfectivo` returned `"rejected"`) — never constructed as a thrown `AppError`
+     * (rejection is an ordinary, expected outcome the drainer resolves and moves on from, not a
+     * control-flow exception), only built to hand its `.code`/`.params` to `@waitron/core`'s
+     * `recordIncident`, exactly as `packages/core/src/errors.ts`'s `chain.verification_failed`
+     * is used from `record-sale.ts`/`record-void.ts`. `fiscal.*`, not `verifactu.*` or
+     * `envio.*`: this is a fact about the submission LIFECYCLE any regime backend shares (a
+     * record it tried to file was refused), matching `fiscal.till_not_registered`'s own
+     * regime-neutral `fiscal.*` prefix, even though only this package constructs it today.
+     * `registroId` is included because `incidents` carries no FK back to `envios`/
+     * `registros_facturacion` at all (`packages/db/src/schema/incidents.ts`) — without it, an
+     * incident row could not be traced back to which submission produced it.
+     */
+    "fiscal.registro_rechazado": {
+      registroId: string;
+      codigo: number | null;
+      mensaje: string | null;
+    };
+
+    /**
+     * Task 9's drainer. AEAT accepted this record but flagged it (`resolveEstadoEfectivo`
+     * returned `"accepted_with_errors"` — `EstadoRegistro="AceptadoConErrores"`, e.g. error 2004,
+     * a future-dated `FechaExpedicionFactura`). A warning, not an error: the record is stored and
+     * counts as accepted (`DrainResult.recordsAccepted`'s own doc comment), but a human should
+     * still see why AEAT flagged it.
+     */
+    "fiscal.aceptado_con_errores": {
+      registroId: string;
+      codigo: number | null;
+      mensaje: string | null;
+    };
+
+    /**
+     * Task 10's drainer (`./drain.ts`, `handleDuplicate` — error 3000, Route A). AEAT's own copy
+     * of this identity is itself `Anulada` (`resolveEstadoEfectivo` returned `duplicate_annulled`,
+     * @waitron/verifactu's own doc comment on the "3000 inverts" rule). Whatever produced that
+     * state, this record can never become a confirmed accept from our side under this identity —
+     * the invoice number is burned, and retrying changes nothing — so it halts visibly (and halts
+     * this chain's successors, exactly like `fiscal.registro_rechazado` above, for the identical
+     * reason: neither outcome ends with THIS record confirmed at AEAT, so a successor's
+     * `RegistroAnterior` pointer at its huella is not something AEAT has actually confirmed
+     * either). No `codigo`/`mensaje` params, unlike `fiscal.registro_rechazado`/
+     * `fiscal.aceptado_con_errores` above: error 3000 IS the code carried on the outer
+     * `RespuestaLinea` for every duplicate case, so a separate `codigo` param here would only ever
+     * repeat the constant `3000` and tell a translator nothing
+     * `RegistroDuplicado.EstadoRegistroDuplicado`'s own value (`Anulada`) doesn't already say more
+     * precisely.
+     */
+    "fiscal.duplicado_anulado": { registroId: string };
+
+    /**
+     * Task 10's drainer (`./drain.ts`, `handleDuplicate`/`routeB` — error 3000, Route B). AEAT
+     * reported a duplicate without saying what it holds (`resolveEstadoEfectivo` returned
+     * `duplicate_unknown`); a targeted consulta (`routeB`) compared AEAT's own stored `Huella`
+     * against ours and they DIFFERED — a genuine identity collision (the same NIF+series+fecha
+     * triple, but not our own record), not a harmless resubmission of a record AEAT already
+     * holds. Halts visibly, and halts this chain's successors, for the same reason
+     * `fiscal.duplicado_anulado` above does: this record never lands as a confirmed accept under
+     * this identity either. No `codigo`/`mensaje` params, for the identical reason given there —
+     * error 3000 already IS the code, and the fact that this is the DIFFERING-huella branch (as
+     * opposed to `fiscal.duplicado_anulado`'s `Anulada` branch) is exactly what the code name
+     * itself already says.
+     */
+    "fiscal.huella_divergente": { registroId: string };
   }
 }

@@ -18,7 +18,7 @@ import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
-import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
+import { fakeClient, saleInput, steadyClock } from "../test/write-path-fixtures.js";
 
 /**
  * `registerTill`/`recordVoid`/`checkIntegrity`/`pendingCount` complete the `FiscalBackend`
@@ -49,7 +49,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenantWithSif(db));
-  backend = new VerifactuBackend({ clock: steadyClock, db });
+  backend = new VerifactuBackend({ clock: steadyClock, db, client: fakeClient });
 });
 
 async function sell() {
@@ -152,7 +152,7 @@ describe("recordVoid — date reconstruction", () => {
 
   it("reconstructs the annulled invoice's calendar day exactly at +13:00", async () => {
     const { saleId } = await sell();
-    const voidBackend = new VerifactuBackend({ clock: clockAt(780), db });
+    const voidBackend = new VerifactuBackend({ clock: clockAt(780), db, client: fakeClient });
     await withTenant(db, tenantId, (tx) => voidBackend.recordVoid(tx, saleId, "staff error"));
 
     const rows = await db
@@ -166,7 +166,7 @@ describe("recordVoid — date reconstruction", () => {
 
   it("reconstructs the annulled invoice's calendar day exactly at -13:00", async () => {
     const { saleId } = await sell();
-    const voidBackend = new VerifactuBackend({ clock: clockAt(-780), db });
+    const voidBackend = new VerifactuBackend({ clock: clockAt(-780), db, client: fakeClient });
     await withTenant(db, tenantId, (tx) => voidBackend.recordVoid(tx, saleId, "staff error"));
 
     const rows = await db

@@ -13,7 +13,7 @@ import { cadenas } from "./schema/cadenas.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
-import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
+import { fakeClient, saleInput, steadyClock } from "../test/write-path-fixtures.js";
 
 let db: Database;
 let backend: VerifactuBackend;
@@ -46,7 +46,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenantWithSif(db));
-  backend = new VerifactuBackend({ clock: steadyClock, db });
+  backend = new VerifactuBackend({ clock: steadyClock, db, client: fakeClient });
 });
 
 async function sell() {

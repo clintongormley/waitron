@@ -189,13 +189,14 @@ describe("row-level security on every tenant-scoped table in this package", () =
 
     // A guard that discovers nothing passes every assertion below it — the same shape of
     // vacuous test english-only.test.ts's "discovers source files" guards against. This package's
-    // four tenant-scoped tables must all actually be found by this query, not merely assumed to
+    // five tenant-scoped tables must all actually be found by this query, not merely assumed to
     // be, and contadores_instalacion — the one table in this package with NO tenant_id — must be
     // absent, proving the key is "has tenant_id", not "is in this package".
     expect(names).toContain("registros_facturacion");
     expect(names).toContain("cadenas");
     expect(names).toContain("registro_sif");
     expect(names).toContain("envios");
+    expect(names).toContain("envio_flujo");
     expect(names).not.toContain("contadores_instalacion");
 
     // Reported as formatted lines rather than a bare boolean: a failure needs to say WHICH table

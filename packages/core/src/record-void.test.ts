@@ -147,6 +147,7 @@ function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>)
     recordVoid: (tx, id, reason) => fake.recordVoid(tx, id, reason),
     checkIntegrity: (tx, tenant, till) => fake.checkIntegrity(tx, tenant, till),
     pendingCount: (tenant, till) => fake.pendingCount(tenant, till),
+    drain: (now) => fake.drain(now),
     ...overrides,
   };
 }
@@ -339,6 +340,9 @@ describe("recordVoid — error propagation", () => {
       // either, mirroring fake-backend.ts's identical `_reason` convention.
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       pendingCount: (_tenant, _till) => {
+        throw new Error("not used by this test");
+      },
+      drain: () => {
         throw new Error("not used by this test");
       },
     };

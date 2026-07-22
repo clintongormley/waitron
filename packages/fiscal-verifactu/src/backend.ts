@@ -4,6 +4,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { AppError, sumDecimals } from "@waitron/shared";
 import type { SaleId, TenantId, TillId } from "@waitron/shared";
 import type {
+  DrainResult,
   FiscalBackend,
   FiscalRecordRef,
   IntegrityReport,
@@ -21,8 +22,10 @@ import type {
   RegistroAlta,
   SiNo,
   SistemaInformatico,
+  VerifactuClient,
 } from "@waitron/verifactu";
 import { appendToChain } from "./chain.js";
+import { drain as runDrain } from "./drain.js";
 import { currentSif } from "./registro-sif.js";
 import type { SifRegistration } from "./registro-sif.js";
 import { fromRegistroRow } from "./registro-row.js";
@@ -80,6 +83,12 @@ export interface VerifactuBackendOptions {
   /** The connection `pendingCount` queries against — the one `FiscalBackend` method with no `tx`
    * parameter at all, so it cannot participate in a caller's transaction. */
   db: Database;
+  /** The AEAT transport. mTLS/endpoint live inside the caller-supplied fetch this wraps
+   * (`createClient({ endpoint, fetch })`); tests wire it over the fake AEAT's fetch
+   * (`@waitron/verifactu`'s `createFakeAeat().client()`). Used by `drain`, not by `recordSale`/
+   * `recordVoid`/`registerTill`/`checkIntegrity`/`pendingCount` — none of those ever contact
+   * AEAT (spec §4: nothing here may block a sale on connectivity). */
+  client: VerifactuClient;
   /** Which QR validation host to build `verificationUrl`-shaped URLs against. Defaults to
    * `"production"`. */
   environment?: Environment;
@@ -120,12 +129,14 @@ type OriginalAlta = Pick<
 export class VerifactuBackend implements FiscalBackend {
   private readonly db: Database;
   private readonly clock: TrustedClock;
+  private readonly client: VerifactuClient;
   private readonly environment: Environment;
   private readonly systemInfo: SystemInfoDefaults;
 
   constructor(options: VerifactuBackendOptions) {
     this.db = options.db;
     this.clock = options.clock;
+    this.client = options.client;
     this.environment = options.environment ?? "production";
     this.systemInfo = { ...DEFAULT_SYSTEM_INFO, ...options.systemInfo };
   }
@@ -373,6 +384,17 @@ export class VerifactuBackend implements FiscalBackend {
       `);
       return Number(rows.rows[0]!.count);
     });
+  }
+
+  /**
+   * Task 6's happy-path drainer (`./drain.ts`): claims one ≤1000-row due batch per tenant,
+   * submits it via `this.client`, and persists the CSV + `aceptado` + `confirmado_en` atomically.
+   * FOR UPDATE SKIP LOCKED, stale recovery, retry/backoff, flow control, batching beyond one
+   * envío, rejections/halting, incidents and error-3000/Route-B are Tasks 7-10 — `drain.ts` itself
+   * documents the scope boundary at each extension point.
+   */
+  async drain(now: Date): Promise<DrainResult> {
+    return runDrain({ db: this.db, client: this.client }, now);
   }
 
   private buildSistemaInformatico(sif: SifRegistration, legalName: string): SistemaInformatico {

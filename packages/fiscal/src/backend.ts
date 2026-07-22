@@ -103,6 +103,20 @@ export interface IntegrityReport {
 }
 
 /**
+ * The outcome of one `drain(now)` pass. `nextDueAt` is the only field a scheduler needs — when to
+ * invoke `drain` again (null = nothing pending). The counts are for a log line and observability;
+ * a caller needing per-record detail reads the module's own tables.
+ */
+export interface DrainResult {
+  nextDueAt: Date | null;
+  batchesSent: number;
+  recordsSubmitted: number;
+  recordsAccepted: number; // includes accepted-with-errors — still counts as accepted
+  recordsHalted: number; // records rejected or otherwise stopped
+  incidentsRaised: number;
+}
+
+/**
  * The only thing that crosses between the POS and a fiscal regime.
  *
  * Nothing in this file names an inter-record linking structure, a one-way digest, a derived
@@ -111,13 +125,15 @@ export interface IntegrityReport {
  * one: a second backend arrives with its own tables and its own vocabulary and changes nothing
  * here.
  *
- * `drain(now)` and `reconcile(period)` are reserved names for the submission plan and are
- * deliberately absent until that plan designs flow control, error-3000 resolution and the
- * file-export persistence rule — every one of which constrains their return types, and guessing
- * now would mean implementing against a signature that changes anyway. An interface method with
- * no caller and no meaningful fake is dead surface that mutation testing cannot reach: exactly the
- * shape of vacuous test this project must not add another instance of. Do not introduce `flush`,
- * `sync` or `push` in their place.
+ * `drain(now)` and `reconcile(period)` were reserved names for the submission plan, deliberately
+ * absent until that plan designed flow control, error-3000 resolution and the file-export
+ * persistence rule — every one of which constrains their return types, and guessing at a
+ * signature before that design existed would mean implementing against one that changes anyway.
+ * `drain` is now filled in below, its shape settled by that design (`DrainResult` above);
+ * `reconcile(period)` remains reserved, still pending plan 3b. An interface method with no caller
+ * and no meaningful fake is dead surface that mutation testing cannot reach: exactly the shape of
+ * vacuous test this project must not add another instance of. Do not introduce `flush`, `sync` or
+ * `push` in `reconcile`'s place.
  */
 export interface FiscalBackend {
   registerTill(
@@ -152,4 +168,11 @@ export interface FiscalBackend {
    * itself (a query with no tenant scope silently counts zero under RLS).
    */
   pendingCount(tenantId: TenantId, tillId: TillId): Promise<number>;
+
+  /**
+   * Submits everything currently due as of `now`, in batches, and returns when to run again. One
+   * pass; the repeating cadence is the caller re-invoking on `nextDueAt`, driven by the database,
+   * never an in-memory timer. A backend with nothing to submit answers `{ nextDueAt: null, …zeros }`.
+   */
+  drain(now: Date): Promise<DrainResult>;
 }

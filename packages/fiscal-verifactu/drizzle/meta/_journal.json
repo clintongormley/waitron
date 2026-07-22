@@ -15,6 +15,27 @@
       "when": 1784595396644,
       "tag": "0001_registros_inmutables",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784668573495,
+      "tag": "0002_envio_flujo",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784668578259,
+      "tag": "0003_envio_flujo_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784721668333,
+      "tag": "0004_envios_drainer_seam",
+      "breakpoints": true
     }
   ]
 }

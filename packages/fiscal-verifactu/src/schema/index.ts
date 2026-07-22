@@ -8,6 +8,7 @@
 // `schema-ownership.test.ts` enforces this, because a comment does not survive contact with a
 // future contributor.
 export { cadenas } from "./cadenas.js";
+export { envioFlujo } from "./envio-flujo.js";
 export { envios } from "./envios.js";
 export { registrosFacturacion } from "./registros.js";
 export { contadoresInstalacion, registroSif } from "./sif.js";

@@ -19,6 +19,7 @@ export {
   resolveEstadoEfectivo,
 } from "./xml/parse-suministro.js";
 export { parseRespuestaConsulta } from "./xml/parse-consulta.js";
+export { parseConsulta, parseEnvio } from "./xml/parse-request.js";
 export { createClient } from "./client.js";
 
 export type * from "./types.js";

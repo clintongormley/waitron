@@ -202,6 +202,21 @@ describe("pendingCount", () => {
   });
 });
 
+describe("drain", () => {
+  beforeEach(() => db.transaction((tx) => backend.registerTill(tx, TILL_A, { tenantId: TENANT })));
+
+  it("acknowledges pending records so pendingCount drops to zero", async () => {
+    await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
+    await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 2)));
+    const before = await backend.pendingCount(TENANT, TILL_A);
+    expect(before).toBeGreaterThan(0);
+    const result = await backend.drain(new Date("2026-07-21T00:00:00Z"));
+    expect(result.recordsAccepted).toBe(before);
+    expect(result.nextDueAt).toBeNull();
+    expect(await backend.pendingCount(TENANT, TILL_A)).toBe(0);
+  });
+});
+
 describe("recordVoid", () => {
   beforeEach(() => db.transaction((tx) => backend.registerTill(tx, TILL_A, { tenantId: TENANT })));
 

@@ -10,6 +10,7 @@ import * as schema from "./schema/index.js";
 const OWNED = [
   "cadenas",
   "contadores_instalacion",
+  "envio_flujo",
   "envios",
   "registro_sif",
   "registros_facturacion",

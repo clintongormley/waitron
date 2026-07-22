@@ -11,6 +11,7 @@ export type {
 } from "./clock.js";
 export type {
   Counterparty,
+  DrainResult,
   FiscalBackend,
   FiscalRecordRef,
   FiscalState,

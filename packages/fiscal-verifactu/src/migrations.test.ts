@@ -8,6 +8,8 @@ import {
 } from "@waitron/db";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import { seedPendingEnvios } from "../test/drain-fixtures.js";
+import { RECUPERACION_ENVIANDO_MS } from "./drain.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 
 /** A fresh in-memory PGlite with nothing in it at all. */
@@ -115,6 +117,212 @@ describe("migration composition across packages", () => {
 
     // And the database is not half-built afterwards.
     expect(await tableNames(db)).not.toContain("registros_facturacion");
+    await db.close();
+  });
+});
+
+describe("envio_flujo migration", () => {
+  it("creates envio_flujo with a tenant PK and both value columns not-null", async () => {
+    const db = await emptyDb();
+    await runMigrations(db, CORE_MIGRATIONS);
+    await runMigrations(db, FISCAL_MIGRATIONS);
+    const cols = await db.execute<{ column_name: string; is_nullable: string }>(sql`
+      select column_name, is_nullable from information_schema.columns where table_name = 'envio_flujo'
+    `);
+    const byName = Object.fromEntries(cols.rows.map((c) => [c.column_name, c.is_nullable]));
+    expect(byName).toMatchObject({
+      tenant_id: "NO",
+      proximo_envio_en: "NO",
+      tiempo_espera_seg: "NO",
+    });
+    await db.close();
+  });
+
+  it("scopes envio_flujo to the calling tenant the same way envios and cadenas are scoped", async () => {
+    // Existence is not correctness (packages/db/src/schema/sales.test.ts's own note on this): a
+    // policy named right, on the right table, still renders nothing visible if its predicate is
+    // wrong. So this reads `qual`/`with_check` (the USING/WITH CHECK expressions, as Postgres
+    // renders them) by value, the same way, rather than merely asserting a row exists — proving
+    // envio_flujo's policy is the exact tenant_isolation shape the other mutable tables in this
+    // package (cadenas, registro_sif, envios) already carry, not just present under some name.
+    const db = await emptyDb();
+    await runMigrations(db, CORE_MIGRATIONS);
+    await runMigrations(db, FISCAL_MIGRATIONS);
+
+    const [policy] = (
+      await db.execute<{
+        policyname: string;
+        cmd: string;
+        qual: string;
+        with_check: string;
+      }>(sql`
+        select policyname, cmd, qual, with_check from pg_policies
+        where tablename = 'envio_flujo'
+      `)
+    ).rows;
+    expect(policy).toEqual({
+      policyname: "envio_flujo_tenant_isolation",
+      cmd: "ALL",
+      qual: "(tenant_id = current_tenant_id())",
+      with_check: "(tenant_id = current_tenant_id())",
+    });
+
+    // FORCE, not just ENABLE: `.enableRLS()` in the Drizzle schema only emits ENABLE ROW LEVEL
+    // SECURITY, which the table OWNER (who runs migrations) always bypasses regardless. FORCE is
+    // what makes the policy above apply to the owner too, matching envios/cadenas/registro_sif —
+    // see 0001_registros_inmutables.sql's identical FORCE statements for those three tables.
+    const [relRow] = (
+      await db.execute<{ relrowsecurity: boolean; relforcerowsecurity: boolean }>(sql`
+        select relrowsecurity, relforcerowsecurity from pg_class where relname = 'envio_flujo'
+      `)
+    ).rows;
+    expect(relRow).toEqual({ relrowsecurity: true, relforcerowsecurity: true });
+
+    await db.close();
+  });
+});
+
+describe("envios drainer enumeration seam (migration 0004)", () => {
+  it("owns the cross-tenant enumeration with a SECURITY DEFINER function on a non-superuser, non-BYPASSRLS role", async () => {
+    const db = await emptyDb();
+    await runMigrations(db, CORE_MIGRATIONS);
+    await runMigrations(db, FISCAL_MIGRATIONS);
+
+    // The whole guarantee (0004's own comment, mirroring sales_assert_tenders_cover): SECURITY
+    // DEFINER alone would go fail-CLOSED here — FORCE ROW LEVEL SECURITY subjects even the owner to
+    // envios_tenant_isolation, which matches zero rows with no app.tenant_id — UNLESS the owner is a
+    // role carrying a permissive policy. So the function must be SECURITY DEFINER, and owned by
+    // envios_drainer, itself neither superuser nor BYPASSRLS (both are the heavier-hammer fix
+    // 0005_sales.sql rejects because BYPASSRLS cannot be granted under the hardened migration role).
+    const [fn] = (
+      await db.execute<{
+        prosecdef: boolean;
+        rolname: string;
+        rolsuper: boolean;
+        rolbypassrls: boolean;
+      }>(sql`
+        select p.prosecdef, r.rolname, r.rolsuper, r.rolbypassrls
+        from pg_proc p join pg_roles r on r.oid = p.proowner
+        where p.proname = 'envios_tenants_with_work'
+      `)
+    ).rows;
+    expect(fn).toEqual({
+      prosecdef: true,
+      rolname: "envios_drainer",
+      rolsuper: false,
+      rolbypassrls: false,
+    });
+
+    // app_user (the one intended caller) can execute it; PUBLIC's default EXECUTE was revoked, so no
+    // other role can invoke the cross-tenant enumeration. aclexplode grantee 0 is PUBLIC.
+    const [exec] = (
+      await db.execute<{ app_user_exec: boolean; public_exec: boolean }>(sql`
+        select
+          has_function_privilege('app_user', 'envios_tenants_with_work(timestamptz)', 'EXECUTE') as app_user_exec,
+          exists (
+            select 1 from pg_proc p, aclexplode(p.proacl) acl
+            where p.proname = 'envios_tenants_with_work'
+              and acl.grantee = 0 and acl.privilege_type = 'EXECUTE'
+          ) as public_exec
+      `)
+    ).rows;
+    expect(exec).toEqual({ app_user_exec: true, public_exec: false });
+
+    await db.close();
+  });
+
+  it("scopes the permissive enumeration policy to the drainer role, SELECT-only, USING(true)", async () => {
+    const db = await emptyDb();
+    await runMigrations(db, CORE_MIGRATIONS);
+    await runMigrations(db, FISCAL_MIGRATIONS);
+
+    // Existence is not correctness (same note as envio_flujo's policy test above): read cmd/roles/
+    // qual BY VALUE. This is the additive permissive policy the SECURITY DEFINER function sees rows
+    // through — SELECT-only, scoped to envios_drainer, USING(true) — ORed with envios_tenant_isolation
+    // for every other role. Flipping USING(true) to USING(false) here would silently turn the whole
+    // seam back into the zero-row no-op it exists to fix. roles::text[] for the same driver reason
+    // sales.test.ts documents (name[] oid 1003 is unparsed by node-postgres; 1009 is parsed).
+    const policies = (
+      await db.execute<{ policyname: string; cmd: string; roles: string[]; qual: string }>(sql`
+        select policyname, cmd, roles::text[] as roles, qual from pg_policies
+        where tablename = 'envios' and policyname = 'envios_drainer_enumeration'
+      `)
+    ).rows;
+    expect(policies).toEqual([
+      {
+        policyname: "envios_drainer_enumeration",
+        cmd: "SELECT",
+        roles: ["envios_drainer"],
+        qual: "true",
+      },
+    ]);
+
+    await db.close();
+  });
+
+  it("enumerates only tenants with DUE work, matching drain.ts's predicate", async () => {
+    // Functional guard on PGlite (superuser, so RLS is bypassed — this proves the PREDICATE, not the
+    // RLS crossing; the crossing is proven under real app_user in drain.concurrency.test.ts). A
+    // pendiente row due at p_now is enumerated; the same query one second BEFORE it comes due is not
+    // — pinning the estado/proximo_intento_en predicate the function shares with tenantsWithWork.
+    const db = await emptyDb();
+    await runMigrations(db, CORE_MIGRATIONS);
+    await runMigrations(db, FISCAL_MIGRATIONS);
+    const seeded = await seedPendingEnvios(db, { count: 1 });
+
+    const due = await db.execute<{ tenant_id: string }>(
+      sql`select tenant_id from envios_tenants_with_work('2026-07-21T00:00:00Z'::timestamptz) as t(tenant_id)`,
+    );
+    expect(due.rows.map((r) => r.tenant_id)).toEqual([seeded.tenantId]);
+
+    const notYet = await db.execute<{ tenant_id: string }>(
+      sql`select tenant_id from envios_tenants_with_work('2026-07-20T23:59:59Z'::timestamptz) as t(tenant_id)`,
+    );
+    expect(notYet.rows).toHaveLength(0);
+
+    await db.close();
+  });
+
+  it("enumerates a lone stale enviando row (no pendiente row) exactly at RECUPERACION_ENVIANDO_MS, pinning the SQL interval to the TS constant", async () => {
+    // 0004's own comment: `interval '300000 milliseconds'` and drain.ts's RECUPERACION_ENVIANDO_MS
+    // (5 * 60_000 ms) are two separate literals across the TS/SQL boundary that "MUST stay in
+    // sync" but cannot be derived from one source. Nothing before this test called that out — a
+    // one-sided edit to either literal would drift silently, and if the SQL interval grew, a
+    // stale `enviando` tenant would stop being enumerated and never reach `recoverStaleClaims`
+    // (drain.ts's own doc comment on `tenantsWithWork` explains why that path must not be
+    // skipped: a lone stuck `enviando` row has zero `pendiente` rows by definition).
+    //
+    // Two distinct tenants (seedPendingEnvios mints a fresh one per call), each flipped from its
+    // seeded `pendiente` row to a lone `enviando` row so NEITHER has a `pendiente` row alongside —
+    // one stamped just PAST the threshold, one just WITHIN it. If either literal drifts from the
+    // other, one of the two assertions below fails.
+    const db = await emptyDb();
+    await runMigrations(db, CORE_MIGRATIONS);
+    await runMigrations(db, FISCAL_MIGRATIONS);
+
+    const now = new Date("2026-07-21T00:00:00Z");
+
+    const stale = await seedPendingEnvios(db, { count: 1 });
+    await db.execute(sql`
+      update envios set estado = 'enviando',
+        enviado_en = ${new Date(now.getTime() - (RECUPERACION_ENVIANDO_MS + 1000)).toISOString()}
+      where tenant_id = ${stale.tenantId}
+    `);
+
+    const fresh = await seedPendingEnvios(db, { count: 1 });
+    await db.execute(sql`
+      update envios set estado = 'enviando',
+        enviado_en = ${new Date(now.getTime() - (RECUPERACION_ENVIANDO_MS - 1000)).toISOString()}
+      where tenant_id = ${fresh.tenantId}
+    `);
+
+    const due = await db.execute<{ tenant_id: string }>(
+      sql`select tenant_id from envios_tenants_with_work(${now.toISOString()}::timestamptz) as t(tenant_id)`,
+    );
+    const tenantIds = due.rows.map((r) => r.tenant_id);
+    expect(tenantIds).toContain(stale.tenantId);
+    expect(tenantIds).not.toContain(fresh.tenantId);
+
     await db.close();
   });
 });
