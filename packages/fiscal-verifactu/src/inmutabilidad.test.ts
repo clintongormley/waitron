@@ -125,17 +125,20 @@ describe("registros_facturacion is immutable, as the app role", () => {
     // A row trigger does NOT fire on TRUNCATE. Without the separate BEFORE TRUNCATE … FOR EACH
     // STATEMENT trigger, TRUNCATE walks straight through every row-level protection above.
     //
-    // CASCADE is required, not optional: TWO tables reference registros_facturacion.id —
-    // `envios.registro_id` (the sidecar) AND `cadenas.ultimo_registro_id` (the chain-head
-    // pointer) — and Postgres refuses a bare TRUNCATE of a table other tables still reference.
-    // TRUNCATE also requires the privilege on every table it cascades into, not only the one
-    // named in the statement. Verified live in the red phase: granting TRUNCATE on
-    // registros_facturacion and envios alone still failed, with 42501 for `cadenas` — the FK from
-    // its nullable `ultimo_registro_id` counts for cascade purposes regardless of whether any row
-    // currently uses it. Both must be granted, or this test fails on a permissions error and never
-    // reaches the statement trigger under test at all.
+    // CASCADE is required, not optional: THREE tables reference registros_facturacion.id —
+    // `envios.registro_id` (the sidecar), `cadenas.ultimo_registro_id` (the chain-head pointer)
+    // and `acks.registro_id` (the ack outbox, added in plan 3b) — and Postgres refuses a bare
+    // TRUNCATE of a table other tables still reference. TRUNCATE also requires the privilege on
+    // every table it cascades into, not only the one named in the statement. Verified live in the
+    // red phase: granting TRUNCATE on registros_facturacion and envios alone still failed, with
+    // 42501 for `cadenas` — the FK from its nullable `ultimo_registro_id` counts for cascade
+    // purposes regardless of whether any row currently uses it; adding `acks` reproduced the same
+    // 42501 until it too was granted. All three must be granted, or this test fails on a
+    // permissions error and never reaches the statement trigger under test at all.
     await withTenant(db, TENANT_A.id, async (tx) => {
-      await tx.execute(sql`grant truncate on registros_facturacion, envios, cadenas to app_user`);
+      await tx.execute(
+        sql`grant truncate on registros_facturacion, envios, cadenas, acks to app_user`,
+      );
       await tx.execute(sql`set local role app_user`);
       const error = await captureError(() =>
         tx.execute(sql`truncate registros_facturacion cascade`),
@@ -189,7 +192,7 @@ describe("row-level security on every tenant-scoped table in this package", () =
 
     // A guard that discovers nothing passes every assertion below it — the same shape of
     // vacuous test english-only.test.ts's "discovers source files" guards against. This package's
-    // five tenant-scoped tables must all actually be found by this query, not merely assumed to
+    // six tenant-scoped tables must all actually be found by this query, not merely assumed to
     // be, and contadores_instalacion — the one table in this package with NO tenant_id — must be
     // absent, proving the key is "has tenant_id", not "is in this package".
     expect(names).toContain("registros_facturacion");
@@ -197,6 +200,7 @@ describe("row-level security on every tenant-scoped table in this package", () =
     expect(names).toContain("registro_sif");
     expect(names).toContain("envios");
     expect(names).toContain("envio_flujo");
+    expect(names).toContain("acks");
     expect(names).not.toContain("contadores_instalacion");
 
     // Reported as formatted lines rather than a bare boolean: a failure needs to say WHICH table

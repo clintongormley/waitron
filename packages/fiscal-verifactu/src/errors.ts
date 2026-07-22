@@ -143,5 +143,75 @@ declare module "@waitron/shared" {
      * itself already says.
      */
     "fiscal.huella_divergente": { registroId: string };
+
+    /**
+     * Plan 3b's reconciliation sweep (`./reconcile.ts`, `raise`). A record this POS believes AEAT
+     * ACCEPTED (`envios.estado` = `aceptado`/`aceptado_con_errores`) that AEAT's own period
+     * consulta has NO trace of at all (`EstadoRegistroConsulta` came back `null` — the record is
+     * absent from every page of the sweep). An error, not a warning: an accepted-but-untraceable
+     * record is a genuine divergence between what we told an operator was filed and what the
+     * authority holds, exactly the art. 16.4 gap reconciliation exists to surface.
+     *
+     * Constructed, never thrown: like `fiscal.registro_rechazado` above, reconciliation classifies
+     * a disagreement and moves on rather than aborting the sweep — the `AppError` exists only to
+     * hand its `.code`/`.params` to `@waitron/core`'s `recordIncident`. `fiscal.*`, not
+     * `verifactu.*`/`reconcile.*`: this is a submission-lifecycle fact any regime backend shares (a
+     * record we reported as filed is not at the authority), matching `fiscal.registro_rechazado`'s
+     * own regime-neutral prefix even though only this package constructs it today.
+     *
+     * The `IDFactura` triple (`idEmisorFactura`/`numSerieFactura`/`fechaExpedicionFactura`, the last
+     * in AEAT's own `DD-MM-YYYY` form) rides HERE, in the incident params, rather than on the
+     * `ReconcileMismatch` the sweep returns (`@waitron/fiscal`'s `ReconcileMismatch` is a
+     * regime-neutral `{ recordId, localState, reportedState }` and carries no Veri*Factu identity):
+     * an operator chasing this incident needs the exact invoice identity to look the record up at
+     * AEAT, and `incidents` carries no FK back to `registros_facturacion` (see
+     * `fiscal.registro_rechazado` above) to recover it from otherwise. `registroId` is our own
+     * `registros_facturacion.id` — the same value the sweep sent as `RefExterna` and keyed AEAT's
+     * view by, so it also equals the `ReconcileMismatch.recordId` this incident corresponds to.
+     */
+    "fiscal.reconcile_no_trace": {
+      registroId: string;
+      idEmisorFactura: string;
+      numSerieFactura: string;
+      fechaExpedicionFactura: string;
+    };
+
+    /**
+     * Plan 3b's reconciliation sweep. A record this POS believes ACCEPTED that AEAT's consulta
+     * reports as `AceptadaConErrores` — accepted, but flagged. A WARNING, not an error, mirroring
+     * the drainer's own `fiscal.aceptado_con_errores` (above) treatment of the same AEAT state on
+     * the submission side: the record IS stored and counts as accepted, but a human should still
+     * see that the authority flagged it and ours did not record why.
+     *
+     * A DISTINCT code from `fiscal.reconcile_drift_anulada` below rather than one shared
+     * `fiscal.reconcile_drift` carrying the reported state as a param: an `AceptadaConErrores` drift
+     * (warning — still filed) and an `Anulada` drift (error — the authority annulled a record we
+     * think is live) need different severities and different operator responses, and collapsing
+     * them would erase which one an on-call human is looking at — the same "distinguish the failure
+     * a translator/human sees" reasoning `chain.append_contention` and `fiscal.duplicado_anulado`
+     * above already apply. See `fiscal.reconcile_no_trace` above for why the `IDFactura` triple
+     * rides in these params.
+     */
+    "fiscal.reconcile_drift_errores": {
+      registroId: string;
+      idEmisorFactura: string;
+      numSerieFactura: string;
+      fechaExpedicionFactura: string;
+    };
+
+    /**
+     * Plan 3b's reconciliation sweep. A record this POS believes ACCEPTED that AEAT's consulta
+     * reports as `Anulada` — the authority holds our identity as annulled while our own books still
+     * count it live. An error, not a warning (unlike `fiscal.reconcile_drift_errores` above): a
+     * record we believe filed being annulled at AEAT is a real books-vs-authority contradiction an
+     * operator must resolve, not a benign flag. Same distinct-code and identity-param reasoning as
+     * `fiscal.reconcile_drift_errores` above.
+     */
+    "fiscal.reconcile_drift_anulada": {
+      registroId: string;
+      idEmisorFactura: string;
+      numSerieFactura: string;
+      fechaExpedicionFactura: string;
+    };
   }
 }

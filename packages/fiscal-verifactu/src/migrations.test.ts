@@ -182,6 +182,63 @@ describe("envio_flujo migration", () => {
   });
 });
 
+describe("acks migration", () => {
+  it("creates acks with tenant PK-less state CHECK and RLS", async () => {
+    const db = await emptyDb();
+    await runMigrations(db, CORE_MIGRATIONS);
+    await runMigrations(db, FISCAL_MIGRATIONS);
+    const cols = await db.execute<{ column_name: string; is_nullable: string }>(sql`
+      select column_name, is_nullable from information_schema.columns where table_name = 'acks'
+    `);
+    const by = Object.fromEntries(cols.rows.map((c) => [c.column_name, c.is_nullable]));
+    expect(by).toMatchObject({
+      registro_id: "NO",
+      tenant_id: "NO",
+      submitted_at: "NO",
+      state: "NO",
+      delivered_at: "YES",
+      csv: "YES",
+    });
+    await db.close();
+  });
+
+  it("scopes acks to the calling tenant the same way envio_flujo is scoped", async () => {
+    // Same by-value note as envio_flujo's policy test above: existence is not correctness, so
+    // this reads qual/with_check from the catalog rather than merely asserting a row exists.
+    const db = await emptyDb();
+    await runMigrations(db, CORE_MIGRATIONS);
+    await runMigrations(db, FISCAL_MIGRATIONS);
+
+    const [policy] = (
+      await db.execute<{
+        policyname: string;
+        cmd: string;
+        qual: string;
+        with_check: string;
+      }>(sql`
+        select policyname, cmd, qual, with_check from pg_policies
+        where tablename = 'acks'
+      `)
+    ).rows;
+    expect(policy).toEqual({
+      policyname: "acks_tenant_isolation",
+      cmd: "ALL",
+      qual: "(tenant_id = current_tenant_id())",
+      with_check: "(tenant_id = current_tenant_id())",
+    });
+
+    // FORCE, not just ENABLE — same rationale as envio_flujo's identical assertion above.
+    const [relRow] = (
+      await db.execute<{ relrowsecurity: boolean; relforcerowsecurity: boolean }>(sql`
+        select relrowsecurity, relforcerowsecurity from pg_class where relname = 'acks'
+      `)
+    ).rows;
+    expect(relRow).toEqual({ relrowsecurity: true, relforcerowsecurity: true });
+
+    await db.close();
+  });
+});
+
 describe("envios drainer enumeration seam (migration 0004)", () => {
   it("owns the cross-tenant enumeration with a SECURITY DEFINER function on a non-superuser, non-BYPASSRLS role", async () => {
     const db = await emptyDb();

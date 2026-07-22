@@ -16,6 +16,7 @@ import type {
   VerifactuClient,
   RegistroAlta,
 } from "@waitron/verifactu";
+import { writeAck } from "./acks.js";
 import { fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
 
@@ -187,7 +188,7 @@ async function drainTenant(
     // chain order.
     const batch = await withTenant(db, tenantId, async (tx) => {
       const claimed = await claimBatch(tx, tenantId, now);
-      return haltOpenChainClaims(tx, claimed, result);
+      return haltOpenChainClaims(tx, claimed, now, result);
     });
     // Defensive only: EITHER the countDue/claimBatch race this function's own doc comment
     // describes, OR every row claimed this round was redirected to `detenido` by
@@ -374,13 +375,22 @@ async function claimBatch(tx: Transaction, tenantId: string, now: Date): Promise
  *
  * Deliberately does NOT raise a fresh `incidents` row: the rejection that opened this chain's gap
  * already raised one (`applyOutcome`), and it is still unresolved — a second row per newly-
- * enqueued successor would spam duplicate incidents for one still-open condition. Only the
- * boolean flag is set here, mirroring `recoverStaleClaims`'s identical precedent and doc comment
- * (a few functions above) for the same "flag, don't duplicate the incident record" reasoning.
+ * enqueued successor would spam duplicate incidents for one still-open condition. The boolean flag
+ * (never a duplicate incident) is set here, mirroring `recoverStaleClaims`'s identical precedent
+ * and doc comment (a few functions above) for the same "flag, don't duplicate the incident record"
+ * reasoning.
+ *
+ * A `halted` ack IS written per halted id, though — right after the bulk `detenido` UPDATE and in
+ * the SAME T1 tx, via `writeAck` (which derives `state = 'halted'` from the just-committed
+ * `detenido` row). This bulk path bypasses `setEstado`'s own per-row `writeAck` choke point, so
+ * without this a claim-time-halted record would carry its counted-and-flagged status but never emit
+ * it downstream (plan 3b §7.2 — the flag rides the ack). `enviado_en` was stamped at claim, so the
+ * ack's `submitted_at` is populated.
  */
 async function haltOpenChainClaims(
   tx: Transaction,
   claimed: DueRow[],
+  now: Date,
   result: DrainResult,
 ): Promise<DueRow[]> {
   if (claimed.length === 0) return claimed;
@@ -409,6 +419,11 @@ async function haltOpenChainClaims(
     await tx.execute(sql`
       update envios set estado = 'detenido', incidencia = true where registro_id in ${haltedIds}
     `);
+    // Write the `halted` ack for each — this bulk path never reaches `setEstado`, so its per-row
+    // `writeAck` choke point would otherwise never fire for these records. Same T1 tx as the UPDATE
+    // above; `writeAck` derives `state = 'halted'` from the committed `detenido` row, so the
+    // ack↔estado invariant holds.
+    for (const id of haltedIds) await writeAck(tx, id, now);
     result.recordsHalted += haltedIds.length;
   }
   return kept;
@@ -537,14 +552,14 @@ async function applyOutcome(
     case "accepted":
       // CSV is written in the SAME transaction as the response — the highest-consequence line in
       // the outbox (spec §7). Dropping this write must fail drain.test.ts's TEETH test.
-      await setEstado(tx, row.id, "aceptado", { csv, confirmadoEn: now });
+      await setEstado(tx, row.id, "aceptado", now, { csv, confirmadoEn: now });
       result.recordsAccepted += 1;
       return;
     case "accepted_with_errors": {
       // Still an accept — DrainResult.recordsAccepted's own doc comment: "includes
       // accepted-with-errors — still counts as accepted". The record IS stored by AEAT; only a
       // warning incident distinguishes this from a clean accept.
-      await setEstado(tx, row.id, "aceptado_con_errores", { csv, confirmadoEn: now });
+      await setEstado(tx, row.id, "aceptado_con_errores", now, { csv, confirmadoEn: now });
       const codigo = linea.CodigoErrorRegistro ?? null;
       const mensaje = linea.DescripcionErrorRegistro ?? null;
       await raiseIncident(
@@ -561,7 +576,7 @@ async function applyOutcome(
     case "rejected": {
       const codigo = linea.CodigoErrorRegistro ?? null;
       const mensaje = linea.DescripcionErrorRegistro ?? null;
-      await setEstado(tx, row.id, "rechazado", {
+      await setEstado(tx, row.id, "rechazado", now, {
         csv,
         codigoError: codigo,
         mensajeError: mensaje,
@@ -579,7 +594,7 @@ async function applyOutcome(
       // rejection just orphaned. Their ids are folded into `halted` (not just counted) so
       // `persistResponse`'s own loop skips them if THEIR OWN response line also appears in this
       // same batch — see `persistResponse`'s doc comment on `halted` for why that matters.
-      const haltedIds = await haltSuccessors(tx, row);
+      const haltedIds = await haltSuccessors(tx, row, now);
       for (const id of haltedIds) halted.add(id);
       result.recordsHalted += 1 + haltedIds.length;
       return;
@@ -620,6 +635,7 @@ async function setEstado(
   tx: Transaction,
   registroId: string,
   estado: string,
+  now: Date,
   opts: {
     csv: string | null;
     confirmadoEn?: Date;
@@ -640,6 +656,15 @@ async function setEstado(
       incidencia = ${opts.incidencia ?? false} or incidencia
     where registro_id = ${registroId}
   `);
+  // The choke point for the per-row terminal estados THIS function writes (accepted /
+  // accepted-with-errors / rejected / a direct duplicate-annulled or huella-divergente halt) — the
+  // ack that reflects each is produced HERE, in the SAME tx, from the row this UPDATE just
+  // committed. The two BULK chain-halt paths do NOT route through here: `haltOpenChainClaims` (T1)
+  // and `haltSuccessors` (T2) write their own `halted` acks alongside their own bulk `detenido`
+  // UPDATEs, in the same tx, so the ack↔estado invariant holds for those records too. `ackStateOf`
+  // no-ops on any non-terminal estado, so this is safe even though today every caller here is
+  // terminal. Plan 3b's ack↔estado atomicity invariant.
+  await writeAck(tx, registroId, now);
 }
 
 /**
@@ -650,11 +675,18 @@ async function setEstado(
  * response line later in this SAME batch — see `persistResponse`'s doc comment on `halted` for
  * why that must not be allowed to overwrite the halt back to `aceptado`.
  *
+ * Each swept successor ALSO gets a `halted` ack written here, in this same T2 tx — this bulk UPDATE
+ * bypasses `setEstado`'s per-row `writeAck`, so the ack that carries the counted-and-flagged status
+ * downstream (plan 3b §7.2 — the flag rides the ack) would otherwise never be produced for a halted
+ * successor. `writeAck` derives `state = 'halted'` from the just-committed `detenido` row, keeping
+ * the ack↔estado invariant intact. Each successor id is distinct from the rejected `row.id` whose
+ * ack `setEstado` already wrote, so there is no double-write.
+ *
  * No `WHERE ... AND e.registro_id <> ${row.id}` guard is needed: `row`'s own estado was already
  * moved to `rechazado` by `setEstado` (called by `applyOutcome` before this), so it can never
  * match this UPDATE's own `estado in ('pendiente', 'enviando')` filter a second time.
  */
-async function haltSuccessors(tx: Transaction, row: DueRow): Promise<string[]> {
+async function haltSuccessors(tx: Transaction, row: DueRow, now: Date): Promise<string[]> {
   const halted = await tx.execute<{ registro_id: string }>(sql`
     update envios e set estado = 'detenido', incidencia = true
     from registros_facturacion r
@@ -662,7 +694,9 @@ async function haltSuccessors(tx: Transaction, row: DueRow): Promise<string[]> {
       and e.estado in ('pendiente', 'enviando')
     returning e.registro_id
   `);
-  return halted.rows.map((r) => r.registro_id);
+  const haltedIds = halted.rows.map((r) => r.registro_id);
+  for (const id of haltedIds) await writeAck(tx, id, now);
+  return haltedIds;
 }
 
 /**
@@ -768,7 +802,7 @@ async function handleDuplicate(
   halted: Set<string>,
 ): Promise<void> {
   if (efectivo === "duplicate_annulled") {
-    await setEstado(tx, row.id, "detenido", { csv, incidencia: true });
+    await setEstado(tx, row.id, "detenido", now, { csv, incidencia: true });
     await raiseIncident(
       tx,
       row,
@@ -777,7 +811,7 @@ async function handleDuplicate(
       now,
       result,
     );
-    const haltedIds = await haltSuccessors(tx, row);
+    const haltedIds = await haltSuccessors(tx, row, now);
     for (const id of haltedIds) halted.add(id);
     result.recordsHalted += 1 + haltedIds.length;
     return;
@@ -786,11 +820,11 @@ async function handleDuplicate(
   // duplicate_unknown -> Route B: consult, compare huella.
   const matched = await routeB(client, row);
   if (matched) {
-    await setEstado(tx, row.id, "aceptado", { csv, confirmadoEn: now });
+    await setEstado(tx, row.id, "aceptado", now, { csv, confirmadoEn: now });
     result.recordsAccepted += 1;
     return;
   }
-  await setEstado(tx, row.id, "detenido", { csv, incidencia: true });
+  await setEstado(tx, row.id, "detenido", now, { csv, incidencia: true });
   await raiseIncident(
     tx,
     row,
@@ -799,7 +833,7 @@ async function handleDuplicate(
     now,
     result,
   );
-  const haltedIds = await haltSuccessors(tx, row);
+  const haltedIds = await haltSuccessors(tx, row, now);
   for (const id of haltedIds) halted.add(id);
   result.recordsHalted += 1 + haltedIds.length;
 }

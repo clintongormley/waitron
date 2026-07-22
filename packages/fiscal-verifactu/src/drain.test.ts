@@ -8,6 +8,7 @@ import type { Database } from "@waitron/db";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { VerifactuBackend } from "./backend.js";
 import { backoffMs } from "./drain.js";
+import { ackStateOf } from "./acks.js";
 import {
   appendPendingAlta,
   seedPendingEnvios,
@@ -763,6 +764,64 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     const stored = aeat.stored();
     expect(stored.find((s) => s.key === seeded.facturaKeys[0])?.huella).toBe("D".repeat(64));
     expect(stored.find((s) => s.key === seeded.facturaKeys[1])?.estado).toBe("Correcta");
+  });
+});
+
+/**
+ * Plan 3b §7.2: a halted record stays counted AND flagged, and the flag rides its `acks` row. The
+ * two BULK chain-halt paths in ./drain.ts (`haltOpenChainClaims` in T1, `haltSuccessors` in T2)
+ * bypass `setEstado`'s per-row `writeAck` choke point, so before their own additive ack writes a
+ * halted successor got its `detenido` estado but NO ack — the record would silently drop off the
+ * ack stream. This drives `haltSuccessors`: a rejection on a chain with a still-`pendiente`
+ * successor must leave BOTH a `rejected` ack for the rejected record AND a `halted` ack for the
+ * successor, with the ack↔estado invariant holding for every acked row.
+ *
+ * Scoped to its own freshly-seeded tenant (`seedPendingEnvios` mints one per call) and asserted
+ * strictly `where tenant_id = …`, so the shared-`db`/global-sweep convention this file otherwise
+ * carries cannot pollute these acks assertions.
+ */
+describe("drain — halted records get a halted ack (the bulk chain-halt paths)", () => {
+  it("writes a rejected ack for the rejection and a halted ack for its still-pending successor", async () => {
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    const seeded = await seedPendingEnvios(db, { count: 3 }); // secuencia 1,2,3 on one SIF
+    aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente"); // reject the middle record
+    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    await backend.drain(new Date("2026-07-21T00:01:00Z"));
+
+    // secuencia 1 accepted, 2 rejected, 3 halted — the successor `haltSuccessors` swept to detenido.
+    const envios = await withTenant(db, seeded.tenantId, (tx) =>
+      tx.execute<{ registro_id: string; secuencia: number; estado: string }>(sql`
+        select e.registro_id, r.secuencia, e.estado from envios e
+        join registros_facturacion r on r.id = e.registro_id
+        where e.tenant_id = ${seeded.tenantId}
+        order by r.secuencia
+      `),
+    );
+    expect(envios.rows.map((r) => r.estado)).toEqual(["aceptado", "rechazado", "detenido"]);
+
+    const acks = await withTenant(db, seeded.tenantId, (tx) =>
+      tx.execute<{ registro_id: string; state: string }>(
+        sql`select registro_id, state from acks where tenant_id = ${seeded.tenantId}`,
+      ),
+    );
+    const ackState = new Map(acks.rows.map((a) => [a.registro_id, a.state]));
+
+    // The rejected record's ack (this one already flowed through setEstado's writeAck).
+    const rejected = envios.rows.find((r) => r.secuencia === 2)!;
+    expect(ackState.get(rejected.registro_id)).toBe("rejected");
+
+    // The halted successor's ack — the bug: haltSuccessors bypassed writeAck, so before the fix
+    // this record had a `detenido` estado but NO acks row at all (this assertion is the RED→GREEN).
+    const halted = envios.rows.find((r) => r.secuencia === 3)!;
+    expect(ackState.get(halted.registro_id)).toBe("halted");
+
+    // The ack↔estado invariant: every acked row's ack agrees with its committed estado — and every
+    // terminal row (all three here) is acked, so none silently drops off the ack stream.
+    for (const env of envios.rows) {
+      const state = ackState.get(env.registro_id);
+      expect(state).toBeDefined();
+      expect(state).toBe(ackStateOf(env.estado));
+    }
   });
 });
 

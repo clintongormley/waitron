@@ -148,6 +148,7 @@ function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>)
     checkIntegrity: (tx, tenant, till) => fake.checkIntegrity(tx, tenant, till),
     pendingCount: (tenant, till) => fake.pendingCount(tenant, till),
     drain: (now) => fake.drain(now),
+    reconcile: (tenant, period) => fake.reconcile(tenant, period),
     ...overrides,
   };
 }
@@ -343,6 +344,9 @@ describe("recordVoid — error propagation", () => {
         throw new Error("not used by this test");
       },
       drain: () => {
+        throw new Error("not used by this test");
+      },
+      reconcile: () => {
         throw new Error("not used by this test");
       },
     };

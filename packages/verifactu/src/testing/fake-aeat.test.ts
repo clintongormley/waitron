@@ -288,3 +288,175 @@ describe("fake AEAT — resubmit (error 3000) and consulta", () => {
     expect(again.RespuestaLinea[0].RegistroDuplicado?.EstadoRegistroDuplicado).toBe("Anulada");
   });
 });
+
+describe("fake AEAT — consulta pagination + RefExterna echo + state hooks", () => {
+  it("paginates consulta results via ClavePaginacion, ordered by insertion (presentation-date stand-in)", async () => {
+    const aeat = createFakeAeat({ consultaPageSize: 2 });
+    for (const numSerie of ["A/1", "A/2", "A/3"]) {
+      await aeat.client().submit(cabecera, [{ RegistroAlta: altaFixture(numSerie) }]);
+    }
+
+    const page1 = await aeat.client().consultar(cabecera, { Ejercicio: "2026", Periodo: "07" });
+    expect(page1.registros).toHaveLength(2);
+    expect(page1.IndicadorPaginacion).toBe("S");
+    expect(page1.ClavePaginacion).toBeDefined();
+
+    const page2 = await aeat.client().consultar(cabecera, {
+      Ejercicio: "2026",
+      Periodo: "07",
+      ClavePaginacion: page1.ClavePaginacion,
+    });
+    expect(page2.registros).toHaveLength(1);
+    expect(page2.IndicadorPaginacion).toBe("N");
+    expect(page2.ClavePaginacion).toBeUndefined();
+  });
+
+  it("reports no further pages when the filtered set exactly fills one page", async () => {
+    const aeat = createFakeAeat({ consultaPageSize: 2 });
+    for (const numSerie of ["A/1", "A/2"]) {
+      await aeat.client().submit(cabecera, [{ RegistroAlta: altaFixture(numSerie) }]);
+    }
+    const r = await aeat.client().consultar(cabecera, { Ejercicio: "2026", Periodo: "07" });
+    expect(r.registros).toHaveLength(2);
+    expect(r.IndicadorPaginacion).toBe("N");
+    expect(r.ClavePaginacion).toBeUndefined();
+  });
+
+  // The ClavePaginacion cursor found at index 0 of the filtered set is the edge case that
+  // distinguishes `idx >= 0` from an off-by-one `idx > 0`: both agree once idx is 1 or more.
+  it("continues correctly when the ClavePaginacion cursor matches the very first record in the filtered set", async () => {
+    const aeat = createFakeAeat({ consultaPageSize: 1 });
+    for (const numSerie of ["A/1", "A/2", "A/3"]) {
+      await aeat.client().submit(cabecera, [{ RegistroAlta: altaFixture(numSerie) }]);
+    }
+    const page1 = await aeat.client().consultar(cabecera, { Ejercicio: "2026", Periodo: "07" });
+    expect(page1.registros[0]?.IDFactura.NumSerieFactura).toBe("A/1");
+
+    const page2 = await aeat.client().consultar(cabecera, {
+      Ejercicio: "2026",
+      Periodo: "07",
+      ClavePaginacion: page1.ClavePaginacion,
+    });
+    expect(page2.registros[0]?.IDFactura.NumSerieFactura).toBe("A/2");
+  });
+
+  // Distinct from the pagination tests above (which all pin an explicit consultaPageSize): this
+  // one exercises the UNSET-option default itself, so a mutant changing the `?? 2` fallback to
+  // some other N is caught even though no test ever asserts the literal default value directly.
+  it("defaults consultaPageSize to 2 when the option is not given", async () => {
+    const aeat = createFakeAeat();
+    for (const numSerie of ["A/1", "A/2", "A/3"]) {
+      await aeat.client().submit(cabecera, [{ RegistroAlta: altaFixture(numSerie) }]);
+    }
+    const page1 = await aeat.client().consultar(cabecera, { Ejercicio: "2026", Periodo: "07" });
+    expect(page1.registros).toHaveLength(2);
+    expect(page1.IndicadorPaginacion).toBe("S");
+  });
+
+  it("falls back to the full filtered set when a ClavePaginacion cursor's record has since been forgotten", async () => {
+    const aeat = createFakeAeat({ consultaPageSize: 2 });
+    for (const numSerie of ["A/1", "A/2", "A/3"]) {
+      await aeat.client().submit(cabecera, [{ RegistroAlta: altaFixture(numSerie) }]);
+    }
+    const page1 = await aeat.client().consultar(cabecera, { Ejercicio: "2026", Periodo: "07" });
+
+    aeat.forget(keyOf(altaFixture("A/2")));
+    const page2 = await aeat.client().consultar(cabecera, {
+      Ejercicio: "2026",
+      Periodo: "07",
+      ClavePaginacion: page1.ClavePaginacion,
+    });
+    expect(page2.registros.map((r) => r.IDFactura.NumSerieFactura)).toEqual(["A/1", "A/3"]);
+  });
+
+  it("a full-period sweep only returns records under the queried obligado's NIF", async () => {
+    const aeat = createFakeAeat();
+    const otherCabecera = { ObligadoEmision: { NombreRazon: "Otro SL", NIF: "B99999999" } };
+    await aeat.client().submit(cabecera, [{ RegistroAlta: altaFixture("A/1") }]);
+    await aeat.client().submit(otherCabecera, [
+      {
+        RegistroAlta: {
+          ...altaFixture("A/2"),
+          IDFactura: {
+            IDEmisorFactura: "B99999999",
+            NumSerieFactura: "A/2",
+            FechaExpedicionFactura: "20-07-2026",
+          },
+          Huella: "H-OTHER-NIF",
+        },
+      },
+    ]);
+
+    const r = await aeat.client().consultar(cabecera, { Ejercicio: "2026", Periodo: "07" });
+    expect(r.registros).toHaveLength(1);
+    expect(r.registros[0]?.IDFactura.NumSerieFactura).toBe("A/1");
+  });
+
+  it("echoes RefExterna in the consulta DatosRegistroFacturacion", async () => {
+    const aeat = createFakeAeat();
+    await aeat
+      .client()
+      .submit(cabecera, [{ RegistroAlta: altaFixture("A/1", "20-07-2026", "reg-uuid-1") }]);
+
+    const r = await aeat.client().consultar(cabecera, {
+      Ejercicio: "2026",
+      Periodo: "07",
+      NumSerieFactura: "A/1",
+    });
+    // Exact-shape equality (not just a `.RefExterna` property check) also pins that no stray
+    // content lands in DatosRegistroFacturacion alongside it.
+    expect(r.registros[0]?.DatosRegistroFacturacion).toEqual({
+      RefExterna: "reg-uuid-1",
+      Huella: "H-A/1",
+      TipoHuella: "01",
+    });
+  });
+
+  it("omits RefExterna from DatosRegistroFacturacion when the record has none", async () => {
+    const aeat = createFakeAeat();
+    await aeat.client().submit(cabecera, [{ RegistroAlta: altaFixture("A/1") }]);
+
+    const r = await aeat.client().consultar(cabecera, {
+      Ejercicio: "2026",
+      Periodo: "07",
+      NumSerieFactura: "A/1",
+    });
+    // Exact-shape equality: no RefExterna key at all, and nothing else sneaks in either.
+    expect(r.registros[0]?.DatosRegistroFacturacion).toEqual({
+      Huella: "H-A/1",
+      TipoHuella: "01",
+    });
+  });
+
+  it("setConsultaState/forget drive the drift and no-trace cases", async () => {
+    const aeat = createFakeAeat();
+    const alta = altaFixture("A/1", "20-07-2026", "reg-uuid-1");
+    await aeat.client().submit(cabecera, [{ RegistroAlta: alta }]);
+
+    aeat.setConsultaState(keyOf(alta), "AceptadaConErrores");
+    let r = await aeat.client().consultar(cabecera, {
+      Ejercicio: "2026",
+      Periodo: "07",
+      NumSerieFactura: "A/1",
+    });
+    expect(r.registros[0]?.EstadoRegistro).toBe("AceptadaConErrores");
+
+    aeat.forget(keyOf(alta));
+    r = await aeat.client().consultar(cabecera, {
+      Ejercicio: "2026",
+      Periodo: "07",
+      NumSerieFactura: "A/1",
+    });
+    expect(r.ResultadoConsulta).toBe("SinDatos");
+    expect(r.registros).toHaveLength(0);
+  });
+
+  it("setConsultaState and forget are no-ops for a key that was never stored", async () => {
+    const aeat = createFakeAeat();
+    expect(() =>
+      aeat.setConsultaState("89890001K|A/9|20-07-2026", "AceptadaConErrores"),
+    ).not.toThrow();
+    expect(() => aeat.forget("89890001K|A/9|20-07-2026")).not.toThrow();
+    expect(aeat.stored()).toEqual([]);
+  });
+});

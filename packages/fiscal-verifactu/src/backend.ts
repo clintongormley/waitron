@@ -8,6 +8,7 @@ import type {
   FiscalBackend,
   FiscalRecordRef,
   IntegrityReport,
+  ReconcileResult,
   SaleForFiscalRecord,
   TillRegistration,
   TrustedClock,
@@ -26,6 +27,7 @@ import type {
 } from "@waitron/verifactu";
 import { appendToChain } from "./chain.js";
 import { drain as runDrain } from "./drain.js";
+import { reconcile as runReconcile } from "./reconcile.js";
 import { currentSif } from "./registro-sif.js";
 import type { SifRegistration } from "./registro-sif.js";
 import { fromRegistroRow } from "./registro-row.js";
@@ -395,6 +397,21 @@ export class VerifactuBackend implements FiscalBackend {
    */
   async drain(now: Date): Promise<DrainResult> {
     return runDrain({ db: this.db, client: this.client }, now);
+  }
+
+  /**
+   * The consulta-driven reconciliation sweep (plan 3b): pages AEAT's period response, keys it by
+   * the `RefExterna` the drainer submitted (= our registro id), and classifies every disagreement
+   * into `lostAck`/`noTrace`/`drift`, raising an incident for each `noTrace`/`drift`. Delegates to
+   * `./reconcile.ts`, which owns the T1/T2 split that keeps the consulta network call out of any
+   * transaction. Like `pendingCount`, it takes `tenantId` and no `tx` — it runs outside any sale
+   * transaction and establishes its own `withTenant` scopes.
+   */
+  async reconcile(
+    tenantId: TenantId,
+    period: { year: string; month: string },
+  ): Promise<ReconcileResult> {
+    return runReconcile({ db: this.db, client: this.client, clock: this.clock }, tenantId, period);
   }
 
   private buildSistemaInformatico(sif: SifRegistration, legalName: string): SistemaInformatico {

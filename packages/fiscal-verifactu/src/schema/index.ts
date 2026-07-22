@@ -7,6 +7,7 @@
 // CREATE TABLE, which then fails at apply time against a database where core already created it.
 // `schema-ownership.test.ts` enforces this, because a comment does not survive contact with a
 // future contributor.
+export { acks } from "./acks.js";
 export { cadenas } from "./cadenas.js";
 export { envioFlujo } from "./envio-flujo.js";
 export { envios } from "./envios.js";

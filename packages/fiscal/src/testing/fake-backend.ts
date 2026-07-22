@@ -3,11 +3,14 @@ import { AppError } from "@waitron/shared";
 import type { SaleId, TenantId, TillId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type {
+  AckState,
   DrainResult,
   FiscalBackend,
   FiscalRecordRef,
   IntegrityIssue,
   IntegrityReport,
+  ReconcileMismatch,
+  ReconcileResult,
   SaleForFiscalRecord,
   TillRegistration,
 } from "../backend.js";
@@ -54,6 +57,7 @@ const nextId = (): string => `fake-${String(++counter).padStart(8, "0")}`;
  */
 export class FakeFiscalBackend implements FiscalBackend {
   private readonly injectedIssues = new Map<string, IntegrityIssue[]>();
+  private readonly reportedState = new Map<string, AckState | null>();
 
   constructor(private readonly db: Database) {}
 
@@ -232,6 +236,51 @@ export class FakeFiscalBackend implements FiscalBackend {
     };
   }
 
+  /**
+   * A genuine diff, not a stub: reads every one of this tenant's fake records and classifies each
+   * against `reportedState` — the test-only injectable view set via `setReportedState`, standing
+   * in for whatever a real regime would report back. This fake's own records carry no date, so —
+   * unlike a real backend's period-scoped implementation — this does not filter by `period` at
+   * all; it exists to demonstrate the three-way diff and the result shape, nothing more.
+   * `incidentsRaised` stays zero: this fake has no incident sink to raise one into.
+   */
+  async reconcile(
+    tenantId: TenantId,
+    period: { year: string; month: string },
+  ): Promise<ReconcileResult> {
+    const rows = await this.db.execute<{ record_id: string; state: string }>(sql`
+      select record_id, state from fake_fiscal_records where tenant_id = ${tenantId}
+    `);
+    const lostAck: ReconcileMismatch[] = [];
+    const noTrace: ReconcileMismatch[] = [];
+    const drift: ReconcileMismatch[] = [];
+    for (const row of rows.rows) {
+      const reported = this.reportedState.get(row.record_id) ?? null;
+      const mismatch: ReconcileMismatch = {
+        recordId: row.record_id,
+        localState: row.state,
+        reportedState: reported,
+      };
+      if (row.state === "pending") {
+        // reported === null: still in flight, which is ordinary, not a mismatch.
+        if (reported !== null) lostAck.push(mismatch);
+      } else if (row.state === "acknowledged") {
+        if (reported === null) noTrace.push(mismatch);
+        // reported === "accepted": clean, otherwise the regime's report disagrees.
+        else if (reported !== "accepted") drift.push(mismatch);
+      }
+    }
+    return {
+      year: period.year,
+      month: period.month,
+      checked: rows.rows.length,
+      lostAck,
+      noTrace,
+      drift,
+      incidentsRaised: 0,
+    };
+  }
+
   // ---- test-only affordances ------------------------------------------------------------
 
   /** Makes `checkIntegrity` report a failure. Without this the "records the next sale anyway"
@@ -242,6 +291,14 @@ export class FakeFiscalBackend implements FiscalBackend {
 
   restoreIntegrity(tillId: TillId): void {
     this.injectedIssues.delete(tillId);
+  }
+
+  /** Sets what the (fake) regime reports back for `recordId` — the injectable view `reconcile`
+   * diffs its own records against. `null` means the regime has no record of it at all. Without
+   * this, `reconcile`'s three-way classification could not be exercised at all — mirrors
+   * `breakIntegrity`'s identical injectable-state convention above. */
+  setReportedState(recordId: string, state: AckState | null): void {
+    this.reportedState.set(recordId, state);
   }
 
   async acknowledge(recordId: string): Promise<void> {

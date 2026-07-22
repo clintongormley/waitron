@@ -117,6 +117,48 @@ export interface DrainResult {
 }
 
 /**
+ * How this POS classifies what a regime reports back about a submission — plan 3b's own settled
+ * classification, independent of whatever raw code a particular regime uses for the same idea.
+ * `"accepted_with_errors"` still counts as accepted, mirroring `DrainResult.recordsAccepted`'s
+ * identical convention above.
+ */
+export type AckState = "accepted" | "accepted_with_errors" | "rejected" | "halted";
+
+/**
+ * One record `reconcile` found this POS and the regime disagreeing about, or that the regime has
+ * nothing to say about at all. `localState`/`reportedState` are deliberately plain strings, like
+ * `FiscalRecordRef.recordId` — this POS's own last-known state and whatever the regime reported
+ * back are each a vocabulary a generic report should not force into `FiscalState` or `AckState`;
+ * a backend maps its own codes onto whichever of those fits before handing this back.
+ */
+export interface ReconcileMismatch {
+  recordId: string;
+  localState: string;
+  /** Null when the regime has no record of this one at all — the `noTrace` case below. */
+  reportedState: string | null;
+}
+
+/**
+ * The outcome of one `reconcile(tenantId, period)` pass — the read-side counterpart to
+ * `DrainResult` above. `lostAck`/`noTrace`/`drift` are non-overlapping: a record still awaiting
+ * acknowledgement that the regime has simply not reported on yet is ordinary in-flight state, not
+ * any of the three. See `FiscalBackend.reconcile`'s own doc comment for the full classification.
+ */
+export interface ReconcileResult {
+  year: string;
+  month: string;
+  checked: number;
+  /** Still `pending` locally, but the regime already reports something for it — this POS's own
+   * acknowledgement was lost, or never arrived. */
+  lostAck: ReconcileMismatch[];
+  /** `acknowledged` locally, but the regime has no trace of it at all. */
+  noTrace: ReconcileMismatch[];
+  /** `acknowledged` locally, but the regime's own report for it disagrees. */
+  drift: ReconcileMismatch[];
+  incidentsRaised: number;
+}
+
+/**
  * The only thing that crosses between the POS and a fiscal regime.
  *
  * Nothing in this file names an inter-record linking structure, a one-way digest, a derived
@@ -125,15 +167,15 @@ export interface DrainResult {
  * one: a second backend arrives with its own tables and its own vocabulary and changes nothing
  * here.
  *
- * `drain(now)` and `reconcile(period)` were reserved names for the submission plan, deliberately
- * absent until that plan designed flow control, error-3000 resolution and the file-export
- * persistence rule — every one of which constrains their return types, and guessing at a
- * signature before that design existed would mean implementing against one that changes anyway.
- * `drain` is now filled in below, its shape settled by that design (`DrainResult` above);
- * `reconcile(period)` remains reserved, still pending plan 3b. An interface method with no caller
- * and no meaningful fake is dead surface that mutation testing cannot reach: exactly the shape of
+ * `drain(now)` and `reconcile(tenantId, period)` were reserved names for the submission plan,
+ * deliberately absent until that plan designed flow control, error-3000 resolution and the
+ * file-export persistence rule — every one of which constrains their return types, and guessing
+ * at a signature before that design existed would mean implementing against one that changes
+ * anyway. Both are now filled in below, their shapes settled by that design (`DrainResult` and
+ * `ReconcileResult` above) — no reserved names remain. An interface method with no caller and no
+ * meaningful fake is dead surface that mutation testing cannot reach: exactly the shape of
  * vacuous test this project must not add another instance of. Do not introduce `flush`, `sync` or
- * `push` in `reconcile`'s place.
+ * `push` in either method's place.
  */
 export interface FiscalBackend {
   registerTill(
@@ -175,4 +217,14 @@ export interface FiscalBackend {
    * never an in-memory timer. A backend with nothing to submit answers `{ nextDueAt: null, …zeros }`.
    */
   drain(now: Date): Promise<DrainResult>;
+
+  /**
+   * Audits one calendar period against whatever the regime reports back for it, classifying every
+   * disagreement into `lostAck`/`noTrace`/`drift` (see `ReconcileResult`). Takes `tenantId` and NO
+   * transaction, like `pendingCount`: the read happens outside any sale transaction, and it is
+   * scoped to the tenant as a whole rather than one till — a regime's own reporting works the same
+   * way. A backend with nothing to check for the period answers `{ year, month, checked: 0,
+   * lostAck: [], noTrace: [], drift: [], incidentsRaised: 0 }`.
+   */
+  reconcile(tenantId: TenantId, period: { year: string; month: string }): Promise<ReconcileResult>;
 }

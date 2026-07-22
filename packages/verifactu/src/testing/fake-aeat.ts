@@ -18,6 +18,8 @@ export interface StoredRecord {
 export interface FakeAeatOptions {
   serverNow?: Date;
   tiempoEsperaInicial?: number;
+  /** Page size for a consulta sweep's `IndicadorPaginacion`/`ClavePaginacion` — small by default so multi-page fixtures stay cheap. */
+  consultaPageSize?: number;
 }
 
 export interface FakeAeat {
@@ -30,6 +32,10 @@ export interface FakeAeat {
   dropRegistroDuplicadoDetail(key: FacturaKey): void;
   /** Marks a stored record `Anulada` directly, without going through a RegistroAnulacion submit. */
   annul(key: FacturaKey): void;
+  /** Overrides a stored record's consulta-reported estado — `annul` is just the `Anulada` special case of this. */
+  setConsultaState(key: FacturaKey, estado: StoredRecord["estado"]): void;
+  /** Evicts a stored record entirely, driving the `SinDatos`/no-trace consulta path. */
+  forget(key: FacturaKey): void;
 }
 
 interface Identity {
@@ -104,6 +110,7 @@ export function createFakeAeat(options: FakeAeatOptions = {}): FakeAeat {
   // value the real AEAT could never send would make that a test of nothing.
   let tiempoEspera = Math.max(1, Math.min(9999, options.tiempoEsperaInicial ?? 60));
   let csvSequence = 0;
+  const consultaPageSize = options.consultaPageSize ?? 2;
 
   function handleEnvio(xml: string): string {
     const { registros } = parseEnvio(xml);
@@ -169,22 +176,34 @@ export function createFakeAeat(options: FakeAeatOptions = {}): FakeAeat {
 
   function handleConsulta(xml: string): string {
     const { cabecera, filtro } = parseConsulta(xml);
-    // Targeted single-record lookup (Route B): match the FULL invoice identity — the obligado's
-    // own NIF (IDEmisorFactura) plus NumSerieFactura plus FechaExpedicionFactura — not
-    // NumSerieFactura alone, which by itself can span multiple obligados/dates and return the
-    // wrong (or multiple) stored record(s). Compared field-by-field against the stored key's own
-    // `|`-separated parts (rather than building one comparison key) so a filtro that omits
-    // NumSerieFactura/FechaExpedicionFactura just fails those comparisons against real stored
-    // values — 3b widens this to a paged period sweep.
-    const matches = [...store.values()].filter((s) => {
-      const [nif, numSerie, fecha] = s.key.split("|");
-      return (
-        nif === cabecera.ObligadoEmision.NIF &&
-        numSerie === filtro.NumSerieFactura &&
-        fecha === filtro.FechaExpedicionFactura
-      );
-    });
-    return consultaEnvelope(matches);
+    // Always scoped to the querying obligado's own NIF (IDEmisorFactura) — a consulta can never
+    // return another obligado's records. NumSerieFactura/FechaExpedicionFactura are optional
+    // NARROWING filters on top of that: a targeted single-record lookup (Route B) supplies both
+    // (and previously required both — 3b widens the same match into a paged period sweep, where
+    // neither is supplied and every in-NIF record is a candidate). All stored records are
+    // in-period for the fake's fixtures, so PeriodoImputacion itself is not re-derived here — the
+    // fixtures control which records exist.
+    let all = [...store.values()].filter(
+      (s) => s.key.split("|")[0] === cabecera.ObligadoEmision.NIF,
+    );
+    if (filtro.NumSerieFactura !== undefined) {
+      all = all.filter((s) => s.key.split("|")[1] === filtro.NumSerieFactura);
+    }
+    if (filtro.FechaExpedicionFactura !== undefined) {
+      all = all.filter((s) => s.key.split("|")[2] === filtro.FechaExpedicionFactura);
+    }
+    // Continue after ClavePaginacion (match by the last-returned identity), ordered by insertion.
+    // If that identity is no longer found (e.g. `forget`ten between pages), fall back to the full
+    // filtered set rather than throwing — a stale cursor is a caller bug this fake surfaces as
+    // "start over", not a crash.
+    if (filtro.ClavePaginacion !== undefined) {
+      const afterKey = `${filtro.ClavePaginacion.IDEmisorFactura}|${filtro.ClavePaginacion.NumSerieFactura}|${filtro.ClavePaginacion.FechaExpedicionFactura}`;
+      const idx = all.findIndex((s) => s.key === afterKey);
+      all = idx >= 0 ? all.slice(idx + 1) : all;
+    }
+    const page = all.slice(0, consultaPageSize);
+    const more = all.length > consultaPageSize;
+    return consultaEnvelope(page, more);
   }
 
   const fetchImpl: typeof globalThis.fetch = async (_url, init) => {
@@ -217,6 +236,13 @@ export function createFakeAeat(options: FakeAeatOptions = {}): FakeAeat {
     annul: (key) => {
       const s = store.get(key);
       if (s) s.estado = "Anulada";
+    },
+    setConsultaState: (key, estado) => {
+      const s = store.get(key);
+      if (s) s.estado = estado;
+    },
+    forget: (key) => {
+      store.delete(key);
     },
   };
 }
@@ -297,7 +323,20 @@ function duplicadoLineaXml(
 
 // --- consulta response XML builder (parsed by the unmodified parseRespuestaConsulta) ---------
 
-function consultaEnvelope(matches: StoredRecord[]): string {
+/** `<sfRC:ClavePaginacion>`, built from a stored record's own key — echoed verbatim by a caller's next request. */
+function clavePaginacionXml(s: StoredRecord): string {
+  const [emisor, serie, fecha] = s.key.split("|");
+  return (
+    "<sfRC:ClavePaginacion>" +
+    `<sf:IDEmisorFactura>${escapeXml(emisor)}</sf:IDEmisorFactura>` +
+    `<sf:NumSerieFactura>${escapeXml(serie)}</sf:NumSerieFactura>` +
+    `<sf:FechaExpedicionFactura>${escapeXml(fecha)}</sf:FechaExpedicionFactura>` +
+    "</sfRC:ClavePaginacion>"
+  );
+}
+
+/** `matches` is the already-paged slice to return; `more` says whether further pages remain beyond it. */
+function consultaEnvelope(matches: StoredRecord[], more: boolean): string {
   const registros = matches
     .map((s) => {
       const [emisor, serie, fecha] = s.key.split("|");
@@ -309,6 +348,9 @@ function consultaEnvelope(matches: StoredRecord[]): string {
         `<sf:FechaExpedicionFactura>${escapeXml(fecha)}</sf:FechaExpedicionFactura>` +
         "</sfRC:IDFactura>" +
         "<sfRC:DatosRegistroFacturacion>" +
+        (s.refExterna !== undefined
+          ? `<sf:RefExterna>${escapeXml(s.refExterna)}</sf:RefExterna>`
+          : "") +
         `<sf:Huella>${escapeXml(s.huella)}</sf:Huella><sf:TipoHuella>01</sf:TipoHuella>` +
         "</sfRC:DatosRegistroFacturacion>" +
         "<sfRC:EstadoRegistro>" +
@@ -319,12 +361,14 @@ function consultaEnvelope(matches: StoredRecord[]): string {
       );
     })
     .join("");
+  const last = matches[matches.length - 1];
   return (
     `<?xml version="1.0" encoding="UTF-8"?>` +
     `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:sf="sf" xmlns:sfRC="sfRC"><soapenv:Body>` +
     "<sfRC:RespuestaConsultaFactuSistemaFacturacion>" +
     `<sfRC:ResultadoConsulta>${matches.length > 0 ? "ConDatos" : "SinDatos"}</sfRC:ResultadoConsulta>` +
-    "<sfRC:IndicadorPaginacion>N</sfRC:IndicadorPaginacion>" +
+    `<sfRC:IndicadorPaginacion>${more ? "S" : "N"}</sfRC:IndicadorPaginacion>` +
+    (more && last ? clavePaginacionXml(last) : "") +
     registros +
     "</sfRC:RespuestaConsultaFactuSistemaFacturacion>" +
     "</soapenv:Body></soapenv:Envelope>"

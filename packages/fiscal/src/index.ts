@@ -10,6 +10,7 @@ export type {
   TrustedTimeSource,
 } from "./clock.js";
 export type {
+  AckState,
   Counterparty,
   DrainResult,
   FiscalBackend,
@@ -17,6 +18,8 @@ export type {
   FiscalState,
   IntegrityIssue,
   IntegrityReport,
+  ReconcileMismatch,
+  ReconcileResult,
   SaleForFiscalRecord,
   TillRegistration,
   VatBreakdownLine,
