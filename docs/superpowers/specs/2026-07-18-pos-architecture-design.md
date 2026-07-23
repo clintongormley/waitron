@@ -62,6 +62,9 @@ display. That is a full-featured POS and too much for one cycle. Phasing:
 | 15 | Online ordering / click-and-collect | Later |
 | 16 | **Workforce** — time & attendance (*registro de jornada*), shift scheduling, payroll handling | Deli — **time-record at launch**; scheduling + payroll follow |
 | 17 | Accounting export — sales/VAT (and later payroll) data to the asesor's package | Deli (core subset) |
+| 18 | **Menu, recipes & allergens** — recipe/BOM model, dietary flags, allergen declaration | Deli — **allergens at launch** |
+| 19 | Opening hours & channel sync — hours model + Google Business Profile / Maps (and other channels) | Deli (small) |
+| 20 | Procurement & inventory — suppliers, purchase orders, goods-in, stock, 3-way reconciliation, reorder | Deli (core); AI forecast later |
 
 Sub-projects 2 and 3 are joined at the hip — the chain *is* the sales table — and get specced
 together, immediately after the design system.
@@ -78,6 +81,20 @@ laboral / graduado social*, distinct from the fiscal-SIF asesor** — those ques
 reservations map to #14 (Bookings), table management to #11 (floor plan) + #10 (tabs), online
 ordering to #15, and table-side QR ordering is a customer-facing sibling of #15 (every QR order
 still flows through the fiscal chain, #3).
+
+**Menu, opening hours, procurement (added 2026-07-22).** Three further areas. **#18** extends the
+catalogue with a recipe/BOM model (menu item → ingredients), dietary flags (vegetarian/vegan), and
+**allergen declaration — a launch legal obligation**: EU Reg. 1169/2011 (Food Information to
+Consumers) + Spain RD 126/2015 require the 14 major allergens for non-prepacked or served food,
+which a deli sells. That introduces a **third advisor domain — food safety / APPCC-HACCP**, distinct from the
+fiscal and laboral advisors. The **recipe/BOM is the linchpin**: it drives allergen derivation *and*
+converts sales → ingredient consumption → purchasing quantities. **#19** is an opening-hours model
+synced to Google Business Profile / Maps and other channels (an integration, like the accounting
+export). **#20** is procurement + inventory (suppliers, purchase orders, goods-in, stock, 3-way
+PO↔goods-in↔invoice reconciliation, par-level reorder); the **AI demand-forecast reorder is
+deferred** until there is sales history to learn from — build the deterministic system first.
+Received supplier invoices (IVA soportado) feed the accounting export (#17), not the Verifactu SIF
+(issued invoices only).
 
 ### Sequencing notes
 
