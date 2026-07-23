@@ -48,6 +48,10 @@ export const payments = pgTable(
     provider: text("provider").notNull(),
     /** This provider's opaque reference and the idempotency anchor. */
     paymentRef: text("payment_ref").notNull(),
+    /** Optional human acquirer reference — e.g. the operation number a merchant keys off a
+     * standalone bank card terminal for an unintegrated (manual) tender. Nullable: only manual
+     * mode, and some integrated adapters, populate it. A reconciliation hook, never validated. */
+    externalRef: text("external_ref"),
     amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
     state: paymentState("state").notNull(),
     /** Set on `captured`, null otherwise. Feeds `RecordSaleTender.settledAt`. */

@@ -19,4 +19,6 @@ export {
   recordVoid,
 } from "./store.js";
 export type { PaymentRecord, PaymentRow } from "./store.js";
+export { MANUAL_PROVIDER, recordManualCardPayment, recordManualRefund } from "./manual.js";
+export type { ManualCardPaymentParams, ManualCardPaymentResult } from "./manual.js";
 export { PAYMENTS_MIGRATIONS } from "./migrations.js";

@@ -6,11 +6,19 @@ import {
   getPaymentByRef,
   insertCapturedPayment,
   insertFailedPayment,
+  MANUAL_PROVIDER,
   PAYMENTS_MIGRATIONS,
+  recordManualCardPayment,
+  recordManualRefund,
   recordRefund,
   recordVoid,
 } from "./index.js";
-import type { PaymentProvider, PaymentResult } from "./index.js";
+import type {
+  ManualCardPaymentParams,
+  ManualCardPaymentResult,
+  PaymentProvider,
+  PaymentResult,
+} from "./index.js";
 import { payments } from "./schema/payments.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
 
@@ -36,6 +44,26 @@ describe("package public surface (./index.js)", () => {
     expect(typeof recordRefund).toBe("function");
     expect(typeof associatePaymentWithSale).toBe("function");
     expect(typeof getPaymentByRef).toBe("function");
+  });
+
+  it("re-exports the manual-tender surface from the package root", () => {
+    expect(MANUAL_PROVIDER).toBe("manual");
+    expect(typeof recordManualCardPayment).toBe("function");
+    expect(typeof recordManualRefund).toBe("function");
+
+    const params: ManualCardPaymentParams = {
+      tenantId: "t",
+      workingOrderId: "w",
+      amount: decimal("1.00"),
+      settledAt: new Date("2026-07-23T09:00:00Z"),
+    };
+    const result: ManualCardPaymentResult = {
+      provider: "manual",
+      paymentRef: "manual-x",
+      settledAt: params.settledAt,
+    };
+    expect(result.provider).toBe("manual");
+    expect(params.tenantId).toBe("t");
   });
 
   it("re-exports the provider types (PaymentProvider, PaymentResult) from the package root", () => {

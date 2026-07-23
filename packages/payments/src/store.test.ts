@@ -307,3 +307,33 @@ describe("findPaymentByRef", () => {
     expect(row).toBeUndefined();
   });
 });
+
+describe("insertCapturedPayment external_ref", () => {
+  it("persists external_ref when provided", async () => {
+    const seeded = await seedTenant();
+    await db.transaction((tx) =>
+      insertCapturedPayment(tx, {
+        tenantId: seeded.tenantId,
+        workingOrderId: seeded.workingOrderId,
+        provider: "fake",
+        paymentRef: "ext1",
+        amount: decimal("10.00"),
+        settledAt: SETTLED,
+        externalRef: "OP-42",
+      }),
+    );
+    const rows = await db.execute<{ external_ref: string | null }>(
+      sql`select external_ref from payments where payment_ref = ${"ext1"} and tenant_id = ${seeded.tenantId}`,
+    );
+    expect(rows.rows[0].external_ref).toBe("OP-42");
+  });
+
+  it("leaves external_ref null when omitted", async () => {
+    const seeded = await seedTenant();
+    await capture(seeded, "ext2");
+    const rows = await db.execute<{ external_ref: string | null }>(
+      sql`select external_ref from payments where payment_ref = ${"ext2"} and tenant_id = ${seeded.tenantId}`,
+    );
+    expect(rows.rows[0].external_ref).toBeNull();
+  });
+});

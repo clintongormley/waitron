@@ -15,6 +15,13 @@
       "when": 1784759629037,
       "tag": "0001_payments_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784812918315,
+      "tag": "0002_payment_external_ref",
+      "breakpoints": true
     }
   ]
 }

@@ -29,6 +29,10 @@ interface NewPayment {
   provider: string;
   paymentRef: string;
   amount: Decimal;
+  /** Optional human acquirer reference (e.g. a standalone bank terminal's operation number). Set by
+   * manual tenders today, and reusable by integrated adapters later for the acquirer reference (as
+   * `payments.external_ref`'s own schema comment notes); null when no such reference applies. */
+  externalRef?: string;
 }
 
 const PAYMENT_COLUMNS = {
@@ -51,6 +55,7 @@ async function insertPayment(
     provider: params.provider,
     paymentRef: params.paymentRef,
     amount: params.amount,
+    externalRef: params.externalRef ?? null,
     state,
     settledAt,
   });
@@ -66,8 +71,13 @@ export async function insertCapturedPayment(
 }
 
 /** Insert a failed payment — the network refused. state=failed, settledAt null. Persisted so a
- * declined attempt still leaves an audit record. */
-export async function insertFailedPayment(tx: Transaction, params: NewPayment): Promise<void> {
+ * declined attempt still leaves an audit record. Takes `Omit<NewPayment, "externalRef">`: a failed
+ * attempt never settled on a terminal, so it must never carry a human acquirer reference — the type
+ * forbids one being supplied, guaranteeing `external_ref` stays NULL for `state = failed`. */
+export async function insertFailedPayment(
+  tx: Transaction,
+  params: Omit<NewPayment, "externalRef">,
+): Promise<void> {
   await insertPayment(tx, params, "failed", null);
 }
 

@@ -26,4 +26,22 @@ describe("payments migrations", () => {
       await db.close();
     }
   });
+
+  it("adds a nullable external_ref column to payments", async () => {
+    const db = await createPgliteDb();
+    try {
+      await runMigrations(db, CORE_MIGRATIONS);
+      await runMigrations(db, PAYMENTS_MIGRATIONS);
+      const rows = await db.execute<{ data_type: string; is_nullable: string }>(sql`
+        select data_type, is_nullable
+        from information_schema.columns
+        where table_name = 'payments' and column_name = 'external_ref'
+      `);
+      expect(rows.rows).toHaveLength(1);
+      expect(rows.rows[0].data_type).toBe("text");
+      expect(rows.rows[0].is_nullable).toBe("YES");
+    } finally {
+      await db.close();
+    }
+  });
 });

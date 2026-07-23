@@ -1,10 +1,23 @@
-# Payment layer (`PaymentProvider` + Stripe Terminal + offline store-and-forward) — Design
+# Payment layer (capture modes: manual · sync-integrated · async) — Design
 
-**Date:** 2026-07-22
-**Status:** Draft — brainstorming complete, pending user review
-**Covers:** Architecture sub-project 4 (the payment layer): a provider-neutral `PaymentProvider`
-interface, a Stripe Terminal adapter, and offline store-and-forward — the money-movement layer that
-sits *before* the sale/fiscal write path and turns "customer pays" into a settled tender.
+**Date:** 2026-07-22 · **revised 2026-07-23** (added the capture-mode taxonomy; the former "4a"
+landed as PR #20)
+**Status:** Living design — the integrated seam (former 4a) shipped; Mode 1 (manual tender) is the next plan
+**Covers:** Architecture sub-project 4 (the payment layer) — the money-movement layer that sits
+*before* the sale/fiscal write path and turns "customer pays" into a settled tender. Organized around
+a **taxonomy of capture modes** (next section): manual/unintegrated, synchronous-integrated, and
+asynchronous-integrated. A provider-neutral `PaymentProvider` (§3) is the contract for the
+*integrated* modes; a Stripe Terminal adapter and offline store-and-forward are two later mechanisms
+of one of them, not the whole layer.
+
+**2026-07-23 revision note.** This document was originally written assuming the whole layer was the
+integrated `PaymentProvider`. Field reality — merchants running an unintegrated bank datáfono with no
+electronic link to the POS, and restaurants running all-in-one handhelds the waiter carries to the
+table — showed that is one mode among several. The revision adds the capture-mode taxonomy (a
+settlement axis + a mechanism axis), re-contextualizes §§3–9 as the *integrated-mode* detail (still
+current; 4a shipped that seam), re-derives the plan sequence (§10), and adds the Mode 1 (manual)
+design. Nothing shipped in 4a is invalidated — the taxonomy re-contextualizes the seam, it does not
+replace it.
 
 **Scope decision (2026-07-22).** This spec covers the **full** roadmap `PaymentProvider` surface —
 `collect`/`authorize`/`capture`/`void`/`refund`/`partialRefund`/`preAuth`/`incrementalAuth`/`tipAdjust`,
@@ -38,6 +51,64 @@ design splits it into **two** packages (`packages/payments` neutral + `packages/
 adapter), consistent with how the fiscal layer actually shipped (`fiscal` + `fiscal-verifactu`) rather
 than how §8 originally sketched it, and for the same reason: the second and third providers (Adyen,
 SumUp) must not force an interface change.
+
+---
+
+## 0. The capture-mode taxonomy (2026-07-23 revision)
+
+The original decomposition (§10) implicitly assumed one kind of merchant — the one where **we** drive
+the money — so a single `PaymentProvider` was the whole world. That is wrong for the field: many
+merchants (especially small Spanish ones) run an **unintegrated bank datáfono** with no electronic
+connection to the POS at all, and restaurants increasingly run **all-in-one handhelds** the waiter
+carries to the table. Forcing those through `PaymentProvider.collect()` would be a lie. So the layer
+is organized around a **taxonomy of capture modes**, not a single interface.
+
+The universal join is unchanged: whatever the mode, it must ultimately produce the one thing the
+sales spine needs — a **settled tender** (`method`, `amount`, `settledAt`, optional `externalRef`)
+that flows into `recordSale`, after which the fiscal record forms (sales-spine §4). The modes differ
+only in *how* that settled tender comes to exist.
+
+### The settlement axis — three modes (what core sees)
+
+1. **Manual / unintegrated.** Staff key the total into a *separate* bank terminal; the POS is told
+   nothing electronically and records a **staff-asserted** card tender. Mechanically a sibling of
+   cash — no provider, no network, no programmatic reversal — and reconciliation against the bank's
+   settlement report is external/manual. This is **not a `PaymentProvider`** (see the Mode 1 design
+   section): it is the trivial, provider-less end of the payment layer, and it works for the largest
+   set of merchants with zero PSP onboarding.
+2. **Synchronous integrated.** We drive a reader and the settled outcome comes **back
+   synchronously**; we own void/refund/reconcile programmatically. Exactly what §3's `PaymentProvider`
+   models — Stripe Terminal, Adyen Terminal API, Redsys integrated mode, and SumUp are adapters behind
+   it.
+3. **Asynchronous integrated.** The customer pays **out-of-band** (QR pay-at-table, payment link,
+   online order); we *initiate* (mint a link/QR/intent) and the settled tender is written **later by a
+   webhook**, not returned. A **different method shape** — `initiate() → { ref, url/qr }` + a webhook
+   that produces and associates the tender — not a variant of §3's `collect(): Promise<PaymentResult>`.
+
+### The mechanism axis — how/where collection is orchestrated
+
+A second axis *inside* the integrated modes, behind the **same** seam:
+
+- **2a — server-driven remote reader.** Our *server* tells a networked smart reader to process
+  (`readers.processPaymentIntent`); reader and till are separate devices; the server orchestrates. The
+  fixed-counter setup (WisePOS E / Reader S700).
+- **2b — on-device SDK reader.** Our app runs *on* a handheld and drives the reader **built into that
+  same device** via an on-device SDK, then reports the outcome back; till and reader are one unit; the
+  *device* orchestrates. The waiter-at-the-table all-in-one (Square Terminal / Clover Flex / SumUp
+  Solo / Toast Go / Stripe handheld + Tap-to-Pay). **Offline store-and-forward lives here** — it is a
+  property of the on-device SDK, not of the integrated mode in the abstract.
+
+Both 2a and 2b satisfy the **same** neutral `PaymentProvider` contract (a settled tender returned
+synchronously; programmatic reversal/reconcile). The seam is defined by the *settlement shape core
+sees*, never by the mechanism — so a mechanism is an **adapter + deployment** detail hidden behind the
+interface, which is exactly what keeps the §3 seam reusable rather than Stripe-specific.
+
+### How the rest of this document maps onto the taxonomy
+
+§§3–9 are the design of the **integrated modes** (the `PaymentProvider` seam, its store, RLS, refunds,
+reconcile, testing) — all still current; 4a shipped the neutral seam and the online happy path of that
+surface. The **Mode 1 (manual)** design is new (its own section, after §10), and §10 is re-derived to
+sequence the whole taxonomy.
 
 ---
 
@@ -104,6 +175,12 @@ foreign keys but never re-export them. Core never imports `@waitron/payments`.
 
 Provider-neutral, card-present / terminal-mediated. Field names are indicative; the exact shapes are
 pinned in §7.
+
+**This interface is the *integrated-mode* contract** (settlement modes 2 and 3 in §0's taxonomy).
+Manual/unintegrated capture (Mode 1) deliberately sits **outside** it — it implements no adapter and
+makes no network call (see the Mode 1 design section). And the 2a/2b **mechanism** split lives
+*behind* this interface: a server-driven reader and an on-device SDK are two adapters (and two
+deployment locations) implementing the same methods, never two interfaces.
 
 ```ts
 interface PaymentProvider {
@@ -328,12 +405,15 @@ PR #14, guarded like
 
 - **`payment_policy`** — per-tenant: `offline_mode` (`accept_offline` default | `cash_only`),
   `offline_amount_cap`. One row per tenant. The §5 policy.
-- **`payments`** — the lifecycle row, one per electronic tender:
+- **`payments`** — the lifecycle row, one per electronic tender (integrated *or* manual):
   - `id`, `tenant_id`, `working_order_id` (FK→core, the pre-sale key), `sale_id` (**nullable** FK→core,
-    set post-commit — the Option B linkage), `provider`, `payment_ref` (opaque processor reference /
-    idempotency anchor), `authorized_amount`, `captured_amount`, `tip_amount`, `offline` (bool),
-    `settled_at`, `state`, timestamps, and a `reconcile_remediated_at` marker (bounds orphan
-    remediation, exactly as `envios.reconciled_resubmit_at` bounds the fiscal self-heal).
+    set post-commit — the Option B linkage), `provider` (the adapter id, or the sentinel `manual` for
+    an unintegrated tender — see the Mode 1 design), `payment_ref` (opaque processor reference /
+    idempotency anchor), `external_ref` (**nullable** — a human acquirer/datáfono reference for manual
+    reconciliation; added by Mode 1, reusable by the integrated modes for the acquirer ref),
+    `authorized_amount`, `captured_amount`, `tip_amount`, `offline` (bool), `settled_at`, `state`,
+    timestamps, and a `reconcile_remediated_at` marker (bounds orphan remediation, exactly as
+    `envios.reconciled_resubmit_at` bounds the fiscal self-heal).
 - **`payment_refunds`** — one row per refund: `payment_id` FK→`payments`, `amount`, `payment_ref`,
   `state`, timestamps. Refunds are distinct money movements, so distinct rows — never a mutation of the
   original capture.
@@ -407,24 +487,94 @@ Reproduce the fiscal package's rigour:
 
 ---
 
-## 10. Decomposition into implementation plans
+## 10. Decomposition into implementation plans (re-derived 2026-07-23)
 
-This spec is large, like the fiscal spec (which became 3a / 3b / reconcile-resolution). Proposed
-sequence, for `writing-plans` to structure — each plan is its own spec→plan→implement→land cycle,
-sharing this design:
+The original 4a–4e sequence assumed the whole layer was the integrated `PaymentProvider`. The
+capture-mode taxonomy (§0) re-derives it, ordered **broadest-reach-and-simplest first**. Each plan is
+its own spec→plan→implement→land cycle, sharing this design.
 
-- **4a — neutral seam + online happy path.** `packages/payments` scaffold (GENERIC_PACKAGES + guards),
-  the interface, `PaymentResult` / state types, `FakeProvider`, the schema + migrations + RLS/grants,
-  and the `sale_id` associate-back linkage. Proven end-to-end via `collect → recordSale` with the fake:
-  `collect` / `void` / `refund` / `partialRefund` online.
-- **4b — Stripe Terminal adapter.** `packages/payments-stripe` (EXEMPT), `StripeTerminalProvider` for
-  the online methods against the Stripe Terminal SDK.
-- **4c — offline store-and-forward.** `allowOffline` opt-in, `accepted_offline`, the amount cap,
-  `payment_policy`, `forward()`, decline→incident.
-- **4d — reconcile.** The four mismatch classes, orphan self-heal, idempotent incidents, in-flight
-  tolerance.
-- **4e — tab/tip lifecycle methods.** `preAuth` / `incrementalAuth` / `tipAdjust` — built + faked +
-  tested now (full surface), with their tab/tip **UI** deferred to sub-projects 10 / 13.
+**Already built** (the former "4a", PR #20): the neutral `PaymentProvider` seam + store + schema +
+`FakePaymentProvider` + online `collect`/`void`/`refund`/`partialRefund` proven with the fake. It is
+the contract every *integrated* mode implements, and it survives the re-derivation unchanged — the
+taxonomy re-contextualizes it as the integrated-mode seam.
+
+Then, in priority order:
+
+1. **Mode 1 — Manual / unintegrated tender** *(the next plan; full design in the Mode 1 section
+   below)*. A staff-asserted card tender — a sibling of cash — that reuses the store with a sentinel
+   `manual` provider but implements **no** adapter and makes **no** network call. Broadest reach, zero
+   PSP onboarding. Adds a nullable `external_ref` column; includes manual refunds; defers capture-mode
+   config to Mode 2a.
+2. **Mode 2a — Server-driven integrated adapter.** The real Stripe Terminal provider (server drives a
+   fixed-counter smart reader) against the existing seam — the former "4b". First real PSP; proves the
+   integrated path end-to-end. Folds in the deferred follow-ups (webhook tenant-resolution for
+   ref-only reversals, the `(provider, payment_ref)` index, the reversal-concurrency test — see memory
+   `payment-layer-4b-followups`); introduces the **capture-mode config** (a per-till choice only earns
+   its keep once a second mode exists to arbitrate); and adds the transient `attempting` state +
+   poll-to-completion the network path needs.
+3. **Mode 2b — On-device SDK integrated + offline.** The waiter's handheld all-in-one: connection
+   tokens, device-side `collect`, webhook outcomes, and **offline store-and-forward** — the former
+   "4c", folded in here because offline is a property of the on-device mechanism.
+4. **Mode 3 — Asynchronous / hosted.** QR pay-at-table, payment links, online orders — the
+   `initiate() + webhook` shape (§0). A distinct interface, so it follows the synchronous adapters.
+5. **Cross-cutting, layered in as modes need them:** `reconcile()` per integrated mode (the former
+   "4d"; manual mode has no `reconcile` — its audit is external); the tab/tip lifecycle
+   (`preAuth`/`incrementalAuth`/`tipAdjust`, the former "4e"); and the refund/void **role-gate**,
+   which rides with identity (sub-project 5).
+
+---
+
+## Mode 1 — Manual / unintegrated tender (design)
+
+The next plan. The unintegrated bank datáfono: staff read the total off the POS, key it into a
+*separate* terminal, the customer pays there, and the POS is told nothing electronically.
+
+### Not a provider — but it reuses the store
+
+"Not a `PaymentProvider`" means it implements **no adapter and makes no network call**. It *does*
+reuse the existing payment-layer **store**: a manual card tender writes an ordinary `payments`
+lifecycle row with a **sentinel `provider = "manual"`**, `state = captured`. That gives the hand-keyed
+acquirer reference a home and makes every card tender — manual or integrated — uniform for
+association, reporting and refunds. Reuse the *table and store functions* (`insertCapturedPayment`,
+`associatePaymentWithSale`, `recordRefund`); do **not** implement the `PaymentProvider` interface. The
+interface is the network-driving contract; the store is the ledger, and the ledger is shared.
+
+### Capture is atomic — the orphan window collapses
+
+The integrated path cannot make capture and sale atomic (a network call sits between them — §4's named
+orphan window). **Manual mode has no network step**, so the manual `payments` row, the sale, and the
+association all commit in **one transaction**: staff record "card €X (manual)" → `recordSale` writes
+the sale → the `payments` row (`provider: "manual"`, `captured`, `settled_at = now`, optional
+`external_ref`) is written and associated, atomically. Manual mode is strictly *simpler* than the
+integrated path, not a cut-down copy of it — §4's orphan class simply does not arise for it, and
+`reconcile`'s `orphan` remediation never has manual rows to consider.
+
+### Manual refunds
+
+A refund on the bank terminal is a real event (a return; staff refund on the datáfono). It is recorded
+via the existing `recordRefund` against the `manual` provider — for the books, and to *deliberately*
+trigger the existing fiscal rectificativa path (`recordVoid` / `record-void.ts`), never as an
+automatic consequence. No network; a ledger entry mirroring what happened on the bank's terminal.
+
+### Schema
+
+One additive migration: a **nullable `external_ref`** column on `payments` — the datáfono operation
+number, a free-text human reconciliation hook, optional and unvalidated. It also gives the integrated
+modes somewhere to keep the acquirer reference later. `manual` is a plain string value of the existing
+`provider` column — no enum change, neutral English, and it passes the `no-provider-vocabulary` guard
+(which bans *SDK/vendor* vocabulary from the neutral seam; a generic word like "manual" is not that).
+
+### Reconciliation is external
+
+No `reconcile()` for manual — there is no processor API to audit against. The bank's own settlement
+report versus our `manual` card-tender total is the accountant's job; a later convenience could import
+that report, but it is never a blocker and never automatic.
+
+### Out of scope for this plan
+
+The `PaymentProvider` adapter (Modes 2a/2b), any network, the till **UI** (sub-project 7), and the
+**capture-mode config** — deferred to Mode 2a, where a second mode first makes a per-till choice
+meaningful (config that arbitrates between capabilities that do not yet exist would be premature).
 
 ---
 
