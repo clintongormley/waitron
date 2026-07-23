@@ -9,11 +9,15 @@ import type { Decimal, TenantId, TillId, WorkingOrderId } from "@waitron/shared"
 /**
  * The lifecycle of one electronic tender as this POS understands it, provider-neutral. 4a covers
  * the online single-message path only: `captured` is the terminal success state, `failed` a
- * network refusal, and `voided`/`refunded`/`partially_refunded` the reversals. The offline states
- * (`accepted_offline`, `settled`, …) and the two-phase states (`authorized`) arrive in later plans
- * with the methods that produce them — never reserved here as dead surface.
+ * network refusal, and `voided`/`refunded`/`partially_refunded` the reversals. `attempting` is the
+ * transient in-flight state a network-driving integrated adapter writes before its network call and
+ * resolves after (T1/T2) — every integrated adapter has this window, so it is neutral, not
+ * adapter-specific. The offline states (`accepted_offline`, `settled`, …) and the two-phase states
+ * (`authorized`) arrive in later plans with the methods that produce them — never reserved here as
+ * dead surface.
  */
-export type PaymentState = "captured" | "voided" | "refunded" | "partially_refunded" | "failed";
+export type PaymentState =
+  "attempting" | "captured" | "voided" | "refunded" | "partially_refunded" | "failed";
 
 /** What a given provider can do, so the app/UI can gate on it. Grows a flag per capability as the
  * methods that back them land — in 4a the only optional capability is partial refunds. */
@@ -41,6 +45,8 @@ export interface PaymentResult {
   provider: string;
   paymentRef: string;
   state: PaymentState;
+  /** The amount this result concerns. For `collect`/`void`/`refund` it is the captured total; for
+   * `partialRefund` it is the AMOUNT REFUNDED (not the capture). */
   amount: Decimal;
   settledAt: Date | null;
 }

@@ -10,11 +10,16 @@ export type {
 // "@waitron/payments/src/testing/fake-provider.js" in test files only, so a production import of
 // the package surface cannot reach a test double by autocomplete (mirrors packages/fiscal).
 export {
+  assertReversible,
   associatePaymentWithSale,
+  captureAttempting,
+  failAttempting,
   findPaymentByRef,
   getPaymentByRef,
+  insertAttempting,
   insertCapturedPayment,
   insertFailedPayment,
+  recordFailedRefund,
   recordRefund,
   recordVoid,
 } from "./store.js";

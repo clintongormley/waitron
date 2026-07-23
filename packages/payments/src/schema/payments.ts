@@ -16,11 +16,14 @@ import { sales, workingOrders } from "@waitron/db";
 /**
  * The lifecycle state of one electronic tender. 4a's online subset: `captured` (money taken),
  * `voided` (a captured payment reversed in full — a same-day void, distinct from a refund),
- * `refunded`/`partially_refunded`, and `failed` (the network refused). Offline and two-phase states
- * are added by later plans via ALTER TYPE, never reserved here. Mirrors `PaymentState` in
- * ../provider.ts.
+ * `refunded`/`partially_refunded`, and `failed` (the network refused). `attempting` is the
+ * transient in-flight state a network-driving integrated adapter writes BEFORE its network call
+ * and resolves after (T1/T2) — neutral across every such adapter, never adapter-specific
+ * vocabulary. Other offline and two-phase states are added by later plans via ALTER TYPE, never
+ * reserved here. Mirrors `PaymentState` in ../provider.ts.
  */
 export const paymentState = pgEnum("payment_state", [
+  "attempting",
   "captured",
   "voided",
   "refunded",

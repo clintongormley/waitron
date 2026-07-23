@@ -1,0 +1,1 @@
+ALTER TYPE "public"."payment_state" ADD VALUE 'attempting' BEFORE 'captured';

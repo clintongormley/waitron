@@ -44,4 +44,20 @@ describe("payments migrations", () => {
       await db.close();
     }
   });
+
+  it("adds 'attempting' to the payment_state enum", async () => {
+    const db = await createPgliteDb();
+    try {
+      await runMigrations(db, CORE_MIGRATIONS);
+      await runMigrations(db, PAYMENTS_MIGRATIONS);
+      const rows = await db.execute<{ enumlabel: string }>(sql`
+        select e.enumlabel from pg_enum e
+        join pg_type t on t.oid = e.enumtypid
+        where t.typname = 'payment_state'
+      `);
+      expect(rows.rows.map((r) => r.enumlabel)).toContain("attempting");
+    } finally {
+      await db.close();
+    }
+  });
 });

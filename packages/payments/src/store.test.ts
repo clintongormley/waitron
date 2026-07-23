@@ -5,11 +5,16 @@ import type { Database } from "@waitron/db";
 import { AppError, decimal } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import {
+  assertReversible,
   associatePaymentWithSale,
+  captureAttempting,
+  failAttempting,
   findPaymentByRef,
   getPaymentByRef,
+  insertAttempting,
   insertCapturedPayment,
   insertFailedPayment,
+  recordFailedRefund,
   recordRefund,
   recordVoid,
 } from "./store.js";
@@ -238,6 +243,65 @@ describe("recordRefund", () => {
   });
 });
 
+describe("assertReversible", () => {
+  it("does not throw for a captured payment, for either kind", async () => {
+    const seeded = await seedTenant();
+    const key = await capture(seeded, "r1");
+    await expect(
+      db.transaction((tx) => assertReversible(tx, { ...key, kind: "void" })),
+    ).resolves.toBeUndefined();
+    await expect(
+      db.transaction((tx) => assertReversible(tx, { ...key, kind: "refund" })),
+    ).resolves.toBeUndefined();
+  });
+
+  it("void throws payment.not_voidable when the payment is not captured (e.g. already fully refunded)", async () => {
+    const seeded = await seedTenant();
+    const key = await capture(seeded, "r2");
+    await db.transaction((tx) => recordRefund(tx, { ...key, amount: decimal("10.00") }));
+    const error = await db
+      .transaction((tx) => assertReversible(tx, { ...key, kind: "void" }))
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe("payment.not_voidable");
+  });
+
+  it("refund throws payment.not_refundable for a voided payment", async () => {
+    const seeded = await seedTenant();
+    const key = await capture(seeded, "r3");
+    await db.transaction((tx) => recordVoid(tx, key));
+    const error = await db
+      .transaction((tx) => assertReversible(tx, { ...key, kind: "refund" }))
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe("payment.not_refundable");
+  });
+
+  it("refund throws payment.refund_exceeds_capture when the running succeeded total + requested would exceed the capture", async () => {
+    const seeded = await seedTenant();
+    const key = await capture(seeded, "r4", "20.00");
+    await db.transaction((tx) => recordRefund(tx, { ...key, amount: decimal("12.00") }));
+    // A full-amount pre-check against the original capture, with 12.00 already succeeded-refunded.
+    const error = await db
+      .transaction((tx) =>
+        assertReversible(tx, { ...key, kind: "refund", amount: decimal("20.00") }),
+      )
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe("payment.refund_exceeds_capture");
+  });
+
+  it("throws payment.not_found for an unknown ref", async () => {
+    const seeded = await seedTenant();
+    const key = { tenantId: seeded.tenantId, provider: "fake", paymentRef: "unknown" };
+    const error = await db
+      .transaction((tx) => assertReversible(tx, { ...key, kind: "void" }))
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe("payment.not_found");
+  });
+});
+
 describe("associatePaymentWithSale", () => {
   it("sets sale_id, observable via getPaymentByRef", async () => {
     const seeded = await seedTenant();
@@ -335,5 +399,115 @@ describe("insertCapturedPayment external_ref", () => {
       sql`select external_ref from payments where payment_ref = ${"ext2"} and tenant_id = ${seeded.tenantId}`,
     );
     expect(rows.rows[0].external_ref).toBeNull();
+  });
+});
+
+describe("attempting lifecycle", () => {
+  it("insertAttempting writes state=attempting, settledAt null", async () => {
+    const seeded = await seedTenant();
+    await db.transaction((tx) =>
+      insertAttempting(tx, {
+        tenantId: seeded.tenantId,
+        workingOrderId: seeded.workingOrderId,
+        provider: "fake",
+        paymentRef: "a1",
+        amount: decimal("12.10"),
+      }),
+    );
+    const row = await getRow({ tenantId: seeded.tenantId, provider: "fake", paymentRef: "a1" });
+    expect(row?.state).toBe("attempting");
+    expect(row?.settledAt).toBeNull();
+  });
+
+  it("captureAttempting advances attempting -> captured with settledAt + external_ref", async () => {
+    const seeded = await seedTenant();
+    const key = { tenantId: seeded.tenantId, provider: "fake", paymentRef: "a2" };
+    await db.transaction((tx) =>
+      insertAttempting(tx, {
+        ...key,
+        workingOrderId: seeded.workingOrderId,
+        amount: decimal("12.10"),
+      }),
+    );
+    const settledAt = new Date("2026-07-23T10:00:00Z");
+    const result = await db.transaction((tx) =>
+      captureAttempting(tx, { ...key, settledAt, externalRef: "pi_123" }),
+    );
+    expect(result.state).toBe("captured");
+    const rows = await db.execute<{
+      state: string;
+      external_ref: string | null;
+      settled_at: string | null;
+    }>(
+      sql`select state, external_ref, settled_at from payments where payment_ref = ${"a2"} and tenant_id = ${seeded.tenantId}`,
+    );
+    expect(rows.rows[0]).toMatchObject({ state: "captured", external_ref: "pi_123" });
+    expect(rows.rows[0].settled_at).not.toBeNull();
+  });
+
+  it("failAttempting advances attempting -> failed", async () => {
+    const seeded = await seedTenant();
+    const key = { tenantId: seeded.tenantId, provider: "fake", paymentRef: "a3" };
+    await db.transaction((tx) =>
+      insertAttempting(tx, {
+        ...key,
+        workingOrderId: seeded.workingOrderId,
+        amount: decimal("12.10"),
+      }),
+    );
+    const result = await db.transaction((tx) => failAttempting(tx, key));
+    expect(result.state).toBe("failed");
+    expect((await getRow(key))?.state).toBe("failed");
+  });
+
+  it("captureAttempting throws payment.not_found when there is no attempting row", async () => {
+    const seeded = await seedTenant();
+    const key = { tenantId: seeded.tenantId, provider: "fake", paymentRef: "nope" };
+    const err = await db
+      .transaction((tx) =>
+        captureAttempting(tx, { ...key, settledAt: new Date(), externalRef: "pi_x" }),
+      )
+      .catch((e: unknown) => e);
+    expect((err as AppError).code).toBe("payment.not_found");
+  });
+});
+
+describe("externalRef on read-back + failed refunds", () => {
+  it("getPaymentByRef returns externalRef", async () => {
+    const seeded = await seedTenant();
+    const key = { tenantId: seeded.tenantId, provider: "fake", paymentRef: "e1" };
+    await db.transaction((tx) =>
+      insertCapturedPayment(tx, {
+        ...key,
+        workingOrderId: seeded.workingOrderId,
+        amount: decimal("10.00"),
+        settledAt: SETTLED,
+        externalRef: "pi_ext",
+      }),
+    );
+    const row = await getRow(key);
+    expect(row?.externalRef).toBe("pi_ext");
+  });
+
+  it("recordFailedRefund inserts a failed refund row and leaves the payment captured", async () => {
+    const seeded = await seedTenant();
+    const key = await capture(seeded, "e2", "20.00");
+    await db.transaction((tx) => recordFailedRefund(tx, { ...key, amount: decimal("5.00") }));
+    expect((await getRow(key))?.state).toBe("captured");
+    const refunds = await db.execute<{ state: string }>(
+      sql`select state from payment_refunds where payment_ref = ${"e2"} and tenant_id = ${seeded.tenantId}`,
+    );
+    expect(refunds.rows).toEqual([{ state: "failed" }]);
+  });
+
+  it("recordRefund ignores a prior FAILED refund when summing (a failed refund does not consume the balance)", async () => {
+    const seeded = await seedTenant();
+    const key = await capture(seeded, "e3", "20.00");
+    await db.transaction((tx) => recordFailedRefund(tx, { ...key, amount: decimal("20.00") }));
+    // A full succeeded refund must still be allowed — the failed one didn't consume anything.
+    const result = await db.transaction((tx) =>
+      recordRefund(tx, { ...key, amount: decimal("20.00") }),
+    );
+    expect(result.state).toBe("refunded");
   });
 });

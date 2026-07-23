@@ -15,6 +15,10 @@ export interface PaymentRow {
   amount: string;
   saleId: string | null;
   settledAt: string | null;
+  /** The processor's own reference (e.g. a Stripe PaymentIntent id) / a manual acquirer ref; null
+   * when none. Read-side of the `external_ref` column, needed by the reversal path to address the
+   * processor. */
+  externalRef: string | null;
 }
 
 interface Key {
@@ -41,6 +45,7 @@ const PAYMENT_COLUMNS = {
   amount: payments.amount,
   saleId: payments.saleId,
   settledAt: payments.settledAt,
+  externalRef: payments.externalRef,
 };
 
 async function insertPayment(
@@ -81,6 +86,58 @@ export async function insertFailedPayment(
   await insertPayment(tx, params, "failed", null);
 }
 
+/** Insert an in-flight payment — state=attempting, settledAt null. Committed BEFORE a provider's
+ * network call (T1) so a crash mid-network leaves a recoverable row and the `payment_ref` (the
+ * caller's idempotency anchor) is already claimed. Resolved by `captureAttempting`/`failAttempting`
+ * (T2). Only network-driving integrated adapters use it; manual mode never does. */
+export async function insertAttempting(tx: Transaction, params: NewPayment): Promise<void> {
+  await insertPayment(tx, params, "attempting", null);
+}
+
+/** Resolve an `attempting` row to `captured` (T2 success): sets `settled_at` (the tender-settlement
+ * time) and `external_ref` (the processor's own reference, e.g. a Stripe PaymentIntent id). Matches
+ * only a row still `attempting`; if none matches, throws `payment.not_found`. */
+export async function captureAttempting(
+  tx: Transaction,
+  params: Key & { settledAt: Date; externalRef: string },
+): Promise<PaymentRow> {
+  return resolveAttempting(tx, params, "captured", {
+    settledAt: params.settledAt.toISOString(),
+    externalRef: params.externalRef,
+  });
+}
+
+/** Resolve an `attempting` row to `failed` (T2 failure — the network refused or timed out). Matches
+ * only a row still `attempting`; if none matches, throws `payment.not_found`. */
+export async function failAttempting(tx: Transaction, params: Key): Promise<PaymentRow> {
+  return resolveAttempting(tx, params, "failed", {});
+}
+
+async function resolveAttempting(
+  tx: Transaction,
+  params: Key,
+  state: "captured" | "failed",
+  extra: { settledAt?: string; externalRef?: string },
+): Promise<PaymentRow> {
+  const [row] = await tx
+    .update(payments)
+    .set({
+      state,
+      settledAt: extra.settledAt ?? null,
+      externalRef: extra.externalRef ?? null,
+      updatedAt: sql`now()`,
+    })
+    .where(and(keyWhere(params), eq(payments.state, "attempting")))
+    .returning(PAYMENT_COLUMNS);
+  if (row === undefined) {
+    throw new AppError("payment.not_found", {
+      provider: params.provider,
+      paymentRef: params.paymentRef,
+    });
+  }
+  return row;
+}
+
 /** Reverse a captured payment in full — a same-day void, distinct from a refund (which records a
  * refund movement instead). Valid only from `captured`; anything else throws `payment.not_voidable`. */
 export async function recordVoid(tx: Transaction, params: Key): Promise<PaymentRow> {
@@ -113,7 +170,13 @@ export async function recordRefund(
   const prior = await tx
     .select({ amount: paymentRefunds.amount })
     .from(paymentRefunds)
-    .where(and(eq(paymentRefunds.tenantId, params.tenantId), eq(paymentRefunds.paymentId, row.id)));
+    .where(
+      and(
+        eq(paymentRefunds.tenantId, params.tenantId),
+        eq(paymentRefunds.paymentId, row.id),
+        eq(paymentRefunds.state, "succeeded"),
+      ),
+    );
   const alreadyRefunded = sumDecimals(prior.map((r) => decimal(r.amount)));
   const afterThis = addDecimal(alreadyRefunded, params.amount);
   const captured = decimal(row.amount);
@@ -140,6 +203,31 @@ export async function recordRefund(
     .set({ state, updatedAt: sql`now()` })
     .where(keyWhere(params));
   return { ...row, state };
+}
+
+/** Record a refund the processor REFUSED — a `payment_refunds` row with `state='failed'`. The
+ * payment's own state is unchanged (nothing was returned), and this refund is excluded from
+ * `recordRefund`'s balance sum, so a later succeeded refund of the same amount is still allowed. No
+ * `FOR UPDATE` needed: it neither reads a running total nor transitions the payment. */
+export async function recordFailedRefund(
+  tx: Transaction,
+  params: Key & { amount: Decimal },
+): Promise<void> {
+  const row = await getPaymentByRef(tx, params);
+  if (row === undefined) {
+    throw new AppError("payment.not_found", {
+      provider: params.provider,
+      paymentRef: params.paymentRef,
+    });
+  }
+  await tx.insert(paymentRefunds).values({
+    tenantId: params.tenantId,
+    paymentId: row.id,
+    provider: params.provider,
+    paymentRef: params.paymentRef,
+    amount: params.amount,
+    state: "failed",
+  });
 }
 
 /** Set the payment's `sale_id` once `recordSale` has written the sale row — the Option B
@@ -209,6 +297,61 @@ function keyWhere(params: Key) {
     eq(payments.provider, params.provider),
     eq(payments.paymentRef, params.paymentRef),
   );
+}
+
+/** Read-only reversibility pre-check for integrated adapters: validates a payment can be reversed the
+ * requested way BEFORE the adapter issues the processor's (irreversible) refund, so an invalid local
+ * state fails fast without moving money. Mirrors the checks `recordVoid`/`recordRefund` enforce under
+ * FOR UPDATE — this is the pre-network read; those stay the authoritative locked checks (a concurrent
+ * reversal slipping between this read and the write is bounded by their lock and audited by reconcile).
+ * Throws the same `payment.not_found`/`payment.not_voidable`/`payment.not_refundable`/
+ * `payment.refund_exceeds_capture` those functions do. */
+export async function assertReversible(
+  tx: Transaction,
+  params: Key & { kind: "void" | "refund"; amount?: Decimal },
+): Promise<void> {
+  const row = await getPaymentByRef(tx, params);
+  if (row === undefined) {
+    throw new AppError("payment.not_found", {
+      provider: params.provider,
+      paymentRef: params.paymentRef,
+    });
+  }
+  if (params.kind === "void") {
+    if (row.state !== "captured") {
+      throw new AppError("payment.not_voidable", {
+        paymentRef: params.paymentRef,
+        state: row.state,
+      });
+    }
+    return;
+  }
+  if (row.state !== "captured" && row.state !== "partially_refunded") {
+    throw new AppError("payment.not_refundable", {
+      paymentRef: params.paymentRef,
+      state: row.state,
+    });
+  }
+  const prior = await tx
+    .select({ amount: paymentRefunds.amount })
+    .from(paymentRefunds)
+    .where(
+      and(
+        eq(paymentRefunds.tenantId, params.tenantId),
+        eq(paymentRefunds.paymentId, row.id),
+        eq(paymentRefunds.state, "succeeded"),
+      ),
+    );
+  const alreadyRefunded = sumDecimals(prior.map((r) => decimal(r.amount)));
+  const requested = params.amount ?? decimal(row.amount);
+  if (compareDecimal(addDecimal(alreadyRefunded, requested), decimal(row.amount)) > 0) {
+    throw new AppError("payment.refund_exceeds_capture", {
+      paymentRef: params.paymentRef,
+      captured: decimal(row.amount),
+      requested,
+      alreadyRefunded,
+    });
+  }
 }
 
 /** Locking row fetch for the reversal paths. Selects the payment row `FOR UPDATE` so concurrent

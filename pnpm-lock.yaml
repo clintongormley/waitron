@@ -245,6 +245,46 @@ importers:
         specifier: ^3.0.0
         version: 3.2.7(@types/node@24.13.3)(@vitest/browser@3.2.7)(tsx@4.23.1)(yaml@2.9.0)
 
+  packages/payments-stripe:
+    dependencies:
+      '@waitron/core':
+        specifier: workspace:*
+        version: link:../core
+      '@waitron/db':
+        specifier: workspace:*
+        version: link:../db
+      '@waitron/payments':
+        specifier: workspace:*
+        version: link:../payments
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../shared
+      stripe:
+        specifier: ^22.3.2
+        version: 22.3.2(@types/node@24.13.3)
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.5.4
+        version: 0.5.4
+      '@testcontainers/postgresql':
+        specifier: ^12.0.4
+        version: 12.0.4
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      '@vitest/coverage-v8':
+        specifier: ^3.0.0
+        version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      '@waitron/fiscal':
+        specifier: workspace:*
+        version: link:../fiscal
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@24.13.3)(@vitest/browser@3.2.7)(tsx@4.23.1)(yaml@2.9.0)
+
   packages/shared:
     devDependencies:
       '@stryker-mutator/core':
@@ -3028,6 +3068,15 @@ packages:
 
   strip-literal@3.1.0:
     resolution: {integrity: sha512-8r3mkIM/2+PpjHoOtiAW8Rg3jJLHaV7xPwG+YRGrv6FP0wwk/toTpATxWYOW0BKdWwl82VT2tFYi5DlROa0Mxg==}
+
+  stripe@22.3.2:
+    resolution: {integrity: sha512-O13QOvgEIQvDlTy6Ubb5kB980wpbhmoZNsgCXKILjCMZS67f+bW+6w99k3gnSi/N1lkryoj1WYdpGT5Wc5edjg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
 
   strnum@1.1.2:
     resolution: {integrity: sha512-vrN+B7DBIoTTZjnPNewwhx6cBA/H+IS7rfW68n7XxC1y7uoiGQBxaKzqucGUgavX15dJgiGztLJ8vxuEzwqBdA==}
@@ -5851,6 +5900,10 @@ snapshots:
   strip-literal@3.1.0:
     dependencies:
       js-tokens: 9.0.1
+
+  stripe@22.3.2(@types/node@24.13.3):
+    optionalDependencies:
+      '@types/node': 24.13.3
 
   strnum@1.1.2: {}
 

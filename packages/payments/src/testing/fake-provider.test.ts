@@ -122,6 +122,20 @@ describe("FakePaymentProvider.partialRefund", () => {
     const partial = await provider.partialRefund(paid.paymentRef, decimal("12.00"));
     expect(partial.state).toBe("partially_refunded");
   });
+
+  it("partialRefund reports the refunded amount, not the captured total", async () => {
+    const seeded = await seedTenant();
+    const provider = new FakePaymentProvider(db);
+    const paid = await provider.collect({
+      tenantId: brandTenantId(seeded.tenantId),
+      tillId: brandTillId(seeded.tillId),
+      workingOrderId: brandWorkingOrderId(seeded.workingOrderId),
+      amount: decimal("20.00"),
+    });
+    const refunded = await provider.partialRefund(paid.paymentRef, decimal("5.00"));
+    expect(refunded.amount).toBe(decimal("5.00"));
+    expect(refunded.state).toBe("partially_refunded");
+  });
 });
 
 describe("FakePaymentProvider.capabilities", () => {

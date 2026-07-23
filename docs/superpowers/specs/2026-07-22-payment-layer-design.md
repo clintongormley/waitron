@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-22 · **revised 2026-07-23** (added the capture-mode taxonomy; the former "4a"
 landed as PR #20)
-**Status:** Living design — the integrated seam (former 4a) shipped; Mode 1 (manual tender) is the next plan
+**Status:** Living design — 4a seam + Mode 1 (manual tender) shipped; Mode 2a (Stripe Terminal adapter) is the next plan
 **Covers:** Architecture sub-project 4 (the payment layer) — the money-movement layer that sits
 *before* the sale/fiscal write path and turns "customer pays" into a settled tender. Organized around
 a **taxonomy of capture modes** (next section): manual/unintegrated, synchronous-integrated, and
@@ -156,11 +156,15 @@ Mirroring the fiscal split exactly.
   [`fiscal-verifactu/src/schema/index.ts`](../../../packages/fiscal-verifactu/src/schema/index.ts)
   does.
 
-### `packages/payments-stripe` — the adapter, exempt
+### `packages/payments-stripe` — the adapter
 
-- Added to `EXEMPT_PACKAGES` — free to name `PaymentIntent`, `Reader`, `ConnectionToken` and Stripe
-  Terminal concepts. Depends on `@waitron/payments`, `@waitron/db`, `@waitron/shared` and the Stripe
-  SDK.
+- **In neither `GENERIC_PACKAGES` nor `EXEMPT_PACKAGES`.** The English-only guard scans only
+  `GENERIC_PACKAGES`, and the neutral `no-provider-vocabulary` guard scans only `@waitron/payments`
+  (a relative glob) — so this adapter names `PaymentIntent`/`Reader`/`ConnectionToken`/`Stripe` freely
+  without being added to any list. It has no *Spanish* to exempt (its vocabulary is English), and the
+  vendor-vocabulary ban applies only to the neutral seam. (Adding it to `EXEMPT_PACKAGES` would break
+  the pinned-list assertions in `english-only.test.ts` + `vocabulary-scope.test.ts` for no benefit.)
+  Depends on `@waitron/payments`, `@waitron/db`, `@waitron/shared` and the Stripe SDK.
 - Holds `StripeTerminalProvider`. If it needs Stripe-shaped columns of its own it declares them in
   *its* schema/migrations, not the neutral package's (it probably needs none — see §7).
 
@@ -493,25 +497,28 @@ The original 4a–4e sequence assumed the whole layer was the integrated `Paymen
 capture-mode taxonomy (§0) re-derives it, ordered **broadest-reach-and-simplest first**. Each plan is
 its own spec→plan→implement→land cycle, sharing this design.
 
-**Already built** (the former "4a", PR #20): the neutral `PaymentProvider` seam + store + schema +
-`FakePaymentProvider` + online `collect`/`void`/`refund`/`partialRefund` proven with the fake. It is
-the contract every *integrated* mode implements, and it survives the re-derivation unchanged — the
-taxonomy re-contextualizes it as the integrated-mode seam.
+**Already built:** the neutral `PaymentProvider` seam + store + schema + `FakePaymentProvider` +
+online `collect`/`void`/`refund`/`partialRefund` proven with the fake (the former "4a", PR #20); and
+**Mode 1 — manual / unintegrated tender** (PR #21): a staff-asserted card tender reusing the store
+with a sentinel `manual` provider, plus the nullable `external_ref` column and manual refunds. The 4a
+seam survives the re-derivation unchanged — the taxonomy re-contextualizes it as the integrated-mode
+seam.
 
 Then, in priority order:
 
-1. **Mode 1 — Manual / unintegrated tender** *(the next plan; full design in the Mode 1 section
-   below)*. A staff-asserted card tender — a sibling of cash — that reuses the store with a sentinel
-   `manual` provider but implements **no** adapter and makes **no** network call. Broadest reach, zero
-   PSP onboarding. Adds a nullable `external_ref` column; includes manual refunds; defers capture-mode
-   config to Mode 2a.
-2. **Mode 2a — Server-driven integrated adapter.** The real Stripe Terminal provider (server drives a
-   fixed-counter smart reader) against the existing seam — the former "4b". First real PSP; proves the
-   integrated path end-to-end. Folds in the deferred follow-ups (webhook tenant-resolution for
-   ref-only reversals, the `(provider, payment_ref)` index, the reversal-concurrency test — see memory
-   `payment-layer-4b-followups`); introduces the **capture-mode config** (a per-till choice only earns
-   its keep once a second mode exists to arbitrate); and adds the transient `attempting` state +
-   poll-to-completion the network path needs.
+1. **Mode 1 — Manual / unintegrated tender** — **landed (PR #21)**; full design in the Mode 1 section
+   below. A staff-asserted card tender, a sibling of cash; no adapter, no network; broadest reach,
+   zero PSP onboarding.
+2. **Mode 2a — Server-driven integrated adapter** *(the next plan; full design in the Mode 2a section
+   below)*. The real Stripe Terminal provider (server drives a fixed-counter smart reader) against the
+   existing seam — the former "4b". First real PSP; proves the integrated path end-to-end.
+   **Standalone accounts** (each merchant's own Stripe account — no Connect), a **config-agnostic**
+   adapter (injected Stripe client + injected till→reader resolver; provisioning deferred),
+   **poll-to-completion** `collect` with the transient **`attempting`** state, and the
+   **failed-reversal** store items (`recordRefund` `state='succeeded'` filter; `PaymentResult.amount`
+   for a partial refund; a real-PG reversal-concurrency test). **Webhooks + the untenanted
+   tenant-resolution (+ `(provider, external_ref)` index) are deferred** to reconcile (4d) / a later
+   async-events plan — 2a is synchronous. Capture-mode config also defers (to orchestration, SP7).
 3. **Mode 2b — On-device SDK integrated + offline.** The waiter's handheld all-in-one: connection
    tokens, device-side `collect`, webhook outcomes, and **offline store-and-forward** — the former
    "4c", folded in here because offline is a property of the on-device mechanism.
@@ -526,7 +533,7 @@ Then, in priority order:
 
 ## Mode 1 — Manual / unintegrated tender (design)
 
-The next plan. The unintegrated bank datáfono: staff read the total off the POS, key it into a
+**Landed (PR #21).** The unintegrated bank datáfono: staff read the total off the POS, key it into a
 *separate* terminal, the customer pays there, and the POS is told nothing electronically.
 
 ### Not a provider — but it reuses the store
@@ -573,8 +580,105 @@ that report, but it is never a blocker and never automatic.
 ### Out of scope for this plan
 
 The `PaymentProvider` adapter (Modes 2a/2b), any network, the till **UI** (sub-project 7), and the
-**capture-mode config** — deferred to Mode 2a, where a second mode first makes a per-till choice
-meaningful (config that arbitrates between capabilities that do not yet exist would be premature).
+**capture-mode config** (which tender modes a till offers) — its consumer is the till orchestration
+(sub-project 7), so it defers there; the Mode 2a section re-scoped it out of the adapter.
+
+---
+
+## Mode 2a — Stripe Terminal adapter (design)
+
+The next plan. The real integrated provider: a fixed-counter **smart reader** (Reader S700 /
+WisePOS E) the *server* drives, proving the integrated path end-to-end behind the neutral seam — what
+4a's `FakePaymentProvider` stood in for. Scope is deliberately **synchronous and online** (collect +
+reversals); webhooks and reconcile are later plans.
+
+### Package & the injected client seam
+
+`packages/payments-stripe` — in **neither** classification list (§2): the English-only guard scans
+only `GENERIC_PACKAGES` and `no-provider-vocabulary` only the neutral package, so the adapter names
+`Stripe`/`PaymentIntent`/`Reader` freely without touching either list (adding it to `EXEMPT_PACKAGES`
+would break their pinned-list tests for no benefit — it has no Spanish to exempt). Depends on
+`@waitron/payments`, `@waitron/db`, `@waitron/shared`, and the `stripe` SDK. It holds
+`StripeTerminalProvider implements PaymentProvider`.
+
+Mirroring `VerifactuBackend`↔`VerifactuClient`, the adapter talks to a **narrow `StripeClient`
+interface** — only the calls it uses (`createPaymentIntent`, `processPaymentIntent(reader, pi)`,
+`retrieveReader`, `cancelReaderAction`, `refund`) — never the `stripe` SDK directly. A **real impl**
+wraps the SDK; a deterministic **`FakeStripe`** models PaymentIntent + reader-action state (capture /
+decline / timeout) for the hermetic suite. The provider is constructed with `{ client, resolveReader,
+db }` and is **config-agnostic**: an injected client credentialed for the merchant's own
+**standalone** Stripe account (no Connect, no connected-account context on calls) and an injected
+`resolveReader(tenantId, tillId) → readerId`. Per-tenant provisioning (the merchant's API key, reader
+ids, webhook secrets) is **not** owned here — a later provisioning/deployment concern, exactly as SIF
+registration is separate from `VerifactuBackend`.
+
+### `collect()` — server-driven, poll-to-completion, T1/T2
+
+Every step is a network call, so the caller's sale transaction is never held across it (T1/T2). One
+`collect`:
+
+1. `readerId = await resolveReader(tenantId, tillId)`.
+2. **T1 (own short tx, committed):** insert an **`attempting`** row keyed by `working_order_id`,
+   `payment_ref` = a freshly minted idempotency **uuid** (the §4 "provider mints its own ref").
+   Committing before the network call leaves a recoverable row on a crash, and the uuid is the Stripe
+   **idempotency key**, so a retry never double-charges.
+3. **Network (no tx):** `createPaymentIntent(idempotencyKey = uuid, amount, card_present, capture
+   automatic)` → `processPaymentIntent(readerId, pi.id)` → **poll** `retrieveReader` until the reader
+   action resolves. A timeout issues `cancelReaderAction` and resolves to `failed`.
+4. **T2 (own short tx):** advance the row to `captured` (`settled_at = now`) or `failed`, storing the
+   **Stripe PaymentIntent id in `external_ref`** — the exact reuse Mode 1's column was designed for.
+   `PaymentResult` flows back as data; the caller passes the settled tender into `recordSale` and then
+   `associatePaymentWithSale` (§4), as the 4a wiring test proved with the fake.
+
+`PaymentResult.paymentRef` is our uuid (idempotency-safe, and what reversals take); the PI id lives in
+`external_ref`. A crash between T1 and T2 leaves an `attempting` row — that stuck-state recovery is a
+`reconcile` (4d) concern, not built here.
+
+### The transient `attempting` state (neutral)
+
+`attempting` is a generic network-provider lifecycle state (every integrated adapter has an in-flight
+window), not a Stripe concept — so it joins the **neutral** `payment_state` enum in
+`packages/payments` via an `ALTER TYPE` migration, with small store helpers (`insertAttempting`,
+`resolveOutcome`). The design §7 already anticipated it. Manual mode never uses it (no network).
+
+### Reversals
+
+`void` / `refund` / `partialRefund` take a `payment_ref` (our uuid), look the row up **tenanted** (the
+caller — staff via the till — always holds the tenant), read its `external_ref` (PI id), and call
+`stripe.refunds.create({ payment_intent })`. Local state advances via the existing
+`recordVoid`/`recordRefund`. 2a is the **first real failed-reversal path** (a Stripe refund can be
+declined), so it lands the two deferred store items: `recordRefund`'s prior-refund sum filtered to
+`state = 'succeeded'`, and the `PaymentResult.amount`-for-a-partial-refund contract (return the
+refunded amount, not the captured total). A dedicated **real-Postgres reversal-concurrency test**
+exercises the `FOR UPDATE` locks (acquired-signal pattern, per `chain.concurrency.test.ts`, to avoid
+the 120s CI hang).
+
+### Testing
+
+- **`FakeStripe` hermetic suite** (normal gate): drives `collect` capture / decline / timeout and the
+  reversal paths deterministically, no network — plus real-Postgres RLS + concurrency tests as 4a did.
+- **Env-gated sandbox suite** (nightly only): the real `stripe` SDK against Stripe **test-mode** with
+  a **simulated reader** (`stripe.testHelpers.terminal.readers.presentPaymentMethod`), proving the
+  real SDK wiring and PI lifecycle. Skipped in per-PR CI (needs `STRIPE_TEST_KEY` + network), run by a
+  **nightly GitHub Action** — a deliberate, explicit skip-unless-`STRIPE_SANDBOX=1`, distinct from the
+  "never skip" RLS rule (which exists because PGlite silently passes; here the fake suite already
+  proves the logic and the sandbox adds real-API fidelity on a cadence).
+- The neutral-vocabulary guard does **not** apply to this EXEMPT package. The one neutral addition to
+  `@waitron/payments` is `attempting`; `no-provider-vocabulary` must still find no
+  `stripe`/`reader`/`terminal` vocabulary in the neutral package.
+
+### Deferred out of 2a (deliberate re-scope)
+
+- **Webhooks + async events** (async refund confirmation, disputes, reader-disconnect) and, with them,
+  the **untenanted tenant-resolution** (an RLS-exempt resolver keyed by `(provider, external_ref)` =
+  the PI id, plus that index). 2a's `collect` is poll-to-completion and its reversals run in a tenanted
+  context, so nothing in the online path needs an untenanted webhook lookup. These land with
+  `reconcile` (4d) / a dedicated async-events plan. (This re-scopes the memory note that had folded
+  webhook tenant-resolution into "4b".)
+- **Capture-mode config** — its consumer is the till orchestration (SP7), which does not exist yet;
+  consistent with the config-agnostic decision, it defers there rather than landing as data with no
+  reader.
+- The **role-gate** on reversals (identity, SP5) and the till **UI** (SP7), as ever.
 
 ---
 

@@ -81,18 +81,29 @@ export class FakePaymentProvider implements PaymentProvider {
     return this.reverse(ref);
   }
 
+  /** Unlike `refund`, reports the amount REFUNDED (not the capture) — see `PaymentResult.amount`'s
+   * doc. */
   async partialRefund(ref: string, amount: Decimal): Promise<PaymentResult> {
-    return this.reverse(ref, amount);
-  }
-
-  private async reverse(ref: string, amount?: Decimal): Promise<PaymentResult> {
     const row = await this.db.transaction(async (tx) => {
       const found = await this.require(tx, ref);
       return recordRefund(tx, {
         tenantId: found.tenantId,
         provider: this.provider,
         paymentRef: ref,
-        amount: amount ?? decimal(found.amount),
+        amount,
+      });
+    });
+    return { provider: this.provider, paymentRef: ref, state: row.state, amount, settledAt: null };
+  }
+
+  private async reverse(ref: string): Promise<PaymentResult> {
+    const row = await this.db.transaction(async (tx) => {
+      const found = await this.require(tx, ref);
+      return recordRefund(tx, {
+        tenantId: found.tenantId,
+        provider: this.provider,
+        paymentRef: ref,
+        amount: decimal(found.amount),
       });
     });
     return this.toResult(ref, row);

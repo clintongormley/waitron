@@ -1,0 +1,40 @@
+name: stripe-sandbox
+
+# The nightly-only counterpart to ci.yml's `test` job: drives real Stripe test-mode against a
+# simulated Terminal reader (packages/payments-stripe/src/collect.sandbox.test.ts), never as part of
+# per-PR CI — network + secret dependent, so it runs on a cadence instead of gating merges. No
+# Playwright/Chromium step: this suite is pure Node + the `stripe` SDK, no browser involved.
+
+on:
+  schedule:
+    - cron: "0 4 * * *" # nightly, 04:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stripe-sandbox:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Self-skips cleanly (describe.skip) when STRIPE_SANDBOX_SECRET_KEY isn't configured as a
+      # repository secret — see packages/payments-stripe/src/collect.sandbox.test.ts. The repo owner
+      # must add that secret (a Stripe TEST-mode key) for this job to actually exercise Stripe rather
+      # than report a skipped suite every night.
+      - run: pnpm --filter @waitron/payments-stripe test:sandbox
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SANDBOX_SECRET_KEY }}
