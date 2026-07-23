@@ -1,0 +1,83 @@
+import { sql } from "drizzle-orm";
+import {
+  check,
+  foreignKey,
+  index,
+  numeric,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from "drizzle-orm/pg-core";
+import { sales, workingOrders } from "@waitron/db";
+
+/**
+ * The lifecycle state of one electronic tender. 4a's online subset: `captured` (money taken),
+ * `voided` (a captured payment reversed in full — a same-day void, distinct from a refund),
+ * `refunded`/`partially_refunded`, and `failed` (the network refused). Offline and two-phase states
+ * are added by later plans via ALTER TYPE, never reserved here. Mirrors `PaymentState` in
+ * ../provider.ts.
+ */
+export const paymentState = pgEnum("payment_state", [
+  "captured",
+  "voided",
+  "refunded",
+  "partially_refunded",
+  "failed",
+]);
+
+/**
+ * One row per electronic tender. The module's own MUTABLE lifecycle record — the deliberate
+ * opposite of core's immutable `tenders` row, and the reason core carries no payment column at
+ * all. `sale_id` is nullable and set post-capture, in the SAME transaction as the sale it belongs
+ * to (see `associatePaymentWithSale`), so a committed sale always carries its association; a
+ * captured payment with a null `sale_id` on a settled/abandoned order is the orphan `reconcile`
+ * (a later plan) exists to find. The FK points module→core exactly as `registros_facturacion` does.
+ */
+export const payments = pgTable(
+  "payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull(),
+    workingOrderId: uuid("working_order_id").notNull(),
+    // Nullable: the payment row exists before the sale does (the money moves first). Set to the
+    // committed sale in the associate-back step.
+    saleId: uuid("sale_id"),
+    provider: text("provider").notNull(),
+    /** This provider's opaque reference and the idempotency anchor. */
+    paymentRef: text("payment_ref").notNull(),
+    amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+    state: paymentState("state").notNull(),
+    /** Set on `captured`, null otherwise. Feeds `RecordSaleTender.settledAt`. */
+    settledAt: timestamp("settled_at", { withTimezone: true, mode: "string" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // Composite target so payment_refunds can point at a tenant-consistent payment.
+    unique("payments_tenant_id_key").on(t.tenantId, t.id),
+    // Idempotency: a retried collect cannot double-insert the same provider reference.
+    unique("payments_provider_ref_key").on(t.tenantId, t.provider, t.paymentRef),
+    // Tenant-consistent FK to the pre-sale entity (also anchors tenant_id).
+    foreignKey({
+      columns: [t.tenantId, t.workingOrderId],
+      foreignColumns: [workingOrders.tenantId, workingOrders.id],
+      name: "payments_working_order_fk",
+    }).onDelete("restrict"),
+    // Nullable composite FK to the committed sale. MATCH SIMPLE: satisfied while sale_id is null.
+    foreignKey({
+      columns: [t.tenantId, t.saleId],
+      foreignColumns: [sales.tenantId, sales.id],
+      name: "payments_sale_fk",
+    }).onDelete("restrict"),
+    index("payments_working_order_idx").on(t.workingOrderId),
+    index("payments_sale_idx").on(t.saleId),
+    check("payments_amount_ck", sql`${t.amount} > 0`),
+  ],
+).enableRLS();

@@ -16,8 +16,8 @@ const discovered = GENERIC_PACKAGES.flatMap((name) =>
 );
 
 describe("configuration", () => {
-  it("scopes itself to the four generic packages", () => {
-    expect([...GENERIC_PACKAGES]).toEqual(["db", "core", "fiscal", "shared"]);
+  it("scopes itself to the five generic packages", () => {
+    expect([...GENERIC_PACKAGES]).toEqual(["db", "core", "fiscal", "shared", "payments"]);
   });
 
   it("exempts the two Spanish packages", () => {

@@ -5,7 +5,7 @@ import { join } from "node:path";
 export const PACKAGES_ROOT = join(import.meta.dirname, "..", "..");
 
 /** English throughout — identifiers and table/column names alike (spec §2). */
-export const GENERIC_PACKAGES = ["db", "core", "fiscal", "shared"] as const;
+export const GENERIC_PACKAGES = ["db", "core", "fiscal", "shared", "payments"] as const;
 
 /** Spanish by design: these mirror AEAT's spec, XML and conformance vectors. */
 export const EXEMPT_PACKAGES = ["verifactu", "fiscal-verifactu"] as const;
