@@ -21,6 +21,7 @@ import type {
 } from "./index.js";
 import { payments } from "./schema/payments.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
+import { paymentPolicy } from "./schema/payment-policy.js";
 
 /**
  * A coherence check on the package root, not a duplicate of schema-ownership.test.ts,
@@ -120,5 +121,16 @@ describe("schema constraint declarations (forces the lazy extraConfig callbacks)
 
     const checkNames = config.checks.map((c) => c.name);
     expect(checkNames).toContain("payment_refunds_amount_ck");
+  });
+
+  it("declares the payment_policy table's foreign-key and check constraints", () => {
+    const config = getTableConfig(paymentPolicy);
+
+    const fkNames = config.foreignKeys.map((fk) => fk.getName());
+    expect(fkNames).toContain("payment_policy_tenant_fk");
+
+    const checkNames = config.checks.map((c) => c.name);
+    expect(checkNames).toContain("payment_policy_offline_mode_ck");
+    expect(checkNames).toContain("payment_policy_cap_ck");
   });
 });

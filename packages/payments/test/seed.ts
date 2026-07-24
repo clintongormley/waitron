@@ -117,3 +117,16 @@ export async function seedForSale(
   });
   return { ...seeded, seriesId };
 }
+
+/** Seeds one `payment_policy` row for the tenant. Run as the connection owner (superuser), like
+ * `seedWorkingOrder`/`seedSale` — RLS is bypassed, so this is pure setup. */
+export async function seedPaymentPolicy(
+  db: Database,
+  tenantId: string,
+  mode: "accept_offline" | "cash_only",
+  cap: string,
+): Promise<void> {
+  await db.execute(sql`
+    insert into payment_policy (tenant_id, offline_mode, offline_amount_cap)
+    values (${tenantId}, ${mode}, ${cap})`);
+}

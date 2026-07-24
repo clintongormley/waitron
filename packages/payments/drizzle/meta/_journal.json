@@ -29,6 +29,20 @@
       "when": 1784826699567,
       "tag": "0003_payment_attempting",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784839844506,
+      "tag": "0004_payment_offline",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784839851628,
+      "tag": "0005_payment_policy_rls",
+      "breakpoints": true
     }
   ]
 }

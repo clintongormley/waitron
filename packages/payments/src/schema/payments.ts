@@ -19,8 +19,9 @@ import { sales, workingOrders } from "@waitron/db";
  * `refunded`/`partially_refunded`, and `failed` (the network refused). `attempting` is the
  * transient in-flight state a network-driving integrated adapter writes BEFORE its network call
  * and resolves after (T1/T2) — neutral across every such adapter, never adapter-specific
- * vocabulary. Other offline and two-phase states are added by later plans via ALTER TYPE, never
- * reserved here. Mirrors `PaymentState` in ../provider.ts.
+ * vocabulary. `accepted_offline`/`settled`/`declined` are Cycle A's offline values, added here with
+ * this cycle's later tasks giving them real behavior. The two-phase `authorized` state is still a
+ * later plan, to be added via ALTER TYPE when it lands. Mirrors `PaymentState` in ../provider.ts.
  */
 export const paymentState = pgEnum("payment_state", [
   "attempting",
@@ -29,6 +30,11 @@ export const paymentState = pgEnum("payment_state", [
   "refunded",
   "partially_refunded",
   "failed",
+  // Cycle A offline lifecycle — appended (DB value-order is cosmetic; the lifecycle order is
+  // documented in the design). accepted_offline -> (forward) -> settled | declined.
+  "accepted_offline",
+  "settled",
+  "declined",
 ]);
 
 /**
@@ -57,7 +63,8 @@ export const payments = pgTable(
     externalRef: text("external_ref"),
     amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
     state: paymentState("state").notNull(),
-    /** Set on `captured`, null otherwise. Feeds `RecordSaleTender.settledAt`. */
+    /** Set on `captured` and `accepted_offline` (the acceptance time), null otherwise. Feeds
+     * `RecordSaleTender.settledAt`, so an offline-accepted tender chains its sale immediately. */
     settledAt: timestamp("settled_at", { withTimezone: true, mode: "string" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .notNull()

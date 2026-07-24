@@ -510,4 +510,14 @@ describe("externalRef on read-back + failed refunds", () => {
     );
     expect(result.state).toBe("refunded");
   });
+
+  it("recordFailedRefund throws payment.not_found for an unknown ref", async () => {
+    const seeded = await seedTenant();
+    const key = { tenantId: seeded.tenantId, provider: "fake", paymentRef: "no-such-ref" };
+    const error = await db
+      .transaction((tx) => recordFailedRefund(tx, { ...key, amount: decimal("5.00") }))
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe("payment.not_found");
+  });
 });

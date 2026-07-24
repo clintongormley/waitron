@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { paymentRefunds, payments } from "./schema/index.js";
+import { paymentPolicy, paymentRefunds, payments } from "./schema/index.js";
 
 /**
  * Every money column this package owns must be `numeric(12, 2)` — the same shape
@@ -75,5 +75,16 @@ describe("payments/payment_refunds monetary columns are numeric(12, 2), never fl
     // catch, mirroring `no-provider-vocabulary.test.ts`'s own "the guard has teeth" block.
     const offendingSql = 'create table "payments" (\n\t"amount" double precision not null\n);';
     expect(offendingSql.toLowerCase()).toMatch(/double precision/);
+  });
+
+  it("payment_policy.offline_amount_cap is numeric(12, 2) in the Drizzle schema", () => {
+    const cap = Object.values(getTableColumns(paymentPolicy)).find(
+      (c) => c.name === "offline_amount_cap",
+    );
+    expect(cap).toBeDefined(); // positive control
+    expect(cap?.columnType).toBe("PgNumeric");
+    expect((cap as { precision?: number } | undefined)?.precision).toBe(12);
+    expect((cap as { scale?: number } | undefined)?.scale).toBe(2);
+    expect(cap?.getSQLType()).toBe("numeric(12, 2)");
   });
 });

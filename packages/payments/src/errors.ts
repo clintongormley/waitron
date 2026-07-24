@@ -38,5 +38,9 @@ declare module "@waitron/shared" {
      * payment↔sale link is write-once, so a second association attempt is rejected rather than
      * re-pointing the payment at a different sale. */
     "payment.already_associated": { paymentRef: string; saleId: string | null };
+    /** Raised as an INCIDENT (never thrown) by a `forward` pass when the network refuses a
+     * previously offline-accepted payment. The sale already chained and is immutable, so this is a
+     * staff-facing uncollected-receivable / bad-debt notice for the till, not a fiscal reversal. */
+    "payment.offline_forward_declined": { paymentRef: string; amount: string };
   }
 }

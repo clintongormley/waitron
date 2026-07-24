@@ -1,8 +1,10 @@
 # Payment layer (capture modes: manual · sync-integrated · async) — Design
 
 **Date:** 2026-07-22 · **revised 2026-07-23** (added the capture-mode taxonomy; the former "4a"
-landed as PR #20)
-**Status:** Living design — 4a seam + Mode 1 (manual tender) shipped; Mode 2a (Stripe Terminal adapter) is the next plan
+landed as PR #20; Mode 1 landed as #21, Mode 2a as #22; Mode 2b sliced into Cycle A / Cycle B)
+**Status:** Living design — 4a seam + Mode 1 (manual) + Mode 2a (Stripe Terminal) shipped (#20/#21/#22);
+**Mode 2b — Cycle A (the provider-neutral offline store-and-forward layer) is the next plan**, with the
+real on-device Stripe binding (Cycle B) following it
 **Covers:** Architecture sub-project 4 (the payment layer) — the money-movement layer that sits
 *before* the sale/fiscal write path and turns "customer pays" into a settled tender. Organized around
 a **taxonomy of capture modes** (next section): manual/unintegrated, synchronous-integrated, and
@@ -294,6 +296,11 @@ Because step 3 is a network call, steps 1–6 cannot be one transaction, so ther
 
 ## 5. Offline store-and-forward
 
+> **This section is the *semantics*; the concrete, provider-neutral build of it is Mode 2b — Cycle A
+> (its own design section below).** §5 says *what* offline acceptance means; Cycle A pins the exact
+> enum states, the `payment_policy` table, the `forward()` signature, the gate helper, and the fake —
+> and proves them with no device SDK. The real on-device Stripe binding (Cycle B) plugs into it.
+
 ### Offline is a deliberate, gated, per-transaction opt-in — never an automatic fallback
 
 When the network is down, the encouraged path is to take **cash**. Offline card acceptance is an
@@ -333,9 +340,9 @@ device). So the neutral outbox's job is durable **lifecycle tracking**, not card
 - `collect()` under an accepted outage writes the `payments` row `accepted_offline`, `settled_at = now`,
   returns `offline: true`; the sale chains immediately.
 - **`forward(now)` is the drain analogue.** It advances `accepted_offline` rows to their terminal state
-  — `captured`/`settled` when the network accepts the forwarded payment, `declined` when it refuses —
-  and returns a `ForwardResult { nextDueAt, forwarded, declined, incidentsRaised }`, shaped exactly
-  like `DrainResult`. One pass; the cadence is the caller re-invoking on `nextDueAt`, DB-driven, never
+  — `settled` when the network accepts the forwarded payment (the offline counterpart of the online
+  `captured`; Cycle A pins the two as distinct enum values), `declined` when it refuses — and returns a
+  `ForwardResult { nextDueAt, forwarded, declined, incidentsRaised }`, shaped exactly like `DrainResult`. One pass; the cadence is the caller re-invoking on `nextDueAt`, DB-driven, never
   an in-memory timer. A provider with nothing pending answers `{ nextDueAt: null, …zeros }`.
 - Like the fiscal submitter, `forward` is **an interface, not a location**: for Stripe the offline
   queue is device-local, so `forward` runs where the reader is; the contract does not assume that.
@@ -519,9 +526,22 @@ Then, in priority order:
    for a partial refund; a real-PG reversal-concurrency test). **Webhooks + the untenanted
    tenant-resolution (+ `(provider, external_ref)` index) are deferred** to reconcile (4d) / a later
    async-events plan — 2a is synchronous. Capture-mode config also defers (to orchestration, SP7).
-3. **Mode 2b — On-device SDK integrated + offline.** The waiter's handheld all-in-one: connection
-   tokens, device-side `collect`, webhook outcomes, and **offline store-and-forward** — the former
-   "4c", folded in here because offline is a property of the on-device mechanism.
+3. **Mode 2b — On-device SDK integrated + offline** — **sliced into two cycles** (2026-07-23), because
+   the offline machinery is provider-neutral and Postgres-backed while the device binding is
+   Stripe-specific and untestable in a Node suite, mirroring how **4a (neutral seam + fake) preceded 2a
+   (real Stripe adapter)**:
+   - **Cycle A — the provider-neutral offline store-and-forward layer** *(the next plan; full design in
+     the Mode 2b section below)*. In `@waitron/payments` only: the `accepted_offline`/`settled`/`declined`
+     enum states, `CollectParams.allowOffline` + `PaymentResult`'s return-only `network_unavailable` and
+     `offline` flag, the `payment_policy` table (`offline_mode` + `offline_amount_cap`), the
+     offline-acceptance gate, `forward(now)` implemented on the `FakePaymentProvider` (the drain
+     analogue — it joins the `PaymentProvider` *interface* in Cycle B, per the Mode 2b §2 note), and
+     the forward-decline → idempotent incident (**no** un-chain) path — all proven with the extended
+     `FakePaymentProvider` + real-PG RLS/concurrency tests. No device SDK, no webhooks.
+   - **Cycle B — the real on-device Stripe binding** *(follows Cycle A)*. The waiter's handheld all-in-one:
+     connection tokens, device-side `collect`, the device-local offline queue behind `forward()`, and a
+     nightly sandbox — the Stripe-specific `@waitron/payments-stripe` half. Webhooks + the untenanted
+     `(provider, external_ref)` resolution stay deferred to Mode 3 / reconcile, as in 2a.
 4. **Mode 3 — Asynchronous / hosted.** QR pay-at-table, payment links, online orders — the
    `initiate() + webhook` shape (§0). A distinct interface, so it follows the synchronous adapters.
 5. **Cross-cutting, layered in as modes need them:** `reconcile()` per integrated mode (the former
@@ -679,6 +699,145 @@ the 120s CI hang).
   consistent with the config-agnostic decision, it defers there rather than landing as data with no
   reader.
 - The **role-gate** on reversals (identity, SP5) and the till **UI** (SP7), as ever.
+
+---
+
+## Mode 2b — Cycle A: the provider-neutral offline store-and-forward layer (design)
+
+The next plan. Mode 2b (§0's on-device mechanism) is **sliced** (§10.3): this cycle builds only the
+**provider-neutral offline store-and-forward layer** in `@waitron/payments` — the machinery §5
+describes as *semantics*, pinned to exact types and proven end-to-end with the extended
+`FakePaymentProvider`, **no device SDK and no webhooks**. Cycle B (the real on-device Stripe binding)
+plugs into it. The split mirrors 4a→2a exactly: build and prove the neutral contract with a fake, then
+land the vendor adapter behind it.
+
+### Why this is a legitimate slice, not reserved surface
+
+`forward()` and the offline states are **built fully — real store behaviour, a working fake, real-PG
+tests — before any device consumer exists**, exactly as `drain`/`reconcile` were built and faked
+before a scheduler called them (the §"Scope decision" rule). This is the opposite of the empty
+`FiscalBackend` stub that reserved a name before its design: §5 *is* the design, and Cycle A implements
+it. The offline machinery is genuinely provider-neutral (an uncollected offline receivable is the same
+movement whatever the PSP), so it belongs in the neutral package regardless of which adapter forwards.
+
+### The load-bearing deployment assumption (from the architecture doc, not re-opened)
+
+The store stays **Postgres-backed as built**. Per architecture §5 (L447–450) and the §6 SIF-fallback,
+**"offline" means *internet*-offline with an on-site local server holding Postgres** — a cloud-direct
+deployment with no local server "loses offline operation entirely." So Cycle A introduces **no new
+local/IndexedDB persistence path**: an offline-accepted card is a normal `payments` row written to the
+on-site Postgres while the internet is down, syncing upward later. Stripe's on-device SDK owns the
+separate *card-forward* queue on the device (Cycle B); our rows own the *lifecycle*; `forward()`
+reconciles the two. This is a deployment fact recorded here so the two docs do not silently disagree,
+not a decision re-litigated in this plan.
+
+### Interface & type changes (`packages/payments/src/provider.ts`)
+
+- `PaymentState` (the **persisted** enum) gains `accepted_offline`, `settled`, `declined`. The offline
+  lifecycle is `accepted_offline` → (`forward`) → `settled` (network cleared it) | `declined` (network
+  refused). `captured` stays the *online single-message* terminal; `settled` is the *forwarded-offline*
+  terminal — §7's enum deliberately distinguishes them.
+- **`network_unavailable` is a return-only widening, never persisted.** When offline is refused nothing
+  durable is written (no money moved), so it must not enter the DB enum. Modelled as
+  `type PaymentResultState = PaymentState | "network_unavailable"`, used only on `PaymentResult.state`.
+- `CollectParams` gains `allowOffline?: boolean` (default `false`) — the per-transaction staff consent.
+- `PaymentResult` gains `offline?: boolean` (true iff `accepted_offline`); `settledAt` is the acceptance
+  time on `accepted_offline` (§3 decision 2), so the sale chains immediately.
+- `ForwardResult { nextDueAt: Date | null; forwarded: number; declined: number; incidentsRaised: number }`
+  is defined (mirroring `DrainResult` field-for-field) and implemented by `FakePaymentProvider.forward()`
+  + the neutral store helpers. **`forward` does NOT join the `PaymentProvider` *interface* this cycle**:
+  adding a required method would break `StripeTerminalProvider` (which does not implement it), forcing an
+  out-of-scope change to `payments-stripe`. The method joins the interface in **Cycle B**, when the real
+  adapter(s) implement it — exactly as `drain`/`reconcile` stayed *absent* from `FiscalBackend` until a
+  backend implemented them (the "no reserved surface" rule). A class may carry methods beyond its
+  interface, so the fake's `forward()` compiles and is fully tested now.
+
+### Schema (`packages/payments`, migration `0004`)
+
+- **`payment_policy`** — `tenant_id` (PK, one row per tenant), `offline_mode text`
+  (`accept_offline` | `cash_only`), `offline_amount_cap numeric(12,2)`, timestamps. `.enableRLS()`;
+  hand-written GRANT `SELECT, INSERT, UPDATE` (no DELETE), like the rest of the schema. The cap is money,
+  so the existing `monetary-columns.test.ts` guard covers it.
+- **`payment_state` ALTER TYPE** adds the three offline states (an additive `ALTER TYPE … ADD VALUE`,
+  as migration `0003` did for `attempting`).
+- **Decision ① — no `till_id` column on `payments`.** `forward`'s decline-incident needs a `till_id`
+  (`recordIncidentOnce` keys on `(tenant, till, code, sale)`); both `working_orders` and `sales` carry
+  `till_id`, so **`forward` derives it via join**. Denormalising `till_id` onto `payments` is a later
+  reconcile-grouping convenience, not needed now — kept out to keep this cycle additive-minimal.
+
+### The offline-acceptance gate (inside `collect`)
+
+`collect` reads the tenant's `payment_policy` row **itself** — the DB is the single source of truth,
+matching how Veri\*Factu-mode is explicit per-tenant configuration (memory
+`verifactu-mode-separate-modules`), rather than the caller passing a policy object in (§4 step 1's
+sketch is superseded on this point). A pure neutral helper decides the outcome:
+
+```text
+resolveOfflineDecision(policy, allowOffline, amount) → "accept" | "refuse"
+  online                                                     → normal capture (captured)
+  offline & !allowOffline                                    → refuse → network_unavailable, nothing written
+  offline & allowOffline & accept_offline & amount ≤ cap     → accept → accepted_offline, settled_at = now
+  offline & allowOffline & (cash_only | amount > cap)        → refuse → network_unavailable
+```
+
+- **Decision ② — a missing `payment_policy` row fails safe → refuse** (treated as `cash_only`). A tenant
+  that never configured a cap never takes offline-decline risk; onboarding/SP7 inserts the row to
+  *enable* offline. This is the money-safe reading of §7's "`accept_offline` is the default": the default
+  is the column default for a *configured* tenant, **not** the behaviour when no row exists.
+- "Nothing goes offline silently" holds: acceptance requires policy `accept_offline` **and** explicit
+  `allowOffline` **and** `amount ≤ cap` — three independent gates.
+
+### `forward()` — the drain analogue (§5/§6)
+
+- **State is the queue** (no outbox table): select `WHERE state = 'accepted_offline'`; per row ask the
+  provider's offline queue whether it cleared or was refused; advance via neutral store helpers
+  `settleForwarded` (→ `settled`) / `declineForwarded` (→ `declined`). One pass; `nextDueAt` is
+  DB-driven; a provider with nothing pending answers `{ nextDueAt: null, …zeros }`.
+- **A forward decline raises one idempotent incident** (an uncollected receivable / bad debt) via
+  `recordIncidentOnce`, and makes **no** fiscal change — the sale already chained and is immutable;
+  voiding it is the deliberate existing `recordVoid` path, never an automatic consequence (§5). The
+  till_id comes from the join above; the sale_id from the (by-now-associated) payment row.
+- **Decision ③ — the incident is raised in the `forward` *implementation*, not a neutral store helper.**
+  Exactly as fiscal's `drain` raises incidents inside `fiscal-verifactu`, not inside neutral
+  `packages/fiscal`. So the neutral **runtime** package stays free of a `@waitron/core` dependency
+  (`@waitron/core` remains a devDependency, used by the fake + tests); the fake's `forward` raises the
+  incident so the full decline→incident contract is proven this cycle, and Cycle B's real adapter raises
+  the same one.
+- **Idempotency**: advancing an already-forwarded row is a no-op (the `state = 'accepted_offline'`
+  filter). **Concurrency**: the queue select takes `FOR UPDATE SKIP LOCKED` so concurrent `forward`
+  passes never double-advance a row — a real-PG concurrency test using the acquired-signal pattern (per
+  `reversal.concurrency.test.ts`) to avoid the 120s CI hang.
+
+### Testing
+
+- **`FakePaymentProvider`** gains an `offlineNextCollect()` affordance (mirroring `failNextCollect()`)
+  that simulates an outage, then applies the real neutral gate → `accepted_offline` or
+  `network_unavailable`; and a deterministic `forward()` that advances `accepted_offline` rows to
+  `settled`/`declined` and raises the decline incident via `recordIncidentOnce`. Still **not**
+  barrel-exported.
+- **Real-Postgres RLS** (the `payment_policy` row and offline `payments` rows under the non-superuser
+  probe role) and **concurrency** (`forward` SKIP-LOCKED) tests, as 2a did.
+- The `no-provider-vocabulary` guard must still find nothing vendor-specific — every new term
+  (`accepted_offline`, `settled`, `declined`, `forward`, `offline_mode`, `offline_amount_cap`,
+  `network_unavailable`) is neutral English. `monetary-columns` covers the cap; `schema-ownership` still
+  holds (the barrel never re-exports a core table).
+
+### Out of scope for this cycle (Cycle B / deferred, unchanged)
+
+The real on-device Stripe binding (connection tokens, device-side `collect`, the device-local offline
+queue behind `forward()`, the nightly sandbox); webhooks + the untenanted `(provider, external_ref)`
+resolution (Mode 3 / reconcile); the `forward`/`reconcile` **scheduler** (`apps/*`); capture-mode config
+(SP7); the reversal role-gate (SP5); the till **UI** (SP7).
+
+**Cycle B carry-over (found in the Cycle A whole-branch review).** `recordIncidentOnce` keys on
+`(tenant, till, code, sale_id)` with `sale_id IS NOT DISTINCT FROM null`, and it is *not* race-free
+(`incidents.ts` documents that a concurrent same-key caller must add a partial unique index
+`(tenant_id, till_id, code, sale_id) WHERE acknowledged_at IS NULL` and switch to `ON CONFLICT DO
+NOTHING`). Cycle A's single-threaded fake `forward` never hits either edge, but a *real* concurrent
+`forward` in Cycle B will: (1) two distinct **orphan** declines (`sale_id = null`) on one till collapse
+to a single incident, and (2) two same-`sale_id` declines (split-tender) racing across concurrent
+forwards can double-insert. Add the partial unique index + `ON CONFLICT DO NOTHING` when Cycle B lands
+a concurrent forward, exactly as the fiscal drainer's SKIP-LOCKED path already required.
 
 ---
 

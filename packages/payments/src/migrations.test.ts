@@ -60,4 +60,47 @@ describe("payments migrations", () => {
       await db.close();
     }
   });
+
+  it("adds accepted_offline, settled and declined to the payment_state enum", async () => {
+    const db = await createPgliteDb();
+    try {
+      await runMigrations(db, CORE_MIGRATIONS);
+      await runMigrations(db, PAYMENTS_MIGRATIONS);
+      const rows = await db.execute<{ enumlabel: string }>(sql`
+        select e.enumlabel from pg_enum e
+        join pg_type t on t.oid = e.enumtypid
+        where t.typname = 'payment_state'
+      `);
+      const labels = rows.rows.map((r) => r.enumlabel);
+      expect(labels).toEqual(expect.arrayContaining(["accepted_offline", "settled", "declined"]));
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("creates the payment_policy table with a numeric(12,2) offline_amount_cap", async () => {
+    const db = await createPgliteDb();
+    try {
+      await runMigrations(db, CORE_MIGRATIONS);
+      await runMigrations(db, PAYMENTS_MIGRATIONS);
+      const table = await db.execute<{ to_regclass: string | null }>(
+        sql`select to_regclass('public.payment_policy')::text as to_regclass`,
+      );
+      expect(table.rows[0].to_regclass).toBe("payment_policy");
+      const col = await db.execute<{
+        data_type: string;
+        numeric_precision: number;
+        numeric_scale: number;
+      }>(sql`
+        select data_type, numeric_precision, numeric_scale
+        from information_schema.columns
+        where table_name = 'payment_policy' and column_name = 'offline_amount_cap'
+      `);
+      expect(col.rows[0].data_type).toBe("numeric");
+      expect(col.rows[0].numeric_precision).toBe(12);
+      expect(col.rows[0].numeric_scale).toBe(2);
+    } finally {
+      await db.close();
+    }
+  });
 });

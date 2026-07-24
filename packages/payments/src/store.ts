@@ -75,6 +75,16 @@ export async function insertCapturedPayment(
   await insertPayment(tx, params, "captured", params.settledAt.toISOString());
 }
 
+/** Insert an offline-accepted payment — state=accepted_offline, settledAt SET (the acceptance
+ * time that feeds `RecordSaleTender.settledAt`, so the sale chains immediately). `forward()` later
+ * advances it to `settled` or `declined`. Written only when the offline gate accepted. */
+export async function insertAcceptedOffline(
+  tx: Transaction,
+  params: NewPayment & { settledAt: Date },
+): Promise<void> {
+  await insertPayment(tx, params, "accepted_offline", params.settledAt.toISOString());
+}
+
 /** Insert a failed payment — the network refused. state=failed, settledAt null. Persisted so a
  * declined attempt still leaves an audit record. Takes `Omit<NewPayment, "externalRef">`: a failed
  * attempt never settled on a terminal, so it must never carry a human acquirer reference — the type
@@ -289,6 +299,66 @@ export async function findPaymentByRef(
     .where(and(eq(payments.provider, provider), eq(payments.paymentRef, paymentRef)))
     .limit(1);
   return row;
+}
+
+/** One accepted-offline payment claimed for a forward pass. `saleId` is null only for an orphan
+ * (accepted but never associated); the fake/adapter uses `workingOrderId` to find the till for the
+ * decline incident. */
+export interface ForwardablePayment {
+  tenantId: string;
+  paymentRef: string;
+  workingOrderId: string;
+  saleId: string | null;
+  amount: string;
+}
+
+/** Claim this provider's accepted-offline payments for a forward pass, locking each row FOR UPDATE
+ * SKIP LOCKED so concurrent `forward` passes partition the queue and never double-advance a row.
+ * State IS the queue (no outbox table). Ordered by `created_at` for a stable pass. */
+export async function claimAcceptedOffline(
+  tx: Transaction,
+  provider: string,
+): Promise<ForwardablePayment[]> {
+  return tx
+    .select({
+      tenantId: payments.tenantId,
+      paymentRef: payments.paymentRef,
+      workingOrderId: payments.workingOrderId,
+      saleId: payments.saleId,
+      amount: payments.amount,
+    })
+    .from(payments)
+    .where(and(eq(payments.provider, provider), eq(payments.state, "accepted_offline")))
+    .orderBy(payments.createdAt)
+    .for("update", { skipLocked: true });
+}
+
+/** Advance a forwarded offline payment to `settled` (the network cleared it). Matches only a row
+ * still `accepted_offline`, so re-running a completed forward is a no-op (idempotent). */
+export async function settleForwarded(tx: Transaction, params: Key): Promise<void> {
+  return advanceAcceptedOffline(tx, params, "settled");
+}
+
+/** Advance a forwarded offline payment to `declined` (the network refused). Matches only a row
+ * still `accepted_offline` (idempotent). The uncollected-receivable incident is raised by the
+ * caller (the `forward` implementation), not here — keeping `@waitron/core` out of this neutral
+ * store, exactly as fiscal's `drain` raises incidents in the adapter, not in `packages/fiscal`. */
+export async function declineForwarded(tx: Transaction, params: Key): Promise<void> {
+  return advanceAcceptedOffline(tx, params, "declined");
+}
+
+/** Shared body of `settleForwarded`/`declineForwarded`: advance a row still `accepted_offline` to
+ * the given terminal state. Matches only a row still `accepted_offline`, so re-running a completed
+ * forward is a no-op (idempotent) whichever state it targets. */
+async function advanceAcceptedOffline(
+  tx: Transaction,
+  params: Key,
+  state: "settled" | "declined",
+): Promise<void> {
+  await tx
+    .update(payments)
+    .set({ state, updatedAt: sql`now()` })
+    .where(and(keyWhere(params), eq(payments.state, "accepted_offline")));
 }
 
 function keyWhere(params: Key) {

@@ -12,12 +12,30 @@ import type { Decimal, TenantId, TillId, WorkingOrderId } from "@waitron/shared"
  * network refusal, and `voided`/`refunded`/`partially_refunded` the reversals. `attempting` is the
  * transient in-flight state a network-driving integrated adapter writes before its network call and
  * resolves after (T1/T2) — every integrated adapter has this window, so it is neutral, not
- * adapter-specific. The offline states (`accepted_offline`, `settled`, …) and the two-phase states
- * (`authorized`) arrive in later plans with the methods that produce them — never reserved here as
- * dead surface.
+ * adapter-specific. `accepted_offline`/`settled`/`declined` are Cycle A's offline states — present
+ * here because this cycle's later tasks give them real behavior (the fake's offline
+ * `collect`/`forward`); the `forward` method that drives the transitions between them is still to
+ * come. The two-phase `authorized` state remains a later plan — never reserved here as dead
+ * surface.
  */
 export type PaymentState =
-  "attempting" | "captured" | "voided" | "refunded" | "partially_refunded" | "failed";
+  | "attempting"
+  | "captured"
+  | "voided"
+  | "refunded"
+  | "partially_refunded"
+  | "failed"
+  | "accepted_offline"
+  | "settled"
+  | "declined";
+
+/**
+ * What a `collect` result may REPORT, which is wider than what is PERSISTED: `network_unavailable`
+ * is returned when the network is down and offline acceptance is refused, but nothing durable is
+ * written (no money moved), so it is deliberately NOT a `payment_state` enum value — it lives only
+ * here, on the return path.
+ */
+export type PaymentResultState = PaymentState | "network_unavailable";
 
 /** What a given provider can do, so the app/UI can gate on it. Grows a flag per capability as the
  * methods that back them land — in 4a the only optional capability is partial refunds. */
@@ -32,23 +50,46 @@ export interface CollectParams {
   /** Exact decimal, tax-inclusive amount to take on this tender. Split tender is several
    * `collect` calls against one working order, each with its own amount. */
   amount: Decimal;
+  /** Per-transaction staff consent to accept this card offline if the network is down (default
+   * false). Even when true, acceptance still requires the tenant policy to allow it and the amount
+   * to be within the cap — offline is never automatic. */
+  allowOffline?: boolean;
 }
 
 /**
  * The outcome of one provider operation, returned as DATA (never inside the caller's transaction —
  * see `PaymentProvider`). `settledAt` is what feeds `RecordSaleTender.settledAt`: non-null on a
- * `captured` result (the sale may then chain), null on `failed` (the tender stays unsettled and
- * `recordSale` refuses). `paymentRef` is this provider's opaque reference and the join key used to
- * associate the payment with the committed sale afterwards.
+ * `captured` result (the sale may then chain) and on an `accepted_offline` result (the acceptance
+ * time — the sale chains immediately, before `forward()` clears it), null on `failed` and on the
+ * return-only `network_unavailable` (the tender stays unsettled and `recordSale` refuses).
+ * `paymentRef` is this provider's opaque reference and the join key used to associate the payment
+ * with the committed sale afterwards.
  */
 export interface PaymentResult {
   provider: string;
   paymentRef: string;
-  state: PaymentState;
+  state: PaymentResultState;
   /** The amount this result concerns. For `collect`/`void`/`refund` it is the captured total; for
    * `partialRefund` it is the AMOUNT REFUNDED (not the capture). */
   amount: Decimal;
+  /** True only on an `accepted_offline` result: the card was accepted while the network was down and
+   * awaits `forward()`. `settledAt` carries the acceptance time, so the sale chains immediately. */
+  offline?: boolean;
   settledAt: Date | null;
+}
+
+/**
+ * The outcome of one `forward(now)` pass — the offline store-and-forward drain, shaped exactly like
+ * fiscal's `DrainResult`. `nextDueAt` is the only field a scheduler needs (null = nothing pending);
+ * the counts are for a log line. Implemented by `FakePaymentProvider` in Cycle A; joins
+ * `PaymentProvider` in Cycle B (see the interface doc). A provider with nothing pending returns
+ * `{ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 }`.
+ */
+export interface ForwardResult {
+  nextDueAt: Date | null;
+  forwarded: number;
+  declined: number;
+  incidentsRaised: number;
 }
 
 /**
@@ -60,9 +101,11 @@ export interface PaymentResult {
  * internally and returns a `PaymentResult`; the caller passes that into `recordSale` as data.
  *
  * Card is the subject. Cash needs no provider (it is recorded directly as a settled tender), so it
- * is deliberately absent. Split tender is N `collect` calls, not a method. `authorize`/`capture`/
- * `preAuth`/`incrementalAuth`/`tipAdjust`/`forward`/`reconcile` are later plans — do not add them
- * here before their design and their fake exist.
+ * is deliberately absent. Split tender is N `collect` calls, not a method.
+ * `authorize`/`capture`/`preAuth`/`incrementalAuth`/`tipAdjust`/`reconcile` are later plans. So is
+ * `forward` on THIS interface: `FakePaymentProvider` implements a concrete `forward` in Cycle A, but
+ * the interface method is added in Cycle B when a real adapter implements it too (a required method
+ * here would not compile against StripeTerminalProvider, which does not) — do not add it before then.
  */
 export interface PaymentProvider {
   readonly provider: string;
