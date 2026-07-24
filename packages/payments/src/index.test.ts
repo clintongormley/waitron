@@ -1,4 +1,5 @@
-import { getTableConfig } from "drizzle-orm/pg-core";
+import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
+import { is } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
 import {
@@ -22,6 +23,7 @@ import type {
 import { payments } from "./schema/payments.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
 import { paymentPolicy } from "./schema/payment-policy.js";
+import * as schema from "./schema/index.js";
 
 /**
  * A coherence check on the package root, not a duplicate of schema-ownership.test.ts,
@@ -132,5 +134,24 @@ describe("schema constraint declarations (forces the lazy extraConfig callbacks)
     const checkNames = config.checks.map((c) => c.name);
     expect(checkNames).toContain("payment_policy_offline_mode_ck");
     expect(checkNames).toContain("payment_policy_cap_ck");
+  });
+
+  // Future-proofing net for the lazy-callback problem above. The per-table blocks assert specific
+  // constraint names, but each also has to REMEMBER to call `getTableConfig` or that table's
+  // extraConfig lines go uncovered — which is exactly how `payment_policy` sank the package to
+  // 96.45% (< the 98% CI threshold) until its block was added. This iterates EVERY table the schema
+  // barrel exports and forces its callback, so a newly-added table is covered here automatically:
+  // adding a table can no longer silently drop coverage even before someone writes its named block.
+  // (Coverage isn't run by the pre-push hook — only in CI — so preventing the regression beats
+  // catching it.)
+  it("forces the extraConfig callback of every owned schema table (new tables can't drop coverage)", () => {
+    // The barrel also exports pgEnums, so cast to unknown[] first to let `is(v, PgTable)` narrow to
+    // the tables only (mirrors schema-ownership.test.ts's filter, but narrowing for getTableConfig).
+    const tables = (Object.values(schema) as unknown[]).filter((v): v is PgTable => is(v, PgTable));
+    // Positive control: without it the loop below would pass vacuously against an empty set.
+    expect(tables.length).toBeGreaterThanOrEqual(3); // payments, payment_refunds, payment_policy
+    for (const table of tables) {
+      expect(() => getTableConfig(table)).not.toThrow();
+    }
   });
 });
