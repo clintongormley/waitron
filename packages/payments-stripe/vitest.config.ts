@@ -19,6 +19,9 @@ export default defineConfig({
         // errors) rather than the SDK boundary; the `FakeStripe` test double lives under
         // `src/testing/**` and is excluded like all test infra.
         "src/stripe-client.ts",
+        // The real on-device SDK boundary — server-side calls exercised only by the nightly sandbox;
+        // the device-side collect/offline-queue run in the device SDK, proven by FakeStripeDevice.
+        "src/stripe-device-client.ts",
         "src/testing/**",
         "src/**/*.sandbox.test.ts",
         // The nightly sandbox suite's OWN vitest config (a `defineConfig()` call, no logic) — v8's

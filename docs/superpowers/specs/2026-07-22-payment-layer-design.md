@@ -1,10 +1,11 @@
 # Payment layer (capture modes: manual · sync-integrated · async) — Design
 
 **Date:** 2026-07-22 · **revised 2026-07-23** (added the capture-mode taxonomy; the former "4a"
-landed as PR #20; Mode 1 landed as #21, Mode 2a as #22; Mode 2b sliced into Cycle A / Cycle B)
-**Status:** Living design — 4a seam + Mode 1 (manual) + Mode 2a (Stripe Terminal) shipped (#20/#21/#22);
-**Mode 2b — Cycle A (the provider-neutral offline store-and-forward layer) is the next plan**, with the
-real on-device Stripe binding (Cycle B) following it
+landed as PR #20; Mode 1 landed as #21, Mode 2a as #22; Mode 2b sliced into Cycle A / Cycle B) ·
+**revised 2026-07-24** (Mode 2b Cycle A landed as PR #23; added the Mode 2b — Cycle B design section)
+**Status:** Living design — 4a seam + Mode 1 (manual) + Mode 2a (Stripe Terminal) + Mode 2b Cycle A
+(provider-neutral offline store-and-forward) shipped (#20/#21/#22/#23);
+**Mode 2b — Cycle B (the real on-device Stripe binding + `forward` joining the interface) is the next plan**
 **Covers:** Architecture sub-project 4 (the payment layer) — the money-movement layer that sits
 *before* the sale/fiscal write path and turns "customer pays" into a settled tender. Organized around
 a **taxonomy of capture modes** (next section): manual/unintegrated, synchronous-integrated, and
@@ -509,15 +510,17 @@ online `collect`/`void`/`refund`/`partialRefund` proven with the fake (the forme
 **Mode 1 — manual / unintegrated tender** (PR #21): a staff-asserted card tender reusing the store
 with a sentinel `manual` provider, plus the nullable `external_ref` column and manual refunds. The 4a
 seam survives the re-derivation unchanged — the taxonomy re-contextualizes it as the integrated-mode
-seam.
+seam. **Mode 2a — Stripe Terminal adapter** (PR #22) and **Mode 2b — Cycle A (the provider-neutral
+offline store-and-forward layer)** (PR #23) have since landed as well; **Mode 2b — Cycle B** is the next
+plan (its full design is the new section below).
 
 Then, in priority order:
 
 1. **Mode 1 — Manual / unintegrated tender** — **landed (PR #21)**; full design in the Mode 1 section
    below. A staff-asserted card tender, a sibling of cash; no adapter, no network; broadest reach,
    zero PSP onboarding.
-2. **Mode 2a — Server-driven integrated adapter** *(the next plan; full design in the Mode 2a section
-   below)*. The real Stripe Terminal provider (server drives a fixed-counter smart reader) against the
+2. **Mode 2a — Server-driven integrated adapter** — **landed (PR #22)**; full design in the Mode 2a
+   section below. The real Stripe Terminal provider (server drives a fixed-counter smart reader) against the
    existing seam — the former "4b". First real PSP; proves the integrated path end-to-end.
    **Standalone accounts** (each merchant's own Stripe account — no Connect), a **config-agnostic**
    adapter (injected Stripe client + injected till→reader resolver; provisioning deferred),
@@ -530,15 +533,16 @@ Then, in priority order:
    the offline machinery is provider-neutral and Postgres-backed while the device binding is
    Stripe-specific and untestable in a Node suite, mirroring how **4a (neutral seam + fake) preceded 2a
    (real Stripe adapter)**:
-   - **Cycle A — the provider-neutral offline store-and-forward layer** *(the next plan; full design in
-     the Mode 2b section below)*. In `@waitron/payments` only: the `accepted_offline`/`settled`/`declined`
+   - **Cycle A — the provider-neutral offline store-and-forward layer** — **landed (PR #23)**; full
+     design in the Mode 2b — Cycle A section below. In `@waitron/payments` only: the `accepted_offline`/`settled`/`declined`
      enum states, `CollectParams.allowOffline` + `PaymentResult`'s return-only `network_unavailable` and
      `offline` flag, the `payment_policy` table (`offline_mode` + `offline_amount_cap`), the
      offline-acceptance gate, `forward(now)` implemented on the `FakePaymentProvider` (the drain
      analogue — it joins the `PaymentProvider` *interface* in Cycle B, per the Mode 2b §2 note), and
      the forward-decline → idempotent incident (**no** un-chain) path — all proven with the extended
      `FakePaymentProvider` + real-PG RLS/concurrency tests. No device SDK, no webhooks.
-   - **Cycle B — the real on-device Stripe binding** *(follows Cycle A)*. The waiter's handheld all-in-one:
+   - **Cycle B — the real on-device Stripe binding** *(the next plan; full design in the Mode 2b —
+     Cycle B section below)*. The waiter's handheld all-in-one:
      connection tokens, device-side `collect`, the device-local offline queue behind `forward()`, and a
      nightly sandbox — the Stripe-specific `@waitron/payments-stripe` half. Webhooks + the untenanted
      `(provider, external_ref)` resolution stay deferred to Mode 3 / reconcile, as in 2a.
@@ -607,7 +611,7 @@ The `PaymentProvider` adapter (Modes 2a/2b), any network, the till **UI** (sub-p
 
 ## Mode 2a — Stripe Terminal adapter (design)
 
-The next plan. The real integrated provider: a fixed-counter **smart reader** (Reader S700 /
+**Landed (PR #22).** The real integrated provider: a fixed-counter **smart reader** (Reader S700 /
 WisePOS E) the *server* drives, proving the integrated path end-to-end behind the neutral seam — what
 4a's `FakePaymentProvider` stood in for. Scope is deliberately **synchronous and online** (collect +
 reversals); webhooks and reconcile are later plans.
@@ -704,7 +708,7 @@ the 120s CI hang).
 
 ## Mode 2b — Cycle A: the provider-neutral offline store-and-forward layer (design)
 
-The next plan. Mode 2b (§0's on-device mechanism) is **sliced** (§10.3): this cycle builds only the
+**Landed (PR #23).** Mode 2b (§0's on-device mechanism) is **sliced** (§10.3): this cycle builds only the
 **provider-neutral offline store-and-forward layer** in `@waitron/payments` — the machinery §5
 describes as *semantics*, pinned to exact types and proven end-to-end with the extended
 `FakePaymentProvider`, **no device SDK and no webhooks**. Cycle B (the real on-device Stripe binding)
@@ -837,7 +841,190 @@ NOTHING`). Cycle A's single-threaded fake `forward` never hits either edge, but 
 `forward` in Cycle B will: (1) two distinct **orphan** declines (`sale_id = null`) on one till collapse
 to a single incident, and (2) two same-`sale_id` declines (split-tender) racing across concurrent
 forwards can double-insert. Add the partial unique index + `ON CONFLICT DO NOTHING` when Cycle B lands
-a concurrent forward, exactly as the fiscal drainer's SKIP-LOCKED path already required.
+a concurrent forward, exactly as the fiscal drainer's SKIP-LOCKED path already required. **Resolved in
+Cycle B** (below), lifted to a table-wide `incidents` invariant (a partial unique index + `on conflict
+do nothing` on both incident writers) rather than a payments-local hack.
+
+---
+
+## Mode 2b — Cycle B: the real on-device Stripe binding (design)
+
+The next plan, and the second half of Mode 2b (§0's on-device mechanism). Cycle A built and proved the
+**provider-neutral** offline store-and-forward layer with the extended `FakePaymentProvider`; Cycle B
+lands the **real on-device Stripe binding** behind it and **promotes `forward` to a first-class provider
+method**. One spec→plan→SDD→land cycle spanning a small **provider-neutral half** (`@waitron/payments`
++ `@waitron/core`/`@waitron/db`) and the **Stripe-specific half** (`@waitron/payments-stripe`). It
+mirrors 4a→2a a second time: the neutral contract was proven with a fake (Cycle A), and the vendor
+adapter now lands behind it (Cycle B).
+
+### The neutral half
+
+**`forward` joins the `PaymentProvider` interface.** Cycle A defined `ForwardResult` and implemented
+`forward` on the fake only, deliberately keeping it *off* the interface so a required method would not
+break `StripeTerminalProvider` (the Cycle A "Interface & type changes" note). Cycle B lands a real
+adapter that implements it, so `forward(now: Date): Promise<ForwardResult>` now joins the interface —
+exactly as `drain`/`reconcile` joined `FiscalBackend` only once a backend implemented them. Every
+implementer must now supply it:
+
+- `FakePaymentProvider.forward` already exists → it now *satisfies* the interface rather than exceeding
+  it, and the `provider.ts` doc comment that says "do not add `forward` before Cycle B" is updated.
+- **`StripeTerminalProvider` (2a, server-driven) gains an all-zeros `forward`** →
+  `{ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 }`. A fixed-counter smart reader has
+  no device-local offline queue, so nothing is ever pending: a one-line method with a unit test asserting
+  the zero result. (Offline store-and-forward is a property of the *on-device SDK* mechanism, not of the
+  integrated mode in the abstract — §0.)
+
+**The table-wide incident invariant (the Cycle A carry-over, now resolved).** Cycle A flagged that
+`recordIncidentOnce` (`insert … where not exists`, `packages/core/src/incidents.ts`) is **not race-free**:
+a real concurrent `forward` collapses two orphan declines (`sale_id = null`) on one till into one
+incident, or double-inserts two same-`sale_id` split-tender declines. Cycle B is that first real
+concurrent caller, so it lands the fix — and lands it as a **table-wide invariant on `incidents`**, not a
+payments-local hack:
+
+- **A partial unique index** (hand-written migration in `packages/db/drizzle/`):
+  `create unique index incidents_open_dedup on incidents (tenant_id, till_id, code, sale_id) nulls not
+  distinct where acknowledged_at is null;`. `nulls not distinct` makes two orphan (`sale_id = null`)
+  declines on one till collapse to a single open incident — matching `recordIncidentOnce`'s existing
+  `sale_id is not distinct from` WHERE semantics. **Requires Postgres 15+**; the plan verifies the server
+  version as its first task and falls back to a `coalesce(sale_id, '<sentinel-uuid>')` expression index
+  if older.
+- **Both incident writers become `on conflict do nothing`.** `recordIncidentOnce` drops its
+  `where not exists` subquery for `insert … on conflict do nothing returning id` (`rows.length > 0` still
+  reports a real insert — the contract is unchanged, now atomic under contention). `recordIncident` (the
+  unconditional writer used by `record-sale`/`record-void`/fiscal `drain`/fiscal `reconcile`) *also* gains
+  `on conflict do nothing`: **safe-or-better for every caller** — the terminal-transition callers have
+  naturally-unique `(sale, code)` keys so the index never fires, and reconcile's still-open
+  `fiscal.reconcile_drift_errores` re-detection becomes a **no-op instead of an accumulating duplicate**,
+  which is the invariant we want everywhere. The `incidents.ts` doc comments that describe the old
+  non-race-free behaviour are rewritten to describe the new guarantee.
+- **Decision ⓪ — the fix is a shared-primitive change, not payments-local.** A `pg_advisory_xact_lock`
+  scoped to the payments `forward` was the alternative; the table-wide index was chosen because "at most
+  one open incident per `(tenant, till, code, sale)`" is the correct invariant in *every* module, it
+  subsumes the latent fiscal-reconcile duplicate-accumulation, and it matches this codebase's
+  "shared primitive, done once" discipline (how the fiscal drainer got SKIP-LOCKED).
+- **The proof:** a real-Postgres concurrency test — two concurrent `forward` passes declining *different*
+  rows that map to the **same** incident key (both the orphan `sale_id = null` case and the same-`sale_id`
+  split-tender case) → exactly **one** open incident survives. Acquired-signal pattern (per
+  `reversal.concurrency.test.ts`) to avoid the 120 s CI hang.
+
+### The Stripe adapter half (`packages/payments-stripe`)
+
+A **second provider class, `StripeOnDeviceProvider`**, alongside 2a's `StripeTerminalProvider`, in the
+**same package** (both are Stripe Terminal; they share connection-token/refund plumbing, the coverage
+config and the sandbox harness — a new package would buy nothing). It depends on its **own narrow client
+interface, `StripeDeviceClient`** (separate from 2a's `StripeClient` — each seam names only the calls it
+uses, mirroring `VerifactuClient`↔`VerifactuBackend`):
+
+```ts
+interface StripeDeviceClient {
+  createConnectionToken(): Promise<{ secret: string }>;   // stripe.terminal.connectionTokens.create
+  collectOnDevice(p: {
+    amount: Decimal; currency: string; idempotencyKey: string; offlineAllowed: boolean;
+  }): Promise<{
+    outcome: "captured" | "accepted_offline" | "declined" | "network_unavailable";
+    externalRef?: string;
+  }>;
+  syncOfflineQueue(refs: string[]): Promise<{ settled: string[]; declined: string[] }>;
+}
+```
+
+- The **real impl** wraps the Stripe on-device SDK bindings and is **coverage-excluded** (like
+  `stripe-client.ts`); a deterministic **`FakeStripeDevice`** drives the hermetic suite (affordances to
+  force each `collectOnDevice` outcome and to script `syncOfflineQueue`). Not barrel-exported.
+- **Connection tokens live entirely here** — the device app calls a thin exported `connectionToken()` (or
+  a provider method) to initialise its on-device SDK. This stays out of `@waitron/payments`, whose
+  `no-provider-vocabulary` guard bans `connectiontoken`/`stripe`/`reader`/`terminal`.
+
+**`collect` — the gate is applied up front; a single write; `network_unavailable` persists nothing.**
+Unlike 2a's server-driven poll-to-completion:
+
+1. Read the tenant `payment_policy` and compute
+   `offlineAllowed = resolveOfflineDecision(policy, allowOffline, amount) === "accept"` — the **same
+   neutral gate** the fake uses. This *configures* the device collect (Stripe's offline behaviour is set
+   per-confirmation), so acceptance is gated *before* anything is stored — "nothing goes offline silently"
+   (§5) holds.
+2. Mint `paymentRef = randomUUID()` — the Stripe idempotency key and our own reference.
+3. `collectOnDevice({ …, offlineAllowed })` → outcome.
+4. **One** short transaction persists the resolved outcome via the *existing* Cycle A / 4a store helpers:
+   `captured` → `insertCapturedPayment` (`external_ref` = the online/offline PI id); `accepted_offline` →
+   `insertAcceptedOffline` (`settled_at = now`, so the sale chains immediately); `declined` →
+   `insertFailedPayment`; **`network_unavailable` → write nothing, return the state** (no money moved).
+
+- **Decision ① — no `attempting`-first pre-write for 2b** (the deliberate opposite of 2a's T1). 2a commits
+  an `attempting` row *before* its network call because a ≤60 s server-side poll can crash mid-flight and
+  lose the handle to a live Stripe-hosted PaymentIntent. The on-device SDK owns its PaymentIntent and
+  offline queue *locally*, so a crash on our side never loses the device's record — the device forwards it
+  regardless. The only residual gap ("device stored offline but our process died before writing the
+  `accepted_offline` row") is precisely reconcile's `missingLocal` class (§6), and dropping the pre-write
+  is what lets `network_unavailable` honour Cycle A's "nothing durable when offline is refused."
+  Idempotency is preserved by the Stripe idempotency key (our uuid) carried into `collectOnDevice`.
+
+**`forward(now)` — a real T1/T2 split reusing Cycle A's idempotent store.** The fake did claim + advance +
+incident in one transaction ("a real adapter splits them T1/T2" — the Cycle A `forward` note). The device
+adapter does:
+
+- **T1 (read tx):** list this provider's `accepted_offline` refs (a non-locking read variant of
+  `claimAcceptedOffline`).
+- **Network (no tx):** `syncOfflineQueue(refs)` — ask the device-local offline queue which refs it has now
+  cleared vs. had refused.
+- **T2 (write tx):** `settleForwarded` / `declineForwarded` — both already **state-guarded → idempotent**
+  (they match only a row still `accepted_offline`), so two concurrent forwards cannot double-advance a row
+  without holding a lock across the network; each decline raises the idempotent
+  `payment.offline_forward_declined` incident (an uncollected receivable; `till_id` derived by join on
+  `working_orders`, `sale_id` from the associated payment row) via the now-race-safe `recordIncidentOnce`,
+  and makes **no fiscal change** — the sale already chained and is immutable (voiding it is the deliberate
+  existing `recordVoid` path, never automatic). `nextDueAt` is DB-driven; an empty queue returns
+  `{ nextDueAt: null, …zeros }`.
+
+- **Decision ② — no new `forwarding` in-flight enum state.** A proper T1/T2 split usually needs an
+  intermediate state (fiscal's `enviando`, the transient `attempting`). It is unnecessary here: the
+  state-guarded, idempotent `settleForwarded`/`declineForwarded` advances plus the table-wide incident
+  dedup give full concurrency safety without one. The only thing forgone versus a `FOR UPDATE SKIP LOCKED`
+  claim is that two concurrent passes may both sync the same refs with the device (idempotent and harmless
+  — the offline queue is small and capped, and forwards are infrequent). Keeps this cycle
+  additive-minimal on the enum.
+
+**Reversals reuse 2a's path unchanged.** `void`/`refund`/`partialRefund` look the row up **tenanted**, read
+`external_ref` (the PI id), issue the Stripe refund, and advance local state via
+`recordVoid`/`recordRefund`/`recordFailedRefund` — shared with `StripeTerminalProvider`, not
+re-implemented. `StripeOnDeviceProvider.capabilities = { partialRefund: true }`.
+
+### Testing
+
+- **Hermetic suite (per-PR gate, no network):** `FakeStripeDevice` + `StripeOnDeviceProvider` — the four
+  `collect` outcomes → correct state + persisted row; the gate-up-front wiring (policy `cash_only` /
+  over-cap / no-consent all yield `network_unavailable` with nothing persisted); `forward` settle /
+  decline (+ incident) / empty-queue zeros; `StripeTerminalProvider`'s all-zeros `forward`; and a **wiring
+  capstone** — an offline-accepted device tender chains a real sale via `recordSale` +
+  `associatePaymentWithSale`, and a later forward-decline raises the incident **without un-chaining** the
+  immutable sale (the 2b twin of Cycle A's `offline.wiring.test.ts`).
+- **Real-Postgres (never skip — PGlite's superuser hides a missing grant):** RLS on the device `payments`
+  rows + `payment_policy` under the non-superuser probe role; and the incident-race concurrency proof
+  above.
+- **Coverage:** extend `packages/payments-stripe/vitest.config.ts` coverage-excludes to the real
+  `StripeDeviceClient` impl file (alongside `stripe-client.ts`, `testing/**`, `*.sandbox.test.ts`);
+  thresholds stay 98/98/98/95. Because the coverage gate is **CI-only** (the pre-push hook runs `test`, CI
+  runs `test:coverage`), run `pnpm --filter @waitron/payments-stripe test:coverage` **and**
+  `--filter @waitron/payments test:coverage` locally before pushing (the #23 lesson). Neutral guards still
+  hold: `no-provider-vocabulary` finds nothing vendor-specific in `@waitron/payments` (`forward` and the
+  offline states are plain English), `schema-ownership` and `monetary-columns` unchanged.
+- **Sandbox (nightly only, server-side calls only):** a new `*.sandbox.test.ts` exercising
+  **connection-token creation** against real Stripe test-mode, plus a reversal smoke-test reusing 2a's
+  path — wired into `.github/workflows/stripe-sandbox.yml`. The device-side
+  `collectOnDevice`/`syncOfflineQueue` have **no headless analogue** (the on-device SDK's offline
+  store-and-forward is a client-SDK feature), so they are proven by `FakeStripeDevice` only; real-device
+  validation is manual and out of CI. The **`STRIPE_SANDBOX_SECRET_KEY` repo secret was added 2026-07-24**,
+  so this suite now runs nightly (per-PR CI still excludes it via the `*.sandbox.test.ts` glob; the test
+  self-skips only if the key is ever absent).
+
+### Out of scope for this cycle (unchanged)
+
+Webhooks + the untenanted `(provider, external_ref)` resolution (Mode 3 / reconcile) — Cycle B's `collect`
+is synchronous and its reversals run tenanted, so nothing here needs an untenanted webhook lookup;
+`reconcile()` itself (the old "4d"; the designed backstop for the `attempting`/`missingLocal`/orphan
+cases, including Decision ①'s crash gap); the `forward`/`reconcile` **scheduler** (`apps/*`); capture-mode
+config (SP7); the reversal **role-gate** (SP5); the till/handheld **UI** (SP7); reversal retry-safety (a
+persisted per-reversal id, as in 2a); a second PSP (Adyen/SumUp).
 
 ---
 

@@ -14,9 +14,9 @@ import type { Decimal, TenantId, TillId, WorkingOrderId } from "@waitron/shared"
  * resolves after (T1/T2) — every integrated adapter has this window, so it is neutral, not
  * adapter-specific. `accepted_offline`/`settled`/`declined` are Cycle A's offline states — present
  * here because this cycle's later tasks give them real behavior (the fake's offline
- * `collect`/`forward`); the `forward` method that drives the transitions between them is still to
- * come. The two-phase `authorized` state remains a later plan — never reserved here as dead
- * surface.
+ * `collect`/`forward`); the `forward` method that drives the transitions between them is now part
+ * of the `PaymentProvider` interface below. The two-phase `authorized` state remains a later plan —
+ * never reserved here as dead surface.
  */
 export type PaymentState =
   | "attempting"
@@ -81,8 +81,7 @@ export interface PaymentResult {
 /**
  * The outcome of one `forward(now)` pass — the offline store-and-forward drain, shaped exactly like
  * fiscal's `DrainResult`. `nextDueAt` is the only field a scheduler needs (null = nothing pending);
- * the counts are for a log line. Implemented by `FakePaymentProvider` in Cycle A; joins
- * `PaymentProvider` in Cycle B (see the interface doc). A provider with nothing pending returns
+ * the counts are for a log line. A provider with nothing pending returns
  * `{ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 }`.
  */
 export interface ForwardResult {
@@ -102,10 +101,7 @@ export interface ForwardResult {
  *
  * Card is the subject. Cash needs no provider (it is recorded directly as a settled tender), so it
  * is deliberately absent. Split tender is N `collect` calls, not a method.
- * `authorize`/`capture`/`preAuth`/`incrementalAuth`/`tipAdjust`/`reconcile` are later plans. So is
- * `forward` on THIS interface: `FakePaymentProvider` implements a concrete `forward` in Cycle A, but
- * the interface method is added in Cycle B when a real adapter implements it too (a required method
- * here would not compile against StripeTerminalProvider, which does not) — do not add it before then.
+ * `authorize`/`capture`/`preAuth`/`incrementalAuth`/`tipAdjust`/`reconcile` are later plans.
  */
 export interface PaymentProvider {
   readonly provider: string;
@@ -114,6 +110,12 @@ export interface PaymentProvider {
   /** Single-message card-present purchase (authorize + capture). Returns `captured` on success,
    * `failed` on a network refusal. */
   collect(params: CollectParams): Promise<PaymentResult>;
+
+  /** Push previously offline-accepted payments to their terminal state. One pass over this provider's
+   * `accepted_offline` rows: `settled` when the network cleared it, `declined` (+ one idempotent
+   * uncollected-receivable incident, no fiscal change) when it refused. `nextDueAt` drives the caller's
+   * cadence (null = nothing pending). A provider with no device-local offline queue answers all-zeros. */
+  forward(now: Date): Promise<ForwardResult>;
 
   /** Reverse a captured payment in full — a same-day void, distinct from a refund. Throws
    * `payment.not_voidable` if the payment is not `captured`. */

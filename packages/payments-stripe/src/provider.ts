@@ -1,24 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { AppError, decimal } from "@waitron/shared";
 import type { Decimal, TenantId, TillId } from "@waitron/shared";
 import type { Database } from "@waitron/db";
 import type {
   CollectParams,
+  ForwardResult,
   PaymentProvider,
   PaymentResult,
   ProviderCapabilities,
 } from "@waitron/payments";
-import {
-  assertReversible,
-  captureAttempting,
-  failAttempting,
-  findPaymentByRef,
-  insertAttempting,
-  recordFailedRefund,
-  recordRefund,
-  recordVoid,
-} from "@waitron/payments";
+import { captureAttempting, failAttempting, insertAttempting } from "@waitron/payments";
 import type { StripeClient } from "./client.js";
+import { reverseViaStripe } from "./reverse.js";
 
 const PROVIDER = "stripe";
 const CURRENCY = "eur";
@@ -90,6 +82,15 @@ export class StripeTerminalProvider implements PaymentProvider {
     };
   }
 
+  /** Server-driven fixed-counter readers have no device-local offline queue, so a
+   * `StripeTerminalProvider` never holds `accepted_offline` payments to forward: the pass is always a
+   * no-op. Offline store-and-forward is a property of the on-device SDK mechanism
+   * (`StripeOnDeviceProvider`), not of the integrated mode in the abstract. */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- `now` is part of the interface; a no-op forward ignores it
+  forward(_now: Date): Promise<ForwardResult> {
+    return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
+  }
+
   /** Drive the reader from PaymentIntent creation through to a terminal outcome, entirely outside a
    * DB transaction. Returns `{ captured: true, ... }` on success and `{ captured: false }` on every
    * failure mode — a network error at ANY step (create, process, or the poll loop itself, including a
@@ -129,100 +130,13 @@ export class StripeTerminalProvider implements PaymentProvider {
     }
   }
 
-  async void(ref: string): Promise<PaymentResult> {
-    return this.reverse(ref, "void");
+  void(ref: string): Promise<PaymentResult> {
+    return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, "void");
   }
-  async refund(ref: string): Promise<PaymentResult> {
-    return this.reverse(ref, "refund");
+  refund(ref: string): Promise<PaymentResult> {
+    return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, "refund");
   }
-  async partialRefund(ref: string, amount: Decimal): Promise<PaymentResult> {
-    return this.reverse(ref, "refund", amount);
-  }
-
-  /** Common reversal path for `void`/`refund`/`partialRefund`: look the payment up untenanted (see
-   * the class doc), read-only pre-check that it is locally reversible, call `stripe.refunds`
-   * (Stripe's own API for both a void and a refund — a void is just a full refund with no `amount`),
-   * and persist the outcome. A refund Stripe REFUSES records a `payment_refunds` failure row and
-   * leaves the payment's own state untouched; a refund/void Stripe accepts transitions the payment
-   * via `recordVoid`/`recordRefund`. On success, `partialRefund` reports the amount REFUNDED and
-   * `refund`/`void` report the captured amount (mirrors `PaymentResult.amount`'s doc). On a FAILED
-   * reversal the payment state is unchanged (still `captured`/`partially_refunded` — no money moved)
-   * and `amount` instead echoes the ATTEMPTED amount: the requested partial amount, or the capture
-   * total for a full refund/void. Reversal `settledAt` is always null — only `collect` settles a
-   * tender.
-   *
-   * The find + `assertReversible` pre-check run in ONE read transaction (T1) BEFORE the network call,
-   * so an invalid local state (e.g. a second `void` against an already-voided payment) fails fast
-   * without ever calling Stripe — the earlier bug this guards against is a full `refund()` racing
-   * ahead of `recordRefund`'s validation: Stripe would refund the remainder (succeeding, since Stripe
-   * has no notion of the local ledger), then the local write threw `refund_exceeds_capture`, leaving
-   * Stripe over-refunded vs. the local ledger. `assertReversible` mirrors `recordVoid`/`recordRefund`'s
-   * checks read-only (no lock); those remain the authoritative FOR UPDATE checks (T2, after the
-   * network call) — a concurrent reversal slipping between this read and the write is bounded by
-   * their lock and audited by reconcile. */
-  private async reverse(
-    ref: string,
-    kind: "void" | "refund",
-    amount?: Decimal,
-  ): Promise<PaymentResult> {
-    const found = await this.opts.db.transaction(async (tx) => {
-      const f = await findPaymentByRef(tx, PROVIDER, ref);
-      if (f === undefined || f.externalRef === null) {
-        throw new AppError("payment.not_found", { provider: PROVIDER, paymentRef: ref });
-      }
-      // Narrowed to a local before the `await` below — TS drops property narrowing across a
-      // function call (it could, in principle, mutate `f`), so re-assert it via the object spread.
-      const externalRef = f.externalRef;
-      await assertReversible(tx, {
-        tenantId: f.tenantId,
-        provider: PROVIDER,
-        paymentRef: ref,
-        kind,
-        amount,
-      });
-      return { ...f, externalRef };
-    });
-    const key = { tenantId: found.tenantId, provider: PROVIDER, paymentRef: ref };
-
-    const outcome = await this.opts.client.refund({
-      paymentIntentId: found.externalRef,
-      ...(amount ? { amount } : {}),
-      // A fresh idempotency id per reversal: each reverse() is a distinct idempotent Stripe
-      // operation, so two INDEPENDENT equal partial refunds each issue a real refund rather than
-      // one replaying the other and silently diverging the local ledger. Retry-safety for the SAME
-      // logical reversal (a caller re-issuing after a network blip) needs a persisted per-reversal id
-      // threaded from the caller — deferred with the identity/async-events work; today a caller must
-      // not blind-retry a reversal, and reconcile (4d) backstops any Stripe-vs-local drift.
-      idempotencyKey: randomUUID(),
-    });
-
-    if (outcome.status === "failed") {
-      await this.opts.db.transaction((tx) =>
-        recordFailedRefund(tx, { ...key, amount: amount ?? decimal(found.amount) }),
-      );
-      return {
-        provider: PROVIDER,
-        paymentRef: ref,
-        state: found.state,
-        amount: amount ?? decimal(found.amount), // failed partial reports the ATTEMPTED amount
-        settledAt: null,
-      };
-    }
-
-    // Any non-"failed" status (including "pending") is treated OPTIMISTICALLY as accepted — the
-    // payment transitions to refunded/voided NOW. Confirmation of async refund settlement is the
-    // deferred webhook path (async-events/reconcile); no behavior change here.
-    const row = await this.opts.db.transaction((tx) =>
-      kind === "void"
-        ? recordVoid(tx, key)
-        : recordRefund(tx, { ...key, amount: amount ?? decimal(found.amount) }),
-    );
-    return {
-      provider: PROVIDER,
-      paymentRef: ref,
-      state: row.state,
-      amount: amount ?? decimal(row.amount), // partialRefund reports the refunded amount
-      settledAt: null,
-    };
+  partialRefund(ref: string, amount: Decimal): Promise<PaymentResult> {
+    return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, "refund", amount);
   }
 }

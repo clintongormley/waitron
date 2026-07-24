@@ -11,9 +11,11 @@ import {
   failAttempting,
   findPaymentByRef,
   getPaymentByRef,
+  insertAcceptedOffline,
   insertAttempting,
   insertCapturedPayment,
   insertFailedPayment,
+  listAcceptedOffline,
   recordFailedRefund,
   recordRefund,
   recordVoid,
@@ -519,5 +521,24 @@ describe("externalRef on read-back + failed refunds", () => {
       .catch((e: unknown) => e);
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("payment.not_found");
+  });
+});
+
+describe("listAcceptedOffline", () => {
+  it("listAcceptedOffline returns this provider's accepted_offline rows without locking them", async () => {
+    const s = await seedWorkingOrder(db, freshNif());
+    await db.transaction((tx) =>
+      insertAcceptedOffline(tx, {
+        tenantId: s.tenantId,
+        workingOrderId: s.workingOrderId,
+        provider: "fake",
+        paymentRef: "lst-1",
+        amount: decimal("10.00"),
+        settledAt: new Date("2026-07-24T10:00:00Z"),
+      }),
+    );
+    const listed = await db.transaction((tx) => listAcceptedOffline(tx, "fake"));
+    expect(listed.map((r) => r.paymentRef)).toContain("lst-1");
+    expect(listed.find((r) => r.paymentRef === "lst-1")?.saleId).toBeNull();
   });
 });

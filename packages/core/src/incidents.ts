@@ -35,43 +35,42 @@ export interface Incident {
 }
 
 /**
- * Records a fiscal incident on the caller's transaction.
- *
- * Always the caller's transaction, never a fresh connection: an incident that committed while
- * its sale rolled back would report a chain failure for a sale that never existed, and support
- * would chase it. `incidents.params` is jsonb, and an `AppError` instance would not survive the
- * JSON round-trip (its `message`/`stack`/prototype are not data) — only `.code` and `.params` are
- * written, which is the structured-code-plus-params shape spec §9 requires crossing any boundary.
+ * Records a fiscal incident on the caller's transaction, deduplicated to at most one OPEN incident
+ * per `(tenant_id, till_id, code, sale_id)` by the `incidents_open_dedup` partial unique index
+ * (`ON CONFLICT DO NOTHING`). Always the caller's transaction, never a fresh connection: an incident
+ * that committed while its sale rolled back would report a failure for a sale that never existed.
+ * Only `.code` and `.params` are written (an `AppError` instance would not survive the jsonb round
+ * trip) — the structured-code-plus-params shape spec §9 requires crossing any boundary. record-sale
+ * and record-void now emit exactly ONE `chain.verification_failed` per (sale, code) — every issue
+ * from a failed check is aggregated into that one incident's `params.issues` rather than pushed as
+ * its own same-key row — so those callers, and the drainer's terminal transitions, genuinely never
+ * conflict: each has a naturally-unique `(sale, code)` key. A caller that re-detects a still-open
+ * condition (reconcile's drift) does hit the conflict and now no-ops instead of accumulating a
+ * duplicate — the intended table-wide invariant.
  */
 export async function recordIncident(tx: Transaction, input: RecordIncidentInput): Promise<void> {
-  await tx.insert(incidents).values({
-    tenantId: input.tenantId,
-    tillId: input.tillId,
-    saleId: input.saleId ?? null,
-    code: input.error.code,
-    params: input.error.params,
-    severity: input.severity,
-    detectedAt: input.detectedAt.toISOString(),
-  });
+  await tx
+    .insert(incidents)
+    .values({
+      tenantId: input.tenantId,
+      tillId: input.tillId,
+      saleId: input.saleId ?? null,
+      code: input.error.code,
+      params: input.error.params,
+      severity: input.severity,
+      detectedAt: input.detectedAt.toISOString(),
+    })
+    .onConflictDoNothing();
 }
 
 /**
- * Like `recordIncident`, but raises AT MOST ONE open incident per `(tenant_id, till_id, code,
- * sale_id)`: a guarded insert that no-ops when an UNACKNOWLEDGED incident for that key already
- * exists, so a periodic caller (reconcile's sweep) that re-detects a still-open condition each pass
- * does not accumulate a duplicate row every time. Returns whether it inserted (`true`) or de-duped
- * (`false`) — the caller counts only real raises. Once the prior incident is acknowledged, the key
- * is free again and the next detection raises afresh (a genuinely-unresolved condition resurfaces).
- *
- * Single-statement `insert … where not exists` — NOT a race-free primitive: two transactions CAN
- * both pass the `where not exists` and both insert, because no unique constraint serialises them.
- * This relies on the caller's invocation pattern: reconcile runs once per tenant/period with no
- * concurrent same-tenant sweep (unlike the drainer's SKIP-LOCKED contention), so a partial unique
- * index is not needed here — and adding one would change every `recordIncident` insert, the
- * drainer's included. A future caller that DOES issue concurrent same-key raises must add
- * `(tenant_id, till_id, code, sale_id) where acknowledged_at is null` as a partial unique index and
- * switch this to `on conflict do nothing`. `recordIncident` (the unconditional insert) stays for
- * callers that intend one row per event.
+ * Like `recordIncident`, but reports whether it actually inserted (`true`) or de-duped against an
+ * existing OPEN incident for the same `(tenant_id, till_id, code, sale_id)` (`false`) — so a periodic
+ * caller that re-detects a still-open condition each sweep counts only real raises. Race-free: the
+ * `incidents_open_dedup` partial unique index (`NULLS NOT DISTINCT`, `WHERE acknowledged_at IS NULL`)
+ * is the arbiter, so two concurrent same-key callers serialise on it and exactly one inserts — the
+ * property a concurrent `forward` (payments Cycle B) relies on. Once the prior incident is
+ * acknowledged the key is free again and the next detection raises afresh.
  */
 export async function recordIncidentOnce(
   tx: Transaction,
@@ -80,15 +79,11 @@ export async function recordIncidentOnce(
   const saleId = input.saleId ?? null;
   const { rows } = await tx.execute<{ id: string }>(sql`
     insert into incidents (tenant_id, till_id, sale_id, code, params, severity, detected_at)
-    select ${input.tenantId}, ${input.tillId}, ${saleId}, ${input.error.code},
-           ${JSON.stringify(input.error.params)}::jsonb, ${input.severity},
-           ${input.detectedAt.toISOString()}
-    where not exists (
-      select 1 from incidents
-      where tenant_id = ${input.tenantId} and till_id = ${input.tillId}
-        and code = ${input.error.code} and sale_id is not distinct from ${saleId}
-        and acknowledged_at is null
-    )
+    values (${input.tenantId}, ${input.tillId}, ${saleId}, ${input.error.code},
+            ${JSON.stringify(input.error.params)}::jsonb, ${input.severity},
+            ${input.detectedAt.toISOString()})
+    on conflict ("tenant_id", "till_id", "code", "sale_id") where acknowledged_at is null
+    do nothing
     returning id
   `);
   return rows.length > 0;

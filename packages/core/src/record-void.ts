@@ -61,15 +61,27 @@ export async function recordVoid(
     sale.tenantId as TenantId,
     sale.tillId as TillId,
   );
-  const pending = verification.issues.map((issue) => ({
-    error: new AppError("chain.verification_failed", {
-      tillId: sale.tillId,
-      issueCode: issue.code,
-      recordId: issue.recordId ?? null,
-      issueParams: issue.params,
-    }),
-    severity: "error" as const,
-  }));
+  // ONE incident aggregating all of this call's issues, never one per issue — the table-wide
+  // `incidents_open_dedup` index holds at most one open incident per (tenant, till, code, sale), so
+  // one row per issue (all sharing this sale + `chain.verification_failed`) would collapse to a
+  // single row and drop every issue after the first. `params.issues` carries them all. Mirrors
+  // `./record-sale.ts`'s identical aggregation.
+  const pending =
+    verification.issues.length > 0
+      ? [
+          {
+            error: new AppError("chain.verification_failed", {
+              tillId: sale.tillId,
+              issues: verification.issues.map((issue) => ({
+                issueCode: issue.code,
+                recordId: issue.recordId ?? null,
+                issueParams: issue.params,
+              })),
+            }),
+            severity: "error" as const,
+          },
+        ]
+      : [];
 
   // No number is allocated. The anulación carries the ANNULLED invoice's own identity
   // (IDFacturaAnulada), not an identity of its own — allocating here would burn a number for a

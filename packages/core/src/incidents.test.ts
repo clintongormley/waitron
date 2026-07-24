@@ -171,6 +171,17 @@ async function incidentsForTill(till: TillId) {
   return db.select().from(incidents).where(eq(incidents.tillId, till));
 }
 
+/**
+ * The open-dedup suite below needs its own tenant/till per test (rather than the module-level
+ * `tenantId`/`tillId` `beforeEach` already seeds) purely so each test's assertions read against
+ * an isolated till — reuses `seedTenant`'s exact seeding path, just narrowed to the two ids these
+ * tests care about.
+ */
+async function seedTillForIncidents(): Promise<{ tenantId: TenantId; tillId: TillId }> {
+  const seeded = await seedTenant(db);
+  return { tenantId: seeded.tenantId, tillId: seeded.tillId };
+}
+
 describe("incidents — chain verification failure", () => {
   it("records an incident and still completes the sale", async () => {
     const backend = failingChain();
@@ -192,18 +203,69 @@ describe("incidents — chain verification failure", () => {
     // **Deviation from the brief.** The brief expected `row.params` to equal the injected issue's
     // OWN params flatly (`{ tillId, sequence, expected }`). This task's own dispatch resolves
     // Step 2's ambiguity explicitly: `chain.verification_failed` is the `ErrorCode` recordSale
-    // maps an ISSUE onto when rendering an incident, not something `checkIntegrity` returns —
+    // maps a failed check onto when rendering an incident, not something `checkIntegrity` returns —
     // so every chain-verification incident carries this ONE stable, translatable code regardless
-    // of which regime-specific issue kind the module actually reported, with that issue's own
-    // code and params nested underneath for support to read. See ./errors.ts's doc comment on
-    // this code.
+    // of which regime-specific issue kinds the module actually reported, with that call's issues
+    // (their own code and params) nested underneath in `params.issues` for support to read. The
+    // issues are AGGREGATED into one incident — never one row per issue — so they survive the
+    // table-wide open-dedup index. See ./errors.ts's doc comment on this code.
     await sell(failingChain());
     const [row] = await incidentsForTill(tillId);
     expect(row?.params).toEqual({
       tillId,
-      issueCode: "predecessor-hash-mismatch",
-      recordId: null,
-      issueParams: { sequence: 7, expected: "ABC" },
+      issues: [
+        {
+          issueCode: "predecessor-hash-mismatch",
+          recordId: null,
+          issueParams: { sequence: 7, expected: "ABC" },
+        },
+      ],
+    });
+  });
+
+  it("aggregates multiple issues from one failed check into a SINGLE incident", async () => {
+    // A doubly-corrupted predecessor: `verifyChain` can return TWO issues for one sale — e.g. a
+    // `predecessor-hash-mismatch` AND a `predecessor-link-mismatch`, because the hash-mismatch push
+    // does not early-return (packages/fiscal-verifactu/src/verify.ts). Modelled here by a fake whose
+    // `checkIntegrity` reports two issues for this till (`breakIntegrity` appends). The table-wide
+    // `incidents_open_dedup` index holds at most ONE open incident per (tenant, till, code, sale),
+    // so emitting one incident row per issue — all sharing this sale + `chain.verification_failed`
+    // — would silently drop the second under `ON CONFLICT DO NOTHING`. record-sale AGGREGATES all
+    // issues into ONE incident whose `params.issues` carries BOTH: this is the proof the
+    // aggregation preserves detail under the index.
+    const backend = new FakeFiscalBackend(db);
+    backend.breakIntegrity(tillId, {
+      code: "predecessor-hash-mismatch",
+      recordId: "rec-1",
+      params: { expected: "ABC", found: "XYZ" },
+    });
+    backend.breakIntegrity(tillId, {
+      code: "predecessor-link-mismatch",
+      recordId: "rec-1",
+      params: { expected: "DEF", found: "GHI" },
+    });
+    const { saleId } = await sell(backend);
+
+    const rows = await incidentsForTill(tillId);
+    // EXACTLY one row — not two — even though two issues were reported for the one sale.
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.code).toBe("chain.verification_failed");
+    expect(rows[0]?.saleId).toBe(saleId);
+    // Both issues are carried, in order, under `params.issues` — no detail lost to the index.
+    expect(rows[0]?.params).toEqual({
+      tillId,
+      issues: [
+        {
+          issueCode: "predecessor-hash-mismatch",
+          recordId: "rec-1",
+          issueParams: { expected: "ABC", found: "XYZ" },
+        },
+        {
+          issueCode: "predecessor-link-mismatch",
+          recordId: "rec-1",
+          issueParams: { expected: "DEF", found: "GHI" },
+        },
+      ],
     });
   });
 
@@ -364,9 +426,13 @@ describe("recordIncidentOnce", () => {
   function chainFailed(): RecordIncidentInput["error"] {
     return new AppError("chain.verification_failed", {
       tillId,
-      issueCode: "predecessor-hash-mismatch",
-      recordId: null,
-      issueParams: { sequence: 7, expected: "ABC" },
+      issues: [
+        {
+          issueCode: "predecessor-hash-mismatch",
+          recordId: null,
+          issueParams: { sequence: 7, expected: "ABC" },
+        },
+      ],
     });
   }
 
@@ -483,5 +549,94 @@ describe("recordIncidentOnce", () => {
       expect(forSaleB).toBe(true);
       expect(await openIncidents(tx, tillId)).toHaveLength(2);
     });
+  });
+});
+
+describe("incidents open-dedup invariant (partial unique index)", () => {
+  // **Deviation from the brief.** The brief's sketch called `recordIncident(asAppUser(tx), input)` /
+  // `recordIncidentOnce(asAppUser(tx), input)` — but `asAppUser(tx): Promise<void>` (`@waitron/db`'s
+  // `testing/roles.ts`) sets the role as a side effect and does not return `tx`; passing its result
+  // as the `tx` argument does not type-check. Every other test in this file (see
+  // `recordIncidentOnce`'s own describe above) awaits `asAppUser(tx)` as its own statement inside an
+  // async callback and then uses `tx` directly — reusing that exact, already-established pattern here
+  // instead.
+  //
+  // **Deviation from the brief.** The brief's orphan/ack tests used `payment.offline_forward_
+  // declined`, an `AppError` code registered by `@waitron/payments`'s `errors.ts` via declaration
+  // merging. `@waitron/core` does not depend on `@waitron/payments` (see this file's own
+  // `recordIncidentOnce` describe block's identical note about `@waitron/fiscal-verifactu`'s
+  // codes) so that code is not a member of `ErrorCode` in this package's typecheck program.
+  // `clock.degraded` (registered by `@waitron/fiscal`, already used throughout this file) is used
+  // in its place — the dedup key only cares that it is a real, distinct code.
+
+  it("recordIncident (unconditional) de-dups a second OPEN same-key raise to one row", async () => {
+    const { tenantId, tillId } = await seedTillForIncidents(); // reuse the suite's existing seeding
+    const input: RecordIncidentInput = {
+      tenantId,
+      tillId,
+      error: new AppError("chain.verification_failed", {
+        tillId,
+        issues: [
+          {
+            issueCode: "predecessor-hash-mismatch",
+            recordId: null,
+            issueParams: { sequence: 7, expected: "ABC" },
+          },
+        ],
+      }),
+      severity: "error",
+      detectedAt: new Date("2026-07-24T10:00:00Z"),
+    };
+    await withTenant(db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      await recordIncident(tx, input);
+    });
+    await withTenant(db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      await recordIncident(tx, input);
+    });
+    const rows = await incidentsForTill(tillId);
+    expect(rows).toHaveLength(1);
+  });
+
+  it("de-dups two orphan (sale_id NULL) raises via NULLS NOT DISTINCT", async () => {
+    const { tenantId, tillId } = await seedTillForIncidents();
+    const raise = () =>
+      withTenant(db, tenantId, async (tx) => {
+        await asAppUser(tx);
+        return recordIncidentOnce(tx, {
+          tenantId,
+          tillId,
+          // no saleId — orphan
+          error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
+          severity: "error",
+          detectedAt: new Date("2026-07-24T10:00:00Z"),
+        });
+      });
+    const first = await raise();
+    const second = await raise();
+    expect(first).toBe(true);
+    expect(second).toBe(false);
+    const rows = await incidentsForTill(tillId);
+    expect(rows.filter((r) => r.saleId === null)).toHaveLength(1);
+  });
+
+  it("frees the key after acknowledgement (a recurring condition resurfaces)", async () => {
+    const { tenantId, tillId } = await seedTillForIncidents();
+    const input: RecordIncidentInput = {
+      tenantId,
+      tillId,
+      error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
+      severity: "error",
+      detectedAt: new Date("2026-07-24T10:00:00Z"),
+    };
+    const raise = () =>
+      withTenant(db, tenantId, async (tx) => {
+        await asAppUser(tx);
+        return recordIncidentOnce(tx, input);
+      });
+    expect(await raise()).toBe(true);
+    await db.execute(sql`update incidents set acknowledged_at = now() where till_id = ${tillId}`);
+    expect(await raise()).toBe(true);
   });
 });

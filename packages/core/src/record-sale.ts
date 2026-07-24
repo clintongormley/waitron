@@ -158,18 +158,24 @@ export async function recordSale(
   // later change adds `if (!verification.ok) throw ...` here, it has implemented the one
   // behaviour the law forbids.
   //
-  // One incident per issue, deferred until `saleId` exists: `incidents.sale_id` is what ties a
-  // chain failure to the receipt a customer is holding, and it cannot be set before the sale row
-  // is. Collected here rather than recorded immediately, so this stays the single place that
-  // decides WHAT counts as an incident on this write path.
+  // ONE incident per failed check (never one per issue), deferred until `saleId` exists:
+  // `incidents.sale_id` is what ties a chain failure to the receipt a customer is holding, and it
+  // cannot be set before the sale row is. All of this call's issues are aggregated into a single
+  // `chain.verification_failed` — the table-wide `incidents_open_dedup` index holds at most one open
+  // incident per (tenant, till, code, sale), so emitting one row per issue (all sharing this sale +
+  // code) would collapse to a single row and drop every issue after the first; carrying them in
+  // `params.issues` keeps them all. Collected here rather than recorded immediately, so this stays
+  // the single place that decides WHAT counts as an incident on this write path.
   const pending: Array<{ error: AppError; severity: IncidentSeverity }> = [];
-  for (const issue of verification.issues) {
+  if (verification.issues.length > 0) {
     pending.push({
       error: new AppError("chain.verification_failed", {
         tillId: input.tillId,
-        issueCode: issue.code,
-        recordId: issue.recordId ?? null,
-        issueParams: issue.params,
+        issues: verification.issues.map((issue) => ({
+          issueCode: issue.code,
+          recordId: issue.recordId ?? null,
+          issueParams: issue.params,
+        })),
       }),
       severity: "error",
     });

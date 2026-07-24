@@ -222,3 +222,19 @@ describe("StripeTerminalProvider reversals", () => {
     await expect(provider.refund(failed.paymentRef)).rejects.toThrow();
   });
 });
+
+describe("StripeTerminalProvider.forward", () => {
+  it("forward is a no-op for the server-driven provider (no device-local offline queue)", async () => {
+    const provider = new StripeTerminalProvider({
+      client: new FakeStripe(),
+      db,
+      resolveReader: () => Promise.resolve("reader_1"),
+    });
+    expect(await provider.forward(new Date("2026-07-24T10:00:00Z"))).toEqual({
+      nextDueAt: null,
+      forwarded: 0,
+      declined: 0,
+      incidentsRaised: 0,
+    });
+  });
+});

@@ -17,6 +17,7 @@
     "@waitron/db": "workspace:*",
     "@waitron/payments": "workspace:*",
     "@waitron/shared": "workspace:*",
+    "drizzle-orm": "^0.45.2",
     "stripe": "^22.3.2"
   },
   "devDependencies": {

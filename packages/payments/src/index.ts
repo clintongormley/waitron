@@ -24,6 +24,7 @@ export {
   insertAttempting,
   insertCapturedPayment,
   insertFailedPayment,
+  listAcceptedOffline,
   recordFailedRefund,
   recordRefund,
   recordVoid,

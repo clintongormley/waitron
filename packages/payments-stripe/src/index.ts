@@ -4,3 +4,7 @@ export type { StripeClient } from "./client.js";
 export { stripeClient } from "./stripe-client.js";
 export { StripeTerminalProvider } from "./provider.js";
 export type { StripeTerminalProviderOptions } from "./provider.js";
+export type { StripeDeviceClient, DeviceCollectOutcome } from "./device-client.js";
+export { stripeDeviceClient } from "./stripe-device-client.js";
+export { StripeOnDeviceProvider } from "./device-provider.js";
+export type { StripeOnDeviceProviderOptions } from "./device-provider.js";

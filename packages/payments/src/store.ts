@@ -333,6 +333,29 @@ export async function claimAcceptedOffline(
     .for("update", { skipLocked: true });
 }
 
+/** Like `claimAcceptedOffline` but WITHOUT the row lock — the T1 read a real adapter's `forward` uses
+ * to list its pending offline payments before the (device) network sync, so it never holds a lock
+ * across the network call (T1/T2). Concurrency safety comes instead from the idempotent, state-guarded
+ * `settleForwarded`/`declineForwarded` advances in T2 (each matches only a row still `accepted_offline`)
+ * plus the race-safe incident dedup — two concurrent forwards listing the same refs is harmless. The
+ * fake's single-transaction `forward` keeps using the locking `claimAcceptedOffline`. */
+export async function listAcceptedOffline(
+  tx: Transaction,
+  provider: string,
+): Promise<ForwardablePayment[]> {
+  return tx
+    .select({
+      tenantId: payments.tenantId,
+      paymentRef: payments.paymentRef,
+      workingOrderId: payments.workingOrderId,
+      saleId: payments.saleId,
+      amount: payments.amount,
+    })
+    .from(payments)
+    .where(and(eq(payments.provider, provider), eq(payments.state, "accepted_offline")))
+    .orderBy(payments.createdAt);
+}
+
 /** Advance a forwarded offline payment to `settled` (the network cleared it). Matches only a row
  * still `accepted_offline`, so re-running a completed forward is a no-op (idempotent). */
 export async function settleForwarded(tx: Transaction, params: Key): Promise<void> {

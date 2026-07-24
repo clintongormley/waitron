@@ -53,8 +53,13 @@ import "@waitron/shared";
  * `{ code: string; params: Record<string, unknown> }` specifically so a regime module never has
  * to register a member on the shared registry per issue kind. `./record-sale.ts`/`./record-void.ts`
  * are what translate "verification failed" into a stable, translatable incident code — one
- * generic code regardless of which specific issue the module reported — and it is this
- * translation, done in `packages/core`, that needs the registered `ErrorCode`. `clock.degraded`
+ * generic code regardless of which specific issues the module reported, and one incident per
+ * (sale) carrying ALL of that call's issues in `params.issues` rather than one row per issue — and
+ * it is this translation, done in `packages/core`, that needs the registered `ErrorCode`.
+ * Aggregating rather than emitting a row per issue is what makes the incident write agree with the
+ * table-wide `incidents_open_dedup` invariant: that partial unique index holds at most one open
+ * incident per (tenant, till, code, sale), so N same-key rows would silently collapse to one and
+ * lose detail — carrying every issue under one row keeps all of it. `clock.degraded`
  * needs no such addition here: it is already registered by `packages/fiscal/src/errors.ts` (Task
  * 10), and `./record-sale.ts` reuses `TrustedReading.warning` — an `AppError` already carrying
  * that exact code — verbatim rather than re-deriving it.
@@ -107,21 +112,26 @@ declare module "@waitron/shared" {
     "sale.already_voided": { saleId: string };
     /** Thrown-and-caught internally by `recordSale`/`recordVoid` (never crosses either function's
      * own boundary — it is constructed only to hand its `.code`/`.params` to `recordIncident`) to
-     * wrap ONE `IntegrityIssue` from a failed `FiscalBackend.checkIntegrity` call as a stable,
+     * wrap the `IntegrityIssue`s from a failed `FiscalBackend.checkIntegrity` call as a stable,
      * translatable incident: staff and support see one consistent code regardless of which
-     * regime-specific issue kind the module actually reported, with the module's own diagnostic
-     * detail preserved underneath for support to read. One incident row per issue — spec's own
-     * table lists "record the incident" for the chain-verification-fails condition, and
-     * `IntegrityReport.issues` may hold more than one. */
+     * regime-specific issue kinds the module actually reported, with the module's own diagnostic
+     * detail preserved underneath for support to read. */
     "chain.verification_failed": {
       tillId: string;
-      /** The module's own issue code — e.g. `predecessor-hash-mismatch` — never itself a
-       * translation key: it is regime-specific and not registered on this shared surface. */
-      issueCode: string;
-      recordId: string | null;
-      /** The module's own structured params for that issue, carried verbatim — never
-       * re-rendered into prose. */
-      issueParams: Record<string, unknown>;
+      /** All `IntegrityIssue`s from one failed `checkIntegrity` call, aggregated into a single
+       * incident: the table-wide open-incident invariant (`incidents_open_dedup`) holds at most one
+       * open incident per (tenant, till, code, sale), so a chain that fails multiple checks at once
+       * records one incident carrying every issue rather than N same-key rows (of which the index
+       * would keep only one). Each entry preserves the module's own diagnostic detail verbatim. */
+      issues: Array<{
+        /** The module's own issue code — e.g. `predecessor-hash-mismatch` — never itself a
+         * translation key: it is regime-specific and not registered on this shared surface. */
+        issueCode: string;
+        recordId: string | null;
+        /** The module's own structured params for that issue, carried verbatim — never
+         * re-rendered into prose. */
+        issueParams: Record<string, unknown>;
+      }>;
     };
   }
 }
