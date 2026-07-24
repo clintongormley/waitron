@@ -78,6 +78,22 @@ describe("payments migrations", () => {
     }
   });
 
+  it("adds 'initiated' to the payment_state enum", async () => {
+    const db = await createPgliteDb();
+    try {
+      await runMigrations(db, CORE_MIGRATIONS);
+      await runMigrations(db, PAYMENTS_MIGRATIONS);
+      const rows = await db.execute<{ enumlabel: string }>(sql`
+        select e.enumlabel from pg_enum e
+        join pg_type t on t.oid = e.enumtypid
+        where t.typname = 'payment_state'
+      `);
+      expect(rows.rows.map((r) => r.enumlabel)).toContain("initiated");
+    } finally {
+      await db.close();
+    }
+  });
+
   it("creates the payment_policy table with a numeric(12,2) offline_amount_cap", async () => {
     const db = await createPgliteDb();
     try {

@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  captureError,
+  createPgliteDb,
+  pgErrorMessage,
+  runMigrations,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { AppError, decimal } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
@@ -8,6 +14,7 @@ import {
   assertReversible,
   associatePaymentWithSale,
   captureAttempting,
+  expireInitiated,
   failAttempting,
   findPaymentByRef,
   getPaymentByRef,
@@ -15,10 +22,12 @@ import {
   insertAttempting,
   insertCapturedPayment,
   insertFailedPayment,
+  insertInitiated,
   listAcceptedOffline,
   recordFailedRefund,
   recordRefund,
   recordVoid,
+  settleInitiated,
 } from "./store.js";
 import { freshNif, seedSale, seedWorkingOrder } from "../test/seed.js";
 import type { Seeded } from "../test/seed.js";
@@ -540,5 +549,124 @@ describe("listAcceptedOffline", () => {
     const listed = await db.transaction((tx) => listAcceptedOffline(tx, "fake"));
     expect(listed.map((r) => r.paymentRef)).toContain("lst-1");
     expect(listed.find((r) => r.paymentRef === "lst-1")?.saleId).toBeNull();
+  });
+});
+
+describe("Mode 3 initiated lifecycle", () => {
+  const HOSTED = "hosted-abc";
+  const SETTLED_AT = new Date("2026-07-24T12:00:00Z");
+
+  async function initiate(seeded: Seeded, externalRef = HOSTED, paymentRef = "pay-1") {
+    await db.transaction((tx) =>
+      insertInitiated(tx, {
+        tenantId: seeded.tenantId,
+        workingOrderId: seeded.workingOrderId,
+        provider: "fake",
+        paymentRef,
+        externalRef,
+        amount: decimal("12.10"),
+      }),
+    );
+    return { tenantId: seeded.tenantId, provider: "fake", paymentRef };
+  }
+
+  it("insertInitiated writes state=initiated, settledAt null, external_ref set", async () => {
+    const seeded = await seedTenant();
+    const key = await initiate(seeded);
+    const row = await getRow(key);
+    expect(row?.state).toBe("initiated");
+    expect(row?.settledAt).toBeNull();
+    expect(row?.externalRef).toBe(HOSTED);
+  });
+
+  it("settleInitiated advances initiated -> captured, sets settledAt, and returns the row", async () => {
+    const seeded = await seedTenant();
+    const key = await initiate(seeded);
+    const settled = await db.transaction((tx) =>
+      settleInitiated(tx, { provider: "fake", externalRef: HOSTED, settledAt: SETTLED_AT }),
+    );
+    expect(settled).not.toBeNull();
+    expect(settled?.workingOrderId).toBe(seeded.workingOrderId);
+    expect(settled?.amount).toBe("12.10");
+    expect(settled?.paymentRef).toBe("pay-1");
+    const row = await getRow(key);
+    expect(row?.state).toBe("captured");
+    expect(row?.settledAt).not.toBeNull();
+  });
+
+  it("settleInitiated is idempotent: a second call returns null and does not re-settle", async () => {
+    const seeded = await seedTenant();
+    const key = await initiate(seeded);
+    await db.transaction((tx) =>
+      settleInitiated(tx, { provider: "fake", externalRef: HOSTED, settledAt: SETTLED_AT }),
+    );
+    const firstSettledAt = (await getRow(key))?.settledAt;
+    const second = await db.transaction((tx) =>
+      settleInitiated(tx, {
+        provider: "fake",
+        externalRef: HOSTED,
+        settledAt: new Date("2026-07-24T13:00:00Z"),
+      }),
+    );
+    expect(second).toBeNull();
+    // Proves idempotency directly (not just by state-guard reasoning): a redelivered settle with a
+    // LATER timestamp must not move settled_at off the first settlement's value.
+    const row = await getRow(key);
+    expect(row?.state).toBe("captured");
+    expect(row?.settledAt).toBe(firstSettledAt);
+  });
+
+  it("expireInitiated advances initiated -> failed and is idempotent", async () => {
+    const seeded = await seedTenant();
+    const key = await initiate(seeded);
+    await db.transaction((tx) => expireInitiated(tx, { provider: "fake", externalRef: HOSTED }));
+    expect((await getRow(key))?.state).toBe("failed");
+    // Second call is a no-op (state is no longer `initiated`) — does not throw, leaves `failed`.
+    await db.transaction((tx) => expireInitiated(tx, { provider: "fake", externalRef: HOSTED }));
+    // Proves idempotency directly: re-fetch after the second call and confirm state did not move
+    // off `failed` (and settledAt, never set by expireInitiated, stays null).
+    const row = await getRow(key);
+    expect(row?.state).toBe("failed");
+    expect(row?.settledAt).toBeNull();
+  });
+
+  it("the partial unique index rejects a second initiated row with the same (provider, external_ref)", async () => {
+    const seeded = await seedTenant();
+    await initiate(seeded, HOSTED, "pay-1");
+    // `db.transaction`/`tx.insert` wrap the real Postgres error in a `DrizzleQueryError` whose own
+    // `.message` is the generic "Failed query: ..." — the actual constraint-violation text lives on
+    // `.cause` (see `@waitron/db`'s `pgErrorMessage`, used the same way throughout
+    // packages/db/src/schema/*.test.ts for a unique/check-constraint assertion).
+    const error = await captureError(() => initiate(seeded, HOSTED, "pay-2"));
+    expect(pgErrorMessage(error)).toMatch(/payments_provider_external_ref_key|duplicate key/);
+  });
+
+  it("the partial unique index does NOT constrain manual/null external_ref rows", async () => {
+    const seeded = await seedTenant();
+    // Two manual rows sharing a hand-keyed external_ref: allowed (provider = 'manual' is excluded).
+    await db.transaction((tx) =>
+      insertCapturedPayment(tx, {
+        tenantId: seeded.tenantId,
+        workingOrderId: seeded.workingOrderId,
+        provider: "manual",
+        paymentRef: "m-1",
+        amount: decimal("5.00"),
+        externalRef: "OP-777",
+        settledAt: SETTLED,
+      }),
+    );
+    await expect(
+      db.transaction((tx) =>
+        insertCapturedPayment(tx, {
+          tenantId: seeded.tenantId,
+          workingOrderId: seeded.workingOrderId,
+          provider: "manual",
+          paymentRef: "m-2",
+          amount: decimal("6.00"),
+          externalRef: "OP-777",
+          settledAt: SETTLED,
+        }),
+      ),
+    ).resolves.toBeUndefined();
   });
 });

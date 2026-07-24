@@ -546,8 +546,13 @@ Then, in priority order:
      connection tokens, device-side `collect`, the device-local offline queue behind `forward()`, and a
      nightly sandbox — the Stripe-specific `@waitron/payments-stripe` half. Webhooks + the untenanted
      `(provider, external_ref)` resolution stay deferred to Mode 3 / reconcile, as in 2a.
-4. **Mode 3 — Asynchronous / hosted.** QR pay-at-table, payment links, online orders — the
-   `initiate() + webhook` shape (§0). A distinct interface, so it follows the synchronous adapters.
+4. **Mode 3 — Asynchronous / hosted** — *the next plan; full design in the Mode 3 section below.* QR
+   pay-at-table, payment links, online orders — the `initiate() + webhook` shape (§0), a distinct
+   `AsyncPaymentProvider` interface, so it follows the synchronous adapters. **Sliced neutral-then-adapter**
+   (2026-07-24), mirroring 4a→2a a third time: **Slice A** the provider-neutral async layer (the interface,
+   the `initiated` state, the webhook→settle→associate path, the untenanted `(provider, external_ref)`
+   resolver, and idempotency, all proven with a fake) and **Slice B** the real Stripe Checkout adapter.
+   Brings in the **webhooks and untenanted tenant-resolution** deferred through 2a/2b.
 5. **Cross-cutting, layered in as modes need them:** `reconcile()` per integrated mode (the former
    "4d"; manual mode has no `reconcile` — its audit is external); the tab/tip lifecycle
    (`preAuth`/`incrementalAuth`/`tipAdjust`, the former "4e"); and the refund/void **role-gate**,
@@ -1025,6 +1030,232 @@ is synchronous and its reversals run tenanted, so nothing here needs an untenant
 cases, including Decision ①'s crash gap); the `forward`/`reconcile` **scheduler** (`apps/*`); capture-mode
 config (SP7); the reversal **role-gate** (SP5); the till/handheld **UI** (SP7); reversal retry-safety (a
 persisted per-reversal id, as in 2a); a second PSP (Adyen/SumUp).
+
+---
+
+## Mode 3 — Asynchronous / hosted payments (design)
+
+The next plan, and the third settlement mode (§0). The customer pays **out-of-band** — a hosted
+payment page reached by a **QR at the table, a payment link, or an online order** — and the settled
+tender is written **later by an inbound webhook, not returned synchronously**. This is a **different
+method shape**, not another `PaymentProvider` adapter: `initiate(params) → { ref, url }` mints a hosted
+payment and hands the customer a URL; a webhook later produces and associates the settled tender.
+
+**The load-bearing shift.** In every mode so far a synchronous till action produces the settled tender
+and *then* chains the sale. Here the working order stays **open** until a webhook — at an unknown later
+time — settles the tender and triggers `recordSale`. The webhook, not a till tap, is what advances the
+order. That ordering is the crux, and it is what brings in the **webhooks + untenanted
+tenant-resolution** deferred through 2a/2b (Mode 2a "Deferred", Mode 2b Cycle B "Out of scope").
+
+**Sliced neutral-then-adapter** (§10 item 4), a third repeat of 4a→2a: **Slice A** builds and proves the
+provider-neutral async layer with a fake; **Slice B** lands the real Stripe Checkout adapter behind it.
+One shared design, two spec→plan→implement→land cycles.
+
+### The new `AsyncPaymentProvider` interface — a distinct shape, not a `PaymentProvider` variant
+
+Mode 3 is a different method shape, so it is its **own** interface in `@waitron/payments`, never new
+methods on `PaymentProvider` — a required `initiate` would break every synchronous adapter, exactly the
+reason `forward` stayed *off* the interface until an implementer existed (Mode 2b Cycle A). An adapter
+may implement `PaymentProvider`, `AsyncPaymentProvider`, or both (Stripe implements both — Terminal for
+§2, Checkout for §3).
+
+```ts
+interface AsyncPaymentProvider {
+  readonly provider: string;                                    // opaque id; "stripe" (shared)
+
+  // Mint a hosted payment for an OPEN working order. Network call to the PSP (T1/T2, NO caller tx —
+  // like collect), then writes an `initiated` payments row (external_ref = the hosted-payment id).
+  initiate(params: InitiateParams): Promise<InitiateResult>;
+
+  // Verify + parse a raw inbound event into a neutral settlement. Vendor-specific (signature check
+  // with an injected endpoint secret); the fake trusts the payload. null = an event we do not act on;
+  // throws on a bad signature.
+  verifyAndParse(payload: string, signature: string): InboundSettlement | null;
+}
+
+interface InitiateParams { tenantId: TenantId; workingOrderId: WorkingOrderId; amount: Decimal; paymentRef: string; }
+interface InitiateResult { ref: string; externalRef: string; url: string; }  // url → QR *or* link (app's choice)
+
+interface InboundSettlement {
+  provider: string;
+  externalRef: string;              // the hosted-payment id — the resolve + settle key
+  outcome: "settled" | "expired";   // paid vs abandoned / timed-out
+  amount: Decimal;                  // what actually settled (the drift anchor reconcile uses later)
+  settledAt: Date;
+}
+```
+
+`paymentRef` is the caller's `(tenant_id, provider, payment_ref)` idempotency anchor (a uuid, as in 2a);
+`external_ref` holds the hosted-payment id — the **only** identifier the inbound webhook carries, and
+therefore the resolve/settle key. This is the exact reuse the `external_ref` column was designed for
+(§7; Mode 1 added it, the integrated modes reuse it for the processor reference).
+
+### Lifecycle & the new `initiated` state
+
+`initiate` writes `state = initiated`, `external_ref = <hosted id>`, `settled_at = null`, `sale_id =
+null`; the working order stays **open**. One additive enum value (`ALTER TYPE`), the smallest change the
+mode needs — the webhook then advances the row through two neutral, tenant-scoped store functions that
+take a `tx` (they do a store write inside the orchestrator's transaction, they make no network call):
+
+- `settleInitiated(tx, { provider, externalRef, settledAt }) → SettledRow | null` — advances a row
+  **still `initiated`** → `captured`, sets `settled_at`. Keys on `(provider, external_ref)` (all the
+  webhook carries), scoped to the resolved tenant by RLS, guarded by `state = 'initiated'`. Returns the
+  row (`workingOrderId`, `amount`, `paymentRef`) when it advanced, **`null` when it matched nothing**
+  (already captured — a redelivery). That row-or-null is the idempotency signal the orchestrator
+  branches on.
+- `expireInitiated(tx, { provider, externalRef })` — `initiated → failed` (reuse the existing `failed`;
+  no new `expired` state — YAGNI). The working order stays open; staff take another tender.
+
+`initiated → captured` matches sync capture semantics (the money has cleared at the PSP when the
+`completed` webhook fires), so a hosted capture is thereafter an **ordinary `captured` row** — refunds,
+association and reporting need nothing async-specific.
+
+### Idempotency (webhooks are at-least-once)
+
+Two guards, both cloning landed patterns:
+
+- **State-guarded advance.** `settleInitiated`'s `WHERE state = 'initiated'` makes a second delivery a
+  no-op returning `null`, exactly as `settleForwarded` / `advanceAcceptedOffline` are idempotent. With
+  the atomic orchestration transaction and the row lock, two **concurrent** deliveries serialize: the
+  first does settle → `recordSale` → associate; the second matches zero rows, returns `null`, and the
+  orchestrator **skips `recordSale`** — so **no second invoice number is ever allocated**. This is the
+  crux of async idempotency, and the reason `settleInitiated` must report whether it advanced (the
+  `recordIncident`-returns-a-bool lesson from #25, applied to the sale-chaining decision).
+- **`(provider, external_ref)` partial unique index.** Anchors resolution and blocks a double
+  `initiated` insert. It **must be partial** — `WHERE external_ref IS NOT NULL AND provider <> 'manual'`
+  (exact predicate pinned after grepping **every** `external_ref` writer) — because a table-wide unique
+  would collide on manual / hand-keyed acquirer references, which are neither unique nor non-null. This
+  is the #25 table-wide-index lesson applied before the fact. Hand-written `--custom` migration (drizzle
+  0.45 cannot express a partial `nullsNotDistinct`), so drizzle-kit never diffs it (same as the RLS /
+  GRANT / incidents-dedup migrations).
+
+### Untenanted tenant resolution — mirrors `envios_tenants_with_work`
+
+A webhook arrives with **no tenant context** (an inbound call, RLS-exempt), yet `withTenant` setting
+`app.tenant_id` is the only scoping mechanism and `payments`' isolation policy fails closed — a lookup
+with no GUC set returns nothing. The neutral store already has the untenanted `findPaymentByRef(provider,
+ref)` built for this, but it needs a **controlled RLS bypass** to see across tenants. Fiscal already
+solved exactly this for its cross-tenant drainer enumeration (`envios_tenants_with_work`, fiscal
+migration `0004`); Mode 3 clones that mechanism verbatim rather than inventing one:
+
+- a dedicated **`NOLOGIN NOSUPERUSER`** role `payments_webhook_resolver` (guarded against a pre-existing
+  `LOGIN` role, like `envios_drainer` — a login-capable role here would read every tenant's payments);
+- a **permissive** `FOR SELECT TO payments_webhook_resolver USING (true)` policy on `payments`
+  (additive — Postgres ORs permissive policies, so tenant isolation is untouched for every other role);
+- a **`SECURITY DEFINER`** function `resolve_payment_tenant(provider text, external_ref text) RETURNS
+  uuid`, `SET search_path = pg_catalog, public`, owned by the role via the temp-grant / reassign /
+  revoke dance, returning **only `tenant_id`** — never a wider `payments` column (the fiscal principle:
+  the bypass surface is one uuid);
+- `REVOKE EXECUTE … FROM PUBLIC; GRANT EXECUTE … TO app_user`, so the one intended caller is named.
+
+Deliberately **not** "grant a role BYPASSRLS": that requires the grantor to already hold BYPASSRLS, which
+the hardened migration role does not (fiscal `0004` / db `0005_sales` verified this live). A hand-written
+`--custom` migration, adding no table or column. After resolution the orchestrator opens
+`withTenant(tenantId)` and **everything else runs under ordinary RLS**.
+
+### The sale-chaining orchestration (app-level, deferred; proven by a Slice A capstone)
+
+`recordSale` lives in `@waitron/core`, and `@waitron/payments` stays **core-free** (core is a
+devDependency, for tests only — the invariant every mode has kept). So the composition — verify →
+resolve → settle → chain → associate — lives **above** both layers, in a future `apps/*` webhook
+endpoint, the only place that imports both. It mirrors §3 decision 1 exactly: the payment layer produces
+a settled tender as **data**, and the caller chains `recordSale`.
+
+```text
+event = provider.verifyAndParse(rawBody, sigHeader)                   // payments-stripe (B) / fake (A)
+if (!event) return 204                                                // not an event we act on
+tenantId = resolvePaymentTenant(event.provider, event.externalRef)    // untenanted (SECURITY DEFINER)
+if (!tenantId) return 202                                             // unknown ref (initiate-crash gap / data loss);
+                                                                     //   no tenant ⇒ no scope to write an incident in;
+                                                                     //   reconcile audits it per-tenant as missingLocal
+await withTenant(tenantId, async (tx) => {                            // re-enter tenant scope
+  if (event.outcome === "expired") { await expireInitiated(tx, …); return }
+  const row = await settleInitiated(tx, …)                            // initiated → captured
+  if (row === null) return                                            // redelivery — already chained; DO NOTHING
+  const sale = await recordSale(tx, backend, saleInput)              // @waitron/core — saleInput's tenders include
+                                                                     //   the just-settled hosted tender (from `row`)
+  await associatePaymentWithSale(tx, { …key, saleId: sale.id })       // Option B associate-back
+})                                                                     // ONE atomic tx
+```
+
+Settle + `recordSale` + associate share **one** transaction, so a `recordSale` failure rolls back the
+settle too and the at-least-once redelivery retries the whole thing cleanly (the row is still
+`initiated`). Slice A proves this exact composition with a **capstone wiring test** playing the
+orchestrator — the established `wiring.test.ts` / `offline.wiring.test.ts` / `manual.wiring.test.ts`
+pattern (each already imports `recordSale` from the devDependency `@waitron/core`) — with **no `apps/`
+layer required.**
+
+### Slice A — the provider-neutral async layer (the next plan)
+
+In `@waitron/payments` only, proven with a fake and real Postgres:
+
+- the `AsyncPaymentProvider` interface + the `InitiateParams` / `InitiateResult` / `InboundSettlement`
+  types (neutral — no `stripe` / `checkout` / `webhook`-vendor vocabulary; the `no-provider-vocabulary`
+  guard still passes);
+- the `initiated` enum value (`ALTER TYPE`); the `(provider, external_ref)` partial unique index; the
+  `resolve_payment_tenant` SECURITY DEFINER seam — the last two as hand-written `--custom` migrations;
+- the store functions `settleInitiated`, `expireInitiated`, and the untenanted `resolvePaymentTenant`
+  wrapper over the SQL seam;
+- a `FakeAsyncProvider` (deterministic `initiate`; `verifyAndParse` trusts a JS-object payload →
+  `InboundSettlement`) — **not** re-exported from the barrel, like every other fake.
+
+### Slice B — the Stripe Checkout adapter (`@waitron/payments-stripe`)
+
+A third provider class beside `StripeTerminalProvider` (2a) and `StripeOnDeviceProvider` (2b), all
+sharing provider id `"stripe"`:
+
+- **`StripeHostedProvider`** implementing `AsyncPaymentProvider`.
+  - `initiate()` → `stripe.checkout.sessions.create({ mode: "payment", amount, currency: "eur", … })` →
+    writes the `initiated` row with `external_ref = session.id`, returns `{ ref: paymentRef, externalRef:
+    session.id, url: session.url }`. The `url` is **presentation-agnostic**: an app renders it as a QR at
+    the table or sends it as a link — the payments layer never distinguishes QR-at-table from
+    payment-link from online-order.
+  - `verifyAndParse()` → `stripe.webhooks.constructEvent(payload, signature, endpointSecret)` (the
+    injected secret), then maps `checkout.session.completed` → `outcome: "settled"`,
+    `checkout.session.expired` → `outcome: "expired"`, everything else → `null`.
+- **Injected client seam.** The narrow `StripeClient` seam + `FakeStripe` (2a/2b) extend to
+  `checkout.sessions.create` and `webhooks.constructEvent`; the real SDK binding stays
+  **coverage-excluded** (`stripe-client.ts`), as today. `currency: "eur"` hardcoded at the boundary
+  (single-currency-per-tenant; revisit at multi-currency), consistent with the other Stripe providers.
+- **The endpoint (webhook signing) secret** is **provisioning / deployment**, *not* owned here — exactly
+  as reader-provisioning and per-tenant Stripe keys were deferred throughout 2a/2b. It is an injected
+  value the provider holds (config-agnostic adapter).
+
+### Testing
+
+- **Slice A** — store tests for `settleInitiated` (advance + idempotent `null`-return) and
+  `expireInitiated`; a **real-PG RLS test** for `resolve_payment_tenant` proving it resolves cross-tenant
+  under a genuine non-superuser role *and* that the permissive policy leaks nothing wider (a plain
+  `select … from payments` with no GUC still returns nothing; only the SECURITY DEFINER function
+  crosses) — the PGlite-can't-cover case; a **two-delivery concurrency test** (real-PG, acquired-signal)
+  asserting exactly one sale, one invoice number, the payment `captured` + associated; the **capstone
+  wiring test**; and behavioural tests that the partial `(provider, external_ref)` index rejects a
+  duplicate async ref while leaving manual / null-ref rows unconstrained (the index is a hand-written
+  migration, deliberately not in the drizzle schema, so it is proven behaviourally rather than via a
+  `getTableConfig` assertion). One task owns the `test:coverage` run (the #25 lesson).
+- **Slice B** — `FakeStripe`-driven unit tests for `initiate` / `verifyAndParse` (including `expired` and
+  unknown-event → `null`), a wiring capstone, a real-PG RLS test, and a **nightly `*.sandbox.test.ts`**
+  exercising the real `checkout.sessions.create` server-side against `STRIPE_SANDBOX_SECRET_KEY`
+  (self-skipping in per-PR CI via the glob). A live inbound webhook cannot be received in the nightly
+  runner, so `verifyAndParse` is proven against `FakeStripe` + recorded-event fixtures, not a live
+  delivery — the sandbox covers session *creation*.
+
+### Out of scope for Mode 3 (deferred)
+
+- **The `apps/*` webhook HTTP endpoint + signature-secret provisioning** — a deployment concern, like
+  the `forward` / `reconcile` scheduler and per-tenant Stripe provisioning. The orchestration *logic* is
+  proven in Slice A's capstone; the HTTP wrapper lands with `apps/`.
+- **`reconcile()` for the async provider** (the former "4d") — the designed backstop for a
+  never-arriving / late webhook (the `unsettled` / `missingLocal` classes, §6) and for the resolver
+  returning no tenant. Its own cross-cutting plan; Mode 3 leaves the anchors it needs (the `initiated`
+  state, the `(provider, external_ref)` index, and `InboundSettlement.amount` for the drift check).
+- **QR-at-table vs payment-link vs online-order presentation** — an app/UI concern over the returned
+  `url`; the payments layer is presentation-agnostic.
+- **A new async-refund surface** — a hosted capture is an ordinary `captured` row, so the existing
+  `refund` / `partialRefund` + shared `reverseViaStripe` path already covers it. Async refund-confirmation
+  / dispute webhooks, if ever needed, ride the same `verifyAndParse` seam later.
+- **Capture-mode config** (SP7), the reversal **role-gate** (SP5), the till/handheld **UI** (SP7), and a
+  second PSP — unchanged deferrals.
 
 ---
 

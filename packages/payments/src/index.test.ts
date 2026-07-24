@@ -2,6 +2,7 @@ import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
 import { is } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
+import type { TenantId, WorkingOrderId } from "@waitron/shared";
 import {
   associatePaymentWithSale,
   getPaymentByRef,
@@ -15,6 +16,10 @@ import {
   recordVoid,
 } from "./index.js";
 import type {
+  AsyncPaymentProvider,
+  InboundSettlement,
+  InitiateParams,
+  InitiateResult,
   ManualCardPaymentParams,
   ManualCardPaymentResult,
   PaymentProvider,
@@ -84,6 +89,35 @@ describe("package public surface (./index.js)", () => {
     const capabilities: PaymentProvider["capabilities"] = { partialRefund: false };
     expect(result.provider).toBe("fake");
     expect(capabilities.partialRefund).toBe(false);
+  });
+
+  it("re-exports the async (Mode 3) provider types from the package root", () => {
+    // Type-only exports: the meaningful check is that ./index.ts's re-export type-checks against a
+    // real value shaped by ./provider.ts — a deleted re-export fails this package's `pnpm typecheck`,
+    // and the annotations force that check against the ROOT barrel, not a deep path.
+    const settlement: InboundSettlement = {
+      provider: "fake",
+      externalRef: "hosted-1",
+      outcome: "settled",
+      amount: decimal("12.10"),
+      settledAt: new Date("2026-07-24T10:00:00Z"),
+    };
+    const result: InitiateResult = {
+      ref: "pay-1",
+      externalRef: "hosted-1",
+      url: "https://pay/hosted-1",
+    };
+    const params: InitiateParams = {
+      tenantId: "t" as TenantId,
+      workingOrderId: "w" as WorkingOrderId,
+      amount: decimal("12.10"),
+      paymentRef: "pay-1",
+    };
+    const asyncProvider: AsyncPaymentProvider["provider"] = "fake";
+    expect(settlement.outcome).toBe("settled");
+    expect(result.externalRef).toBe("hosted-1");
+    expect(params.paymentRef).toBe("pay-1");
+    expect(asyncProvider).toBe("fake");
   });
 });
 

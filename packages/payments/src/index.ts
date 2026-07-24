@@ -1,7 +1,11 @@
 // The entire public surface of @waitron/payments. Re-exports only — no logic here.
 export type {
+  AsyncPaymentProvider,
   CollectParams,
   ForwardResult,
+  InboundSettlement,
+  InitiateParams,
+  InitiateResult,
   PaymentProvider,
   PaymentResult,
   PaymentResultState,
@@ -17,6 +21,7 @@ export {
   captureAttempting,
   claimAcceptedOffline,
   declineForwarded,
+  expireInitiated,
   failAttempting,
   findPaymentByRef,
   getPaymentByRef,
@@ -24,13 +29,16 @@ export {
   insertAttempting,
   insertCapturedPayment,
   insertFailedPayment,
+  insertInitiated,
   listAcceptedOffline,
   recordFailedRefund,
   recordRefund,
   recordVoid,
+  resolvePaymentTenant,
   settleForwarded,
+  settleInitiated,
 } from "./store.js";
-export type { ForwardablePayment, PaymentRecord, PaymentRow } from "./store.js";
+export type { ForwardablePayment, PaymentRecord, PaymentRow, SettledInitiated } from "./store.js";
 export { MANUAL_PROVIDER, recordManualCardPayment, recordManualRefund } from "./manual.js";
 export type { ManualCardPaymentParams, ManualCardPaymentResult } from "./manual.js";
 export { PAYMENTS_MIGRATIONS } from "./migrations.js";

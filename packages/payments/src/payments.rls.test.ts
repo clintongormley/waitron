@@ -3,7 +3,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { decimal } from "@waitron/shared";
-import { getPaymentByRef, insertCapturedPayment } from "./store.js";
+import {
+  getPaymentByRef,
+  insertCapturedPayment,
+  insertInitiated,
+  resolvePaymentTenant,
+} from "./store.js";
 import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
 import { seedWorkingOrder } from "../test/seed.js";
 
@@ -74,6 +79,59 @@ describe("payments under real row-level security", () => {
       // RLS-subject role rather than being assumed from the migration text.
       const hidden = await withTenant(probe, tenantB.tenantId, (tx) => getPaymentByRef(tx, key));
       expect(hidden).toBeUndefined();
+    } finally {
+      await probe.close();
+    }
+  });
+});
+
+describe("the untenanted webhook resolver under real row-level security", () => {
+  it("resolves (provider, external_ref) -> tenant_id across tenants, but leaks no wider row", async () => {
+    const tenantA = await seedWorkingOrder(admin, "B33333333");
+    const tenantB = await seedWorkingOrder(admin, "B44444444");
+
+    // Seed one `initiated` hosted payment for each tenant, as the superuser (RLS bypassed for setup).
+    await withTenant(admin, tenantA.tenantId, (tx) =>
+      insertInitiated(tx, {
+        tenantId: tenantA.tenantId,
+        workingOrderId: tenantA.workingOrderId,
+        provider: "fake",
+        paymentRef: "pa",
+        externalRef: "hosted-A",
+        amount: decimal("10.00"),
+      }),
+    );
+    await withTenant(admin, tenantB.tenantId, (tx) =>
+      insertInitiated(tx, {
+        tenantId: tenantB.tenantId,
+        workingOrderId: tenantB.workingOrderId,
+        provider: "fake",
+        paymentRef: "pb",
+        externalRef: "hosted-B",
+        amount: decimal("20.00"),
+      }),
+    );
+
+    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      // The resolver runs with NO tenant GUC set — the genuine webhook case. It must still return
+      // tenant A's id for hosted-A, proving the SECURITY DEFINER function crosses tenants for this
+      // one lookup even under a real RLS-subject role.
+      const resolvedA = await resolvePaymentTenant(probe, "fake", "hosted-A");
+      expect(resolvedA).toBe(tenantA.tenantId);
+      const resolvedB = await resolvePaymentTenant(probe, "fake", "hosted-B");
+      expect(resolvedB).toBe(tenantB.tenantId);
+
+      // An unknown ref resolves to null (the missingLocal case the app acks + reconcile audits).
+      expect(await resolvePaymentTenant(probe, "fake", "nope")).toBeNull();
+
+      // The bypass is confined to the function: a PLAIN select by the same probe, with no tenant
+      // GUC set, still sees nothing (the permissive policy is scoped TO payments_webhook_resolver,
+      // not to app_user). This is what proves the resolver leaks only tenant_id, nothing wider.
+      const direct = await probe.execute<{ tenant_id: string }>(
+        sql`select tenant_id from payments where provider = 'fake' and external_ref = 'hosted-A'`,
+      );
+      expect(direct.rows).toHaveLength(0);
     } finally {
       await probe.close();
     }

@@ -1,7 +1,7 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { AppError, addDecimal, compareDecimal, decimal, sumDecimals } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
-import type { Transaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { payments } from "./schema/payments.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
 import type { PaymentState } from "./provider.js";
@@ -382,6 +382,90 @@ async function advanceAcceptedOffline(
     .update(payments)
     .set({ state, updatedAt: sql`now()` })
     .where(and(keyWhere(params), eq(payments.state, "accepted_offline")));
+}
+
+/** The row `settleInitiated` returns when it advances a hosted payment, enough for the app-level
+ * orchestrator to chain `recordSale`: the still-open working order, the captured amount, and the
+ * payment_ref association key. */
+export interface SettledInitiated {
+  workingOrderId: string;
+  amount: string;
+  paymentRef: string;
+}
+
+/** Insert a minted-but-unpaid hosted payment — Mode 3's `initiate`. state=initiated, settledAt null,
+ * external_ref = the hosted-payment id (required: it is the resolve/settle key the webhook carries).
+ * The working order stays open until the inbound settlement advances this row. */
+export async function insertInitiated(
+  tx: Transaction,
+  params: NewPayment & { externalRef: string },
+): Promise<void> {
+  await insertPayment(tx, params, "initiated", null);
+}
+
+/** Advance a hosted payment still `initiated` -> `captured`, setting `settled_at`. Keyed by
+ * `(provider, external_ref)` — all the inbound webhook carries — under the caller's tenant scope
+ * (RLS), guarded by `state = 'initiated'`. Returns the row when it advanced, `null` when it matched
+ * nothing (already captured — an at-least-once redelivery). That row-or-null is the idempotency
+ * signal the orchestrator branches on: it chains `recordSale` only on a non-null return, so no second
+ * invoice number is ever allocated. Mirrors `settleForwarded`'s state-guarded, idempotent advance. */
+export async function settleInitiated(
+  tx: Transaction,
+  params: { provider: string; externalRef: string; settledAt: Date },
+): Promise<SettledInitiated | null> {
+  const [row] = await tx
+    .update(payments)
+    .set({ state: "captured", settledAt: params.settledAt.toISOString(), updatedAt: sql`now()` })
+    .where(
+      and(
+        eq(payments.provider, params.provider),
+        eq(payments.externalRef, params.externalRef),
+        eq(payments.state, "initiated"),
+      ),
+    )
+    .returning({
+      workingOrderId: payments.workingOrderId,
+      amount: payments.amount,
+      paymentRef: payments.paymentRef,
+    });
+  return row ?? null;
+}
+
+/** Advance a hosted payment still `initiated` -> `failed` (the customer abandoned / it expired).
+ * State-guarded and idempotent, like `settleInitiated`; the working order stays open so staff can
+ * take another tender. */
+export async function expireInitiated(
+  tx: Transaction,
+  params: { provider: string; externalRef: string },
+): Promise<void> {
+  await tx
+    .update(payments)
+    .set({ state: "failed", updatedAt: sql`now()` })
+    .where(
+      and(
+        eq(payments.provider, params.provider),
+        eq(payments.externalRef, params.externalRef),
+        eq(payments.state, "initiated"),
+      ),
+    );
+}
+
+/** Resolve the tenant that owns a hosted payment from `(provider, external_ref)` alone — the ONLY
+ * identifiers an inbound webhook carries, with NO tenant context. Calls the `resolve_payment_tenant`
+ * SECURITY DEFINER seam, the single controlled RLS bypass (it returns only tenant_id). Runs on a
+ * plain `db` handle, OUTSIDE any tenant scope — the app-level orchestrator calls this first, then
+ * opens `withTenant(tenantId)` for the settle + `recordSale` + associate. Returns null for an unknown
+ * reference (the missingLocal case reconcile audits per-tenant). Mirrors fiscal drain's
+ * `tenantsWithWork` call over `envios_tenants_with_work`. */
+export async function resolvePaymentTenant(
+  db: Database,
+  provider: string,
+  externalRef: string,
+): Promise<string | null> {
+  const result = await db.execute<{ tenant_id: string | null }>(
+    sql`select resolve_payment_tenant(${provider}, ${externalRef}) as tenant_id`,
+  );
+  return result.rows[0]?.tenant_id ?? null;
 }
 
 function keyWhere(params: Key) {

@@ -16,7 +16,8 @@ import type { Decimal, TenantId, TillId, WorkingOrderId } from "@waitron/shared"
  * here because this cycle's later tasks give them real behavior (the fake's offline
  * `collect`/`forward`); the `forward` method that drives the transitions between them is now part
  * of the `PaymentProvider` interface below. The two-phase `authorized` state remains a later plan —
- * never reserved here as dead surface.
+ * never reserved here as dead surface. `initiated` is Mode 3 (async / hosted): the minted-but-unpaid
+ * hosted payment.
  */
 export type PaymentState =
   | "attempting"
@@ -27,7 +28,10 @@ export type PaymentState =
   | "failed"
   | "accepted_offline"
   | "settled"
-  | "declined";
+  | "declined"
+  // Mode 3 (async / hosted): the minted-but-unpaid hosted payment. initiate() writes it; the
+  // inbound settlement advances it to `captured` (paid) or `failed` (abandoned / expired).
+  | "initiated";
 
 /**
  * What a `collect` result may REPORT, which is wider than what is PERSISTED: `network_unavailable`
@@ -127,4 +131,59 @@ export interface PaymentProvider {
   /** Return part of the captured amount. Throws `payment.refund_exceeds_capture` if the running
    * total of refunds would exceed what was captured. */
   partialRefund(ref: string, amount: Decimal): Promise<PaymentResult>;
+}
+
+/**
+ * Parameters to mint one hosted payment for an OPEN working order. `paymentRef` is the caller's
+ * `(tenant_id, provider, payment_ref)` idempotency anchor (a uuid), so a retried initiate cannot
+ * double-insert. Amount is the tenant's single currency.
+ */
+export interface InitiateParams {
+  tenantId: TenantId;
+  workingOrderId: WorkingOrderId;
+  amount: Decimal;
+  paymentRef: string;
+}
+
+/**
+ * What `initiate` returns: `ref` echoes the caller's `paymentRef`; `externalRef` is the
+ * hosted-payment id (the ONLY identifier the later inbound webhook carries, and therefore the
+ * resolve/settle key); `url` is the hosted payment page — presentation-agnostic, rendered as a QR
+ * at the table or sent as a link by the app, never distinguished here.
+ */
+export interface InitiateResult {
+  ref: string;
+  externalRef: string;
+  url: string;
+}
+
+/**
+ * A VERIFIED, parsed inbound settlement event, neutral of any vendor's wire shape. `outcome` is
+ * `settled` (the customer paid — advance to `captured`) or `expired` (abandoned / timed out —
+ * advance to `failed`). `amount` is what actually settled (the drift anchor reconcile uses later).
+ */
+export interface InboundSettlement {
+  provider: string;
+  externalRef: string;
+  outcome: "settled" | "expired";
+  amount: Decimal;
+  settledAt: Date;
+}
+
+/**
+ * The asynchronous / hosted settlement contract (§0's Mode 3) — a DIFFERENT method shape from
+ * `PaymentProvider`, never new methods on it (a required `initiate` would break every synchronous
+ * adapter). An adapter may implement `PaymentProvider`, this, or both. No method takes a caller
+ * transaction: `initiate` does its own short-transaction bookkeeping around a network call (T1/T2,
+ * like `collect`), and `verifyAndParse` is a pure verify+decode of a raw inbound event.
+ */
+export interface AsyncPaymentProvider {
+  readonly provider: string;
+
+  /** Mint a hosted payment and write an `initiated` `payments` row (external_ref = hosted id). */
+  initiate(params: InitiateParams): Promise<InitiateResult>;
+
+  /** Verify (signature) + parse a raw inbound event into a neutral settlement. `null` = an event
+   * we do not act on; throws on a bad signature. */
+  verifyAndParse(payload: string, signature: string): InboundSettlement | null;
 }

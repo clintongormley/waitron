@@ -20,8 +20,9 @@ import { sales, workingOrders } from "@waitron/db";
  * transient in-flight state a network-driving integrated adapter writes BEFORE its network call
  * and resolves after (T1/T2) — neutral across every such adapter, never adapter-specific
  * vocabulary. `accepted_offline`/`settled`/`declined` are Cycle A's offline values, added here with
- * this cycle's later tasks giving them real behavior. The two-phase `authorized` state is still a
- * later plan, to be added via ALTER TYPE when it lands. Mirrors `PaymentState` in ../provider.ts.
+ * this cycle's later tasks giving them real behavior. `initiated` is Mode 3 (async / hosted): the
+ * minted-but-unpaid hosted payment. The two-phase `authorized` state is still a later plan, to be
+ * added via ALTER TYPE when it lands. Mirrors `PaymentState` in ../provider.ts.
  */
 export const paymentState = pgEnum("payment_state", [
   "attempting",
@@ -35,6 +36,8 @@ export const paymentState = pgEnum("payment_state", [
   "accepted_offline",
   "settled",
   "declined",
+  // Mode 3 (async / hosted): the minted-but-unpaid hosted payment. Mirrors `PaymentState`.
+  "initiated",
 ]);
 
 /**
