@@ -272,6 +272,10 @@ only when — `settled` gains a reversal path.
 
 ### A drifting orphan is still reversed — and the two amounts can disagree
 
+> **Superseded.** As of `docs/superpowers/specs/2026-07-25-orphan-drift-gate-design.md`, a drifting
+> orphan is gated OUT of auto-reversal rather than reversed — see that design for the current
+> behaviour. The rest of this section is the historical record of the slice that shipped first.
+
 `drift` is never auto-*corrected*, but the claim loop does not consult it: a row that classified both
 `orphan` and `drift` is still reversed, in full. Skipping it would leave the *whole* amount unreturned
 in a case where returning it is otherwise unambiguously right, which is strictly worse for the

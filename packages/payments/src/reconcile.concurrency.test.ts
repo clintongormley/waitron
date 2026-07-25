@@ -123,11 +123,25 @@ describe("concurrent reconcile sweeps", () => {
       // winner. If a future change added a pre-filter (or an advisory lock) that serialised the two
       // sweeps instead, every assertion here would stay green while the thing this suite exists to
       // prove — the DB-level `isNull` guard under real concurrent contention — went untested.
-      const { rows } = await admin.execute<{ n: string }>(sql`
-        select count(*) as n from incidents
+      const { rows } = await admin.execute<{
+        n: string;
+        params: { payments: { remediation: string }[] };
+      }>(sql`
+        select count(*) over () as n, params from incidents
         where tenant_id = ${seeded.tenantId} and code = 'payment.reconcile_orphan'
           and acknowledged_at is null`);
+      // `count(*) over ()` returns ZERO rows (not one row with n = 0) when no incident matches, so
+      // this guards the failure mode explicitly: without it, a regression that raised no orphan
+      // incident at all would throw `Cannot read properties of undefined` on the next line instead
+      // of failing cleanly on the count assertion this suite exists to make.
+      expect(rows).toHaveLength(1);
       expect(Number(rows[0].n)).toBe(1);
+      // The surviving incident is the WINNER's. The loser blocks on the row lock inside the
+      // winner's T2, so the winner has committed — incident and all — before the loser evaluates
+      // its own gate, and the loser's `alreadyClaimed` insert is deduplicated away. If a future
+      // change let the loser's incident win instead, a human would read "another sweep owns this"
+      // about the sweep that is actually doing the reversal.
+      expect(rows[0].params.payments[0].remediation).toBe("claimed");
       expect(a.incidentsRaised + b.incidentsRaised).toBe(1);
     } finally {
       // `reconcilePayments` owns its own transaction boundaries internally — T1 and T2 each commit

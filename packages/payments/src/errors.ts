@@ -4,6 +4,32 @@
 import "@waitron/shared";
 
 /**
+ * Why the sweep is, or is not, reversing one orphaned payment — the four gates of the claim loop in
+ * `./reconcile.ts`, plus the claimed case, as a single code per payment.
+ *
+ * A code rather than a boolean because "not remediating" has four distinct causes with four
+ * different human responses, and a bare `false` told a reader none of them. Structured data the
+ * display layer localises; never prose.
+ */
+export type OrphanRemediation =
+  /** This sweep stamped the marker and will attempt the reversal. The marker is stamped in T2,
+   * BEFORE the network call, so this means "is reversing it", NOT "succeeded" — a claimed-but-refused
+   * reversal still reads `claimed` here and separately raises `payment.reconcile_remediation_failed`. */
+  | "claimed"
+  /** The working order is settled, not abandoned, so a sale exists: the orphan may be a lost
+   * associate-back, and refunding would hand back money owed against a live invoice. */
+  | "workingOrderNotAbandoned"
+  /** The payment is in the `settled` state, which the local state machine gives NO reversal path
+   * out of. Claiming it would stamp a permanent marker for a reversal that must fail. */
+  | "stateNotCaptured"
+  /** The same sweep also classified this payment `drift` — our amount and the processor's disagree,
+   * so the amount any reversal would move is exactly the figure we have just proven untrustworthy.
+   * Reported for a human, with the `payment.reconcile_drift` incident carrying both figures. */
+  | "amountDrifted"
+  /** An earlier sweep, or a concurrent one that won the race, already owns the reversal. */
+  | "alreadyClaimed";
+
+/**
  * packages/payments's contribution to the shared error registry, by declaration merging — the
  * DOMAIN-CONCEPT, lowercase, dot-namespaced convention (`payment.*`), never the package name.
  * packages/shared must never change just because a dependent package adds a code; this is how
@@ -61,21 +87,16 @@ declare module "@waitron/shared" {
       count: number;
     };
     /** Reconcile INCIDENT: money captured against a working order that is settled or abandoned but
-     * carries no sale. `remediating` is true when this sweep claimed the payment for reversal — the
-     * marker is stamped in T2, BEFORE the reversal is attempted, so `true` here means "this sweep is
-     * reversing it", not "this sweep succeeded"; a claimed-but-refused reversal still reads
-     * `remediating: true` and separately raises `payment.reconcile_remediation_failed`. On a SETTLED
-     * order the orphan is never claimed at all — it may be a lost association, where refunding would
-     * hand back money for an invoice the customer owes, so it is reported for a human instead; nor is
-     * a payment in the `settled` STATE, which has no reversal path at all, so claiming it would stamp
-     * a permanent marker for a reversal that cannot happen. Aggregated per till. */
+     * carries no sale. `remediation` says what the sweep is doing about each payment and, when it is
+     * standing down, which gate stopped it — see `OrphanRemediation`, whose members carry the
+     * reasoning. Aggregated per till. */
     "payment.reconcile_orphan": {
       payments: {
         paymentRef: string;
         amount: string;
         workingOrderId: string;
         workingOrderStatus: string;
-        remediating: boolean;
+        remediation: OrphanRemediation;
       }[];
       count: number;
     };
@@ -93,10 +114,15 @@ declare module "@waitron/shared" {
       count: number;
     };
     /** Reconcile INCIDENT: the processor settled a DIFFERENT amount than we captured. The AMOUNT is
-     * never auto-corrected — a human decides. Note this does not veto an orphan reversal: a row that
-     * is both an orphan on an abandoned order and a drift is still reversed, at OUR amount, because
-     * returning most of the money beats returning none; this incident carries both figures so the
-     * remainder is visible. Aggregated per till. */
+     * never auto-corrected — a human decides. Note this DOES veto an orphan reversal, but only when
+     * the state gate also passes: a row that is an orphan on an abandoned order, in state
+     * `captured`, and a drift is gated out and reported instead of reversed
+     * (`remediation: "amountDrifted"`) — a `settled`-state row in that same shape reports
+     * `stateNotCaptured` instead, since that gate runs first. No marker is stamped for the drift
+     * case, so the row stays in the audited state set and any sweep whose period covers it again
+     * will re-detect it, and this incident stays open (the dedup index is partial on
+     * `acknowledged_at IS NULL`) until a human settles the difference; it carries both figures for
+     * that human. Aggregated per till. */
     "payment.reconcile_drift": {
       payments: { paymentRef: string; captured: string; settled: string }[];
       count: number;

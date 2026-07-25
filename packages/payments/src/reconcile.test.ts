@@ -460,9 +460,10 @@ describe("orphan remediation", () => {
       sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
     );
     expect(rows[0].reconcile_remediated_at).not.toBeNull();
-    // `remediating` tells a human whether the sweep is handing this customer their money back, so
-    // the whole params shape is asserted here and negated in the SETTLED-order test below —
-    // hardcoding either value must fail one of the two.
+    // `remediation` tells a human whether the sweep is handing this customer their money back and,
+    // when it is not, which gate stopped it — so the whole params shape is asserted here and each
+    // other reason is asserted in its own test below. Hardcoding any single value must fail one of
+    // them.
     const incident = await db.execute<{
       params: {
         count: number;
@@ -471,7 +472,7 @@ describe("orphan remediation", () => {
           amount: string;
           workingOrderId: string;
           workingOrderStatus: string;
-          remediating: boolean;
+          remediation: string;
         }[];
       };
     }>(sql`select params from incidents where code = 'payment.reconcile_orphan'`);
@@ -483,7 +484,7 @@ describe("orphan remediation", () => {
           amount: "10.00",
           workingOrderId: seeded.workingOrderId,
           workingOrderStatus: "abandoned",
-          remediating: true,
+          remediation: "claimed",
         },
       ],
     });
@@ -533,7 +534,7 @@ describe("orphan remediation", () => {
     );
     expect(rows[0].reconcile_remediated_at).toBeNull();
     const incident = await db.execute<{
-      params: { payments: { workingOrderStatus: string; remediating: boolean }[] };
+      params: { payments: { workingOrderStatus: string; remediation: string }[] };
     }>(sql`select params from incidents where code = 'payment.reconcile_orphan'`);
     expect(incident.rows[0].params.payments).toEqual([
       {
@@ -541,7 +542,7 @@ describe("orphan remediation", () => {
         amount: "10.00",
         workingOrderId: seeded.workingOrderId,
         workingOrderStatus: "settled",
-        remediating: false,
+        remediation: "workingOrderNotAbandoned",
       },
     ]);
   });
@@ -569,9 +570,9 @@ describe("orphan remediation", () => {
     expect(reverse.calls).toEqual([]);
     expect(await openIncidentCodes(seeded.tenantId)).toEqual(["payment.reconcile_orphan"]);
     const incident = await db.execute<{
-      params: { payments: { remediating: boolean }[] };
+      params: { payments: { remediation: string }[] };
     }>(sql`select params from incidents where code = 'payment.reconcile_orphan'`);
-    expect(incident.rows[0].params.payments[0].remediating).toBe(false);
+    expect(incident.rows[0].params.payments[0].remediation).toBe("stateNotCaptured");
     const { rows } = await db.execute<{ reconcile_remediated_at: string | null }>(
       sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
     );
@@ -737,6 +738,260 @@ describe("orphan remediation", () => {
     expect(second.incidentsRaised).toBe(0);
     expect(second.remediationFailures).toEqual([
       { paymentRef: "p2", reason: "payment.not_refundable" },
+    ]);
+  });
+
+  it("reports alreadyClaimed for an orphan an earlier sweep already stamped", async () => {
+    // The marker is permanent by design, so a second sweep over the same period must not reverse
+    // the payment again — and must say WHY it is standing down, rather than reading identically to
+    // an orphan it was never allowed to touch.
+    const seeded = await seedWorkingOrder(db, freshNif());
+    await capture(seeded, "p1", "ext-1");
+    await setOrderStatus(seeded, "abandoned");
+    const first = recordingReverse();
+    await reconcilePayments(
+      deps(new FakeSettlementReport([settlement()]), first.fn),
+      brandTenantId(seeded.tenantId),
+      PERIOD,
+      NOW,
+    );
+    expect(first.calls).toEqual(["p1"]);
+
+    // Acknowledge the first sweep's incident before the second runs. Without this the assertion
+    // below would read the FIRST incident (`claimed`) and fail for a reason that has nothing to do
+    // with what is under test: the open-incident dedup index is partial on `acknowledged_at IS
+    // NULL`, so while the first stays open the second sweep's insert is deduplicated away.
+    await db.execute(sql`
+      update incidents set acknowledged_at = now()
+      where tenant_id = ${seeded.tenantId} and code = 'payment.reconcile_orphan'`);
+
+    const second = recordingReverse();
+    const result = await reconcilePayments(
+      deps(new FakeSettlementReport([settlement()]), second.fn),
+      brandTenantId(seeded.tenantId),
+      PERIOD,
+      NOW,
+    );
+    expect(result.orphan).toHaveLength(1);
+    expect(result.remediated).toBe(0);
+    expect(second.calls).toEqual([]);
+    const incident = await db.execute<{
+      params: { payments: { remediation: string }[] };
+    }>(sql`
+      select params from incidents
+      where code = 'payment.reconcile_orphan' and acknowledged_at is null`);
+    expect(incident.rows).toHaveLength(1);
+    expect(incident.rows[0].params.payments[0].remediation).toBe("alreadyClaimed");
+  });
+
+  it("reports alreadyClaimed, not amountDrifted, for a row that is both already-claimed and drifting", async () => {
+    // Pins the gate order: already-claimed precedes drift. An earlier sweep's marker is permanent,
+    // so settling THIS sweep's drift can never unblock a reversal this row already either succeeded
+    // or permanently failed at — reporting `amountDrifted` here would point a human at a fix that
+    // cannot do anything, which is exactly what the reordering exists to prevent.
+    const seeded = await seedWorkingOrder(db, freshNif());
+    await capture(seeded, "p1", "ext-1");
+    await setOrderStatus(seeded, "abandoned");
+    const first = recordingReverse();
+    await reconcilePayments(
+      deps(new FakeSettlementReport([settlement()]), first.fn),
+      brandTenantId(seeded.tenantId),
+      PERIOD,
+      NOW,
+    );
+    expect(first.calls).toEqual(["p1"]);
+
+    // Acknowledge the first sweep's incident before the second runs — as in the test above, the
+    // open-incident dedup index is partial on `acknowledged_at IS NULL`, so leaving it open would
+    // dedupe away the second sweep's insert and this assertion would read the FIRST incident
+    // (`claimed`) instead of the second sweep's.
+    await db.execute(sql`
+      update incidents set acknowledged_at = now()
+      where tenant_id = ${seeded.tenantId} and code = 'payment.reconcile_orphan'`);
+
+    // The second sweep's report now drifts the amount for the already-claimed row.
+    const second = recordingReverse();
+    const result = await reconcilePayments(
+      deps(new FakeSettlementReport([settlement({ amount: decimal("12.50") })]), second.fn),
+      brandTenantId(seeded.tenantId),
+      PERIOD,
+      NOW,
+    );
+    expect(result.orphan).toHaveLength(1);
+    expect(result.drift).toHaveLength(1);
+    expect(result.remediated).toBe(0);
+    expect(second.calls).toEqual([]);
+    const incident = await db.execute<{
+      params: { payments: { remediation: string }[] };
+    }>(sql`
+      select params from incidents
+      where code = 'payment.reconcile_orphan' and acknowledged_at is null`);
+    expect(incident.rows).toHaveLength(1);
+    expect(incident.rows[0].params.payments[0].remediation).toBe("alreadyClaimed");
+  });
+
+  it("does NOT claim an orphan whose amount has DRIFTED — it reports both instead", async () => {
+    // The one case where the sweep would move money at a figure it has, in the same pass, proven it
+    // cannot trust. The reversal primitive sends no amount, so the processor refunds ITS figure
+    // while we would record OURS; and the marker is permanent, so the row would leave the audited
+    // set with the books wrong and nothing to re-examine it. Report both, move nothing.
+    const seeded = await seedWorkingOrder(db, freshNif());
+    await capture(seeded, "p1", "ext-1");
+    await setOrderStatus(seeded, "abandoned");
+    const reverse = recordingReverse();
+    const result = await reconcilePayments(
+      deps(new FakeSettlementReport([settlement({ amount: decimal("12.50") })]), reverse.fn),
+      brandTenantId(seeded.tenantId),
+      PERIOD,
+      NOW,
+    );
+
+    expect(result.orphan).toHaveLength(1);
+    expect(result.drift).toHaveLength(1);
+    expect(result.remediated).toBe(0);
+    // Not a failed remediation — one correctly never attempted.
+    expect(result.remediationFailures).toEqual([]);
+    expect(reverse.calls).toEqual([]);
+    // No marker: the row stays in the audited state set, so any sweep whose period covers it again
+    // will re-detect it, and the open drift/orphan incidents persist regardless of cadence until a
+    // human settles the difference. This is the whole difference from a claimed-then-failed
+    // reversal, whose marker is permanent unconditionally.
+    const { rows } = await db.execute<{ reconcile_remediated_at: string | null }>(
+      sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
+    );
+    expect(rows[0].reconcile_remediated_at).toBeNull();
+    expect(await openIncidentCodes(seeded.tenantId)).toEqual([
+      "payment.reconcile_drift",
+      "payment.reconcile_orphan",
+    ]);
+    const orphan = await db.execute<{
+      params: { payments: { remediation: string }[] };
+    }>(sql`select params from incidents where code = 'payment.reconcile_orphan'`);
+    expect(orphan.rows[0].params.payments[0].remediation).toBe("amountDrifted");
+    // The drift incident still carries BOTH figures — the human settling the difference reads them
+    // from here, which is what makes reporting-instead-of-reversing actionable.
+    const drift = await db.execute<{
+      params: { payments: { paymentRef: string; captured: string; settled: string }[] };
+    }>(sql`select params from incidents where code = 'payment.reconcile_drift'`);
+    expect(drift.rows[0].params.payments).toEqual([
+      { paymentRef: "p1", captured: "10.00", settled: "12.50" },
+    ]);
+  });
+
+  it("still claims an orphan whose amount MATCHES — this is a gate, not a disabling", async () => {
+    // The regression guard for the test above: if the drift set were built wrongly (say, over every
+    // classified row rather than the `drift` ones), auto-reversal would silently stop entirely and
+    // every other orphan test would still pass.
+    const seeded = await seedWorkingOrder(db, freshNif());
+    await capture(seeded, "p1", "ext-1");
+    await setOrderStatus(seeded, "abandoned");
+    const reverse = recordingReverse();
+    const result = await reconcilePayments(
+      deps(new FakeSettlementReport([settlement()]), reverse.fn),
+      brandTenantId(seeded.tenantId),
+      PERIOD,
+      NOW,
+    );
+    expect(result.drift).toEqual([]);
+    expect(result.remediated).toBe(1);
+    expect(reverse.calls).toEqual(["p1"]);
+  });
+
+  it("still claims and reverses an abandoned orphan whose reference matches NOTHING in the report", async () => {
+    // The documented scope boundary (see the design's §4/§7): `classify` only ever emits `drift` for
+    // a row a settlement actually MATCHED (`settled !== undefined`). A reference the report never
+    // mentions at all leaves `settled` undefined — no `drift` entry is ever produced for it, so the
+    // drift gate has nothing to catch — and the orphan is claimed and reversed with NO amount
+    // comparison ever having happened. A stricter gate written as
+    // `entry.settled === null || driftedRefs.has(ref)` would still pass every other test in this
+    // file, which is exactly why this one exists.
+    //
+    // This row is ALSO `unsettled`: it is audited (captured, non-open working order) but unmatched,
+    // and its `auditedAt` sits inside `PERIOD`, which is always more than the settlement lag before
+    // `NOW` in this fixture set. That overlap is asserted below rather than avoided — `classify`'s
+    // predicates are independent by design (see its own doc comment).
+    const seeded = await seedWorkingOrder(db, freshNif());
+    await capture(seeded, "p1", "ext-nomatch");
+    await setOrderStatus(seeded, "abandoned");
+    const reverse = recordingReverse();
+    const result = await reconcilePayments(
+      deps(new FakeSettlementReport([]), reverse.fn),
+      brandTenantId(seeded.tenantId),
+      PERIOD,
+      NOW,
+    );
+    expect(result.orphan).toHaveLength(1);
+    expect(result.orphan[0]).toMatchObject({ paymentRef: "p1", settledAmount: null });
+    expect(result.unsettled).toHaveLength(1);
+    expect(result.drift).toEqual([]);
+    expect(result.remediated).toBe(1);
+    expect(reverse.calls).toEqual(["p1"]);
+    const { rows } = await db.execute<{ reconcile_remediated_at: string | null }>(
+      sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
+    );
+    expect(rows[0].reconcile_remediated_at).not.toBeNull();
+  });
+
+  it("reports the FIRST gate when a row trips several — not the drift one", async () => {
+    // A settled-order orphan whose amount ALSO drifted. Both gates apply, and the order matters to
+    // the human: reporting `amountDrifted` would suggest that settling the difference unblocks the
+    // reversal, when the settled working order forbids it whatever the amount says.
+    const seeded = await seedWorkingOrder(db, freshNif());
+    await capture(seeded, "p1", "ext-1");
+    await setOrderStatus(seeded, "settled");
+    const reverse = recordingReverse();
+    const result = await reconcilePayments(
+      deps(new FakeSettlementReport([settlement({ amount: decimal("12.50") })]), reverse.fn),
+      brandTenantId(seeded.tenantId),
+      PERIOD,
+      NOW,
+    );
+    expect(result.drift).toHaveLength(1);
+    expect(reverse.calls).toEqual([]);
+    const orphan = await db.execute<{
+      params: { payments: { remediation: string }[] };
+    }>(sql`select params from incidents where code = 'payment.reconcile_orphan'`);
+    expect(orphan.rows[0].params.payments[0].remediation).toBe("workingOrderNotAbandoned");
+  });
+
+  it("gates only the DRIFTING orphan, not every orphan in the sweep", async () => {
+    // The regression guard for the three tests above: every one of them exercises a single payment,
+    // so an over-broad gate of the shape `if (driftedRefs.size > 0)` — any drift anywhere blocking
+    // EVERY orphan's reversal — would still pass all three. Two abandoned orphans on the same till,
+    // only one of which drifts, is what catches that: only the non-drifting one may be reversed.
+    const seeded = await seedWorkingOrder(db, freshNif());
+    await capture(seeded, "p1", "ext-1");
+    await capture(seeded, "p2", "ext-2", "20.00");
+    await setOrderStatus(seeded, "abandoned");
+    const reverse = recordingReverse();
+    const result = await reconcilePayments(
+      deps(
+        new FakeSettlementReport([
+          settlement(),
+          settlement({ references: ["ext-2"], amount: decimal("22.00") }),
+        ]),
+        reverse.fn,
+      ),
+      brandTenantId(seeded.tenantId),
+      PERIOD,
+      NOW,
+    );
+    expect(result.drift).toHaveLength(1);
+    expect(result.remediated).toBe(1);
+    expect(reverse.calls).toEqual(["p1"]);
+    // One aggregate orphan incident, both reasons present — the only coverage anywhere of two
+    // different `remediation` values coexisting in the same aggregate.
+    const orphan = await db.execute<{
+      params: { payments: { paymentRef: string; remediation: string }[] };
+    }>(sql`select params from incidents where code = 'payment.reconcile_orphan'`);
+    expect(orphan.rows).toHaveLength(1);
+    expect(
+      orphan.rows[0].params.payments
+        .map(({ paymentRef, remediation }) => ({ paymentRef, remediation }))
+        .sort((a, b) => a.paymentRef.localeCompare(b.paymentRef)),
+    ).toEqual([
+      { paymentRef: "p1", remediation: "claimed" },
+      { paymentRef: "p2", remediation: "amountDrifted" },
     ]);
   });
 });

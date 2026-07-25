@@ -29,6 +29,7 @@ import type {
   InitiateResult,
   ManualCardPaymentParams,
   ManualCardPaymentResult,
+  OrphanRemediation,
   PaymentMismatch,
   PaymentProvider,
   PaymentReconciler,
@@ -168,6 +169,15 @@ describe("the reconcile surface", () => {
       }),
     };
     expect(reconciler.provider).toBe("fake");
+  });
+
+  it("types an OrphanRemediation value from the root barrel", () => {
+    // Type-only export declared in ./errors.ts and re-exported from ./index.ts: nothing else in the
+    // repo imports it, so this is the only thing that would catch it being deleted from the root
+    // barrel — a deleted re-export fails this package's own `pnpm typecheck`, and the annotation
+    // below forces that check against the ROOT barrel, not the deep `./errors.js` path.
+    const remediation: OrphanRemediation = "amountDrifted";
+    expect(remediation).toBe("amountDrifted");
   });
 
   it("types a SettlementReportSource and a mismatch from the root barrel", () => {

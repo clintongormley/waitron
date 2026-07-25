@@ -55,6 +55,7 @@ export { PAYMENTS_MIGRATIONS } from "./migrations.js";
 export { getPaymentPolicy, resolveOfflineDecision } from "./policy.js";
 export type { PaymentPolicyRow } from "./policy.js";
 export { DEFAULT_SETTLEMENT_LAG_MS, classify, reconcilePayments } from "./reconcile.js";
+export type { OrphanRemediation } from "./errors.js";
 export type {
   Classification,
   ClassifiedRow,

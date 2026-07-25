@@ -9,6 +9,7 @@ import type { Decimal, SaleId, TenantId, TillId } from "@waitron/shared";
 import { withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { PaymentState } from "./provider.js";
+import type { OrphanRemediation } from "./errors.js";
 import type { ReconcilableRow } from "./store.js";
 import {
   existingReferences,
@@ -109,11 +110,12 @@ export interface PaymentReconcileResult {
   /**
    * Orphans this sweep CLAIMED and then could not reverse, with the structured reason each failed
    * for. Present because the result is the audit's authoritative record and this is the one finding
-   * that is otherwise unrecoverable: the five mismatch classes are re-detected from scratch by every
-   * later sweep, but a claimed orphan carries a permanent `reconcile_remediated_at` marker, so a
-   * failure dropped here is dropped for good. The `payment.reconcile_remediation_failed` incident
-   * alone cannot carry it — the open-incident dedup keys on `(tenant, till, code, sale_id)`, so a
-   * still-open incident from an earlier sweep silently swallows this sweep's new failures.
+   * that is otherwise unrecoverable: the five mismatch classes are re-detected by any sweep whose
+   * period covers them again, and their incidents stay open regardless of cadence — but a claimed
+   * orphan carries a permanent `reconcile_remediated_at` marker unconditionally, whichever sweep
+   * stamped it, so a failure dropped here is dropped for good. The `payment.reconcile_remediation_failed`
+   * incident alone cannot carry it — the open-incident dedup keys on `(tenant, till, code, sale_id)`,
+   * so a still-open incident from an earlier sweep silently swallows this sweep's new failures.
    */
   remediationFailures: { paymentRef: string; reason: string }[];
 }
@@ -301,6 +303,15 @@ export async function reconcilePayments(
   };
   for (const entry of classified.rows) result[entry.klass].push(mismatchOf(entry));
 
+  // `classify` emits INDEPENDENT predicates, so a drifting orphan is TWO entries over one row and
+  // the `orphan` entry carries no knowledge of the `drift` one. This set is the join, keyed on
+  // paymentRef — which the sweep already treats as unique per row. Built here, before T2 opens,
+  // because it depends only on `classified`: see the batching comments on `existingReferences` and
+  // `tillsForWorkingOrders` below for why this file keeps the write transaction minimal.
+  const driftedRefs = new Set(
+    classified.rows.filter((e) => e.klass === "drift").map((e) => e.row.paymentRef),
+  );
+
   // T2 — resolve the missingLocal candidates, raise every incident, and claim the orphans this
   // sweep will reverse. One short write transaction.
   const remediable: ReconcilableRow[] = [];
@@ -324,8 +335,9 @@ export async function reconcilePayments(
       result.missingLocal.push(missingLocalMismatch(record));
     }
 
-    // Claim the orphans this sweep will reverse. Three gates, each narrowing to money that can
-    // actually be handed back:
+    // Decide what happens to each orphan, and record WHY on every one of them. The gates narrow to
+    // money that can actually be handed back, and their ORDER is what a human is shown when a row
+    // trips more than one, so it is deliberate:
     //
     //   - ABANDONED working order only. On a `settled` one a sale exists, so the orphan may be a
     //     lost associate-back and refunding would take back money the customer owes against a live
@@ -338,33 +350,65 @@ export async function reconcilePayments(
     //     good, on every occurrence. It is reported and incident-raised instead, exactly like a
     //     `settled`-working-order orphan. DO NOT drop this gate to "cover more orphans" until
     //     `settled` has a reversal path.
-    //   - not already claimed by an earlier sweep.
+    //   - not already claimed by an earlier or concurrent sweep. This precedes the drift gate below
+    //     for the same permanence reason as the state gate above: the marker an earlier (or
+    //     concurrent, race-losing) sweep stamped is permanent, so settling a drift on a row that is
+    //     already claimed can never unblock a reversal — it has either already happened or already
+    //     failed for good. Reporting `amountDrifted` on such a row would point a human at a fix that
+    //     cannot do anything; `alreadyClaimed` is the gate whose resolution (there is none, for this
+    //     row) is actually accurate.
+    //   - amount carries no recorded DISAGREEMENT with the processor. A drifting row is the one case
+    //     where the sweep would move money at a figure it has, in the same pass, proven
+    //     untrustworthy: the reversal primitive sends no amount, so the processor refunds ITS figure
+    //     while we record OURS. Sending our amount instead is NOT the fix — when the processor's
+    //     charge is the smaller of the two it exceeds the charge, the refund is refused, and the
+    //     marker is already stamped, so it becomes money kept for good. Gated out and reported: no
+    //     marker is stamped, so the row stays in the audited state set and ANY sweep whose period
+    //     covers it again will re-detect it; and the `payment.reconcile_drift` and
+    //     `payment.reconcile_orphan` incidents stay OPEN (the dedup index is partial on
+    //     `acknowledged_at IS NULL`), so the human signal persists regardless of cadence. The
+    //     separate `drift` incident carries both figures.
     //
-    // A row that ALSO classified `drift` is still claimed, and reversed at OUR amount (`ReversalFn`
-    // takes none). Skipping it would leave money unreturned in the one case where returning it is
-    // otherwise unambiguous; the separate `drift` incident carries both figures for the human who
-    // settles the difference.
+    // Every orphan gets exactly one entry in this map, which is what lets `incidentFor` read it
+    // without a fallback.
+    const remediation = new Map<string, OrphanRemediation>();
     for (const entry of classified.rows) {
       if (entry.klass !== "orphan") continue;
-      if (entry.row.workingOrderStatus !== "abandoned") continue;
-      if (entry.row.state !== "captured") continue;
-      if (entry.row.reconcileRemediatedAt !== null) continue;
+      const ref = entry.row.paymentRef;
+      if (entry.row.workingOrderStatus !== "abandoned") {
+        remediation.set(ref, "workingOrderNotAbandoned");
+        continue;
+      }
+      if (entry.row.state !== "captured") {
+        remediation.set(ref, "stateNotCaptured");
+        continue;
+      }
+      if (entry.row.reconcileRemediatedAt !== null) {
+        remediation.set(ref, "alreadyClaimed");
+        continue;
+      }
+      if (driftedRefs.has(ref)) {
+        remediation.set(ref, "amountDrifted");
+        continue;
+      }
       const claimed = await markReconcileRemediated(tx, {
         tenantId,
         provider: deps.provider,
-        paymentRef: entry.row.paymentRef,
+        paymentRef: ref,
         at: now,
       });
+      // A lost race is the same fact as an earlier sweep's marker — another sweep owns the reversal
+      // — so it reports the same reason.
+      remediation.set(ref, claimed ? "claimed" : "alreadyClaimed");
       if (claimed) remediable.push(entry.row);
     }
-    const claimedRefs = new Set(remediable.map((row) => row.paymentRef));
 
     result.incidentsRaised += await raiseRowIncidents(
       tx,
       deps,
       tenantId,
       classified,
-      claimedRefs,
+      remediation,
       now,
     );
     result.incidentsRaised += await raiseMissingLocal(tx, deps, tenantId, missing, now);
@@ -400,7 +444,7 @@ async function raiseRowIncidents(
   deps: ReconcileDeps,
   tenantId: TenantId,
   classified: Classification,
-  claimedRefs: Set<string>,
+  remediation: Map<string, OrphanRemediation>,
   now: Date,
 ): Promise<number> {
   const groups = new Map<string, ClassifiedRow[]>();
@@ -417,7 +461,7 @@ async function raiseRowIncidents(
     const inserted = await deps.incidents(tx, {
       tenantId,
       tillId: brandTillId(first.row.tillId),
-      error: incidentFor(first.klass, group, claimedRefs),
+      error: incidentFor(first.klass, group, remediation),
       severity: SEVERITY[first.klass],
       detectedAt: now,
     });
@@ -434,7 +478,7 @@ async function raiseRowIncidents(
 function incidentFor(
   klass: MismatchClass,
   group: ClassifiedRow[],
-  claimedRefs: Set<string>,
+  remediation: Map<string, OrphanRemediation>,
 ): AppError {
   const count = group.length;
   if (klass === "unsettled") {
@@ -468,7 +512,9 @@ function incidentFor(
         amount: row.amount,
         workingOrderId: row.workingOrderId,
         workingOrderStatus: row.workingOrderStatus,
-        remediating: claimedRefs.has(row.paymentRef),
+        // Never undefined: the claim loop above sets an entry for EVERY orphan entry in
+        // `classified.rows`, and this branch groups over that same array.
+        remediation: remediation.get(row.paymentRef)!,
       })),
     });
   }
