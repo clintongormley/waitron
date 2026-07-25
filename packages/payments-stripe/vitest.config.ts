@@ -22,6 +22,9 @@ export default defineConfig({
         // The real on-device SDK boundary — server-side calls exercised only by the nightly sandbox;
         // the device-side collect/offline-queue run in the device SDK, proven by FakeStripeDevice.
         "src/stripe-device-client.ts",
+        // The real Checkout/webhooks SDK boundary — createCheckoutSession exercised only by the
+        // nightly sandbox; constructWebhookEvent's mapping is proven through FakeStripeHosted.
+        "src/stripe-hosted-client.ts",
         "src/testing/**",
         "src/**/*.sandbox.test.ts",
         // The nightly sandbox suite's OWN vitest config (a `defineConfig()` call, no logic) — v8's

@@ -1,4 +1,4 @@
-import { toScale } from "@waitron/shared";
+import { decimal, toScale } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 
 /** The narrow Stripe surface `StripeTerminalProvider` depends on — the calls it makes, not the SDK.
@@ -31,4 +31,16 @@ export interface StripeClient {
 export function toMinorUnits(amount: Decimal): number {
   const scaled = toScale(amount, 2);
   return Number(scaled.replace(".", ""));
+}
+
+/** Exact minor→major conversion — the inverse of `toMinorUnits`. Stripe reports settled amounts as
+ * integer minor units (`amount_total`, cents); this rebuilds the exact scale-2 `Decimal` for the
+ * neutral `InboundSettlement`. Integer arithmetic only (never a float): the string is built from the
+ * absolute integer, split at the last two digits. */
+export function fromMinorUnits(minor: number): Decimal {
+  const cents = Math.trunc(Math.abs(minor));
+  const s = String(cents).padStart(3, "0");
+  const whole = s.slice(0, -2);
+  const frac = s.slice(-2);
+  return decimal(`${minor < 0 ? "-" : ""}${whole}.${frac}`);
 }

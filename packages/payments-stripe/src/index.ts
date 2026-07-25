@@ -8,3 +8,8 @@ export type { StripeDeviceClient, DeviceCollectOutcome } from "./device-client.j
 export { stripeDeviceClient } from "./stripe-device-client.js";
 export { StripeOnDeviceProvider } from "./device-provider.js";
 export type { StripeOnDeviceProviderOptions } from "./device-provider.js";
+export type { StripeHostedClient, ParsedHostedEvent } from "./hosted-client.js";
+export { fromMinorUnits } from "./client.js";
+export { StripeHostedProvider } from "./hosted-provider.js";
+export type { StripeHostedProviderOptions } from "./hosted-provider.js";
+export { stripeHostedClient } from "./stripe-hosted-client.js";

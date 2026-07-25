@@ -546,13 +546,17 @@ Then, in priority order:
      connection tokens, device-side `collect`, the device-local offline queue behind `forward()`, and a
      nightly sandbox — the Stripe-specific `@waitron/payments-stripe` half. Webhooks + the untenanted
      `(provider, external_ref)` resolution stay deferred to Mode 3 / reconcile, as in 2a.
-4. **Mode 3 — Asynchronous / hosted** — *the next plan; full design in the Mode 3 section below.* QR
-   pay-at-table, payment links, online orders — the `initiate() + webhook` shape (§0), a distinct
-   `AsyncPaymentProvider` interface, so it follows the synchronous adapters. **Sliced neutral-then-adapter**
-   (2026-07-24), mirroring 4a→2a a third time: **Slice A** the provider-neutral async layer (the interface,
-   the `initiated` state, the webhook→settle→associate path, the untenanted `(provider, external_ref)`
-   resolver, and idempotency, all proven with a fake) and **Slice B** the real Stripe Checkout adapter.
-   Brings in the **webhooks and untenanted tenant-resolution** deferred through 2a/2b.
+4. **Mode 3 — Asynchronous / hosted** — full design in the Mode 3 section below. QR pay-at-table,
+   payment links, online orders — the `initiate() + webhook` shape (§0), a distinct
+   `AsyncPaymentProvider` interface, so it follows the synchronous adapters. **Sliced
+   neutral-then-adapter** (2026-07-24), mirroring 4a→2a a third time:
+   - **Slice A — the provider-neutral async layer** — **landed (PR #26)**; the `AsyncPaymentProvider`
+     interface, the `initiated` state, the webhook→settle→associate path, the untenanted
+     `(provider, external_ref)` resolver, and idempotency, all proven with a fake.
+   - **Slice B — the real Stripe Checkout adapter** — *implemented; lands with this PR*;
+     `StripeHostedProvider` (`initiate` + `verifyAndParse`) behind the neutral layer, proven with
+     `FakeStripeHosted` + a real-PG RLS test. Brings in the **webhooks and untenanted
+     tenant-resolution** deferred through 2a/2b.
 5. **Cross-cutting, layered in as modes need them:** `reconcile()` per integrated mode (the former
    "4d"; manual mode has no `reconcile` — its audit is external); the tab/tip lifecycle
    (`preAuth`/`incrementalAuth`/`tipAdjust`, the former "4e"); and the refund/void **role-gate**,
