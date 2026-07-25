@@ -36,7 +36,17 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
     stripe = new Stripe(KEY!);
     const location = await stripe.terminal.locations.create({
       display_name: "Waitron CI",
-      address: { line1: "1 Test St", city: "Madrid", country: "ES", postal_code: "28001" },
+      // `state` is REQUIRED for an ES Location — Stripe began rejecting the address without it
+      // ("Missing required address field for a Location in ES: address[state]") between the
+      // 2026-07-24 and 2026-07-25 nightlies, with no change on our side. It is the province, so
+      // for a Madrid address it repeats the city. Do not drop it as redundant.
+      address: {
+        line1: "1 Test St",
+        city: "Madrid",
+        state: "Madrid",
+        country: "ES",
+        postal_code: "28001",
+      },
     });
     locationId = location.id;
     // `registration_code: "simulated-wpe"` registers a Stripe-hosted SIMULATED reader (the WisePOS E
