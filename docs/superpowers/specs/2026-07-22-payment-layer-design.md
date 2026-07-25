@@ -209,9 +209,8 @@ interface PaymentProvider {
   refund(ref: string): Promise<PaymentResult>;                        // full refund of a capture
   partialRefund(ref: string, amount: Decimal): Promise<PaymentResult>;
 
-  // The drain / reconcile pair — mirrors FiscalBackend.
+  // The drain half of the pair; reconcile is its own interface (see the reconcile design).
   forward(now: Date): Promise<ForwardResult>;                         // push accepted-offline payments
-  reconcile(tenantId: TenantId, period: Period): Promise<PaymentReconcileResult>;
 }
 ```
 
@@ -369,6 +368,8 @@ fail) into an explicit, idempotent incident at the back, reusing the self-heal d
 ---
 
 ## 6. Reconciliation
+
+> **Superseded in two places by [the reconcile design](./2026-07-25-payment-reconcile-design.md) (2026-07-25):** the sweep is a separate `PaymentReconciler` interface rather than a `PaymentProvider` method, and the missed-inbound-settlement case is its own fifth class (`lostSettlement`) rather than part of `missingLocal`.
 
 `reconcile(tenantId, period)` is the read-side backstop, structurally the twin of
 `FiscalBackend.reconcile`: it audits our `payments` rows against **what the processor's settlement /
@@ -557,8 +558,9 @@ Then, in priority order:
      `StripeHostedProvider` (`initiate` + `verifyAndParse`) behind the neutral layer, proven with
      `FakeStripeHosted` + a real-PG RLS test. Brings in the **webhooks and untenanted
      tenant-resolution** deferred through 2a/2b.
-5. **Cross-cutting, layered in as modes need them:** `reconcile()` per integrated mode (the former
-   "4d"; manual mode has no `reconcile` — its audit is external); the tab/tip lifecycle
+5. **Cross-cutting, layered in as modes need them:** `reconcile()` per settlement identity (the former
+   "4d") — **Slice A (the neutral sweep) landed**; Slice B (the vendor adapter) is next (manual mode
+   has no `reconcile` — its audit is external); the tab/tip lifecycle
    (`preAuth`/`incrementalAuth`/`tipAdjust`, the former "4e"); and the refund/void **role-gate**,
    which rides with identity (sub-project 5).
 

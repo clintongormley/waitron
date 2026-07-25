@@ -105,7 +105,10 @@ export interface ForwardResult {
  *
  * Card is the subject. Cash needs no provider (it is recorded directly as a settled tender), so it
  * is deliberately absent. Split tender is N `collect` calls, not a method.
- * `authorize`/`capture`/`preAuth`/`incrementalAuth`/`tipAdjust`/`reconcile` are later plans.
+ * `authorize`/`capture`/`preAuth`/`incrementalAuth`/`tipAdjust` are later plans. `reconcile` is
+ * deliberately NOT here: the audit is scoped per settlement identity, not per capture mechanism, so
+ * it lives on its own `PaymentReconciler` interface (./reconcile.ts) which one implementer covers
+ * for all of a vendor's adapters — including a hosted one, which is not a `PaymentProvider` at all.
  */
 export interface PaymentProvider {
   readonly provider: string;

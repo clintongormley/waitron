@@ -42,5 +42,77 @@ declare module "@waitron/shared" {
      * previously offline-accepted payment. The sale already chained and is immutable, so this is a
      * staff-facing uncollected-receivable / bad-debt notice for the till, not a fiscal reversal. */
     "payment.offline_forward_declined": { paymentRef: string; amount: string };
+    /** Raised as an INCIDENT (never thrown) by a reconcile sweep: payments we believe settled that
+     * the processor's report still shows nothing for, past the in-flight tolerance. AGGREGATED —
+     * one incident per (till, code) carrying every payment, because the open-incident dedup index
+     * keys on `(tenant, till, code, sale_id)` and these rows share a null sale_id, so N same-key
+     * rows would silently collapse into one (the PR #25 lesson, applied deliberately here).
+     * `settledAt` is ISO-8601 (never null: a row only reaches this class once it is `captured` or
+     * `settled`, and both states always stamp `settled_at` at insert time). */
+    "payment.reconcile_unsettled": {
+      payments: { paymentRef: string; amount: string; settledAt: string }[];
+      count: number;
+    };
+    /** Reconcile INCIDENT: a payment still `initiated` locally that the processor reports as paid —
+     * a missed or late inbound settlement. Not auto-healed: advancing it would need the sale to be
+     * chained, which is app-level orchestration. Aggregated per till, as above. */
+    "payment.reconcile_lost_settlement": {
+      payments: { paymentRef: string; amount: string; workingOrderId: string }[];
+      count: number;
+    };
+    /** Reconcile INCIDENT: money captured against a working order that is settled or abandoned but
+     * carries no sale. `remediating` is true when this sweep claimed the payment for reversal — the
+     * marker is stamped in T2, BEFORE the reversal is attempted, so `true` here means "this sweep is
+     * reversing it", not "this sweep succeeded"; a claimed-but-refused reversal still reads
+     * `remediating: true` and separately raises `payment.reconcile_remediation_failed`. On a SETTLED
+     * order the orphan is never claimed at all — it may be a lost association, where refunding would
+     * hand back money for an invoice the customer owes, so it is reported for a human instead; nor is
+     * a payment in the `settled` STATE, which has no reversal path at all, so claiming it would stamp
+     * a permanent marker for a reversal that cannot happen. Aggregated per till. */
+    "payment.reconcile_orphan": {
+      payments: {
+        paymentRef: string;
+        amount: string;
+        workingOrderId: string;
+        workingOrderStatus: string;
+        remediating: boolean;
+      }[];
+      count: number;
+    };
+    /** Reconcile INCIDENT: the processor reports a settlement we hold no payment row for, at any
+     * time, in any state — silent data loss. Only raised when the settlement carried our own
+     * identifiers back (the `hint`), because an incident needs a till and an unattributable
+     * settlement has none; unattributable ones are reported in the result instead. */
+    "payment.reconcile_missing_local": {
+      settlements: {
+        references: string[];
+        amount: string;
+        settledAt: string;
+        paymentRef: string;
+      }[];
+      count: number;
+    };
+    /** Reconcile INCIDENT: the processor settled a DIFFERENT amount than we captured. The AMOUNT is
+     * never auto-corrected — a human decides. Note this does not veto an orphan reversal: a row that
+     * is both an orphan on an abandoned order and a drift is still reversed, at OUR amount, because
+     * returning most of the money beats returning none; this incident carries both figures so the
+     * remainder is visible. Aggregated per till. */
+    "payment.reconcile_drift": {
+      payments: { paymentRef: string; captured: string; settled: string }[];
+      count: number;
+    };
+    /** Reconcile INCIDENT: one or more orphan auto-reversals were attempted this sweep and the
+     * processor refused (or the payment could not be addressed at all). Aggregated per till, for the
+     * same reason `payment.reconcile_orphan` and its siblings are: these payments have a null
+     * `sale_id` by definition (that is what makes them orphans), so N same-key incidents racing for
+     * one open-incident dedup slot (`tenant, till, code, sale_id`) would silently collapse to one,
+     * dropping every failure but the first. Each entry's `reason` is a structured code — the failed
+     * reversal's `AppError` code, or the literal `"unknown"` for a non-`AppError` failure — never
+     * prose. The remediation marker is already stamped for every payment named here, so none of them
+     * will be retried by a later sweep; this incident is a human's to resolve. */
+    "payment.reconcile_remediation_failed": {
+      payments: { paymentRef: string; amount: string; reason: string }[];
+      count: number;
+    };
   }
 }

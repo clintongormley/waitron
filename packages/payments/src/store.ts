@@ -1,7 +1,8 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { AppError, addDecimal, compareDecimal, decimal, sumDecimals } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
+import { workingOrders } from "@waitron/db";
 import { payments } from "./schema/payments.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
 import type { PaymentState } from "./provider.js";
@@ -529,6 +530,234 @@ export async function assertReversible(
       alreadyRefunded,
     });
   }
+}
+
+/**
+ * One row the reconcile sweep audits, joined to its working order for the till (every incident
+ * needs one) and the status (the orphan rule). `auditedAt` is the NON-NULL tolerance anchor —
+ * `settled_at` for a captured/settled row, `created_at` for an `initiated` one — so the classifier
+ * needs no null branch on a column that, for the states this query returns, is never null anyway.
+ * `createdAt` is separate from it and carried for one reason: it is the ordering anchor
+ * `listReconcilable` merges its two arms on (see there).
+ */
+export interface ReconcilableRow {
+  paymentRef: string;
+  state: PaymentState;
+  amount: string;
+  externalRef: string | null;
+  saleId: string | null;
+  settledAt: string | null;
+  createdAt: string;
+  auditedAt: string;
+  workingOrderId: string;
+  workingOrderStatus: "open" | "settled" | "abandoned";
+  tillId: string;
+  reconcileRemediatedAt: string | null;
+}
+
+/**
+ * The reconcile sweep's T1 read: this provider's auditable rows for the period, joined to their
+ * working order. Auditable means money we believe we hold (`captured`/`settled`, anchored on
+ * `settled_at`) or money we believe is pending (`initiated`, anchored on `created_at` — it has no
+ * settlement time yet). `accepted_offline` is deliberately absent: that queue belongs to
+ * `forward()`. `failed`/`voided`/`refunded`/`partially_refunded` are absent too — nothing is
+ * expected to settle for them, and `existingReferences` still sees them, so their settlements
+ * never read as missingLocal.
+ *
+ * Filters compare the timestamp columns directly (no `to_char` wrapper), and the two state groups
+ * are issued as TWO queries rather than one `OR`, deliberately. A single `OR` over two different
+ * timestamp columns needs a usable index on BOTH arms before the planner will build a BitmapOr;
+ * there is an index leading `(tenant_id, provider, settled_at)` but none on `created_at`, so the OR
+ * form degrades to a scan of the tenant's whole payments history on every sweep — for a tenant with
+ * a year of payments, every row, every night. Split, the `captured`/`settled` arm uses
+ * `payments_reconcile_idx` fully, and the `initiated` arm uses its leading `(tenant_id, provider)`
+ * columns and then filters a set that is small and short-lived by nature (a minted-but-unpaid hosted
+ * payment resolves or expires within minutes). A second index on `created_at` would buy the same
+ * thing at the cost of another write-path index, which is why it is not the answer here.
+ *
+ * The two arms are merged on `created_at` then `payment_ref`, so the combined result keeps the
+ * single query's created_at ordering AND is fully deterministic (the old single `ORDER BY
+ * created_at` left same-instant rows in whatever order the plan produced them).
+ *
+ * Run under `withTenant`, so RLS scopes both tables; on top of that, both arms below ALSO carry an
+ * explicit `eq(payments.tenantId, tenantId)` predicate — defence-in-depth for a superuser or
+ * `BYPASSRLS` connection, where RLS does not apply and this predicate is the only thing scoping the
+ * query to one tenant at all. The join's `workingOrders.tenantId = payments.tenantId` equality is
+ * NOT that defence: it only keeps the join tenant-*consistent* (the two tables agree with each
+ * other), never tenant-*scoped* (that either belongs to the caller's tenant) — under a bypassing
+ * connection with no `eq(payments.tenantId, …)` at all, it happily agrees across every tenant's
+ * rows. Mirrors the fiscal sweep's `rowsForPeriod`, which carries the same explicit predicate
+ * alongside its own join-consistency one, for the identical reason.
+ */
+export async function listReconcilable(
+  tx: Transaction,
+  tenantId: string,
+  provider: string,
+  period: { from: Date; to: Date },
+): Promise<ReconcilableRow[]> {
+  const from = period.from.toISOString();
+  const to = period.to.toISOString();
+  const auditable = () =>
+    tx
+      .select({
+        paymentRef: payments.paymentRef,
+        state: payments.state,
+        amount: payments.amount,
+        externalRef: payments.externalRef,
+        saleId: payments.saleId,
+        settledAt: payments.settledAt,
+        createdAt: payments.createdAt,
+        auditedAt: sql<string>`coalesce(${payments.settledAt}, ${payments.createdAt})`,
+        workingOrderId: payments.workingOrderId,
+        workingOrderStatus: workingOrders.status,
+        tillId: workingOrders.tillId,
+        reconcileRemediatedAt: payments.reconcileRemediatedAt,
+      })
+      .from(payments)
+      .innerJoin(
+        workingOrders,
+        and(
+          eq(workingOrders.id, payments.workingOrderId),
+          eq(workingOrders.tenantId, payments.tenantId),
+        ),
+      );
+
+  const held = await auditable().where(
+    and(
+      eq(payments.tenantId, tenantId),
+      eq(payments.provider, provider),
+      inArray(payments.state, ["captured", "settled"]),
+      gte(payments.settledAt, from),
+      lt(payments.settledAt, to),
+    ),
+  );
+  const pending = await auditable().where(
+    and(
+      eq(payments.tenantId, tenantId),
+      eq(payments.provider, provider),
+      eq(payments.state, "initiated"),
+      gte(payments.createdAt, from),
+      lt(payments.createdAt, to),
+    ),
+  );
+
+  // Code-unit comparison of `${created_at}|${payment_ref}` — no locale collation, no branch on the
+  // three-way result. `payment_ref` is unique per (tenant, provider), so the key is total.
+  const orderKey = (row: ReconcilableRow): string => `${row.createdAt}|${row.paymentRef}`;
+  return [...held, ...pending].sort((a, b) => {
+    const left = orderKey(a);
+    const right = orderKey(b);
+    return Number(left > right) - Number(left < right);
+  });
+}
+
+/** Postgres statements have a hard bind-parameter ceiling (65535); chunking an `IN` list keeps a
+ * caller well under it regardless of how large the input is, rather than trusting every future
+ * caller to stay small. Shared by `existingReferences` (a settlement report's references) and
+ * `tillsForWorkingOrders` (a sweep's hinted working-order ids) — the same discipline, two lists. */
+const CHUNK_SIZE = 1000;
+
+/**
+ * Which of these processor references belongs to ANY payment of this provider — in any state, at
+ * any time? The targeted existence check that stands between an unmatched settlement and a
+ * `missingLocal` classification, batched into as few round trips as the bind-parameter ceiling
+ * allows: the caller collects every reference across a whole sweep's unmatched settlements and
+ * calls this ONCE (see `reconcilePayments`'s T2), rather than once per settlement. T2 is a WRITE
+ * transaction, so one query per settlement there would also lengthen lock contention with the
+ * concurrent sweeps this feature explicitly supports (see `reconcile.concurrency.test.ts`) — for a
+ * tenant with zero local rows against a large report, the exact silent-data-loss case this audit
+ * exists to catch, that is an unmatched settlement's worth of round trips inside the one
+ * transaction every other sweep also has to get through.
+ *
+ * It is deliberately unbounded by period and by state: the report is fetched over a WIDER window
+ * than the local rows (settlement lags capture by days), so a window-difference would manufacture
+ * false positives for payments whose local row simply sits outside the audited period.
+ *
+ * Carries an explicit `eq(payments.tenantId, tenantId)` predicate for the same defence-in-depth
+ * reason as `listReconcilable` — under a superuser or `BYPASSRLS` connection, where RLS does not
+ * apply, this is the only thing scoping the check to one tenant. The consequence of skipping it here
+ * is sharper than `listReconcilable`'s: a match against another tenant's `external_ref` would
+ * suppress a real `missingLocal` finding, silently hiding exactly the money-loss case this audit
+ * exists to catch.
+ */
+export async function existingReferences(
+  tx: Transaction,
+  tenantId: string,
+  provider: string,
+  references: string[],
+): Promise<Set<string>> {
+  if (references.length === 0) return new Set();
+  const found = new Set<string>();
+  for (let i = 0; i < references.length; i += CHUNK_SIZE) {
+    const chunk = references.slice(i, i + CHUNK_SIZE);
+    const rows = await tx
+      .select({ externalRef: payments.externalRef })
+      .from(payments)
+      .where(
+        and(
+          eq(payments.tenantId, tenantId),
+          eq(payments.provider, provider),
+          inArray(payments.externalRef, chunk),
+        ),
+      );
+    // `externalRef` is never null here: the WHERE clause matches only rows whose external_ref
+    // equals one of `chunk`'s (non-null) entries. The cast avoids a null check the query already
+    // forecloses, which would otherwise sit as a branch no test can legitimately take.
+    for (const row of rows) found.add(row.externalRef as string);
+  }
+  return found;
+}
+
+/**
+ * Stamp the orphan-remediation marker, matching only a row whose marker is still null and returning
+ * whether it stamped. That row-or-nothing return is the concurrency guard: two sweeps racing over
+ * one orphan produce exactly one reversal, because only one of them sees `true`.
+ */
+export async function markReconcileRemediated(
+  tx: Transaction,
+  params: Key & { at: Date },
+): Promise<boolean> {
+  const [row] = await tx
+    .update(payments)
+    .set({ reconcileRemediatedAt: params.at.toISOString(), updatedAt: sql`now()` })
+    .where(and(keyWhere(params), isNull(payments.reconcileRemediatedAt)))
+    .returning({ id: payments.id });
+  return row !== undefined;
+}
+
+/**
+ * The tills of many working orders, resolved in as few round trips as the bind-parameter ceiling
+ * allows — every incident needs a till, and a payment reaches its till only through its working
+ * order. Batched for the same reason `existingReferences` is: `raiseMissingLocal` collects every
+ * hinted settlement's working-order id across a whole sweep and calls this ONCE (in `reconcile.ts`'s
+ * T2, a write transaction), rather than once per hinted settlement — one query per settlement there
+ * would lengthen lock contention with the concurrent sweeps this feature explicitly supports (see
+ * `reconcile.concurrency.test.ts`), worst-case largest for a large report with few or no local rows.
+ *
+ * Returns a map keyed by `workingOrderId`; an id that does not exist (or that RLS hides) is simply
+ * absent from it, which the caller reads as "skip this hint" — the same contract the unbatched
+ * single-lookup form expressed with `undefined`.
+ *
+ * Carries an explicit `eq(workingOrders.tenantId, tenantId)` predicate for the same defence-in-depth
+ * reason as `listReconcilable`/`existingReferences` — under a superuser or `BYPASSRLS` connection,
+ * where RLS does not apply, this is the only thing scoping the lookup to one tenant.
+ */
+export async function tillsForWorkingOrders(
+  tx: Transaction,
+  tenantId: string,
+  workingOrderIds: string[],
+): Promise<Map<string, string>> {
+  if (workingOrderIds.length === 0) return new Map();
+  const tills = new Map<string, string>();
+  for (let i = 0; i < workingOrderIds.length; i += CHUNK_SIZE) {
+    const chunk = workingOrderIds.slice(i, i + CHUNK_SIZE);
+    const rows = await tx
+      .select({ id: workingOrders.id, tillId: workingOrders.tillId })
+      .from(workingOrders)
+      .where(and(eq(workingOrders.tenantId, tenantId), inArray(workingOrders.id, chunk)));
+    for (const row of rows) tills.set(row.id, row.tillId);
+  }
+  return tills;
 }
 
 /** Locking row fetch for the reversal paths. Selects the payment row `FOR UPDATE` so concurrent

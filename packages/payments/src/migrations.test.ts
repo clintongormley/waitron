@@ -94,6 +94,45 @@ describe("payments migrations", () => {
     }
   });
 
+  it("adds a nullable reconcile_remediated_at column to payments", async () => {
+    const db = await createPgliteDb();
+    try {
+      await runMigrations(db, CORE_MIGRATIONS);
+      await runMigrations(db, PAYMENTS_MIGRATIONS);
+      const rows = await db.execute<{ data_type: string; is_nullable: string }>(sql`
+        select data_type, is_nullable
+        from information_schema.columns
+        where table_name = 'payments' and column_name = 'reconcile_remediated_at'
+      `);
+      expect(rows.rows).toHaveLength(1);
+      expect(rows.rows[0].data_type).toBe("timestamp with time zone");
+      expect(rows.rows[0].is_nullable).toBe("YES");
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("creates the reconcile sweep index on payments", async () => {
+    const db = await createPgliteDb();
+    try {
+      await runMigrations(db, CORE_MIGRATIONS);
+      await runMigrations(db, PAYMENTS_MIGRATIONS);
+      const rows = await db.execute<{ indexdef: string }>(sql`
+        select indexdef from pg_indexes
+        where tablename = 'payments' and indexname = 'payments_reconcile_idx'
+      `);
+      expect(rows.rows).toHaveLength(1);
+      // A plain, NON-UNIQUE index: a unique one here would break any legitimate
+      // "N rows sharing a key" writer (the PR #25 lesson).
+      expect(rows.rows[0].indexdef).not.toContain("UNIQUE");
+      expect(rows.rows[0].indexdef).toContain("tenant_id");
+      expect(rows.rows[0].indexdef).toContain("provider");
+      expect(rows.rows[0].indexdef).toContain("settled_at");
+    } finally {
+      await db.close();
+    }
+  });
+
   it("creates the payment_policy table with a numeric(12,2) offline_amount_cap", async () => {
     const db = await createPgliteDb();
     try {

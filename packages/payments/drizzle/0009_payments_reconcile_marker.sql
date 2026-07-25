@@ -1,0 +1,2 @@
+ALTER TABLE "payments" ADD COLUMN "reconcile_remediated_at" timestamp with time zone;--> statement-breakpoint
+CREATE INDEX "payments_reconcile_idx" ON "payments" USING btree ("tenant_id","provider","settled_at");

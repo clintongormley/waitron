@@ -69,6 +69,15 @@ export const payments = pgTable(
     /** Set on `captured` and `accepted_offline` (the acceptance time), null otherwise. Feeds
      * `RecordSaleTender.settledAt`, so an offline-accepted tender chains its sale immediately. */
     settledAt: timestamp("settled_at", { withTimezone: true, mode: "string" }),
+    /** Set by the reconcile sweep when it ATTEMPTS to auto-reverse an orphan (a captured payment
+     * with no sale on an abandoned working order), whether or not that reversal then succeeds.
+     * Bounds the self-heal to one attempt so a permanently-unrefundable orphan cannot start a
+     * retry storm on every sweep — exactly as `envios.reconciled_resubmit_at` bounds the fiscal
+     * self-heal. Null means reconcile has not remediated this payment. */
+    reconcileRemediatedAt: timestamp("reconcile_remediated_at", {
+      withTimezone: true,
+      mode: "string",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .notNull()
       .defaultNow(),
@@ -95,6 +104,9 @@ export const payments = pgTable(
     }).onDelete("restrict"),
     index("payments_working_order_idx").on(t.workingOrderId),
     index("payments_sale_idx").on(t.saleId),
+    // The reconcile sweep's own filter: one tenant's rows for one provider over a settled_at
+    // window. Plain and non-unique — it constrains nothing, so it cannot collide with any writer.
+    index("payments_reconcile_idx").on(t.tenantId, t.provider, t.settledAt),
     check("payments_amount_ck", sql`${t.amount} > 0`),
   ],
 ).enableRLS();

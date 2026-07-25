@@ -21,6 +21,7 @@ export {
   captureAttempting,
   claimAcceptedOffline,
   declineForwarded,
+  existingReferences,
   expireInitiated,
   failAttempting,
   findPaymentByRef,
@@ -31,16 +32,40 @@ export {
   insertFailedPayment,
   insertInitiated,
   listAcceptedOffline,
+  listReconcilable,
+  markReconcileRemediated,
   recordFailedRefund,
   recordRefund,
   recordVoid,
   resolvePaymentTenant,
   settleForwarded,
   settleInitiated,
+  tillsForWorkingOrders,
 } from "./store.js";
-export type { ForwardablePayment, PaymentRecord, PaymentRow, SettledInitiated } from "./store.js";
+export type {
+  ForwardablePayment,
+  PaymentRecord,
+  PaymentRow,
+  ReconcilableRow,
+  SettledInitiated,
+} from "./store.js";
 export { MANUAL_PROVIDER, recordManualCardPayment, recordManualRefund } from "./manual.js";
 export type { ManualCardPaymentParams, ManualCardPaymentResult } from "./manual.js";
 export { PAYMENTS_MIGRATIONS } from "./migrations.js";
 export { getPaymentPolicy, resolveOfflineDecision } from "./policy.js";
 export type { PaymentPolicyRow } from "./policy.js";
+export { DEFAULT_SETTLEMENT_LAG_MS, classify, reconcilePayments } from "./reconcile.js";
+export type {
+  Classification,
+  ClassifiedRow,
+  IncidentSink,
+  MismatchClass,
+  PaymentMismatch,
+  PaymentReconcileResult,
+  PaymentReconciler,
+  ReconcileDeps,
+  ReconcilePeriod,
+  ReversalFn,
+  SettlementRecord,
+  SettlementReportSource,
+} from "./reconcile.js";

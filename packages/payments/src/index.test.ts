@@ -5,15 +5,22 @@ import { decimal } from "@waitron/shared";
 import type { TenantId, WorkingOrderId } from "@waitron/shared";
 import {
   associatePaymentWithSale,
+  classify,
+  DEFAULT_SETTLEMENT_LAG_MS,
+  existingReferences,
   getPaymentByRef,
   insertCapturedPayment,
   insertFailedPayment,
+  listReconcilable,
   MANUAL_PROVIDER,
+  markReconcileRemediated,
   PAYMENTS_MIGRATIONS,
+  reconcilePayments,
   recordManualCardPayment,
   recordManualRefund,
   recordRefund,
   recordVoid,
+  tillsForWorkingOrders,
 } from "./index.js";
 import type {
   AsyncPaymentProvider,
@@ -22,8 +29,13 @@ import type {
   InitiateResult,
   ManualCardPaymentParams,
   ManualCardPaymentResult,
+  PaymentMismatch,
   PaymentProvider,
+  PaymentReconciler,
+  PaymentReconcileResult,
   PaymentResult,
+  SettlementRecord,
+  SettlementReportSource,
 } from "./index.js";
 import { payments } from "./schema/payments.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
@@ -121,6 +133,68 @@ describe("package public surface (./index.js)", () => {
   });
 });
 
+describe("the reconcile surface", () => {
+  it("re-exports the sweep and its default lag from the package root", () => {
+    expect(typeof reconcilePayments).toBe("function");
+    // `classify` is a type-erased runtime check too — a value export, unlike the interfaces below,
+    // so a dropped re-export would slip past every type-only check here and be caught only here.
+    expect(typeof classify).toBe("function");
+    expect(DEFAULT_SETTLEMENT_LAG_MS).toBe(7 * 24 * 60 * 60 * 1000);
+  });
+
+  it("re-exports the store queries the sweep is built on", () => {
+    expect(typeof listReconcilable).toBe("function");
+    expect(typeof existingReferences).toBe("function");
+    expect(typeof markReconcileRemediated).toBe("function");
+    expect(typeof tillsForWorkingOrders).toBe("function");
+  });
+
+  it("types a PaymentReconciler an adapter can implement against the root barrel", () => {
+    // A structural check, exactly like the AsyncPaymentProvider one above: this is what a vendor
+    // package's own reconciler has to satisfy, so it must be reachable and complete from here.
+    const reconciler: PaymentReconciler = {
+      provider: "fake",
+      reconcile: async (_tenantId, period): Promise<PaymentReconcileResult> => ({
+        period,
+        checked: 0,
+        unsettled: [],
+        lostSettlement: [],
+        orphan: [],
+        missingLocal: [],
+        drift: [],
+        incidentsRaised: 0,
+        remediated: 0,
+        remediationFailures: [],
+      }),
+    };
+    expect(reconciler.provider).toBe("fake");
+  });
+
+  it("types a SettlementReportSource and a mismatch from the root barrel", () => {
+    // Both arguments named, not elided: the tenant is what a real source has to filter its report
+    // by, so the surface test has to prove the barrel still hands it one.
+    const source: SettlementReportSource = {
+      fetch: async (tenantId, window): Promise<SettlementRecord[]> => [
+        {
+          references: [tenantId, window.from.toISOString()],
+          amount: decimal("1.00"),
+          settledAt: new Date(),
+        },
+      ],
+    };
+    const mismatch: PaymentMismatch = {
+      paymentRef: "p",
+      references: ["a"],
+      localState: "captured",
+      localAmount: "1.00",
+      settledAmount: "1.00",
+      workingOrderId: "w",
+    };
+    expect(typeof source.fetch).toBe("function");
+    expect(mismatch.paymentRef).toBe("p");
+  });
+});
+
 /**
  * drizzle invokes each table's `(t) => [...]` extraConfig callback LAZILY — a plain import never
  * runs it, which is why `payments.ts` lines ~63-81 and `payment-refunds.ts`'s constraint block
@@ -147,6 +221,9 @@ describe("schema constraint declarations (forces the lazy extraConfig callbacks)
     const indexNames = config.indexes.map((i) => i.config.name);
     expect(indexNames).toContain("payments_working_order_idx");
     expect(indexNames).toContain("payments_sale_idx");
+    expect(getTableConfig(payments).indexes.map((i) => i.config.name)).toContain(
+      "payments_reconcile_idx",
+    );
   });
 
   it("declares the payment_refunds table's foreign-key and check constraints", () => {
