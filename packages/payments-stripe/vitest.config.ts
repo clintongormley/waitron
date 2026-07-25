@@ -25,6 +25,10 @@ export default defineConfig({
         // The real Checkout/webhooks SDK boundary — createCheckoutSession exercised only by the
         // nightly sandbox; constructWebhookEvent's mapping is proven through FakeStripeHosted.
         "src/stripe-hosted-client.ts",
+        // The real balance-transaction / Checkout-session SDK boundary — paging and field mapping
+        // exercised only by the nightly sandbox; the report source's own logic is proven through
+        // FakeStripeReport.
+        "src/stripe-report-client.ts",
         "src/testing/**",
         "src/**/*.sandbox.test.ts",
         // The nightly sandbox suite's OWN vitest config (a `defineConfig()` call, no logic) — v8's

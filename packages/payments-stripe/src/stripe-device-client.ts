@@ -1,6 +1,7 @@
 import type Stripe from "stripe";
+import type { Decimal } from "@waitron/shared";
 import { toMinorUnits } from "./client.js";
-import type { StripeDeviceClient } from "./device-client.js";
+import type { DeviceCollectOutcome, StripeDeviceClient } from "./device-client.js";
 
 /** The real `StripeDeviceClient`, wrapping the `stripe` SDK's on-device / Tap-to-Pay Terminal API.
  * Coverage-excluded (see vitest.config.ts): a thin call-mapping boundary. Only its SERVER-side calls
@@ -14,7 +15,22 @@ export function stripeDeviceClient(stripe: Stripe): StripeDeviceClient {
       const token = await stripe.terminal.connectionTokens.create();
       return { secret: token.secret };
     },
-    collectOnDevice() {
+    // The parameter is named and typed even though this stub only throws: an implementation that
+    // elided it would still satisfy the interface structurally, which is precisely how the device
+    // bridge could come to miss the `metadata` forwarding below. Spelling the shape out here keeps
+    // the obligation visible at the site someone will actually replace.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- see comment above
+    collectOnDevice(_params: {
+      amount: Decimal;
+      currency: string;
+      idempotencyKey: string;
+      offlineAllowed: boolean;
+      metadata: { working_order_id: string; payment_ref: string };
+    }): Promise<{ outcome: DeviceCollectOutcome; externalRef?: string }> {
+      // When the device app's bridge implements this against the on-device SDK it MUST forward the
+      // caller's `metadata` onto the PaymentIntent it creates. That stamp is the only way reconcile
+      // can ever attribute a settlement whose local row was never written — this provider collects
+      // before it writes. See `device-client.ts`'s `collectOnDevice` doc.
       throw new Error("on-device collect runs in the device SDK, not the server wrapper (SP7/SP9)");
     },
     syncOfflineQueue() {

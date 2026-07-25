@@ -22,6 +22,16 @@ export class FakeStripeDevice implements StripeDeviceClient {
   private nextQueue: { settled: string[]; declined: string[] } = { settled: [], declined: [] };
   private nextRefundFails = false;
 
+  /** The last `collectOnDevice` params, so a test can assert what was stamped onto the device's
+   * PaymentIntent — the `missingLocal` attribution hint. Mirrors `FakeStripeHosted.lastCreate`. */
+  lastCollect: {
+    amount: Decimal;
+    currency: string;
+    idempotencyKey: string;
+    offlineAllowed: boolean;
+    metadata: { working_order_id: string; payment_ref: string };
+  } | null = null;
+
   nextCollect(scenario: DeviceScenario): void {
     this.scenario = scenario;
   }
@@ -41,7 +51,9 @@ export class FakeStripeDevice implements StripeDeviceClient {
     currency: string;
     idempotencyKey: string;
     offlineAllowed: boolean;
+    metadata: { working_order_id: string; payment_ref: string };
   }): Promise<{ outcome: DeviceCollectOutcome; externalRef?: string }> {
+    this.lastCollect = params;
     const scenario = this.scenario;
     this.scenario = "online";
     if (scenario === "declined") return Promise.resolve({ outcome: "declined" });

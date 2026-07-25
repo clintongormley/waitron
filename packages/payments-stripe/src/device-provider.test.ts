@@ -81,6 +81,22 @@ describe("StripeOnDeviceProvider.collect", () => {
     expect(row).toBeUndefined();
   });
 
+  it("stamps the working order and payment ref into the device PaymentIntent metadata", async () => {
+    // The same attribution hint the hosted create carries, for the same reason: this provider
+    // collects on the reader BEFORE it writes, so a crash in between leaves a captured charge with
+    // no local row — reconcile's `missingLocal`. Without these keys such a settlement can never be
+    // named to a till, so nobody is told about money we hold no record of. Mirrors
+    // hosted-provider.test.ts's "stamps the working order and payment ref into the session metadata".
+    const s = await seedWorkingOrder(db, freshNif());
+    const client = new FakeStripeDevice();
+    const provider = new StripeOnDeviceProvider({ client, db });
+    const r = await provider.collect(collectParams(s));
+    expect(client.lastCollect?.metadata).toEqual({
+      working_order_id: s.workingOrderId,
+      payment_ref: r.paymentRef,
+    });
+  });
+
   it("declined writes a failed row", async () => {
     const s = await seedWorkingOrder(db, freshNif());
     const client = new FakeStripeDevice();

@@ -20,6 +20,13 @@ import { FakeStripe } from "./testing/fake-stripe.js";
 import { StripeTerminalProvider } from "./provider.js";
 import { freshNif, seedForSale } from "@waitron/payments/test/seed.js";
 import type { SeededForSale } from "@waitron/payments/test/seed.js";
+import { StripeReconciler, stripeReportClient, stripeSettlementReport } from "./index.js";
+import type {
+  StripeReconcileAccount,
+  StripeReportClient,
+  StripeSessionRef,
+  StripeSettlement,
+} from "./index.js";
 
 // The adapter capstone: it composes the REAL pieces end to end — a Stripe Terminal payment settles a
 // tender via `StripeTerminalProvider.collect` (driven by `FakeStripe`), `@waitron/core`'s
@@ -147,5 +154,50 @@ describe("stripe collect -> recordSale -> associate (the adapter seam, end to en
     expect(row?.saleId).toBe(saleId);
     expect(row?.state).toBe("captured");
     expect(row?.externalRef).toMatch(/^pi_/);
+  });
+});
+
+/**
+ * A coherence check on the package root's Slice B (reconcile) surface — this package has no
+ * `index.test.ts` yet, so this lives here per the brief's fallback. Every other test in this file
+ * (and package) imports the reconcile surface from a deep path (`./reconciler.js`, `./report-client.js`,
+ * `./stripe-report-client.js`), so none of them would catch a re-export deleted from `./index.ts`
+ * itself. Mirrors `packages/payments/src/index.test.ts`'s own reasoning for its barrel check.
+ */
+describe("package public surface (./index.js) — the reconcile surface", () => {
+  it("re-exports the reconcile surface's functions from the package root", () => {
+    // Value exports: type-only checks are erased at runtime by esbuild (vitest does not run tsc), so
+    // a dropped re-export would compile clean here and only fail `pnpm typecheck` for a TYPE. These
+    // three are runtime bindings, and this `typeof` assertion is the only thing that would catch one
+    // of them being dropped from the barrel.
+    expect(typeof StripeReconciler).toBe("function");
+    expect(typeof stripeSettlementReport).toBe("function");
+    expect(typeof stripeReportClient).toBe("function");
+  });
+
+  it("types the report-client shapes and StripeReconcileAccount from the root barrel", () => {
+    // All four are type-only exports, so the meaningful check is that `./index.ts`'s re-export still
+    // type-checks against a value shaped by `./report-client.js`/`./reconciler.js` — a deleted
+    // re-export fails this package's `pnpm typecheck`, not this assertion, but the annotations below
+    // are what force that check to run against the ROOT barrel rather than a deep path. Without
+    // `StripeReconcileAccount` specifically, a caller could satisfy `StripeReconcilerOptions.resolveAccount`
+    // but could never NAME the type its own resolver has to return.
+    const settlement: StripeSettlement = {
+      paymentIntentId: "pi_1",
+      chargeId: "ch_1",
+      amountMinor: 1000,
+      settledAt: new Date("2026-07-25T00:00:00Z"),
+    };
+    const session: StripeSessionRef = { sessionId: "cs_1", paymentIntentId: "pi_1" };
+    const report: StripeReportClient = {
+      listSettlements: () => Promise.resolve([settlement]),
+      listCheckoutSessions: () => Promise.resolve([session]),
+      paymentIntentForSession: () => Promise.resolve(null),
+    };
+    // `StripeRefunder` is deliberately NOT barrel-exported (only the account composing it is), so
+    // it's satisfied structurally here by `FakeStripe` (already used this way by reconciler.test.ts)
+    // rather than named.
+    const account: StripeReconcileAccount = { report, refund: new FakeStripe() };
+    expect(account.report).toBe(report);
   });
 });

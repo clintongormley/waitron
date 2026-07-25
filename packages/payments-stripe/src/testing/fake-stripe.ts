@@ -12,6 +12,13 @@ type Outcome = "succeeded" | "failed" | "in_progress";
  * `throwOnPollNext` makes the next `readerOutcome` call reject (simulating a network error mid-poll).
  * A stalled action stays `in_progress` until `cancelReaderAction` flips it to `failed`. */
 export class FakeStripe implements StripeClient {
+  /** The params of the most recent `refund` call; `undefined` until one is made. Recorded because
+   * WHICH processor identifier a reversal addressed is otherwise unobservable, and it is the whole
+   * point of the reversal path's `resolveProcessorRef` hook: a hosted payment stores its Checkout
+   * Session id in `external_ref` while `stripe.refunds` addresses a PaymentIntent, so this field is
+   * how a test proves the resolution happened (and, for the terminal/on-device callers, that it
+   * did NOT). */
+  lastRefund: { paymentIntentId: string; amount?: Decimal; idempotencyKey: string } | undefined;
   private outcome: Outcome = "succeeded";
   private nextRefundFails = false;
   private nextPollThrows = false;
@@ -66,13 +73,14 @@ export class FakeStripe implements StripeClient {
     this.readerAction.set(readerId, "failed");
     return Promise.resolve();
   }
-  // Same convention as `createPaymentIntent`'s `_params` above.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- see comment above
-  refund(_params: {
+  // Unlike the calls above, this one really does use its params — `lastRefund` records them, so a
+  // test can assert which identifier the reversal addressed.
+  refund(params: {
     paymentIntentId: string;
     amount?: Decimal;
     idempotencyKey: string;
   }): Promise<{ id: string; status: "succeeded" | "pending" | "failed" }> {
+    this.lastRefund = params;
     const fails = this.nextRefundFails;
     this.nextRefundFails = false;
     return Promise.resolve({ id: nextId("re"), status: fails ? "failed" : "succeeded" });

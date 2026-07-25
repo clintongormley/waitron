@@ -38,7 +38,12 @@ export interface StripeTerminalProviderOptions {
  * an exception; the `stripe.collect_timeout` code stays declared in `errors.ts` for a future
  * incident. Reversals (void / refund / partialRefund) look the payment up untenanted via
  * `findPaymentByRef` (the interface method carries only a ref) — this works under the hermetic
- * (superuser) suite and a tenanted caller; the untenanted webhook case is deferred by design. */
+ * (superuser) suite and a tenanted caller; the untenanted webhook case is deferred by design.
+ *
+ * Deliberately carries NO session/PaymentIntent metadata analogous to the hosted create's
+ * `metadata` stamp — see `hosted-client.ts`'s `createCheckoutSession` doc for why that stamp exists
+ * and why it is Mode-3-only. A maintainer adding one here "for symmetry" would be undoing that
+ * decision, not completing it. */
 export class StripeTerminalProvider implements PaymentProvider {
   readonly provider = PROVIDER;
   readonly capabilities: ProviderCapabilities = { partialRefund: true };

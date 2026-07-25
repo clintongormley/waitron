@@ -15,10 +15,17 @@ export function stripeHostedClient(
   config: { successUrl: string; cancelUrl: string; webhookSecret: string },
 ): StripeHostedClient {
   return {
-    async createCheckoutSession({ amount, currency, idempotencyKey }) {
+    async createCheckoutSession({ amount, currency, idempotencyKey, metadata }) {
       const session = await stripe.checkout.sessions.create(
         {
           mode: "payment",
+          // Stamped on the session AND, via `payment_intent_data`, forwarded onto the PaymentIntent
+          // Checkout creates behind it — session metadata does NOT propagate there on its own. The
+          // reconciliation audit's settlement report is keyed off the PaymentIntent/charge, so without
+          // this the audit would need an extra `expand` on its main list call just to read metadata
+          // that lives on the session instead.
+          metadata,
+          payment_intent_data: { metadata },
           success_url: config.successUrl,
           cancel_url: config.cancelUrl,
           line_items: [

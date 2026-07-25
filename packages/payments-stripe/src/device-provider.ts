@@ -48,7 +48,21 @@ export interface StripeOnDeviceProviderOptions {
  * in ONE short transaction — no `attempting`-first, because the device owns its PaymentIntent/offline
  * queue locally (a crash on our side never loses the device's record; the residual gap is reconcile's
  * `missingLocal`), and `network_unavailable` persists nothing. `forward` drives the device-local
- * offline queue T1/T2. Reversals delegate to the shared `reverseViaStripe` (Task 4). */
+ * offline queue T1/T2. Reversals delegate to the shared `reverseViaStripe` (Task 4).
+ *
+ * `collect` STAMPS the same `working_order_id`/`payment_ref` metadata onto the device's PaymentIntent
+ * that the hosted create stamps onto its Checkout Session, and for exactly the same reason: writing
+ * the row AFTER the money moves means a crash in between leaves a captured charge with no local row —
+ * reconcile's `missingLocal`. This mode CAN reach that state; terminal (2a) cannot, because it commits
+ * an `attempting` row before its network call. An earlier version of this comment asserted the stamp
+ * was Mode-3-only "because terminal and on-device both write `attempting` first" — the sentence two
+ * paragraphs above already said otherwise for this class, and the gap it papered over is real.
+ *
+ * What remains deferred is the READ side only: PaymentIntent metadata does not propagate to the
+ * charge, so the audit's main balance-transaction list would need an
+ * `expand: ["data.source.payment_intent"]` level to see it, where a hosted session's metadata comes
+ * free with the session list the report already fetches. Until that lands, an on-device `missingLocal`
+ * is reported but UNATTRIBUTED — no till, so no incident (Slice B §7's deferred list). */
 export class StripeOnDeviceProvider implements PaymentProvider {
   readonly provider = PROVIDER;
   readonly capabilities: ProviderCapabilities = { partialRefund: true };
@@ -76,6 +90,12 @@ export class StripeOnDeviceProvider implements PaymentProvider {
       currency: CURRENCY,
       idempotencyKey: paymentRef,
       offlineAllowed,
+      // snake_case: these are Stripe-side field names travelling in Stripe metadata, not our
+      // TypeScript — kept distinct from our camelCase `params.workingOrderId`/`paymentRef` on
+      // purpose, and identical to the keys the hosted create uses. This is the attribution hint for
+      // a settlement whose local row never got written (see the class doc): the row below is the
+      // FIRST durable trace of this payment on our side, and it is written after the money moves.
+      metadata: { working_order_id: params.workingOrderId, payment_ref: paymentRef },
     });
 
     const common = {

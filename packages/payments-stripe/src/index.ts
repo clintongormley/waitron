@@ -13,3 +13,8 @@ export { fromMinorUnits } from "./client.js";
 export { StripeHostedProvider } from "./hosted-provider.js";
 export type { StripeHostedProviderOptions } from "./hosted-provider.js";
 export { stripeHostedClient } from "./stripe-hosted-client.js";
+export { StripeReconciler } from "./reconciler.js";
+export type { StripeReconcilerOptions, StripeReconcileAccount } from "./reconciler.js";
+export { stripeSettlementReport } from "./report-source.js";
+export { stripeReportClient } from "./stripe-report-client.js";
+export type { StripeReportClient, StripeSessionRef, StripeSettlement } from "./report-client.js";

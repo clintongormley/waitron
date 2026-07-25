@@ -27,8 +27,10 @@ export interface StripeHostedProviderOptions {
  * the write leaves an orphaned session (no local row), which `reconcile` backstops (deferred). The
  * webhook itself is handled by `verifyAndParse` (signature-verified, mapped to the neutral
  * `InboundSettlement`); the settle→recordSale→associate chaining is the app-level orchestrator's job
- * (deferred), proven here by the wiring capstone. Reversals of a hosted payment are out of scope for
- * this slice (the `external_ref` is the session id, not the PaymentIntent id). */
+ * (deferred), proven here by the wiring capstone. This provider exposes no reversal API of its own;
+ * the one path that hands a hosted payment back is the reconcile sweep, which resolves the stored
+ * session id to its PaymentIntent before refunding (see `StripeReconciler`'s `processorRef`) because
+ * `stripe.refunds` cannot address a session. */
 export class StripeHostedProvider implements AsyncPaymentProvider {
   readonly provider = PROVIDER;
 
@@ -41,6 +43,11 @@ export class StripeHostedProvider implements AsyncPaymentProvider {
       amount: params.amount,
       currency: CURRENCY,
       idempotencyKey: params.paymentRef,
+      // snake_case: these are Stripe-side field names travelling in Stripe metadata, not our
+      // TypeScript — kept distinct from our camelCase `params.workingOrderId`/`params.paymentRef` on
+      // purpose. This is the attribution hint: the reconciliation audit reads it back off a settlement
+      // that has no local `payments` row (see hosted-client.ts's `metadata` doc) to name a till.
+      metadata: { working_order_id: params.workingOrderId, payment_ref: params.paymentRef },
     });
     // Persist the initiated row (tenant-scoped via the injected db handle). The (tenant, provider,
     // payment_ref) unique makes a retried initiate a no-op-or-throw, and external_ref = session.id

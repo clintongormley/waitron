@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
+import { CORE_MIGRATIONS, createPgliteDb, runMigrations, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import {
   AppError,
@@ -8,10 +8,11 @@ import {
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
-import { PAYMENTS_MIGRATIONS, getPaymentByRef } from "@waitron/payments";
+import { PAYMENTS_MIGRATIONS, getPaymentByRef, insertCapturedPayment } from "@waitron/payments";
 import type { PaymentRow } from "@waitron/payments";
 import { FakeStripe } from "./testing/fake-stripe.js";
 import { StripeTerminalProvider } from "./provider.js";
+import { reverseViaStripe } from "./reverse.js";
 import type { StripeClient } from "./client.js";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 
@@ -51,6 +52,26 @@ async function collectParams(nif = freshNif()) {
 }
 function rowFor(tenantId: string, paymentRef: string): Promise<PaymentRow | undefined> {
   return db.transaction((tx) => getPaymentByRef(tx, { tenantId, provider: "stripe", paymentRef }));
+}
+/** A `captured` stripe payment on a fresh tenant whose `external_ref` is EXACTLY the supplied
+ * string. Written directly rather than through `collect`, which mints its own `pi_` id: the
+ * resolver tests are about which reference the reversal path hands the processor, so the stored one
+ * has to be chosen by the test. Returns the payment ref to reverse. */
+async function capturedPayment(externalRef: string): Promise<string> {
+  const seeded = await seedWorkingOrder(db, freshNif());
+  const paymentRef = `ref-${externalRef}`;
+  await withTenant(db, seeded.tenantId, (tx) =>
+    insertCapturedPayment(tx, {
+      tenantId: seeded.tenantId,
+      workingOrderId: seeded.workingOrderId,
+      provider: "stripe",
+      paymentRef,
+      externalRef,
+      amount: decimal("12.10"),
+      settledAt: new Date("2026-07-24T10:00:00Z"),
+    }),
+  );
+  return paymentRef;
 }
 
 describe("StripeTerminalProvider.collect", () => {
@@ -220,6 +241,96 @@ describe("StripeTerminalProvider reversals", () => {
     const failed = await provider.collect(await collectParams());
     expect(failed.state).toBe("failed");
     await expect(provider.refund(failed.paymentRef)).rejects.toThrow();
+  });
+});
+
+describe("reverseViaStripe's processor-ref resolution", () => {
+  it("passes the stored external ref to the processor unchanged by default", async () => {
+    // The identity default is what keeps the terminal and on-device callers byte-identical: neither
+    // supplies a resolver, so the stored `external_ref` must reach `stripe.refunds` untouched.
+    const client = new FakeStripe();
+    const paymentRef = await capturedPayment("pi_plain");
+    await reverseViaStripe(db, client, "stripe", paymentRef, "refund");
+    expect(client.lastRefund?.paymentIntentId).toBe("pi_plain");
+  });
+
+  it("resolves the external ref through the supplied resolver before refunding", async () => {
+    const client = new FakeStripe();
+    const paymentRef = await capturedPayment("cs_hosted");
+    await reverseViaStripe(db, client, "stripe", paymentRef, "refund", undefined, {
+      resolveProcessorRef: (ref) => Promise.resolve(ref === "cs_hosted" ? "pi_resolved" : ref),
+    });
+    // A hosted payment stores the SESSION id; the refund API needs the PaymentIntent, and before
+    // this hook every hosted orphan reversal failed permanently.
+    expect(client.lastRefund?.paymentIntentId).toBe("pi_resolved");
+  });
+
+  it("resolves only AFTER the local reversibility pre-check has passed", async () => {
+    // The resolution is a network call, so it obeys the same T1/T2 rule as the refund itself: an
+    // invalid local state must fail fast without touching the processor at all — not even to look
+    // an identifier up.
+    const client = new FakeStripe();
+    const paymentRef = await capturedPayment("cs_precheck");
+    let resolved = 0;
+    const resolve = (ref: string): Promise<string> => {
+      resolved += 1;
+      return Promise.resolve(ref);
+    };
+    await reverseViaStripe(db, client, "stripe", paymentRef, "void", undefined, {
+      resolveProcessorRef: resolve,
+    });
+    expect(resolved).toBe(1);
+    // Second void: `assertReversible` throws on the now-`voided` row before any resolution happens.
+    await expect(
+      reverseViaStripe(db, client, "stripe", paymentRef, "void", undefined, {
+        resolveProcessorRef: resolve,
+      }),
+    ).rejects.toBeInstanceOf(AppError);
+    expect(resolved).toBe(1);
+  });
+});
+
+describe("reverseViaStripe's tenant scoping", () => {
+  it("refuses another tenant's payment before any money moves, and still reverses the owner's", async () => {
+    // `findPaymentByRef` is deliberately untenanted (the `PaymentProvider` reversal methods carry
+    // only a payment ref), which left the one query on the reconcile path that goes on to move money
+    // relying on RLS alone, while its two siblings on that path (`listReconcilable`,
+    // `existingReferences`) each carry an explicit tenant predicate as documented defence-in-depth.
+    //
+    // This test can only exist BECAUSE PGlite connects as superuser and bypasses FORCE ROW LEVEL
+    // SECURITY: the lookup genuinely returns the other tenant's row, so what rejects it is the
+    // explicit predicate and nothing else. That is exactly the condition the predicate defends —
+    // an RLS-unenforced connection, or one whose tenant GUC was never set.
+    const owner = await seedWorkingOrder(db, freshNif());
+    const stranger = await seedWorkingOrder(db, freshNif());
+    const paymentRef = "ref-cross-tenant";
+    await withTenant(db, owner.tenantId, (tx) =>
+      insertCapturedPayment(tx, {
+        tenantId: owner.tenantId,
+        workingOrderId: owner.workingOrderId,
+        provider: "stripe",
+        paymentRef,
+        externalRef: "pi_cross_tenant",
+        amount: decimal("12.10"),
+        settledAt: new Date("2026-07-24T10:00:00Z"),
+      }),
+    );
+    const client = new FakeStripe();
+
+    const error = await reverseViaStripe(db, client, "stripe", paymentRef, "refund", undefined, {
+      tenantId: brandTenantId(stranger.tenantId),
+    }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe("payment.not_found");
+    expect(client.lastRefund).toBeUndefined(); // nothing reached Stripe
+
+    // The predicate SCOPES rather than blocks: the owning tenant's reversal goes through untouched.
+    const ok = await reverseViaStripe(db, client, "stripe", paymentRef, "refund", undefined, {
+      tenantId: brandTenantId(owner.tenantId),
+    });
+    expect(ok.state).toBe("refunded");
+    expect(client.lastRefund?.paymentIntentId).toBe("pi_cross_tenant");
   });
 });
 

@@ -7,13 +7,17 @@ const params = (offlineAllowed: boolean) => ({
   currency: "eur",
   idempotencyKey: "k1",
   offlineAllowed,
+  metadata: { working_order_id: "wo-1", payment_ref: "k1" },
 });
 
 describe("FakeStripeDevice", () => {
-  it("defaults to the online scenario → captured with a pi_ externalRef", async () => {
-    const r = await new FakeStripeDevice().collectOnDevice(params(false));
+  it("defaults to the online scenario → captured with a pi_ externalRef, recording the params", async () => {
+    const f = new FakeStripeDevice();
+    const r = await f.collectOnDevice(params(false));
     expect(r.outcome).toBe("captured");
     expect(r.externalRef).toMatch(/^pi_/);
+    // `lastCollect` is what lets a provider test assert the PaymentIntent metadata stamp.
+    expect(f.lastCollect?.metadata).toEqual({ working_order_id: "wo-1", payment_ref: "k1" });
   });
 
   it("offline scenario yields accepted_offline only when offlineAllowed, else network_unavailable", async () => {

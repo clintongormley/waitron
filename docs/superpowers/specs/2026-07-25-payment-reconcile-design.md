@@ -270,19 +270,36 @@ So the claim is gated on `state === "captured"` as well, and a `settled` orphan 
 incident-raised only, exactly like a `settled`-working-order orphan. The gate comes out when — and
 only when — `settled` gains a reversal path.
 
-### A drifting orphan is still reversed, at OUR amount
+### A drifting orphan is still reversed — and the two amounts can disagree
 
 `drift` is never auto-*corrected*, but the claim loop does not consult it: a row that classified both
-`orphan` and `drift` is still reversed, in full, at the amount **we** recorded (`ReversalFn` takes no
-amount). If the processor settled 12.50 against our 10.00, we hand back 10.00 and 2.50 stays with the
-processor until a human acts.
+`orphan` and `drift` is still reversed, in full. Skipping it would leave the *whole* amount unreturned
+in a case where returning it is otherwise unambiguously right, which is strictly worse for the
+customer; and the sweep raises the `drift` incident alongside the `orphan` one, carrying both figures,
+so the residual difference is visible to whoever settles it.
 
-That is deliberate. Skipping the reversal would leave the *whole* amount unreturned in a case where
-returning it is otherwise unambiguously right, which is strictly worse for the customer; and the
-sweep raises the `drift` incident alongside the `orphan` one, carrying both figures, so the residual
-difference is visible to the person who settles it. Reversing at the processor's figure instead is
-not on the table — that would mean trusting a number our own books disagree with, which is the very
-thing `drift` exists to escalate.
+**What "in full" means at the processor is not what it means in our books, and this section used to
+say otherwise.** `ReversalFn` takes no amount, so the adapter sends none — and a processor given no
+amount refunds **its own** notion of the full payment. In `packages/payments-stripe` that is
+`stripe.refunds.create` with no `amount`, i.e. the whole PaymentIntent at the **processor's** figure,
+while `recordRefund` writes the amount **we** stored. On a non-drifting payment the two are the same
+number and nothing is visible. On a drifting one they are not:
+
+> Local `payments.amount` 12.00, processor's balance transaction 10.00. The sweep claims the orphan,
+> **10.00** goes back, and we record a **12.00** refund and mark the payment `refunded`. Our books say
+> the customer is whole; 2.00 of their money is still ours. The row has also left the audited state
+> set, so no later sweep re-examines it.
+
+Reversing at *our* figure deliberately — passing the amount we recorded — is not the fix either, for
+the reason this section always gave: that would mean handing back a number our own books chose over
+one the processor's ledger disagrees with, which is the very thing `drift` exists to escalate. The fix
+is to send the amount **explicitly** so the processor and our record cannot silently diverge, and to
+let the drift incident carry the disagreement as it already does. That is deferred and wants its own
+review: `reverseViaStripe` is shared money-path code with three callers, so changing what it sends to
+the processor is not a rider on an adapter slice. Recorded in the Slice B spec's §7. The code comments
+that still say "reversed at OUR amount" (`reconcile.ts`'s claim loop, `errors.ts`'s
+`payment.reconcile_drift` doc) are accurate about the *local* record and wrong about the processor;
+they get corrected with the fix.
 
 The `reconcile_remediated_at` marker bounds the *attempt*, not the outcome: it is stamped whether
 the reversal then succeeds or fails, so a permanently-unrefundable orphan cannot start a
@@ -445,12 +462,23 @@ classes, the three ports, `reconcilePayments()`, the store queries, migration 00
 `payment.reconcile_*` codes, the fakes and the whole test suite above. Nothing vendor-specific; no
 Stripe SDK call.
 
-**Slice B (its own plan) — `packages/payments-stripe`.** `StripeReconciler`; a
-`stripeSettlementReport` `SettlementReportSource` built on payouts / balance transactions, expanding
-each to its charge and PaymentIntent and resolving Checkout Session ids so hosted rows match;
-metadata stamping (`working_order_id`, `payment_ref`, `tenant_id`) on the three create calls so
-`hint` is populated; `reverse` wired to the shared `reverseViaStripe`; a nightly
-`reconcile.sandbox.test.ts`.
+**Slice B — `packages/payments-stripe`. Landed.** `StripeReconciler`; a `stripeSettlementReport`
+`SettlementReportSource` built on **balance transactions, not payouts** — a card charge's balance
+transaction is visible within minutes of capture, while a payout cycles 2–7 days later, and
+`lostSettlement`/`missingLocal` are exactly the money-losing classes a payout-based report would hide
+for up to a week — expanding each to its charge and PaymentIntent and resolving Checkout Session ids
+so hosted rows match; `working_order_id`/`payment_ref` metadata stamped for the `hint` by **both modes
+that write their local row after the money moves** — hosted Checkout and on-device — since only such a
+mode can leave a settlement with no local row at all, which is the case the hint exists to attribute.
+Terminal (2a) cannot: it commits an `attempting` row *before* its network call. (An earlier version of
+this line said on-device could not either; it can, and the on-device hint is stamped but not yet
+readable — reading it needs an `expand: ["data.source.payment_intent"]`, since PaymentIntent metadata
+does not propagate to the charge, so an on-device `missingLocal` is currently unattributed. Slice B
+§7.) `reverse` wired to the shared `reverseViaStripe` through an additive `resolveProcessorRef`
+resolver hook (§11 below), with the tenant threaded down so it works under real RLS. A nightly
+`reconcile.sandbox.test.ts` covers the real balance-transaction/Checkout-session SDK boundary. Full
+design:
+[`2026-07-25-payment-reconcile-slice-b-design.md`](./2026-07-25-payment-reconcile-slice-b-design.md).
 
 Build the report source against **`fetch(tenantId, window)`** (§2): it must return only that tenant's
 settlements. With Connect that is the connected-account scope; with a shared platform account it is a
@@ -465,10 +493,13 @@ that ignores the argument fills every sweep's `missingLocal` with other tenants'
 - **Sale-chaining a `lostSettlement`** — app-level orchestration, deferred with the rest of it.
 - **Self-healing a `missingLocal`** by inserting the missing payment row. The `hint` makes it
   possible later; this plan reports and raises.
-- **Hosted reversals.** A hosted payment's `external_ref` is a session id, so `reverseViaStripe`
-  cannot address it. A hosted orphan on an abandoned order therefore fails its reversal and raises
-  `payment.reconcile_remediation_failed` — visible, bounded by the marker, and fixed for free when
-  the deferred session→PaymentIntent work lands.
+- ~~**Hosted reversals.** A hosted payment's `external_ref` is a session id, so `reverseViaStripe`
+  cannot address it.~~ **Closed by Slice B.** `reverseViaStripe` now takes an optional
+  `resolveProcessorRef` hook; `StripeReconciler` supplies one that maps a Checkout Session id to its
+  PaymentIntent via `paymentIntentForSession` before refunding, and passes every other reference
+  through unchanged. A hosted orphan on an abandoned order is auto-reversed like any other orphan; only
+  a session that resolves to no PaymentIntent at all (never paid — nothing to hand back) still raises
+  `payment.reconcile_remediation_failed`, which is the correct outcome for that case, not a gap.
 - **Multi-currency**, the **refund/void role-gate** (rides with identity, sub-project 5), and
   **stuck `accepted_offline` rows** (`forward()`'s domain).
 - **Per-reversal idempotency at the processor** — still deferred, and this branch *raises its

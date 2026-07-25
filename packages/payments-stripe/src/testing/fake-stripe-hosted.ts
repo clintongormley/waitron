@@ -12,6 +12,14 @@ const nextId = (prefix: string): string => `${prefix}_${String(++seq).padStart(8
 export class FakeStripeHosted implements StripeHostedClient {
   private nextSigFails = false;
 
+  /** The last `createCheckoutSession` params, so a test can assert what was stamped. */
+  lastCreate: {
+    amount: Decimal;
+    currency: string;
+    idempotencyKey: string;
+    metadata: { working_order_id: string; payment_ref: string };
+  } | null = null;
+
   /** Build the JSON payload a `constructWebhookEvent` call decodes — the fake's analogue of a raw
    * Stripe webhook body. `amountTotalMinor` defaults to null, `createdAt` to the epoch. */
   static event(e: {
@@ -33,15 +41,13 @@ export class FakeStripeHosted implements StripeHostedClient {
     this.nextSigFails = true;
   }
 
-  // `params` is part of the public contract (the real adapter needs amount/currency/idempotencyKey);
-  // this fake only mints a deterministic id. Underscore-prefixed so tsc's noUnusedParameters leaves it
-  // alone; the eslint-disable matches the FakeStripe/FakeStripeDevice convention in this package.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- see comment above
-  createCheckoutSession(_params: {
+  createCheckoutSession(params: {
     amount: Decimal;
     currency: string;
     idempotencyKey: string;
+    metadata: { working_order_id: string; payment_ref: string };
   }): Promise<{ id: string; url: string }> {
+    this.lastCreate = params;
     const id = nextId("cs");
     return Promise.resolve({ id, url: `https://checkout.stripe.test/${id}` });
   }

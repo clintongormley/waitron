@@ -59,6 +59,27 @@ describe("StripeHostedProvider.initiate", () => {
     expect(row?.settledAt).toBeNull();
     expect(row?.saleId).toBeNull();
   });
+
+  it("stamps the working order and payment ref into the session metadata", async () => {
+    // These are what let a settlement with NO local row be attributed to a till and raise an
+    // incident: an `initiate` that crashes after the network call leaves exactly that state.
+    // Terminal (2a) cannot reach it — it commits an `attempting` row BEFORE its network call — but
+    // on-device (2b) can, and stamps the same keys; only the audit's read side for those is still
+    // deferred (see `hosted-client.ts`'s `metadata` doc).
+    const client = new FakeStripeHosted();
+    const provider = new StripeHostedProvider({ client, db });
+    const seeded = await seedWorkingOrder(db, freshNif());
+    await provider.initiate({
+      tenantId: brandTenantId(seeded.tenantId),
+      workingOrderId: brandWorkingOrderId(seeded.workingOrderId),
+      amount: decimal("12.50"),
+      paymentRef: "ref-meta",
+    });
+    expect(client.lastCreate?.metadata).toEqual({
+      working_order_id: seeded.workingOrderId,
+      payment_ref: "ref-meta",
+    });
+  });
 });
 
 describe("StripeHostedProvider.verifyAndParse", () => {

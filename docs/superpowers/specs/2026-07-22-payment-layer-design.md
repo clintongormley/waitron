@@ -559,8 +559,10 @@ Then, in priority order:
      `FakeStripeHosted` + a real-PG RLS test. Brings in the **webhooks and untenanted
      tenant-resolution** deferred through 2a/2b.
 5. **Cross-cutting, layered in as modes need them:** `reconcile()` per settlement identity (the former
-   "4d") — **Slice A (the neutral sweep) landed**; Slice B (the vendor adapter) is next (manual mode
-   has no `reconcile` — its audit is external); the tab/tip lifecycle
+   "4d") — **complete for Stripe: Slice A (the neutral sweep, PR #28) and Slice B (the Stripe adapter,
+   `StripeReconciler`) have both landed**, covering all three Stripe capture mechanisms (terminal,
+   on-device, hosted) under one sweep and closing the hosted-reversal gap Slice A deferred (manual
+   mode has no `reconcile` — its audit is external); the tab/tip lifecycle
    (`preAuth`/`incrementalAuth`/`tipAdjust`, the former "4e"); and the refund/void **role-gate**,
    which rides with identity (sub-project 5).
 

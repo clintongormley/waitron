@@ -25,6 +25,22 @@ export interface StripeDeviceClient {
     currency: string;
     idempotencyKey: string;
     offlineAllowed: boolean;
+    /** Our own identifiers, stamped onto the PaymentIntent the device creates — the SAME keys, in the
+     * same Stripe-side snake_case, that the hosted create stamps onto its Checkout Session, so one
+     * read path in the reconciliation audit can eventually serve both.
+     *
+     * It exists for the same reason it does there: this provider collects on the reader FIRST and
+     * writes its `payments` row afterwards, so a crash in between leaves a captured charge with no
+     * local row at all — reconcile's `missingLocal`, the class the audit exists to catch. Without
+     * these identifiers such a settlement can be reported but never attributed to a till, so nobody
+     * is told about it.
+     *
+     * The stamp is done NOW even though the audit cannot read it back yet: PaymentIntent metadata does
+     * not propagate to the charge, so the settlement report would need an
+     * `expand: ["data.source.payment_intent"]` level on its main list call. Doing the write half here
+     * leaves that expand as the ONLY remaining piece, rather than requiring a second change to this
+     * money-moving seam later. See `hosted-client.ts`'s `metadata` doc for the full picture. */
+    metadata: { working_order_id: string; payment_ref: string };
   }): Promise<{ outcome: DeviceCollectOutcome; externalRef?: string }>;
   /** Reconcile our pending offline refs against the device-local offline queue: which the device has
    * now forwarded to the network (`settled`) vs. had refused (`declined`). Refs still pending on the

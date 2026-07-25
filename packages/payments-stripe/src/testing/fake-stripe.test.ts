@@ -49,4 +49,20 @@ describe("FakeStripe", () => {
     const bad = await fake.refund({ paymentIntentId: "pi_x", idempotencyKey: "r2" });
     expect(bad.status).toBe("failed");
   });
+
+  it("records the last refund's params, and nothing before the first refund", async () => {
+    const fake = new FakeStripe();
+    expect(fake.lastRefund).toBeUndefined();
+    await fake.refund({ paymentIntentId: "pi_first", idempotencyKey: "r1" });
+    await fake.refund({
+      paymentIntentId: "pi_second",
+      amount: decimal("5.00"),
+      idempotencyKey: "r2",
+    });
+    expect(fake.lastRefund).toEqual({
+      paymentIntentId: "pi_second",
+      amount: decimal("5.00"),
+      idempotencyKey: "r2",
+    });
+  });
 });

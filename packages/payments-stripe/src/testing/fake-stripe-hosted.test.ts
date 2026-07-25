@@ -9,9 +9,14 @@ describe("FakeStripeHosted", () => {
       amount: decimal("12.10"),
       currency: "eur",
       idempotencyKey: "pay-1",
+      metadata: { working_order_id: "wo-1", payment_ref: "pay-1" },
     });
     expect(s.id).toMatch(/^cs_/);
     expect(s.url).toContain(s.id);
+    expect(client.lastCreate?.metadata).toEqual({
+      working_order_id: "wo-1",
+      payment_ref: "pay-1",
+    });
   });
 
   it("constructWebhookEvent parses an event() payload", () => {
