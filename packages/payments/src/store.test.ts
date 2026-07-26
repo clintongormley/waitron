@@ -551,7 +551,7 @@ describe("listAcceptedOffline", () => {
         settledAt: new Date("2026-07-24T10:00:00Z"),
       }),
     );
-    const listed = await db.transaction((tx) => listAcceptedOffline(tx, "fake"));
+    const listed = await db.transaction((tx) => listAcceptedOffline(tx, s.tenantId, "fake"));
     expect(listed.map((r) => r.paymentRef)).toContain("lst-1");
     expect(listed.find((r) => r.paymentRef === "lst-1")?.saleId).toBeNull();
   });

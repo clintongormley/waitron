@@ -79,7 +79,11 @@ describe("on-device offline accept -> recordSale -> associate -> forward decline
 
     const client = new FakeStripeDevice();
     client.nextCollect("offline"); // policy accepts + consent + under cap → the device stores offline
-    const provider = new StripeOnDeviceProvider({ client, db });
+    const provider = new StripeOnDeviceProvider({
+      client,
+      db,
+      tenantId: brandTenantId(s.tenantId),
+    });
     const paid = await provider.collect({
       tenantId: brandTenantId(s.tenantId),
       tillId: brandTillId(s.tillId),

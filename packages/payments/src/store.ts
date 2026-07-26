@@ -313,23 +313,53 @@ export interface ForwardablePayment {
   amount: string;
 }
 
-/** Claim this provider's accepted-offline payments for a forward pass, locking each row FOR UPDATE
+const FORWARDABLE_COLUMNS = {
+  tenantId: payments.tenantId,
+  paymentRef: payments.paymentRef,
+  workingOrderId: payments.workingOrderId,
+  saleId: payments.saleId,
+  amount: payments.amount,
+};
+
+/**
+ * The predicate both forward-queue reads share — kept as one function so the twins below cannot
+ * drift, which they briefly did when only one of them gained the tenant filter.
+ *
+ * Filters `tenant_id` EXPLICITLY, defence in depth alongside the RLS policy — the convention
+ * fiscal's `pendingCount` already follows. Not belt-and-braces: relying on the policy alone made
+ * these queries return DIFFERENT rows in different environments, because PGlite connects as
+ * superuser and bypasses FORCE ROW LEVEL SECURITY. Every hermetic test therefore saw every
+ * tenant's `accepted_offline` rows, so a `forward` pass counted other tenants' unresolved refs as
+ * its own, while the same code under a real role saw only its own tenant's. The predicate makes
+ * both agree — which is what makes a hermetic test of a forward pass mean anything at all.
+ */
+function forwardableWhere(tenantId: string, provider: string) {
+  return and(
+    eq(payments.tenantId, tenantId),
+    eq(payments.provider, provider),
+    eq(payments.state, "accepted_offline"),
+  );
+}
+
+/**
+ * Claim this provider's accepted-offline payments for a forward pass, locking each row FOR UPDATE
  * SKIP LOCKED so concurrent `forward` passes partition the queue and never double-advance a row.
- * State IS the queue (no outbox table). Ordered by `created_at` for a stable pass. */
+ * State IS the queue (no outbox table). Ordered by `created_at` for a stable pass.
+ *
+ * Takes the same `tenantId` as its unlocked twin, and for the same reason — see
+ * `forwardableWhere`. Its only caller today is `FakePaymentProvider`, whose single-transaction
+ * drain has no network call to split around; a REAL adapter uses `listAcceptedOffline` instead so
+ * it never holds a row lock across the processor round-trip.
+ */
 export async function claimAcceptedOffline(
   tx: Transaction,
+  tenantId: string,
   provider: string,
 ): Promise<ForwardablePayment[]> {
   return tx
-    .select({
-      tenantId: payments.tenantId,
-      paymentRef: payments.paymentRef,
-      workingOrderId: payments.workingOrderId,
-      saleId: payments.saleId,
-      amount: payments.amount,
-    })
+    .select(FORWARDABLE_COLUMNS)
     .from(payments)
-    .where(and(eq(payments.provider, provider), eq(payments.state, "accepted_offline")))
+    .where(forwardableWhere(tenantId, provider))
     .orderBy(payments.createdAt)
     .for("update", { skipLocked: true });
 }
@@ -342,18 +372,13 @@ export async function claimAcceptedOffline(
  * fake's single-transaction `forward` keeps using the locking `claimAcceptedOffline`. */
 export async function listAcceptedOffline(
   tx: Transaction,
+  tenantId: string,
   provider: string,
 ): Promise<ForwardablePayment[]> {
   return tx
-    .select({
-      tenantId: payments.tenantId,
-      paymentRef: payments.paymentRef,
-      workingOrderId: payments.workingOrderId,
-      saleId: payments.saleId,
-      amount: payments.amount,
-    })
+    .select(FORWARDABLE_COLUMNS)
     .from(payments)
-    .where(and(eq(payments.provider, provider), eq(payments.state, "accepted_offline")))
+    .where(forwardableWhere(tenantId, provider))
     .orderBy(payments.createdAt);
 }
 

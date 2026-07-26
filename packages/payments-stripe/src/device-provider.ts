@@ -6,8 +6,9 @@ import {
   tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import type { Decimal } from "@waitron/shared";
-import type { Database } from "@waitron/db";
+import type { Decimal, TenantId } from "@waitron/shared";
+import { withTenant } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { workingOrders } from "@waitron/db";
 import { recordIncidentOnce } from "@waitron/core";
 import type {
@@ -27,6 +28,7 @@ import {
   resolveOfflineDecision,
   settleForwarded,
 } from "@waitron/payments";
+import "./errors.js";
 import { reverseViaStripe } from "./reverse.js";
 import type { StripeDeviceClient } from "./device-client.js";
 
@@ -35,12 +37,38 @@ import type { StripeDeviceClient } from "./device-client.js";
 // `provider = 'stripe'` scoping is unambiguous; the server-driven forward is all-zeros.
 const PROVIDER = "stripe";
 const CURRENCY = "eur";
+/** How long `forward` asks to wait before re-checking refs the device has not yet resolved. A local
+ * constant, not a knob: unlike fiscal's drain — which is paced by AEAT's own `TiempoEsperaEnvio` —
+ * nothing on the Stripe side supplies a wait, and an unresolved ref clears when the device regains
+ * connectivity rather than on any schedule we control. Five minutes is short enough that recovery
+ * is prompt and long enough that a device offline for hours is not polled thousands of times. */
+const FORWARD_RETRY_MS = 5 * 60 * 1000;
 
 export interface StripeOnDeviceProviderOptions {
   client: StripeDeviceClient;
-  /** Must be a TENANT-SCOPED `Database` handle (sets `app.tenant_id`) — `collect`/`forward`/`reverse`
-   * open their own transactions and rely on RLS scoping from this handle. */
+  /** A plain `Database` handle. `collect`/`forward`/`reverse` open their own transactions and scope
+   * each one with `withTenant(db, tenantId, …)`, so nothing is required of the handle itself.
+   *
+   * An earlier version of this comment demanded a "TENANT-SCOPED `Database` handle (sets
+   * `app.tenant_id`)". No such handle can be built — `withTenant` sets the GUC transaction-locally
+   * from inside a transaction it opens itself, and `createPostgresDb` returns an unscoped handle —
+   * so under a real non-superuser role this adapter did not work at all:
+   *
+   *   - `collect` threw `42501` on `insertCapturedPayment`, AFTER `collectOnDevice` had already
+   *     taken the customer's money. It failed OPEN: a charge with no local row on every sale, which
+   *     is reconcile's `missingLocal`, and an on-device one is unattributed (see the class doc).
+   *   - `forward` read `listAcceptedOffline` through the tenant-isolation policy with no GUC set,
+   *     matched zero rows and returned all-zeros — silently, no error, for ever.
+   *   - the reversals failed closed with `payment.not_found`.
+   *
+   * PGlite connects as superuser and bypasses FORCE ROW LEVEL SECURITY, so no hermetic suite could
+   * show any of it; `device.rls.test.ts` makes the adapter itself the subject. */
   db: Database;
+  /** The tenant this provider serves. An on-device provider is a per-till object and a till belongs
+   * to exactly one tenant, so the scope is known at construction — which is what lets `forward` and
+   * the reversals be scoped at all, since neither carries a tenant in its arguments. The host
+   * builds one provider per tenant. */
+  tenantId: TenantId;
 }
 
 /** The real on-device Stripe `PaymentProvider` (Tap-to-Pay / handheld). `collect` applies the neutral
@@ -74,11 +102,47 @@ export class StripeOnDeviceProvider implements PaymentProvider {
     return this.opts.client.createConnectionToken();
   }
 
+  /** The tenant this provider serves — the single source of truth for scope. A method-supplied
+   * tenant is VALIDATED against it; the two are equal thereafter, so which one the writes below
+   * use does not matter (they use `params`, unchanged).
+   *
+   * That is the rule, not an exception: an object with a per-tenant identity scopes from that
+   * identity, and an object without one (`StripeHostedProvider`, whose only database method is
+   * `initiate`) scopes from its parameters. Both are "the tenant is established exactly once, as
+   * early as it is known".
+   *
+   * Compared case-INSENSITIVELY. `tenantId()` validates the UUID shape with a case-insensitive
+   * pattern and returns the value unchanged, so a host reading `A1B2…` from config and a caller
+   * carrying `a1b2…` from a database read hold the same tenant in Postgres's eyes and different
+   * strings in JavaScript's. A `!==` here would reject every sale on that till.
+   *
+   * Throws `stripe.tenant_mismatch` BEFORE any network call. Leaving the disagreement to the
+   * isolation policy's WITH CHECK would be too late on the on-device path — see the code's doc. */
+  private requireOwnTenant(supplied: TenantId): void {
+    if (supplied.toLowerCase() !== this.opts.tenantId.toLowerCase()) {
+      throw new AppError("stripe.tenant_mismatch", {
+        expected: this.opts.tenantId,
+        supplied,
+      });
+    }
+  }
+
+  /** Every database phase runs through here, so no transaction this adapter opens can be left
+   * unscoped — the failure that made `collect` charge cards without recording them and `forward` a
+   * permanent silent no-op under a real role. */
+  private inTenant<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+    return withTenant(this.opts.db, this.opts.tenantId, fn);
+  }
+
   async collect(params: CollectParams): Promise<PaymentResult> {
+    // FIRST — before the policy read and, critically, before `collectOnDevice` takes the money.
+    // This class writes its row only after the card is charged, so a mis-wiring caught by the RLS
+    // policy instead would be caught one statement too late.
+    this.requireOwnTenant(params.tenantId);
     const paymentRef = randomUUID();
     // Gate up front: the neutral policy decides whether offline is permitted for THIS transaction,
     // which configures the device's offline behaviour BEFORE anything is stored.
-    const offlineAllowed = await this.opts.db.transaction(async (tx) => {
+    const offlineAllowed = await this.inTenant(async (tx) => {
       const policy = await getPaymentPolicy(tx, params.tenantId);
       return (
         resolveOfflineDecision(policy, params.allowOffline ?? false, params.amount) === "accept"
@@ -117,7 +181,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
       };
     }
     if (outcome.outcome === "declined") {
-      await this.opts.db.transaction((tx) => insertFailedPayment(tx, common));
+      await this.inTenant((tx) => insertFailedPayment(tx, common));
       return {
         provider: PROVIDER,
         paymentRef,
@@ -141,7 +205,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
     /* v8 ignore stop */
     const settledAt = new Date();
     if (outcome.outcome === "accepted_offline") {
-      await this.opts.db.transaction((tx) =>
+      await this.inTenant((tx) =>
         insertAcceptedOffline(tx, { ...common, settledAt, externalRef: outcome.externalRef }),
       );
       return {
@@ -154,7 +218,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
       };
     }
     // captured (online single-message)
-    await this.opts.db.transaction((tx) =>
+    await this.inTenant((tx) =>
       insertCapturedPayment(tx, { ...common, settledAt, externalRef: outcome.externalRef }),
     );
     return { provider: PROVIDER, paymentRef, state: "captured", amount: params.amount, settledAt };
@@ -162,7 +226,9 @@ export class StripeOnDeviceProvider implements PaymentProvider {
 
   async forward(now: Date): Promise<ForwardResult> {
     // T1 (read, no lock): list our pending offline payments. Never hold a lock across the device sync.
-    const pending = await this.opts.db.transaction((tx) => listAcceptedOffline(tx, PROVIDER));
+    const pending = await this.inTenant((tx) =>
+      listAcceptedOffline(tx, this.opts.tenantId, PROVIDER),
+    );
     if (pending.length === 0) {
       return { nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 };
     }
@@ -174,12 +240,34 @@ export class StripeOnDeviceProvider implements PaymentProvider {
     const settledSet = new Set(settled);
     const declinedSet = new Set(declined);
 
+    // Refs the device resolved neither way — it still holds them. Computed here, off the sets,
+    // rather than counted in the write loop below: it is a property of what the device just said,
+    // not of anything being written, and `nextDueAt` is the only thing that reads it.
+    //
+    // `ForwardResult.nextDueAt` means "when to run again; null = nothing pending". This method
+    // returned null unconditionally, including for refs its own comment describes as "left for a
+    // later pass" — so a host sleeping until the earliest nextDueAt was told there was nothing to
+    // come back for, and those rows would stay `accepted_offline` for ever: card revenue accepted
+    // while the network was down and never cleared. Nothing calls `forward` yet, which is the only
+    // reason it never bit.
+    const unresolved = pending.some(
+      (p) => !settledSet.has(p.paymentRef) && !declinedSet.has(p.paymentRef),
+    );
+    const nextDueAt = unresolved ? new Date(now.getTime() + FORWARD_RETRY_MS) : null;
+
+    // Nothing to write: the device resolved none of them. Skipping T2 avoids a BEGIN/COMMIT (and
+    // its `set_config`) per pass for exactly the case that now RECURS every FORWARD_RETRY_MS — a
+    // device offline through a service would otherwise pay for an empty transaction each time.
+    if (settled.length === 0 && declined.length === 0) {
+      return { nextDueAt, forwarded: 0, declined: 0, incidentsRaised: 0 };
+    }
+
     // T2 (write): advance each resolved row (idempotent — matches only rows still accepted_offline)
-    // and raise one race-safe incident per decline. Refs still pending on the device are left for a
-    // later pass. Under two concurrent forwards the counts may double (both advance the same row, the
-    // second a no-op) — a benign log-line inaccuracy the design accepts; the incident count stays
-    // exact because recordIncidentOnce reports real inserts.
-    return this.opts.db.transaction(async (tx) => {
+    // and raise one race-safe incident per decline. Under two concurrent forwards the counts may
+    // double (both advance the same row, the second a no-op) — a benign log-line inaccuracy the
+    // design accepts; the incident count stays exact because recordIncidentOnce reports real
+    // inserts.
+    return this.inTenant(async (tx) => {
       let forwarded = 0;
       let declinedCount = 0;
       let incidentsRaised = 0;
@@ -211,19 +299,32 @@ export class StripeOnDeviceProvider implements PaymentProvider {
           if (raised) incidentsRaised += 1;
         }
       }
-      return { nextDueAt: null, forwarded, declined: declinedCount, incidentsRaised };
+      return { nextDueAt, forwarded, declined: declinedCount, incidentsRaised };
     });
   }
 
-  // Reversals delegate to the shared helper (the design's "shared with StripeTerminalProvider, not
-  // re-implemented"); the on-device client's `refund` satisfies `StripeRefunder` structurally.
+  /** The one place a reversal's tenant scope is derived, for the same reason `inTenant` is the one
+   * place a transaction's is. Delegates to the shared `reverseViaStripe` (the design's "shared with StripeTerminalProvider, not re-implemented"); the on-device client's `refund` satisfies `StripeRefunder` structurally.
+   *
+   * Supplying `tenantId` is what makes a reversal work at all: `reverseViaStripe` opens with the
+   * untenanted `findPaymentByRef`, which under a real role matches zero rows with no GUC set, so
+   * every reversal failed closed with `payment.not_found` for a payment sitting right there.
+   * `reverse.ts` diagnosed exactly that, then defaulted these callers to omitting the option
+   * because their options "already REQUIRE a tenant-scoped handle" — the requirement that could
+   * not be met. */
+  private reverse(kind: "void" | "refund", ref: string, amount?: Decimal): Promise<PaymentResult> {
+    return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, kind, amount, {
+      tenantId: this.opts.tenantId,
+    });
+  }
+
   void(ref: string): Promise<PaymentResult> {
-    return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, "void");
+    return this.reverse("void", ref);
   }
   refund(ref: string): Promise<PaymentResult> {
-    return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, "refund");
+    return this.reverse("refund", ref);
   }
   partialRefund(ref: string, amount: Decimal): Promise<PaymentResult> {
-    return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, "refund", amount);
+    return this.reverse("refund", ref, amount);
   }
 }

@@ -113,6 +113,7 @@ describe("stripe collect -> recordSale -> associate (the adapter seam, end to en
     const provider = new StripeTerminalProvider({
       client: new FakeStripe(),
       db,
+      tenantId: brandTenantId(s.tenantId),
       resolveReader: () => Promise.resolve("reader_1"),
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });

@@ -44,7 +44,7 @@ beforeEach(async () => {
 describe("the orphan backstop, end to end", () => {
   it("collects, loses the sale, and lets the sweep reverse it and warn the till", async () => {
     const seeded = await seedWorkingOrder(db, freshNif());
-    const provider = new FakePaymentProvider(db);
+    const provider = new FakePaymentProvider(db, seeded.tenantId);
 
     // 1. Real capture through the provider — the money moves.
     const captured = await provider.collect({

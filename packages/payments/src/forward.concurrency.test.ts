@@ -60,7 +60,7 @@ describe("claimAcceptedOffline SKIP LOCKED partitions the queue across concurren
       // The waiter's real claimAcceptedOffline runs WHILE the holder holds its lock. SKIP LOCKED
       // means it returns immediately (never blocks) with exactly the row the holder did NOT lock.
       const secondClaim = await withTenant(waiter, seeded.tenantId, (tx) =>
-        claimAcceptedOffline(tx, "fake"),
+        claimAcceptedOffline(tx, seeded.tenantId, "fake"),
       );
       const secondRefs = secondClaim.map((r) => r.paymentRef);
 

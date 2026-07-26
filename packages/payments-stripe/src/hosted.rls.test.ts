@@ -1,10 +1,16 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { decimal } from "@waitron/shared";
+import {
+  decimal,
+  tenantId as brandTenantId,
+  workingOrderId as brandWorkingOrderId,
+} from "@waitron/shared";
 import { getPaymentByRef, insertInitiated, resolvePaymentTenant } from "@waitron/payments";
-import { seedWorkingOrder } from "@waitron/payments/test/seed.js";
+import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { FakeStripeHosted } from "./testing/fake-stripe-hosted.js";
+import { StripeHostedProvider } from "./hosted-provider.js";
 
 const PROBE_ROLE = "rls_probe_hosted";
 const PROBE_PASSWORD = "probe";
@@ -61,6 +67,25 @@ describe("hosted initiated rows under real row-level security", () => {
       // crosses and returns ONLY the tenant id.
       const resolved = await resolvePaymentTenant(probe, "stripe", sessionId);
       expect(resolved).toBe(a.tenantId);
+    } finally {
+      await probe.close();
+    }
+  });
+
+  // The third adapter that carried the same impossible "TENANT-SCOPED `Database` handle"
+  // requirement. It scopes from `params.tenantId` now — `initiate` is its only database method.
+  it("initiate() writes its initiated row when handed the only Database handle the API can build", async () => {
+    const t = await seedWorkingOrder(admin, freshNif());
+    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const provider = new StripeHostedProvider({ client: new FakeStripeHosted(), db: probe });
+      const res = await provider.initiate({
+        tenantId: brandTenantId(t.tenantId),
+        workingOrderId: brandWorkingOrderId(t.workingOrderId),
+        amount: decimal("12.10"),
+        paymentRef: "hosted-rls-1",
+      });
+      expect(res.externalRef).toBeTruthy();
     } finally {
       await probe.close();
     }

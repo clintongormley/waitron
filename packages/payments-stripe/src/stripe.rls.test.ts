@@ -1,10 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { decimal } from "@waitron/shared";
+import {
+  decimal,
+  tenantId as brandTenantId,
+  tillId as brandTillId,
+  workingOrderId as brandWorkingOrderId,
+} from "@waitron/shared";
 import { captureAttempting, getPaymentByRef, insertAttempting } from "@waitron/payments";
 import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
-import { seedWorkingOrder } from "@waitron/payments/test/seed.js";
+import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
+import { FakeStripe } from "./testing/fake-stripe.js";
+import { StripeTerminalProvider } from "./provider.js";
 
 // A non-superuser LOGIN role that inherits app_user's grants. Being non-superuser is what makes RLS
 // apply to it at all (a superuser bypasses FORCE ROW LEVEL SECURITY, which is exactly why PGlite —
@@ -99,6 +106,33 @@ describe("stripe attempting/capture lifecycle under real row-level security", ()
       // assumed from the migration text.
       const hidden = await withTenant(probe, tenantB.tenantId, (tx) => getPaymentByRef(tx, key));
       expect(hidden).toBeUndefined();
+    } finally {
+      await probe.close();
+    }
+  });
+
+  // The suite header above notes that `collect` opens its own transactions and so "can't have
+  // `app.tenant_id` set on them from out here", then exercises the store lifecycle under
+  // withTenant instead. That proves the POLICY holds; it infers the ADAPTER is therefore fine.
+  // This test makes the adapter itself the subject, which is the step that inference skipped.
+  it("collect() writes its attempting row when handed the only Database handle the API can build", async () => {
+    const t = await seedWorkingOrder(admin, freshNif());
+    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const provider = new StripeTerminalProvider({
+        client: new FakeStripe(),
+        db: probe,
+        tenantId: brandTenantId(t.tenantId),
+        resolveReader: () => Promise.resolve("reader_1"),
+        poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
+      });
+      const result = await provider.collect({
+        tenantId: brandTenantId(t.tenantId),
+        tillId: brandTillId(t.tillId),
+        workingOrderId: brandWorkingOrderId(t.workingOrderId),
+        amount: decimal("10.00"),
+      });
+      expect(result.state).toBe("captured");
     } finally {
       await probe.close();
     }

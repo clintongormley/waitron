@@ -23,52 +23,45 @@ export interface StripeRefunder {
 }
 
 /**
- * `reverseViaStripe`'s OPTIONAL tail, gathered into one named object rather than trailing
+ * `reverseViaStripe`'s trailing options, gathered into one named object rather than trailing
  * positional parameters.
  *
  * The function already takes six positional arguments, four of them strings, and these two options
  * are unrelated to each other — a reference resolver and a tenant scope — so no ordering between
- * them reads naturally and the caller that wants only the second would have to write
- * `undefined, resolverOrUndefined, tenantId`. Naming them removes both problems and leaves room
- * for the next optional (a persisted per-reversal idempotency key is the known one) without
- * re-litigating argument order.
- *
- * It is deliberately only the TAIL: `db`/`client`/`provider`/`ref`/`kind`/`amount` stay positional,
- * so all six call sites in `provider.ts` and `device-provider.ts` are byte-for-byte unchanged. That
- * is what keeps this additive on a primitive three shipped adapters depend on — the same reason the
- * resolver was introduced with an identity default rather than as a required argument.
+ * them reads naturally. Naming them removes the problem and leaves room for the next option (a
+ * persisted per-reversal idempotency key is the known one) without re-litigating argument order.
  */
 export interface ReverseViaStripeOptions {
   /**
-   * The tenant whose payment is being reversed. Supply it whenever `db` is NOT already a
-   * tenant-scoped handle; omit it when it is.
+   * The tenant whose payment is being reversed. REQUIRED — see below for why it stopped being
+   * optional.
    *
-   * This exists because of a non-obvious fact about how tenancy is established: a bare
-   * `db.transaction(...)` sets no `app.tenant_id` GUC at all. `withTenant` sets it with
-   * `set_config(..., true)` — transaction-local — from INSIDE the transaction it itself opens, so a
-   * transaction opened any other way begins with `current_tenant_id()` NULL. This function's first
-   * act is `findPaymentByRef`, which is deliberately untenanted (the `PaymentProvider` reversal
-   * methods carry only a `paymentRef`), so with the GUC unset the `payments` tenant-isolation
-   * policy matches ZERO rows and the reversal fails closed with `payment.not_found` — for a payment
-   * that is sitting right there. Fails CLOSED, so no money moves; but it fails every single time.
+   * Tenancy here is non-obvious: a bare `db.transaction(...)` sets no `app.tenant_id` GUC at all.
+   * `withTenant` sets it with `set_config(..., true)` — transaction-local — from INSIDE the
+   * transaction it itself opens, so a transaction opened any other way begins with
+   * `current_tenant_id()` NULL. This function's first act is `findPaymentByRef`, deliberately
+   * untenanted (the `PaymentProvider` reversal methods carry only a `paymentRef`), so with the GUC
+   * unset the `payments` tenant-isolation policy matches ZERO rows and the reversal fails closed
+   * with `payment.not_found` — for a payment that is sitting right there. No money moves; it just
+   * fails every single time.
    *
    * No hermetic suite can show that: PGlite connects as superuser and bypasses FORCE ROW LEVEL
    * SECURITY, so the untenanted transaction reads the row anyway and every PGlite test passes.
-   * `reconcile.rls.test.ts`, against a real non-superuser role, is the proof.
    *
-   * Supplied → both database phases run through `withTenant`, the GUC is set, RLS matches the row,
+   * **This option used to be optional, and its own doc named the two interactive providers as the
+   * "correct default" for omitting it, "whose own options already REQUIRE a tenant-scoped handle
+   * and document it".** That handle cannot be constructed — `withTenant` is transaction-local and
+   * `createPostgresDb` returns an unscoped handle — so the advice recommended precisely the failure
+   * described two paragraphs up, and both providers' reversals did fail that way. Requiring the
+   * tenant makes the mistake unrepresentable rather than documented. See
+   * `2026-07-26-provider-tenant-scoping-design.md`.
+   *
+   * Given it, both database phases run through `withTenant`, the GUC is set, RLS matches the row,
    * AND the found row's own `tenant_id` is checked against this value before anything moves — the
    * explicit predicate `listReconcilable`/`existingReferences` already carry, applied to the one
    * money-moving query on the reconcile path (see the check itself for why RLS alone is not enough).
-   * Omitted → behaviour is exactly what it has always been: a bare `db.transaction`. That is the
-   * correct default for the two interactive providers, whose own options already REQUIRE a
-   * tenant-scoped handle and document it. `StripeReconciler` is the caller that must supply it: it
-   * holds a plain, unscoped handle, because the neutral sweep wraps its OWN phases in `withTenant`
-   * and hands the reversal callback nothing — so without this, every hosted orphan's auto-reversal
-   * would fail permanently under real RLS, which is precisely the failure the auto-reversal exists
-   * to eliminate.
    */
-  tenantId?: TenantId;
+  tenantId: TenantId;
   /** Maps the payment's stored `external_ref` to the identifier the processor's refund API needs.
    * Defaults to identity, so the terminal and on-device callers — which store a PaymentIntent id,
    * exactly what `stripe.refunds` wants — behave byte-for-byte as before; the default is the whole
@@ -93,33 +86,38 @@ export interface ReverseViaStripeOptions {
  * real refund; SAME-reversal retry-safety (a persisted per-reversal id) is deferred, and reconcile
  * backstops Stripe-vs-local drift.
  *
- * Both database phases obey ONE tenant-scoping decision, made from `ReverseViaStripeOptions.tenantId`:
- * supplied means `withTenant`, omitted means the bare `db.transaction` this has always used — which
- * sets no `app.tenant_id` GUC and so, under a real non-superuser role, sees none of the tenant's
- * rows. Read that option's comment before adding a caller: whether a reversal works at all under RLS
- * depends on it. */
+ * Both database phases run through `withTenant` under `ReverseViaStripeOptions.tenantId`, which is
+ * required. It was once optional, defaulting to a bare `db.transaction` that sets no `app.tenant_id`
+ * GUC and therefore, under a real non-superuser role, sees none of the tenant's rows — read that
+ * option's comment before loosening it again. */
 export async function reverseViaStripe(
   db: Database,
   client: StripeRefunder,
   provider: string,
   ref: string,
   kind: "void" | "refund",
-  amount?: Decimal,
-  /** The optional tail — see `ReverseViaStripeOptions` for why these two are an object and not two
-   * more positional parameters. `= {}` so a caller wanting neither passes nothing at all. */
+  /** Required but nullable, NOT optional (`amount?`): TypeScript forbids an optional parameter
+   * before a required one, and the options object below is required now that `tenantId` is. Every
+   * caller already passed an explicit `undefined` here, so the shape is unchanged in practice —
+   * this only stops a new caller silently omitting the tail that carries the tenant. */
+  amount: Decimal | undefined,
+  /** See `ReverseViaStripeOptions` for why these are an object and not two more positional
+   * parameters. No default: `tenantId` is required, so every caller passes this. */
   {
     tenantId,
     resolveProcessorRef = (externalRef) => Promise.resolve(externalRef),
-  }: ReverseViaStripeOptions = {},
+  }: ReverseViaStripeOptions,
 ): Promise<PaymentResult> {
-  // The ONLY place either transaction opener is chosen, so the database phases below — the T1
-  // pre-check and whichever T2 write the outcome selects — cannot drift apart: one tenanted and
-  // another not would be a payment found under RLS and then written outside its own tenant's scope.
-  // `withTenant` OPENS a transaction, which is exactly why this wraps only those short phases: the
-  // processor refund between them is a network call and stays outside every transaction (T1/T2), as
-  // does the `resolveProcessorRef` lookup that feeds it.
+  // The ONE opener for every database phase below — the T1 pre-check and whichever T2 write the
+  // outcome selects — so they cannot drift apart. `withTenant` OPENS a transaction, which is why
+  // this wraps only those short phases: the processor refund between them is a network call and
+  // stays outside every transaction (T1/T2), as does the `resolveProcessorRef` lookup feeding it.
+  //
+  // There used to be a second, untenanted branch here (`tenantId === undefined ? db.transaction(fn)
+  // : …`). It is gone with the option's optionality: it was the mechanism by which every
+  // interactive-provider reversal failed closed under a real role.
   const inTransaction = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    tenantId === undefined ? db.transaction(fn) : withTenant(db, tenantId, fn);
+    withTenant(db, tenantId, fn);
 
   const found = await inTransaction(async (tx) => {
     const f = await findPaymentByRef(tx, provider, ref);
@@ -134,9 +132,10 @@ export async function reverseViaStripe(
     // which left this, the ONE query on the reconcile path that goes on to move money, relying on
     // RLS alone. Now that the tenant is in hand it is checked here too: a row belonging to anyone
     // else is `payment.not_found`, the same answer as a row that does not exist, before the refund
-    // is issued or any local state is touched. Omitting `tenantId` keeps the historical behaviour
-    // exactly (the two interactive providers pass an already-scoped handle and no tenant).
-    if (tenantId !== undefined && f.tenantId !== tenantId) {
+    // is issued or any local state is touched.
+    // Case-insensitive: Postgres renders `uuid` canonical-lowercase while `tenantId()` accepts and
+    // preserves either case, so a caller holding `A1B2…` would be denied its OWN payment.
+    if (f.tenantId.toLowerCase() !== tenantId.toLowerCase()) {
       throw new AppError("payment.not_found", { provider, paymentRef: ref });
     }
     const externalRef = f.externalRef;

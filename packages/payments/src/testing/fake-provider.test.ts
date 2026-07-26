@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
@@ -59,7 +60,7 @@ async function collect(
 describe("FakePaymentProvider.collect", () => {
   it("returns a captured result with a settledAt and persists it", async () => {
     const s = await seedTenant();
-    const provider = new FakePaymentProvider(db);
+    const provider = new FakePaymentProvider(db, s.tenantId);
     const r = await collect(provider, s);
     expect(r.state).toBe("captured");
     expect(r.settledAt).not.toBeNull();
@@ -72,7 +73,7 @@ describe("FakePaymentProvider.collect", () => {
 
   it("returns a failed result with a null settledAt after failNextCollect, then recovers on the next call", async () => {
     const s = await seedTenant();
-    const provider = new FakePaymentProvider(db);
+    const provider = new FakePaymentProvider(db, s.tenantId);
     provider.failNextCollect();
     const failed = await collect(provider, s);
     expect(failed.state).toBe("failed");
@@ -90,14 +91,14 @@ describe("FakePaymentProvider.collect", () => {
 describe("FakePaymentProvider.void", () => {
   it("reverses a captured payment to voided", async () => {
     const s = await seedTenant();
-    const provider = new FakePaymentProvider(db);
+    const provider = new FakePaymentProvider(db, s.tenantId);
     const paid = await collect(provider, s);
     const voided = await provider.void(paid.paymentRef);
     expect(voided.state).toBe("voided");
   });
 
   it("throws payment.not_found for an unknown ref", async () => {
-    const provider = new FakePaymentProvider(db);
+    const provider = new FakePaymentProvider(db, randomUUID());
     const error = await provider.void("unknown").catch((e: unknown) => e);
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("payment.not_found");
@@ -107,14 +108,14 @@ describe("FakePaymentProvider.void", () => {
 describe("FakePaymentProvider.refund", () => {
   it("refund of the full amount marks the payment refunded", async () => {
     const s = await seedTenant();
-    const provider = new FakePaymentProvider(db);
+    const provider = new FakePaymentProvider(db, s.tenantId);
     const paid = await collect(provider, s);
     const refunded = await provider.refund(paid.paymentRef);
     expect(refunded.state).toBe("refunded");
   });
 
   it("throws payment.not_found for an unknown ref", async () => {
-    const provider = new FakePaymentProvider(db);
+    const provider = new FakePaymentProvider(db, randomUUID());
     const error = await provider.refund("unknown").catch((e: unknown) => e);
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("payment.not_found");
@@ -124,7 +125,7 @@ describe("FakePaymentProvider.refund", () => {
 describe("FakePaymentProvider.partialRefund", () => {
   it("refunding part of the captured amount marks the payment partially_refunded", async () => {
     const s = await seedTenant();
-    const provider = new FakePaymentProvider(db);
+    const provider = new FakePaymentProvider(db, s.tenantId);
     const paid = await collect(provider, s, "20.00");
     const partial = await provider.partialRefund(paid.paymentRef, decimal("12.00"));
     expect(partial.state).toBe("partially_refunded");
@@ -132,7 +133,7 @@ describe("FakePaymentProvider.partialRefund", () => {
 
   it("partialRefund reports the refunded amount, not the captured total", async () => {
     const seeded = await seedTenant();
-    const provider = new FakePaymentProvider(db);
+    const provider = new FakePaymentProvider(db, seeded.tenantId);
     const paid = await provider.collect({
       tenantId: brandTenantId(seeded.tenantId),
       tillId: brandTillId(seeded.tillId),
@@ -147,7 +148,7 @@ describe("FakePaymentProvider.partialRefund", () => {
 
 describe("FakePaymentProvider.capabilities", () => {
   it("advertises partialRefund support", () => {
-    expect(new FakePaymentProvider(db).capabilities.partialRefund).toBe(true);
+    expect(new FakePaymentProvider(db, randomUUID()).capabilities.partialRefund).toBe(true);
   });
 });
 
@@ -155,7 +156,7 @@ describe("FakePaymentProvider.collect offline", () => {
   it("accepts offline when policy allows, staff opt in, and amount is within the cap", async () => {
     const s = await seedTenant();
     await seedPaymentPolicy(db, s.tenantId, "accept_offline", "50.00");
-    const provider = new FakePaymentProvider(db);
+    const provider = new FakePaymentProvider(db, s.tenantId);
     provider.offlineNextCollect();
     const r = await collect(provider, s, "10.00", true);
     expect(r.state).toBe("accepted_offline");
@@ -169,7 +170,7 @@ describe("FakePaymentProvider.collect offline", () => {
   it("returns network_unavailable and writes nothing when staff did not opt in", async () => {
     const s = await seedTenant();
     await seedPaymentPolicy(db, s.tenantId, "accept_offline", "50.00");
-    const provider = new FakePaymentProvider(db);
+    const provider = new FakePaymentProvider(db, s.tenantId);
     provider.offlineNextCollect();
     const r = await collect(provider, s, "10.00", false);
     expect(r.state).toBe("network_unavailable");
@@ -180,7 +181,7 @@ describe("FakePaymentProvider.collect offline", () => {
 
   it("returns network_unavailable when there is no policy row (fail-safe)", async () => {
     const s = await seedTenant();
-    const provider = new FakePaymentProvider(db);
+    const provider = new FakePaymentProvider(db, s.tenantId);
     provider.offlineNextCollect();
     const r = await collect(provider, s, "10.00", true);
     expect(r.state).toBe("network_unavailable");
@@ -189,7 +190,7 @@ describe("FakePaymentProvider.collect offline", () => {
   it("returns network_unavailable over the cap", async () => {
     const s = await seedTenant();
     await seedPaymentPolicy(db, s.tenantId, "accept_offline", "50.00");
-    const provider = new FakePaymentProvider(db);
+    const provider = new FakePaymentProvider(db, s.tenantId);
     provider.offlineNextCollect();
     const r = await collect(provider, s, "50.01", true);
     expect(r.state).toBe("network_unavailable");
@@ -198,7 +199,7 @@ describe("FakePaymentProvider.collect offline", () => {
   it("offlineNextCollect is one-shot — the next collect is a normal online capture", async () => {
     const s = await seedTenant();
     await seedPaymentPolicy(db, s.tenantId, "accept_offline", "50.00");
-    const provider = new FakePaymentProvider(db);
+    const provider = new FakePaymentProvider(db, s.tenantId);
     provider.offlineNextCollect();
     await collect(provider, s, "10.00", true);
     const online = await collect(provider, s, "10.00", true);
@@ -230,7 +231,7 @@ describe("FakePaymentProvider.forward", () => {
   it("settles an accepted_offline payment the network clears", async () => {
     const s = await seedTenant();
     await seedPaymentPolicy(db, s.tenantId, "accept_offline", "50.00");
-    const provider = new FakePaymentProvider(db);
+    const provider = new FakePaymentProvider(db, s.tenantId);
     const ref = await acceptOfflineAndAssociate(provider, s);
     const result = await provider.forward(new Date());
     expect(result).toMatchObject({
@@ -246,7 +247,7 @@ describe("FakePaymentProvider.forward", () => {
   it("declines a payment the network refuses, raising one incident, without touching the sale", async () => {
     const s = await seedTenant();
     await seedPaymentPolicy(db, s.tenantId, "accept_offline", "50.00");
-    const provider = new FakePaymentProvider(db);
+    const provider = new FakePaymentProvider(db, s.tenantId);
     const ref = await acceptOfflineAndAssociate(provider, s);
     provider.declineForwardFor(ref);
     const result = await provider.forward(new Date());
@@ -261,7 +262,7 @@ describe("FakePaymentProvider.forward", () => {
   it("is idempotent — a second forward advances nothing and raises no duplicate incident", async () => {
     const s = await seedTenant();
     await seedPaymentPolicy(db, s.tenantId, "accept_offline", "50.00");
-    const provider = new FakePaymentProvider(db);
+    const provider = new FakePaymentProvider(db, s.tenantId);
     const ref = await acceptOfflineAndAssociate(provider, s);
     provider.declineForwardFor(ref);
     await provider.forward(new Date());
@@ -272,7 +273,11 @@ describe("FakePaymentProvider.forward", () => {
   });
 
   it("returns all-zeros when there is nothing to forward", async () => {
-    const provider = new FakePaymentProvider(db);
+    // A real seeded tenant, not a random id: the claim must come back empty because this tenant's
+    // QUEUE is empty, which is what the fake's forward is being asked about — a tenant that cannot
+    // own rows at all would assert the same thing against a broken claim predicate.
+    const s = await seedTenant();
+    const provider = new FakePaymentProvider(db, s.tenantId);
     const result = await provider.forward(new Date());
     expect(result).toEqual({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
   });

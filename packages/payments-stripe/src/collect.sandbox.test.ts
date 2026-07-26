@@ -78,6 +78,7 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
     const provider = new StripeTerminalProvider({
       client: stripeClient(stripe),
       db,
+      tenantId: brandTenantId(s.tenantId),
       resolveReader: () => Promise.resolve(readerId),
       poll: { maxAttempts: 40, intervalMs: 500 },
     });

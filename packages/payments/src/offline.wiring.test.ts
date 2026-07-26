@@ -78,7 +78,7 @@ describe("offline accept -> recordSale -> associate -> forward decline (sale sta
     await seedPaymentPolicy(db, s.tenantId, "accept_offline", "50.00");
 
     // 1. Offline accept BEFORE the sale transaction (there is an acceptance step, unlike manual mode).
-    const provider = new FakePaymentProvider(db);
+    const provider = new FakePaymentProvider(db, s.tenantId);
     provider.offlineNextCollect();
     const paid = await provider.collect({
       tenantId: brandTenantId(s.tenantId),

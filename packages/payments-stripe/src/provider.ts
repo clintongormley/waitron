@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { AppError } from "@waitron/shared";
 import type { Decimal, TenantId, TillId } from "@waitron/shared";
-import type { Database } from "@waitron/db";
+import { withTenant } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import type {
   CollectParams,
   ForwardResult,
@@ -10,6 +12,7 @@ import type {
 } from "@waitron/payments";
 import { captureAttempting, failAttempting, insertAttempting } from "@waitron/payments";
 import type { StripeClient } from "./client.js";
+import "./errors.js";
 import { reverseViaStripe } from "./reverse.js";
 
 const PROVIDER = "stripe";
@@ -22,11 +25,21 @@ const DEFAULT_POLL = {
 
 export interface StripeTerminalProviderOptions {
   client: StripeClient;
-  /** Must be a TENANT-SCOPED `Database` handle (one that sets `app.tenant_id`) — `collect`/`reverse`
-   * open their own transactions and rely on RLS scoping from this handle; the untenanted
-   * `findPaymentByRef` returns nothing under real RLS with no tenant GUC set. (The untenanted-webhook
-   * reversal case is deferred by design.) */
+  /** A plain `Database` handle. This adapter opens its own transactions and scopes each one with
+   * `withTenant(db, tenantId, …)`, so nothing is required of the handle itself.
+   *
+   * This option once demanded a "TENANT-SCOPED `Database` handle", which cannot be constructed —
+   * see `StripeOnDeviceProviderOptions.db` for the mechanism and
+   * `2026-07-26-provider-tenant-scoping-design.md` for the full account. Here it meant `collect`
+   * failed on `insertAttempting` with `42501` under any real role, on every sale. It failed CLOSED
+   * (T1 precedes the reader network call, so no money moved), which is the only reason this
+   * adapter's version was less serious than the on-device one. `stripe.rls.test.ts` is the proof. */
   db: Database;
+  /** The tenant this provider serves. A terminal provider is a per-till object and a till belongs
+   * to exactly one tenant, so the scope is known at construction — which is what makes every
+   * database phase below scopable without threading a tenant through methods (`void`/`refund`
+   * carry only a payment reference). The host builds one provider per tenant. */
+  tenantId: TenantId;
   resolveReader: (tenantId: TenantId, tillId: TillId) => Promise<string>;
   poll?: { maxAttempts?: number; intervalMs?: number; sleep?: (ms: number) => Promise<void> };
 }
@@ -53,13 +66,45 @@ export class StripeTerminalProvider implements PaymentProvider {
     this.poll = { ...DEFAULT_POLL, ...opts.poll };
   }
 
+  /** The tenant this provider serves — the single source of truth for scope. A method-supplied
+   * tenant is VALIDATED against it; the two are equal thereafter, so which one the writes below
+   * use does not matter (they use `params`, unchanged).
+   *
+   * That is the rule, not an exception: an object with a per-tenant identity scopes from that
+   * identity, and an object without one (`StripeHostedProvider`, whose only database method is
+   * `initiate`) scopes from its parameters. Both are "the tenant is established exactly once, as
+   * early as it is known".
+   *
+   * Compared case-INSENSITIVELY. `tenantId()` validates the UUID shape with a case-insensitive
+   * pattern and returns the value unchanged, so a host reading `A1B2…` from config and a caller
+   * carrying `a1b2…` from a database read hold the same tenant in Postgres's eyes and different
+   * strings in JavaScript's. A `!==` here would reject every sale on that till.
+   *
+   * Throws `stripe.tenant_mismatch` BEFORE any network call. Leaving the disagreement to the
+   * isolation policy's WITH CHECK would be too late on the on-device path — see the code's doc. */
+  private requireOwnTenant(supplied: TenantId): void {
+    if (supplied.toLowerCase() !== this.opts.tenantId.toLowerCase()) {
+      throw new AppError("stripe.tenant_mismatch", {
+        expected: this.opts.tenantId,
+        supplied,
+      });
+    }
+  }
+
+  /** Every database phase runs through here, so no transaction this adapter opens can be left
+   * unscoped — the failure that made `collect` throw `42501` on every sale under a real role. */
+  private inTenant<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+    return withTenant(this.opts.db, this.opts.tenantId, fn);
+  }
+
   async collect(params: CollectParams): Promise<PaymentResult> {
+    this.requireOwnTenant(params.tenantId);
     const readerId = await this.opts.resolveReader(params.tenantId, params.tillId);
     const paymentRef = randomUUID();
     const key = { tenantId: params.tenantId, provider: PROVIDER, paymentRef };
 
     // T1 — commit the attempt before any network call.
-    await this.opts.db.transaction((tx) =>
+    await this.inTenant((tx) =>
       insertAttempting(tx, {
         tenantId: params.tenantId,
         workingOrderId: params.workingOrderId,
@@ -73,7 +118,7 @@ export class StripeTerminalProvider implements PaymentProvider {
     const outcome = await this.drive(readerId, params.amount, paymentRef);
 
     // T2 — persist the terminal outcome.
-    const row = await this.opts.db.transaction((tx) =>
+    const row = await this.inTenant((tx) =>
       outcome.captured
         ? captureAttempting(tx, { ...key, settledAt: outcome.settledAt, externalRef: outcome.piId })
         : failAttempting(tx, key),
@@ -135,13 +180,28 @@ export class StripeTerminalProvider implements PaymentProvider {
     }
   }
 
+  /** The one place a reversal's tenant scope is derived, for the same reason `inTenant` is the one
+   * place a transaction's is. The three public methods below differ only in kind and amount.
+   *
+   * Supplying `tenantId` is what makes a reversal work at all: `reverseViaStripe` opens with the
+   * untenanted `findPaymentByRef`, which under a real role matches zero rows with no GUC set, so
+   * every reversal failed closed with `payment.not_found` for a payment sitting right there.
+   * `reverse.ts` diagnosed exactly that, then defaulted these callers to omitting the option
+   * because their options "already REQUIRE a tenant-scoped handle" — the requirement that could
+   * not be met. */
+  private reverse(kind: "void" | "refund", ref: string, amount?: Decimal): Promise<PaymentResult> {
+    return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, kind, amount, {
+      tenantId: this.opts.tenantId,
+    });
+  }
+
   void(ref: string): Promise<PaymentResult> {
-    return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, "void");
+    return this.reverse("void", ref);
   }
   refund(ref: string): Promise<PaymentResult> {
-    return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, "refund");
+    return this.reverse("refund", ref);
   }
   partialRefund(ref: string, amount: Decimal): Promise<PaymentResult> {
-    return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, "refund", amount);
+    return this.reverse("refund", ref, amount);
   }
 }

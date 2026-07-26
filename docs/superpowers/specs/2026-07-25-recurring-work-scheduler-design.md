@@ -123,6 +123,50 @@ of due work alongside the three in §5 — not a rewrite. The ledger's `period_f
 `NOT NULL` today precisely because inventing nullable columns for an unbuilt kind is the same
 speculation in a different place.
 
+> **Amended 2026-07-26 — the paragraph above is wrong about what `DueAtDuty` would cost, and the
+> two duties it names do not have the same answer.** The claim that landing `drain` means "a
+> derivation strategy and a migration" was written without checking either duty's actual shape.
+>
+> **`drain` is genuinely not schedulable by this ledger.** Three reasons, all specific to it:
+>
+> 1. **`drain(now)` takes no tenant.** It enumerates its own through `envios_tenants_with_work`, a
+>    `SECURITY DEFINER` seam built precisely so it can read across tenants under FORCE RLS. Every
+>    `scheduled_runs` row is `tenant_id NOT NULL` with an FK and RLS, so a cross-tenant duty has
+>    nothing to key a row on — and running it once per tenant would repeat the whole sweep N times.
+> 2. **It already owns durable schedule state.** `envio_flujo.proximo_envio_en` is per tenant and
+>    persisted ("never an in-memory timer"), and `envios.proximo_intento_en` carries per-record
+>    retry. A ledger row would duplicate scheduling this package does not own.
+> 3. **`parked` is terminal.** Three throws would silently end `drain`'s hourly retry, which is a
+>    legal obligation — the opposite of what scheduling it is for.
+>
+> **`forward` is a different case, and is DEFERRED rather than ruled out.** None of the three holds
+> for it. It is now a per-tenant object (`StripeOnDeviceProviderOptions.tenantId`, landed the same
+> day — see [`2026-07-26-provider-tenant-scoping-design.md`](./2026-07-26-provider-tenant-scoping-design.md)),
+> so it keys onto `tenant_id NOT NULL` exactly as a `PeriodDuty` does. It owns **no** durable
+> schedule state: its only cadence is an in-process `FORWARD_RETRY_MS` constant in the adapter,
+> which is the very thing this package exists to replace. And nothing about its failure mode is
+> legally load-bearing, so `parked` is survivable.
+>
+> What blocks it is not shape but consumption: `forward` returns a `nextDueAt` **no code reads**,
+> because the host does not exist. An offline card queue that never clears is real revenue, so this
+> is a real gap — it is just a gap the host closes first. Revisit when sub-project C lands, and
+> treat `FORWARD_RETRY_MS` as the thing the host or this ledger should own instead of the adapter.
+>
+> Netting out for `drain`: what the runner would add is *a caller*, and the `apps/*` host is already
+> that. It calls `runDue(…)` for period duties and `drain(now)`/`forward(now)` directly, then sleeps
+> until the earliest of the three `nextDueAt`s. **No interface, no migration, no derivation
+> strategy.** Nor could this library carry the legal cadence even if it wanted to — an hourly duty
+> runs hourly only if the host ticks hourly, which is the host's configuration, so a `maxIntervalMs`
+> knob here would look like a guarantee it cannot make.
+>
+> The one real loss is durable visibility of a `drain` that keeps throwing: `TickResult.skipped` is
+> ephemeral and `incidents.till_id` is `NOT NULL` (§4), so there is nowhere to record it. That is
+> **assigned to monitoring**, not to a duty abstraction. Record-level failures already raise
+> incidents; this is about the sweep itself.
+>
+> Investigating this also surfaced that all three Stripe adapters were non-functional under a real
+> deployment role — same spec.
+
 ## 4. The ledger
 
 `scheduled_runs`, owned by this package: its own `src/schema/` directory, its own
@@ -402,6 +446,8 @@ not what is *stored*.
   host exists; that host wires this runner and the deferred webhook endpoint together.
 - **`DueAtDuty`** and therefore `drain` / `forward` scheduling — §3. The legal exposure on `drain`
   is real and unchanged by this design; this makes landing it cheap, not done.
+  **Amended 2026-07-26:** cheaper than "cheap" — it is not being built. The host calls `drain` and
+  `forward` directly and folds their `nextDueAt` in beside `runDue`'s. See §3's amendment.
 - **A time bound on the drift-orphan fund-hold** — decision 4, owned by the remediation-UI cycle.
   §7 makes the hold self-healing once a human acts, and its age computable; it does not decide how
   long is too long.

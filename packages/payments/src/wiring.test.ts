@@ -117,7 +117,7 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
   it("settles a tender, chains the sale, and associates the payment atomically", async () => {
     const backend = new FakeFiscalBackend(db);
     const s = await seedForSale(db, backend, freshNif());
-    const provider = new FakePaymentProvider(db);
+    const provider = new FakePaymentProvider(db, s.tenantId);
 
     // 1. The payment settles the tender.
     const paid = await provider.collect({
@@ -154,7 +154,7 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
   it("refuses the sale when the payment failed and leaves the tender unsettled", async () => {
     const backend = new FakeFiscalBackend(db);
     const s = await seedForSale(db, backend, freshNif());
-    const provider = new FakePaymentProvider(db);
+    const provider = new FakePaymentProvider(db, s.tenantId);
     provider.failNextCollect();
 
     const paid = await provider.collect({

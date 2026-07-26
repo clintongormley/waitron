@@ -48,7 +48,14 @@ export class FakePaymentProvider implements PaymentProvider {
   private offlineNext = false;
   private readonly declineForwardRefs = new Set<string>();
 
-  constructor(private readonly db: Database) {}
+  /** The tenant this fake serves. Real `PaymentProvider`s are per-till, therefore per-tenant,
+   * objects (see `StripeOnDeviceProviderOptions.tenantId`); a double that drained every tenant at
+   * once would model a shape no real provider has — and `claimAcceptedOffline` now carries the
+   * same explicit tenant predicate its unlocked twin does. */
+  constructor(
+    private readonly db: Database,
+    private readonly tenantId: string,
+  ) {}
 
   /** Test affordance: makes the next `collect` return a `failed` result. */
   failNextCollect(): void {
@@ -69,6 +76,16 @@ export class FakePaymentProvider implements PaymentProvider {
   }
 
   async collect(params: CollectParams): Promise<PaymentResult> {
+    // Mirrors the real adapters' `requireOwnTenant`. Without it this double would accept a collect
+    // for another tenant, write an `accepted_offline` row, and then never drain it — `forward`
+    // claims by `this.tenantId` — with no error anywhere. A double that silently loses money is
+    // worse than no double.
+    if (params.tenantId.toLowerCase() !== this.tenantId.toLowerCase()) {
+      throw new AppError("payment.not_found", {
+        provider: this.provider,
+        paymentRef: "<tenant mismatch>",
+      });
+    }
     const paymentRef = nextRef();
     if (this.offlineNext) {
       this.offlineNext = false;
@@ -109,7 +126,7 @@ export class FakePaymentProvider implements PaymentProvider {
    */
   async forward(now: Date): Promise<ForwardResult> {
     return this.db.transaction(async (tx) => {
-      const claimed = await claimAcceptedOffline(tx, this.provider);
+      const claimed = await claimAcceptedOffline(tx, this.tenantId, this.provider);
       let forwarded = 0;
       let declined = 0;
       let incidentsRaised = 0;
