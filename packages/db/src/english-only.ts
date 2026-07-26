@@ -12,6 +12,7 @@ export const GENERIC_PACKAGES = [
   "shared",
   "payments",
   "scheduler",
+  "credentials",
 ] as const;
 
 /** Spanish by design: these mirror AEAT's spec, XML and conformance vectors. */

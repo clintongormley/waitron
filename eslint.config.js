@@ -189,5 +189,52 @@ export default tseslint.config(
     },
   },
 
+  {
+    // packages/credentials is a leaf: `PURPOSES` in packages/credentials/src/purposes.ts holds a
+    // purpose's field names as plain string data, never a provider's own types or vocabulary (see
+    // docs/superpowers/specs/2026-07-26-tenant-credential-vault-design.md §3). Its package.json
+    // does NOT enforce that — `main` points at TS source with no build step, so
+    // `import { reconcilePayments } from "@waitron/payments"` inside src/store.ts would typecheck,
+    // lint clean and pass every test with no manifest dependency declared at all. The manifest
+    // constrains nothing here; only this rule does. Brought forward from Task 7 (originally
+    // scheduled there) because Tasks 5 and 6 add a CLI and rotation on top of this package before
+    // Task 7 lands, and purposes.ts's own comment claims this enforcement exists starting now.
+    files: ["packages/credentials/src/**/*.ts"],
+    plugins: { "import-x": importX },
+    settings: {
+      "import-x/resolver": { typescript: true },
+    },
+    rules: {
+      "import-x/no-restricted-paths": [
+        "error",
+        {
+          // As above: resolved from this config's own directory, never a leading `**/` —
+          // minimatch globstars refuse to cross a dot-prefixed segment such as
+          // `.claude/worktrees/`.
+          basePath: import.meta.dirname,
+          zones: [
+            {
+              target: "./packages/credentials/src/**/*",
+              from: [
+                "./packages/payments/**",
+                "./packages/payments-stripe/**",
+                "./packages/fiscal/**",
+                "./packages/fiscal-verifactu/**",
+                "./packages/verifactu/**",
+                "./packages/core/**",
+              ],
+              message:
+                "packages/credentials must stay a leaf with zero knowledge of any provider or " +
+                "regime package (see docs/superpowers/specs/" +
+                "2026-07-26-tenant-credential-vault-design.md §3). A purpose's field list is " +
+                "string DATA, never an import — if this needs something from payments or fiscal, " +
+                "it belongs behind the purpose registry, not in an import.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   eslintConfigPrettier,
 );

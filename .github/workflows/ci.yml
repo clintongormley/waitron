@@ -37,6 +37,33 @@ jobs:
 
       - run: pnpm format:check
 
+      # Nothing else in this workflow builds packages/credentials's bundle: dist/ is gitignored,
+      # bin.ts is excluded from coverage, and the SDD ledger records this exact artifact shipping
+      # broken twice during development (a duplicated shebang, then pg's CJS require failing under
+      # --format=esm). typecheck and test both run against TypeScript source, never the bundle
+      # operators actually run — this is the one gate that would have caught either break.
+      - run: pnpm --filter @waitron/credentials build
+
+      # A smoke test, not a full run: confirms the BUILT bundle actually executes under Node with no
+      # real database available. DATABASE_URL absent is the cheapest failure to trigger without
+      # provisioning Postgres, and bin.ts's own contract is to fail fast with a specific message and
+      # a non-zero exit code rather than crash with a raw, unformatted stack trace.
+      - name: Smoke-test the credentials CLI bundle (no DATABASE_URL)
+        run: |
+          set +e
+          output=$(node packages/credentials/dist/bin.js list 2>&1)
+          code=$?
+          set -e
+          echo "$output"
+          if [ "$code" -eq 0 ]; then
+            echo "expected a non-zero exit code with no DATABASE_URL set, got 0" >&2
+            exit 1
+          fi
+          if ! grep -q "DATABASE_URL is not set" <<< "$output"; then
+            echo "expected the 'DATABASE_URL is not set' message, got: $output" >&2
+            exit 1
+          fi
+
   # TypeScript project-wide type check. No Playwright/Chromium involved.
   typecheck:
     runs-on: ubuntu-latest
