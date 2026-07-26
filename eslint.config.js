@@ -141,5 +141,53 @@ export default tseslint.config(
     },
   },
 
+  {
+    // packages/scheduler is a duty-NEUTRAL runner: duties are injected and typed structurally, so
+    // it must never import a duty's own package (docs/superpowers/specs/
+    // 2026-07-25-recurring-work-scheduler-design.md §3). Its package.json does NOT enforce that.
+    // `@waitron/payments` is a devDependency there only for the type-fit test and the AppError
+    // code augmentation — but there is no build step, `main` points at TS source, and pnpm links a
+    // workspace devDependency identically to a runtime one, so `import { reconcilePayments } from
+    // "@waitron/payments"` inside src/run.ts would typecheck, lint clean and pass every test. The
+    // manifest constrains nothing here; only this rule does.
+    //
+    // Test files are exempt: the fit test and the AppError-code augmentation both name
+    // @waitron/payments deliberately, and neither ships in the runtime path.
+    files: ["packages/scheduler/src/**/*.ts"],
+    ignores: ["packages/scheduler/src/**/*.test.ts"],
+    plugins: { "import-x": importX },
+    settings: {
+      "import-x/resolver": { typescript: true },
+    },
+    rules: {
+      "import-x/no-restricted-paths": [
+        "error",
+        {
+          // As above: resolved from this config's own directory, never a leading `**/` —
+          // minimatch globstars refuse to cross a dot-prefixed segment such as
+          // `.claude/worktrees/`.
+          basePath: import.meta.dirname,
+          zones: [
+            {
+              target: "./packages/scheduler/src/**/*",
+              from: [
+                "./packages/payments/**",
+                "./packages/fiscal/**",
+                "./packages/fiscal-verifactu/**",
+                "./packages/verifactu/**",
+              ],
+              message:
+                "packages/scheduler is a duty-neutral runner and must not import a duty's own " +
+                "package (see docs/superpowers/specs/" +
+                "2026-07-25-recurring-work-scheduler-design.md §3). Duties are injected and " +
+                "typed structurally — if the runner needs something from payments or fiscal, it " +
+                "belongs on the PeriodDuty seam, not in an import.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   eslintConfigPrettier,
 );
