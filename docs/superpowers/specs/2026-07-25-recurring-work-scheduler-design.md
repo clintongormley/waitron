@@ -296,6 +296,20 @@ export interface RunRecord {
 }
 ```
 
+> **2026-07-27 amendment (pre-merge review, F3):** `TickResult.nextDueAt`'s doc comment above —
+> "`now` when work is available immediately (deferred > 0, **or skipped is non-empty**: skipped
+> work was never claimed and no backoff was written for it)" — is superseded by
+> [`2026-07-27-degraded-pass-design.md`](./2026-07-27-degraded-pass-design.md) §2. A skipped pair
+> no longer reports `now`: it reports `now + skipRetryMs`, folded as a MINIMUM against whatever
+> else the tick already knows is due, so a long-running host does not spin at `MIN_TICK` forever
+> for a pair only a human can fix (the identical reasoning `drain`'s own `nextDueAt` fold applies).
+> The `deferred > 0` half of the sentence is unchanged — capped work is still genuinely runnable
+> immediately, and `runDue`'s own source (`packages/scheduler/src/run.ts`) still reports `now` for
+> it. Recorded here rather than silently edited above, matching this file's own §2/§8/§11
+> amendment convention — and because a prior fix round already widened a grep for exactly this
+> sentence and missed this occurrence, leaving a false contract in the one document that owns
+> `TickResult.nextDueAt`.
+
 `RunRecord` carries no `summary`. The duty's own result is persisted to the ledger row — that is
 what §4 means by "the ledger row is the durable record" — and a runner that never has to understand
 it has no reason to hand it back up as well.

@@ -22,6 +22,10 @@ export interface SchedulerDeps {
   maxAttempts: number;
   backoffBaseMs: number;
   staleAfterMs: number;
+  /** How long after a skipped pair to report work due again. `DEFAULTS.skipRetryMs` owns the
+   * default and its reasoning; required here so a caller that forgets is a compile error rather
+   * than a silent cadence. */
+  skipRetryMs: number;
 }
 
 /** One run this tick actually claimed and completed. */
@@ -51,13 +55,14 @@ export interface TickResult {
    */
   skipped: { tenantId: TenantId; duty: string; errorCode: string }[];
   /**
-   * `now` when work is available immediately — the per-tick cap deferred some, or a pair was
-   * skipped and whatever it was abandoned part-way through is still due. Otherwise the earliest
-   * FUTURE time work appears, as the ledger stands at the END of this tick: the derivation's own
-   * answer, folded together with the backoff and re-sweep times this tick's own runs just wrote.
+   * `now` when work is available immediately — the per-tick cap deferred some. `now + skipRetryMs`
+   * when a pair was skipped and nothing earlier is known, folded as a MINIMUM against the earliest
+   * FUTURE time work appears as the ledger stands at the END of this tick: the derivation's own
+   * answer, together with the backoff and re-sweep times this tick's own runs just wrote.
    *
    * Null only when there is no (tenant, duty) pair at all — which stays true only because a
-   * skipped pair reports `now`. Mirrors `DrainResult.nextDueAt`.
+   * skipped pair reports an interval rather than nothing. Mirrors `DrainResult.nextDueAt`, which
+   * folds its own skip time the same way and for the same reason.
    */
   nextDueAt: Date | null;
 }
@@ -120,12 +125,40 @@ export async function runDue(
     }
   }
 
-  // A skipped pair is due NOW: it was abandoned part-way, whatever it left undone was never
-  // claimed, and nothing about it reached `earliestFuture`. Reporting the derivation's future
-  // answer — or, when every pair threw, `null` — would tell a long-running host that nothing is
-  // due, and one transient database blip would stop it polling for good.
+  // NOT "a skipped pair has nothing in `earliestFuture` of its own" (F4 of the 2026-07-27
+  // pre-merge review corrected this claim; see lines 52-54 above for why): the due-item loop for a
+  // pair runs INSIDE the same `try` as the pair's own `catch`, so a throw on the third of five due
+  // items still leaves the first two claimed, in `ran`, and already folded into `earliestFuture`
+  // above — a pair that ends up in `skipped` can still have contributed to `earliestFuture` before
+  // the throw. What is genuinely true, and what this fold exists for, is the part that did NOT get
+  // that far: the items this pair's due-item loop never reached have no claim and no backoff, so
+  // nothing else in this tick reports them. Reporting only the derivation's future answer — or,
+  // when every pair threw before claiming anything, `null` — would tell a long-running host that
+  // nothing is due, and one transient database blip would stop it polling for good.
+  //
+  // The consequence worth stating plainly: those never-reached, genuinely-due items of a
+  // partially-failed pair now wait up to `skipRetryMs`, not one `MIN_TICK` the way an unclaimed
+  // item used to be retried near-immediately. That is acceptable here — this is a daily duty with
+  // a 26-hour staleness budget (`DUTY_BUDGET_MS`, `apps/server/src/health.ts`), so a few minutes'
+  // extra delay on a partial failure costs nothing that budget was not already built to absorb.
+  //
+  // FOLDED AS A MINIMUM, not assigned. This used to assign `now`, which was safe only because
+  // `now` is earlier than every real future answer; `now + skipRetryMs` is not, and assigning it
+  // would mask a successful pair's genuinely earlier backoff.
+  //
+  // Folded into `earliestFuture` — the same accumulator the loop above already builds with
+  // `Math.min` — BEFORE the branch below rather than inside it. That is what makes the
+  // every-pair-skipped case structural rather than a trick to be re-derived: `earliestFuture` is
+  // still `Infinity` when nothing ran, so this line makes it finite, and the `null` branch below
+  // becomes unreachable whenever anything was skipped. `null` therefore keeps meaning exactly what
+  // `TickResult.nextDueAt` says it means — no (tenant, duty) pair at all.
+  if (result.skipped.length > 0) {
+    earliestFuture = Math.min(earliestFuture, now.getTime() + deps.skipRetryMs);
+  }
+  // `deferred > 0` is untouched and still reports `now`: capped work is immediately runnable, and
+  // draining that backlog fast is the intent — unlike a skip, which is often waiting on a human.
   result.nextDueAt =
-    result.deferred > 0 || result.skipped.length > 0
+    result.deferred > 0
       ? now
       : earliestFuture === Number.POSITIVE_INFINITY
         ? null

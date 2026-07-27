@@ -102,10 +102,12 @@ describe("one pass as the non-superuser deployment role", () => {
               {
                 db: probe,
                 resolveClient: () => Promise.reject(new Error("no due fiscal work in this suite")),
+                skipRetryMs: DEFAULTS.skipRetryMs,
               },
               now,
             ),
           reconcile: (now) => runDue({ db: probe, duties: [duty], ...DEFAULTS }, tenants, now),
+          monotonicMs: () => performance.now(),
           log: createLogger(
             (line) => lines.push(line),
             () => NOW,

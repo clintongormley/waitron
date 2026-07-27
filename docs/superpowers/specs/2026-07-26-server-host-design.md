@@ -197,6 +197,17 @@ sweep that is behind must never delay it.
 - `MIN_TICK` = 5 seconds — stops a hot loop when a duty reports `now`, which both do for deferred
   or skipped work by design.
 
+**2026-07-27 amendment (degraded-pass cadence review): skipped work no longer reports `now`.**
+`deferred > 0` still does — capped work is genuinely runnable immediately, and draining a backlog
+fast is still the intent, so that half of the bullet above is unchanged. A **skipped** tenant
+(`fiscal.drain`) or (tenant, duty) pair (`payments.reconcile.stripe`) instead reports
+`now + WAITRON_SKIP_RETRY_MS` (default five minutes), folded as a MINIMUM against whatever a
+successful tenant or pair computed the same pass — because a skip is frequently not transient, and
+`now` pinned this host at `MIN_TICK`'s five-second floor forever for exactly the tenant a human has
+not yet provisioned a certificate for. `MIN_TICK` itself, and its role for `deferred` work and for a
+whole-duty throw (§8), is unchanged. Full reasoning: §9's own amendment on `duty.degraded`, and
+`apps/server/README.md`'s `WAITRON_SKIP_RETRY_MS` row.
+
 **Folding is the minimum of the NON-NULL answers.** Each duty reports `null` for "no work exists at
 all", which is not a time and must not win a `Math.min` against one: a `null` from reconcile while
 `drain` has a batch due in ten minutes must sleep ten minutes, not an hour. `null` from both means
@@ -212,7 +223,9 @@ rather than a code path.
 recorded, its consecutive-failure counter increments, health state updates, and the loop sleeps and
 tries again. Letting a throw out would end the hourly retry on one transient database blip — the
 exact failure `TickResult.nextDueAt`'s "a skipped pair is due NOW" semantics were written to
-prevent. A duty that fails forever is therefore *visible* (§9) rather than *fatal*.
+prevent (superseded by §7's 2026-07-27 amendment above — a skipped pair now reports
+`now + skipRetryMs`, folded as a minimum, not `now`). A duty that fails forever is therefore
+*visible* (§9) rather than *fatal*.
 
 **At boot, everything escapes.** Invalid config, an unloadable key ring, a failed migration, an
 unreachable database: log the structured code and exit non-zero. A host that boots half-configured
@@ -291,6 +304,47 @@ log line before this amendment. The original reasoning above is UNCHANGED by thi
 - **The `/health` example above** was also missing `stale` (the code has always emitted it) — added
   in the same edit as `parked`, both now present.
 
+**2026-07-27 amendment (degraded-pass cadence review): `durationMs` exists now, and goes further
+than this section originally promised.** This section's opening paragraph named "pass duration" as
+one of the fields the per-pass line carries, without specifying its shape. It is `durationMs` on
+`pass.complete` itself — but ALSO, beyond what the opening paragraph promised, one `durationMs`
+inside EACH entry of `duties`, because a single pass-level number cannot say WHICH duty was slow: a
+stretched database round-trip inside `drain` and a stretched Stripe call inside
+`payments.reconcile.stripe` produce the identical pass-level total, and only the per-duty figure
+tells them apart without a reader correlating against each provider's own latency separately. Both
+are read off a MONOTONIC clock (`PassDeps.monotonicMs`, wired to `performance.now` in `boot.ts`),
+deliberately not the wall-clock `now` a pass already takes as a parameter — an NTP step mid-pass
+could otherwise turn the one field an operator uses to spot a slow pass negative or absurd. The
+per-duty figure is present even when a duty THREW: elapsed time is real either way, unlike
+`skipped`/`parked`, which a throw genuinely has no honest value for (`pass.ts`'s own comment on
+`attempt`).
+
+**2026-07-27 amendment (degraded-pass cadence review): the escalating level is derived from `stale`,
+not the consecutive-failure count this section's opening paragraph named.** A count threshold means
+a different amount of elapsed TIME depending on which retry cadence is in effect: three consecutive
+failures is fifteen minutes at `WAITRON_SKIP_RETRY_MS`'s five-minute default and three hours at an
+hourly one, so "three" would silently mean two different degrees of trouble depending on a value an
+operator sets independently of this line. `stale` (this section's own `DutyHealth`/`isStale` above)
+is time-based already, and is ALREADY the exact criterion `/health` returns `503` on — deriving the
+anomaly line's level from it, rather than from the count, makes an `error` line and a `503` the same
+condition BY CONSTRUCTION, not two thresholds that can independently disagree about whether this
+host is in trouble. The count still ships in the line's payload; it no longer decides anything.
+Consequence, stated rather than left to be discovered: a duty that fails on the FIRST pass after
+boot logs `error`, not `warn`, because `lastOkAt === null` reads as stale — the identical instant
+`/health` starts answering `503` for it, which is the point, not a flaw in the threshold.
+
+This line is also a NEW event, `duty.degraded`, carrying `{ duty, consecutiveFailures, skipped,
+parked, stale, lastOkAt }` — one per degraded duty per pass, `error` when `stale`, `warn` otherwise.
+It is emitted from `health.ts`, the health-RECORDING site (`logDegradedDuties`, called by
+`boot.ts`'s `onPass` immediately after `recordPass`), rather than from `runPass` (`pass.ts`) the way
+this section's opening paragraph might suggest. `recordPass` is what computes the fresh
+consecutive-failure count and the fresh `stale` reading for this pass; `runPass` cannot log at the
+level those numbers justify because it emits its own lines (`drain.complete`, `pass.complete`, and
+the rest) BEFORE `recordPass` ever runs — the count `runPass` could see would always be the
+PREVIOUS pass's, never this one's. The loop calls `onPass` only after `runPass` has already
+returned and logged, which is exactly what makes the count `logDegradedDuties` reads current rather
+than stale by one pass.
+
 ## 10. Configuration
 
 Environment only, matching `packages/credentials`' `bin.ts`.
@@ -304,6 +358,7 @@ Environment only, matching `packages/credentials`' `bin.ts`.
 | `WAITRON_HTTP_PORT` | no | Default 8080. |
 | `WAITRON_HTTP_HOST` | no | Default `127.0.0.1`. `/health` is deliberately unauthenticated (§9), which is fine on a loopback listener and less fine on every interface — see I7 of the 2026-07-26 whole-branch review. |
 | `WAITRON_MIN_TICK_MS` / `WAITRON_MAX_TICK_MS` | no | §7's clamps. |
+| `WAITRON_SKIP_RETRY_MS` | no | **2026-07-27 amendment** — §7's amendment. How long after a skipped tenant (`fiscal.drain`) or (tenant, duty) pair (`payments.reconcile.stripe`) either duty reports work due again, folded as a minimum against whatever the successful tenants computed. Defaults to `@waitron/scheduler`'s own `DEFAULTS.skipRetryMs` (five minutes). One value, sourced to both duties. |
 | `WAITRON_MIGRATIONS_DIR` | no | The migrations root §11 resolves folders from. **Defaults to `<bundle directory>/drizzle`** (`DEFAULT_MIGRATIONS_ROOT`, `boot.ts`) — named here explicitly because §11 originally called the root "overridable" without saying by what (I8 of the 2026-07-26 whole-branch review). |
 | `WAITRON_SETTLEMENT_LAG_MS` | no | Passed to `StripeReconcilerOptions`; defaults to the neutral layer's seven days. |
 | `WAITRON_SCHEDULER_*` | no | `horizonDays`, `maxPeriodsPerTick`, `maxAttempts`, `backoffBaseMs`, `staleAfterMs` — `SchedulerDeps`' fields, defaulted from `DEFAULTS`. |
@@ -433,6 +488,13 @@ host is recorded as out of the guard's scope and why. Silence is the one unaccep
   lifecycle. Deferred at Task 4 specifically because closing it means changing what `mtlsFetch`
   returns, which reaches into the boot wiring Task 11 (and, transitively, this task's `boot.test.ts`)
   built on top of — still true after both.
+
+  **Superseded 2026-07-27 (degraded-pass cadence review): no longer true.** The resolver is now
+  built per pass rather than at boot, and its `closeAll` closes every `Agent` it built before the
+  pass returns — see [`2026-07-27-degraded-pass-design.md`](2026-07-27-degraded-pass-design.md) §3
+  and `aeat-transport.ts`'s `closeAll`, called from `boot.ts`'s per-pass `drain` closure's own
+  `finally`. Recorded here rather than silently edited above, matching this file's own §7/§8/§9
+  amendment convention.
 - **`ALL_DUTIES` (`pass.ts`) is still a manual step.** Nothing forces a new `*_DUTY` const to be
   appended to it; Task 9's own review accepted this as downgraded rather than closed, because
   forgetting is now LOUD (an unlisted duty reads permanently stale in `/health`, a 503 that will not

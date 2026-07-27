@@ -26,7 +26,7 @@ import type {
   VerifactuClient,
 } from "@waitron/verifactu";
 import { appendToChain } from "./chain.js";
-import { drain as runDrain } from "./drain.js";
+import { DEFAULT_SKIP_RETRY_MS, drain as runDrain } from "./drain.js";
 import { reconcile as runReconcile } from "./reconcile.js";
 import { currentSif } from "./registro-sif.js";
 import type { SifRegistration } from "./registro-sif.js";
@@ -103,6 +103,14 @@ export interface VerifactuBackendOptions {
   /** Overrides for this installation's software-identity claims. See `SystemInfoDefaults`'s own
    * doc comment for why these are configuration rather than hardcoded constants. */
   systemInfo?: Partial<SystemInfoDefaults>;
+  /**
+   * Overrides `DEFAULT_SKIP_RETRY_MS` for this backend's `drain`. OPTIONAL, unlike
+   * `DrainDeps.skipRetryMs` which is required: this option has construction sites scattered across
+   * this package's own test suites, none of which care about a cadence knob, and making it
+   * required would edit every one of them to say the same thing. The strictness stays where it is
+   * cheap — `DrainDeps` itself.
+   */
+  skipRetryMs?: number;
 }
 
 /**
@@ -140,6 +148,7 @@ export class VerifactuBackend implements FiscalBackend {
   private readonly resolveClient: (tenantId: TenantId) => Promise<VerifactuClient>;
   private readonly environment: Environment;
   private readonly systemInfo: SystemInfoDefaults;
+  private readonly skipRetryMs: number;
 
   constructor(options: VerifactuBackendOptions) {
     this.db = options.db;
@@ -157,6 +166,11 @@ export class VerifactuBackend implements FiscalBackend {
     this.resolveClient = (tenantId) => options.resolveClient(tenantId);
     this.environment = options.environment ?? "production";
     this.systemInfo = { ...DEFAULT_SYSTEM_INFO, ...options.systemInfo };
+    // Defaulted HERE, like every sibling option above, rather than at the `runDrain` call site
+    // below: a `number | undefined` field would let a future SECOND call site forget the `??` and
+    // silently pass `undefined` into `DrainDeps.skipRetryMs: number`, which the fold arithmetic
+    // then turns into `Invalid Date` rather than a compile error.
+    this.skipRetryMs = options.skipRetryMs ?? DEFAULT_SKIP_RETRY_MS;
   }
 
   /**
@@ -415,7 +429,14 @@ export class VerifactuBackend implements FiscalBackend {
    * `drain`'s own doc comments for the full behaviour and its reasoning.
    */
   async drain(now: Date): Promise<DrainResult> {
-    return runDrain({ db: this.db, resolveClient: this.resolveClient }, now);
+    return runDrain(
+      {
+        db: this.db,
+        resolveClient: this.resolveClient,
+        skipRetryMs: this.skipRetryMs,
+      },
+      now,
+    );
   }
 
   /**

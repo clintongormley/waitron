@@ -32,6 +32,10 @@ export interface ServerConfig {
   httpHost: string;
   minTickMs: number;
   maxTickMs: number;
+  /** How long after a skipped tenant or pair either duty reports work due again. ONE value for
+   * BOTH duties: they are independently defaulted in their own packages (no invariant ties them),
+   * and this host deliberately presents a single operator-visible skip cadence. */
+  skipRetryMs: number;
   /** Undefined means "let the neutral layer apply its own seven days" — not zero. */
   settlementLagMs: number | undefined;
   migrationsRoot: string;
@@ -45,7 +49,11 @@ export interface ServerConfig {
  * rather than by two independently-chosen literals that happen to agree — which is how they
  * disagreed before (both were one hour, so an idle host flipped 503 once an hour by construction). */
 export const DEFAULT_MAX_TICK_MS = 60 * 60 * 1000;
-/** Stops a hot loop when a duty reports `now`, which both do for deferred or skipped work. */
+/** Stops a hot loop when a duty reports `now` — `runDue`'s `deferred > 0` branch (capped work is
+ * genuinely runnable immediately, `packages/scheduler/src/run.ts`), and a whole-duty throw
+ * (`pass.ts`'s `attempt` catch, which deliberately still reports `now` — it has no other honest
+ * answer). Neither duty reports `now` for merely SKIPPED work any more — see `skipRetryMs` above,
+ * and `drain` has no `deferred` concept at all. */
 const DEFAULT_MIN_TICK_MS = 5_000;
 const DEFAULT_HTTP_PORT = 8080;
 const DEFAULT_HTTP_HOST = "127.0.0.1";
@@ -126,9 +134,56 @@ export function loadConfig(env: Env, defaultMigrationsRoot: string): ServerConfi
   const maxTickMs = positiveInt(env, "WAITRON_MAX_TICK_MS", DEFAULT_MAX_TICK_MS);
   // Checked here rather than left to `clamp`, whose Math.min/Math.max composition would silently
   // resolve an impossible range to whichever bound happened to win.
+  //
+  // Both variables and both effective values ride in `params` (F6 of the 2026-07-27 pre-merge
+  // review), not just the one this guard happens to key off: an operator who set only
+  // `WAITRON_MAX_TICK_MS` below the default `WAITRON_MIN_TICK_MS` would otherwise get an error
+  // naming a variable they never touched, with the one actually at fault unnamed. Same shape for
+  // all three tick-cadence guards in this function.
   if (minTickMs > maxTickMs) {
     throw new AppError("server.config_invalid", {
       variable: "WAITRON_MIN_TICK_MS",
+      value: minTickMs,
+      otherVariable: "WAITRON_MAX_TICK_MS",
+      otherValue: maxTickMs,
+      reason: "above_max_tick",
+    });
+  }
+  const skipRetryMs = positiveInt(env, "WAITRON_SKIP_RETRY_MS", DEFAULTS.skipRetryMs);
+  // Checked here rather than left to `sleepMsFor`'s clamp (`loop.ts`): that clamp's
+  // `Math.max(minTickMs, wait)` would silently round a too-low value back UP to `minTickMs`, which
+  // reproduces exactly the failure this variable exists to remove — a skipped tenant (a certificate
+  // only a human can provision, say) reporting its retry at the 5-second floor, forever, with no
+  // error anywhere: not from `loadConfig`, not from the loop, not from `/health`. A boot failure is
+  // loud and immediate; a silently-restored spin is neither. Strictly `<`, not `<=`: equal to
+  // `minTickMs` IS the floor, so the clamp leaves it untouched and nothing the operator configured
+  // is lost — only a value the clamp would actually RAISE is rejected.
+  if (skipRetryMs < minTickMs) {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_SKIP_RETRY_MS",
+      value: skipRetryMs,
+      otherVariable: "WAITRON_MIN_TICK_MS",
+      otherValue: minTickMs,
+      reason: "below_min_tick",
+    });
+  }
+  // F1 of the 2026-07-27 pre-merge review: the symmetric half of the guard above, closing a gap
+  // the design doc once claimed did not exist. `sleepMsFor`'s `Math.min(maxTickMs, wait)` clamps a
+  // too-HIGH `skipRetryMs` back DOWN — and when `maxTickMs` is itself at or below `minTickMs`
+  // (an operator sets only `WAITRON_MAX_TICK_MS`, low), that clamped-down value can land BELOW
+  // `minTickMs` too, restoring exactly the 5-second-forever spin this design removes, with every
+  // OTHER guard in this file passing: `minTickMs > maxTickMs` is false when both equal `maxTickMs`
+  // or below it via their own defaults, and `skipRetryMs < minTickMs` is false because the
+  // (unclamped) configured `skipRetryMs` is still >= `minTickMs`. Only the clamp — which this
+  // function does not apply, `sleepMsFor` does, at runtime — exposes the problem. Strictly `>`, not
+  // `>=`: equal to `maxTickMs` is the clamp's own no-op boundary, so nothing configured is lost
+  // there either.
+  if (skipRetryMs > maxTickMs) {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_SKIP_RETRY_MS",
+      value: skipRetryMs,
+      otherVariable: "WAITRON_MAX_TICK_MS",
+      otherValue: maxTickMs,
       reason: "above_max_tick",
     });
   }
@@ -154,6 +209,7 @@ export function loadConfig(env: Env, defaultMigrationsRoot: string): ServerConfi
     httpHost: isUnset(httpHost) ? DEFAULT_HTTP_HOST : httpHost,
     minTickMs,
     maxTickMs,
+    skipRetryMs,
     settlementLagMs: optionalPositiveInt(env, "WAITRON_SETTLEMENT_LAG_MS"),
     migrationsRoot: isUnset(migrationsDir) ? defaultMigrationsRoot : migrationsDir,
     scheduler: {

@@ -12,7 +12,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
-import { drain } from "./drain.js";
+import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 
@@ -20,6 +20,8 @@ import { seedTenantWithSif } from "../test/fixtures.js";
 // minute later so the seeded rows are due.
 const SERVER_NOW = new Date("2026-07-21T00:00:00Z");
 const NOW = new Date("2026-07-21T00:01:00Z");
+const SKIP_RETRY_MS = DEFAULT_SKIP_RETRY_MS;
+const AFTER_SKIP_RETRY = new Date(NOW.getTime() + SKIP_RETRY_MS);
 
 /**
  * A client that records which tenant asked for it. `drain` took ONE client for every tenant it
@@ -67,7 +69,7 @@ describe("drain resolves one client per tenant", () => {
     // empty list, so the test does not depend on running before the seeding one.
     const { tenantId: idle } = await seedTenantWithSif(db);
     const { resolveClient, asked } = recordingResolver();
-    await drain({ db, resolveClient }, NOW);
+    await drain({ db, resolveClient, skipRetryMs: SKIP_RETRY_MS }, NOW);
     expect(asked).not.toContain(idle);
   });
 
@@ -108,6 +110,7 @@ describe("drain resolves one client per tenant", () => {
           // completed for the second tenant after the first one failed.
           return Promise.resolve(aeat.client());
         },
+        skipRetryMs: SKIP_RETRY_MS,
       },
       NOW,
     );
@@ -128,22 +131,19 @@ describe("drain resolves one client per tenant", () => {
     expect(workingRows.rows.map((r) => r.estado)).toEqual(["aceptado"]);
   });
 
-  it("reports nextDueAt: now when every due tenant this pass was skipped", async () => {
-    // `nextDueAt` starts `null`, and only a tenant that reaches `drainTenant` ever advances it
-    // (`bumpNextDue`) — a tenant whose resolver throws never reaches `drainTenant`, so it
-    // contributes nothing. Before this fix, a pass where EVERY due tenant failed this way (one
-    // expired vault key, one dead credentials connection) resolved SUCCESSFULLY with every count
-    // zero, a non-empty `skipped`, and `nextDueAt: null`. `packages/fiscal/src/backend.ts`
-    // documents `null` as "nothing pending", so a host sleeping on this field would sleep forever
-    // while this tenant's `pendiente` row sat past its art. 16.4 hour — trading the loud failure
-    // that reached the host before per-tenant containment existed for a silent one.
+  it("reports the skip-retry interval when every due tenant this pass was skipped", async () => {
+    // `nextDueAt` starts `null`, and only a tenant that reaches `drainTenant` ever advances it —
+    // so a pass in which every due tenant was skipped would otherwise report `null`, meaning "no
+    // work will ever be due", and a host sleeping on that stops polling for good.
+    //
+    // It is equally not `now`: a certificate a human has not provisioned yet produces the same
+    // skip every pass, and `now` pins the host's loop at its 5-second MIN_TICK floor indefinitely
+    // — the expected state of the first deployment, not a corner case.
     //
     // Asserted with `.some(...)` rather than an exact `toEqual` on the whole `skipped` array: this
-    // reuses the file's shared `db`, which may already carry OTHER tenants left `pendiente` by
-    // earlier tests in this file (e.g. the previous test's own `failing`, whose resolver rejected
-    // it every time and which nothing here ever resubmits) — this test's own tenant appearing
-    // among `skipped`, and `nextDueAt` landing on `now`, hold regardless of what else got swept
-    // into the same pass.
+    // suite shares one PGlite database across tests, so other tests' tenants may also be due. The
+    // two facts this test owns — the failing tenant appearing among `skipped`, and `nextDueAt`
+    // landing on the interval — hold regardless of what else got swept.
     const failingSeed = await seedPendingEnvios(db, { count: 1 });
     const failing = failingSeed.tenantId;
 
@@ -154,12 +154,48 @@ describe("drain resolves one client per tenant", () => {
           Promise.reject(
             new AppError("sif.not_registered", { tenantId, tillId: failingSeed.tillId }),
           ),
+        skipRetryMs: SKIP_RETRY_MS,
       },
       NOW,
     );
 
     expect(result.skipped.some((s) => s.tenantId === failing)).toBe(true);
-    expect(result.nextDueAt).toEqual(NOW);
+    expect(result.nextDueAt).toEqual(AFTER_SKIP_RETRY);
+  });
+
+  // THE FOLD. `drain` used to assign `now` on any skip, which was safe only because `now` is
+  // earlier than every gate a successful tenant could compute. `now + skipRetryMs` is not, so it
+  // is folded as a MINIMUM — otherwise a skipped tenant would delay a healthy tenant's own gate.
+  //
+  // The genuinely-successful-tenant version of this test moved to `drain.fold.test.ts`: wiring a
+  // tenant that actually submits through the fake AEAT into THIS suite, alongside a skip, needs
+  // fixture work beyond this task (the shared `db` here already carries permanently-pending
+  // tenants from the tests above, and `recordingResolver`'s client rejects every submit — it
+  // cannot produce a successful side at all). `drain.fold.test.ts` instead uses a tenant whose own
+  // `envio_flujo` gate is hand-seeded 30s out — no network round trip needed to prove the fold.
+  it("honours an explicit skipRetryMs rather than a package constant", async () => {
+    // Pins that the value is READ from deps, not baked in — the assertion that would fail if the
+    // fold quietly used DEFAULT_SKIP_RETRY_MS instead of what the caller passed. Every tenant
+    // enumerated this pass (this test's own `failing`, plus any left permanently `pendiente` by
+    // earlier tests in this shared `db`) is skipped by this unconditionally-rejecting resolver, so
+    // `nextDueAt` folds from `null`, landing exactly on `now + 90_000` regardless of how many.
+    const failingSeed = await seedPendingEnvios(db, { count: 1 });
+    const failing = failingSeed.tenantId;
+
+    const result = await drain(
+      {
+        db,
+        resolveClient: (tenantId) =>
+          Promise.reject(
+            new AppError("sif.not_registered", { tenantId, tillId: failingSeed.tillId }),
+          ),
+        skipRetryMs: 90_000,
+      },
+      NOW,
+    );
+
+    expect(result.skipped.some((s) => s.tenantId === failing)).toBe(true);
+    expect(result.nextDueAt).toEqual(new Date(NOW.getTime() + 90_000));
   });
 
   it("reports a tenant when drainTenant itself throws, not only when the resolver does", async () => {
@@ -195,6 +231,7 @@ describe("drain resolves one client per tenant", () => {
             consultar: () => Promise.reject(new Error("unreachable")),
           };
         },
+        skipRetryMs: SKIP_RETRY_MS,
       },
       NOW,
     );

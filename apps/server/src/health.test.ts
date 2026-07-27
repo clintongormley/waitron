@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_MAX_TICK_MS } from "./config.js";
-import { DRAIN_DUTY, RECONCILE_DUTY, type PassReport } from "./pass.js";
+import { DRAIN_DUTY, RECONCILE_DUTY, type DutyReport, type PassReport } from "./pass.js";
+import type { Logger } from "./logger.js";
 import {
   createHealthState,
   healthApp,
   healthSnapshot,
+  logDegradedDuties,
   recordPass,
   DUTY_BUDGET_MS,
 } from "./health.js";
@@ -15,14 +17,47 @@ const UNBUDGETED_DUTY = "made.up.duty";
 
 const BOOT = new Date("2026-07-26T08:00:00Z");
 const AT = new Date("2026-07-26T08:00:05Z");
+/** Alias for `AT` used by the `recordPass`/`logDegradedDuties` tests below, matching the name those
+ * tests are written against — same value, so it composes with the rest of the file's fixtures
+ * rather than introducing a second point in time. */
+const NOW = AT;
 
-function report(drainOk: boolean, reconcileOk = true): PassReport {
+/** One `DutyReport` entry, defaulted to a clean pass so a caller only names what it overrides —
+ * e.g. `duty(DRAIN_DUTY, { skipped: 1 })`. */
+function duty(name: string, overrides: Partial<DutyReport> = {}): DutyReport {
+  return { duty: name, ok: true, nextDueAt: null, durationMs: 0, ...overrides };
+}
+
+/** Builds a `PassReport`. Called with an array of `duty(...)` entries for a report naming exactly
+ * the duties a test cares about, or with the original `(drainOk, reconcileOk)` booleans for the
+ * two-duty default most existing tests below still use — one builder, not two parallel ones. */
+function report(entries: DutyReport[]): PassReport;
+function report(drainOk: boolean, reconcileOk?: boolean): PassReport;
+function report(drainOkOrEntries: boolean | DutyReport[], reconcileOk = true): PassReport {
+  if (Array.isArray(drainOkOrEntries)) {
+    return { duties: drainOkOrEntries, nextDueAt: null };
+  }
+  const drainOk = drainOkOrEntries;
   return {
     duties: [
-      { duty: DRAIN_DUTY, ok: drainOk, nextDueAt: null, ...(drainOk ? {} : { errorCode: "x" }) },
-      { duty: RECONCILE_DUTY, ok: reconcileOk, nextDueAt: null },
+      {
+        duty: DRAIN_DUTY,
+        ok: drainOk,
+        nextDueAt: null,
+        durationMs: 0,
+        ...(drainOk ? {} : { errorCode: "x" }),
+      },
+      { duty: RECONCILE_DUTY, ok: reconcileOk, nextDueAt: null, durationMs: 0 },
     ],
     nextDueAt: null,
+  };
+}
+
+/** A `Logger` that appends `"<level> <event> <fields json>"` to `lines` instead of writing
+ * anywhere real, so `logDegradedDuties`'s tests can assert on level and content without a sink. */
+function collect(lines: string[]): Logger {
+  return (level, event, fields) => {
+    lines.push(`${level} ${event} ${JSON.stringify(fields ?? {})}`);
   };
 }
 
@@ -113,7 +148,10 @@ describe("health state", () => {
     // (permanently stale) rather than as "this host does not pace it."
     const state = createHealthState(BOOT);
     const withExtra: PassReport = {
-      duties: [...report(true).duties, { duty: UNBUDGETED_DUTY, ok: true, nextDueAt: null }],
+      duties: [
+        ...report(true).duties,
+        { duty: UNBUDGETED_DUTY, ok: true, nextDueAt: null, durationMs: 0 },
+      ],
       nextDueAt: null,
     };
     recordPass(state, withExtra, AT);
@@ -163,8 +201,8 @@ describe("health state", () => {
       const state = createHealthState(BOOT);
       const withSkip: PassReport = {
         duties: [
-          { duty: DRAIN_DUTY, ok: true, nextDueAt: null, skipped: 1 },
-          { duty: RECONCILE_DUTY, ok: true, nextDueAt: null, skipped: 0 },
+          { duty: DRAIN_DUTY, ok: true, nextDueAt: null, skipped: 1, durationMs: 0 },
+          { duty: RECONCILE_DUTY, ok: true, nextDueAt: null, skipped: 0, durationMs: 0 },
         ],
         nextDueAt: null,
       };
@@ -184,8 +222,8 @@ describe("health state", () => {
       const state = createHealthState(BOOT);
       const withSkip: PassReport = {
         duties: [
-          { duty: DRAIN_DUTY, ok: true, nextDueAt: null, skipped: 0 },
-          { duty: RECONCILE_DUTY, ok: true, nextDueAt: null, skipped: 2 },
+          { duty: DRAIN_DUTY, ok: true, nextDueAt: null, skipped: 0, durationMs: 0 },
+          { duty: RECONCILE_DUTY, ok: true, nextDueAt: null, skipped: 2, durationMs: 0 },
         ],
         nextDueAt: null,
       };
@@ -205,8 +243,8 @@ describe("health state", () => {
         state,
         {
           duties: [
-            { duty: DRAIN_DUTY, ok: true, nextDueAt: null, skipped: 1 },
-            { duty: RECONCILE_DUTY, ok: true, nextDueAt: null, skipped: 0 },
+            { duty: DRAIN_DUTY, ok: true, nextDueAt: null, skipped: 1, durationMs: 0 },
+            { duty: RECONCILE_DUTY, ok: true, nextDueAt: null, skipped: 0, durationMs: 0 },
           ],
           nextDueAt: null,
         },
@@ -231,8 +269,8 @@ describe("health state", () => {
       const state = createHealthState(BOOT);
       const withParked: PassReport = {
         duties: [
-          { duty: DRAIN_DUTY, ok: true, nextDueAt: null, skipped: 0, parked: 0 },
-          { duty: RECONCILE_DUTY, ok: true, nextDueAt: null, skipped: 0, parked: 1 },
+          { duty: DRAIN_DUTY, ok: true, nextDueAt: null, skipped: 0, parked: 0, durationMs: 0 },
+          { duty: RECONCILE_DUTY, ok: true, nextDueAt: null, skipped: 0, parked: 1, durationMs: 0 },
         ],
         nextDueAt: null,
       };
@@ -253,8 +291,15 @@ describe("health state", () => {
         state,
         {
           duties: [
-            { duty: DRAIN_DUTY, ok: true, nextDueAt: null, skipped: 0, parked: 0 },
-            { duty: RECONCILE_DUTY, ok: true, nextDueAt: null, skipped: 0, parked: 2 },
+            { duty: DRAIN_DUTY, ok: true, nextDueAt: null, skipped: 0, parked: 0, durationMs: 0 },
+            {
+              duty: RECONCILE_DUTY,
+              ok: true,
+              nextDueAt: null,
+              skipped: 0,
+              parked: 2,
+              durationMs: 0,
+            },
           ],
           nextDueAt: null,
         },
@@ -280,8 +325,8 @@ describe("health state", () => {
       const state = createHealthState(BOOT);
       const failedOnly: PassReport = {
         duties: [
-          { duty: DRAIN_DUTY, ok: true, nextDueAt: null, skipped: 0, parked: 0 },
-          { duty: RECONCILE_DUTY, ok: true, nextDueAt: null, skipped: 0, parked: 0 },
+          { duty: DRAIN_DUTY, ok: true, nextDueAt: null, skipped: 0, parked: 0, durationMs: 0 },
+          { duty: RECONCILE_DUTY, ok: true, nextDueAt: null, skipped: 0, parked: 0, durationMs: 0 },
         ],
         nextDueAt: null,
       };
@@ -319,7 +364,10 @@ describe("healthApp", () => {
     recordPass(
       state,
       {
-        duties: [...report(true).duties, { duty: UNBUDGETED_DUTY, ok: true, nextDueAt: null }],
+        duties: [
+          ...report(true).duties,
+          { duty: UNBUDGETED_DUTY, ok: true, nextDueAt: null, durationMs: 0 },
+        ],
         nextDueAt: null,
       },
       AT,
@@ -338,8 +386,8 @@ describe("healthApp", () => {
       state,
       {
         duties: [
-          { duty: DRAIN_DUTY, ok: true, nextDueAt: null, skipped: 1 },
-          { duty: RECONCILE_DUTY, ok: true, nextDueAt: null, skipped: 0 },
+          { duty: DRAIN_DUTY, ok: true, nextDueAt: null, skipped: 1, durationMs: 0 },
+          { duty: RECONCILE_DUTY, ok: true, nextDueAt: null, skipped: 0, durationMs: 0 },
         ],
         nextDueAt: null,
       },
@@ -360,8 +408,8 @@ describe("healthApp", () => {
       state,
       {
         duties: [
-          { duty: DRAIN_DUTY, ok: true, nextDueAt: null, skipped: 0 },
-          { duty: RECONCILE_DUTY, ok: true, nextDueAt: null, skipped: 3 },
+          { duty: DRAIN_DUTY, ok: true, nextDueAt: null, skipped: 0, durationMs: 0 },
+          { duty: RECONCILE_DUTY, ok: true, nextDueAt: null, skipped: 3, durationMs: 0 },
         ],
         nextDueAt: null,
       },
@@ -385,8 +433,8 @@ describe("healthApp", () => {
       state,
       {
         duties: [
-          { duty: DRAIN_DUTY, ok: true, nextDueAt: null, skipped: 0, parked: 0 },
-          { duty: RECONCILE_DUTY, ok: true, nextDueAt: null, skipped: 0, parked: 1 },
+          { duty: DRAIN_DUTY, ok: true, nextDueAt: null, skipped: 0, parked: 0, durationMs: 0 },
+          { duty: RECONCILE_DUTY, ok: true, nextDueAt: null, skipped: 0, parked: 1, durationMs: 0 },
         ],
         nextDueAt: null,
       },
@@ -409,6 +457,72 @@ describe("healthApp", () => {
     recordPass(state, report(true), AT);
     const res = await app.request("/health");
     expect(res.status).toBe(200);
+  });
+});
+
+describe("recordPass returns what it recorded", () => {
+  it("marks a duty with skips degraded even though its report reads ok", () => {
+    const state = createHealthState(NOW);
+    const records = recordPass(state, report([duty(DRAIN_DUTY, { ok: true, skipped: 1 })]), NOW);
+
+    expect(records).toHaveLength(1);
+    expect(records[0]!.degraded).toBe(true);
+    expect(records[0]!.consecutiveFailures).toBe(1);
+  });
+
+  it("marks a clean duty not degraded", () => {
+    const state = createHealthState(NOW);
+    const records = recordPass(state, report([duty(DRAIN_DUTY, { ok: true })]), NOW);
+
+    expect(records[0]!.degraded).toBe(false);
+  });
+});
+
+describe("logDegradedDuties", () => {
+  it("says nothing for a clean pass", () => {
+    const lines: string[] = [];
+    const state = createHealthState(NOW);
+    logDegradedDuties(collect(lines), recordPass(state, report([duty(DRAIN_DUTY)]), NOW));
+
+    expect(lines).toEqual([]);
+  });
+
+  // Level from staleness, not from a count: a count threshold means a different amount of TIME at
+  // a different retry cadence, while `stale` is already the 503 criterion — so an `error` line and
+  // a 503 are the same condition by construction rather than two thresholds that can disagree.
+  it("logs error when the duty is stale and warn when it is not", () => {
+    const lines: string[] = [];
+    const state = createHealthState(NOW);
+    // First: a duty that has succeeded recently, then fails — not yet stale.
+    recordPass(state, report([duty(DRAIN_DUTY, { ok: true })]), NOW);
+    logDegradedDuties(
+      collect(lines),
+      recordPass(state, report([duty(DRAIN_DUTY, { ok: false })]), NOW),
+    );
+    expect(lines[0]).toContain("warn duty.degraded");
+
+    // Then: far enough past the budget that the same duty is stale.
+    const late = new Date(NOW.getTime() + DUTY_BUDGET_MS[DRAIN_DUTY] + 1);
+    lines.length = 0;
+    logDegradedDuties(
+      collect(lines),
+      recordPass(state, report([duty(DRAIN_DUTY, { ok: false })]), late),
+    );
+    expect(lines[0]).toContain("error duty.degraded");
+  });
+
+  // A host that has never had a successful pass reads as stale (`lastOkAt === null`), which is
+  // exactly when `/health` returns 503 — so the first failing pass after boot is an `error`, and
+  // the two agree.
+  it("logs error on the first failing pass after boot", () => {
+    const lines: string[] = [];
+    const state = createHealthState(NOW);
+    logDegradedDuties(
+      collect(lines),
+      recordPass(state, report([duty(DRAIN_DUTY, { ok: false })]), NOW),
+    );
+
+    expect(lines[0]).toContain("error duty.degraded");
   });
 });
 

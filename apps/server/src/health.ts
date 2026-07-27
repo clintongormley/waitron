@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { DEFAULT_MAX_TICK_MS } from "./config.js";
 import { ALL_DUTIES, DRAIN_DUTY, RECONCILE_DUTY, type Duty, type PassReport } from "./pass.js";
+import type { Logger } from "./logger.js";
 
 const HOUR_MS = 60 * 60 * 1000;
 /**
@@ -29,10 +30,12 @@ const DRAIN_STALE_SLACK_MS = 15 * 60 * 1000;
  * enforcement — no test can drift out of sync with the map the way a hand-maintained literal can.
  *
  * This bounds against `DEFAULT_MAX_TICK_MS`, not a running instance's actual `WAITRON_MAX_TICK_MS`:
- * this map is a compile-time constant with no access to a booted config. An operator who raises
- * `WAITRON_MAX_TICK_MS` above `DEFAULT_MAX_TICK_MS + DRAIN_STALE_SLACK_MS` reintroduces the exact
- * flap this margin exists to avoid — worth stating plainly rather than silently assuming nobody
- * will.
+ * this map is a compile-time constant with no access to a booted config. An operator raising
+ * `WAITRON_MAX_TICK_MS` at or above `DEFAULT_MAX_TICK_MS + DRAIN_STALE_SLACK_MS` does not silently
+ * reintroduce the flap this margin exists to avoid — `boot.ts` (~line 86) enforces the invariant
+ * directly against the RUNTIME value and refuses to start: `server.config_invalid` with
+ * `reason: "at_or_above_drain_budget"`. Worth stating plainly rather than leaving a reader to
+ * assume this map alone is the whole guard.
  */
 export const DUTY_BUDGET_MS: Readonly<Record<Duty, number>> = {
   [DRAIN_DUTY]: DEFAULT_MAX_TICK_MS + DRAIN_STALE_SLACK_MS,
@@ -74,6 +77,25 @@ export function createHealthState(startedAt: Date): HealthState {
   return { startedAt, lastPassAt: null, duties };
 }
 
+/** What `recordPass` just recorded for one duty, returned so a caller can log it at a level the
+ * FRESH failure count supports. `pass.ts` cannot do this itself: it emits its lines before
+ * `recordPass` runs, so the count it could see is always the previous pass's. */
+export interface DutyRecord {
+  duty: string;
+  consecutiveFailures: number;
+  skipped: number;
+  parked: number;
+  stale: boolean;
+  lastOkAt: Date | null;
+  /**
+   * `ok: false`, OR `ok: true` with `skipped > 0` or `parked > 0` — computed HERE and returned
+   * rather than re-derived at the logging site, because it is already the condition deciding
+   * whether `lastOkAt` advances below. One expression, so the log line and the `/health` verdict
+   * cannot disagree about what "degraded" means.
+   */
+  degraded: boolean;
+}
+
 /**
  * C2: a per-tenant skip is treated as the duty FAILING this pass, even though `DutyReport.ok` is
  * `true` for it — `attempt` (pass.ts) only ever sets `ok: false` on a THROW, so a `drain` or
@@ -106,9 +128,16 @@ export function createHealthState(startedAt: Date): HealthState {
  * shape), and per-tenant health is not something this endpoint represents at all. A 503 here means
  * "at least one tenant's fiscal submission is not being met" (or, for reconcile, "at least one
  * settlement-audit period has been permanently abandoned"), never "nothing is happening."
+ *
+ * Returns one `DutyRecord` per entry in `report.duties` — what this call just recorded for it,
+ * including the SAME `degraded` this function used to decide whether `lastOkAt` advances above.
+ * This is what lets `logDegradedDuties` log at a level the fresh failure count supports: `pass.ts`
+ * emits its own lines before this function ever runs, so the count it could read would always be
+ * the previous pass's, never this one's (see this module's own header comment, and spec §9).
  */
-export function recordPass(state: HealthState, report: PassReport, at: Date): void {
+export function recordPass(state: HealthState, report: PassReport, at: Date): DutyRecord[] {
   state.lastPassAt = at;
+  const records: DutyRecord[] = [];
   for (const entry of report.duties) {
     const duty = (state.duties[entry.duty] ??= {
       lastOkAt: null,
@@ -118,12 +147,56 @@ export function recordPass(state: HealthState, report: PassReport, at: Date): vo
     });
     duty.skipped = entry.skipped ?? 0;
     duty.parked = entry.parked ?? 0;
-    if (entry.ok && duty.skipped === 0 && duty.parked === 0) {
+    const degraded = !(entry.ok && duty.skipped === 0 && duty.parked === 0);
+    if (degraded) {
+      duty.consecutiveFailures += 1;
+    } else {
       duty.lastOkAt = at;
       duty.consecutiveFailures = 0;
-    } else {
-      duty.consecutiveFailures += 1;
     }
+    records.push({
+      duty: entry.duty,
+      consecutiveFailures: duty.consecutiveFailures,
+      skipped: duty.skipped,
+      parked: duty.parked,
+      stale: isStale(duty, budgetFor(entry.duty), at),
+      lastOkAt: duty.lastOkAt,
+      degraded,
+    });
+  }
+  return records;
+}
+
+/**
+ * One line per degraded duty, at a level derived from STALENESS rather than from the
+ * consecutive-failure count — an amendment to spec §9, which named the count.
+ *
+ * A count threshold means a different amount of elapsed time at a different retry cadence: three
+ * consecutive failures is fifteen minutes at a five-minute skip retry and three hours at an hourly
+ * one, so "three" would silently mean two different things depending on `WAITRON_SKIP_RETRY_MS`.
+ * `stale` is time-based and is ALREADY the criterion `/health` returns 503 on, so deriving the
+ * level from it makes an `error` line and a 503 the same condition by construction instead of two
+ * thresholds that can disagree about whether this host is in trouble. The count still ships in the
+ * payload; it just does not decide anything.
+ *
+ * Consequence, stated rather than left to be discovered: a duty that fails on the FIRST pass after
+ * boot logs `error`, because `lastOkAt === null` reads as stale. That is the same instant
+ * `/health` starts answering 503 for it — the two agree, which is the point.
+ *
+ * No `errorCode`: `duty.failed` (pass.ts) already carries the throw's code at the moment it
+ * happened, and a skip-only degradation has no duty-level code to report at all.
+ */
+export function logDegradedDuties(log: Logger, records: readonly DutyRecord[]): void {
+  for (const record of records) {
+    if (!record.degraded) continue;
+    log(record.stale ? "error" : "warn", "duty.degraded", {
+      duty: record.duty,
+      consecutiveFailures: record.consecutiveFailures,
+      skipped: record.skipped,
+      parked: record.parked,
+      stale: record.stale,
+      lastOkAt: record.lastOkAt?.toISOString() ?? null,
+    });
   }
 }
 

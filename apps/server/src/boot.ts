@@ -13,6 +13,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "./migrations
 import {
   createHealthState,
   healthApp,
+  logDegradedDuties,
   recordPass,
   DUTY_BUDGET_MS,
   type HealthState,
@@ -106,18 +107,6 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   );
   const db = await createPostgresDb(config.databaseUrl);
 
-  const resolveClient = aeatClientResolver({
-    db,
-    ring,
-    endpointFor: aeatEndpointFor(config.aeatEnv),
-    // `mtlsFetch` directly, not a wrapping arrow: its own second parameter (`ca`, for a private
-    // trust root) is optional, so `mtlsFetch` already has the exact shape `fetchFor` wants when
-    // called with one argument. A wrapper here would be one more never-invoked closure — this host
-    // has no envios rows in its own tests (drain's write path is covered under the probe role by
-    // packages/fiscal-verifactu's own suite, not here), so a tenant's `fetchFor` is never actually
-    // called by anything this package's tests exercise.
-    fetchFor: mtlsFetch,
-  });
   const reconciler = new StripeReconciler({
     db,
     resolveAccount: stripeAccountResolver({ db, ring, makeStripe: defaultMakeStripe }),
@@ -202,7 +191,32 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     pass: (at) =>
       runPass(
         {
-          drain: (at2) => drain({ db, resolveClient }, at2),
+          // Per pass, not once at boot: `closeAll` below must release exactly the transports THIS
+          // pass built. Each holds a TLS connection pool keyed to one tenant's client certificate,
+          // and nothing closed them before — they accumulated for the process lifetime.
+          drain: async (at2) => {
+            const resolver = aeatClientResolver(
+              {
+                db,
+                ring,
+                endpointFor: aeatEndpointFor(config.aeatEnv),
+                // `mtlsFetch` directly, not a wrapping arrow: its own second parameter (`ca`, for a
+                // private trust root) is optional, so `mtlsFetch` already has the exact shape
+                // `fetchFor` wants when called with one argument. A wrapper here would be one more
+                // never-invoked closure.
+                fetchFor: mtlsFetch,
+              },
+              log,
+            );
+            try {
+              return await drain(
+                { db, resolveClient: resolver.resolve, skipRetryMs: config.skipRetryMs },
+                at2,
+              );
+            } finally {
+              await resolver.closeAll();
+            }
+          },
           // Enumerated per pass, not at boot: a tenant provisioned while the host runs is served
           // on the next pass rather than after a restart.
           reconcile: async (at2) =>
@@ -215,10 +229,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
                 maxAttempts: config.scheduler.maxAttempts,
                 backoffBaseMs: config.scheduler.backoffBaseMs,
                 staleAfterMs: config.scheduler.staleAfterMs,
+                skipRetryMs: config.skipRetryMs,
               },
               await credentialTenants(db, "payments.stripe"),
               at2,
             ),
+          monotonicMs: () => performance.now(),
           log,
         },
         at,
@@ -229,7 +245,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     minTickMs: config.minTickMs,
     maxTickMs: config.maxTickMs,
     log,
-    onPass: (report, at) => recordPass(health, report, at),
+    onPass: (report, at) => logDegradedDuties(log, recordPass(health, report, at)),
   });
 
   // Guards a second, LOSING concurrent `close()`: without it, both calls would reach `db.close()`

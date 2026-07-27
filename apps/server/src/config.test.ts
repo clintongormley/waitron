@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { captureError } from "@waitron/db";
+import { DEFAULTS } from "@waitron/scheduler";
 import { isAppError } from "@waitron/shared";
 import { loadConfig } from "./config.js";
 
@@ -27,6 +28,10 @@ describe("loadConfig", () => {
       httpHost: "127.0.0.1",
       minTickMs: 5_000,
       maxTickMs: 3_600_000,
+      // ONE value for both `drain` and `runDue` — see the field's own doc comment in config.ts.
+      // Asserted against the scheduler's own DEFAULTS rather than a hardcoded literal: this default
+      // IS the scheduler's default, not a copy of it that happens to agree today.
+      skipRetryMs: DEFAULTS.skipRetryMs,
       settlementLagMs: undefined,
       migrationsRoot: ROOT,
       scheduler: {
@@ -54,7 +59,8 @@ describe("loadConfig", () => {
         WAITRON_HTTP_PORT: "9000",
         WAITRON_HTTP_HOST: "0.0.0.0",
         WAITRON_MIN_TICK_MS: "1000",
-        WAITRON_MAX_TICK_MS: "60000",
+        WAITRON_MAX_TICK_MS: "90000",
+        WAITRON_SKIP_RETRY_MS: "60000",
         WAITRON_SETTLEMENT_LAG_MS: "172800000",
         WAITRON_MIGRATIONS_DIR: "/srv/migrations",
         WAITRON_SCHEDULER_HORIZON_DAYS: "14",
@@ -70,7 +76,8 @@ describe("loadConfig", () => {
     expect(config.httpPort).toBe(9000);
     expect(config.httpHost).toBe("0.0.0.0");
     expect(config.minTickMs).toBe(1000);
-    expect(config.maxTickMs).toBe(60_000);
+    expect(config.maxTickMs).toBe(90_000);
+    expect(config.skipRetryMs).toBe(60_000);
     expect(config.settlementLagMs).toBe(172_800_000);
     expect(config.migrationsRoot).toBe("/srv/migrations");
     expect(config.scheduler).toEqual({
@@ -105,6 +112,7 @@ describe("loadConfig", () => {
     // `server.config_invalid`. 65536 is the first value past the real ceiling (65535).
     ["WAITRON_HTTP_PORT", "65536", "port_out_of_range"],
     ["WAITRON_MIN_TICK_MS", "-1", "not_a_positive_integer"],
+    ["WAITRON_SKIP_RETRY_MS", "nope", "not_a_positive_integer"],
     ["WAITRON_SCHEDULER_MAX_ATTEMPTS", "1.5", "not_a_positive_integer"],
   ])("rejects %s=%s", async (variable, value, reason) => {
     const error = await captureError(() =>
@@ -123,9 +131,97 @@ describe("loadConfig", () => {
       ),
     );
     expect(codeOf(error)).toBe("server.config_invalid");
+    // Both variables and both effective values, not just the one the guard happens to key off (F6
+    // of the 2026-07-27 pre-merge review): an operator staring at this error must be able to tell
+    // which of the two they actually set, whichever one that was.
     expect(isAppError(error) && error.params).toEqual({
       variable: "WAITRON_MIN_TICK_MS",
+      value: 10_000,
+      otherVariable: "WAITRON_MAX_TICK_MS",
+      otherValue: 5_000,
       reason: "above_max_tick",
     });
+  });
+
+  it("rejects a skipRetryMs below minTickMs, which sleepMsFor's clamp would otherwise silently round back up to the floor", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(
+        loadConfig(
+          { ...MIN_ENV, WAITRON_MIN_TICK_MS: "10000", WAITRON_SKIP_RETRY_MS: "9999" },
+          ROOT,
+        ),
+      ),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    // F6: an operator who set only WAITRON_MIN_TICK_MS must still see it named — not just
+    // WAITRON_SKIP_RETRY_MS, which here is the untouched default.
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_SKIP_RETRY_MS",
+      value: 9_999,
+      otherVariable: "WAITRON_MIN_TICK_MS",
+      otherValue: 10_000,
+      reason: "below_min_tick",
+    });
+  });
+
+  it("accepts a skipRetryMs exactly equal to minTickMs — the boundary the rejection above lives one below", () => {
+    const config = loadConfig(
+      { ...MIN_ENV, WAITRON_MIN_TICK_MS: "10000", WAITRON_SKIP_RETRY_MS: "10000" },
+      ROOT,
+    );
+    expect(config.minTickMs).toBe(10_000);
+    expect(config.skipRetryMs).toBe(10_000);
+  });
+
+  it("boots with the shipped defaults (skipRetryMs 300000, minTickMs 5000) — the new guard must not reject them", () => {
+    const config = loadConfig(MIN_ENV, ROOT);
+    expect(config.minTickMs).toBe(5_000);
+    expect(config.skipRetryMs).toBe(DEFAULTS.skipRetryMs);
+  });
+
+  // F1 of the 2026-07-27 pre-merge review: `WAITRON_MAX_TICK_MS` alone silently capped
+  // `WAITRON_SKIP_RETRY_MS` — `sleepMsFor`'s `Math.min(maxTickMs, …)` would round a too-high
+  // configured interval back DOWN, below `minTickMs` in the concrete case (operator sets only
+  // `WAITRON_MAX_TICK_MS=5000`, `minTickMs` and `skipRetryMs` both default to their shipped
+  // values), silently restoring the 5-second-forever spin this whole design exists to remove, with
+  // every OTHER guard in this file passing. This guard closes that gap symmetrically with the
+  // below-the-floor one above.
+  it("rejects a skipRetryMs above maxTickMs, which sleepMsFor's clamp would otherwise silently round back down past the floor", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(
+        loadConfig(
+          { ...MIN_ENV, WAITRON_MAX_TICK_MS: "5000", WAITRON_SKIP_RETRY_MS: "300000" },
+          ROOT,
+        ),
+      ),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    // Same reason string the minTickMs > maxTickMs guard already uses — not a near-synonym — and
+    // the same both-variables-both-values shape as the other two tick-cadence guards.
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_SKIP_RETRY_MS",
+      value: 300_000,
+      otherVariable: "WAITRON_MAX_TICK_MS",
+      otherValue: 5_000,
+      reason: "above_max_tick",
+    });
+  });
+
+  it("accepts a skipRetryMs exactly equal to maxTickMs — the boundary the rejection above lives one above", () => {
+    const config = loadConfig(
+      { ...MIN_ENV, WAITRON_MAX_TICK_MS: "300000", WAITRON_SKIP_RETRY_MS: "300000" },
+      ROOT,
+    );
+    expect(config.maxTickMs).toBe(300_000);
+    expect(config.skipRetryMs).toBe(300_000);
+  });
+
+  it("accepts a skipRetryMs comfortably below maxTickMs", () => {
+    const config = loadConfig(
+      { ...MIN_ENV, WAITRON_MAX_TICK_MS: "120000", WAITRON_SKIP_RETRY_MS: "60000" },
+      ROOT,
+    );
+    expect(config.maxTickMs).toBe(120_000);
+    expect(config.skipRetryMs).toBe(60_000);
   });
 });

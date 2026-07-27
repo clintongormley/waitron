@@ -8,7 +8,7 @@ const MIN = 5_000;
 const MAX = 3_600_000;
 
 function report(nextDueAt: Date | null): PassReport {
-  return { duties: [{ duty: "fiscal.drain", ok: true, nextDueAt }], nextDueAt };
+  return { duties: [{ duty: "fiscal.drain", ok: true, nextDueAt, durationMs: 0 }], nextDueAt };
 }
 
 describe("sleepMsFor", () => {

@@ -24,6 +24,10 @@ import { seedTenant } from "../test/seed.js";
 
 const NOW = new Date("2026-07-25T04:00:00Z");
 const HORIZON_START = new Date("2026-06-01T00:00:00Z");
+// Read from DEFAULTS rather than re-typed: a test that hardcodes 300000 keeps passing when the
+// default changes and silently stops testing the default at all.
+const SKIP_RETRY_MS = DEFAULTS.skipRetryMs;
+const AFTER_SKIP_RETRY = new Date(NOW.getTime() + SKIP_RETRY_MS);
 
 let db: Database;
 let tenantId: TenantId;
@@ -191,17 +195,20 @@ describe("runDue", () => {
       { tenantId: missing, duty: "test.duty", errorCode: "unknown" },
     ]);
     expect(duty.calls).toEqual([]);
-    // Skipped work is due NOW — nothing was claimed and no backoff was written for it. Without
-    // this, the tick reports the next day boundary (the derivation ran before the claim threw)
-    // and a host sleeping on `nextDueAt` leaves the failure untouched for 20 hours.
-    expect(result.nextDueAt).toEqual(NOW);
+    // Skipped work is due on the skip-retry interval, NOT at the next day boundary the derivation
+    // computed before the claim threw — a host sleeping on that would leave the failure untouched
+    // for 20 hours. It is also not `now`: a pair that fails for a reason only a human can fix
+    // answers the same way every pass, and reporting `now` pins the host's loop at its MIN_TICK
+    // floor forever.
+    expect(result.nextDueAt).toEqual(AFTER_SKIP_RETRY);
   });
 
   // The sharper half of the same defect. Here the SNAPSHOT READ fails, before derivation runs at
   // all, so nothing ever moves `earliestFuture` — the state in which `nextDueAt` used to be
   // `null`, i.e. "no work will ever be due", from one transient database blip. A long-running host
-  // reading that stops polling permanently.
-  it("reports `now`, never `null`, when the snapshot read itself fails", async () => {
+  // reading that stops polling permanently. `Math.min(Infinity, retryAt)` is `retryAt`, which is
+  // why this case needs no branch of its own in `runDue`.
+  it("reports the skip-retry interval, never `null`, when the snapshot read itself fails", async () => {
     // A real driver failure rather than a stub: a closed PGlite connection is exactly what a
     // database that has gone away looks like at this seam, and it costs no cast.
     const dead = await createPgliteDb();
@@ -213,12 +220,63 @@ describe("runDue", () => {
     expect(result.ran).toEqual([]);
     expect(result.skipped).toHaveLength(1);
     expect(duty.calls).toEqual([]);
+    expect(result.nextDueAt).toEqual(AFTER_SKIP_RETRY);
+  });
+
+  // THE FOLD, and the reason it is a fold rather than an assignment. Before this, a skip
+  // overwrote `nextDueAt` unconditionally, which was safe only because the value written was
+  // `now` — always earlier than any real future answer. A value in the FUTURE can mask a
+  // successful pair's genuinely earlier one, so the skip time is folded as a MINIMUM.
+  it("prefers a successful pair's earlier backoff over the skip-retry interval", async () => {
+    // 1s, so the backoff this failing duty writes lands well inside the 5-minute skip interval.
+    // The DEFAULT backoff (15 minutes) is longer than the skip interval, so this test cannot be
+    // written without the override — and without it the assertion would pass for the wrong reason.
+    const failing = throwingDuty("test.duty", new Error("boom"));
+    const missing = brandTenantId(randomUUID());
+    const result = await runDue(
+      deps([failing], { backoffBaseMs: 1_000 }),
+      [tenantId, missing],
+      NOW,
+    );
+
+    expect(result.skipped).toHaveLength(1);
+    expect(result.ran.some((r) => r.outcome === "failed")).toBe(true);
+    expect(result.nextDueAt).toEqual(new Date(NOW.getTime() + 1_000));
+  });
+
+  it("prefers the skip-retry interval over a successful pair's later answer", async () => {
+    // The default 15-minute backoff is LATER than the 5-minute skip interval, so the skip wins.
+    // Same shape as the test above with one knob changed — that is the point: the fold is a min,
+    // not a preference for either side.
+    const failing = throwingDuty("test.duty", new Error("boom"));
+    const missing = brandTenantId(randomUUID());
+    const result = await runDue(deps([failing]), [tenantId, missing], NOW);
+
+    expect(result.skipped).toHaveLength(1);
+    expect(result.nextDueAt).toEqual(AFTER_SKIP_RETRY);
+  });
+
+  // The branch that deliberately does NOT change. Capped work is genuinely runnable right now, so
+  // draining the backlog fast is the intent — a skip present alongside it must not slow that down.
+  it("still reports `now` when work was deferred, even with a skip present", async () => {
+    const duty = new FakeDuty();
+    const missing = brandTenantId(randomUUID());
+    // A duty that has never run has only ONE day due — the most recent complete period, per
+    // "runs the most recent complete period for a duty that has never run" — so `maxPeriodsPerTick:
+    // 1` alone could not defer anything. Sweeping once at 2026-07-23 records 2026-07-22 as the
+    // floor, so at NOW there are two gaps (07-23, 07-24) for the cap to actually bite on.
+    await runDue(deps([duty]), [tenantId], new Date("2026-07-23T04:00:00Z"));
+    const result = await runDue(deps([duty], { maxPeriodsPerTick: 1 }), [tenantId, missing], NOW);
+
+    expect(result.deferred).toBeGreaterThan(0);
+    expect(result.skipped).toHaveLength(1);
     expect(result.nextDueAt).toEqual(NOW);
   });
 
   // The ONLY state in which `nextDueAt` may be null, and now the only test that reaches it: a
   // tenant list with a duty list to cross against produces at least a next period boundary, and a
-  // pair that throws reports `now`. "No pair at all" is what null means, and nothing else.
+  // pair that throws reports the skip-retry interval. "No pair at all" is what null means, and
+  // nothing else.
   it("reports null only when there is no (tenant, duty) pair at all", async () => {
     const duty = new FakeDuty();
     expect((await runDue(deps([duty]), [], NOW)).nextDueAt).toBeNull();

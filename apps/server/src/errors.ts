@@ -19,11 +19,25 @@ declare module "@waitron/shared" {
     "server.config_missing": { variable: string };
     /**
      * A supplied environment variable cannot be used. Carries the variable NAME and a reason CODE
-     * and never the value: an operator who pasted a secret into the wrong variable must not have it
-     * land in an error's params, the same leak `credentials.invalid_payload` avoids by reporting a
-     * count instead of field names.
+     * and, for most reasons, never the value: an operator who pasted a secret into the wrong
+     * variable must not have it land in an error's params, the same leak
+     * `credentials.invalid_payload` avoids by reporting a count instead of field names.
+     *
+     * `value`/`otherVariable`/`otherValue` are the deliberate exception, used only by `config.ts`'s
+     * three tick-cadence cross-checks (`minTickMs` vs `maxTickMs`, `skipRetryMs` vs each). Those
+     * compare TWO variables, and either one may be the one the operator actually set — naming only
+     * the one the guard happens to key off (F6 of the 2026-07-27 pre-merge review: an operator who
+     * set only `WAITRON_MIN_TICK_MS` got an error naming `WAITRON_SKIP_RETRY_MS`, a variable they
+     * never touched) leaves the message unreadable half the time. A millisecond integer is not a
+     * secret the way an arbitrary env value can be, so both effective values travel too.
      */
-    "server.config_invalid": { variable: string; reason: string };
+    "server.config_invalid": {
+      variable: string;
+      reason: string;
+      value?: number;
+      otherVariable?: string;
+      otherValue?: number;
+    };
     /**
      * A tenant's credential exists but this host cannot use it — a field the purpose registry now
      * declares is absent from a row sealed under an older field list, or its value is not one of

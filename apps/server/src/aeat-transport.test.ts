@@ -20,7 +20,7 @@ import {
   mtlsFetch,
   readCertMaterial,
 } from "./aeat-transport.js";
-import type { CertKind } from "./aeat-transport.js";
+import type { CertKind, CertMaterial } from "./aeat-transport.js";
 import {
   mintMtlsMaterial,
   startMtlsServer,
@@ -176,7 +176,7 @@ describe("the resolved client over a real client-certificate handshake", () => {
     // provisioned certKind" and "the endpoint it selects" is the one thing a two-tenant deployment
     // actually depends on, so it is the one thing this test must not let through unobserved.
     let seenCertKind: CertKind | undefined;
-    const resolve = aeatClientResolver({
+    const resolver = aeatClientResolver({
       db,
       ring,
       endpointFor: (certKind) => {
@@ -185,7 +185,7 @@ describe("the resolved client over a real client-certificate handshake", () => {
       },
       fetchFor: (m) => mtlsFetch(m, material.caPem),
     });
-    const client = await resolve(tenantId);
+    const client = await resolver.resolve(tenantId);
 
     // `submit` posts, and the local server answers with a body `parseRespuestaSuministro` will
     // reject. The assertion is the HANDSHAKE: the server only answers at all if the client
@@ -213,13 +213,13 @@ describe("the resolved client over a real client-certificate handshake", () => {
     // it relies on what the vaulted material itself already carries, which is this suite's own
     // fixture and a realistic PFX shape, not a gap in the test.
     const tenantId = await provision("representante");
-    const resolve = aeatClientResolver({
+    const resolver = aeatClientResolver({
       db,
       ring,
       endpointFor: () => server.origin,
       fetchFor: (m) => mtlsFetch(m),
     });
-    const client = await resolve(tenantId);
+    const client = await resolver.resolve(tenantId);
     await captureError(() => client.submit(anyCabecera(), [anyRegistro()]));
     expect(server.sawClientCn()).toBe(material.clientCn);
   });
@@ -255,6 +255,213 @@ describe("the resolved client over a real client-certificate handshake", () => {
     // and answered the request. (Mutation-checked: flipping this fixture's own `rejectUnauthorized`
     // to `false` makes the request succeed and turns this whole test red — see the task report.)
     expect(server.requests()).toBe(requestsBefore);
+  });
+});
+
+describe("aeatClientResolver lifetime", () => {
+  it("closes one transport per tenant it built", async () => {
+    const tenantA = await provision("sello");
+    const tenantB = await provision("representante");
+    const closed: string[] = [];
+    const resolver = aeatClientResolver({
+      db,
+      ring,
+      endpointFor: () => "https://example.test/soap",
+      fetchFor: (m) => ({
+        fetch: (() => Promise.reject(new Error("not this test's subject"))) as typeof fetch,
+        close: () => {
+          closed.push(m.certKind);
+          return Promise.resolve();
+        },
+      }),
+    });
+
+    await resolver.resolve(tenantA);
+    await resolver.resolve(tenantB);
+    await resolver.closeAll();
+
+    expect(closed).toHaveLength(2);
+  });
+
+  // The constraint that is invisible until it is violated: `closeAll` runs in boot's `finally`, so
+  // a throw there would REPLACE drain's return value or its error — a cleanup path eating the
+  // finding it was cleaning up after. Every transport is still attempted, and the failure is
+  // logged rather than silently dropped.
+  it("does not throw when a transport's close fails, and still closes the rest", async () => {
+    const tenantA = await provision("sello");
+    const tenantB = await provision("representante");
+    const closed: string[] = [];
+    const logged: Array<[string, string, Record<string, unknown> | undefined]> = [];
+    let n = 0;
+    const resolver = aeatClientResolver(
+      {
+        db,
+        ring,
+        endpointFor: () => "https://example.test/soap",
+        fetchFor: () => ({
+          fetch: (() => Promise.reject(new Error("not this test's subject"))) as typeof fetch,
+          close: () => {
+            n += 1;
+            if (n === 1) return Promise.reject(new Error("socket already gone"));
+            closed.push("ok");
+            return Promise.resolve();
+          },
+        }),
+      },
+      (level, event, fields) => logged.push([level, event, fields]),
+    );
+
+    await resolver.resolve(tenantA);
+    await resolver.resolve(tenantB);
+
+    await expect(resolver.closeAll()).resolves.toBeUndefined();
+    expect(closed).toEqual(["ok"]);
+    // The one call attributable to the failing transport, not the one that closed cleanly —
+    // carrying WHICH tenant (tenantA, resolved first, so its close() is the one `n === 1` catches)
+    // and a message that survives `codeOf`'s "unknown" flattening of a plain socket-layer `Error`.
+    expect(logged).toEqual([
+      [
+        "warn",
+        "transport.close_failed",
+        { tenantId: tenantA, errorCode: "unknown", message: "socket already gone" },
+      ],
+    ]);
+  });
+
+  // A rejected promise can reject with ANY value, not only an `Error` — `close()`'s own type
+  // (`Promise<void>`) makes no promise about what it rejects with, so `message: error instanceof
+  // Error ? error.message : String(error)` above has a real, not merely defensive, second branch.
+  it("stringifies a close failure that rejects with something other than an Error", async () => {
+    const tenantA = await provision("sello");
+    const logged: Array<[string, string, Record<string, unknown> | undefined]> = [];
+    const resolver = aeatClientResolver(
+      {
+        db,
+        ring,
+        endpointFor: () => "https://example.test/soap",
+        fetchFor: () => ({
+          fetch: (() => Promise.reject(new Error("not this test's subject"))) as typeof fetch,
+          close: () => Promise.reject("socket gone, no Error wrapper"),
+        }),
+      },
+      (level, event, fields) => logged.push([level, event, fields]),
+    );
+
+    await resolver.resolve(tenantA);
+
+    await expect(resolver.closeAll()).resolves.toBeUndefined();
+    expect(logged).toEqual([
+      [
+        "warn",
+        "transport.close_failed",
+        { tenantId: tenantA, errorCode: "unknown", message: "socket gone, no Error wrapper" },
+      ],
+    ]);
+  });
+
+  // F2 of the 2026-07-27 pre-merge review: every case above rejects a *returned* Promise —
+  // `.catch` alone. `TenantTransport.close` is typed `() => Promise<void>`, but an injected
+  // `fetchFor` is free to violate that and throw BEFORE ever returning a promise (undici's real
+  // `Agent.close()` cannot, but the seam here is `fetchFor`, not undici). A synchronous throw
+  // inside the `.map` callback used to propagate straight out of `closeAll` before
+  // `Promise.allSettled` was ever reached — rejecting into `boot.ts`'s `finally` and replacing
+  // `drain`'s own return value or error, and abandoning every transport queued after the throwing
+  // one even though `open.splice(0)` had already emptied the list. `Promise.resolve().then(...)`
+  // wraps the call so a throw becomes a rejection like any other, caught by the same `.catch`.
+  it("does not throw when a transport's close throws SYNCHRONOUSLY, and still closes the one after it", async () => {
+    const tenantA = await provision("sello");
+    const tenantB = await provision("representante");
+    const closed: string[] = [];
+    const logged: Array<[string, string, Record<string, unknown> | undefined]> = [];
+    let n = 0;
+    const resolver = aeatClientResolver(
+      {
+        db,
+        ring,
+        endpointFor: () => "https://example.test/soap",
+        fetchFor: () => ({
+          fetch: (() => Promise.reject(new Error("not this test's subject"))) as typeof fetch,
+          close: () => {
+            n += 1;
+            if (n === 1) {
+              // Thrown, not returned as a rejected Promise — the case `.catch` alone cannot reach.
+              throw new Error("socket exploded synchronously");
+            }
+            closed.push("ok");
+            return Promise.resolve();
+          },
+        }),
+      },
+      (level, event, fields) => logged.push([level, event, fields]),
+    );
+
+    await resolver.resolve(tenantA);
+    await resolver.resolve(tenantB);
+
+    await expect(resolver.closeAll()).resolves.toBeUndefined();
+    // The transport queued AFTER the one whose close() threw synchronously still closed — proof
+    // the throw did not abort the whole `.map`/`Promise.allSettled` sweep.
+    expect(closed).toEqual(["ok"]);
+    expect(logged).toEqual([
+      [
+        "warn",
+        "transport.close_failed",
+        { tenantId: tenantA, errorCode: "unknown", message: "socket exploded synchronously" },
+      ],
+    ]);
+  });
+
+  // The second half of the same guarantee, and the reason the log call is guarded in turn while
+  // `loop.ts`'s and `pass.ts`'s equivalents are not: those sit in ordinary catch blocks, where a
+  // throwing `Logger` surfaces as itself. This one runs inside `boot.ts`'s `finally`, where a throw
+  // does not surface at all — it REPLACES the sweep's own result or error. Without the inner guard
+  // this test throws "logger is down" out of `closeAll`, and `tenantB`'s transport is never closed.
+  it("does not throw when the LOGGER fails while reporting a close failure", async () => {
+    const tenantA = await provision("sello");
+    const tenantB = await provision("representante");
+    const closed: string[] = [];
+    let n = 0;
+    const resolver = aeatClientResolver(
+      {
+        db,
+        ring,
+        endpointFor: () => "https://example.test/soap",
+        fetchFor: () => ({
+          fetch: (() => Promise.reject(new Error("not this test's subject"))) as typeof fetch,
+          close: () => {
+            n += 1;
+            if (n === 1) return Promise.reject(new Error("socket already gone"));
+            closed.push("ok");
+            return Promise.resolve();
+          },
+        }),
+      },
+      () => {
+        throw new Error("logger is down");
+      },
+    );
+
+    await resolver.resolve(tenantA);
+    await resolver.resolve(tenantB);
+
+    await expect(resolver.closeAll()).resolves.toBeUndefined();
+    // The transport AFTER the failing one still got released — the loop was not abandoned.
+    expect(closed).toEqual(["ok"]);
+  });
+
+  it("mtlsFetch's close closes the Agent it built", async () => {
+    // Against the suite's existing mTLS fixture: a request succeeds, close resolves, and a request
+    // after close rejects — which is what proves `close` reached the real Agent rather than a
+    // no-op wrapper.
+    const certMaterial: CertMaterial = {
+      pfx: material.clientPfx,
+      passphrase: material.clientPassphrase,
+      certKind: "representante",
+    };
+    const transport = mtlsFetch(certMaterial, material.caPem);
+    await transport.fetch(server.origin);
+    await transport.close();
+    await expect(transport.fetch(server.origin)).rejects.toThrow();
   });
 });
 

@@ -39,6 +39,10 @@ export interface DutyReport {
    * (not `isStale`, which is about undeclared duties, not skips) for how this field closes that.
    */
   skipped?: number;
+  /** How long this duty took, from `attempt`'s own monotonic reads. Present for a duty that threw
+   * too — the elapsed time is real either way, unlike `skipped`/`parked`, which a throw leaves
+   * with no honest value. */
+  durationMs: number;
   /**
    * How many of `TickResult.ran` this pass ended `outcome: "parked"` — a run that exhausted
    * `maxAttempts` (`@waitron/scheduler`'s `parkOrRetry`), whose `completeRun` wrote
@@ -70,15 +74,23 @@ export interface PassReport {
 export interface PassDeps {
   drain: (now: Date) => Promise<DrainResult>;
   reconcile: (now: Date) => Promise<TickResult>;
+  /**
+   * A MONOTONIC millisecond clock — `performance.now` in `boot.ts`, injected here so the suite
+   * asserts exact durations. Deliberately not the wall-clock `now` this function already receives:
+   * an NTP step during a pass would make that produce a negative or absurd duration, in the one
+   * field an operator uses to spot a slow one.
+   */
+  monotonicMs: () => number;
   log: Logger;
 }
 
 export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
+  const startedAt = deps.monotonicMs();
   const duties: DutyReport[] = [];
 
   // DRAIN FIRST, unconditionally. It is the duty with a legal clock.
   duties.push(
-    await attempt(DRAIN_DUTY, now, deps.log, async () => {
+    await attempt(DRAIN_DUTY, now, deps.log, deps.monotonicMs, async () => {
       const result = await deps.drain(now);
       for (const skipped of result.skipped) {
         // A tenant with due fiscal work this pass could not submit for is an unmet legal
@@ -123,7 +135,7 @@ export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
   );
 
   duties.push(
-    await attempt(RECONCILE_DUTY, now, deps.log, async () => {
+    await attempt(RECONCILE_DUTY, now, deps.log, deps.monotonicMs, async () => {
       const result = await deps.reconcile(now);
       for (const skipped of result.skipped) {
         deps.log("warn", "reconcile.pair_skipped", skipped);
@@ -157,8 +169,10 @@ export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
     duties: duties.map((entry) => ({
       duty: entry.duty,
       ok: entry.ok,
+      durationMs: entry.durationMs,
       ...(entry.errorCode === undefined ? {} : { errorCode: entry.errorCode }),
     })),
+    durationMs: Math.round(deps.monotonicMs() - startedAt),
     nextDueAt: nextDueAt?.toISOString() ?? null,
   });
   return { duties, nextDueAt };
@@ -172,14 +186,17 @@ export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
  * to say died with the throw — and "due immediately" is the honest reading, which the loop's
  * MIN_TICK floor then turns into a prompt retry rather than a hot spin. It also has no `skipped` or
  * `parked` count of its own for the identical reason: both stay `undefined`, not `0` — `0` would
- * claim a clean sweep the throw makes no promise about.
+ * claim a clean sweep the throw makes no promise about. `durationMs` is the one field that stays
+ * populated on both branches — elapsed monotonic time is real whether or not the body threw.
  */
 async function attempt(
   duty: string,
   now: Date,
   log: Logger,
+  monotonicMs: () => number,
   body: () => Promise<{ nextDueAt: Date | null; skipped: number; parked: number }>,
 ): Promise<DutyReport> {
+  const startedAt = monotonicMs();
   try {
     const result = await body();
     return {
@@ -188,11 +205,18 @@ async function attempt(
       nextDueAt: result.nextDueAt,
       skipped: result.skipped,
       parked: result.parked,
+      durationMs: Math.round(monotonicMs() - startedAt),
     };
   } catch (error) {
     const errorCode = codeOf(error);
     log("error", "duty.failed", { duty, errorCode });
-    return { duty, ok: false, errorCode, nextDueAt: now };
+    return {
+      duty,
+      ok: false,
+      errorCode,
+      nextDueAt: now,
+      durationMs: Math.round(monotonicMs() - startedAt),
+    };
   }
 }
 

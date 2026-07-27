@@ -14,7 +14,7 @@ export type { RegisterSifParams, SifRegistration } from "./registro-sif.js";
 // The drainer itself, not only `VerifactuBackend.drain`. The `apps/*` host calls this directly:
 // constructing a backend to reach it would demand a `TrustedClock` and a `db` handle the drainer
 // never touches.
-export { drain } from "./drain.js";
+export { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 export type { DrainDeps } from "./drain.js";
 export { appendToChain, isUniqueViolation, lockChainHead } from "./chain.js";
 export type { ChainHead, PendingRegistro } from "./chain.js";

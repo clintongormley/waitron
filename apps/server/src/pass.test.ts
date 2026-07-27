@@ -43,10 +43,14 @@ function runRecord(over: Partial<RunRecord> = {}): RunRecord {
 
 function deps(over: Partial<PassDeps> = {}): PassDeps & { lines: string[] } {
   const lines: string[] = [];
+  // A monotonic clock that advances 10ms per read: two reads per duty plus two for the pass makes
+  // every duration in the assertions below exact rather than merely non-negative.
+  let ticks = 0;
   return {
     lines,
     drain: () => Promise.resolve(drainResult()),
     reconcile: () => Promise.resolve(tickResult()),
+    monotonicMs: () => (ticks += 10),
     log: (level, event, fields) => lines.push(`${level} ${event} ${JSON.stringify(fields ?? {})}`),
     ...over,
   };
@@ -139,6 +143,10 @@ describe("runPass", () => {
       // A duty that threw has no answer about when it is next due, and a failed drain is due
       // immediately — the pass reports `now` so the loop retries on its floor rather than sleeping.
       nextDueAt: NOW,
+      // `deps()`'s injected clock advances 10ms per read; drain is the first duty attempted, so
+      // this is its own pair of reads (20 on entry, 30 on the catch branch) — 10 regardless of
+      // what reconcile does afterwards.
+      durationMs: 10,
     });
     expect(report.duties.find((entry) => entry.duty === RECONCILE_DUTY)?.ok).toBe(true);
     expect(report.nextDueAt).toEqual(NOW);
@@ -320,5 +328,41 @@ describe("runPass", () => {
         expect.objectContaining({ duty: RECONCILE_DUTY, ok: true }),
       ]),
     );
+  });
+
+  it("reports the pass duration and each duty's own", async () => {
+    const d = deps();
+    await runPass(d, NOW);
+
+    const complete = d.lines.find((line) => line.startsWith("info pass.complete"));
+    expect(complete).toBeDefined();
+    const payload = JSON.parse(complete!.slice("info pass.complete ".length)) as {
+      durationMs: number;
+      duties: { duty: string; durationMs: number }[];
+    };
+    // `deps()`'s injected clock advances 10ms per read, in the fixed order: one read at `runPass`
+    // entry, one at each `attempt` entry/exit, one at `runPass` exit right before this line is
+    // built. That is 10 (pass start), 20/30 (drain), 40/50 (reconcile), 60 (pass end) — so each
+    // duty's own duration is exactly 10, and the pass's is exactly 60 - 10 = 50. Asserted exactly,
+    // not `toBeGreaterThan(0)`: that would pass against a field that was never wired up.
+    expect(payload.durationMs).toBe(50);
+    expect(payload.duties.map((entry) => entry.durationMs)).toEqual([10, 10]);
+  });
+
+  it("still reports a duration for a duty that threw", async () => {
+    const d = deps({
+      drain: () =>
+        Promise.reject(
+          new AppError("server.credential_unusable", {
+            tenantId: "t",
+            purpose: "fiscal.aeat",
+            field: "certKind",
+          }),
+        ),
+    });
+    const report = await runPass(d, NOW);
+
+    expect(report.duties[0]!.ok).toBe(false);
+    expect(report.duties[0]!.durationMs).toBe(10);
   });
 });

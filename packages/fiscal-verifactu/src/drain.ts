@@ -41,6 +41,32 @@ export const TIEMPO_ESPERA_INICIAL_SEG = 60;
  */
 export const RECUPERACION_ENVIANDO_MS = 5 * 60_000;
 
+/**
+ * How long after a SKIPPED tenant `drain` reports work is due again.
+ *
+ * A skip used to report `now`, which a host sleeping on `nextDueAt` turns into its MIN_TICK floor
+ * — 5 seconds, forever, for a tenant whose certificate only a human can provision. Five minutes is
+ * twelve retries inside art. 16.4's hour, so a transient skip (an expired vault key, a dead
+ * credentials connection) costs minutes of that legal budget rather than all of it.
+ *
+ * `@waitron/scheduler`'s `DEFAULTS.skipRetryMs` holds the same value for `runDue`. The two are
+ * DELIBERATELY independent — two duties, two cadences, no invariant requiring them to agree — and
+ * `apps/server` overrides both from one `WAITRON_SKIP_RETRY_MS`, so they can only diverge in a
+ * deployment that does not use that host. Nothing asserts they are equal, on purpose: a test
+ * policing that copy would fail the day someone legitimately splits them.
+ *
+ * INERT IN PRODUCTION, worth stating plainly rather than leaving a reader to discover it:
+ * `apps/server/src/config.ts` sources `WAITRON_SKIP_RETRY_MS`'s default from
+ * `@waitron/scheduler`'s `DEFAULTS.skipRetryMs`, not from this constant, and `boot.ts` passes that
+ * one resulting value to BOTH `drain` and `runDue`. `VerifactuBackend` does apply this constant
+ * (`VerifactuBackendOptions.skipRetryMs`'s own doc comment), but `apps/server` always supplies its
+ * own `skipRetryMs` explicitly (`config.skipRetryMs`, sourced as above) to the standalone `drain`
+ * function this file exports — never to `VerifactuBackend`'s constructor — so `VerifactuBackend`'s
+ * default has no production caller today. Editing THIS constant changes nothing about the deployed
+ * fiscal cadence; editing `@waitron/scheduler`'s `DEFAULTS.skipRetryMs` silently changes it instead.
+ */
+export const DEFAULT_SKIP_RETRY_MS = 5 * 60 * 1000;
+
 /** The first retry's wait, and the per-attempt doubling unit `backoffMs` scales from. */
 export const BACKOFF_BASE_MS = 60_000;
 /** The retry ceiling: no transiently-failed batch waits longer than one hour before its next
@@ -77,6 +103,10 @@ export interface DrainDeps {
    * decrypted for a tenant with nothing to submit is a secret in memory for no reason.
    */
   resolveClient: (tenantId: TenantId) => Promise<VerifactuClient>;
+  /** How long after a skipped tenant to report work due again. `DEFAULT_SKIP_RETRY_MS` owns the
+   * default and its reasoning; required here so a caller that forgets is a compile error rather
+   * than a silent cadence. `VerifactuBackend` applies the default on its callers' behalf. */
+  skipRetryMs: number;
 }
 
 /** A due `envios` row joined to enough of its registro to rebuild and order it. */
@@ -142,18 +172,36 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
       result.skipped.push({ tenantId, errorCode: codeOf(error) });
     }
   }
-  // A skipped tenant is due NOW: nothing about it was ever scheduled — no gate, no backoff row —
-  // so there is no future instant `bumpNextDue` could have folded in for it. Mirrors
-  // `packages/scheduler/src/run.ts`'s identical `result.skipped.length > 0 ? now : ...`, and for
-  // the same reason: reporting whatever `bumpNextDue` computed from the tenants that DID run — or
-  // `null`, if every due tenant this pass skipped — would tell a long-running host nothing is due,
-  // and one transient failure (an expired vault key, a dead credentials connection) would stop it
-  // polling for good while a `pendiente` row sits past its art. 16.4 hour. Unconditional, not
-  // merged with `bumpNextDue`: `now` is always earlier than any real future `nextDueAt` a
-  // successful tenant computed this same pass (a gate/backoff time is always strictly later than
-  // `now`), so taking it whenever anything was skipped can only pull the reported instant earlier,
-  // never mask a later one a successful tenant is still waiting on.
-  if (result.skipped.length > 0) result.nextDueAt = now;
+  // NOT "a skipped tenant has no future instant of its own" (Copilot, 2026-07-27 — the same
+  // correction F4 of that day's pre-merge review made to `runDue`'s twin comment, applied there and
+  // missed here). `drainTenant` calls `bumpNextDue` itself, per chunk, so a tenant that threw AFTER
+  // sending one — a mid-sweep AEAT failure on its second batch, say — has already folded a real gate
+  // into `result.nextDueAt` and still lands in `skipped`. A skipped tenant may therefore have
+  // contributed to `nextDueAt`, and may have mutated state (claimed rows) besides.
+  //
+  // What is genuinely true, and what this fold exists for, is the part that did NOT get that far:
+  // the tenant whose transport could not be built at all never reached `drainTenant`, so nothing
+  // was scheduled for it — no gate, no backoff row — and nothing else in this pass reports it.
+  // Reporting only whatever the tenants that DID run computed, or `null` when every due tenant
+  // skipped, would tell a long-running host nothing is due, and one transient failure (an expired
+  // vault key, a dead credentials connection) would stop it polling while a `pendiente` row sits
+  // past its art. 16.4 hour.
+  //
+  // FOLDED AS A MINIMUM, not assigned — and folded through `bumpNextDue`, the same helper every
+  // successful tenant's gate goes through, so there is one definition of "fold an instant into
+  // `nextDueAt`" in this file rather than two that must be kept in step. This used to assign `now`
+  // unconditionally, and the comment here used to justify that by observing `now` is always earlier
+  // than any real gate — true, and no longer the point: `now + skipRetryMs` IS later than a gate a
+  // successful tenant may have computed this same pass, so assigning it would delay a healthy
+  // tenant's submission behind a broken tenant's retry. The minimum can only pull the reported
+  // instant earlier.
+  //
+  // Not `now`, because a skip is frequently NOT transient: a certificate nobody has provisioned
+  // produces the identical answer every pass, and `now` pins the host's loop at its MIN_TICK floor
+  // indefinitely — the expected state of the first deployment.
+  if (result.skipped.length > 0) {
+    bumpNextDue(result, new Date(now.getTime() + deps.skipRetryMs));
+  }
   return result;
 }
 
@@ -317,8 +365,17 @@ async function upsertFlujo(
   `);
 }
 
-/** Folds one tenant's gate time into `result.nextDueAt` — the earliest instant ANY drained
- * tenant needs `drain` called again, per `DrainResult`'s own doc comment. */
+/**
+ * Folds one instant into `result.nextDueAt` as a MINIMUM — the earliest instant `drain` needs
+ * calling again, per `DrainResult`'s own doc comment.
+ *
+ * NOT only "one tenant's gate time" (F5 of the 2026-07-27 pre-merge review corrected this): that
+ * was true of every call site until the skip-cadence fix, but `drain`'s own skip branch now folds
+ * `now + skipRetryMs` through this same helper too, and that instant is neither a gate time nor
+ * attributable to a DRAINED tenant — it exists precisely for the tenant this pass did NOT drain.
+ * One definition of "fold an instant into `nextDueAt`" either way, which is the point; the doc
+ * just no longer gets to say every caller's instant means the same thing.
+ */
 function bumpNextDue(result: DrainResult, at: Date | null): void {
   if (at === null) return;
   result.nextDueAt =

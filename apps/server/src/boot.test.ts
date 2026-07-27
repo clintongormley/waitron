@@ -5,14 +5,51 @@ import { tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { captureError, type Database } from "@waitron/db";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { Agent } from "undici";
+import { captureError, withTenant, type Database } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
+import { loadKeyRing, putCredential } from "@waitron/credentials";
+// The exact test-only entry point `packages/fiscal-verifactu`'s OWN tests use to seed a due
+// `envios` row — mirroring the established cross-package convention (e.g.
+// `@waitron/payments/test/seed.js` from `packages/payments-stripe`'s suites): no `exports` map
+// restricts either package, so the deep import resolves the same way a same-package one would.
+import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { DEFAULT_MIGRATIONS_ROOT, startServer, type StartedServer } from "./boot.js";
 import { DUTY_BUDGET_MS } from "./health.js";
 import { manifestSets, migrationOptionsFor } from "./migrations.js";
 import { DRAIN_DUTY } from "./pass.js";
 import { roleUrl, startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { mintMtlsMaterial } from "./testing/tls.js";
+
+/**
+ * F4 (2026-07-27 fix wave): the ONE test below that provisions a tenant with a usable
+ * `fiscal.aeat` credential needs `resolveClient` (`aeat-transport.ts`) to actually build a real
+ * mTLS `Agent`, so `closeAll` has something genuine to release — but `startServer` takes only
+ * `env`, with no seam to point `aeatEndpointFor`/`mtlsFetch` at a local test double the way
+ * `aeat-transport.test.ts`'s own suite does directly against `aeatClientResolver`. The only other
+ * route to a real endpoint is AEAT's actual preproduction host — reachable from this sandbox, but
+ * not something an automated suite should be dialling on every run. Module-mocking `undici`'s
+ * `fetch` keeps the resulting SOAP POST from ever leaving this process; `Agent` is spread through
+ * untouched, so `mtlsFetch` (aeat-transport.ts, unmodified) still constructs a genuine per-tenant
+ * TLS connection pool for that test's `Agent.prototype.close` spy to observe. Confirmed this does
+ * not affect any OTHER test in this file: none of them seed a usable `fiscal.aeat` credential
+ * (boot.ts's own comment on its `drain` closure), so `resolveClient` never reaches `mtlsFetch` for
+ * any tenant but this one, and the plain global `fetch(...)` calls this file uses against its own
+ * local `/health` server resolve through Node's OWN built-in fetch, a separate module identity
+ * from the `"undici"` npm package specifier this mock intercepts.
+ */
+vi.mock("undici", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("undici")>();
+  return {
+    ...actual,
+    fetch: vi.fn(() =>
+      Promise.reject(
+        new Error("undici fetch disabled in boot.test.ts — see this file's own header comment"),
+      ),
+    ),
+  };
+});
 
 /**
  * `startServer`'s only test subject. Everything else in this package tests one composed piece
@@ -254,6 +291,10 @@ describe("startServer, against a real container as the deployment role", () => {
         // confusable with each other, or with sleepMsFor's own clamp bounds by coincidence.
         WAITRON_MIN_TICK_MS: "1000",
         WAITRON_MAX_TICK_MS: "94327",
+        // Within [minTickMs, maxTickMs] only to satisfy `loadConfig`'s guard (F1 of the 2026-07-27
+        // pre-merge review) — zero tenants are enrolled for either duty below, so neither drain nor
+        // reconcile ever reports a skip, and this value plays no part in `sleeping.sleepMs` below.
+        WAITRON_SKIP_RETRY_MS: "9000",
         WAITRON_SETTLEMENT_LAG_MS: "1000",
         // Set explicitly to the NON-default value: `config.test.ts` already proves `loadConfig`
         // parses this correctly, and `preproduction` is both the default AND what a silently
@@ -324,6 +365,9 @@ describe("startServer, against a real container as the deployment role", () => {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_MIN_TICK_MS: "50",
       WAITRON_MAX_TICK_MS: "200",
+      // Within [minTickMs, maxTickMs]: the default (300000) sits above maxTickMs here and would
+      // now fail `loadConfig`'s guard (F1 of the 2026-07-27 pre-merge review).
+      WAITRON_SKIP_RETRY_MS: "100",
     });
 
     try {
@@ -350,6 +394,9 @@ describe("startServer, against a real container as the deployment role", () => {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_MIN_TICK_MS: "50",
       WAITRON_MAX_TICK_MS: "200",
+      // Within [minTickMs, maxTickMs]: the default (300000) sits above maxTickMs here and would
+      // now fail `loadConfig`'s guard (F1 of the 2026-07-27 pre-merge review).
+      WAITRON_SKIP_RETRY_MS: "100",
     });
     try {
       await waitForPass(server.health);
@@ -389,6 +436,9 @@ describe("startServer, against a real container as the deployment role", () => {
               WAITRON_MIGRATIONS_DIR: migrationsRoot,
               WAITRON_MIN_TICK_MS: "1000",
               WAITRON_MAX_TICK_MS: "2000",
+              // Within [minTickMs, maxTickMs]: the default (300000) sits above maxTickMs here and
+              // would now fail `loadConfig`'s guard (F1 of the 2026-07-27 pre-merge review).
+              WAITRON_SKIP_RETRY_MS: "1500",
             });
             const event = await waitForEvent(lines, "server.listen_failed");
             return [s, event] as const;
@@ -432,6 +482,9 @@ describe("startServer, against a real container as the deployment role", () => {
               WAITRON_MIGRATIONS_DIR: migrationsRoot,
               WAITRON_MIN_TICK_MS: "1000",
               WAITRON_MAX_TICK_MS: "2000",
+              // Within [minTickMs, maxTickMs]: the default (300000) sits above maxTickMs here and
+              // would now fail `loadConfig`'s guard (F1 of the 2026-07-27 pre-merge review).
+              WAITRON_SKIP_RETRY_MS: "1500",
             });
             const event = await waitForEvent(lines, "server.listen_failed");
             return [s, event] as const;
@@ -446,6 +499,157 @@ describe("startServer, against a real container as the deployment role", () => {
       });
     }, 60_000);
   });
+
+  // I1 of the 2026-07-27 whole-branch review: nothing PINS which config field reaches which duty,
+  // and nothing proves this branch's headline behaviour end to end. `boot.ts` passes
+  // `skipRetryMs: config.skipRetryMs` to both `drain` and `runDue` — `tsc` only pins that the
+  // field is PRESENT, `config.test.ts` pins parsing, and the fold unit tests
+  // (`drain.fold.test.ts`, `run.test.ts`) pin behaviour GIVEN a value. None of them would notice
+  // `skipRetryMs: config.minTickMs` at either call site: 13/13 typecheck, every unit test and 100%
+  // coverage would all stay green while silently reintroducing the exact 5-second spin this branch
+  // exists to remove. This test seeds a real, due `envios` row for a tenant with no `fiscal.aeat`
+  // credential — the expected shape of the first deployment (degraded-pass design §1) — and reads
+  // the loop's own logged sleep duration back, the same "prove the mapping via the LOGGED effect,
+  // not the call site" technique the very first test in this describe block already uses for
+  // `minTickMs`/`maxTickMs`.
+  //
+  // The seeded tenant is never provisioned a `fiscal.aeat` credential, so — left in place — its
+  // `envios` row would stay due FOREVER against the one real container this whole describe block
+  // shares (`beforeAll` above): `drain.tenant_skipped` fires on `resolveClient` itself, before any
+  // per-row retry state is ever touched, so nothing about this row's own due-ness ever advances.
+  // The tests at ~249/~348 above assert `consecutiveFailures === 0` in this SAME container and
+  // used to pass only because they were declared, and therefore ran, earlier — order-dependent on
+  // this test staying last, which `--sequence.shuffle` (or a later `it` added after this one)
+  // breaks. The `finally` below deletes the seeded `envios` row regardless of how this test
+  // finishes, which is what actually fixes that rather than merely relying on position — verified
+  // by running this suite with `--sequence.shuffle` repeatedly.
+  it("sleeps on WAITRON_SKIP_RETRY_MS, not WAITRON_MIN_TICK_MS, for a tenant with due fiscal work and no fiscal.aeat credential", async () => {
+    const port = await freePort();
+    // `seedPendingEnvios`'s own fixed `proximo_intento_en` ('2026-07-21T00:00:00Z') is always in
+    // the past relative to `startServer`'s real wall clock (`boot.ts` hardcodes `new Date()`,
+    // deliberately not injectable — see its own doc comment), so this tenant is due the instant the
+    // first pass runs. Seeded against `admin` (the container's own superuser default), matching
+    // `pass.rls.test.ts`'s identical convention for setup that must bypass RLS.
+    const seeded = await seedPendingEnvios(admin, { count: 1 });
+
+    try {
+      const [server, sleeping, skipped] = await withCapturedStdout(async (lines) => {
+        const started = await startServer({
+          ...KEY_ENV,
+          DATABASE_URL: databaseUrl,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_MIN_TICK_MS: "1000",
+          // Comfortably above the distinctive skip-retry value below, so neither clamp can mask it.
+          WAITRON_MAX_TICK_MS: "600000",
+          // Distinctive on purpose: not 5000 (`WAITRON_MIN_TICK_MS`'s own default — the old floor
+          // this branch exists to stop reporting), not 300000 (`@waitron/scheduler`'s own
+          // `DEFAULTS.skipRetryMs`, which this test must not pass by coincidence with the fallback),
+          // and strictly between `WAITRON_MIN_TICK_MS` and `WAITRON_MAX_TICK_MS` above so neither
+          // clamp can produce this same number by accident either.
+          WAITRON_SKIP_RETRY_MS: "45678",
+        });
+        const skippedEvent = await waitForEvent(lines, "drain.tenant_skipped");
+        const event = await waitForEvent(lines, "loop.sleeping");
+        return [started, event, skippedEvent] as const;
+      });
+
+      try {
+        // Proof #1: the seeded tenant really was skipped for a missing credential, not silently
+        // dropped some other way — a passing `sleepMs` assertion below would prove nothing about
+        // THIS branch's behaviour if the tenant were never enumerated at all.
+        expect(skipped.tenantId).toBe(seeded.tenantId);
+        expect(skipped.errorCode).toBe("credentials.missing");
+
+        // THE assertion. `config.skipRetryMs` reached `drain` via `boot.ts`'s `drain` closure and
+        // folded into `nextDueAt` as `now + WAITRON_SKIP_RETRY_MS` (`drain.ts`'s own fold — no other
+        // tenant has earlier work this pass, and reconcile has no enrolled `payments.stripe` tenants
+        // at all, so nothing pulls the folded answer earlier). `sleepMsFor` then clamps that against
+        // `[minTickMs, maxTickMs]`, and 45678 sits strictly inside both, so it survives close to
+        // verbatim — not EXACTLY 45678, because `sleepMsFor` (`loop.ts`) subtracts a SECOND,
+        // freshly-read `now()` from `nextDueAt`, taken after the pass itself ran, so the reported
+        // `sleepMs` is `45678` minus whatever real wall-clock time the pass took (confirmed live: a
+        // few milliseconds). A generous 5-second tolerance absorbs that real timing noise while
+        // staying two orders of magnitude away from `config.minTickMs` (1000) — the value
+        // `skipRetryMs: config.minTickMs` at either `boot.ts` call site would report instead. This
+        // test's own header comment records that the swap was verified live: making that edit turned
+        // this into ~1000, watching it fail, then reverting it.
+        expect(sleeping.sleepMs).toBeLessThanOrEqual(45678);
+        expect(sleeping.sleepMs).toBeGreaterThan(45678 - 5000);
+      } finally {
+        await server.close();
+      }
+    } finally {
+      // The ONLY row that makes this tenant perpetually due: `envios_tenants_with_work`
+      // (drain.ts) reads `envios`, not `tenants`/`tills`/`registros_facturacion`/`sales`/
+      // `registro_sif`, so deleting just this is what stops the tenant from being enumerated
+      // again — and it sidesteps the FK-ordered teardown a full tenant delete would need
+      // (`registros_facturacion`/`sales`/`invoice_series` all reference `tenants` with
+      // `onDelete: "restrict"`). Runs regardless of how the block above finishes, so a failed
+      // assertion still leaves the container clean for whatever test runs next.
+      await admin.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
+    }
+  }, 60_000);
+
+  // F4 (2026-07-27 fix wave): `boot.ts`'s `drain` closure builds a fresh `aeatClientResolver`
+  // every pass and releases it via `finally { await resolver.closeAll() }` — the fix this whole
+  // branch exists to land, and the one line of it with no test at all before this one. Every OTHER
+  // test in this describe block either enrols no tenant for `fiscal.drain`, or (the test just
+  // above) enrols one with due work but NO usable `fiscal.aeat` credential — in both cases
+  // `resolveClient` never reaches `mtlsFetch`, so no real per-tenant `Agent` is ever built for
+  // `closeAll` to release. This seeds BOTH: due `envios` work (`seedPendingEnvios`, as above) AND
+  // a usable credential, reusing `aeat-transport.test.ts`'s own TLS/PKCS#12 fixture
+  // (`mintMtlsMaterial`) rather than inventing a new one — so `resolveClient` succeeds and a
+  // genuine undici `Agent` gets constructed. See this file's own header comment for why `undici`'s
+  // `fetch` is module-mocked (no seam to point `startServer` at a local AEAT double, and this
+  // process has no business dialling the real one) while `Agent` itself stays real.
+  it("closes the mTLS transport it built for a tenant with due fiscal work and a usable fiscal.aeat credential", async () => {
+    const port = await freePort();
+    const seeded = await seedPendingEnvios(admin, { count: 1 });
+    const material = mintMtlsMaterial();
+    // Same shape as `aeat-transport.test.ts`'s own `provision(certKind)` helper, against the
+    // TENANT `seedPendingEnvios` just seeded rather than a fresh one of its own — this test needs
+    // ONE tenant carrying both due work and a usable credential, not two separate tenants.
+    await withTenant(admin, seeded.tenantId, (tx) =>
+      putCredential(tx, loadKeyRing(KEY_ENV), {
+        tenantId: seeded.tenantId,
+        purpose: "fiscal.aeat",
+        value: {
+          pfxBase64: material.clientPfx.toString("base64"),
+          passphrase: material.clientPassphrase,
+          certKind: "representante",
+        },
+      }),
+    );
+
+    // The only observable proof, through a real boot, that the transport this pass built was
+    // actually released rather than leaked for the process lifetime — `startServer`'s public
+    // surface exposes no handle onto `aeatClientResolver`'s own `open` list.
+    const closeSpy = vi.spyOn(Agent.prototype, "close");
+    try {
+      const server = await startServer({
+        ...KEY_ENV,
+        DATABASE_URL: databaseUrl,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_MIN_TICK_MS: "1000",
+        WAITRON_MAX_TICK_MS: "600000",
+      });
+      try {
+        await waitForPass(server.health);
+        expect(closeSpy).toHaveBeenCalled();
+      } finally {
+        await server.close();
+      }
+    } finally {
+      closeSpy.mockRestore();
+      // Same reasoning as the skip-retry test above: only the `envios` row makes this tenant
+      // perpetually due, so deleting it is enough to keep this test order-independent. The
+      // `tenant_credentials` row this test also inserted is not read by `envios_tenants_with_work`
+      // and is left in place, matching every other tenant/credential this file's suite seeds.
+      await admin.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
+    }
+  }, 60_000);
 });
 
 // Neither test below needs the real container `beforeAll` starts for the suite above: both

@@ -107,9 +107,22 @@ export interface IntegrityReport {
  * invoke `drain` again. `null` means nothing pending, but only when `skipped` is ALSO empty: a
  * tenant recorded in `skipped` was abandoned mid-pass with nothing scheduled for it (no gate, no
  * backoff row), so `nextDueAt` is never `null` while `skipped` is non-empty — an implementation
- * must report `now`, not `null`, so a host sleeping on this field wakes up again rather than
- * sleeping forever past a tenant's art. 16.4 hour. The counts are for a log line and
- * observability; a caller needing per-record detail reads the module's own tables.
+ * must fold in `now` plus its own configured skip-retry interval in that case rather than report
+ * `null`, so a host sleeping on this field wakes up again rather than sleeping forever past a
+ * tenant's art. 16.4 hour. That interval is the implementation's to choose and name — this package
+ * neither defines nor depends on one. `now` alone is not enough either: a skip is frequently not
+ * transient (a certificate nobody has provisioned answers the same way every pass), and a host
+ * that wakes on `now` pins its loop at its MIN_TICK floor indefinitely. FOLD, never assign: the
+ * reported instant is that interval, or anything EARLIER a successful tenant computed this same
+ * pass — never the interval unconditionally — so a broken tenant's retry can never delay a healthy
+ * tenant's own earlier gate. Mirrors `TickResult.nextDueAt` in `@waitron/scheduler`
+ * in spirit, not exactly: `runDue` (`packages/scheduler/src/run.ts`) folds its own skip time the
+ * identical way, but ONLY when `deferred` is zero — a tick with `deferred > 0` reports `now`
+ * outright instead, discarding that fold entirely, because capped-but-runnable work takes priority
+ * over a skip's own retry interval. `drain` has no `deferred` concept at all, so the fold described
+ * above is unconditional here: a skip always contributes at least the skip-retry floor to
+ * `nextDueAt`, with nothing else this pass could find that overrides it away. The counts are for a
+ * log line and observability; a caller needing per-record detail reads the module's own tables.
  */
 export interface DrainResult {
   nextDueAt: Date | null;

@@ -111,6 +111,20 @@ export const DEFAULTS = {
   maxAttempts: 3,
   backoffBaseMs: 15 * 60 * 1000,
   staleAfterMs: 60 * 60 * 1000,
+  /**
+   * How long after a SKIPPED (tenant, duty) pair `runDue` reports work is due again.
+   *
+   * Bounded below by not spinning: a skip used to report `now`, which a host sleeping on
+   * `nextDueAt` turns into its MIN_TICK floor — 5 seconds, forever, for a pair whose failure only
+   * a human can fix. Bounded above by the cadence of the duty being retried: five minutes is
+   * twelve attempts inside an hour, so a genuinely transient skip costs minutes of that budget
+   * rather than all of it.
+   *
+   * Lives here rather than in the host because `DEFAULTS` is spread as a COMPLETE `SchedulerDeps`
+   * by four test call sites and `apps/server`'s own `pass.rls.test.ts`; a required field withheld
+   * from it would make this table silently incomplete.
+   */
+  skipRetryMs: 5 * 60 * 1000,
 } as const;
 
 export function derive(snapshot: LedgerSnapshot, now: Date, config: DeriveConfig): Derivation {
