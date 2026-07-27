@@ -16,7 +16,18 @@ import { deleteAck, writeAck } from "./acks.js";
 
 export interface ReconcileDeps {
   db: Database;
-  client: VerifactuClient;
+  /**
+   * The tenant's own AEAT transport — resolved LAZILY, inside `reconcile` itself, and only once T1
+   * has confirmed the period holds at least one row (see `reconcile`'s own doc comment on the
+   * zero-row early return). Mirrors `DrainDeps.resolveClient`'s "a secret in memory for no reason"
+   * reasoning: a certificate decrypted before that check would be decrypted for a period that turns
+   * out to need no network call at all, e.g. a caller auditing last month for a tenant that
+   * fiscalized nothing in it. A FUNCTION, not a resolved client, for the same reason `DrainDeps`'s
+   * field is: this package's real resolver decrypts a per-tenant certificate, and `reconcile`, like
+   * `drain`, must control exactly when that happens rather than have it happen unconditionally at
+   * the caller.
+   */
+  resolveClient: (tenantId: TenantId) => Promise<VerifactuClient>;
   clock: TrustedClock;
 }
 
@@ -122,10 +133,13 @@ const CORRECTION: Partial<Record<EstadoRegistroConsulta, "aceptado" | "aceptado_
  * The consulta network call runs OUTSIDE any transaction, between two short `withTenant`
  * transactions — never held across the round trip, mirroring the drainer's own T1/T2 split (plan
  * 3a, `drain.ts`). T1 reads our period rows; if there are none there is nothing to reconcile and
- * the sweep returns `checked: 0` WITHOUT contacting AEAT at all. Otherwise the consulta is paged
- * into an authority map, then T2 classifies the already-read rows against that map and writes any
- * incidents, corrections and acks. Classification is pure computation over rows T1 already read —
- * no query depends on the network response, so nothing reopens the read under a stale snapshot.
+ * the sweep returns `checked: 0` WITHOUT contacting AEAT at all — and, because `deps.resolveClient`
+ * is only ever called AFTER that check, without a credential being resolved for this tenant either
+ * (see `ReconcileDeps.resolveClient`'s own doc comment). Otherwise the client is resolved and the
+ * consulta is paged into an authority map, then T2 classifies the already-read rows against that
+ * map and writes any incidents, corrections and acks. Classification is pure computation over rows
+ * T1 already read — no query depends on the network response, so nothing reopens the read under a
+ * stale snapshot.
  *
  * Diff on `EstadoRegistro`, not presence (design §4.3, the in-flight tolerance that makes this
  * correct against a paged, presentation-date-ordered response):
@@ -180,13 +194,22 @@ export async function reconcile(
   );
   result.checked = rows.length;
   // Nothing recorded for this period: no consulta at all (there is nothing its answer could
-  // change), and no T2. Answers the interface's "nothing to check" contract directly.
+  // change), and no T2 — and, therefore, no need for a credential either. `deps.resolveClient` is
+  // not called above this line, so a tenant with nothing to reconcile for this period never has a
+  // certificate resolved for it at all. Answers the interface's "nothing to check" contract
+  // directly.
   if (rows.length === 0) return result;
+
+  // Resolved HERE, not at the top of this function: only past the zero-row return above is a
+  // network call about to happen at all, so this is the earliest point a certificate is actually
+  // needed (see `ReconcileDeps.resolveClient`'s own doc comment). Used exactly once, by
+  // `fetchAuthority` below, so there is nothing to memoize.
+  const client = await deps.resolveClient(tenantId);
 
   // Network — OUTSIDE any transaction. Page AEAT's view for the period, keyed by RefExterna
   // (= our registro id). All rows share one obligado (the tenant↔NIF invariant), so any row's own
   // emisor identity builds the cabecera.
-  const authority = await fetchAuthority(deps.client, cabeceraFor(rows[0]!), normalizedPeriod);
+  const authority = await fetchAuthority(client, cabeceraFor(rows[0]!), normalizedPeriod);
 
   // T2 — classify the already-read rows against the authority map and write incidents.
   const detectedAt = deps.clock.now().instant;

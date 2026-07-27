@@ -4,7 +4,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { recordIncident } from "@waitron/core";
 import type { IncidentSeverity } from "@waitron/core";
 import type { DrainResult } from "@waitron/fiscal";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError, tenantId as brandTenantId } from "@waitron/shared";
 import type { SaleId, TenantId, TillId } from "@waitron/shared";
 import { MAX_REGISTROS_POR_ENVIO, resolveEstadoEfectivo } from "@waitron/verifactu";
 import type {
@@ -61,7 +61,22 @@ export function backoffMs(intentos: number): number {
 
 export interface DrainDeps {
   db: Database;
-  client: VerifactuClient;
+  /**
+   * The tenant's own AEAT transport. A FUNCTION, not a fixed client: this sweep enumerates its own
+   * tenants across `envios_tenants_with_work`, while a Veri*Factu certificate identifies ONE
+   * presenter — so a single injected client submitted every tenant's records under whichever
+   * tenant's seal the host happened to construct it from.
+   *
+   * Mirrors `StripeReconcilerOptions.resolveAccount` and
+   * `StripeTerminalProviderOptions.resolveReader`, which are functions of `tenantId` for exactly
+   * this reason. A deployment that establishes it may lawfully submit for many issuers under one
+   * certificate returns the same client for every tenant; a fixed client could not express the
+   * other answer at all.
+   *
+   * Resolved lazily, INSIDE the per-tenant loop and only for tenants with due work: a certificate
+   * decrypted for a tenant with nothing to submit is a secret in memory for no reason.
+   */
+  resolveClient: (tenantId: TenantId) => Promise<VerifactuClient>;
 }
 
 /** A due `envios` row joined to enough of its registro to rebuild and order it. */
@@ -96,11 +111,14 @@ type DueRow = RegistroRow & { intentos: number };
  * row" unit test's tenant is silently skipped by the top-level sweep and the row is left `enviando`
  * forever, incidencia never raised.
  */
-async function tenantsWithWork(db: Database, now: Date): Promise<string[]> {
+async function tenantsWithWork(db: Database, now: Date): Promise<TenantId[]> {
   const rows = await db.execute<{ tenant_id: string }>(sql`
     select tenant_id from envios_tenants_with_work(${now.toISOString()}::timestamptz) as t(tenant_id)
   `);
-  return rows.rows.map((r) => r.tenant_id);
+  // Branded here, at the boundary where the raw SQL string enters TypeScript — every caller
+  // downstream (`DrainDeps.resolveClient`, `DrainResult.skipped`) then receives an already-branded
+  // `TenantId` with no second conversion.
+  return rows.rows.map((r) => brandTenantId(r.tenant_id));
 }
 
 export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
@@ -111,10 +129,31 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
     recordsAccepted: 0,
     recordsHalted: 0,
     incidentsRaised: 0,
+    skipped: [],
   };
   for (const tenantId of await tenantsWithWork(deps.db, now)) {
-    await drainTenant(deps.db, deps.client, tenantId, now, result);
+    try {
+      const client = await deps.resolveClient(tenantId);
+      await drainTenant(deps.db, client, tenantId, now, result);
+    } catch (error) {
+      // Contained per tenant, deliberately. Before this, one tenant's failure threw straight out of
+      // the sweep and every LATER tenant's submission — each with its own legal clock — never
+      // happened, silently, because nothing above this called drain in a loop either.
+      result.skipped.push({ tenantId, errorCode: codeOf(error) });
+    }
   }
+  // A skipped tenant is due NOW: nothing about it was ever scheduled — no gate, no backoff row —
+  // so there is no future instant `bumpNextDue` could have folded in for it. Mirrors
+  // `packages/scheduler/src/run.ts`'s identical `result.skipped.length > 0 ? now : ...`, and for
+  // the same reason: reporting whatever `bumpNextDue` computed from the tenants that DID run — or
+  // `null`, if every due tenant this pass skipped — would tell a long-running host nothing is due,
+  // and one transient failure (an expired vault key, a dead credentials connection) would stop it
+  // polling for good while a `pendiente` row sits past its art. 16.4 hour. Unconditional, not
+  // merged with `bumpNextDue`: `now` is always earlier than any real future `nextDueAt` a
+  // successful tenant computed this same pass (a gate/backoff time is always strictly later than
+  // `now`), so taking it whenever anything was skipped can only pull the reported instant earlier,
+  // never mask a later one a successful tenant is still waiting on.
+  if (result.skipped.length > 0) result.nextDueAt = now;
   return result;
 }
 
@@ -836,4 +875,10 @@ async function handleDuplicate(
   const haltedIds = await haltSuccessors(tx, row, now);
   for (const id of haltedIds) halted.add(id);
   result.recordsHalted += 1 + haltedIds.length;
+}
+
+/** A structured code, never prose: the AppError's own code, or the literal "unknown". The same
+ * convention `@waitron/scheduler`'s `run.ts` and `reconcilePayments`'s `remediate()` both use. */
+function codeOf(error: unknown): string {
+  return isAppError(error) ? error.code : "unknown";
 }

@@ -1,0 +1,23 @@
+[
+  { "name": "core", "table": "__drizzle_migrations_db", "from": "../../packages/db/drizzle" },
+  {
+    "name": "fiscal",
+    "table": "__drizzle_migrations_fiscal",
+    "from": "../../packages/fiscal-verifactu/drizzle"
+  },
+  {
+    "name": "payments",
+    "table": "__drizzle_migrations_payments",
+    "from": "../../packages/payments/drizzle"
+  },
+  {
+    "name": "scheduler",
+    "table": "__drizzle_migrations_scheduler",
+    "from": "../../packages/scheduler/drizzle"
+  },
+  {
+    "name": "credentials",
+    "table": "__drizzle_migrations_credentials",
+    "from": "../../packages/credentials/drizzle"
+  }
+]

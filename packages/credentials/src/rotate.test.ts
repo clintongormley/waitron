@@ -112,7 +112,7 @@ describe("rotateCredentials", () => {
       putCredential(tx, RING_V1, {
         tenantId,
         purpose: "fiscal.aeat",
-        value: { pfxBase64: "AA", passphrase: "p" },
+        value: { pfxBase64: "AA", passphrase: "p", certKind: "sello" },
       }),
     );
     const first = await rotateCredentials(db, RING_BOTH);
@@ -140,7 +140,7 @@ describe("rotateCredentials", () => {
       putCredential(tx, RING_BOTH, {
         tenantId,
         purpose: "fiscal.aeat",
-        value: { pfxBase64: "AA", passphrase: "p" },
+        value: { pfxBase64: "AA", passphrase: "p", certKind: "sello" },
       }),
     );
 
@@ -253,7 +253,7 @@ describe("rotateCredentials", () => {
       putCredential(tx, RING_V1, {
         tenantId: q,
         purpose: "fiscal.aeat",
-        value: { pfxBase64: "AA", passphrase: "p" },
+        value: { pfxBase64: "AA", passphrase: "p", certKind: "sello" },
       }),
     );
 

@@ -64,6 +64,95 @@ jobs:
             exit 1
           fi
 
+      # apps/server has the HARDER version of the problem above. Every *_MIGRATIONS descriptor
+      # computes its folder from its own import.meta.url, and esbuild collapses all five onto the
+      # bundle's directory, so a mistake in the migrations-root resolution works in development and
+      # fails only at boot, in the shipped artefact — the worst available failure mode. Nothing else
+      # in this workflow builds this bundle: dist/ is gitignored, src/bin.ts is excluded from
+      # coverage, and typecheck/test both run against TypeScript source, never the bundle operators
+      # actually run.
+      - run: pnpm --filter @waitron/server build
+
+      # scripts/copy-migrations.mjs (invoked by the build script above) is the fix for the collapse:
+      # it copies each package's drizzle/ folder in beside dist/server.js. This confirms it actually
+      # ran rather than merely that `build` exited zero — a broken copy step would otherwise only
+      # surface as a missing folder the first time something tries to boot the bundle for real.
+      - name: Assert the built bundle carries its migrations
+        run: |
+          if [ ! -f apps/server/dist/drizzle/core/meta/_journal.json ]; then
+            echo "expected apps/server/dist/drizzle/core/meta/_journal.json beside dist/server.js" >&2
+            exit 1
+          fi
+
+      # The same shape of check as above, for the OTHER file scripts/copy-migrations.mjs writes
+      # (I11, 2026-07-27 pre-merge review) — confirms the write actually ran and named the module
+      # system correctly, not just that `build` exited zero.
+      - name: Assert the built bundle carries a dist/package.json declaring ESM
+        run: |
+          if [ ! -f apps/server/dist/package.json ]; then
+            echo "expected apps/server/dist/package.json beside dist/server.js" >&2
+            exit 1
+          fi
+          if ! grep -q '"type":"module"' apps/server/dist/package.json; then
+            echo "expected {\"type\":\"module\"} in apps/server/dist/package.json, got: $(cat apps/server/dist/package.json)" >&2
+            exit 1
+          fi
+
+      # Same shape as the credentials smoke test above: DATABASE_URL absent is the cheapest failure
+      # to trigger with no Postgres available, and boot.ts's contract (see its own doc comment) is to
+      # let a boot failure escape and exit non-zero rather than half-start. AppError's message IS the
+      # code (packages/shared/src/errors.ts's own comment), so grepping stderr for the literal code
+      # confirms the bundle failed for THIS reason and not, say, a dependency the bundler forgot to
+      # inline.
+      - name: Smoke-test the server bundle (no DATABASE_URL)
+        run: |
+          set +e
+          output=$(node apps/server/dist/server.js 2>&1)
+          code=$?
+          set -e
+          echo "$output"
+          if [ "$code" -eq 0 ]; then
+            echo "expected a non-zero exit code with no DATABASE_URL set, got 0" >&2
+            exit 1
+          fi
+          if ! grep -q "server.config_missing" <<< "$output"; then
+            echo "expected the 'server.config_missing' code in output, got: $output" >&2
+            exit 1
+          fi
+
+      # I11 (2026-07-27 pre-merge review): dist/server.js is ESM. A bare .js file's module system
+      # is normally decided by Node walking up for the nearest package.json — today that walk finds
+      # apps/server/package.json's own "type": "module" purely because dist/ lives two directories
+      # under it, not because the bundle carries that fact itself. scripts/copy-migrations.mjs now
+      # also writes dist/package.json so dist/ is portable ALONE — copied into a Docker image with
+      # nothing else from this package, say. Proven here by copying JUST dist/ out to a directory
+      # with no ancestor package.json at all (mktemp -d, off the checkout entirely) and running it
+      # from there. This runner's own Node (this workflow's .nvmrc) auto-detects ES module syntax
+      # even with no package.json at all, so this step passing does not by itself prove
+      # dist/package.json is load-bearing on THIS Node — it is confirmed load-bearing on a Node
+      # build with that detection disabled (`--no-experimental-detect-module`; see
+      # scripts/copy-migrations.mjs's own comment). What this step actually guards is dist/ staying
+      # portable and self-describing going forward — a regression here (the write silently dropped,
+      # or a future esbuild option this detection cannot sniff) would otherwise only surface off
+      # this specific Node version, in whatever environment an operator's Dockerfile happens to run.
+      - name: Smoke-test dist/ copied out on its own, with no ancestor package.json
+        run: |
+          standalone=$(mktemp -d)
+          cp -r apps/server/dist/. "$standalone/"
+          set +e
+          output=$(node "$standalone/server.js" 2>&1)
+          code=$?
+          set -e
+          echo "$output"
+          if [ "$code" -eq 0 ]; then
+            echo "expected a non-zero exit code with no DATABASE_URL set, got 0" >&2
+            exit 1
+          fi
+          if ! grep -q "server.config_missing" <<< "$output"; then
+            echo "expected the 'server.config_missing' code in output, got: $output" >&2
+            exit 1
+          fi
+
   # TypeScript project-wide type check. No Playwright/Chromium involved.
   typecheck:
     runs-on: ubuntu-latest

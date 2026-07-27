@@ -85,12 +85,18 @@ export interface VerifactuBackendOptions {
   /** The connection `pendingCount` queries against — the one `FiscalBackend` method with no `tx`
    * parameter at all, so it cannot participate in a caller's transaction. */
   db: Database;
-  /** The AEAT transport. mTLS/endpoint live inside the caller-supplied fetch this wraps
+  /**
+   * The AEAT transport, per tenant. mTLS/endpoint live inside the caller-supplied fetch this wraps
    * (`createClient({ endpoint, fetch })`); tests wire it over the fake AEAT's fetch
-   * (`@waitron/verifactu`'s `createFakeAeat().client()`). Used by `drain`, not by `recordSale`/
-   * `recordVoid`/`registerTill`/`checkIntegrity`/`pendingCount` — none of those ever contact
-   * AEAT (spec §4: nothing here may block a sale on connectivity). */
-  client: VerifactuClient;
+   * (`@waitron/verifactu`'s `createFakeAeat().client()`), which needs no certificate and so returns
+   * the same client for every tenant.
+   *
+   * A function of `tenantId` because `drain` sweeps every tenant with due work and a certificate
+   * identifies one presenter — see `DrainDeps.resolveClient`. Used by `drain` and `reconcile`, not
+   * by `recordSale`/`recordVoid`/`registerTill`/`checkIntegrity`/`pendingCount` — none of those
+   * ever contact AEAT (spec §4: nothing here may block a sale on connectivity).
+   */
+  resolveClient: (tenantId: TenantId) => Promise<VerifactuClient>;
   /** Which QR validation host to build `verificationUrl`-shaped URLs against. Defaults to
    * `"production"`. */
   environment?: Environment;
@@ -131,14 +137,24 @@ type OriginalAlta = Pick<
 export class VerifactuBackend implements FiscalBackend {
   private readonly db: Database;
   private readonly clock: TrustedClock;
-  private readonly client: VerifactuClient;
+  private readonly resolveClient: (tenantId: TenantId) => Promise<VerifactuClient>;
   private readonly environment: Environment;
   private readonly systemInfo: SystemInfoDefaults;
 
   constructor(options: VerifactuBackendOptions) {
     this.db = options.db;
     this.clock = options.clock;
-    this.client = options.client;
+    // Wrapped, not stored as the bare `options.resolveClient` reference: `drain()` hands this
+    // field to `runDrain`, which invokes it as `deps.resolveClient(tenantId)` (receiver = the
+    // fresh `DrainDeps` literal), while `reconcile()` calls `this.resolveClient(tenantId)`
+    // directly (receiver = this instance) — two different receivers for what would otherwise be
+    // the same function reference, so a host supplying an unbound class method would behave
+    // differently depending on which of `drain`/`reconcile` reached it. The arrow wrapper is
+    // itself receiver-agnostic (arrow functions ignore whatever they were called through) and
+    // always calls the ORIGINAL `options.resolveClient(tenantId)` with `options` as its own fixed,
+    // closed-over receiver — so both call sites end up invoking it identically, regardless of how
+    // each one happens to read this field.
+    this.resolveClient = (tenantId) => options.resolveClient(tenantId);
     this.environment = options.environment ?? "production";
     this.systemInfo = { ...DEFAULT_SYSTEM_INFO, ...options.systemInfo };
   }
@@ -389,14 +405,17 @@ export class VerifactuBackend implements FiscalBackend {
   }
 
   /**
-   * Task 6's happy-path drainer (`./drain.ts`): claims one ≤1000-row due batch per tenant,
-   * submits it via `this.client`, and persists the CSV + `aceptado` + `confirmado_en` atomically.
-   * FOR UPDATE SKIP LOCKED, stale recovery, retry/backoff, flow control, batching beyond one
-   * envío, rejections/halting, incidents and error-3000/Route-B are Tasks 7-10 — `drain.ts` itself
-   * documents the scope boundary at each extension point.
+   * Delegates to `./drain.ts`'s own `drain`, resolving nothing itself: enumerates every tenant
+   * with due work, resolves each one's own AEAT transport via `this.resolveClient`, and — per
+   * tenant, in its own contained try/catch — claims ≤1000-row due batches (FOR UPDATE SKIP
+   * LOCKED), submits them, persists the CSV + `aceptado`/`aceptado_con_errores`/`rechazado` +
+   * incidents, and applies flow control and retry backoff. A tenant whose transport cannot be
+   * built, or whose sweep throws, is recorded in `DrainResult.skipped` rather than aborting every
+   * OTHER tenant's legally-timed submission — see `drain.ts`'s own `DrainDeps.resolveClient` and
+   * `drain`'s own doc comments for the full behaviour and its reasoning.
    */
   async drain(now: Date): Promise<DrainResult> {
-    return runDrain({ db: this.db, client: this.client }, now);
+    return runDrain({ db: this.db, resolveClient: this.resolveClient }, now);
   }
 
   /**
@@ -406,12 +425,27 @@ export class VerifactuBackend implements FiscalBackend {
    * `./reconcile.ts`, which owns the T1/T2 split that keeps the consulta network call out of any
    * transaction. Like `pendingCount`, it takes `tenantId` and no `tx` — it runs outside any sale
    * transaction and establishes its own `withTenant` scopes.
+   *
+   * Passes `this.resolveClient` straight through rather than resolving here: `./reconcile.ts` calls
+   * it itself, lazily, only after confirming the period holds at least one record — for the same
+   * "a secret in memory for no reason" reason `drain` already resolves lazily
+   * (`DrainDeps.resolveClient`'s own doc comment). A tenant with nothing recorded for the requested
+   * period needs no certificate and makes no network call at all (`reconcile`'s own doc comment on
+   * the zero-row early return); resolving here, before that check, would have turned that clean
+   * no-op into a hard failure for any tenant whose credential happens to be missing or unusable —
+   * exactly the regression a prior version of this comment defended on the wrong grounds (it argued
+   * only that eager resolution here would not be "unnecessary" work, never that it could turn a
+   * legitimate no-op into a failure).
    */
   async reconcile(
     tenantId: TenantId,
     period: { year: string; month: string },
   ): Promise<ReconcileResult> {
-    return runReconcile({ db: this.db, client: this.client, clock: this.clock }, tenantId, period);
+    return runReconcile(
+      { db: this.db, resolveClient: this.resolveClient, clock: this.clock },
+      tenantId,
+      period,
+    );
   }
 
   private buildSistemaInformatico(sif: SifRegistration, legalName: string): SistemaInformatico {

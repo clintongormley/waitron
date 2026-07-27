@@ -104,8 +104,12 @@ export interface IntegrityReport {
 
 /**
  * The outcome of one `drain(now)` pass. `nextDueAt` is the only field a scheduler needs — when to
- * invoke `drain` again (null = nothing pending). The counts are for a log line and observability;
- * a caller needing per-record detail reads the module's own tables.
+ * invoke `drain` again. `null` means nothing pending, but only when `skipped` is ALSO empty: a
+ * tenant recorded in `skipped` was abandoned mid-pass with nothing scheduled for it (no gate, no
+ * backoff row), so `nextDueAt` is never `null` while `skipped` is non-empty — an implementation
+ * must report `now`, not `null`, so a host sleeping on this field wakes up again rather than
+ * sleeping forever past a tenant's art. 16.4 hour. The counts are for a log line and
+ * observability; a caller needing per-record detail reads the module's own tables.
  */
 export interface DrainResult {
   nextDueAt: Date | null;
@@ -114,6 +118,14 @@ export interface DrainResult {
   recordsAccepted: number; // includes accepted-with-errors — still counts as accepted
   recordsHalted: number; // records rejected or otherwise stopped
   incidentsRaised: number;
+  /**
+   * A tenant this pass abandoned before submitting anything for it — its transport could not be
+   * built, or its sweep threw. Mirrors `TickResult.skipped` in `@waitron/scheduler`, and for the
+   * same reason: a per-tenant failure has no ledger row of its own to carry it, so reporting it
+   * here is the alternative to swallowing it. NEVER silent — a tenant with due fiscal work that
+   * this pass could not submit is an unmet legal obligation.
+   */
+  skipped: { tenantId: TenantId; errorCode: string }[];
 }
 
 /**

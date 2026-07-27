@@ -18,6 +18,7 @@ import {
   type Ack,
 } from "./acks.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
+import { staticResolver } from "../test/write-path-fixtures.js";
 
 // The suite-wide instants, shared with reconcile.test.ts / drain-fixtures: every seeded record's
 // `fecha_expedicion_factura` is 2026-07-20 (drain-fixtures' PAST_FECHA), so all fall in one period.
@@ -82,7 +83,11 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
   it("writes an ack atomically when the drainer sets a terminal estado", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
 
     await backend.drain(DRAIN_AT);
 
@@ -104,7 +109,11 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
   it("reconcile writes/updates an ack when it corrects a lostAck (pendiente → accepted)", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
     await backend.drain(DRAIN_AT); // AEAT now holds it Correcta; ours aceptado; drainer wrote an ack
 
     // Model a genuinely lost acknowledgement: our side never persisted the response, so it still
@@ -141,7 +150,11 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
   it("INVARIANT: every ack agrees with the committed envios.estado it reflects (drain + reconcile)", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 2 });
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
 
     // Producer 1 — the drainer accepts both records, writing two `accepted` acks.
     await backend.drain(DRAIN_AT);
@@ -172,7 +185,11 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
   it("is idempotent: a second reconcile after a correction finds a clean match and does not double-write", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
     await backend.drain(DRAIN_AT);
     await withTenant(db, seeded.tenantId, (tx) =>
       tx.execute(
@@ -200,7 +217,11 @@ describe("acks — durable transport (pendingAcks / markDelivered)", () => {
   it("pendingAcks returns undelivered acks; markDelivered clears them", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 2 });
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
     await backend.drain(DRAIN_AT); // two accepted records → two acks
 
     const before = await pendingAcks(db, seeded.tenantId);
@@ -227,7 +248,11 @@ describe("acks — durable transport (pendingAcks / markDelivered)", () => {
   it("deleteAck removes a record's ack row, and is a no-op when there is none", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
     await backend.drain(DRAIN_AT); // writes an `accepted` ack
 
     expect(await acksFor(seeded.tenantId)).toHaveLength(1);

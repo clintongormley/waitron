@@ -19,6 +19,16 @@ describe("PURPOSES", () => {
       "webhookSecret",
     ]);
   });
+
+  it("requires certKind on fiscal.aeat, because the sello endpoint is a different AEAT host", () => {
+    // SOAP_ENDPOINTS_SELLO is www10/prewww10, not www1/prewww1. The endpoint is therefore a
+    // function of the certificate's kind, which is per-tenant provisioning data — the host cannot
+    // infer it without parsing X.509 policy OIDs.
+    expect(PURPOSES["fiscal.aeat"]).toEqual(["pfxBase64", "passphrase", "certKind"]);
+    expect(() =>
+      validatePayload("fiscal.aeat", { pfxBase64: "AAA=", passphrase: "s3cret" }),
+    ).toThrow(/credentials.invalid_payload/);
+  });
 });
 
 describe("isPurpose", () => {

@@ -6,6 +6,7 @@ import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
 import { VerifactuBackend } from "./backend.js";
 import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
+import { staticResolver } from "../test/write-path-fixtures.js";
 
 let pg: RealPostgres;
 let admin: Database;
@@ -65,8 +66,16 @@ describe("drain — claim concurrency (real Postgres)", () => {
     const dbA = await pg.connect();
     const dbB = await pg.connect();
     try {
-      const a = new VerifactuBackend({ clock: seeded.clock, db: dbA, client: aeat.client() });
-      const b = new VerifactuBackend({ clock: seeded.clock, db: dbB, client: aeat.client() });
+      const a = new VerifactuBackend({
+        clock: seeded.clock,
+        db: dbA,
+        resolveClient: staticResolver(aeat.client()),
+      });
+      const b = new VerifactuBackend({
+        clock: seeded.clock,
+        db: dbB,
+        resolveClient: staticResolver(aeat.client()),
+      });
       const now = new Date("2026-07-21T00:01:00Z");
 
       const [ra, rb] = await Promise.all([a.drain(now), b.drain(now)]);
@@ -123,7 +132,11 @@ describe("drain — claim concurrency (real Postgres)", () => {
   it("pendingCount reflects drained rows under the app_user role (RLS), not just the admin connection", async () => {
     const seeded = await seedPendingEnvios(admin, { count: 3 });
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    const backend = new VerifactuBackend({ clock: seeded.clock, db: admin, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db: admin,
+      resolveClient: staticResolver(aeat.client()),
+    });
 
     const pendingUnderRls = () =>
       withTenant(admin, seeded.tenantId, async (tx) => {
@@ -189,7 +202,7 @@ describe("drain — cross-tenant enumeration seam under RLS (real Postgres, as a
       const backend = new VerifactuBackend({
         clock: t1.clock,
         db: appUserDb,
-        client: aeat.client(),
+        resolveClient: staticResolver(aeat.client()),
       });
       const result = await backend.drain(now);
 

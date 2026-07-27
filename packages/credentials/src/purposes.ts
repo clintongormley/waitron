@@ -14,7 +14,19 @@ import "./errors.js";
  */
 export const PURPOSES = {
   "payments.stripe": ["secretKey", "webhookSecret", "successUrl", "cancelUrl"],
-  "fiscal.aeat": ["pfxBase64", "passphrase"],
+  /**
+   * `certKind` is `"sello"` or `"representante"` — validated by the READER, not here: this package
+   * declares field names and never their vocabularies, which is the line that keeps it a leaf.
+   * It exists because `SOAP_ENDPOINTS_SELLO` is a different AEAT host from `SOAP_ENDPOINTS`, so the
+   * endpoint depends on the certificate's kind and nothing else knows it.
+   *
+   * Still PROVISIONAL — the FNMT export question remains unresolved. Also note the cost of editing
+   * this list: `rotate` re-runs `validatePayload`, so a row sealed under an older list aborts a
+   * rotation sweep, and a read returns a payload missing the new field. The host validates what it
+   * reads for exactly that reason (see the server design §5.1); adding a field remains cheap only
+   * while nothing is provisioned.
+   */
+  "fiscal.aeat": ["pfxBase64", "passphrase", "certKind"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type Purpose = keyof typeof PURPOSES;

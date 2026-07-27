@@ -10,7 +10,7 @@ import { VerifactuBackend } from "./backend.js";
 import { reconcile } from "./reconcile.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
-import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
+import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
 // This file's fixtures all stamp `fecha_expedicion_factura` = 2026-07-20 (drain-fixtures' own
 // PAST_FECHA), so every seeded record falls in this one period.
@@ -145,7 +145,11 @@ describe("reconcile — the three audit cases", () => {
   it("clean audit: our records all match AEAT — empty lists", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 3 });
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
     await storeAllAtAeat(backend);
 
     const result = await backend.reconcile(seeded.tenantId, PERIOD);
@@ -161,7 +165,11 @@ describe("reconcile — the three audit cases", () => {
   it("lostAck: we believe pendiente, AEAT holds it (Correcta) → lostAck", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 3 });
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
     await storeAllAtAeat(backend); // AEAT now holds all three as Correcta
 
     // Our acknowledgement was lost: our side reads pendiente though AEAT already holds them.
@@ -197,7 +205,11 @@ describe("reconcile — the three audit cases", () => {
     // carries no ack). Only a SECOND, still-missing detection escalates (see the test below).
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
     await storeAllAtAeat(backend); // aceptado at us, stored at AEAT
     aeat.forget(seeded.facturaKeys[0]!); // AEAT loses all trace of it
 
@@ -231,7 +243,11 @@ describe("reconcile — the three audit cases", () => {
   it("noTrace already remediated (marker set) and still missing: raises one idempotent error incident, no re-reset", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
     await storeAllAtAeat(backend); // aceptado at us, stored at AEAT
     aeat.forget(seeded.facturaKeys[0]!); // AEAT loses all trace of it
 
@@ -282,7 +298,11 @@ describe("reconcile — the three audit cases", () => {
     // (the acks invariant `acks.test.ts`'s own INVARIANT test guards from the other direction).
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
     await storeAllAtAeat(backend); // aceptado at us, with an `accepted` ack, stored at AEAT
     aeat.forget(seeded.facturaKeys[0]!); // AEAT loses all trace of it
 
@@ -300,7 +320,11 @@ describe("reconcile — the three audit cases", () => {
   it("a record AEAT has a trace of clears a set marker", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
     await storeAllAtAeat(backend); // aceptado at us, AEAT holds it Correcta
 
     // Simulate a marker left over from an earlier noTrace remediation that has since self-healed.
@@ -324,7 +348,11 @@ describe("reconcile — the three audit cases", () => {
   it("drift: we believe aceptado, AEAT holds AceptadaConErrores → drift + warning incident", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
     await storeAllAtAeat(backend);
     aeat.setConsultaState(seeded.facturaKeys[0]!, "AceptadaConErrores");
 
@@ -360,7 +388,11 @@ describe("reconcile — the three audit cases", () => {
     // cross-sweep idempotency are covered by the two tests below.
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
     await storeAllAtAeat(backend);
     aeat.setConsultaState(seeded.facturaKeys[0]!, "Anulada");
 
@@ -408,7 +440,11 @@ describe("reconcile — the three audit cases", () => {
     const period = { year: "2026", month: "03" };
     const { tenantId, tillId, seriesId, workingOrderId } = await seedTenantWithSif(db);
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
-    const backend = new VerifactuBackend({ clock: steadyClock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: steadyClock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
 
     const sale = await withTenant(db, tenantId, async (tx) => {
       await asAppUser(tx);
@@ -460,7 +496,11 @@ describe("reconcile — the three audit cases", () => {
     // has no entry for it) and so re-detects as drift on every sweep for as long as it stays open.
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
     await storeAllAtAeat(backend);
     aeat.setConsultaState(seeded.facturaKeys[0]!, "Anulada"); // no local anulación at all
 
@@ -489,7 +529,11 @@ describe("reconcile — the three audit cases", () => {
     // proves sweep 2 now finds a clean match: exactly ONE incident total, not two.
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
     await storeAllAtAeat(backend); // local aceptado, AEAT Correcta
     aeat.setConsultaState(seeded.facturaKeys[0]!, "AceptadaConErrores"); // AEAT now disagrees
 
@@ -536,7 +580,11 @@ describe("reconcile — the three audit cases", () => {
     // re-flagged as drift just because aceptado_con_errores is a member of the accepted family.
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1, futureDated: true }); // 2004 → AceptadoConErrores
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
     await backend.drain(DRAIN_AT); // sets local aceptado_con_errores; AEAT's own store already
     // holds AceptadaConErrores for this key too (createFakeAeat's future-dated branch) — no
     // `setConsultaState` needed, this is the drainer's own genuine happy-with-errors path.
@@ -575,7 +623,11 @@ describe("reconcile — paging", () => {
         return base.consultar(cabecera, filtro);
       },
     };
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: counting });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(counting),
+    });
     await backend.drain(DRAIN_AT); // all 5 stored at AEAT as Correcta, ours aceptado
     consultarCalls = 0;
 
@@ -596,7 +648,11 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
   it("does NOT flag a pendiente record as noTrace (in-flight tolerance)", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
     // Deliberately DO NOT drain: our record is pendiente and AEAT holds nothing for this NIF —
     // exactly the mid-submission / later-page case §4.3 forbids calling noTrace.
     const result = await backend.reconcile(seeded.tenantId, PERIOD);
@@ -612,7 +668,11 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
   it("skips a rechazado record — neither pending nor accepted, so never a mismatch", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
     await storeAllAtAeat(backend);
     // A record we already know AEAT refused: not stored there, and our side reads rechazado.
     aeat.forget(seeded.facturaKeys[0]!);
@@ -634,7 +694,11 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
   it("ignores an AEAT record with no RefExterna (one we cannot attribute)", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
     await storeAllAtAeat(backend); // our one record: aceptado + Correcta
 
     // A record AEAT holds for the SAME obligado that WE did not submit — no RefExterna keys it to
@@ -661,7 +725,11 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
       submit: () => Promise.reject(new Error("reconcile must not submit")),
       consultar: () => Promise.reject(new Error("reconcile must not consult an empty period")),
     };
-    const backend = new VerifactuBackend({ clock: steadyClock, db, client: throwing });
+    const backend = new VerifactuBackend({
+      clock: steadyClock,
+      db,
+      resolveClient: staticResolver(throwing),
+    });
 
     const result = await backend.reconcile(tenantId, PERIOD);
 
@@ -685,7 +753,11 @@ describe("reconcile — period normalization", () => {
     // instead of auditing July.
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 3 });
-    const backend = new VerifactuBackend({ clock: seeded.clock, db, client: aeat.client() });
+    const backend = new VerifactuBackend({
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
     await storeAllAtAeat(backend); // all three: local aceptado, AEAT Correcta — a clean match
 
     const result = await backend.reconcile(seeded.tenantId, { year: "2026", month: "7" });
@@ -721,8 +793,48 @@ describe("reconcile — malformed consulta paging", () => {
     };
 
     await expect(
-      reconcile({ db, client: malformed, clock: seeded.clock }, seeded.tenantId, PERIOD),
+      reconcile(
+        { db, resolveClient: staticResolver(malformed), clock: seeded.clock },
+        seeded.tenantId,
+        PERIOD,
+      ),
     ).rejects.toThrow(/ClavePaginacion/);
+  });
+});
+
+describe("reconcile — lazy client resolution", () => {
+  it("a zero-row period never resolves a client, even one that would throw", async () => {
+    // The regression this test guards: `reconcile` used to resolve the client BEFORE checking
+    // whether the period held any records at all, so a tenant with nothing to reconcile — a clean
+    // `checked: 0` no-op that contacts AEAT for nothing — was turned into a hard failure whenever
+    // that tenant's credential happened to be missing or unusable. `resolveClient` below rejects
+    // with a distinctive, unmistakable message (never a client that merely COULD have been asked and
+    // happened to succeed) so this test fails loudly if the fix regresses, and asserts the resolver
+    // was never even called — a test that only checked the returned result would still pass if the
+    // resolver were called and happened to succeed.
+    const { tenantId } = await seedTenantWithSif(db); // a tenant with a till/SIF but no envios
+    let calls = 0;
+    const resolveClient = (): Promise<VerifactuClient> => {
+      calls += 1;
+      // A plain Error with a distinctive message, not an AppError: `credentials.missing` is
+      // `@waitron/credentials`'s own code, and this package does not depend on that package — the
+      // point here is only that resolution is unmistakably never reached, not to construct a
+      // cross-package error type this test has no business typing.
+      return Promise.reject(new Error("resolveClient must not be called for a zero-row period"));
+    };
+
+    const result = await reconcile({ db, resolveClient, clock: steadyClock }, tenantId, PERIOD);
+
+    expect(result).toEqual({
+      year: "2026",
+      month: "07",
+      checked: 0,
+      lostAck: [],
+      noTrace: [],
+      drift: [],
+      incidentsRaised: 0,
+    });
+    expect(calls).toBe(0);
   });
 });
 

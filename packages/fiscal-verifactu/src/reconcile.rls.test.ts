@@ -5,7 +5,7 @@ import type { Database } from "@waitron/db";
 import { VerifactuBackend } from "./backend.js";
 import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
-import { steadyClock } from "../test/write-path-fixtures.js";
+import { staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
 // A non-superuser LOGIN role that inherits app_user's grants — the same probe pending-count.rls.
 // test.ts uses. Being non-superuser is what makes RLS apply (a superuser bypasses FORCE ROW LEVEL
@@ -70,7 +70,7 @@ describe("reconcile under real row-level security", () => {
       const backend = new VerifactuBackend({
         clock: steadyClock,
         db: probe,
-        client: aeat.client(),
+        resolveClient: staticResolver(aeat.client()),
       });
       // Fix under test: `withTenant` sets app.tenant_id, so current_tenant_id() both matches this
       // tenant's rows for the period read AND satisfies incidents' WITH CHECK for the write.
@@ -112,7 +112,7 @@ describe("reconcile under real row-level security", () => {
     const seedBackend = new VerifactuBackend({
       clock: steadyClock,
       db: admin,
-      client: aeat.client(),
+      resolveClient: staticResolver(aeat.client()),
     });
     // Fixed instant past `seedPendingEnvios`'s stamped `proximo_intento_en` (it seeds July dates —
     // the same reason reconcile.test.ts drains at a fixed 2026-07-21T00:01:00Z), so the drain is
@@ -131,7 +131,7 @@ describe("reconcile under real row-level security", () => {
       const backend = new VerifactuBackend({
         clock: steadyClock,
         db: probe,
-        client: aeat.client(),
+        resolveClient: staticResolver(aeat.client()),
       });
       const result = await backend.reconcile(seeded.tenantId, { year: "2026", month: "07" });
 

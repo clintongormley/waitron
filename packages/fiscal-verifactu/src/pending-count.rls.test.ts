@@ -6,7 +6,7 @@ import { appendToChain } from "./chain.js";
 import { envios } from "./schema/envios.js";
 import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
 import { altaFor, seedSale, seedTill, type SeededTill } from "./testing/seed.js";
-import { fakeClient, steadyClock } from "../test/write-path-fixtures.js";
+import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
 // A non-superuser LOGIN role that inherits app_user's grants. Being non-superuser is what makes RLS
 // apply to it (a superuser bypasses FORCE ROW LEVEL SECURITY); the app_user membership is what lets
@@ -45,7 +45,11 @@ describe("pendingCount under real row-level security", () => {
     // Run pendingCount as rls_probe: a non-superuser, so the tenant-isolation policy is enforced.
     const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      const backend = new VerifactuBackend({ clock: steadyClock, db: probe, client: fakeClient });
+      const backend = new VerifactuBackend({
+        clock: steadyClock,
+        db: probe,
+        resolveClient: staticResolver(fakeClient),
+      });
       // Fix under test: withTenant sets app.tenant_id, so current_tenant_id() matches this tenant's
       // rows. Without it the policy sees NULL and returns 0 — the bug this test exists to catch.
       expect(await backend.pendingCount(till.tenantId, till.tillId)).toBe(1);

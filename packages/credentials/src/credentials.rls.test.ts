@@ -173,7 +173,7 @@ describe("waitron-credentials list, no --tenant, under real RLS", () => {
         putCredential(tx, RING, {
           tenantId,
           purpose: "fiscal.aeat",
-          value: { pfxBase64: "AAAA", passphrase: "p" },
+          value: { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" },
         }),
       );
 
@@ -208,7 +208,7 @@ describe("credentialTenants", () => {
           putCredential(tx, RING, {
             tenantId,
             purpose: "fiscal.aeat",
-            value: { pfxBase64: "AAAA", passphrase: "p" },
+            value: { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" },
           }),
         );
       }
@@ -240,7 +240,7 @@ describe("credentialTenants", () => {
         putCredential(tx, RING, {
           tenantId: without,
           purpose: "fiscal.aeat",
-          value: { pfxBase64: "AAAA", passphrase: "p" },
+          value: { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" },
         }),
       );
       const found = await credentialTenants(probe, "payments.stripe");
@@ -351,7 +351,7 @@ describe("rotateCredentials under real RLS", () => {
         putCredential(tx, RING, {
           tenantId: b,
           purpose: "fiscal.aeat",
-          value: { pfxBase64: "AAAA", passphrase: "p" },
+          value: { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" },
         }),
       );
 
@@ -372,7 +372,7 @@ describe("rotateCredentials under real RLS", () => {
       const actualB = await withTenant(probe, b, (tx) =>
         getCredential(tx, ROTATED, { tenantId: b, purpose: "fiscal.aeat" }),
       );
-      expect(actualB).toEqual({ pfxBase64: "AAAA", passphrase: "p" });
+      expect(actualB).toEqual({ pfxBase64: "AAAA", passphrase: "p", certKind: "sello" });
 
       const versions = await admin.execute<{ tenant_id: string; key_version: number }>(sql`
         select tenant_id, key_version from tenant_credentials where tenant_id in (${a}, ${b})`);

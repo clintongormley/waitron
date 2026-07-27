@@ -18,6 +18,36 @@ export const GENERIC_PACKAGES = [
 /** Spanish by design: these mirror AEAT's spec, XML and conformance vectors. */
 export const EXEMPT_PACKAGES = ["verifactu", "fiscal-verifactu"] as const;
 
+// -----------------------------------------------------------------------------------------------
+// Decision record: apps/* is OUT OF SCOPE for this guard. Prose, not another `as const` array,
+// deliberately — see below for why. This block documents the DECISION and belongs to no
+// declaration; it is not part of the doc comment on `SELF` immediately following it.
+// -----------------------------------------------------------------------------------------------
+//
+// `apps/*` — `apps/server` today, more later — is deliberately OUT OF SCOPE, a decision recorded
+// here rather than left as the silent gap `packages/scheduler`'s own design already flagged this
+// trap for (`GENERIC_PACKAGES` enumerates `packages/<name>`, so anything under `apps/` was never
+// reachable by `sourceFilesIn` in the first place — extending it needs a second dimension, not a
+// list entry, which is why this is prose and not another `as const` array).
+//
+// The generic/regime split this guard enforces (spec §2) is a property of a LIBRARY: a package
+// that names only its own domain's vocabulary, so that a second regime could be added beside
+// Veri*Factu without touching it. `apps/server` is not that — it is the COMPOSITION ROOT, and a
+// composition root's job is to wire the generic layer to a specific regime for real: its structured
+// logs name `drain` (Veri*Factu's own duty), its config reads `WAITRON_AEAT_ENV`, and its coverage
+// comments cite `envios`-derived counters by name. It necessarily speaks both vocabularies in the
+// same file, on purpose — `boot.ts` importing `@waitron/fiscal-verifactu` IS the point of the
+// package existing. An exemption list that tried to cover everything a composition root legitimately
+// says would end up listing most of `SPANISH_WORDS` below, which asserts nothing.
+//
+// This is not a loophole for a NEW generic package to hide Spanish vocabulary behind: the guard
+// still applies to every package under `packages/`, `apps/server` still imports the generic layer
+// through the same interfaces (`DrainDeps`, `PeriodDuty`) as everything else, and its own `src/`
+// mixes English identifiers with the Spanish ones its logs and comments cite deliberately — nothing
+// here weakens THAT boundary. Only the identifier-naming guard stops at the composition root's own
+// door.
+// -----------------------------------------------------------------------------------------------
+
 /**
  * Files that exist to enumerate forbidden vocabulary in plain text, excluded by exact name from
  * the scan that vocabulary feeds — this guard's own two files, plus `packages/fiscal`'s narrower

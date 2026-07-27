@@ -36,6 +36,13 @@ Taken in the brainstorm, recorded here so a later reader can see they were choic
    The standalone deli deployment wants ONE process, so the runner and the deferred `apps/*` webhook
    endpoint belong in the same host; building a process here would mean building it twice.
    **Honest cost: nothing runs until that host exists.**
+
+   > **2026-07-27 amendment:** that host now exists — `apps/server`
+   > (`docs/superpowers/specs/2026-07-26-server-host-design.md`). `boot.ts` wires `runDue` as one of
+   > its two duties, on real Postgres behind the deployment role. The honest cost above is closed;
+   > it is recorded here rather than rewritten, since the decision it explains (library, not
+   > process) was correct at the time and remains the reason `packages/scheduler` still has no
+   > config loading or secrets of its own.
 3. **A run ledger**, one row per `(tenant, duty, period, generation)`.
 4. **No time bound on a gated drift orphan's fund-hold.** Nothing consumes incidents today — no till
    UI, no dashboard — so an age-triggered escalation would be a signal into a void, the "dead surface
@@ -389,6 +396,15 @@ passed in and the cadence is an `apps/*` concern.
 What this cycle can still do is prove the fit rather than assert it: `@waitron/payments` as a **dev
 dependency**, with a type test that a `PaymentReconciler` adapts to a `PeriodDuty`. That is the house
 pattern — *"`recordIncidentOnce` is assignable to it verbatim"*.
+
+> **2026-07-27 amendment:** the adapter landed at `apps/server/src/reconcile-duty.ts`
+> (`docs/superpowers/specs/2026-07-26-server-host-design.md` §7), not inside `packages/scheduler` —
+> the owner this section anticipated. `packages/scheduler/src/payments-fit.test.ts`, the type-fit
+> test described below, was **deleted** rather than kept or reduced: the host now imports both
+> `PaymentReconciler` and `PeriodDuty` on a real runtime path (`boot.ts` wires the adapter into
+> `runDue`), so it is itself the compile-time proof the fit test existed to provide before a host
+> existed. A reduced version left in `packages/scheduler` would have asserted a tautology against a
+> shape nothing there uses any more.
 
 The adapter maps `PaymentReconcileResult` onto `DutyOutcome.summary` verbatim, and sets
 `resweepAfter` when a `paymentRef` appears in **both** `result.orphan` and `result.drift`.

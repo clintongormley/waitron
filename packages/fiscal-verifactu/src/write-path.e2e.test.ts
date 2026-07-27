@@ -24,7 +24,7 @@ import { cadenas } from "./schema/cadenas.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
-import { fakeClient, saleInput, steadyClock } from "../test/write-path-fixtures.js";
+import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
 let db: Database;
 let backend: VerifactuBackend;
@@ -64,7 +64,11 @@ beforeEach(async () => {
   // `FiscalBackend` method with no `tx` parameter at all, so it cannot participate in a caller's
   // transaction and needs its own connection to query against (`backend.ts`'s own doc comment on
   // `VerifactuBackendOptions.db`).
-  backend = new VerifactuBackend({ clock: steadyClock, db, client: fakeClient });
+  backend = new VerifactuBackend({
+    clock: steadyClock,
+    db,
+    resolveClient: staticResolver(fakeClient),
+  });
 });
 
 async function sell(overrides: Record<string, unknown> = {}) {

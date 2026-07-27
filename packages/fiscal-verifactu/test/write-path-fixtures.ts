@@ -7,16 +7,33 @@ import type { VerifactuClient } from "@waitron/verifactu";
 const BASE = new Date("2026-03-01T13:05:00+01:00");
 
 /**
- * `VerifactuBackendOptions.client` (Task 5) is required by the constructor, even though not one
- * test in this package calls `drain` — the only method that reads it. A single module-scope fake
- * AEAT transport, shared across every `new VerifactuBackend(...)` site in this package, is
- * therefore enough: nothing here submits anything, so which fake instance answers is irrelevant,
- * and minting a fresh `createFakeAeat()` per test would be decoration with no consumer. Deep
- * import mirrors this package's own `FakeFiscalBackend` convention (`@waitron/fiscal/src/testing/
- * fake-backend.js`, imported by `packages/core`'s tests): `@waitron/verifactu` exports no test
- * doubles from its own package surface either.
+ * `VerifactuBackendOptions.resolveClient` (Task 5) is required by the constructor, and is read by
+ * both `drain` and `reconcile` (`drain.test.ts`, `acks.test.ts`, `drain.concurrency.test.ts`, and
+ * others across this package all call `backend.drain`/`backend.reconcile`). A single module-scope
+ * fake AEAT transport, shared across every `new VerifactuBackend(...)` site in this package via
+ * `staticResolver` below, is therefore enough for the tests that never care which tenant's
+ * transport they got — nothing in THOSE tests submits anything distinguishable per tenant, so
+ * which fake instance answers is irrelevant, and minting a fresh `createFakeAeat()` per test would
+ * be decoration with no consumer. Deep import mirrors this package's own `FakeFiscalBackend`
+ * convention (`@waitron/fiscal/src/testing/fake-backend.js`, imported by `packages/core`'s tests):
+ * `@waitron/verifactu` exports no test doubles from its own package surface either.
  */
 export const fakeClient: VerifactuClient = createFakeAeat().client();
+
+/**
+ * A `resolveClient` that ignores its `tenantId` argument and always returns `client` — the shape
+ * every `VerifactuBackend` in this package's suites must supply SOME `resolveClient` to satisfy
+ * (Task 5 made the field required), for a test that never cares which tenant's transport it got,
+ * for the reason `fakeClient` above documents. Do NOT reach for this in a test that DOES care which
+ * tenant asked — one asserting per-tenant isolation, or that a different (or throwing) client
+ * answers depending on `tenantId` — write a bespoke resolver instead, the way
+ * `drain.tenancy.test.ts`'s `recordingResolver` does.
+ */
+export function staticResolver(
+  client: VerifactuClient,
+): (tenantId: TenantId) => Promise<VerifactuClient> {
+  return () => Promise.resolve(client);
+}
 
 /**
  * Confident, fixed, +01:00. `anchor`/`currentAnchor` are stubs — `recordSale` never calls either

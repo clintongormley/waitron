@@ -238,7 +238,7 @@ describe("putCredential and getCredential", () => {
       putCredential(tx, both, {
         tenantId,
         purpose: "fiscal.aeat",
-        value: { pfxBase64: "AAAA", passphrase: "p" },
+        value: { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" },
       }),
     );
     const onV1 = await withTenant(db, tenantId, (tx) =>
@@ -248,7 +248,7 @@ describe("putCredential and getCredential", () => {
       getCredential(tx, both, { tenantId, purpose: "fiscal.aeat" }),
     );
     expect(onV1).toEqual(STRIPE);
-    expect(onV2).toEqual({ pfxBase64: "AAAA", passphrase: "p" });
+    expect(onV2).toEqual({ pfxBase64: "AAAA", passphrase: "p", certKind: "sello" });
   });
 });
 

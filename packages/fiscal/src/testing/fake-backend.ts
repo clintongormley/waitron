@@ -233,6 +233,13 @@ export class FakeFiscalBackend implements FiscalBackend {
       recordsAccepted: accepted,
       recordsHalted: 0,
       incidentsRaised: 0,
+      // This fake has no per-tenant loop or containment at all — one `db.execute` sweeps every
+      // pending record in a single shot. Those `db.execute` calls above CAN throw like any real
+      // query; there is simply no per-tenant try/catch here to turn that into a `skipped` entry —
+      // a throw propagates straight out of this method, unlike the real `VerifactuBackend.drain`.
+      // `skipped` is always `[]` because nothing here is wired to ever push to it, not because
+      // nothing can fail.
+      skipped: [],
     };
   }
 
