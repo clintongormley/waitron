@@ -258,9 +258,9 @@ export PROBE_URL="postgresql://postgres:probe@127.0.0.1:55432/postgres"
 pnpm --filter @waitron/server build
 
 # Boots, migrates, then idles on its duty loop. Stop it once /health answers.
-DATABASE_URL="$PROBE_URL" WAITRON_AEAT_ENV=preproduction node apps/server/dist/bin.js &
+DATABASE_URL="$PROBE_URL" WAITRON_AEAT_ENV=preproduction node apps/server/dist/server.js &
 HOST_PID=$!
-until curl -sf http://127.0.0.1:3000/health >/dev/null 2>&1; do sleep 1; done
+until curl -sf http://127.0.0.1:8080/health >/dev/null 2>&1; do sleep 1; done
 kill "$HOST_PID"
 
 psql "$PROBE_URL" -v nif="B00000000" -v legal_name="Probe SL" -v location_name="Mostrador" \
@@ -294,7 +294,21 @@ part of a fiscal record."
 
 The deli's database, following `apps/server/README.md`'s "Database roles and grants" — this is that recipe's **first real use**, and it is recorded there as hand-verified rather than test-covered. Any step that does not work as written is a finding for Task 5 and a fix to that README in this cycle.
 
-Migrate it by booting the host against it once, exactly as Step 2 did with the throwaway container. Then run `bootstrap-tenant.sql` with the deli's real values, and keep the printed `tenant_id` — Tasks 3 and 4 need it.
+**Generate the credential key ring FIRST.** `boot.ts` calls `loadKeyRing(env)` (line 96) *before*
+`applyMigrations` (line 104), so the host will not even migrate without it — this is the same key
+Task 3 Step 2 uses, generated once here and kept for the life of the deployment:
+
+```zsh
+export WAITRON_CREDENTIALS_KEY="$(openssl rand -base64 32)"
+export WAITRON_CREDENTIALS_KEY_VERSION=1
+```
+
+**Losing this key makes every sealed credential unrecoverable.** Store it wherever the deployment's
+secrets live before going further.
+
+Then migrate by booting the host against the database once, exactly as Step 2 did with the throwaway
+container, and run `bootstrap-tenant.sql` with the deli's real values. Keep the printed `tenant_id`
+— Tasks 3 and 4 need it.
 
 - [ ] **Step 5: [HUMAN] Send the certificate-kind question to the fiscal advisor**
 
@@ -318,15 +332,16 @@ pnpm --filter @waitron/credentials build
 checkout — `pnpm install` warns about exactly this. Without the build, the next step fails with
 "command not found".
 
-- [ ] **Step 2: [HUMAN] Generate and set the credential key ring**
+- [ ] **Step 2: [HUMAN] Confirm the credential key ring is set**
 
-The vault seals payloads with a 32-byte key supplied as base64 in `WAITRON_CREDENTIALS_KEY`, plus
-`WAITRON_CREDENTIALS_KEY_VERSION`. Generate one and keep it wherever the deployment's secrets live —
-**losing it makes every sealed credential unrecoverable**:
+Task 2 Step 4 already generated this — `boot.ts` reads the key ring before it runs migrations, so
+the database could not have been migrated without it. **Use that same key**; a second one would seal
+this credential where the host cannot read it. Confirm it is still exported in this shell:
 
-```bash
-export WAITRON_CREDENTIALS_KEY="$(openssl rand -base64 32)"
-export WAITRON_CREDENTIALS_KEY_VERSION=1
+```zsh
+[[ -n "$WAITRON_CREDENTIALS_KEY" && -n "$WAITRON_CREDENTIALS_KEY_VERSION" ]] \
+  && echo "key ring: set (version $WAITRON_CREDENTIALS_KEY_VERSION)" \
+  || echo "NOT SET — re-export the SAME key from Task 2 Step 4, never a new one"
 ```
 
 - [ ] **Step 3: [HUMAN] Seal the certificate into the vault**
@@ -415,7 +430,7 @@ export DATABASE_URL="$DELI_DATABASE_URL"
 export WAITRON_AEAT_ENV=preproduction
 export WAITRON_CREDENTIALS_KEY WAITRON_CREDENTIALS_KEY_VERSION
 pnpm --filter @waitron/server build
-node apps/server/dist/bin.js
+node apps/server/dist/server.js
 ```
 
 Watch for: `drain.tenant_skipped` disappearing (the certificate now resolves), a submission attempt, and the ack recorded against the `envios` row. Then:
