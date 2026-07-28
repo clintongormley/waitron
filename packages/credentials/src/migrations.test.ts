@@ -10,7 +10,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
-import { seedTenant } from "../test/seed.js";
+import { seedTenant } from "@waitron/db/testing/seed.js";
 
 let db: Database;
 let tenantId: string;

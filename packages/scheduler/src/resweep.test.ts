@@ -13,7 +13,7 @@ import { completeRun, readSnapshot, reclaimStale } from "./store.js";
 import { runDue, type SchedulerDeps } from "./run.js";
 import { scheduledRuns } from "./schema/scheduled-runs.js";
 import { FakeDuty } from "./testing/fake-duty.js";
-import { seedTenant } from "../test/seed.js";
+import { seedTenant } from "@waitron/db/testing/seed.js";
 
 const NOW = new Date("2026-07-25T04:00:00Z");
 const TOMORROW = new Date("2026-07-26T04:00:00Z");

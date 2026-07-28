@@ -1,10 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { join } from "node:path";
 import { beforeAll, afterAll, describe } from "vitest";
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { sql } from "drizzle-orm";
 import { createPgliteDb, createPostgresDb, type Database } from "../client.js";
 import { runMigrations } from "../migrate.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
+import { startPostgresContainer, type StartedContainer } from "./postgres.js";
 
 export interface Target {
   readonly name: "pglite" | "postgres";
@@ -69,17 +69,6 @@ export function dockerAvailable(): boolean {
   return cachedDockerAvailable;
 }
 
-// packages/db's own migrations, applied before every test in this package so
-// a suite always sees the real schema rather than an empty database. Not
-// exported: the brief's public interface for this module is
-// describeEachTarget/resolveTargets/Target, and a later package with its own
-// migrations folder (e.g. fiscal-verifactu) supplies its own core migrations
-// rather than importing this package's.
-const CORE_MIGRATIONS = {
-  migrationsFolder: join(import.meta.dirname, "..", "..", "drizzle"),
-  migrationsTable: "__drizzle_migrations_db",
-};
-
 /** Migrations run as OWNER, here. The application role never runs them. */
 async function migrated(db: Database): Promise<Database> {
   await runMigrations(db, CORE_MIGRATIONS);
@@ -94,12 +83,12 @@ const pgliteTarget: Target = {
 };
 
 function postgresTarget(): Target {
-  let container: StartedPostgreSqlContainer | undefined;
+  let container: StartedContainer | undefined;
   let created = 0;
   return {
     name: "postgres",
     setup: async () => {
-      container = await new PostgreSqlContainer("postgres:18-alpine").start();
+      container = await startPostgresContainer();
     },
     create: async () => {
       // Guards an ordering invariant describeEachTarget itself enforces
@@ -119,10 +108,10 @@ function postgresTarget(): Target {
       // across every test that runs against this one container, not reset.
       created += 1;
       const name = `waitron_test_${created}`;
-      const admin = await createPostgresDb(container.getConnectionUri());
+      const admin = await createPostgresDb(container.uri);
       await admin.execute(sql.raw(`create database ${name}`));
       await admin.close();
-      const url = new URL(container.getConnectionUri());
+      const url = new URL(container.uri);
       url.pathname = `/${name}`;
       return migrated(await createPostgresDb(url.toString()));
     },

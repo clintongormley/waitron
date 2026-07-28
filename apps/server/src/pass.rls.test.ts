@@ -12,7 +12,7 @@ import { reconcilerAsDuty } from "./reconcile-duty.js";
 import { runPass, RECONCILE_DUTY } from "./pass.js";
 import { stripeAccountResolver } from "./stripe-account.js";
 import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
-import { seedTenant } from "../test/seed.js";
+import { seedTenant } from "@waitron/db/testing/seed.js";
 
 // A non-superuser LOGIN role inheriting app_user's grants — being non-superuser is what makes RLS
 // apply at all. Everything below is the deployment role's view of the world.

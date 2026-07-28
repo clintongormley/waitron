@@ -5,7 +5,7 @@ import type { TenantId } from "@waitron/shared";
 import { dayPeriod } from "./derive.js";
 import { claimGap, claimRow, completeRun, enqueueSuccessor, readSnapshot } from "./store.js";
 import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
-import { seedTenant } from "../test/seed.js";
+import { seedTenant } from "@waitron/db/testing/seed.js";
 
 const DUTY = "test.duty";
 const NOW = new Date("2026-07-25T04:00:00Z");

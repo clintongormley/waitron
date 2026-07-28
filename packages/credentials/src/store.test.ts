@@ -21,7 +21,7 @@ import {
   putCredential,
   tryGetCredential,
 } from "./store.js";
-import { seedTenant } from "../test/seed.js";
+import { seedTenant } from "@waitron/db/testing/seed.js";
 import { captured } from "./testing/captured.js";
 
 const K1 = Buffer.alloc(32, 1).toString("base64");

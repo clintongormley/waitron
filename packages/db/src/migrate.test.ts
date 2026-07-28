@@ -5,6 +5,7 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testconta
 import { createPgliteDb, createPostgresDb, type Database } from "./client.js";
 import { runMigrations } from "./migrate.js";
 import { dockerAvailable, resolveTargets } from "./testing/harness.js";
+import { POSTGRES_IMAGE } from "./testing/postgres.js";
 
 const FOLDER_A = join(import.meta.dirname, "..", "test", "migrations-a");
 const FOLDER_B = join(import.meta.dirname, "..", "test", "migrations-b");
@@ -105,7 +106,7 @@ describe.runIf(POSTGRES_COVERED)("runMigrations against real PostgreSQL", () => 
   let container: StartedPostgreSqlContainer;
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:18-alpine").start();
+    container = await new PostgreSqlContainer(POSTGRES_IMAGE).start();
   });
 
   afterAll(async () => {
