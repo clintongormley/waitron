@@ -306,12 +306,15 @@ would otherwise walk past one.
   own reasons, untouched here), `apps/server`'s `migrations.concurrency.test.ts`, and `bench/`. The
   mechanical check that six copies are gone rather than merely thinned.
 - **No `startRealPostgres`, `RealPostgres` or `roleUrl` import line changed in any of the 22 test
-  files that call `startRealPostgres`, and Tasks 3–6 edited no test file at all.** Four of the 22 —
+  files that call `startRealPostgres`, and Tasks 3–6 edited no *such* test file.** Four of the 22 —
   the RLS and concurrency suites that also seed a tenant — did have one *other* line changed:
   Task 1 re-pointed their `seedTenant` import from `../test/seed.js` to
-  `@waitron/db/testing/seed.js`, which was that task's own planned work. A diff touching one of
-  these files' `startRealPostgres`/`RealPostgres`/`roleUrl` import is a design violation, not a
-  detail.
+  `@waitron/db/testing/seed.js`, which was that task's own planned work. Separately, Task 5 edited
+  four test files that do **not** call `startRealPostgres` — `packages/db/src/client.test.ts`,
+  `packages/db/src/migrate.test.ts`, `packages/db/src/testing/postgres.test.ts` and
+  `apps/server/src/migrations.concurrency.test.ts` — to use `POSTGRES_IMAGE` in place of the
+  literal, which is §6's own sweep. A diff touching one of the 22 files'
+  `startRealPostgres`/`RealPostgres`/`roleUrl` import is a design violation, not a detail.
 - The six `dockerRequired` messages appear verbatim in the six wrappers.
 - `@waitron/db`'s coverage stays at its thresholds **with the new file included**, and the two
   previously-uncovered failure paths have named tests.

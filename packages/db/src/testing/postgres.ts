@@ -105,12 +105,14 @@ export function roleUrl(uri: string, role: string, password: string): string {
  *
  * Ordering across packages is the runtime's responsibility and nothing enforces it, so callers pass
  * the order explicitly — core first, since it carries `tenants` and every other set has a foreign
- * key to it. The `finally` is not decoration: the five copies this replaces closed their migrator
- * only on success, so a failing migration leaked a pool as well as a container.
+ * key to it. Closing the connection either way is not decoration: the five copies this replaces
+ * closed their migrator only on success, so a failing migration leaked a pool as well as a
+ * container.
  *
- * The close is best-effort for the same reason `startMigratedPostgres`'s stop is: if a set throws
- * and `close()` then also rejects, the close failure must not replace the migration error a caller
- * is trying to see.
+ * The close is best-effort only on the failure path — mirroring `startMigratedPostgres`'s stop: if
+ * a set throws and `close()` then also rejects, the close failure must not replace the migration
+ * error the caller needs to see. On the success path nothing is competing to be reported, so a
+ * `close()` failure there is the only thing left to surface and propagates normally.
  */
 export async function runMigrationSets(
   uri: string,
@@ -119,9 +121,12 @@ export async function runMigrationSets(
   const migrator = await createPostgresDb(uri);
   try {
     for (const set of sets) await runMigrations(migrator, set);
-  } finally {
+  } catch (error) {
+    // Best-effort: a rejecting close() must not replace the migration error the caller needs to see.
     await migrator.close().catch(() => {});
+    throw error;
   }
+  await migrator.close();
 }
 
 /**
