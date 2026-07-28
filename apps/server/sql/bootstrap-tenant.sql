@@ -1,6 +1,10 @@
--- The deli's own rows. Run ONCE, by hand, against a migrated database, as a role that can write
--- these tables (the migration owner or a superuser — RLS is bypassed for the owner, which is what
--- makes this pure setup).
+-- The deli's own rows. Run ONCE, by hand, against a migrated database, as a SUPERUSER (or a role
+-- with BYPASSRLS) — not merely as the table owner. packages/db/drizzle/0001_tenancy_rls.sql (and
+-- 0003_invoice_series.sql for invoice_series) apply FORCE ROW LEVEL SECURITY to every table this
+-- script writes, which denies the owner its usual RLS exemption, and the first INSERT here creates
+-- the very tenant whose id app.tenant_id would need to be set to — there is no tenant scope yet to
+-- adopt. Only a superuser (or BYPASSRLS) bypasses RLS unconditionally, which is what makes this
+-- pure setup possible.
 --
 -- Deliberately NOT the test seeds: packages/db/src/testing/seed.ts writes 'Test SL' and a NIF from
 -- a counter. Those values would become part of a fiscal record the Agencia Tributaria keeps.
