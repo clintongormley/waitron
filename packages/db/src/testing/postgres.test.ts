@@ -165,13 +165,19 @@ describe.runIf(dockerAvailable())("against a real container", () => {
       // runMigrationSets's finally completes, and close() is awaited, before the rejection above
       // propagates — but PostgreSQL can take a moment to reap the backend process after the
       // client disconnects, so poll on a short deadline rather than asserting immediately.
+      //
+      // toBeLessThanOrEqual, not toBe: `before` is itself a snapshot, and a backend from an
+      // earlier test in this file can still be winding down when it is taken. If that happens,
+      // `before` is inflated by one and exact equality would fail on a race that has nothing to
+      // do with runMigrationSets. A leaked backend from THIS call still pins `after` at
+      // `before + 1` for the whole deadline, which toBeLessThanOrEqual still catches.
       const deadline = Date.now() + 2000;
       let after = await backendCount();
       while (after > before && Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 50));
         after = await backendCount();
       }
-      expect(after).toBe(before);
+      expect(after).toBeLessThanOrEqual(before);
     } finally {
       await observer.close();
     }

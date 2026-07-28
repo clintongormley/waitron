@@ -13,8 +13,13 @@ import { fileURLToPath } from "node:url";
  * "the journal this package actually uses".
  *
  * `src/testing/harness.ts` imports this rather than computing its own. It carried a private
- * duplicate under a comment saying this constant was "not exported" — true when written, false
- * since the barrel began exporting it. Same folder, same table, one definition.
+ * duplicate, under a comment giving two reasons: the constant was "not exported" (scoped to
+ * `harness.ts`'s own module surface — that stayed true right up to deletion; the private const was
+ * never exported from that module) and that a later package with its own migrations folder (e.g.
+ * `fiscal-verifactu`) "supplies its own core migrations rather than importing this package's" — that
+ * second clause is the one that went stale: `packages/fiscal-verifactu/src/testing/postgres.ts` now
+ * imports `CORE_MIGRATIONS` from `@waitron/db`, precisely what it said would not happen. Same
+ * folder, same table, one definition.
  */
 export const CORE_MIGRATIONS = {
   migrationsFolder: fileURLToPath(new URL("../drizzle", import.meta.url)),

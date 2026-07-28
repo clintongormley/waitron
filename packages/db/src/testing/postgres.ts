@@ -2,7 +2,12 @@ import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import { createPostgresDb, type Database } from "../client.js";
 import { runMigrations, type MigrationOptions } from "../migrate.js";
 
-/** The one place this repo's test PostgreSQL image tag is written down. */
+/**
+ * The one place any TEST suite in this repo writes down the PostgreSQL image tag.
+ * `bench/pglite-throughput/src/bench.ts` still carries its own literal, deliberately: it is a
+ * standalone benchmark harness, not a test suite, and pulling this package in to share one string
+ * would be a bad trade.
+ */
 export const POSTGRES_IMAGE = "postgres:18-alpine";
 
 /**
@@ -31,6 +36,12 @@ export interface RealPostgres {
    * caller count would silently reduce the concurrency under test.
    * `packages/fiscal-verifactu/src/chain.concurrency.test.ts`'s first test — "runs its writers on
    * distinct backend processes" — is the load-bearing check that this promise holds downstream.
+   *
+   * A second, independent reason an RLS suite cares about this: it typically seeds rows through
+   * `connect()`, as the superuser, and probes through `connectAs()`, under `SET app.tenant_id`. A
+   * shared backend between the two would let that session GUC leak into the seeding connection and
+   * make the RLS assertion pass for the wrong reason — quietly proving nothing. A fresh `Database`
+   * per call keeps the two on separate backend processes, so that leak cannot happen.
    */
   connect(): Promise<Database>;
   /**
@@ -49,6 +60,13 @@ export interface MigratedPostgresOptions {
    * Required, never defaulted. Each caller's message explains why THAT suite has no soft mode, and
    * several cite the file that documents the reason; a default would produce a generic message at
    * exactly the moment someone needs the specific one.
+   *
+   * This is a harder line than `./harness.ts`'s own `resolveTargets` takes for `@waitron/db`'s OWN
+   * dual-target suites — those warn and continue on PGlite alone (fatal only under
+   * `REQUIRE_DOCKER=1`), because most of them still prove something real on PGlite. A suite reached
+   * through `startMigratedPostgres` does not: it exists specifically to observe lock contention or
+   * non-superuser RLS, which PGlite's superuser-only bundled server cannot reproduce at all — so it
+   * has no soft mode to fall back to, and `dockerRequired` is why every one of its callers says so.
    */
   dockerRequired: string;
   /** Applies every migration set this suite needs, core first. */
@@ -89,6 +107,10 @@ export function roleUrl(uri: string, role: string, password: string): string {
  * the order explicitly — core first, since it carries `tenants` and every other set has a foreign
  * key to it. The `finally` is not decoration: the five copies this replaces closed their migrator
  * only on success, so a failing migration leaked a pool as well as a container.
+ *
+ * The close is best-effort for the same reason `startMigratedPostgres`'s stop is: if a set throws
+ * and `close()` then also rejects, the close failure must not replace the migration error a caller
+ * is trying to see.
  */
 export async function runMigrationSets(
   uri: string,
@@ -98,7 +120,7 @@ export async function runMigrationSets(
   try {
     for (const set of sets) await runMigrations(migrator, set);
   } finally {
-    await migrator.close();
+    await migrator.close().catch(() => {});
   }
 }
 
@@ -129,7 +151,10 @@ export async function startMigratedPostgres(
   try {
     await options.migrate(uri);
   } catch (error) {
-    await container.stop();
+    // Best-effort: a rejecting stop() (wedged daemon, container already gone) must never replace
+    // the migration error that actually caused this — that error is why the caller's suite fails,
+    // and it is what "propagates the original error" below asserts.
+    await container.stop().catch(() => {});
     throw error;
   }
 
