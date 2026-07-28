@@ -15,7 +15,7 @@
 - **Every commit signed off**: `git commit -s`. The `dco` job walks every commit in the PR range.
 - **The gate is four commands**: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm format:check`.
 - **`TESTCONTAINERS_RYUK_DISABLED=true`** for anything that starts a container.
-- **The `.p12` file, its passphrase, and the credential key ring NEVER appear** in a commit, a command argument, a shell history entry, a test fixture, or a Claude transcript. Secrets reach a process through stdin or an environment variable read with `read -rs`, and nothing else.
+- **The `.p12` file, its passphrase, and the credential key ring NEVER appear** in a commit, a command argument, a shell history entry, a test fixture, or a Claude transcript. Secrets reach a process through stdin, or through an environment variable set from a silent prompt (`printf` + `stty -echo` + `read -r` — portable; **never bash's `read -p`, which fails in zsh with "no coprocess"**), and nothing else.
 - **Pre-production only.** `WAITRON_AEAT_ENV=preproduction`. No step in this plan may target `production`; switching is a separate, human decision.
 - **The probe is read-only.** It calls `consultar`, never `submit`. A query files nothing.
 - **Nothing invents the deli's real data.** The NIF, legal name, address and series code come from the human. A test NIF must never reach AEAT.
@@ -164,7 +164,10 @@ unattended at all. Excluded from pnpm test and from CI."
 - [ ] **Step 6: [HUMAN] Run it against the real certificate**
 
 ```bash
-read -rs -p "PFX passphrase: " WAITRON_PREPROD_PFX_PASSPHRASE; echo
+# Portable across zsh and bash. zsh's `read -p` means "read from a coprocess", not
+# "prompt", so the bash spelling fails outright on this repo's default shell.
+printf 'PFX passphrase: '; stty -echo
+read -r WAITRON_PREPROD_PFX_PASSPHRASE; stty echo; echo
 export WAITRON_PREPROD_PFX_PASSPHRASE
 export WAITRON_PREPROD_PFX_BASE64="$(base64 -i /path/to/cert.p12)"
 export WAITRON_PREPROD_NIF="<the deli's NIF>"
@@ -329,7 +332,8 @@ export WAITRON_CREDENTIALS_KEY_VERSION=1
 - [ ] **Step 3: [HUMAN] Seal the certificate into the vault**
 
 ```bash
-read -rs -p "PFX passphrase: " PFX_PASS; echo
+# Portable across zsh and bash — zsh's `read -p` reads from a coprocess, not a prompt.
+printf 'PFX passphrase: '; stty -echo; read -r PFX_PASS; stty echo; echo
 jq -n --arg pfx "$(base64 -i /path/to/cert.p12)" \
       --arg pass "$PFX_PASS" \
       --arg kind representante \

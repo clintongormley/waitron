@@ -80,7 +80,9 @@ The passphrase must therefore reach stdin without passing through shell history,
 this repository's transcripts:
 
 ```bash
-read -rs -p "PFX passphrase: " PFX_PASS   # not echoed, not in history
+# Portable across zsh and bash. Do NOT use bash's `read -p`: in zsh, this repo's default
+# shell, -p means "read from a coprocess" and the command fails with "no coprocess".
+printf 'PFX passphrase: '; stty -echo; read -r PFX_PASS; stty echo; echo
 jq -n --arg pfx "$(base64 -i /path/to/cert.p12)" \
       --arg pass "$PFX_PASS" \
       --arg kind representante \
