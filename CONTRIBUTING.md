@@ -12,6 +12,17 @@ royalty-free, transferable, sublicensable licence to use, reproduce, modify, pre
 works of, publicly display, distribute, and relicense your contribution, in whole or in part,
 under any terms, including commercial terms.**
 
+**Patent grant.** You also grant Clinton Gormley and his successors and assigns a perpetual,
+irrevocable, worldwide, royalty-free, transferable, sublicensable patent licence to make, have
+made, use, offer to sell, sell, import and otherwise transfer your contribution, alone or in
+combination with Waitron, under any patent claims you can license that are necessarily infringed
+by it. If you or your organisation initiate patent litigation alleging that Waitron or any
+contribution to it infringes a patent, the patent licence granted to you under these terms ends
+immediately.
+
+**No warranty.** Unless required by applicable law or agreed in writing, you provide your
+contribution "as is", without warranties or conditions of any kind.
+
 You retain copyright in your contribution. This grant does not take it from you; it lets the
 project ship your work under its current licence and under any future licence, including the
 commercial terms under which Waitron itself is operated.

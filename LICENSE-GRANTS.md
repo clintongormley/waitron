@@ -16,7 +16,7 @@ as a hosted or managed service" for the purposes of ELv2's first limitation.
 
 The distinction is **who holds the infrastructure account**, not who performs the work. Running
 the software on infrastructure you control and selling other parties access to it remains
-prohibited by ELv2.
+prohibited by ELv2, as its first limitation defines that prohibition.
 
 ## Grant 2 — Abandonment sunset
 
