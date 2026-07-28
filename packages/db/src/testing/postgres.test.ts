@@ -141,11 +141,39 @@ describe.runIf(dockerAvailable())("against a real container", () => {
     }
   });
 
-  it("runMigrationSets rejects when a set's folder holds no migrations", async () => {
-    await expect(
-      runMigrationSets(pg.uri, [
-        { migrationsFolder: "/nonexistent-waitron-migrations", migrationsTable: "probe" },
-      ]),
-    ).rejects.toThrow();
+  it("runMigrationSets rejects when a set's folder holds no migrations, and closes its connection", async () => {
+    // A separate, long-lived connection is the observer: it is the constant against which both
+    // the "before" and "after" backend counts are taken, so only runMigrationSets's own
+    // connection can account for a difference between them.
+    const observer = await pg.connect();
+    try {
+      const backendCount = async (): Promise<number> => {
+        const result = await observer.execute<{ n: number }>(
+          sql`select count(*)::int as n from pg_stat_activity where datname = current_database()`,
+        );
+        return (result.rows[0] as { n: number }).n;
+      };
+
+      const before = await backendCount();
+
+      await expect(
+        runMigrationSets(pg.uri, [
+          { migrationsFolder: "/nonexistent-waitron-migrations", migrationsTable: "probe" },
+        ]),
+      ).rejects.toThrow();
+
+      // runMigrationSets's finally completes, and close() is awaited, before the rejection above
+      // propagates — but PostgreSQL can take a moment to reap the backend process after the
+      // client disconnects, so poll on a short deadline rather than asserting immediately.
+      const deadline = Date.now() + 2000;
+      let after = await backendCount();
+      while (after > before && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        after = await backendCount();
+      }
+      expect(after).toBe(before);
+    } finally {
+      await observer.close();
+    }
   });
 });
