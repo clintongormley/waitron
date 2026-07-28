@@ -737,7 +737,7 @@ fallback and the Q2 mitigation are in §6, next to the design they affect.
 
 Two of them block: **Q1** (is a fast-syncing till an independent SIF) and **Q2** (may a node
 other than the till transmit its records). **Q9** — who signs the declaración responsable for
-publicly-published software — blocks public release rather than the build.
+published-source software — blocks public release rather than the build.
 
 Decisions closed during design:
 
