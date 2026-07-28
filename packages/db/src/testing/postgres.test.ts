@@ -14,7 +14,7 @@ import {
 const FAKE_URI = "postgresql://owner:secret@127.0.0.1:5432/waitron";
 
 function fakeContainer(stop = vi.fn(async () => {})): StartedContainer {
-  return { getConnectionUri: () => FAKE_URI, stop };
+  return { uri: FAKE_URI, stop };
 }
 
 describe("roleUrl", () => {
@@ -141,10 +141,19 @@ describe.runIf(dockerAvailable())("against a real container", () => {
     }
   });
 
-  it("runMigrationSets rejects when a set's folder holds no migrations, and closes its connection", async () => {
-    // A separate, long-lived connection is the observer: it is the constant against which both
-    // the "before" and "after" backend counts are taken, so only runMigrationSets's own
-    // connection can account for a difference between them.
+  /**
+   * Runs `work` and proves it left no backend process behind.
+   *
+   * A separate, long-lived connection is the observer: it is the constant against which both the
+   * "before" and "after" counts are taken, so only `work`'s own connection can account for a
+   * difference between them.
+   *
+   * Both of `runMigrationSets`'s close paths go through here, because a guard with no test that
+   * fails when it is deleted is not a guard. The failure path was the one the five copies this
+   * module replaces got wrong; the success path is the one a later edit could quietly drop while
+   * the failure-path test stayed green.
+   */
+  const expectNoLeakedBackend = async (work: () => Promise<unknown>): Promise<void> => {
     const observer = await pg.connect();
     try {
       const backendCount = async (): Promise<number> => {
@@ -155,21 +164,17 @@ describe.runIf(dockerAvailable())("against a real container", () => {
       };
 
       const before = await backendCount();
+      await work();
 
-      await expect(
-        runMigrationSets(pg.uri, [
-          { migrationsFolder: "/nonexistent-waitron-migrations", migrationsTable: "probe" },
-        ]),
-      ).rejects.toThrow();
-
-      // runMigrationSets's finally completes, and close() is awaited, before the rejection above
-      // propagates — but PostgreSQL can take a moment to reap the backend process after the
-      // client disconnects, so poll on a short deadline rather than asserting immediately.
+      // `runMigrationSets` awaits its close before returning or rethrowing, so the close has
+      // already happened by now — but PostgreSQL can take a moment to reap the backend process
+      // after the client disconnects, so poll on a short deadline rather than asserting
+      // immediately.
       //
       // toBeLessThanOrEqual, not toBe: `before` is itself a snapshot, and a backend from an
       // earlier test in this file can still be winding down when it is taken. If that happens,
       // `before` is inflated by one and exact equality would fail on a race that has nothing to
-      // do with runMigrationSets. A leaked backend from THIS call still pins `after` at
+      // do with the code under test. A leaked backend from THIS call still pins `after` at
       // `before + 1` for the whole deadline, which toBeLessThanOrEqual still catches.
       const deadline = Date.now() + 2000;
       let after = await backendCount();
@@ -181,5 +186,22 @@ describe.runIf(dockerAvailable())("against a real container", () => {
     } finally {
       await observer.close();
     }
+  };
+
+  it("runMigrationSets rejects when a set's folder holds no migrations, and closes its connection", async () => {
+    await expectNoLeakedBackend(async () => {
+      await expect(
+        runMigrationSets(pg.uri, [
+          { migrationsFolder: "/nonexistent-waitron-migrations", migrationsTable: "probe" },
+        ]),
+      ).rejects.toThrow();
+    });
+  });
+
+  it("runMigrationSets closes its connection when every set succeeds", async () => {
+    // CORE_MIGRATIONS has already run against this container in beforeAll, so Drizzle's journal
+    // makes this a no-op — which is the point: the migrations are not under test here, the
+    // connection's fate on the path where nothing throws is.
+    await expectNoLeakedBackend(() => runMigrationSets(pg.uri, [CORE_MIGRATIONS]));
   });
 });

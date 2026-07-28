@@ -1,11 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { beforeAll, afterAll, describe } from "vitest";
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { sql } from "drizzle-orm";
 import { createPgliteDb, createPostgresDb, type Database } from "../client.js";
 import { runMigrations } from "../migrate.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { POSTGRES_IMAGE } from "./postgres.js";
+import { startPostgresContainer, type StartedContainer } from "./postgres.js";
 
 export interface Target {
   readonly name: "pglite" | "postgres";
@@ -84,12 +83,12 @@ const pgliteTarget: Target = {
 };
 
 function postgresTarget(): Target {
-  let container: StartedPostgreSqlContainer | undefined;
+  let container: StartedContainer | undefined;
   let created = 0;
   return {
     name: "postgres",
     setup: async () => {
-      container = await new PostgreSqlContainer(POSTGRES_IMAGE).start();
+      container = await startPostgresContainer();
     },
     create: async () => {
       // Guards an ordering invariant describeEachTarget itself enforces
@@ -109,10 +108,10 @@ function postgresTarget(): Target {
       // across every test that runs against this one container, not reset.
       created += 1;
       const name = `waitron_test_${created}`;
-      const admin = await createPostgresDb(container.getConnectionUri());
+      const admin = await createPostgresDb(container.uri);
       await admin.execute(sql.raw(`create database ${name}`));
       await admin.close();
-      const url = new URL(container.getConnectionUri());
+      const url = new URL(container.uri);
       url.pathname = `/${name}`;
       return migrated(await createPostgresDb(url.toString()));
     },

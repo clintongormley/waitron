@@ -11,17 +11,22 @@ import { runMigrations, type MigrationOptions } from "../migrate.js";
 export const POSTGRES_IMAGE = "postgres:18-alpine";
 
 /**
- * The slice of a started container this helper actually uses, and the seam a test fakes.
+ * The slice of a started container this package's test helpers actually use, and the seam a test
+ * fakes.
  *
- * `StartedPostgreSqlContainer` does NOT satisfy this structurally: its `stop()` resolves to a
- * `StoppedTestContainer`, and TypeScript's void-return relaxation covers `() => T` against
- * `() => void`, never `Promise<T>` against `Promise<void>`. `defaultStart` therefore adapts the
- * real container rather than handing it back. The seam exists so the Docker-absent and
- * failed-migration paths can be proven without a daemon — the same reason `harness.ts` keeps
- * `resolveTargets` pure and separate from `describeEachTarget`.
+ * `StartedPostgreSqlContainer` does not satisfy this structurally, on either member: it exposes
+ * `getConnectionUri()` rather than a `uri` field, and its `stop()` resolves to a
+ * `StoppedTestContainer` (TypeScript's void-return relaxation covers `() => T` against
+ * `() => void`, never `Promise<T>` against `Promise<void>`). `startPostgresContainer` therefore
+ * adapts the real container rather than handing it back.
+ *
+ * `uri` is a field, not a getter, because a started container's URI never changes — every caller
+ * reads it and holds it. The seam exists so the Docker-absent and failed-migration paths can be
+ * proven without a daemon, the same reason `harness.ts` keeps `resolveTargets` pure and separate
+ * from `describeEachTarget`.
  */
 export interface StartedContainer {
-  getConnectionUri(): string;
+  uri: string;
   stop(): Promise<void>;
 }
 
@@ -63,10 +68,14 @@ export interface MigratedPostgresOptions {
    *
    * This is a harder line than `./harness.ts`'s own `resolveTargets` takes for `@waitron/db`'s OWN
    * dual-target suites — those warn and continue on PGlite alone (fatal only under
-   * `REQUIRE_DOCKER=1`), because most of them still prove something real on PGlite. A suite reached
-   * through `startMigratedPostgres` does not: it exists specifically to observe lock contention or
-   * non-superuser RLS, which PGlite's superuser-only bundled server cannot reproduce at all — so it
-   * has no soft mode to fall back to, and `dockerRequired` is why every one of its callers says so.
+   * `REQUIRE_DOCKER=1`), because most of them still prove something real on PGlite. The six
+   * package wrappers that call this do not: each exists specifically to observe lock contention or
+   * non-superuser RLS, which PGlite's superuser-only bundled server cannot reproduce at all, so
+   * none has a soft mode to fall back to — and each says so in its own words.
+   *
+   * `postgres.test.ts`'s own real-container block is the one caller that IS gated, on
+   * `describe.runIf(dockerAvailable())`: it tests this helper rather than using it to test
+   * something else, so it has nothing to prove when Docker is absent and nothing to warn about.
    */
   dockerRequired: string;
   /** Applies every migration set this suite needs, core first. */
@@ -75,10 +84,22 @@ export interface MigratedPostgresOptions {
   start?(): Promise<StartedContainer>;
 }
 
-async function defaultStart(): Promise<StartedContainer> {
+/**
+ * Starts a real PostgreSQL container on `POSTGRES_IMAGE`, adapted to `StartedContainer`.
+ *
+ * The one place any SHARED test helper here constructs a container: `./harness.ts` calls this for
+ * its own dual-target suites rather than reaching for `PostgreSqlContainer` itself. The two have
+ * different lifecycles — one container per suite with a fresh database per test, versus one
+ * connect-migrate-stop — but only one way to start one.
+ *
+ * `client.test.ts` and `migrate.test.ts` still construct their own directly. They are testing
+ * `createPostgresDb` and `runMigrations` against a bare server, so routing them through a helper
+ * built on top of both would make each suite depend on the thing it exists to check.
+ */
+export async function startPostgresContainer(): Promise<StartedContainer> {
   const container = await new PostgreSqlContainer(POSTGRES_IMAGE).start();
   return {
-    getConnectionUri: () => container.getConnectionUri(),
+    uri: container.getConnectionUri(),
     stop: async () => {
       await container.stop();
     },
@@ -142,7 +163,7 @@ export async function runMigrationSets(
 export async function startMigratedPostgres(
   options: MigratedPostgresOptions,
 ): Promise<RealPostgres> {
-  const start = options.start ?? defaultStart;
+  const start = options.start ?? startPostgresContainer;
   let container: StartedContainer;
   try {
     container = await start();
@@ -152,7 +173,7 @@ export async function startMigratedPostgres(
     throw new Error(options.dockerRequired, { cause });
   }
 
-  const uri = container.getConnectionUri();
+  const uri = container.uri;
   try {
     await options.migrate(uri);
   } catch (error) {
