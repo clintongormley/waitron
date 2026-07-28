@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import type { Database } from "../client.js";
-import { CORE_MIGRATIONS } from "../index.js";
+import { CORE_MIGRATIONS } from "../migrations.js";
 import { dockerAvailable } from "./harness.js";
 import {
   roleUrl,

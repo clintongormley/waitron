@@ -4,13 +4,14 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { createPostgresDb } from "@waitron/db";
+import { POSTGRES_IMAGE } from "@waitron/db/testing/postgres.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "./migrations.js";
 
 let container: StartedPostgreSqlContainer;
 let uri: string;
 
 beforeAll(async () => {
-  container = await new PostgreSqlContainer("postgres:18-alpine").start();
+  container = await new PostgreSqlContainer(POSTGRES_IMAGE).start();
   uri = container.getConnectionUri();
 }, 180_000);
 

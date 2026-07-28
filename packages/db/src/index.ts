@@ -1,5 +1,3 @@
-import { fileURLToPath } from "node:url";
-
 // The public surface of @waitron/db. Re-exports only — no logic here.
 export { createPgliteDb, createPostgresDb } from "./client.js";
 export type { Database, Driver, Schema, Transaction } from "./client.js";
@@ -15,24 +13,7 @@ export type { IncidentSeverity } from "./schema/incidents.js";
 export { allocateInvoiceNumber } from "./allocate-number.js";
 export { withTenant } from "./tenancy.js";
 export { isUniqueViolation } from "./unique-violation.js";
-
-/**
- * This package's own migration set, in the same descriptor shape as
- * `packages/fiscal-verifactu`'s `FISCAL_MIGRATIONS` (Task 12). A module package composes its own
- * migrations with core's by running both descriptors, in order, against one database — ordering
- * is the RUNTIME's responsibility, never Drizzle's, so both halves of that composition are handed
- * out as plain data rather than as a function that would silently decide the order itself.
- *
- * `migrationsTable` matches `drizzle.config.ts`'s own `migrations.table` and
- * `src/testing/harness.ts`'s private `CORE_MIGRATIONS` — `__drizzle_migrations_db`, not Drizzle's
- * bare default of `__drizzle_migrations`, which this package deliberately avoids so that a
- * consumer never confuses "the journal Drizzle would use if you forgot the option" with "the
- * journal this package actually uses".
- */
-export const CORE_MIGRATIONS = {
-  migrationsFolder: fileURLToPath(new URL("../drizzle", import.meta.url)),
-  migrationsTable: "__drizzle_migrations_db",
-} as const;
+export { CORE_MIGRATIONS } from "./migrations.js";
 
 /**
  * Testing infrastructure exported for reuse by a module package's OWN test suite — not test-only
