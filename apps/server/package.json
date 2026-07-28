@@ -8,7 +8,7 @@
     "waitron-server": "./dist/server.js"
   },
   "scripts": {
-    "build": "node scripts/copy-migrations.mjs && esbuild src/bin.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/server.js --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "build": "node scripts/copy-migrations.mjs && esbuild src/bin.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/server.js --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && esbuild scripts/record-one-sale.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/record-one-sale.js --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
     "test": "vitest run",
     "test:preprod": "vitest run --config vitest.preprod.config.ts",
     "test:watch": "vitest",
@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.13.0",
+    "@waitron/core": "workspace:*",
     "@waitron/credentials": "workspace:*",
     "@waitron/db": "workspace:*",
     "@waitron/fiscal": "workspace:*",

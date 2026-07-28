@@ -44,6 +44,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.0
         version: 1.19.15(hono@4.12.32)
+      '@waitron/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@waitron/credentials':
         specifier: workspace:*
         version: link:../../packages/credentials
