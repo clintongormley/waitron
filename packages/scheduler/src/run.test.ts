@@ -20,7 +20,7 @@ import { DEFAULTS, dayPeriod } from "./derive.js";
 import { claimGap, readSnapshot, reclaimStale } from "./store.js";
 import { runDue, type SchedulerDeps } from "./run.js";
 import { FakeDuty, throwingDuty } from "./testing/fake-duty.js";
-import { seedTenant } from "../test/seed.js";
+import { seedTenant } from "@waitron/db/testing/seed.js";
 
 const NOW = new Date("2026-07-25T04:00:00Z");
 const HORIZON_START = new Date("2026-06-01T00:00:00Z");

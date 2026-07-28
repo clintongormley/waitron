@@ -13,7 +13,7 @@ import { loadKeyRing } from "./keyring.js";
 import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
 import { tenantCredentials } from "./schema/tenant-credentials.js";
 import { getCredential, putCredential, rotateCredentials } from "./store.js";
-import { seedTenant } from "../test/seed.js";
+import { seedTenant } from "@waitron/db/testing/seed.js";
 import { captured } from "./testing/captured.js";
 
 const K1 = Buffer.alloc(32, 1).toString("base64");

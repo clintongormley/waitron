@@ -12,7 +12,7 @@ import {
   rotateCredentials,
 } from "./store.js";
 import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
-import { seedTenant } from "../test/seed.js";
+import { seedTenant } from "@waitron/db/testing/seed.js";
 
 // A non-superuser LOGIN role inheriting app_user's grants. Being non-superuser is what makes RLS
 // apply at all — a superuser bypasses FORCE ROW LEVEL SECURITY, which is why PGlite cannot prove

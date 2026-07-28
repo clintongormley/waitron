@@ -27,7 +27,7 @@ import {
   type MtlsMaterial,
   type MtlsServer,
 } from "./testing/tls.js";
-import { seedTenant } from "../test/seed.js";
+import { seedTenant } from "@waitron/db/testing/seed.js";
 
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),

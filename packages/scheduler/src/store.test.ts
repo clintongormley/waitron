@@ -18,7 +18,7 @@ import {
   reclaimStale,
 } from "./store.js";
 import { scheduledRuns } from "./schema/scheduled-runs.js";
-import { seedTenant } from "../test/seed.js";
+import { seedTenant } from "@waitron/db/testing/seed.js";
 
 const DUTY = "test.duty";
 const NOW = new Date("2026-07-25T04:00:00Z");

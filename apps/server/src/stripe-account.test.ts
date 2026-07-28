@@ -12,7 +12,7 @@ import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/cre
 import type { KeyRing } from "@waitron/credentials";
 import { isAppError } from "@waitron/shared";
 import { defaultMakeStripe, stripeAccountResolver, stripeSecretKeyFrom } from "./stripe-account.js";
-import { seedTenant } from "../test/seed.js";
+import { seedTenant } from "@waitron/db/testing/seed.js";
 
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
