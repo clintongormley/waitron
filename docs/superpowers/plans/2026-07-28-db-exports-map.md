@@ -1049,12 +1049,12 @@ finish; if it fails on resolution, that is a real finding.
 - [ ] **Step 6: Run the spec's §8 mechanical checks**
 
 ```bash
-git grep -l "PostgreSqlContainer" | sort            # expect 6 files
+git grep -l "PostgreSqlContainer" -- '*.ts' '*.mjs' '*.js' | sort   # expect 5 files
 git grep -c "startRealPostgres()" -- '*.test.ts' | wc -l   # expect 22 test files
 git status --porcelain | grep -cE '\.test\.ts$'     # expect 0 modified test files vs Task 1's baseline
 ```
 
-The six files: `packages/db/src/testing/postgres.ts`, `packages/db/src/testing/harness.ts`,
+The five files: `packages/db/src/testing/postgres.ts`,
 `packages/db/src/client.test.ts`, `packages/db/src/migrate.test.ts`,
 `apps/server/src/migrations.concurrency.test.ts`, `bench/pglite-throughput/src/bench.ts`.
 
@@ -1092,7 +1092,7 @@ would have made one clause accidentally true while the other stayed wrong."
 | --- | --- | --- |
 | The `exports` map resolves under all four resolvers | typecheck, lint, cross-package vitest, bounded Stryker | Task 1 Step 7, Task 6 Step 5 |
 | No test that calls `startRealPostgres` was edited | `git status --porcelain \| grep '\.test\.ts$'` | Task 3 Step 9, Task 6 Step 6 |
-| Six copies are gone, not thinned | `git grep -l "PostgreSqlContainer"` → 6 files | Task 6 Step 6 |
+| Six copies are gone, not thinned | `git grep -l "PostgreSqlContainer" -- '*.ts'` → 5 files | Task 6 Step 6 |
 | The Docker-required messages survived verbatim | Task 3 Step 1's captured `grep` vs the final files | Task 3 |
 | The two previously-untested failure paths have tests | `postgres.test.ts` fake-container blocks | Task 2 |
 | `@waitron/db` still meets 98/98/98/95 with the new files | `pnpm --filter @waitron/db test:coverage` | Tasks 2, 5 |

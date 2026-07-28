@@ -264,9 +264,13 @@ harness, not a test suite, and pulling a dependency into it to share a string is
 
 **`CORE_MIGRATIONS` has two definitions.** The barrel exports one (folder via
 `fileURLToPath(new URL("../drizzle", …))`); `harness.ts` carries a private second one (folder via
-`join(import.meta.dirname, "..", "..", "drizzle")`) under a comment saying it is "*Not exported*"
-— which stopped being true when Task 12 added the barrel export. Same folder, same table, two
-sources of truth, one stale justification. Extract it to `packages/db/src/migrations.ts`; the barrel
+`join(import.meta.dirname, "..", "..", "drizzle")`). Same folder, same table, two sources of truth.
+Its comment justifies the duplicate on the grounds that "*a later package with its own migrations
+folder (e.g. fiscal-verifactu) supplies its own core migrations rather than importing this
+package's*" — which every one of the six wrappers this cycle writes now contradicts, since each
+imports `CORE_MIGRATIONS` from `@waitron/db`. (The comment's opening "*Not exported*" was scoped to
+`harness.ts`'s own module surface and stayed true; it is the justification underneath that went
+stale.) Extract it to `packages/db/src/migrations.ts`; the barrel
 re-exports it and `harness.ts` imports it directly, rather than importing the whole barrel from a
 leaf module. Five lines, and it is adjacent code this cycle is already reading.
 
@@ -301,10 +305,13 @@ would otherwise walk past one.
 
 - `pnpm -r typecheck`, `pnpm -r lint`, **`pnpm -r format:check`** (not covered by `lint`; it has
   broken the branch in each of the last two cycles), `pnpm -r test:coverage` all green.
-- **`git grep -l "PostgreSqlContainer"` drops from 11 files to 6** — `db`'s new helper, `db`'s
-  `harness.ts`, `db`'s `client.test.ts` and `migrate.test.ts` (each starts its own container for its
-  own reasons, untouched here), `apps/server`'s `migrations.concurrency.test.ts`, and `bench/`. The
-  mechanical check that six copies are gone rather than merely thinned.
+- **`git grep -l "PostgreSqlContainer" -- '*.ts' '*.mjs' '*.js'` drops from 11 files to 5** — `db`'s
+  new helper, `db`'s `client.test.ts` and `migrate.test.ts` (each starts its own container against a
+  bare server, to test `createPostgresDb` and `runMigrations` themselves), `apps/server`'s
+  `migrations.concurrency.test.ts`, and `bench/`. The mechanical check that six copies are gone
+  rather than merely thinned. Scope the grep to source: `docs/**` quotes the name in prose,
+  including this document. `harness.ts` was a sixth until the finishing pass had it take its
+  container from the shared helper too.
 - **No `startRealPostgres`, `RealPostgres` or `roleUrl` import line changed in any of the 22 test
   files that call `startRealPostgres`, and Tasks 3–6 edited no *such* test file.** Four of the 22 —
   the RLS and concurrency suites that also seed a tenant — did have one *other* line changed:
