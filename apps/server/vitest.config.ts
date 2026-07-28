@@ -6,7 +6,7 @@ export default defineConfig({
     // The real-Postgres and mTLS suites pull a container and mint certificates in a beforeAll.
     testTimeout: 120_000,
     hookTimeout: 180_000,
-    exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
+    exclude: [...configDefaults.exclude, "**/.stryker-tmp/**", "src/**/*.preprod.test.ts"],
     // One fork: @vitest/coverage-v8 under-merges BRANCH coverage across fork workers. Same
     // finding as packages/payments and packages/scheduler.
     poolOptions: { forks: { singleFork: true } },
