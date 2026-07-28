@@ -1,4 +1,4 @@
-# Open-Source Restaurant POS — Architecture Design
+# Source-Available Restaurant POS — Architecture Design
 
 **Date:** 2026-07-18
 **Status:** Approved in brainstorming; supersedes `docs/plans/2026-02-28-architecture-design.md`
@@ -16,7 +16,7 @@ restate the regulation — where the two disagree, the findings document wins.
 
 ## 1. What we are building
 
-An open-source POS and restaurant management system, intended to replace Square, released
+A source-available POS and restaurant management system, intended to replace Square, released
 so it can benefit restaurants generally.
 
 **First deployment:** a new deli in Barcelona, not yet open. Because it is greenfield, it is
@@ -192,11 +192,11 @@ taxpayer or per SIF is open (asesor Q4).
 **This is also why the project can stay in TypeScript** — exemption from XAdES removes the
 hardest cryptographic component from the build.
 
-### Declaración responsable and open source
+### Declaración responsable and published source
 
 AEAT guidance (FAQ updated 26 March 2026) explicitly addresses this: whoever programs the
 code or integrates components, *"ya sea o no de código abierto"*, must make the declaration.
-Being open source changes nothing about liability. There is no homologación or prior
+Being publicly readable changes nothing about liability. There is no homologación or prior
 registration.
 
 **There is nothing to register.** AEAT operates no homologación, no approval process and no
@@ -225,7 +225,7 @@ make onboarding trivial. It should not, for four reasons:
 #### Position
 
 - **Declare for our own installation.** Mandatory regardless, and unaffected by the
-  open-source question: our company, our NIF, our deployment.
+  published-source question: our company, our NIF, our deployment.
 - **Distribute a compliance kit, not a declaration** — a template declaración responsable with
   the blanks marked, a component and version manifest, AEAT conformance test results, and
   documentation of exactly what a deployer must supply. This removes most onboarding pain
@@ -626,7 +626,7 @@ The frontend is themeable throughout, using the token + primitive convention:
   dialog, used everywhere.
 - **No hardcoded chrome** — no hex values, spacing, radii or font sizes in view code.
 
-This matters more here than in a typical app: an open-source POS will be deployed by
+This matters more here than in a typical app: a POS with published source will be deployed by
 restaurants that want their own branding, and white-labelling is a plausible commercial
 offering later. Retrofitting a token layer across a built-out POS is the expensive path, which
 is why it is sub-project 1.
@@ -737,7 +737,7 @@ fallback and the Q2 mitigation are in §6, next to the design they affect.
 
 Two of them block: **Q1** (is a fast-syncing till an independent SIF) and **Q2** (may a node
 other than the till transmit its records). **Q9** — who signs the declaración responsable for
-open-source software — blocks public release rather than the build.
+publicly-published software — blocks public release rather than the build.
 
 Decisions closed during design:
 

@@ -507,12 +507,19 @@ LGT art. 201 bis sanctions the production and marketing of non-compliant softwar
 codebase intended for building SIFs falls within *fabricación*, exposure attaches to the
 project regardless of who deploys it. The `josemmo` disclaimer is a bet that it does not.
 
-> Publicamos como código abierto un sistema de punto de venta que, una vez desplegado por un
-> tercero, constituye un SIF. Nosotros no lo desplegamos para ese tercero, no lo
-> comercializamos y no cobramos por él; cada empresa lo instala y lo configura por su cuenta.
+> Publicamos el código fuente de un sistema de punto de venta que, una vez desplegado por un
+> tercero, constituye un SIF. Lo publicamos bajo una licencia restrictiva («source-available»,
+> no de código abierto): cualquier empresa puede descargarlo, instalarlo y utilizarlo
+> gratuitamente en sus propios locales, pero no puede ofrecerlo a terceros como servicio
+> alojado. Nosotros no lo desplegamos para esos terceros; cada empresa lo instala y lo
+> configura por su cuenta. Por separado, nosotros mismos explotamos comercialmente el mismo
+> software como servicio en la nube para nuestros propios clientes.
 >
 > **¿Constituye la mera publicación del código fuente "fabricación o comercialización" de
 > sistemas informáticos de facturación a efectos del artículo 201 bis de la LGT?**
+>
+> ¿Cambia la respuesta el hecho de que el titular del código lo explote además comercialmente
+> como servicio en la nube?
 >
 > ¿Cambia la respuesta si además publicamos artefactos ejecutables (imágenes de contenedor)
 > listos para desplegar, en lugar de sólo el código fuente?
