@@ -46,14 +46,14 @@ it says.
 | File | Status | Contents |
 | --- | --- | --- |
 | `LICENSE` | replaced | Elastic License 2.0, verbatim and unmodified. |
-| `LICENSE-GRANTS.md` | new | Additional permissions. **Adds only, never subtracts** — safe because we hold all copyright and may always grant more than the licence does. Two grants, below. |
+| `LICENSE-GRANTS.md` | new | Additional permissions. **Adds only, never subtracts** — safe because we hold all copyright and may always grant more than the licence does. Four grants, below. |
 | `CONTRIBUTING.md` | new | Transferable inbound grant including the right to relicense, plus DCO sign-off. |
 | `README.md` | new — none exists today | Plain-English licensing summary, trademark reservation, and a licensing-questions contact. |
 | `.github/workflows/` | amended | A DCO check job, so the inbound grant is enforced rather than aspirational. |
 
 Root `package.json` gains `"license": "SEE LICENSE IN LICENSE"`.
 
-### The two additional grants
+### The four additional grants
 
 **Grant 1 — service providers.** Installing, configuring, hosting, administering, monitoring or
 supporting the software, for a fee, **on infrastructure the customer controls under the

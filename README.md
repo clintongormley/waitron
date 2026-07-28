@@ -43,7 +43,7 @@ logo are reserved by the licensor and are not licensed with the software. You ma
 that your product is built on or derived from Waitron; you may not name or brand your distribution
 "Waitron". Rebranding to comply with this is expressly permitted and is not "obscuring a notice"
 under the licence — see Grant 3 and the trademark section in
-[LICENSE-GRANTS.md](LICENSE-GRANTS.md), which are the binding version of this paragraph.
+[LICENSE-GRANTS.md](LICENSE-GRANTS.md), which are the operative text.
 
 Copyright © 2026 Clinton Gormley.
 

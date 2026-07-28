@@ -80,7 +80,7 @@ issuing a DR for a library rather than leaving it to integrators is free.
 
 ## Waitron's own licence — Elastic License 2.0
 
-**Decided 2026-07-28: Elastic License 2.0, whole repo**, plus two additional grants in
+**Decided 2026-07-28: Elastic License 2.0, whole repo**, plus four additional grants in
 `LICENSE-GRANTS.md`. Supersedes the MIT decision of 2026-07-18.
 
 The requirement is narrow: a restaurant, or a group of forty restaurants, may run Waitron for
