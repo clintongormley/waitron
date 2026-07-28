@@ -16,12 +16,12 @@ under any terms, including commercial terms.**
 irrevocable, worldwide, royalty-free, transferable, sublicensable patent licence to make, have
 made, use, offer to sell, sell, import and otherwise transfer your contribution, alone or in
 combination with Waitron, under any patent claims you can license that are necessarily infringed
-by it. If you or your organisation initiate patent litigation alleging that Waitron or any
-contribution to it infringes a patent, the patent licence granted to you under these terms ends
-immediately.
+by it. Waitron's own licence carries a patent-retaliation term of its own; see the Patents
+section of the Elastic License 2.0.
 
 **No warranty.** Unless required by applicable law or agreed in writing, you provide your
-contribution "as is", without warranties or conditions of any kind.
+contribution "as is", without warranties or conditions of any kind, other than the confirmation
+you give below.
 
 You retain copyright in your contribution. This grant does not take it from you; it lets the
 project ship your work under its current licence and under any future licence, including the

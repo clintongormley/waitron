@@ -19,7 +19,8 @@ In plain English:
 **You may**, free of charge and at any scale —
 
 - run Waitron for your own restaurant business, however many locations, on infrastructure you control;
-- read, modify and redistribute the source, provided you pass these terms on with any copy you distribute and mark modified copies as modified;
+- read, modify and redistribute the source, provided you pass these terms on with any copy you
+  distribute and mark modified copies as modified;
 - pay anyone you like to install, configure, host, administer or support it **on infrastructure
   you control, under your own accounts**;
 - sell hardware with Waitron pre-installed, for the buyer to own and run.
@@ -30,9 +31,9 @@ In plain English:
 - circumvent licence-key functionality;
 - remove or obscure licensing, copyright or other notices.
 
-If the licensor announces that Waitron is discontinued, or twelve months pass with no release, the
-current version also becomes available under Apache 2.0 — see Grant 2. Your till does not die if
-we do.
+If the licensor publicly announces that Waitron is discontinued, or twelve months pass with no
+release, the current version also becomes available under Apache 2.0 — see Grant 2. Your till
+does not die if we do.
 
 The authoritative terms are in [LICENSE](LICENSE) and [LICENSE-GRANTS.md](LICENSE-GRANTS.md);
 this summary has no legal effect. Licensing questions: info@waitron.io
