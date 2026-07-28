@@ -419,6 +419,34 @@ There is no till application yet, so this is the only way to put a real sale
 into the chain. Mirrors write-path.e2e.test.ts's backend construction."
 ```
 
+- [ ] **Step 4b: The till must be registered as a SIF first — and nothing does that yet**
+
+**Discovered while proving Task 4 against a throwaway container.** `VerifactuBackend.recordSale`
+reads the till's live SIF identity via `currentSif`, which throws `sif.not_registered` when no
+`registro_sif` row exists. `registerSif` exists in `@waitron/fiscal-verifactu` and is exported from
+its barrel — but **it has no production caller anywhere in this repository**. Every reference
+outside `registro-sif.ts` is a doc comment; only tests and fixtures invoke it.
+
+So a till created by `bootstrap-tenant.sql` cannot record a sale. Step 5 fails immediately without
+this.
+
+**Do not paper over it with raw SQL.** `registerSif` mints the installation number through a
+counter with real contention semantics (proven under 20 concurrent writers in
+`chain.concurrency.test.ts`), and re-registration deliberately begins a new chain. A hand-written
+INSERT would produce a `registro_sif` row that looks right and chains wrong.
+
+Write `apps/server/scripts/register-till.ts` alongside `record-one-sale.ts`, mirroring it: reads
+`DATABASE_URL`, takes tenant and till ids plus the `IdSistemaInformatico` from argv, runs inside
+`withTenant`, calls `registerSif`, prints the resulting `numeroInstalacion` and `sif_id`. Add it to
+`apps/server`'s `build` script as a third esbuild target, the same way `record-one-sale.ts` was.
+
+Prove it against a throwaway container exactly as Task 4 Step 3 did: register, then record a sale,
+then confirm one `registros_facturacion` row with `primer_registro = true`.
+
+**Record in Task 5:** provisioning a till is a product gap, not just a plan gap. The first customer
+till in a real deployment will hit this too, and the eventual provisioning surface must cover SIF
+registration — not only tenant, location, till and series.
+
 - [ ] **Step 5: [HUMAN] Record one real sale on the deli's database**
 
 Small, real, and defensible as a genuine transaction — a single low-value item. It is a real fiscal record from the moment it is chained.

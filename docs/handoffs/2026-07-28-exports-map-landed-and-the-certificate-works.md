@@ -152,9 +152,26 @@ All surfaced only by execution, and two would have failed **only against the rea
 | `90bb66f` | four operational errors in the plan, corrected |
 | `d44c689` | the false owner-exemption claim, corrected |
 
-**In flight at handoff:** Task 4's `record-one-sale.ts` was dispatched and had not reported. Check
-`git log` before assuming it is missing — there is no till application, so this script is the only
-way to put a real sale into the chain.
+**Task 4 landed after this handoff was first written** (`334879f`), and found something that changes
+the gate below.
+
+**A till cannot record a sale until it is registered as a SIF, and nothing in this repository does
+that.** `VerifactuBackend.recordSale` reads the till's identity through `currentSif`, which throws
+`sif.not_registered` when no `registro_sif` row exists. `registerSif` exists and is exported — but
+**has no production caller anywhere**; every reference outside its own module is a doc comment, and
+only tests invoke it. A till created by `bootstrap-tenant.sql` therefore cannot sell.
+
+This is a **product gap, not just a plan gap**: the first customer till in any real deployment hits
+it, and the eventual provisioning surface must cover SIF registration, not merely tenant/location/
+till/series. The plan now carries a Step 4b describing the `register-till.ts` script that closes it
+— **write that before attempting the gate below.** Do not substitute raw SQL: `registerSif` mints
+the installation number through a contended counter and re-registration deliberately starts a new
+chain, so a hand-written INSERT looks right and chains wrong.
+
+Task 4 also surfaced two smaller facts: `apps/server` was missing `@waitron/core` as a dependency
+entirely, and `node` cannot run these scripts directly (Node's TS stripping will not resolve this
+repo's `.js`-suffixed relative imports back to sibling `.ts` files), so `record-one-sale.ts` is now
+a third esbuild target in `apps/server`'s `build`.
 
 ### The gate, and it is yours
 
@@ -169,7 +186,8 @@ Everything remaining in this plan needs a human at a terminal with real data:
 3. **Seal the certificate** into the vault: `waitron-credentials set --tenant <id> --purpose
    fiscal.aeat`, payload as JSON on stdin. Build the CLI first — `dist/bin.js` does not exist in a
    fresh checkout.
-4. **Record one sale, start the host, watch drain submit it.** Then Task 5: write down what AEAT
+4. **Register the till as a SIF** — see Step 4b. Nothing does this yet; write the script first.
+5. **Record one sale, start the host, watch drain submit it.** Then Task 5: write down what AEAT
    actually did.
 
 ## 8. What else remains
