@@ -518,7 +518,7 @@ that produces the company's legally-mandated invoice records.
 - **Whether a non-resident NIE is reliably "identificado en el censo"** for `ObligadoEmision`
   purposes (errors 4107/1109). Not tested; avoid depending on it by testing with the obligado's
   own certificate.
-- **The downstream-fork limb of the published-source DR question** above.
+- **The downstream-fork limb of the source-available DR question** above.
 - **Whether the FNMT documentation PDFs' stale *nota simple* wording** or the 1 July 2026
   certificación-registral rule is what the Área de Registro actually enforces this month.
 

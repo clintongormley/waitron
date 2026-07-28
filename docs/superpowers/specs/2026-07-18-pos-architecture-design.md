@@ -192,7 +192,7 @@ taxpayer or per SIF is open (asesor Q4).
 **This is also why the project can stay in TypeScript** — exemption from XAdES removes the
 hardest cryptographic component from the build.
 
-### Declaración responsable and published source
+### Declaración responsable and source-available
 
 AEAT guidance (FAQ updated 26 March 2026) explicitly addresses this: whoever programs the
 code or integrates components, *"ya sea o no de código abierto"*, must make the declaration.
@@ -225,7 +225,7 @@ make onboarding trivial. It should not, for four reasons:
 #### Position
 
 - **Declare for our own installation.** Mandatory regardless, and unaffected by the
-  published-source question: our company, our NIF, our deployment.
+  source-available question: our company, our NIF, our deployment.
 - **Distribute a compliance kit, not a declaration** — a template declaración responsable with
   the blanks marked, a component and version manifest, AEAT conformance test results, and
   documentation of exactly what a deployer must supply. This removes most onboarding pain
@@ -626,7 +626,7 @@ The frontend is themeable throughout, using the token + primitive convention:
   dialog, used everywhere.
 - **No hardcoded chrome** — no hex values, spacing, radii or font sizes in view code.
 
-This matters more here than in a typical app: a POS with published source will be deployed by
+This matters more here than in a typical app: a source-available POS will be deployed by
 restaurants that want their own branding, and white-labelling is a plausible commercial
 offering later. Retrofitting a token layer across a built-out POS is the expensive path, which
 is why it is sub-project 1.
@@ -737,7 +737,7 @@ fallback and the Q2 mitigation are in §6, next to the design they affect.
 
 Two of them block: **Q1** (is a fast-syncing till an independent SIF) and **Q2** (may a node
 other than the till transmit its records). **Q9** — who signs the declaración responsable for
-published-source software — blocks public release rather than the build.
+source-available software — blocks public release rather than the build.
 
 Decisions closed during design:
 

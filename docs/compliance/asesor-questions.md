@@ -30,7 +30,7 @@ simplified Spanish list sent to a fellow implementer (kept out of this repositor
 | Q4 mixed modes | **Answered.** Closed |
 | Q7 installation number | Partly answered — and reveals a practice we should *not* copy |
 | Q8 clock | **Answered.** Closed — moved to [verifactu-findings.md](verifactu-findings.md) |
-| Q9 published-source DR | **Substantially answered**; part (b) narrowed considerably |
+| Q9 source-available DR | **Substantially answered**; part (b) narrowed considerably |
 | Q10 certificate gap | **Dissolved** — the premise was wrong; overlap two certificates |
 | Q11 client key custody | Unanswered directly; answered by routing around it — see Q12 |
 | — | New **Q12** on convenio 017, arising from their answer |
@@ -67,7 +67,7 @@ filing early and building on the provisional answer is defensible.
 **Also worth trying — AEAT's Verifactu technical channel for developers.** Faster than DGT
 and more likely to engage with the encadenamiento scoping directly. Non-binding.
 
-**Q9 is not for the asesor fiscal.** It concerns liability for distributing published-source
+**Q9 is not for the asesor fiscal.** It concerns liability for distributing source-available
 software rather than the operation of our own SIF, and carries the largest financial exposure
 here. Take it to a lawyer, and file **Q9(a)** as a DGT consulta vinculante — on its own, now
 that Q1, Q2 and Q9(b) have all come off the list.
@@ -439,7 +439,7 @@ warn and whether the system should refuse to trade rather than accumulate unsend
 
 ## SEPARATE — for a lawyer, not the asesor fiscal
 
-### Q9. Who signs the declaración responsable for published-source software?
+### Q9. Who signs the declaración responsable for source-available software?
 
 **Why it matters.** Blocks public release, not the build — but it has the largest financial
 exposure of anything here, and the answer shapes the distribution model. What is already
@@ -511,7 +511,7 @@ project regardless of who deploys it. The `josemmo` disclaimer is a bet that it 
 > tercero, constituye un SIF. Lo publicamos bajo una licencia restrictiva («source-available»,
 > no de código abierto): cualquier empresa puede descargarlo, instalarlo y utilizarlo
 > gratuitamente para su propio negocio, pero no puede ofrecerlo a terceros como servicio
-> alojado. Nosotros no lo desplegamos para esas empresas; cada empresa lo instala y lo
+> alojado («en la nube»). Nosotros no lo desplegamos para esas empresas; cada empresa lo instala y lo
 > configura por su cuenta. Con independencia de lo anterior, la licencia nos reserva en
 > exclusiva la facultad de ofrecerlo como servicio alojado, y tenemos previsto explotarlo
 > comercialmente como servicio en la nube para nuestros propios clientes.
