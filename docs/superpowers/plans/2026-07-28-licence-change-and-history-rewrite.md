@@ -23,7 +23,7 @@
 - **Shell state does not persist between command blocks.** Working directory carries over; exported variables do not. **Every block that references `$SCRATCH` must begin with this line, verbatim:**
 
   ```bash
-  export export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+  export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
   ```
 
   Values that must survive between blocks (`OLD_MAIN_SHA`, `LOCAL_PRE_REWRITE`) are written to `$SCRATCH/pre-relicense-state.txt` and read back, never held in a shell variable across calls.
@@ -90,7 +90,7 @@ Expected: empty status, and a commit count of `1`. **If the status is non-empty,
 - [ ] **Step 4: Create the backup bundle**
 
 ```bash
-export export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 cd /Users/clintongormley/workspace/repos/waitron
 git bundle create "$SCRATCH/waitron-pre-relicense.bundle" --all
 ```
@@ -100,7 +100,7 @@ git bundle create "$SCRATCH/waitron-pre-relicense.bundle" --all
 A bundle you have not verified is not a backup.
 
 ```bash
-export export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 git bundle verify "$SCRATCH/waitron-pre-relicense.bundle"
 rm -rf "$SCRATCH/restore-test"
 git clone "$SCRATCH/waitron-pre-relicense.bundle" "$SCRATCH/restore-test" 2>&1 | tail -2
@@ -509,7 +509,7 @@ never become shell code.
 The check is only worth having if it actually fails on a modified licence.
 
 ```bash
-export export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 cd /Users/clintongormley/workspace/repos/waitron
 echo "48255018b41fc0e965b1115af7e6779bc218bb8a6747d561da800d5022622aa2  LICENSE" | shasum -a 256 -c -
 cp LICENSE "$SCRATCH/LICENSE.bak"
@@ -584,7 +584,7 @@ reference to the mdiago letter. A script file rather than an inline `--tree-filt
 because it can be tested on its own first.
 
 ```bash
-export export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 cat > "$SCRATCH/rewrite-tree.sh" <<'SCRIPT'
 #!/bin/sh
 # Runs once per commit, inside a checkout of that commit's tree.
@@ -616,7 +616,7 @@ Note the `s{}{}` delimiters: the paths contain `/`, so a `s///` form would termi
 early, and `\Q…\E` must contain the plain unescaped path or the quoting swallows the escapes.
 
 ```bash
-export export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 rm -rf "$SCRATCH/scripttest"
 mkdir -p "$SCRATCH/scripttest/docs/superpowers/specs"
 cd "$SCRATCH/scripttest"
@@ -636,7 +636,7 @@ partially-working script.
 - [ ] **Step 4: Rewrite every commit**
 
 ```bash
-export export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 cd "$SCRATCH/waitron-relicense"
 export ELV2_SRC=/Users/clintongormley/workspace/repos/waitron/LICENSE
 export FILTER_BRANCH_SQUELCH_WARNING=1
@@ -652,7 +652,7 @@ ref is deleted the entire MIT history is still reachable**, and the verification
 correctly report failure. Delete it, then expire the reflog and garbage-collect.
 
 ```bash
-export export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 cd "$SCRATCH/waitron-relicense"
 git for-each-ref --format='%(refname)' refs/original | while read -r r; do git update-ref -d "$r"; done
 git reflog expire --expire=now --all
@@ -667,7 +667,7 @@ Expected: `refs/original gone`.
 This is the whole point of the task. Check every commit, not just the tip.
 
 ```bash
-export export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 cd "$SCRATCH/waitron-relicense"
 echo "--- commits whose LICENSE is not ELv2 (expect none) ---"
 for c in $(git rev-list --all); do
@@ -700,7 +700,7 @@ and fix it before pushing**, because those objects would otherwise be pushed.
 The rewrite must alter `LICENSE` and one documentation line, and nothing else.
 
 ```bash
-export export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 cd "$SCRATCH/waitron-relicense"
 diff <(git -C /Users/clintongormley/workspace/repos/waitron ls-tree -r --name-only main | sort) \
      <(git ls-tree -r --name-only main | sort) \
@@ -740,7 +740,7 @@ Present to the human, and wait for an unambiguous go-ahead:
 - [ ] **Step 2: Force-push the rewritten main**
 
 ```bash
-export export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 cd "$SCRATCH/waitron-relicense"
 git remote set-url origin https://github.com/clintongormley/waitron.git
 git push --force-with-lease origin main
@@ -799,7 +799,7 @@ detect ELv2, which is expected and not a problem.
 - [ ] **Step 1: Reset local main onto the rewritten history**
 
 ```bash
-export export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 cd /Users/clintongormley/workspace/repos/waitron
 # Record the pre-rewrite tip BEFORE resetting — Step 2 needs it as the rebase base,
 # and shell variables do not survive to the next command block.
@@ -820,7 +820,7 @@ That branch carries one commit — `f3f2233`, the exports-map spec — on top of
 `main`. Rebase it onto the new history.
 
 ```bash
-export export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 LOCAL_PRE_REWRITE=$(grep '^LOCAL_PRE_REWRITE=' "$SCRATCH/pre-relicense-state.txt" | cut -d= -f2)
 echo "rebasing onto origin/main, off base $LOCAL_PRE_REWRITE"
 git -C /Users/clintongormley/workspace/worktrees/waitron-db-exports-map status --porcelain
@@ -846,7 +846,7 @@ parent; `spec intact`.
 - [ ] **Step 4: Clean up the throwaway clone, keep the bundle**
 
 ```bash
-export export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 rm -rf "$SCRATCH/waitron-relicense" "$SCRATCH/scripttest" "$SCRATCH/regextest" \
        "$SCRATCH/LICENSE.bak" "$SCRATCH/old-files.txt" "$SCRATCH/new-files.txt"
 ls -la "$SCRATCH/waitron-pre-relicense.bundle"

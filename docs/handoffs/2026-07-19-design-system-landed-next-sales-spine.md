@@ -19,7 +19,7 @@ Most of what matters is committed. This handoff only carries what those document
 
 ## Where the project is
 
-An open-source POS to replace Square, first deployed at a **new deli in Barcelona that has not opened yet** — a greenfield launch, not a cutover. The existing restaurant (bar, kitchen, tables, on Square) migrates later. It must run both self-hosted standalone and as multi-tenant cloud, from one codebase.
+A source-available POS to replace Square, first deployed at a **new deli in Barcelona that has not opened yet** — a greenfield launch, not a cutover. The existing restaurant (bar, kitchen, tables, on Square) migrates later. It must run both self-hosted standalone and as multi-tenant cloud, from one codebase.
 
 The deli trades as a **sociedad**, so its Verifactu obligation begins **1 January 2027**. It opens somewhere in October 2026 – January 2027.
 
