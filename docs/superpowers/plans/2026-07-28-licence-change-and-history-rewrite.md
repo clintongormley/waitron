@@ -215,12 +215,18 @@ must be fixed now. **Do not edit the spec or this plan to satisfy this check.**
 
 - [ ] **Step 5: Stage everything except the letter, and prove it**
 
+`git status` has no `--cached` flag, so use `git diff --cached`, which does. Getting this wrong
+produces a gate that always prints PASS — grep finds nothing in git's *error message* — on the one
+check standing between a private letter and a public repository.
+
 ```bash
 git add -A
-git status --porcelain --cached | grep consulta-mdiago && echo "FAIL: letter is staged" || echo "PASS: letter not staged"
+git diff --cached --name-only | grep consulta-mdiago && echo "FAIL: letter is staged" || echo "PASS: letter not staged"
+git ls-files --error-unmatch docs/compliance/consulta-mdiago.md 2>/dev/null && echo "FAIL: letter is tracked" || echo "PASS: letter untracked"
 ```
 
-Expected: `PASS: letter not staged`
+Expected: `PASS: letter not staged` and `PASS: letter untracked`. Two independent checks, because
+a false PASS here is unrecoverable once pushed.
 
 - [ ] **Step 6: Commit**
 
@@ -565,7 +571,8 @@ rm -rf "$SCRATCH/waitron-relicense"
 git clone --no-hardlinks --single-branch --branch main --no-tags \
   /Users/clintongormley/workspace/repos/waitron "$SCRATCH/waitron-relicense"
 cd "$SCRATCH/waitron-relicense"
-git log --oneline | wc -l          # Expected: 41 (38 original + Tasks 2, 3, 4)
+git log --oneline | wc -l          # must equal the source repo's count, recorded below
+git -C /Users/clintongormley/workspace/repos/waitron rev-list --count main   # the authority
 git branch -a                       # Expected: only main
 git tag | wc -l                     # Expected: 0
 ```
@@ -673,10 +680,13 @@ git rev-list --all --objects | awk '{print $1}' | sort -u | while read -r o; do
     git cat-file -p "$o" 2>/dev/null | grep -q 'Permission is hereby granted, free of charge' && echo "MIT TEXT IN BLOB $o"
   fi
 done
-echo "--- mdiago letter references (expect none) ---"
-git grep -l 'consulta-mdiago' $(git rev-list --all) 2>/dev/null | head || echo "none"
+echo "--- mdiago LINKS anywhere in rewritten history (expect none) ---"
+# Links only, not mentions: this plan and the licence spec name the file in prose and in shell
+# commands by necessity, and this plan also quotes the link itself as the perl pattern's input.
+git grep -lE '\]\([^)]*consulta-mdiago\.md\)' $(git rev-list --all) 2>/dev/null \
+  | grep -v 'plans/2026-07-28-licence-change-and-history-rewrite\.md' | head || echo "none"
 echo "--- both old MIT blobs must be gone after the Step 5 gc ---"
-for b in $PRE_REWRITE_LICENSE_BLOBS; do
+for b in $PRE_REWRITE_LICENSE_BLOBS; do   # the two values are recorded in the run ledger, which is git-ignored
   git cat-file -e "$b" 2>/dev/null && echo "STILL PRESENT: $b" || echo "gone: $b"
 done
 ```
