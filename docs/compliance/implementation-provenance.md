@@ -78,15 +78,26 @@ issuing a DR for a library rather than leaving it to integrators is free.
 
 ---
 
-## Waitron's own licence
+## Waitron's own licence — Elastic License 2.0
 
-**Elastic License 2.0, whole repo**, with additional permissions in `LICENSE-GRANTS.md`.
+**Decided 2026-07-28: Elastic License 2.0, whole repo**, plus two additional grants in
+`LICENSE-GRANTS.md`. Supersedes the MIT decision of 2026-07-18.
 
-A restaurant may self-host at any scale for free, and may pay a contractor to run it on
-infrastructure the restaurant controls. Nobody may sell Waitron as a hosted service.
+The requirement is narrow: a restaurant, or a group of forty restaurants, may run Waitron for
+free at any scale and pay a contractor to look after it; nobody may take the codebase and sell a
+hosted Waitron. ELv2's first limitation prohibits exactly that — *providing the software to third
+parties as a hosted or managed service* — and permits everything else.
 
-**AGPL was ruled out.** It is the licence a hyperscaler complies with — by publishing its
-modifications — while still taking the business. A licence that taxes hosting does not prevent it.
+**AGPL was ruled out, and the reasoning has changed.** AGPL is the reflex answer and it is the
+wrong one: it is precisely the licence AWS defeated against MongoDB and Elasticsearch, because a
+hyperscaler can comply by publishing its modifications and still take the business. A licence
+that taxes hosting with a source-publication duty does not prevent hosting.
+
+**Known trade-off, accepted:** this is source-available, not OSI-approved open source, and the
+MIT grant already given cannot be revoked. See
+[the licence design](../superpowers/specs/2026-07-28-licence-change-and-history-rewrite-design.md)
+for the full reasoning, the alternatives considered (PolyForm Shield, BUSL 1.1, FSL, a bespoke
+licence), and what the change does not protect.
 
 ---
 
@@ -112,6 +123,13 @@ questions about what our distribution model actually is.
 - Does running an AGPL binary to generate test-comparison vectors carry any obligation? (Expected
   no — AGPL obligations attach to conveying and to network interaction with *modified* versions,
   not to running an unmodified program locally. Unverified.)
-- Does a permissive licence on `packages/verifactu` interact with the declaración responsable —
-  i.e. can a DR meaningfully cover a library that anyone may fork and modify? This is the
-  immutable-artifact question in Q9(b), viewed from the licensing side.
+- ~~Does a permissive licence on `packages/verifactu` interact with the declaración responsable —
+  i.e. can a DR meaningfully cover a library that anyone may fork and modify?~~ **Closed
+  2026-07-27.** The licence is not the operative fact; what the recipient *does* is. A faithful
+  build of our source is our product and our DR covers it; a fork that modifies it is a new
+  product whose producer owes their own declaration. The licence permits the fork but does not transfer
+  our certification to it — the two questions are orthogonal. See
+  [asesor-questions.md Q9(b)](asesor-questions.md).
+- **Carried over from that reasoning:** a version-scoped DR is only meaningful if the version
+  identifies a determinate artifact. `packages/verifactu` needs pinned dependencies and a
+  reproducible build for its declaration to mean anything.

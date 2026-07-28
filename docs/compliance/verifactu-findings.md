@@ -61,9 +61,166 @@ A SIF is identified by **NIF + IdSIF + NºInstalación**. The installation numbe
 software on the same reformatted machine. Reimage, hardware swap and till relocation all
 need deliberate handling.
 
+> **Version is NOT part of the identity — settled on primary source, 2026-07-27.** AEAT
+> developer FAQ v1.3 §4, verbatim:
+>
+> > Un SIF se identifica universalmente por la "concatenación" de tres campos: Id.OEF (NIF) +
+> > Id.SIF + NºInstalación. Otro dato importante que caracteriza al SIF es su versión, pero **un
+> > cambio en dicha versión (cuando se actualiza, por ejemplo) no significa que el SIF pase a ser
+> > otro SIF con Id. distinto**, cosa que sí ocurre con los otros 3 campos mencionados.
+>
+> **An upgrade does not end the chain.** This matters because two true statements look like they
+> collide, and they do not:
+>
+> | Statement | Sense | True? |
+> | --- | --- | --- |
+> | "Each version is a distinct product" | **Certification** — a DR per version | Yes |
+> | "A component change bumps the CPF's version" (§5) | **Certification** | Yes |
+> | "A new version is a new SIF" | **Identity / chaining** | **No** — §4 says so expressly |
+>
+> So a release needs a new declaración responsable and does *not* need a new installation number
+> or a new chain. **Our rule: rotate on re-provisioning, never on upgrade.** mdiago rotates per
+> release and thereby ends every till's chain on every release — unnecessary, and irreversible
+> since chains cannot be merged. Their hardware answer is sound and we follow it: hardware
+> changes alone do not require a new number.
+
+**Recommended installation-number values** (§4) — either is acceptable to AEAT:
+
+- a timestamp of the installation, to at least second precision; or
+- a sequential number that never repeats across that OEF's installations: 1, 2, 3… n.
+
+**One product serving several facturaciones needs one installation number each.** §4:
+
+> Si se utiliza un SIF que permite llevar distintas facturaciones […] cada una de esas
+> facturaciones distintas (sean de distintos OEF o del mismo OEF pero de distintos centros de
+> facturación independientes, como tiendas) debe tener un nº de instalación propio y distinto al
+> resto […] porque **se consideran SIF independientes, como si fueran "SIF virtuales"**, dentro
+> de un producto SIF más completo que los gestiona y administra.
+
+That is our multi-tenant, multi-site case described exactly, and it confirms the partitioning
+already recorded above: the key is genuinely (NIF, installation), and each till or site is a
+"SIF virtual" in AEAT's own words.
+
+### `IndicadorMultiplesOT` is computed per user, not per deployment
+
+**Added 2026-07-27**, developer FAQ §4. A field we must set correctly in a SaaS deployment, with
+counter-intuitive semantics:
+
+> Este valor deberá calcularse **de forma independiente por cada usuario** del SIF SaaS (no a
+> nivel global del SIF SaaS) y se informará con "S" en todos los registros de facturación (y, en
+> su caso, de evento) de aquellos usuarios que tengan creadas **más de una facturación** en el
+> SIF SaaS, independientemente del estado de dichas facturaciones (alta, baja…) y de si son de
+> igual o de distinto OEF. En caso contrario […] se informará con "N".
+
+Three traps in that: it is **per user, not per platform** — a multi-tenant system does not set
+"S" globally just because it serves many taxpayers; it counts **facturaciones the user has
+created**, including inactive ones (*"independientemente del estado […] alta, baja"*); and it
+does not matter whether those facturaciones belong to the same OEF or different ones. A gestoría
+user managing several clients gets "S"; a single-site restaurant user on the same platform gets
+"N".
+
+### Clock tolerance is enforced at submission, not at generation
+
+**Added 2026-07-27.** Orden art. 7.f requires the system to keep date and time accurate *"con un
+margen máximo de error admitido de un minuto"*. That is a requirement on the *system*. What AEAT
+actually enforces on the wire is a separate, looser check, from its error table:
+
+> `2004 = El valor del campo FechaHoraHusoGenRegistro debe ser la fecha actual del sistema de la
+> AEAT, admitiéndose un margen de error de: …`
+
+The table templates the tolerance rather than printing it. **mdiago reports the value in
+production as 240 seconds**, and that exceeding it yields *aceptado con errores* rather than a
+rejection — so a drifting clock degrades submission quality without stopping trade.
+
+Two consequences:
+
+- **Do not block invoicing on clock drift.** A till days offline should keep trading. mdiago
+  accepts internal drift and does not gate on it; the AEAT check happens later, at submission,
+  when the device is by definition back online.
+- **The two margins are different things.** One minute is the standard the system must be built
+  to; 240 seconds is the tolerance a submission is judged against. Conflating them would lead to
+  gating sales on a threshold that is not the one AEAT applies.
+
+> The 240-second figure is **mdiago's observation, not printed in AEAT's published error table**.
+> The error code, the field and the mechanism are confirmed from the table; the number is not.
+> Verify against a live `aceptado con errores` response before relying on the exact value.
+
 First record from a fresh installation carries `PrimerRegistro="S"`. AEAT returns a
 non-rejecting warning if that is claimed when records already exist for that SIF+NIF —
 useful as a signal that a till has been accidentally re-provisioned.
+
+### Split till/backoffice architecture is expressly permitted — with conditions
+
+**Added 2026-07-27.** Source: AEAT developer FAQ v1.3 (4 Dec 2025) §5 *"Arquitecturas de los
+SIF"*. The PDF resists normal fetching; download and run `pdftotext -layout` locally.
+
+AEAT states the general principle first — *"las arquitecturas «mixtas» […] incluso de fabricantes
+distintos, no son contrarias a la normativa y pueden utilizarse"* — then describes two valid
+shapes. The second is ours:
+
+> Igualmente sería válida una arquitectura en la que sea la propia TPV la que genere el "Registro
+> de alta de factura" directamente, procediendo también a su impresión con el código QR y entrega
+> al cliente, y en tiempo real traslade todo ello al backoffice central, para que este último
+> sistema proceda a su envío a la sede electrónica. Ese backoffice haría de instrumento para la
+> remisión del fichero sin más.
+
+**The relaying node is explicitly "un instrumento para la remisión sin más".** It is not the
+point of expedition and does not become the SIF.
+
+The conditions AEAT attaches are binding design constraints, not advice:
+
+- **The link must be unavoidable.** *"Que la conexión entre los sistemas sea indefectible y
+  necesaria, es decir que no quede a decisión del usuario sino que se produzca de forma
+  automática y necesaria."* No user-triggered sync, no "upload now" button as the only path.
+- **No orphans, in either direction.** *"No pueden quedar «huérfanos» ni facturas expedidas ni
+  registros de facturación generados"* — and for Veri\*Factu this extends to transmission:
+  *"no pueden quedar RF generados sin remitir a la AEAT."*
+- **No reprocessing at the centre.** *"No sería acorde a la normativa la producción de los
+  registros de facturación por parte de la TPV y un reproceso posterior de los mismos (que los
+  altere) desde el servidor Back Office central."* What is transmitted must be byte-identical to
+  what was generated and hashed at the till.
+- **Immediacy applies to all three processes** — invoice + QR, RF generation, and transmission.
+  *"Simultánea (entiéndase inmediata o sin demora apreciable)."*
+- **Both ends must handle AEAT's error and warning responses**, including generating subsanación
+  and anulación records: *"ambos componentes deberán estar preparados y correctamente integrados
+  y coordinados para atender posibles respuestas con error o avisos."*
+- **Each component must be certified for the part it performs** — see the CPF/CF rules below.
+
+The orphan condition is the sharpest of these, and the existing orphan-drift work is the right
+shape for it: an orphan is a compliance defect, not merely a data-quality one.
+
+### Multi-component SIFs: which components need their own DR
+
+**Added 2026-07-27.** Same source. A SIF may be composed of a **componente principal de
+facturación (CPF)** plus one or more **componentes de facturación (CF)** — OM HAC/1177/2024
+art. 1.2.b and 1.2.c. AEAT's default is that all of them need certifying:
+
+> Los SIF que estén formados por dos, o más componentes […] deberán contar todos ellos con la
+> preceptiva Certificación mediante Declaración Responsable.
+
+With an exception for components that do not touch the regulated functionality:
+
+> No será preciso certificar aquellos componentes que presten funcionalidades que sean
+> irrelevantes […] las que no afecten a la generación del RF, a su encadenamiento, a la impresión
+> de facturas, a la generación del QR, al envío a sede electrónica, al enlace indefectible entre
+> componentes, a la conservación inalterada ni al registro de eventos.
+
+Three cases, and **which one we are in depends on a decision we have not yet made**:
+
+| Case | Situation | DR consequence |
+| --- | --- | --- |
+| (a) | CF produced by a third party | CF needs its own DR. The CPF's DR must name it, the **exact version used**, and how/when/why it is invoked |
+| (b) | CF by the same producer but with an **independent release cycle** — *"productos separados, que pueden dar servicio a múltiples CPF, que incluso podrían comercializarse de forma independiente"* | Same as (a) — its own DR |
+| (c) | CF by the same producer with a **linked release cycle** | No separate DR. The CPF's DR must explain the integration and its *uso indefectible*. **A change in the CF is a version change of the CPF** |
+
+**This decides the fate of `packages/verifactu`.** Kept internal with a release cycle tied to the
+POS, it is case (c) — no separate DR, and bumping it bumps the product version. **Published as a
+reusable source-available library for others to build on, it is case (b) by AEAT's own words, and needs a DR
+of its own.** That is not a licensing consequence; it follows from the component being separately
+usable.
+
+It also explains mdiago's position exactly: they are case (a)/(b) to their integrators, which is
+why they issue a DR per release for the library. Their reasoning was right and is now sourced.
 
 ### Required runtime check
 
