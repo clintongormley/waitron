@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
+import type { Database } from "../client.js";
 import { describeEachTarget } from "./harness.js";
 import { freshNif, seedTenant } from "./seed.js";
 
@@ -18,8 +19,21 @@ describe("freshNif", () => {
 });
 
 describeEachTarget("seedTenant", (target) => {
+  // beforeEach/afterEach rather than a per-test `const db`, matching every other
+  // describeEachTarget suite in this package: on the postgres target `target.create()` opens a
+  // real pool against the suite's shared container, so a database this file opens and never
+  // closes holds its backend for the rest of the run.
+  let db: Database;
+
+  beforeEach(async () => {
+    db = await target.create();
+  });
+
+  afterEach(async () => {
+    await db.close();
+  });
+
   it("inserts one tenant and returns its id", async () => {
-    const db = await target.create();
     const id = await seedTenant(db);
     const result = await db.execute<{ n: number }>(
       sql`select count(*)::int as n from tenants where id = ${id}`,
@@ -28,7 +42,6 @@ describeEachTarget("seedTenant", (target) => {
   });
 
   it("gives each tenant its own NIF, so a suite can seed several", async () => {
-    const db = await target.create();
     await seedTenant(db);
     await seedTenant(db);
     await seedTenant(db);
