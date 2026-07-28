@@ -38,10 +38,12 @@ does not die if we do.
 The authoritative terms are in [LICENSE](LICENSE) and [LICENSE-GRANTS.md](LICENSE-GRANTS.md);
 this summary has no legal effect. Licensing questions: info@waitron.io
 
-**Trademark.** No trademark rights are granted by the licence. "Waitron" is the licensor's mark.
-You may state accurately that your product is built on or derived from Waitron; you may not name
-or brand your distribution "Waitron". Rebranding to comply with this is not "obscuring a notice"
-under the licence: the licensing and copyright notices must stay, the name and logo must go.
+**Trademark.** No trademark rights are granted by the licence. The name "Waitron" and the Waitron
+logo are reserved by the licensor and are not licensed with the software. You may state accurately
+that your product is built on or derived from Waitron; you may not name or brand your distribution
+"Waitron". Rebranding to comply with this is expressly permitted and is not "obscuring a notice"
+under the licence — see Grant 3 and the trademark section in
+[LICENSE-GRANTS.md](LICENSE-GRANTS.md), which are the binding version of this paragraph.
 
 Copyright © 2026 Clinton Gormley.
 
