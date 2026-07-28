@@ -1,6 +1,7 @@
 {
   "name": "waitron",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "packageManager": "pnpm@9.15.0",
   "engines": {
