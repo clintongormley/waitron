@@ -182,9 +182,6 @@ importers:
       '@electric-sql/pglite':
         specifier: ^0.5.4
         version: 0.5.4
-      '@testcontainers/postgresql':
-        specifier: ^12.0.4
-        version: 12.0.4
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
@@ -302,9 +299,6 @@ importers:
       '@electric-sql/pglite':
         specifier: ^0.5.4
         version: 0.5.4
-      '@testcontainers/postgresql':
-        specifier: ^12.0.4
-        version: 12.0.4
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
@@ -336,9 +330,6 @@ importers:
       '@electric-sql/pglite':
         specifier: ^0.5.4
         version: 0.5.4
-      '@testcontainers/postgresql':
-        specifier: ^12.0.4
-        version: 12.0.4
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
@@ -385,9 +376,6 @@ importers:
       '@electric-sql/pglite':
         specifier: ^0.5.4
         version: 0.5.4
-      '@testcontainers/postgresql':
-        specifier: ^12.0.4
-        version: 12.0.4
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
@@ -419,9 +407,6 @@ importers:
       '@electric-sql/pglite':
         specifier: ^0.5.4
         version: 0.5.4
-      '@testcontainers/postgresql':
-        specifier: ^12.0.4
-        version: 12.0.4
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3

@@ -50,9 +50,9 @@ export interface SifRegistration {
  * PGlite cannot exercise the concurrent-contention case at all: every query against one PGlite
  * instance serialises onto a single backend, so a naive read-then-write implementation would pass
  * there by accident (see allocate-number.test.ts's identical `it.runIf(target.name ===
- * "postgres")` gate). This package has no real-Postgres test target — unlike packages/db, it does
- * not depend on `@testcontainers/postgresql` — so no test in this suite asserts the concurrent
- * case directly; it is covered structurally instead, by using the exact same single-statement
+ * "postgres")` gate). This package does have real-Postgres suites — they reach a container through
+ * `@waitron/db/testing/postgres.js` — but none of them exercises THIS function's concurrent case
+ * directly; it is covered structurally instead, by using the exact same single-statement
  * shape `allocate-number.ts` uses, proven under real contention there.
  */
 async function mintNumeroInstalacion(
