@@ -127,7 +127,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     { fetch: healthApp(health, now).fetch, port: config.httpPort, hostname: config.httpHost },
     (info) => {
       bound = true;
-      log("info", "server.listening", { port: info.port, aeatEnv: config.aeatEnv });
+      log("info", "server.listening", { port: info.port, environment: config.environment });
     },
   );
   // The failure counterpart: `EADDRINUSE` (a fixed default port already taken — the most common
@@ -199,7 +199,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
               {
                 db,
                 ring,
-                endpointFor: aeatEndpointFor(config.aeatEnv),
+                endpointFor: aeatEndpointFor(config.environment),
                 // `mtlsFetch` directly, not a wrapping arrow: its own second parameter (`ca`, for a
                 // private trust root) is optional, so `mtlsFetch` already has the exact shape
                 // `fetchFor` wants when called with one argument. A wrapper here would be one more

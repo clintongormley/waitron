@@ -278,7 +278,7 @@ async function waitForEvent(lines: readonly string[], event: string): Promise<Lo
 }
 
 describe("startServer, against a real container as the deployment role", () => {
-  it("boots, pins the tick-clamp mapping, folds settlementLagMs, threads aeatEnv, runs a pass, serves /health and shuts down cleanly", async () => {
+  it("boots, pins the tick-clamp mapping, folds settlementLagMs, threads environment, runs a pass, serves /health and shuts down cleanly", async () => {
     const port = await freePort();
     const [server, sleeping, listening] = await withCapturedStdout(async (lines) => {
       const started = await startServer({
@@ -300,9 +300,9 @@ describe("startServer, against a real container as the deployment role", () => {
         // parses this correctly, and `preproduction` is both the default AND what a silently
         // hardcoded `aeatEndpointFor` argument would also produce, so leaving this unset here would
         // assert nothing I4 didn't already have. "production" only appears on the logged line below
-        // if `config.aeatEnv` genuinely reached `boot.ts`'s runtime, not merely `loadConfig`'s
+        // if `config.environment` genuinely reached `boot.ts`'s runtime, not merely `loadConfig`'s
         // return value in isolation.
-        WAITRON_AEAT_ENV: "production",
+        WAITRON_ENV: "production",
       });
       // loop.ts logs "loop.sleeping" strictly AFTER onPass runs (its own source order, no await in
       // between), so finding this line is also proof the first pass — and onPass -> recordPass —
@@ -319,15 +319,15 @@ describe("startServer, against a real container as the deployment role", () => {
       // .maxTickMs -> sleepMsFor end to end; it is 94327 only if boot.ts's mapping is not swapped.
       expect(sleeping.sleepMs).toBe(94327);
 
-      // I4: `aeatEndpointFor(config.aeatEnv)` is the one config value spec §10 calls irreversible
+      // I4: `aeatEndpointFor(config.environment)` is the one config value spec §10 calls irreversible
       // (production numbering can never be reused), and nothing observed it reaching `boot.ts` at
       // all before this assertion — a hardcoded `aeatEndpointFor("production")` would have passed
       // every other test in the repository. This does not observe the endpoint the resolver itself
       // selects (that needs a seeded `fiscal.aeat` credential and due `envios` work, which this
       // suite deliberately has none of — see the 2026-07-27 addendum to the server-host spec §14),
-      // but it does prove `config.aeatEnv` is not silently dropped between `loadConfig` and the log
-      // line `aeatClientResolver` is built from the same config field beside.
-      expect(listening.aeatEnv).toBe("production");
+      // but it does prove `config.environment` is not silently dropped between `loadConfig` and the
+      // log line `aeatClientResolver` is built from the same config field beside.
+      expect(listening.environment).toBe("production");
       expect(listening.port).toBe(port);
 
       expect(server.health.startedAt).toBeInstanceOf(Date);

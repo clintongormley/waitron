@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { captureError } from "@waitron/db";
 import { DEFAULTS } from "@waitron/scheduler";
 import { isAppError } from "@waitron/shared";
-import { loadConfig } from "./config.js";
+import { deploymentEnvironment, loadConfig } from "./config.js";
 
 const MIN_ENV = { DATABASE_URL: "postgres://u@h/d" };
 const ROOT = "/opt/waitron/drizzle";
@@ -12,7 +12,7 @@ function codeOf(error: unknown): string {
 }
 
 describe("loadConfig", () => {
-  it("defaults every optional value, and defaults AEAT to preproduction", () => {
+  it("defaults every optional value, and defaults the deployment environment to preproduction", () => {
     const config = loadConfig(MIN_ENV, ROOT);
     expect(config).toEqual({
       databaseUrl: "postgres://u@h/d",
@@ -22,7 +22,7 @@ describe("loadConfig", () => {
       migrationsDatabaseUrl: "postgres://u@h/d",
       // Production numbering can never be reused, so the safe environment is the default and
       // production must be typed out. This assertion is the guard on that.
-      aeatEnv: "preproduction",
+      environment: "preproduction",
       httpPort: 8080,
       // /health is unauthenticated (spec §9); loopback-only is the safe default.
       httpHost: "127.0.0.1",
@@ -55,7 +55,7 @@ describe("loadConfig", () => {
       {
         ...MIN_ENV,
         WAITRON_MIGRATIONS_DATABASE_URL: "postgres://migrator@h/d",
-        WAITRON_AEAT_ENV: "production",
+        WAITRON_ENV: "production",
         WAITRON_HTTP_PORT: "9000",
         WAITRON_HTTP_HOST: "0.0.0.0",
         WAITRON_MIN_TICK_MS: "1000",
@@ -72,7 +72,7 @@ describe("loadConfig", () => {
       ROOT,
     );
     expect(config.migrationsDatabaseUrl).toBe("postgres://migrator@h/d");
-    expect(config.aeatEnv).toBe("production");
+    expect(config.environment).toBe("production");
     expect(config.httpPort).toBe(9000);
     expect(config.httpHost).toBe("0.0.0.0");
     expect(config.minTickMs).toBe(1000);
@@ -103,7 +103,7 @@ describe("loadConfig", () => {
   });
 
   it.each([
-    ["WAITRON_AEAT_ENV", "sandbox", "not_an_aeat_environment"],
+    ["WAITRON_ENV", "sandbox", "not_a_deployment_environment"],
     ["WAITRON_HTTP_PORT", "http", "not_a_positive_integer"],
     ["WAITRON_HTTP_PORT", "0", "not_a_positive_integer"],
     // Item 13 of the 2026-07-27 pre-merge review: `positiveInt` alone accepts any positive
@@ -223,5 +223,26 @@ describe("loadConfig", () => {
     );
     expect(config.maxTickMs).toBe(120_000);
     expect(config.skipRetryMs).toBe(60_000);
+  });
+});
+
+describe("deploymentEnvironment", () => {
+  it("defaults to preproduction when unset, so production is never reached by omission", () => {
+    expect(deploymentEnvironment({})).toBe("preproduction");
+    expect(deploymentEnvironment({ WAITRON_ENV: "" })).toBe("preproduction");
+  });
+
+  it("refuses a value that is neither environment, naming the variable", async () => {
+    // `Promise.resolve(...)`, not a bare arrow returning `deploymentEnvironment(...)` directly:
+    // `deploymentEnvironment` throws synchronously rather than returning a rejected promise, and
+    // `captureError` is typed `() => Promise<unknown>` — the same wrapping every other
+    // synchronous-throw case in this file already uses (see `loadConfig`'s callers above).
+    const error = await captureError(() =>
+      Promise.resolve(deploymentEnvironment({ WAITRON_ENV: "staging" })),
+    );
+    expect(error).toMatchObject({
+      code: "server.config_invalid",
+      params: { variable: "WAITRON_ENV", reason: "not_a_deployment_environment" },
+    });
   });
 });

@@ -5,7 +5,7 @@ import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import { SOAP_ENDPOINTS, SOAP_ENDPOINTS_SELLO, createClient } from "@waitron/verifactu";
 import type { VerifactuClient } from "@waitron/verifactu";
-import type { AeatEnvironment } from "./config.js";
+import type { DeploymentEnvironment } from "./config.js";
 import { readCredential } from "./credentials.js";
 import { codeOf } from "./error-code.js";
 import type { Logger } from "./logger.js";
@@ -87,9 +87,11 @@ export async function readCertMaterial(
  * `www1`/`prewww1`. That is why the certificate's kind is provisioned data and not something this
  * host could infer without reading X.509 policy OIDs.
  */
-export function aeatEndpointFor(aeatEnv: AeatEnvironment): (certKind: CertKind) => string {
+export function aeatEndpointFor(
+  environment: DeploymentEnvironment,
+): (certKind: CertKind) => string {
   return (certKind) =>
-    certKind === "sello" ? SOAP_ENDPOINTS_SELLO[aeatEnv] : SOAP_ENDPOINTS[aeatEnv];
+    certKind === "sello" ? SOAP_ENDPOINTS_SELLO[environment] : SOAP_ENDPOINTS[environment];
 }
 
 /** A tenant's mTLS `fetch` and the handle that releases the connection pool behind it. */
