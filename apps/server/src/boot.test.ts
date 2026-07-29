@@ -7,7 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Agent } from "undici";
-import { captureError, withTenant, type Database } from "@waitron/db";
+import { captureError, stampDeployment, withTenant, type Database } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 // The exact test-only entry point `packages/fiscal-verifactu`'s OWN tests use to seed a due
@@ -650,6 +650,28 @@ describe("startServer, against a real container as the deployment role", () => {
       await admin.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
     }
   }, 60_000);
+
+  // Task 3: the boot guard (deployment-guard.ts). Deliberately the LAST test in this describe
+  // block: `stampDeployment` is permanent (a second, different value is refused, not overwritten —
+  // see its own doc comment), so once this stamps the shared container's database as
+  // "preproduction" every real-container test declared ABOVE this one must already have run —
+  // several of them boot with no `WAITRON_ENV` at all (default "preproduction", so a stamp of
+  // "preproduction" would not even break a later one), but the very first test in this block boots
+  // with `WAITRON_ENV: "production"` and would fail this same guard if it ran after this stamp
+  // landed. This is the identical order-dependency the "sleeps on WAITRON_SKIP_RETRY_MS" test above
+  // already documents and accepts for this same shared-container suite.
+  it("refuses to start, and runs no migration, against another environment's database", async () => {
+    await stampDeployment(admin, "preproduction");
+
+    const error = await captureError(() =>
+      startServer({
+        ...KEY_ENV,
+        DATABASE_URL: roleUrl(pg.uri, PROBE_ROLE, PROBE_PASSWORD),
+        WAITRON_ENV: "production",
+      }),
+    );
+    expect(error).toMatchObject({ code: "deployment.environment_mismatch" });
+  });
 });
 
 // Neither test below needs the real container `beforeAll` starts for the suite above: both

@@ -8,6 +8,7 @@ import { drain } from "@waitron/fiscal-verifactu";
 import { AppError } from "@waitron/shared";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { loadConfig } from "./config.js";
+import { assertDeploymentMatches } from "./deployment-guard.js";
 import { createLogger } from "./logger.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "./migrations.js";
 import {
@@ -94,6 +95,17 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // second source of truth. (Not literally `process.env` — that is true only when `bin.ts` is the
   // caller; `boot.test.ts` passes a literal object instead.)
   const ring = loadKeyRing(env);
+
+  // Before ANY write, including migrations: a host pointed at another environment's database must
+  // stop here. Its own connection, closed immediately — the long-lived pool below is not opened
+  // until migrations have run, and borrowing the migrator's string keeps this on the same database
+  // the migrations are about to touch.
+  const stampProbe = await createPostgresDb(config.migrationsDatabaseUrl);
+  try {
+    await assertDeploymentMatches(stampProbe, config.environment);
+  } finally {
+    await stampProbe.close();
+  }
 
   // Migrations first, over `config.migrationsDatabaseUrl` — which defaults to `config.databaseUrl`
   // but may name a differently-privileged role (config.ts's own doc comment). Running this BEFORE

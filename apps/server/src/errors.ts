@@ -106,5 +106,14 @@ declare module "@waitron/shared" {
      * for every other caught value applies no less because this one happens on the way out.
      */
     "server.shutdown_failed": { errorCode: string };
+    /**
+     * This host is configured for one environment and the database belongs to another. Thrown
+     * before migrations run, so nothing is written.
+     *
+     * `deployment.*` rather than `server.*`: it is a fact about which deployment this database
+     * belongs to, not about the process. Neither value is a secret — both are already in the
+     * host's own configuration.
+     */
+    "deployment.environment_mismatch": { databaseEnvironment: string; hostEnvironment: string };
   }
 }
