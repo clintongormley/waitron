@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createPostgresDb, type Database } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
-import { captureError, pgErrorCode } from "./testing/errors.js";
+import { captureError, pgErrorCode, pgErrorMessage } from "./testing/errors.js";
 import {
   roleUrl,
   runMigrationSets,
@@ -40,7 +40,7 @@ describe("tenant_provisioner", () => {
   afterAll(async () => {
     // GUARDED teardown. An unguarded afterAll turns a beforeAll failure into "Cannot read
     // properties of undefined (reading 'close')" and masks the real error — the pattern this repo
-    // is trying to stop repeating. Optional chaining is the guard; it is not "unconditional".
+    // is trying to stop repeating.
     if (admin !== undefined) await admin.close();
     if (pg !== undefined) await pg.stop();
   });
@@ -81,10 +81,17 @@ describe("tenant_provisioner", () => {
           );
         }),
       );
-      // 42501 is insufficient_privilege — the GRANT failing. An RLS refusal would be 42501 too on
-      // a policy violation... which is precisely why the previous test exists: the two roles differ
-      // only in the tenant_provisioner membership, so this failure can only be the grant.
+      // 42501 is insufficient_privilege — but an RLS WITH CHECK refusal is ALSO 42501 (verified
+      // live: "new row violates row-level security policy for table \"tenants\""), so the code
+      // alone does not distinguish the two, and the previous test does not fix that either: with
+      // app_user widened to hold INSERT on tenants plus a RESTRICTIVE policy scoped to deny
+      // app_only_login specifically, both tests stayed green under a code-only assertion here —
+      // exactly the "never widen a grant" failure mode this suite exists to catch. Under that
+      // same mutant, asserting the message too makes this line fail: the mutant's refusal reads
+      // "new row violates row-level security policy ...", not "permission denied for table
+      // tenants", which is what the grant failure this test names actually reads.
       expect(pgErrorCode(error)).toBe("42501");
+      expect(pgErrorMessage(error)).toMatch(/permission denied for table/);
     } finally {
       await db.close();
     }

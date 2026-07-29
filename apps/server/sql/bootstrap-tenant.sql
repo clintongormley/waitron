@@ -22,21 +22,32 @@
 -- it is RLS (`deployment` carries none at all; see its own schema comment), so it fails on the
 -- grant, the same way `tenants` does, not on a policy.
 --
--- This file nonetheless keeps the superuser requirement, for two reasons, NEITHER of which is a
--- psql limitation. An earlier version of this note claimed psql "cannot generate a uuid into a
--- variable before the INSERT that uses it" — that is also false (Copilot, PR #4), and this script
--- already uses `\gset` three times; `select gen_random_uuid() as tid \gset` works and the variable
--- is usable in `set_config` before any INSERT. The real reasons:
+-- This file nonetheless keeps the superuser requirement, and not for a psql limitation. An
+-- earlier version of this note claimed psql "cannot generate a uuid into a variable before the
+-- INSERT that uses it" — that is also false (Copilot, PR #4), and this script already uses
+-- `\gset` three times; `select gen_random_uuid() as tid \gset` works and the variable is usable
+-- in `set_config` before any INSERT. The real reason it keeps the requirement:
 --
 --   1. This script lets `tenants.id` DEFAULT rather than choosing it, so there is no id to adopt as
---      the scope. That is this file's choice, changeable in three lines.
---   2. No non-superuser role in this repository holds INSERT on `tenants` today. Fixing (1) alone
---      would just move the failure from the RLS check to the grant.
+--      the scope. That is this file's choice, changeable in three lines — but until it is made,
+--      this script still needs superuser AS WRITTEN, regardless of what any role is granted.
+--      Verified live: as `provisioner_login` (a LOGIN role in both `app_user` and
+--      `tenant_provisioner`, so it holds `tenant_provisioner`'s INSERT grant), running this
+--      file's own current pattern — `insert into tenants (nif, legal_name) values (...)`, no id
+--      chosen, no `app.tenant_id` set — still fails, with "new row violates row-level security
+--      policy for table tenants", not a grant error. Holding the grant does not help a caller
+--      that has not also adopted a scope.
 --
--- So the rewrite only pays off together with a provisioning role that holds that grant, which is
--- what the programmatic provisioning path introduces. The distinction matters beyond tidiness:
--- managed Postgres (Neon, Supabase, RDS) grants CREATEDB/CREATEROLE but never true superuser, so
--- "superuser required" would have read as "not deployable there".
+-- A second reason this note used to give — "no non-superuser role in this repository holds INSERT
+-- on tenants today" — is no longer true as of commit 02c5f5e: `tenant_provisioner`
+-- (packages/db/drizzle/0011_provisioner_role.sql) now holds exactly that grant. (That file did not
+-- exist when the proof at :15-23 above was written, in PR #4 — several commits earlier — so
+-- whatever role that proof used, it cannot have been `tenant_provisioner`.) None of this means the
+-- script now works without superuser — reason 1 alone still blocks it, as the live check above
+-- shows. The grant existing is necessary but not sufficient; fixing (1) is the remaining piece,
+-- and it is what the programmatic provisioning path (not this script) does. The distinction
+-- matters beyond tidiness: managed Postgres (Neon, Supabase, RDS) grants CREATEDB/CREATEROLE but
+-- never true superuser, so "superuser required" would have read as "not deployable there".
 --
 -- Deliberately NOT the test seeds: packages/db/src/testing/seed.ts writes 'Test SL' and a NIF from
 -- a counter. Those values would become part of a fiscal record the Agencia Tributaria keeps.
