@@ -49,6 +49,20 @@ declare module "@waitron/shared" {
     /** A migration folder named by the manifest is absent or carries no Drizzle journal. */
     "server.migrations_missing": { name: string; folder: string };
     /**
+     * Provisioning was pointed at a tenant or a till that this connection cannot see. `id` is
+     * echoed because both are operator-supplied arguments and neither is a secret — an operator who
+     * mistyped one needs to see which of the two ids was rejected, and a UUID identifies nothing on
+     * its own.
+     *
+     * A till of ANOTHER tenant reports `till` rather than a distinct "wrong owner" code, and
+     * deliberately: to a caller scoped to one tenant the two are the same fact, and RLS makes them
+     * literally indistinguishable — a foreign till simply is not there. Reporting them separately
+     * would mean a superuser (who sees the foreign row) got a different error than the deployment
+     * role for the same mistake, and would confirm the existence of another tenant's till to
+     * whoever asked.
+     */
+    "server.provision_target_missing": { target: "tenant" | "till"; id: string };
+    /**
      * The HTTP listener's socket failed to bind. `code` is the raw OS error Node attaches to the
      * `'error'` event (`EADDRINUSE` for the common case of a fixed default port already taken,
      * `EACCES` for a privileged port with no permission) — never the `Error` itself, whose

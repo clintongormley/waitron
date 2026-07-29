@@ -257,6 +257,12 @@ docker run -d --name waitron-bootstrap-probe \
 export PROBE_URL="postgresql://postgres:probe@127.0.0.1:55432/postgres"
 pnpm --filter @waitron/server build
 
+# A THROWAWAY key ring, discarded with the container — never the deli's, which Step 4 generates and
+# keeps. `boot.ts` calls loadKeyRing BEFORE applyMigrations, so without one the host exits on
+# `credentials.key_missing` and never migrates at all (observed while proving Step 4b).
+export WAITRON_CREDENTIALS_KEY="$(openssl rand -base64 32)"
+export WAITRON_CREDENTIALS_KEY_VERSION=1
+
 # Boots, migrates, then idles on its duty loop. Stop it once /health answers.
 DATABASE_URL="$PROBE_URL" WAITRON_AEAT_ENV=preproduction node apps/server/dist/server.js &
 HOST_PID=$!
@@ -295,8 +301,11 @@ part of a fiscal record."
 The deli's database, following `apps/server/README.md`'s "Database roles and grants" — this is that recipe's **first real use**, and it is recorded there as hand-verified rather than test-covered. Any step that does not work as written is a finding for Task 5 and a fix to that README in this cycle.
 
 **Generate the credential key ring FIRST.** `boot.ts` calls `loadKeyRing(env)` (line 96) *before*
-`applyMigrations` (line 104), so the host will not even migrate without it — this is the same key
-Task 3 Step 2 uses, generated once here and kept for the life of the deployment:
+`applyMigrations` (line 104), so the host will not even migrate without it — confirmed by observation
+while proving Step 4b: with neither variable set, the host dies on `credentials.key_missing` inside
+`startServer` and the database is left unmigrated. This is the deli's own key, generated once here
+and kept for the life of the deployment. Task 3 Step 2 generates a **separate throwaway** one that
+dies with its container; the two are deliberately not the same key.
 
 ```zsh
 export WAITRON_CREDENTIALS_KEY="$(openssl rand -base64 32)"
@@ -419,7 +428,7 @@ There is no till application yet, so this is the only way to put a real sale
 into the chain. Mirrors write-path.e2e.test.ts's backend construction."
 ```
 
-- [ ] **Step 4b: The till must be registered as a SIF first — and nothing does that yet**
+- [x] **Step 4b: The till must be registered as a SIF first — and nothing does that yet**
 
 **Discovered while proving Task 4 against a throwaway container.** `VerifactuBackend.recordSale`
 reads the till's live SIF identity via `currentSif`, which throws `sif.not_registered` when no
@@ -435,17 +444,46 @@ counter with real contention semantics (proven under 20 concurrent writers in
 `chain.concurrency.test.ts`), and re-registration deliberately begins a new chain. A hand-written
 INSERT would produce a `registro_sif` row that looks right and chains wrong.
 
-Write `apps/server/scripts/register-till.ts` alongside `record-one-sale.ts`, mirroring it: reads
-`DATABASE_URL`, takes tenant and till ids plus the `IdSistemaInformatico` from argv, runs inside
-`withTenant`, calls `registerSif`, prints the resulting `numeroInstalacion` and `sif_id`. Add it to
-`apps/server`'s `build` script as a third esbuild target, the same way `record-one-sale.ts` was.
+**Done.** Split across two files rather than the single script this step first described:
 
-Prove it against a throwaway container exactly as Task 4 Step 3 did: register, then record a sale,
-then confirm one `registros_facturacion` row with `primer_registro = true`.
+- `apps/server/src/provision-till.ts` — `provisionTill(db, { tenantId, tillId, idSistemaInformatico })`,
+  covered by `src/provision-till.test.ts` against a real container. It lives in `src/` because
+  `vitest.config.ts` excludes `scripts/**` from coverage as *build tooling*, and provisioning a till
+  is behaviour this host owns. It is also the seed of the provisioning surface this step's own
+  closing note calls for.
+- `apps/server/scripts/register-till.ts` — the argv/stdout shim, a third esbuild target in `build`.
+
+Two departures from the sketch above, both deliberate:
+
+1. **The NIF is not an argument.** It is read from the tenant row. `sif.nif` becomes
+   `ObligadoEmision.NIF` and `IDEmisorFactura` on every registro the till ever files
+   (`backend.ts:475`, `:231`), so an operator-supplied NIF is a way to file one tenant's sales under
+   another's with nothing in the database disagreeing. The fixtures that pass `nif` to `registerSif`
+   mint the tenant in the same breath; a provisioning tool has an existing tenant to read it from.
+2. **The till is checked against `tills.tenant_id` explicitly.** `registro_sif` has separate foreign
+   keys onto `tenants` and `tills` and no composite one, and RLS's WITH CHECK only constrains
+   `tenant_id` — so a row naming tenant A with a till of tenant B satisfies every constraint in the
+   schema. Leaning on RLS to hide the foreign row would not hold for the superuser who provisions the
+   first till of a deployment. Both misses report `server.provision_target_missing`.
+
+**Proven against a throwaway container**, in the order that makes the gap visible:
+
+| | |
+| --- | --- |
+| `record-one-sale` before registering | fails, `sif.not_registered` — the gap, reproduced |
+| `register-till` | `numeroInstalacion: 1`, `nif: B00000000` (the tenant's own, unprompted) |
+| `record-one-sale` after | `fiscalState: pending`, QR names `nif=B00000000` |
+| `registros_facturacion` | 1 row, `primer_registro = true`; 1 sale; 1 `pendiente` envío |
+
+Also verified: both failure paths exit non-zero (an operator's `&&` chain depends on it).
 
 **Record in Task 5:** provisioning a till is a product gap, not just a plan gap. The first customer
 till in a real deployment will hit this too, and the eventual provisioning surface must cover SIF
-registration — not only tenant, location, till and series.
+registration — not only tenant, location, till and series. Also record the plan defect this step
+found: **Task 3 Step 2's boot command omitted the key ring entirely** and the key was not generated
+until Task 3 Step 4, two steps later — the operator would have hit `credentials.key_missing` on an
+unmigrated database. Corrected above. That is the *sixth* operational error execution found in a plan
+that was reviewed before it was run, and the second of the same shape as finding §4 in the handoff.
 
 - [ ] **Step 5: [HUMAN] Record one real sale on the deli's database**
 
