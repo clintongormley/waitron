@@ -39,6 +39,14 @@ Run the thing.
 is how a third false claim happened — an experiment on one mutation, written up as a claim about a
 different mutation that was never run. If the sentence describes more than what you ran, narrow it.
 
+### "Pre-existing" and "not a regression" are claims too
+
+Both are load-bearing — they decide whether something gets fixed now or deferred — and both are
+routinely asserted from impression. Check with `git log`/`git blame` before saying either, and if you
+have not checked, say so: "I believe this predates the branch" is honest, "this is pre-existing" is a
+finding. The same goes for "harmless", "unreachable" and "narrow": each is a claim about behaviour
+under conditions you may not have enumerated.
+
 ### The correction is a new claim
 
 Both false claims above were born _while fixing someone else's_. Attention goes to the old text
