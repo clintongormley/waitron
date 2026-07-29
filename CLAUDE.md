@@ -125,9 +125,10 @@ Two targets, and the choice matters:
 Pick the lighter one when the heavier one's justification does not apply to your suite, and say why
 in a comment.
 
-**`TESTCONTAINERS_RYUK_DISABLED=true` is required locally** or container suites hang for 180s.
-Docker contention on a full `pnpm test` shows up as `EADDRINUSE`; it passes on retry and CI has never
-reproduced it.
+**`TESTCONTAINERS_RYUK_DISABLED=true` is required locally.** Without it, container suites hang until
+the 180s `hookTimeout` in `apps/server/vitest.config.ts` fires — observed repeatedly on this machine,
+never in CI, which is why no config default papers over it. Docker contention on a full `pnpm test`
+shows up separately as `EADDRINUSE` and passes on retry.
 
 **Guard every teardown**: `if (db !== undefined) await db.close()`. An unguarded `afterAll` turns a
 `beforeAll` failure into `Cannot read properties of undefined (reading 'close')` and masks the real

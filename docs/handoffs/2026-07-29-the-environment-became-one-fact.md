@@ -1,8 +1,9 @@
 # Handoff — the environment became one fact, and a till learned to sell
 
 **Date:** 2026-07-29
-**Type:** *Backward-looking.* No live branch — the working tree is clean, `main` is `4fb3db0`, and
-`origin` carries nothing but `main`.
+**Type:** *Backward-looking.* Written against `main` at `4fb3db0`, with every branch below merged and
+torn down. (This document and the repo's `CLAUDE.md` then landed on a branch of their own, so `main`
+has moved on by the time you read it.)
 
 | PR | Squash | What |
 | --- | --- | --- |
