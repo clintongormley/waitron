@@ -143,6 +143,7 @@ Domain-concept prefixes, per `packages/shared/src/errors.ts`:
 | Code | Where | Params |
 | --- | --- | --- |
 | `deployment.environment_mismatch` | `startServer`, once | `databaseEnvironment`, `hostEnvironment` |
+| `deployment.already_stamped` | `stampDeployment`, at provisioning | `stamped`, `requested` |
 | `fiscal.environment_mismatch` | `drain`, per record | `recordId`, `recordEnvironment`, `hostEnvironment` |
 | `fiscal.environment_unknown` | `drain`, per record | `recordId`, `hostEnvironment` |
 | `payments.credential_environment_mismatch` | Stripe credential read, per tenant | `tenantId`, `keyEnvironment`, `hostEnvironment` |
