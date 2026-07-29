@@ -190,3 +190,39 @@ tests alongside the code.
 
 **After pulling a branch that added a workspace dependency, run `pnpm install`** in the main
 checkout, or typecheck fails on a module that exists.
+
+---
+
+## 7. Keep this file current — it is part of the work, not a chore
+
+**This file is maintained continuously, not rewritten occasionally.** Every rule above was paid for
+by a defect, a wasted round trip, or a review finding. When you pay that price again, the lesson goes
+here in the same change that fixes it — not into a handoff that the next session may not read.
+
+**Add an entry when any of these happens:**
+
+- A review finds a defect whose _shape_ could recur — a convention nobody wrote down, a claim that
+  outran its evidence, a test that passed for the wrong reason.
+- A trap costs real time: a gate that behaves differently locally than in CI, a command that fails
+  in this shell, a tool that needs a flag here and nowhere else.
+- You discover a convention by grepping rather than by reading — that is precisely the convention
+  that was missing from this file.
+- A decision gets made that a future session would otherwise relitigate, or worse, silently reverse.
+
+**Do not add:** one-off bugs with no reusable shape, anything the code or types already state
+plainly, or the narrative of what a session did. The last of those belongs in `docs/handoffs/`; this
+file carries only what changes how the _next_ piece of work is done.
+
+**The receipt rule in §1 applies to this file too.** An entry states the rule and what it cost —
+"CI's `test` job runs `test:coverage`, not `test`" is followed by the consequence that made it worth
+writing. A rule with no evidence behind it reads as opinion and gets ignored by the session that
+most needs it.
+
+**Prune as well as append.** A rule that has been superseded, or whose underlying trap was fixed in
+the code, is worse than no rule: it teaches a session to work around something that no longer
+exists. Delete it rather than leaving it to rot, and say so in the commit.
+
+Natural moments to do this: while addressing review findings (the lesson is freshest and the branch
+is already open), and when writing a handoff — anything in the handoff phrased as "next time,
+remember to…" belongs here instead, because a handoff is read once and this file is read every
+session.
