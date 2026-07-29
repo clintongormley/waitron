@@ -17,10 +17,11 @@ const MIGRATION_LOCK_KEY = 8_474_103;
  * locking nothing and leaking a lock. `pg_advisory_xact_lock` is not available either, because
  * Drizzle's migrator opens its own transactions and cannot run inside ours.
  *
- * `connectionString` is `config.migrationsDatabaseUrl` (`config.ts`), not necessarily the pool the
- * rest of the host runs its duties over: a deployment may run migrations under a privileged role
- * while `DATABASE_URL` stays the least-privileged one spec §10 requires, and those can be two
- * different roles entirely. That is why this function opens and closes its OWN `Database` here
+ * `connectionString` is whatever the caller passes — for `apps/server`, that's
+ * `config.migrationsDatabaseUrl` (`apps/server/src/config.ts`), not necessarily the pool the rest of
+ * the host runs its duties over: a deployment may run migrations under a privileged role while
+ * `DATABASE_URL` stays the least-privileged one spec §10 requires, and those can be two different
+ * roles entirely. That is why this function opens and closes its OWN `Database` here
  * rather than accepting the caller's long-lived pool as a parameter — migrating over a caller-
  * supplied pool opened from a DIFFERENT connection string would migrate under the wrong role
  * whenever the two happen to differ, silently correct only when they happen to be equal. Both the

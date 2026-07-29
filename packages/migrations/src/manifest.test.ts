@@ -38,11 +38,11 @@ describe("the migration manifest", () => {
   });
 
   it("resolves under a bundle root by name", () => {
-    // A real fixture, not the illustrative "/opt/waitron/drizzle" config.test.ts uses for ROOT:
-    // that path is never touched on disk there (loadConfig only plumbs the string through), but
-    // migrationOptionsFor's journal check runs in the root branch too — so a bundle-root test
-    // needs a folder that actually exists, or it fails on server.migrations_missing rather than
-    // on the assertion it's meant to check.
+    // A real fixture, not the illustrative "/opt/waitron/drizzle" apps/server/src/config.test.ts
+    // uses for ROOT: that path is never touched on disk there (loadConfig only plumbs the string
+    // through), but migrationOptionsFor's journal check runs in the root branch too — so a
+    // bundle-root test needs a folder that actually exists, or it fails on server.migrations_missing
+    // rather than on the assertion it's meant to check.
     const root = mkdtempSync(join(tmpdir(), "waitron-migrations-"));
     try {
       mkdirSync(join(root, "core", "meta"), { recursive: true });

@@ -27,10 +27,13 @@ export function manifestSets(): MigrationSet[] {
  * `root === null` means "running from source": resolve each `from` against this package. Otherwise
  * every set lives at `<root>/<name>` — an ABSOLUTE `root` is used as-is; a RELATIVE one resolves
  * against this package's own directory (`packages/migrations`), the same base the from-source branch
- * uses, never the process's current working directory. `scripts/copy-migrations.mjs` always builds an
- * absolute `dist/drizzle` beside the bundle, so the relative case only matters for a caller passing
- * `WAITRON_MIGRATIONS_DIR` as a relative path — supported deliberately, not rejected, but worth
- * stating precisely: a wrong assumption here resolves silently into the wrong folder rather than
+ * uses, never the process's current working directory. Which shape a caller passes is that caller's
+ * own choice, not something this package can assume from its one existing consumer: a caller that
+ * builds an absolute path beside its own bundle (`apps/server`'s `scripts/copy-migrations.mjs` does
+ * this) never exercises the relative case, while a caller relaying an operator-supplied value —
+ * `apps/server`'s `WAITRON_MIGRATIONS_DIR` is one such value — may be relaying a relative one,
+ * supported deliberately, not rejected. Worth stating precisely regardless of who exercises it: a
+ * wrong assumption about the resolution base fails silently into the wrong folder rather than
  * failing loud.
  *
  * The indirection is not taste. Every `*_MIGRATIONS` descriptor computes `migrationsFolder` from its
