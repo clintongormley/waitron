@@ -213,5 +213,37 @@ declare module "@waitron/shared" {
       numSerieFactura: string;
       fechaExpedicionFactura: string;
     };
+
+    /**
+     * The deployment-environment plan's Task 6: `./drain.ts`'s `claimBatch`. A registro whose OWN
+     * `entorno` (stamped at generation time by `VerifactuBackendOptions.deploymentEnvironment`,
+     * `./registro-row.ts`'s `RegistroRowContext.entorno`) disagrees with the DRAINING host's own
+     * `DrainDeps.environment`. Constructed, never thrown, exactly like `fiscal.registro_rechazado`
+     * above — the drainer classifies the row and moves on rather than aborting the whole batch.
+     *
+     * Never retried with backoff: unlike a transient AEAT failure, a mismatch is a configuration
+     * fact that resubmitting cannot fix, so `claimBatch` leaves the row `pendiente` with no
+     * `proximo_intento_en` change at all, rather than scheduling `backoffMs`'s exponential wait —
+     * correcting `WAITRON_ENV` and restarting is what must release it. Submitting a
+     * pre-production record to the real AEAT is unrecoverable (chains cannot be merged or
+     * migrated, and invoice numbers are never reused), which is why this refuses rather than
+     * assumes.
+     */
+    "fiscal.environment_mismatch": {
+      recordId: string;
+      recordEnvironment: string;
+      hostEnvironment: string;
+    };
+
+    /**
+     * The deployment-environment plan's Task 6: `./drain.ts`'s `claimBatch`. A registro written
+     * before the `entorno` column existed (migration 0009) — nothing recorded which deployment it
+     * was destined for. A DISTINCT code from `fiscal.environment_mismatch` above, not a shared one
+     * defaulting the missing value to "assume production": guessing which deployment an
+     * un-stamped row belongs to is exactly what this whole guard exists to avoid, and collapsing
+     * the two would erase, for the human resolving the incident, whether AEAT ever saw a
+     * disagreeing value or none at all.
+     */
+    "fiscal.environment_unknown": { recordId: string; hostEnvironment: string };
   }
 }

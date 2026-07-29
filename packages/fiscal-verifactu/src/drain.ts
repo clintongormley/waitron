@@ -18,7 +18,7 @@ import type {
 } from "@waitron/verifactu";
 import { writeAck } from "./acks.js";
 import { fromRegistroRow, toAeatDate } from "./registro-row.js";
-import type { RegistroRow } from "./registro-row.js";
+import type { Entorno, RegistroRow } from "./registro-row.js";
 
 /**
  * The fake AEAT's own default (`FakeAeatOptions.tiempoEsperaInicial`,
@@ -107,6 +107,21 @@ export interface DrainDeps {
    * default and its reasoning; required here so a caller that forgets is a compile error rather
    * than a silent cadence. `VerifactuBackend` applies the default on its callers' behalf. */
   skipRetryMs: number;
+  /**
+   * Which deployment THIS host is draining for — compared, per claimed row, against that row's
+   * own `entorno` (`RegistroRow.entorno`, stamped at generation time by
+   * `VerifactuBackendOptions.deploymentEnvironment`; `./registro-row.ts`'s own doc comment on
+   * `Entorno`). `claimBatch` refuses a row whose `entorno` disagrees, or carries none at all,
+   * rather than submitting it — see that function's own doc comment and `errors.ts`'s
+   * `fiscal.environment_mismatch`/`fiscal.environment_unknown`. Submitting a pre-production
+   * record to the real AEAT is unrecoverable: chains cannot be merged or migrated, and invoice
+   * numbers are never reused.
+   *
+   * `Entorno`, not a bare `string`, for the identical reason `VerifactuBackendOptions.deploymentEnvironment`
+   * is typed that way: an unrepresentable value is a `tsc` error here, not a runtime surprise
+   * discovered only once a whole tenant's backlog is silently refused.
+   */
+  environment: Entorno;
 }
 
 /** A due `envios` row joined to enough of its registro to rebuild and order it. */
@@ -164,7 +179,7 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
   for (const tenantId of await tenantsWithWork(deps.db, now)) {
     try {
       const client = await deps.resolveClient(tenantId);
-      await drainTenant(deps.db, client, tenantId, now, result);
+      await drainTenant(deps.db, client, tenantId, deps.environment, now, result);
     } catch (error) {
       // Contained per tenant, deliberately. Before this, one tenant's failure threw straight out of
       // the sweep and every LATER tenant's submission — each with its own legal clock — never
@@ -239,6 +254,7 @@ async function drainTenant(
   db: Database,
   client: VerifactuClient,
   tenantId: string,
+  environment: Entorno,
   now: Date,
   result: DrainResult,
 ): Promise<void> {
@@ -274,7 +290,7 @@ async function drainTenant(
     // never handed to AEAT, since submitting over an unresolved gap would be submitting out of
     // chain order.
     const batch = await withTenant(db, tenantId, async (tx) => {
-      const claimed = await claimBatch(tx, tenantId, now);
+      const claimed = await claimBatch(tx, tenantId, now, environment, result);
       return haltOpenChainClaims(tx, claimed, now, result);
     });
     // Defensive only: EITHER the countDue/claimBatch race this function's own doc comment
@@ -420,8 +436,27 @@ async function recoverStaleClaims(tx: Transaction, tenantId: string, now: Date):
  * immediately move past whatever the first already has locked and claim only what remains — the
  * concurrency this drainer needs when scaled beyond one process. Proven under REAL contention (not
  * PGlite, which serialises everything onto one backend) by `drain.concurrency.test.ts`.
+ *
+ * **The deployment-environment guard** (Task 6 of the deployment-environment plan): every SELECTed
+ * row's OWN `entorno` (stamped at generation time — `RegistroRow.entorno`, `./registro-row.ts`) is
+ * checked against this DRAINING host's `environment` BEFORE the `enviando` UPDATE below runs. A
+ * row that disagrees, or carries no `entorno` at all (written before migration 0009 added the
+ * column), is EXCLUDED from that UPDATE's id list — never included, never flipped, never reverted
+ * — and `raiseIncident` reports it on THIS SAME transaction instead. Because the row is simply
+ * never touched, no explicit UPDATE is needed to leave it `pendiente`: the `FOR UPDATE` lock this
+ * SELECT holds on it is released like any other when the transaction ends, and nothing else here
+ * or in any caller ever sets its `estado`. Also never backed off via `backoffMs` like a transient
+ * submit failure would be — a mismatch is a configuration fact, not a fact about AEAT's
+ * availability, so only correcting `WAITRON_ENV` and restarting releases the row, not a timer. See
+ * `errors.ts`'s own `fiscal.environment_mismatch`/`fiscal.environment_unknown` doc comments.
  */
-async function claimBatch(tx: Transaction, tenantId: string, now: Date): Promise<DueRow[]> {
+async function claimBatch(
+  tx: Transaction,
+  tenantId: string,
+  now: Date,
+  environment: Entorno,
+  result: DrainResult,
+): Promise<DueRow[]> {
   const rows = await tx.execute<DueRow>(sql`
     select r.*, e.intentos from envios e
     join registros_facturacion r on r.id = e.registro_id
@@ -430,8 +465,31 @@ async function claimBatch(tx: Transaction, tenantId: string, now: Date): Promise
     limit ${MAX_REGISTROS_POR_ENVIO}
     for update of e skip locked
   `);
-  if (rows.rows.length > 0) {
-    const ids = rows.rows.map((r) => r.id);
+
+  const sendable: DueRow[] = [];
+  for (const row of rows.rows) {
+    const mismatch =
+      row.entorno === null
+        ? new AppError("fiscal.environment_unknown", {
+            recordId: row.id,
+            hostEnvironment: environment,
+          })
+        : row.entorno !== environment
+          ? new AppError("fiscal.environment_mismatch", {
+              recordId: row.id,
+              recordEnvironment: row.entorno,
+              hostEnvironment: environment,
+            })
+          : null;
+    if (mismatch === null) {
+      sendable.push(row);
+    } else {
+      await raiseIncident(tx, row, "error", mismatch, now, result);
+    }
+  }
+
+  if (sendable.length > 0) {
+    const ids = sendable.map((r) => r.id);
     // NOT `= any(${ids})`, and NOT `in (${ids})` either: drizzle-orm's `sql` tag expands a JS
     // array parameter into an ALREADY-PARENTHESISED placeholder list — `($1, $2, $3)` — for
     // exactly this `IN` shape, not a single Postgres array value. `any(${ids})` sends
@@ -447,8 +505,11 @@ async function claimBatch(tx: Transaction, tenantId: string, now: Date): Promise
   }
   // `r.intentos + 1` reflects the UPDATE just committed above — the SELECT ran before it, so its
   // own `e.intentos` is still the PRE-increment value. Returned already incremented so
-  // `backoffBatch` (if the submit below fails) computes THIS attempt's wait, not the previous one's.
-  return rows.rows.map((r) => ({ ...r, intentos: r.intentos + 1 }));
+  // `backoffBatch` (if the submit below fails) computes THIS attempt's wait, not the previous
+  // one's. Only ever computed for `sendable` rows: a row the environment guard above excluded was
+  // never part of that UPDATE, so its own `intentos` was never touched either, and it is never
+  // returned from here for a caller to see a bumped value that was never actually persisted.
+  return sendable.map((r) => ({ ...r, intentos: r.intentos + 1 }));
 }
 
 /**

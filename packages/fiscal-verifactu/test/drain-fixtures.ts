@@ -4,8 +4,17 @@ import type { TrustedClock } from "@waitron/fiscal";
 import { tillId as brandTillId } from "@waitron/shared";
 import type { TenantId, TillId } from "@waitron/shared";
 import { currentSif, registerSif } from "../src/registro-sif.js";
+import type { Entorno } from "../src/registro-row.js";
 import { seedTenantWithSif } from "./fixtures.js";
 import { steadyClock } from "./write-path-fixtures.js";
+
+/**
+ * Every existing caller of `seedPendingEnvios` (before the deployment-environment plan's Task 6)
+ * constructs its `VerifactuBackend` with `deploymentEnvironment: "production"` — this fixture's
+ * own default keeps every one of those callers submitting exactly as before Task 6's drain guard
+ * landed, without touching a single one of their call sites.
+ */
+const DEFAULT_ENTORNO: Entorno = "production";
 
 export interface SeededDrainOptions {
   count: number;
@@ -18,6 +27,15 @@ export interface SeededDrainOptions {
    * to matter once `persistResponse` reads per-line state (Task 9).
    */
   futureDated?: boolean;
+  /**
+   * The deployment-environment plan's Task 6: which `entorno` every seeded row carries — the fact
+   * `drain`'s new guard (`../src/drain.ts`) compares against `DrainDeps.environment`. Defaults to
+   * `"production"` (`DEFAULT_ENTORNO` above) so every EXISTING caller of this fixture — none of
+   * which know this field exists — keeps submitting exactly as it did before the guard landed.
+   * `null` seeds a row as if written before migration 0009 added the column at all, for a test
+   * that needs to exercise `fiscal.environment_unknown` rather than `fiscal.environment_mismatch`.
+   */
+  entorno?: Entorno | null;
 }
 
 /**
@@ -68,6 +86,10 @@ async function insertPendingAlta(
     secuencia: number;
     huella: string;
     fecha: string;
+    /** See `SeededDrainOptions.entorno`'s own doc comment — required here (no default at this
+     * low level) so every caller states it explicitly, matching this file's own house style of
+     * defaulting once, at the public `seedPendingEnvios` boundary, never silently deeper down. */
+    entorno: Entorno | null;
   },
 ): Promise<{ registroId: string; numSerieFactura: string }> {
   const numSerieFactura = `S${String(params.secuencia)}/1`;
@@ -114,13 +136,13 @@ async function insertPendingAlta(
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       tipo_factura, descripcion_operacion, desglose, cuota_total, importe_total,
       primer_registro, sistema_informatico,
-      fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella
+      fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, entorno
     ) values (
       ${params.tenantId}, ${params.tillId}, ${params.sifId}, ${saleId}, ${params.secuencia}, 'alta',
       ${params.nif}, ${numSerieFactura}, ${params.fecha}, 'Waitron SL',
       'F2', 'Venta en establecimiento', ${desglose}::jsonb, '2.10', '12.10',
       true, '{}'::jsonb,
-      '2026-07-20T19:20:30+01:00', 60, '01', ${params.huella}
+      '2026-07-20T19:20:30+01:00', 60, '01', ${params.huella}, ${params.entorno}
     )
     returning id
   `);
@@ -165,6 +187,9 @@ export async function seedPendingEnvios(
   const legalName = tenantRow.rows[0]?.legal_name ?? "Waitron SL";
 
   const fecha = opts.futureDated === true ? FUTURE_FECHA : PAST_FECHA;
+  // `undefined` (the field was never mentioned) defaults to production; an EXPLICIT `null` is a
+  // deliberate request to model a pre-migration row, and must not be coalesced away by `??`.
+  const entorno = opts.entorno === undefined ? DEFAULT_ENTORNO : opts.entorno;
   const registroIds: string[] = [];
   const facturaKeys: string[] = [];
 
@@ -180,6 +205,7 @@ export async function seedPendingEnvios(
       secuencia: i,
       huella,
       fecha,
+      entorno,
     });
     registroIds.push(registroId);
     facturaKeys.push(`${sif.nif}|${numSerieFactura}|${toAeatDate(fecha)}`);
@@ -215,6 +241,10 @@ export async function appendPendingAlta(
   secuencia: number,
 ): Promise<{ registroId: string; facturaKey: string }> {
   const huella = String(secuencia).padStart(64, "0");
+  // `DEFAULT_ENTORNO`, matching every `seedPendingEnvios` call this helper's own callers seed
+  // `seeded` from: none of them pass a non-default `entorno`, so a row appended onto that SAME
+  // chain must agree with it too, or Task 6's drain guard would refuse it for a reason entirely
+  // unrelated to whatever THIS helper's own caller is testing.
   const { registroId, numSerieFactura } = await insertPendingAlta(db, {
     tenantId: seeded.tenantId,
     tillId: seeded.tillId,
@@ -223,6 +253,7 @@ export async function appendPendingAlta(
     secuencia,
     huella,
     fecha: PAST_FECHA,
+    entorno: DEFAULT_ENTORNO,
   });
   await db.execute(sql`
     insert into envios (registro_id, tenant_id, proximo_intento_en)
@@ -277,6 +308,8 @@ export async function seedSecondChain(
   );
 
   const huella = `B${String(secuencia).padStart(63, "0")}`;
+  // `DEFAULT_ENTORNO` — same reasoning as `appendPendingAlta` above: this second chain shares
+  // `seeded`'s own tenant, and every existing caller seeds that tenant at the default.
   const { registroId, numSerieFactura } = await insertPendingAlta(db, {
     tenantId: seeded.tenantId,
     tillId,
@@ -285,6 +318,7 @@ export async function seedSecondChain(
     secuencia,
     huella,
     fecha: PAST_FECHA,
+    entorno: DEFAULT_ENTORNO,
   });
   await db.execute(sql`
     insert into envios (registro_id, tenant_id, proximo_intento_en)

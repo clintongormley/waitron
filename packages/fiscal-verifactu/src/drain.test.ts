@@ -910,6 +910,106 @@ describe("drain — halted records get a halted ack (the bulk chain-halt paths)"
   });
 });
 
+/**
+ * Deployment-environment plan, Task 6: `drain` must never submit a registro generated for the
+ * OTHER deployment — submitting a pre-production record to the real AEAT is unrecoverable, since
+ * chains cannot be merged or migrated and invoice numbers are never reused. `claimBatch`
+ * (./drain.ts) checks each claimed row's OWN `entorno` (`seedPendingEnvios`'s new `entorno`
+ * option, defaulting to `"production"` so every OTHER describe in this file keeps submitting
+ * unaffected) against `DrainDeps.environment` — threaded here via
+ * `VerifactuBackendOptions.deploymentEnvironment` — BEFORE ever flipping a row to `enviando`, so a
+ * mismatched or unrecorded row is reported and left `pendiente` rather than submitted or backed
+ * off with `backoffMs` like a transient failure.
+ *
+ * Adapted from the brief's own illustrative snippet to this file's established shape (a real
+ * `VerifactuBackend.drain(now)` call, `withTenant`-scoped assertions against the real `envios`/
+ * `incidents` tables) rather than the bare `drain(db, {...deps, environment})` sketch, which does
+ * not match `drain`'s actual `(deps, now)` signature or this suite's `deps`-free convention.
+ */
+describe("drain — the deployment-environment guard", () => {
+  it("refuses to submit a registro generated for another environment, leaving it pendiente", async () => {
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    const seeded = await seedPendingEnvios(db, { count: 1, entorno: "preproduction" });
+    const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
+    const result = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+
+    expect(result.recordsSubmitted).toBe(0);
+    expect(result.incidentsRaised).toBe(1);
+
+    const envio = await withTenant(db, seeded.tenantId, (tx) =>
+      tx.execute<{ estado: string }>(
+        sql`select estado from envios where tenant_id = ${seeded.tenantId}`,
+      ),
+    );
+    // Left pendiente, not failed: fixing the host's configuration and restarting must be enough.
+    expect(envio.rows[0]!.estado).toBe("pendiente");
+
+    const inc = await withTenant(db, seeded.tenantId, (tx) =>
+      tx.execute<{ code: string; severity: string; params: Record<string, unknown> }>(
+        sql`select code, severity, params from incidents where tenant_id = ${seeded.tenantId}`,
+      ),
+    );
+    expect(inc.rows).toHaveLength(1);
+    expect(inc.rows[0]?.code).toBe("fiscal.environment_mismatch");
+    expect(inc.rows[0]?.severity).toBe("error");
+    expect(inc.rows[0]?.params).toMatchObject({
+      recordEnvironment: "preproduction",
+      hostEnvironment: "production",
+    });
+  });
+
+  it("refuses a registro with no recorded environment, distinctly from a mismatch", async () => {
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    const seeded = await seedPendingEnvios(db, { count: 1, entorno: null });
+    const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
+    const result = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+
+    expect(result.recordsSubmitted).toBe(0);
+
+    const envio = await withTenant(db, seeded.tenantId, (tx) =>
+      tx.execute<{ estado: string }>(
+        sql`select estado from envios where tenant_id = ${seeded.tenantId}`,
+      ),
+    );
+    expect(envio.rows[0]!.estado).toBe("pendiente");
+
+    const inc = await withTenant(db, seeded.tenantId, (tx) =>
+      tx.execute<{ code: string }>(
+        sql`select code from incidents where tenant_id = ${seeded.tenantId}`,
+      ),
+    );
+    expect(inc.rows).toHaveLength(1);
+    // Distinct code from the mismatch test above — a NULL entorno is refused rather than assumed
+    // to be ours, never silently treated as agreeing with the host.
+    expect(inc.rows[0]?.code).toBe("fiscal.environment_unknown");
+  });
+
+  it("submits normally when the environments agree", async () => {
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    const seeded = await seedPendingEnvios(db, { count: 1, entorno: "production" });
+    const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
+      clock: seeded.clock,
+      db,
+      resolveClient: staticResolver(aeat.client()),
+    });
+    const result = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+
+    expect(result.recordsSubmitted).toBeGreaterThan(0);
+    expect(result.recordsAccepted).toBeGreaterThan(0);
+  });
+});
+
 describe("backoffMs", () => {
   it("doubles from BACKOFF_BASE_MS (60s) per attempt, capped at BACKOFF_MAX_MS (3600s)", () => {
     expect(backoffMs(1)).toBe(60_000);

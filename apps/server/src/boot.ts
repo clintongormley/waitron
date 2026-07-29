@@ -227,7 +227,17 @@ export async function startServer(env: Record<string, string | undefined>): Prom
             );
             try {
               return await drain(
-                { db, resolveClient: resolver.resolve, skipRetryMs: config.skipRetryMs },
+                {
+                  db,
+                  resolveClient: resolver.resolve,
+                  skipRetryMs: config.skipRetryMs,
+                  // Which deployment THIS host is — the same `WAITRON_ENV`-derived value
+                  // `config.environment` already is (`deployment-guard.ts` pins it against the
+                  // database at boot). `drain`'s guard (`@waitron/fiscal-verifactu`'s `claimBatch`)
+                  // refuses any due registro whose own `entorno` disagrees, or is unrecorded,
+                  // rather than ever submitting it to AEAT.
+                  environment: config.environment,
+                },
                 at2,
               );
             } finally {

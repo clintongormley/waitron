@@ -8,6 +8,7 @@ import {
 } from "@waitron/shared";
 import type { SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
 import { registerSif } from "../src/registro-sif.js";
+import type { Entorno } from "../src/registro-row.js";
 
 /**
  * Fixed ids for one tenant/till/SIF-identity/sale, reused across `inmutabilidad.test.ts`'s
@@ -153,8 +154,18 @@ export async function seedSoldRegistro(
     nif: string;
     secuencia: number;
     huella: string;
+    /**
+     * Deployment-environment plan, Task 6: defaults to `"production"` so `registro-sif.test.ts`'s
+     * existing calls (neither of which mentions this field) keep stamping a non-null, agreeing
+     * `entorno` now that `drain.ts` refuses a NULL/mismatched one — mirroring
+     * `test/drain-fixtures.ts`'s identical `seedPendingEnvios`/`DEFAULT_ENTORNO` precedent.
+     * Neither existing caller ever runs `drain()` over a row this fixture seeds, so the default
+     * is inert for them today; it exists so a FUTURE caller that does isn't silently refused.
+     */
+    entorno?: Entorno | null;
   },
 ): Promise<void> {
+  const entorno = params.entorno === undefined ? "production" : params.entorno;
   const series = await db.execute<{ id: string }>(sql`
     insert into invoice_series (tenant_id, till_id, code)
     values (${params.tenantId}, ${params.tillId}, ${"S" + String(params.secuencia)})
@@ -181,12 +192,12 @@ export async function seedSoldRegistro(
       tenant_id, till_id, sif_id, sale_id, secuencia, tipo_registro,
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       primer_registro, sistema_informatico,
-      fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella
+      fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, entorno
     ) values (
       ${params.tenantId}, ${params.tillId}, ${params.sifId}, ${saleId}, ${params.secuencia}, 'alta',
       ${params.nif}, ${"S" + String(params.secuencia) + "/1"}, '2026-07-20', 'Waitron SL',
       true, '{}'::jsonb,
-      '2026-07-20T19:20:30+01:00', 60, '01', ${params.huella}
+      '2026-07-20T19:20:30+01:00', 60, '01', ${params.huella}, ${entorno}
     )
     returning id
   `);

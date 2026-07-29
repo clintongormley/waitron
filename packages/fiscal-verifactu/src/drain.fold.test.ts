@@ -77,6 +77,7 @@ describe("drain — folds the skip-retry interval as a minimum against a healthy
               )
             : Promise.resolve(unreachableClient),
         skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+        environment: "production",
       },
       NOW,
     );
@@ -129,6 +130,7 @@ describe("drain — folds the skip-retry interval as a minimum against a healthy
                 )
               : Promise.resolve(unreachableClient),
           skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+          environment: "production",
         },
         NOW,
       );

@@ -445,6 +445,10 @@ export class VerifactuBackend implements FiscalBackend {
    * built, or whose sweep throws, is recorded in `DrainResult.skipped` rather than aborting every
    * OTHER tenant's legally-timed submission — see `drain.ts`'s own `DrainDeps.resolveClient` and
    * `drain`'s own doc comments for the full behaviour and its reasoning.
+   *
+   * Passes `this.deploymentEnvironment` through as `DrainDeps.environment` — Task 6's guard
+   * (`./drain.ts`'s `claimBatch`) refuses any claimed row whose own `entorno` disagrees, or is
+   * unrecorded, rather than ever submitting it.
    */
   async drain(now: Date): Promise<DrainResult> {
     return runDrain(
@@ -452,6 +456,7 @@ export class VerifactuBackend implements FiscalBackend {
         db: this.db,
         resolveClient: this.resolveClient,
         skipRetryMs: this.skipRetryMs,
+        environment: this.deploymentEnvironment,
       },
       now,
     );
