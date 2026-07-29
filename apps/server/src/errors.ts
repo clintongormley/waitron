@@ -115,5 +115,18 @@ declare module "@waitron/shared" {
      * host's own configuration.
      */
     "deployment.environment_mismatch": { databaseEnvironment: string; hostEnvironment: string };
+    /**
+     * A tenant's Stripe key belongs to the other environment. A test key on a production
+     * deployment takes payments that never settle, and `reconcile` then sweeps a test-mode account
+     * against live rows and reports every one as missing upstream.
+     *
+     * Carries the key's ENVIRONMENT, never the key or any prefix of it — the same rule
+     * `credentials.invalid_payload` follows by reporting a count rather than field values.
+     */
+    "payments.credential_environment_mismatch": {
+      tenantId: string;
+      keyEnvironment: string;
+      hostEnvironment: string;
+    };
   }
 }

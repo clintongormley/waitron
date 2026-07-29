@@ -86,6 +86,7 @@ describe("one pass as the non-superuser deployment role", () => {
         resolveAccount: stripeAccountResolver({
           db: probe,
           ring,
+          environment: "preproduction",
           makeStripe: () => emptyStripe,
         }),
       });

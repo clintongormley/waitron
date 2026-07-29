@@ -121,7 +121,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
 
   const reconciler = new StripeReconciler({
     db,
-    resolveAccount: stripeAccountResolver({ db, ring, makeStripe: defaultMakeStripe }),
+    resolveAccount: stripeAccountResolver({
+      db,
+      ring,
+      environment: config.environment,
+      makeStripe: defaultMakeStripe,
+    }),
     ...(config.settlementLagMs === undefined ? {} : { settlementLagMs: config.settlementLagMs }),
   });
   const duty = reconcilerAsDuty(reconciler);
