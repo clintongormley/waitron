@@ -365,8 +365,8 @@ The ones worth grepping for:
 - **`sleep.threw`** (`error`) — `{ errorCode }`. The injected `sleep` rejected for something other
   than the ordinary shutdown abort (`realSleep` narrows to just that case) — logged and the loop
   goes around again rather than ending.
-- **`server.listening`** (`info`) — `{ port, aeatEnv }`, logged once the HTTP listener has actually
-  bound (not merely been asked to).
+- **`server.listening`** (`info`) — `{ port, environment }`, logged once the HTTP listener has
+  actually bound (not merely been asked to).
 - **`server.listen_failed`** (`error`) — `{ port, code }`. The listener failed to bind — `EADDRINUSE`
   (the port is already taken — the common case for a fixed default port) or `EACCES` (a privileged
   port, no permission) are the usual `code` values. The process exits `1` immediately after this
