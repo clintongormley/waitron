@@ -36,5 +36,11 @@ import "@waitron/shared";
 declare module "@waitron/shared" {
   interface ErrorParams {
     "series.not_found": { seriesId: string };
+    /**
+     * A database already belongs to a different environment. Never overwritten: the rows written
+     * under the first stamp cannot be moved to the second — an invoice series that filed to
+     * pre-production has a numbering hole in production that nothing can fill.
+     */
+    "deployment.already_stamped": { stamped: string; requested: string };
   }
 }

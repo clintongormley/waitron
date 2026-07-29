@@ -9,3 +9,4 @@ export * from "./orders.js";
 export * from "./sales.js";
 export * from "./sale-voids.js";
 export * from "./incidents.js";
+export * from "./deployment.js";
