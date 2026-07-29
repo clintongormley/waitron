@@ -1,9 +1,23 @@
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import type { Database } from "./client.js";
+import { createPgliteDb, type Database } from "./client.js";
 import { readDeploymentEnvironment, stampDeployment } from "./deployment.js";
 import { captureError } from "./testing/errors.js";
 import { describeEachTarget } from "./testing/harness.js";
+
+// Deliberately outside describeEachTarget: every target's create() (testing/harness.ts)
+// migrates before handing back a database, so a suite built on it can never observe a
+// database the table-creating migration has not reached yet — the exact state of a
+// first-ever boot, and the state Task 3's boot-time guard must handle without throwing.
+// migrate.test.ts's own top-level "fails loudly when a module folder is migrated before
+// the core folder" test uses the same bare createPgliteDb() (no target, no
+// runMigrations(..., CORE_MIGRATIONS)) for the identical reason: a pre-migration handle
+// is a fixture describeEachTarget's contract cannot produce.
+it("reads as unstamped when the table has not been created yet", async () => {
+  const bare = await createPgliteDb();
+  expect(await readDeploymentEnvironment(bare)).toBeNull();
+  await bare.close();
+});
 
 describeEachTarget("the deployment stamp", (target) => {
   let db: Database;
