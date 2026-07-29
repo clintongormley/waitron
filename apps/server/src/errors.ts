@@ -49,6 +49,48 @@ declare module "@waitron/shared" {
     /** A migration folder named by the manifest is absent or carries no Drizzle journal. */
     "server.migrations_missing": { name: string; folder: string };
     /**
+     * No such tenant. `id` is echoed because it is an operator-supplied argument and not a secret —
+     * a mistyped UUID identifies nothing on its own, so an error that withheld it would be
+     * unactionable.
+     *
+     * Deliberately NOT `server.*`, unlike its neighbours here: the prefix names the DOMAIN CONCEPT,
+     * never the package that happens to throw (packages/shared/src/errors.ts's design note, and
+     * `series.not_found` — renamed twice to converge on exactly this rule). "There is no such
+     * tenant" is a fact about a tenant. It is declared in this file rather than in packages/db,
+     * which owns the table, only because `@waitron/db`'s exports map is enumerated and deliberately
+     * publishes no path to its `errors.ts` — so a consumer cannot follow this repo's "the throwing
+     * file imports the registry directly" convention across that boundary. Move both codes down if
+     * a package ever needs to throw them.
+     */
+    "tenant.not_found": { id: string };
+    /**
+     * No such till *for this tenant*. A till belonging to ANOTHER tenant reports this same code
+     * rather than a distinct "wrong owner" one: to a caller scoped to one tenant the two are the
+     * same fact, and a separate code would confirm the existence of another tenant's till to
+     * whoever asked.
+     *
+     * Note this is enforced by comparing `tills.tenant_id`, NOT by relying on RLS to hide the
+     * foreign row — see `provisionTill`. The two agree for the deployment role; the explicit check
+     * is what makes them agree for a superuser as well.
+     */
+    "till.not_found": { id: string; tenantId: string };
+    /**
+     * `IdSistemaInformatico` is not a usable software identifier. AEAT caps it at two characters —
+     * `packages/verifactu`'s `validate` encodes exactly that rule as `ID_SISTEMA_LENGTH`, and every
+     * fixture in this repo uses `"WT"`.
+     *
+     * Checked at provisioning because nothing else checks it anywhere: `validate` has no caller on
+     * the production path, `registro_sif` carries no CHECK on the column, and `registerSif` takes a
+     * bare `string`. Provisioning is the one moment a human types the value, and from then on it is
+     * copied onto every registro the till files — where it cannot be corrected, only superseded by
+     * re-registering onto a fresh chain.
+     *
+     * `sif.*` rather than `server.*` for the reason `tenant.not_found` gives; the namespace is
+     * `packages/fiscal-verifactu`'s, and this code belongs there once that package validates its own
+     * input (recorded as a follow-up in the plan).
+     */
+    "sif.id_sistema_invalid": { value: string; maxLength: number };
+    /**
      * The HTTP listener's socket failed to bind. `code` is the raw OS error Node attaches to the
      * `'error'` event (`EADDRINUSE` for the common case of a fixed default port already taken,
      * `EACCES` for a privileged port with no permission) — never the `Error` itself, whose
