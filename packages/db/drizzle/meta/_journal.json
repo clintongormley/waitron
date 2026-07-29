@@ -78,6 +78,13 @@
       "when": 1785328647533,
       "tag": "0010_deployment_stamp",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785350527112,
+      "tag": "0011_provisioner_role",
+      "breakpoints": true
     }
   ]
 }
