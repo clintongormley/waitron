@@ -47,6 +47,7 @@ afterAll(async () => {
 beforeEach(async () => {
   ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenantWithSif(db));
   backend = new VerifactuBackend({
+    deploymentEnvironment: "production",
     clock: steadyClock,
     db,
     resolveClient: staticResolver(fakeClient),

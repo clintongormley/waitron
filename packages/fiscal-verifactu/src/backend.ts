@@ -100,6 +100,18 @@ export interface VerifactuBackendOptions {
   /** Which QR validation host to build `verificationUrl`-shaped URLs against. Defaults to
    * `"production"`. */
   environment?: Environment;
+  /**
+   * Which DEPLOYMENT this backend is generating registros for — a plain `string`, not this
+   * option's namesake above and not `apps/server`'s `DeploymentEnvironment` type: this package
+   * never imports from `apps/server`, and the two options answer unrelated questions that only
+   * coincidentally share a name and a value space (`"production"` | `"preproduction"`).
+   * `environment` above picks a QR validation HOST; this one is stamped onto every registro's own
+   * `entorno` column (`./registro-row.ts`'s `RegistroRowContext.entorno`) so `drain` (Task 6) can
+   * refuse to submit a record generated for the other deployment. REQUIRED, unlike `environment`:
+   * defaulting a value that gates fiscal submission would silently mis-stamp every registro from a
+   * host that forgot to set it, rather than failing the build.
+   */
+  deploymentEnvironment: string;
   /** Overrides for this installation's software-identity claims. See `SystemInfoDefaults`'s own
    * doc comment for why these are configuration rather than hardcoded constants. */
   systemInfo?: Partial<SystemInfoDefaults>;
@@ -147,6 +159,7 @@ export class VerifactuBackend implements FiscalBackend {
   private readonly clock: TrustedClock;
   private readonly resolveClient: (tenantId: TenantId) => Promise<VerifactuClient>;
   private readonly environment: Environment;
+  private readonly deploymentEnvironment: string;
   private readonly systemInfo: SystemInfoDefaults;
   private readonly skipRetryMs: number;
 
@@ -165,6 +178,7 @@ export class VerifactuBackend implements FiscalBackend {
     // each one happens to read this field.
     this.resolveClient = (tenantId) => options.resolveClient(tenantId);
     this.environment = options.environment ?? "production";
+    this.deploymentEnvironment = options.deploymentEnvironment;
     this.systemInfo = { ...DEFAULT_SYSTEM_INFO, ...options.systemInfo };
     // Defaulted HERE, like every sibling option above, rather than at the `runDrain` call site
     // below: a `number | undefined` field would let a future SECOND call site forget the `??` and
@@ -250,7 +264,7 @@ export class VerifactuBackend implements FiscalBackend {
       tx,
       sale.tenantId,
       sale.tillId,
-      { tipo: "alta", saleId: sale.saleId, input },
+      { tipo: "alta", saleId: sale.saleId, entorno: this.deploymentEnvironment, input },
       sif,
     );
 
@@ -369,7 +383,7 @@ export class VerifactuBackend implements FiscalBackend {
       tx,
       tenantId,
       tillId,
-      { tipo: "anulacion", saleId, input },
+      { tipo: "anulacion", saleId, entorno: this.deploymentEnvironment, input },
       sif,
     );
 

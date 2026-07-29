@@ -34,6 +34,16 @@ export interface RegistroRowContext {
    * the exact literal that was hashed, rather than a value merely equal to it in wall-clock terms.
    */
   offsetMinutes: number;
+  /**
+   * Which environment this registro was generated for (`"production"` | `"preproduction"`, a
+   * plain `string` here — this package never imports `apps/server`'s `DeploymentEnvironment`
+   * type). OURS, never AEAT's: it is written straight onto the column below and MUST NEVER be
+   * folded into `record` before it reaches `computeHuella` (./chain.ts already computes the huella
+   * before `toRegistroRow` ever runs, so this file has no opportunity to leak it in even by
+   * accident — verify.test.ts pins the resulting invariant: two records differing only in
+   * `entorno` hash identically).
+   */
+  entorno: string;
 }
 
 /**
@@ -111,6 +121,7 @@ export function toRegistroRow(
     offsetMinutos: ctx.offsetMinutes,
     tipoHuella: record.TipoHuella,
     huella: record.Huella,
+    entorno: ctx.entorno,
   };
 
   if (isAlta(record)) {
@@ -217,6 +228,10 @@ export type RegistroRow = {
   offset_minutos: number;
   tipo_huella: TipoHuella;
   huella: string;
+  // Never read by fromRegistroRow below — see this file's own note on RegistroRowContext.entorno
+  // for why: a value that reached recomputation would make one environment's chain unverifiable
+  // under the other.
+  entorno: string | null;
   creado_en: string;
 };
 

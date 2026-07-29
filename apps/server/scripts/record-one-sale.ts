@@ -130,6 +130,11 @@ async function main(): Promise<void> {
       // reused. It decides only which QR validation host `verificationUrl` names — this script
       // never contacts AEAT — but that URL is the one thing it prints for a human to act on.
       environment: deploymentEnvironment(process.env),
+      // Which environment this script is generating the registro FOR — the fact `drain` (Task 6)
+      // will refuse to submit if it disagrees with the host it eventually runs on. Same resolver,
+      // same host config, different field: this one is never read for the QR host and is stored on
+      // the row itself, never hashed (`entorno`, ./schema/registros.ts).
+      deploymentEnvironment: deploymentEnvironment(process.env),
       // Never invoked by `recordSale` (see this file's header comment) — a rejection here would
       // only ever surface a bug in this script or in the backend, not a real AEAT contact.
       resolveClient: () =>

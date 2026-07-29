@@ -46,6 +46,7 @@ describe("pendingCount under real row-level security", () => {
     const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const backend = new VerifactuBackend({
+        deploymentEnvironment: "production",
         clock: steadyClock,
         db: probe,
         resolveClient: staticResolver(fakeClient),

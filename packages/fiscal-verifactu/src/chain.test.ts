@@ -190,6 +190,18 @@ describe("appendToChain", () => {
     expect(computeHuella(expected)).toBe(row?.huella);
   });
 
+  it("records the environment the registro was generated for", async () => {
+    const saleId = await seedSale(db, till, 1);
+    const appended = await db.transaction((tx) =>
+      appendToChain(tx, till.tenantId, till.tillId, altaFor(saleId, 1, 1, "preproduction")),
+    );
+
+    const { rows } = await db.execute<{ entorno: string }>(
+      sql`select entorno from registros_facturacion where id = ${appended.id}`,
+    );
+    expect(rows[0]?.entorno).toBe("preproduction");
+  });
+
   it("rejects a second record claiming an occupied chain position", async () => {
     const a = await seedSale(db, till, 1);
     const b = await seedSale(db, till, 2);

@@ -191,6 +191,30 @@ describe("verifyChain — detection", () => {
   });
 });
 
+describe("entorno is not part of the huella", () => {
+  // The single most important test in this file. Two records built from IDENTICAL input, differing
+  // ONLY in entorno, must produce the same huella — entorno is Waitron's own metadata, never
+  // AEAT's, and if it ever reached computeHuella's input every chain written under one environment
+  // would become unverifiable under the other.
+  //
+  // A FRESH tenant per call (via seedTill, never the shared module-scope `till`) is what makes both
+  // records a *first* record — same `null` predecessor — so any hash difference between them can
+  // only come from entorno.
+  async function appendOne(entorno: string): Promise<{ huella: string }> {
+    const fresh = await seedTill(db);
+    const saleId = await seedSale(db, fresh, 1);
+    return db.transaction((tx) =>
+      appendToChain(tx, fresh.tenantId, fresh.tillId, altaFor(saleId, 1, 1, entorno)),
+    );
+  }
+
+  it("hashes identically regardless of environment, because entorno is ours and not AEAT's", async () => {
+    const a = await appendOne("production");
+    const b = await appendOne("preproduction");
+    expect(a.huella).toBe(b.huella);
+  });
+});
+
 describe("verifyChain — never blocks the sale", () => {
   it("returns rather than throws when verification fails", async () => {
     // The single most important assertion in this file. A throw propagates out of the sale

@@ -64,6 +64,13 @@
       "when": 1784750693354,
       "tag": "0008_acks_delete_grant",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785333402567,
+      "tag": "0009_registro_entorno",
+      "breakpoints": true
     }
   ]
 }

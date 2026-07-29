@@ -37,6 +37,7 @@ describe("drain — happy path", () => {
     aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     seeded = await seedPendingEnvios(db, { count: 3 }); // 3 pending altas on one till/tenant
     backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -89,6 +90,7 @@ describe("drain — happy path, an anulación row", () => {
     const { tenantId, tillId, seriesId, workingOrderId } = await seedTenantWithSif(db);
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: steadyClock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -145,6 +147,7 @@ describe("drain — batching (the 1001-split)", () => {
   it("splits a >1000 backlog at the XSD cap: full 1000-chunk now, the <1000 tail deferred until t", async () => {
     const seeded = await seedPendingEnvios(db, { count: 1001 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -177,6 +180,7 @@ describe("drain — flow control (envio_flujo)", () => {
     aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     seeded = await seedPendingEnvios(db, { count: 3 }); // 3 pending altas on one till/tenant
     backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -207,6 +211,7 @@ describe("drain — flow control (envio_flujo)", () => {
       tiempoEsperaInicial: 10000,
     });
     const backend2 = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(big.client()),
@@ -286,6 +291,7 @@ describe("drain — stale claim recovery", () => {
       `),
     );
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -318,6 +324,7 @@ describe("drain — stale claim recovery", () => {
       `),
     );
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -347,6 +354,7 @@ describe("drain — retry backoff on a transient submit failure", () => {
     };
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(failing),
@@ -389,6 +397,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     const seeded = await seedPendingEnvios(db, { count: 3 }); // secuencia 1,2,3 on one SIF
     aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente"); // reject the middle record
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -426,6 +435,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(db, { count: 1, futureDated: true }); // triggers 2004 → AceptadoConErrores
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -472,6 +482,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     const seeded = await seedPendingEnvios(db, { count: 3 });
     aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente");
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -524,6 +535,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     const seeded = await seedPendingEnvios(db, { count: 3 });
     aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente");
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -602,6 +614,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
   it("TEETH: a 3000 whose RegistroDuplicado is Correcta resolves to aceptado, not rechazado/detenido", async () => {
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -654,6 +667,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
   it("Route A: duplicate_annulled halts detenido, and halts a same-batch successor too, raising a fiscal.duplicado_anulado incident", async () => {
     const seeded = await seedPendingEnvios(db, { count: 2 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -696,6 +710,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
   it("Route B: duplicate_unknown with a matching huella resolves to aceptado", async () => {
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -790,6 +805,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     aeat.dropRegistroDuplicadoDetail(seeded.facturaKeys[0]!);
 
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -850,6 +866,7 @@ describe("drain — halted records get a halted ack (the bulk chain-halt paths)"
     const seeded = await seedPendingEnvios(db, { count: 3 }); // secuencia 1,2,3 on one SIF
     aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente"); // reject the middle record
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),

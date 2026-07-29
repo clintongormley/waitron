@@ -104,6 +104,18 @@ export const registrosFacturacion = pgTable(
     offsetMinutos: integer("offset_minutos").notNull(),
     tipoHuella: text("tipo_huella").notNull(),
     huella: text("huella").notNull(),
+    // Which environment this registro was GENERATED for, so `drain` (Task 6) can refuse to submit
+    // it to the other one. Immutable, like every other column here: it is a fact about the record,
+    // not about the attempt to send it, which is why it lives here and not on the mutable `envios`
+    // sidecar. NULLABLE with no backfill, deliberately — rows written before this migration have no
+    // recorded destination and we cannot infer one.
+    //
+    // NOT part of the huella. `entorno` is ours, never AEAT's: it is absent from the RegistroAlta/
+    // RegistroAnulacion `toRegistroRow` builds off of, and `verify.test.ts` pins that two records
+    // differing only here hash identically. Never read by `fromRegistroRow` for exactly that
+    // reason — a value that reached recomputation would make one environment's chain unverifiable
+    // under the other.
+    entorno: text("entorno"),
     creadoEn: timestamp("creado_en", { withTimezone: true }).notNull().defaultNow(),
   },
   // Drizzle invokes this extraConfig callback lazily — via `drizzle(client, { schema })`
@@ -141,6 +153,10 @@ export const registrosFacturacion = pgTable(
     check("registros_tipo_huella_ck", sql`${t.tipoHuella} = '01'`),
     check("registros_huella_ck", sql`${t.huella} ~ '^[0-9A-F]{64}$'`),
     check("registros_secuencia_ck", sql`${t.secuencia} > 0`),
+    check(
+      "registros_entorno_ck",
+      sql`${t.entorno} is null or ${t.entorno} in ('production', 'preproduction')`,
+    ),
     check(
       "registros_encadenamiento_ck",
       sql`(${t.primerRegistro}
