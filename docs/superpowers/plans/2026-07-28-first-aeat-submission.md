@@ -143,9 +143,17 @@ describe.runIf(configured)("AEAT pre-production, real certificate", () => {
 - [ ] **Step 4: Confirm it is excluded from the normal run**
 
 ```bash
-pnpm --filter @waitron/server test 2>&1 | grep -c "preprod" || echo "correctly excluded"
+if pnpm --filter @waitron/server test 2>&1 | grep -q "preprod"; then
+  echo "PROBLEM: the probe ran in the normal suite"
+else
+  echo "correctly excluded"
+fi
 pnpm lint && pnpm typecheck && pnpm format:check
 ```
+
+`grep -q`, not `grep -c`: with `-c ... || echo`, a clean run prints BOTH a bare `0` and the
+reassurance, while a dirty run prints only a count and no warning at all — the reader has to know
+which number means trouble. Reported by Copilot on PR #3.
 
 Expected: the probe does not appear; the gate is clean. The suite still reports its usual 12 files.
 
