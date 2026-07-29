@@ -116,8 +116,14 @@ does not ship; the host requires a `Content-Type` or SOAPAction the client does 
 ## 6. Step 3 — one real submission
 
 Record one sale on the deli's till, let `drain` pick it up, and read what comes back. `drain`
-already does the rest: `registro-sif` mints the installation number, the chain appends, the envío is
-serialized and submitted, and the ack path records the outcome.
+already does the rest: the chain appends, the envío is serialized and submitted, and the ack path
+records the outcome.
+
+> **Corrected during execution.** This section originally read "`registro-sif` mints the installation
+> number" as though that happened on the way through. It does not: `registerSif` had no production
+> caller at all, so a till created by `bootstrap-tenant.sql` could not record a sale — `recordSale`
+> threw `sif.not_registered`. Registering the till is a separate provisioning step, added by the
+> plan's Step 4b. The rest of the sentence stands.
 
 The success criterion is not "no error". It is **a submission whose outcome we can read** —
 accepted, or rejected with a reason we can act on.

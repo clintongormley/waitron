@@ -75,6 +75,22 @@ declare module "@waitron/shared" {
      */
     "till.not_found": { id: string; tenantId: string };
     /**
+     * `IdSistemaInformatico` is not a usable software identifier. AEAT caps it at two characters —
+     * `packages/verifactu`'s `validate` encodes exactly that rule as `ID_SISTEMA_LENGTH`, and every
+     * fixture in this repo uses `"WT"`.
+     *
+     * Checked at provisioning because nothing else checks it anywhere: `validate` has no caller on
+     * the production path, `registro_sif` carries no CHECK on the column, and `registerSif` takes a
+     * bare `string`. Provisioning is the one moment a human types the value, and from then on it is
+     * copied onto every registro the till files — where it cannot be corrected, only superseded by
+     * re-registering onto a fresh chain.
+     *
+     * `sif.*` rather than `server.*` for the reason `tenant.not_found` gives; the namespace is
+     * `packages/fiscal-verifactu`'s, and this code belongs there once that package validates its own
+     * input (recorded as a follow-up in the plan).
+     */
+    "sif.id_sistema_invalid": { value: string; maxLength: number };
+    /**
      * The HTTP listener's socket failed to bind. `code` is the raw OS error Node attaches to the
      * `'error'` event (`EADDRINUSE` for the common case of a fixed default port already taken,
      * `EACCES` for a privileged port with no permission) — never the `Error` itself, whose

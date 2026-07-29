@@ -15,7 +15,15 @@ import { provisionTill } from "./provision-till.js";
 // covered exactly this way (`registro-sif.test.ts`, same two migration sets), as are this
 // directory's `stripe-account.test.ts` and `aeat-transport.test.ts`. `vitest.config.ts` pins
 // `singleFork`, so a container here would be pure additive wall-clock on every run.
-const ID_SIF = "WTRN01";
+//
+// What PGlite does NOT buy: it is not a stronger harness for the ownership guard. Both it and a
+// superuser container kill a mutant that drops the guard, because neither applies RLS. Only a
+// container connected as the non-superuser deployment role would let `eq(tills.tenantId, …)` be
+// deleted unnoticed — RLS would hide the foreign till anyway — and no harness here does that.
+
+// Two characters: `packages/verifactu`'s `validate` caps `IdSistemaInformatico` at that
+// (`ID_SISTEMA_LENGTH`), and every other fixture in the repo uses this exact value.
+const ID_SIF = "WT";
 
 // Well-formed but absent — the shape a mistyped argument actually takes, since a malformed one
 // never survives `tenantId()`'s brand.
@@ -136,5 +144,25 @@ describe("provisioning a till that bootstrap-tenant.sql created", () => {
         idSistemaInformatico: ID_SIF,
       }),
     ).rejects.toMatchObject({ code: "tenant.not_found", params: { id: ABSENT } });
+  });
+
+  // The value AEAT caps at two characters, which nothing else in the repo checks: `validate` has no
+  // production caller, the column has no CHECK, and `registerSif` takes a bare string. An operator
+  // types it once and it lands on every registro the till files.
+  it.each([
+    ["longer than two characters", "WTRN01"],
+    ["empty", ""],
+  ])("refuses an IdSistemaInformatico that is %s, before writing anything", async (_label, bad) => {
+    const { tenantId, tillId } = await bootstrapTenant();
+
+    await expect(
+      provisionTill(db, { tenantId, tillId, idSistemaInformatico: bad }),
+    ).rejects.toMatchObject({
+      code: "sif.id_sistema_invalid",
+      params: { value: bad, maxLength: 2 },
+    });
+
+    const written = await db.execute(sql`select 1 from registro_sif where till_id = ${tillId}`);
+    expect(written.rows).toEqual([]);
   });
 });

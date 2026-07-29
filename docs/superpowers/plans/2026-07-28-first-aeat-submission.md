@@ -202,9 +202,11 @@ unset WAITRON_PREPROD_PFX_PASSPHRASE WAITRON_PREPROD_PFX_BASE64
 Create `apps/server/sql/bootstrap-tenant.sql`. Values arrive as `psql` variables so the committed file carries no business data and can be reused for a second deli:
 
 ```sql
--- The deli's own rows. Run ONCE, by hand, against a migrated database, as a role that can write
--- these tables (the migration owner or a superuser — RLS is bypassed for the owner, which is what
--- makes this pure setup).
+-- The deli's own rows. Run ONCE, by hand, against a migrated database, as a SUPERUSER (or a role
+-- with BYPASSRLS) — NOT merely as the table owner. Every table this script writes has FORCE ROW
+-- LEVEL SECURITY, which denies the owner its usual RLS exemption, and the first INSERT creates the
+-- very tenant whose id app.tenant_id would need to be set to. Confirmed live: a non-superuser role
+-- made owner of all four tables is denied on the tenants INSERT.
 --
 -- Deliberately NOT the test seeds: packages/db/src/testing/seed.ts writes 'Test SL' and a NIF from
 -- a counter. Those values would become part of a fiscal record the Agencia Tributaria keeps.
@@ -304,7 +306,7 @@ The deli's database, following `apps/server/README.md`'s "Database roles and gra
 `applyMigrations` (line 104), so the host will not even migrate without it — confirmed by observation
 while proving Step 4b: with neither variable set, the host dies on `credentials.key_missing` inside
 `startServer` and the database is left unmigrated. This is the deli's own key, generated once here
-and kept for the life of the deployment. Task 3 Step 2 generates a **separate throwaway** one that
+and kept for the life of the deployment. Task 2 Step 2 generates a **separate throwaway** one that
 dies with its container; the two are deliberately not the same key.
 
 ```zsh
@@ -447,7 +449,7 @@ INSERT would produce a `registro_sif` row that looks right and chains wrong.
 **Done.** Split across two files rather than the single script this step first described:
 
 - `apps/server/src/provision-till.ts` — `provisionTill(db, { tenantId, tillId, idSistemaInformatico })`,
-  covered by `src/provision-till.test.ts` against a real container. It lives in `src/` because
+  covered by `src/provision-till.test.ts` against a real schema on PGlite. It lives in `src/` because
   `vitest.config.ts` excludes `scripts/**` from coverage as *build tooling*, and provisioning a till
   is behaviour this host owns. It is also the seed of the provisioning surface this step's own
   closing note calls for.
@@ -469,9 +471,13 @@ Two departures from the sketch above, both deliberate:
 The suite runs on PGlite rather than a container, against this package's grain. `startRealPostgres`'s
 own refusal message justifies itself by "PGlite runs every connection as a superuser, so it cannot
 show whether this host works as the non-superuser deployment role" — and nothing in this suite leaves
-the superuser connection, so that justification does not apply. It is also the *stronger* harness for
-the ownership guard: under RLS a foreign till is hidden regardless, so a container test would still
-pass with the guard deleted. On PGlite it fails, which is how the guard was verified.
+the superuser connection, so that justification does not apply.
+
+It is **not** a stronger harness, and an earlier draft of this paragraph claimed it was. A mutant
+that drops the ownership guard dies on PGlite and on a superuser container alike, since neither
+applies RLS. The narrower true statement: dropping only the `eq(tills.tenantId, …)` predicate would
+survive on a container connected as the *deployment role*, because RLS hides the foreign till
+anyway — and no suite here connects that way. Verified by deletion on PGlite.
 
 **Proven against a throwaway container**, in the order that makes the gap visible:
 
@@ -509,8 +515,8 @@ Also verified: both failure paths exit non-zero (an operator's `&&` chain depend
 **Record in Task 5:** provisioning a till is a product gap, not just a plan gap. The first customer
 till in a real deployment will hit this too, and the eventual provisioning surface must cover SIF
 registration — not only tenant, location, till and series. Also record the plan defect this step
-found: **Task 3 Step 2's boot command omitted the key ring entirely** and the key was not generated
-until Task 3 Step 4, two steps later — the operator would have hit `credentials.key_missing` on an
+found: **Task 2 Step 2's boot command omitted the key ring entirely** and the key was not generated
+until Task 2 Step 4, two steps later — the operator would have hit `credentials.key_missing` on an
 unmigrated database. Corrected above. That is the *sixth* operational error execution found in a plan
 that was reviewed before it was run, and the second of the same shape as finding §4 in the handoff.
 

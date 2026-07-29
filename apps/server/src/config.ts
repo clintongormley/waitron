@@ -114,7 +114,9 @@ function optionalPositiveInt(env: Env, variable: string): number | undefined {
   return parsePositiveInt(env, variable);
 }
 
-function aeatEnvironment(env: Env): AeatEnvironment {
+/** Exported so one-shot scripts that build their own backend resolve this the same way the host
+ * does — the safe default below is not one for a caller to re-derive. */
+export function aeatEnvironment(env: Env): AeatEnvironment {
   const raw = env.WAITRON_AEAT_ENV;
   // The DEFAULT is preproduction and production must be typed out. Architecture §9: production
   // numbering can never be reused, even for a test invoice, so this is the one default in the file

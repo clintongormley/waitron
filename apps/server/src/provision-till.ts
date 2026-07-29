@@ -27,18 +27,40 @@ import "./errors.js";
 export interface ProvisionTillParams {
   tenantId: TenantId;
   tillId: TillId;
-  /** Waitron's own AEAT-registered software identifier. Opaque here: half of the (NIF,
-   * IdSistemaInformatico) key `registerSif`'s installation counter is scoped by. */
+  /** Waitron's own AEAT-registered software identifier, at most `ID_SISTEMA_MAX_LENGTH` characters.
+   * Half of the (NIF, IdSistemaInformatico) key `registerSif`'s installation counter is scoped by. */
   idSistemaInformatico: string;
+}
+
+/** `packages/verifactu`'s `validate` rule `ID_SISTEMA_LENGTH`, duplicated because that validator has
+ * no caller on the production path — see `sif.id_sistema_invalid`. */
+const ID_SISTEMA_MAX_LENGTH = 2;
+
+/**
+ * Rejects an unusable `IdSistemaInformatico` before anything is written.
+ *
+ * The only moment a human types this value, and the last moment it is correctable: `registerSif`
+ * copies it into `registro_sif`, and from there `buildSistemaInformatico` puts it on every registro
+ * the till files. Nothing downstream re-checks it — not `registerSif` (a bare `string` parameter),
+ * not the schema (no CHECK on the column), and not `validate`, which nothing in the production path
+ * calls.
+ */
+function assertUsableIdSistema(value: string): void {
+  if (value.length === 0 || value.length > ID_SISTEMA_MAX_LENGTH) {
+    throw new AppError("sif.id_sistema_invalid", { value, maxLength: ID_SISTEMA_MAX_LENGTH });
+  }
 }
 
 /**
  * The obligado tributario's NIF, read from the tenant that owns the till.
  *
  * NOT an argument, unlike every fixture that calls `registerSif` (those mint the tenant in the same
- * breath and already hold its NIF). This value becomes `ObligadoEmision.NIF` and `IDEmisorFactura`
- * on every registro the till ever files (`backend.ts`), so an operator-supplied one is a way to
- * file a real tenant's sales under someone else's NIF with nothing in the database disagreeing. The
+ * breath and already hold its NIF). It is written to `registro_sif.nif`, from where it reaches
+ * `registros_facturacion.id_emisor_factura` and, through that, `ObligadoEmision.NIF` on every
+ * registro the till ever files (`drain.ts`/`reconcile.ts` build that element; `backend.ts`'s
+ * `buildSistemaInformatico` separately uses the same value for the SOFTWARE producer's NIF, which
+ * is its own open question — see the compliance record). So an operator-supplied NIF is a way to
+ * file a real tenant's sales under someone else's, with nothing in the database disagreeing. The
  * certificate makes the same distinction the other way round: it identifies a natural person as
  * *representante*, and the filing is still the company's.
  *
@@ -89,8 +111,17 @@ async function assertTillBelongsToTenant(
  * Re-running this against an already-registered till is meaningful, not an error — `registerSif`
  * revokes the live identity, mints a fresh installation number and starts a new chain, which is
  * what a reimaged till needs. The caller decides; nothing here guards against it.
+ *
+ * `async` rather than returning `withTenant`'s promise directly: the argument check below runs
+ * before any transaction is opened, and a function whose type says `Promise` must not throw
+ * synchronously — a caller holding it as `provisionTill(…).catch(…)` would never see the rejection.
  */
-export function provisionTill(db: Database, params: ProvisionTillParams): Promise<SifRegistration> {
+export async function provisionTill(
+  db: Database,
+  params: ProvisionTillParams,
+): Promise<SifRegistration> {
+  assertUsableIdSistema(params.idSistemaInformatico);
+
   return withTenant(db, params.tenantId, async (tx) => {
     const nif = await obligadoNif(tx, params.tenantId);
     await assertTillBelongsToTenant(tx, params.tenantId, params.tillId);

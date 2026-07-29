@@ -30,6 +30,7 @@ import type { RecordSaleInput } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { createPostgresDb, withTenant } from "@waitron/db";
+import { aeatEnvironment } from "../src/config.js";
 import {
   addDecimal,
   decimal,
@@ -49,7 +50,7 @@ const LOCALE = "es-ES";
 function usageError(message: string): never {
   console.error(`record-one-sale: ${message}`);
   console.error(
-    "usage: DATABASE_URL=<...> node apps/server/scripts/record-one-sale.ts " +
+    "usage: DATABASE_URL=<...> node apps/server/dist/record-one-sale.js " +
       "<tenantId> <tillId> <seriesId> <description> <baseAmount> <vatRate> [tipAmount]",
   );
   process.exit(1);
@@ -122,6 +123,13 @@ async function main(): Promise<void> {
     const backend = new VerifactuBackend({
       clock,
       db,
+      // `VerifactuBackendOptions.environment` defaults to `"production"`, which is the wrong default
+      // for a script whose whole plan is pre-production only. `aeatEnvironment` is the host's own
+      // resolver and defaults the other way, deliberately: config.ts calls it "the one default in
+      // the file whose mistake is irreversible", because production numbering can never be reused.
+      // It decides only which QR validation host `verificationUrl` names — this script never
+      // contacts AEAT — but that URL is the one thing it prints for a human to act on.
+      environment: aeatEnvironment(process.env),
       // Never invoked by `recordSale` (see this file's header comment) — a rejection here would
       // only ever surface a bug in this script or in the backend, not a real AEAT contact.
       resolveClient: () =>
