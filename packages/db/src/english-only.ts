@@ -201,6 +201,9 @@ export const SPANISH_WORDS = new Set([
   "estados",
   "tipo",
   "tipos",
+  // deployment-environment vocabulary (packages/fiscal-verifactu's registros_facturacion.entorno)
+  "entorno",
+  "entornos",
   "descripcion",
   "descripciones",
 ]);

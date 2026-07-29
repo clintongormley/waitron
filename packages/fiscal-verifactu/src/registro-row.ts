@@ -16,6 +16,17 @@ import { registrosFacturacion } from "./schema/registros.js";
  */
 export type RegistroRowInsert = typeof registrosFacturacion.$inferInsert;
 
+/**
+ * Which deployment a registro was generated for. A package-local union, deliberately NOT
+ * `apps/server`'s `DeploymentEnvironment` type — this package must never import from `apps/server`
+ * — but a union all the same, not a bare `string`: the brief's actual constraint was "do not import
+ * that type," never "do not have one." Narrowing this at compile time is what makes an unrepresentable
+ * value (`""`, `"staging"`, a stray `process.env.NODE_ENV`) a `tsc` error instead of a runtime
+ * `registros_entorno_ck` violation (SQLSTATE 23514) discovered only once a caller has already, e.g.,
+ * started `recordSale`'s transaction — a sale-blocking failure spec §4 forbids.
+ */
+export type Entorno = "production" | "preproduction";
+
 export interface RegistroRowContext {
   tenantId: string;
   tillId: string;
@@ -35,15 +46,15 @@ export interface RegistroRowContext {
    */
   offsetMinutes: number;
   /**
-   * Which environment this registro was generated for (`"production"` | `"preproduction"`, a
-   * plain `string` here — this package never imports `apps/server`'s `DeploymentEnvironment`
-   * type). OURS, never AEAT's: it is written straight onto the column below and MUST NEVER be
-   * folded into `record` before it reaches `computeHuella` (./chain.ts already computes the huella
-   * before `toRegistroRow` ever runs, so this file has no opportunity to leak it in even by
-   * accident — verify.test.ts pins the resulting invariant: two records differing only in
-   * `entorno` hash identically).
+   * Which environment this registro was generated for — see `Entorno`'s own doc comment above for
+   * why this is a package-local union rather than a plain `string` or `apps/server`'s
+   * `DeploymentEnvironment`. OURS, never AEAT's: it is written straight onto the column below and
+   * MUST NEVER be folded into `record` before it reaches `computeHuella` (./chain.ts already
+   * computes the huella before `toRegistroRow` ever runs, so this file has no opportunity to leak
+   * it in even by accident — verify.test.ts pins the resulting invariant: two records differing
+   * only in `entorno` hash identically).
    */
-  entorno: string;
+  entorno: Entorno;
 }
 
 /**

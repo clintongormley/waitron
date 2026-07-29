@@ -124,11 +124,13 @@ async function main(): Promise<void> {
       clock,
       db,
       // `VerifactuBackendOptions.environment` defaults to `"production"`, which is the wrong default
-      // for a script whose whole plan is pre-production only. `deploymentEnvironment` is the host's
-      // own resolver and defaults the other way, deliberately: config.ts calls it "the one default
-      // in the file whose mistake is irreversible", because production numbering can never be
-      // reused. It decides only which QR validation host `verificationUrl` names — this script
-      // never contacts AEAT — but that URL is the one thing it prints for a human to act on.
+      // for a script whose whole plan is pre-production only. The `deploymentEnvironment(env)`
+      // resolver (imported above, from ../src/config.js — NOT the `deploymentEnvironment` option
+      // key two lines below, which is a different `VerifactuBackendOptions` field entirely) defaults
+      // the other way, deliberately: config.ts calls it "the one default in the file whose mistake
+      // is irreversible", because production numbering can never be reused. Assigned here to
+      // `environment`, it decides only which QR validation host `verificationUrl` names — this
+      // script never contacts AEAT — but that URL is the one thing it prints for a human to act on.
       environment: deploymentEnvironment(process.env),
       // Which environment this script is generating the registro FOR — the fact `drain` (Task 6)
       // will refuse to submit if it disagrees with the host it eventually runs on. Same resolver,

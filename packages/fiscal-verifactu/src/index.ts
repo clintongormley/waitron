@@ -19,5 +19,10 @@ export type { DrainDeps } from "./drain.js";
 export { appendToChain, isUniqueViolation, lockChainHead } from "./chain.js";
 export type { ChainHead, PendingRegistro } from "./chain.js";
 export { fromRegistroRow, pointerTo, toRegistroRow } from "./registro-row.js";
-export type { RegistroRow, RegistroRowContext, RegistroRowInsert } from "./registro-row.js";
+export type {
+  Entorno,
+  RegistroRow,
+  RegistroRowContext,
+  RegistroRowInsert,
+} from "./registro-row.js";
 export { verifyChain } from "./verify.js";

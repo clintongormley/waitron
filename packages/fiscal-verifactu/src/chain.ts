@@ -13,6 +13,7 @@ import { buildAltaRecord, buildAnulacionRecord } from "@waitron/verifactu";
 import { currentSif } from "./registro-sif.js";
 import type { SifRegistration } from "./registro-sif.js";
 import { pointerTo, toRegistroRow } from "./registro-row.js";
+import type { Entorno } from "./registro-row.js";
 import { cadenas } from "./schema/cadenas.js";
 import { registrosFacturacion } from "./schema/registros.js";
 
@@ -42,11 +43,11 @@ const MAX_APPEND_ATTEMPTS = 3;
  * `buildAltaRecord`/`buildAnulacionRecord` and, from there, `computeHuella`.
  */
 export type PendingRegistro =
-  | { tipo: "alta"; saleId: string; entorno: string; input: Omit<AltaInput, "Encadenamiento"> }
+  | { tipo: "alta"; saleId: string; entorno: Entorno; input: Omit<AltaInput, "Encadenamiento"> }
   | {
       tipo: "anulacion";
       saleId: string;
-      entorno: string;
+      entorno: Entorno;
       input: Omit<AnulacionInput, "Encadenamiento">;
     };
 

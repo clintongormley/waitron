@@ -31,7 +31,7 @@ import { reconcile as runReconcile } from "./reconcile.js";
 import { currentSif } from "./registro-sif.js";
 import type { SifRegistration } from "./registro-sif.js";
 import { fromRegistroRow } from "./registro-row.js";
-import type { RegistroRow } from "./registro-row.js";
+import type { Entorno, RegistroRow } from "./registro-row.js";
 import { envios } from "./schema/envios.js";
 import { verifyChain } from "./verify.js";
 
@@ -101,17 +101,21 @@ export interface VerifactuBackendOptions {
    * `"production"`. */
   environment?: Environment;
   /**
-   * Which DEPLOYMENT this backend is generating registros for — a plain `string`, not this
-   * option's namesake above and not `apps/server`'s `DeploymentEnvironment` type: this package
-   * never imports from `apps/server`, and the two options answer unrelated questions that only
-   * coincidentally share a name and a value space (`"production"` | `"preproduction"`).
-   * `environment` above picks a QR validation HOST; this one is stamped onto every registro's own
-   * `entorno` column (`./registro-row.ts`'s `RegistroRowContext.entorno`) so `drain` (Task 6) can
-   * refuse to submit a record generated for the other deployment. REQUIRED, unlike `environment`:
-   * defaulting a value that gates fiscal submission would silently mis-stamp every registro from a
-   * host that forgot to set it, rather than failing the build.
+   * Which DEPLOYMENT this backend is generating registros for — `Entorno` (`./registro-row.ts`),
+   * not this option's namesake above and not `apps/server`'s `DeploymentEnvironment` type: this
+   * package never imports from `apps/server`, and the two options answer unrelated questions that
+   * only coincidentally share a value space (`"production"` | `"preproduction"`). `environment`
+   * above picks a QR validation HOST; this one is stamped onto every registro's own `entorno`
+   * column (`./registro-row.ts`'s `RegistroRowContext.entorno`) so `drain` (Task 6) can refuse to
+   * submit a record generated for the other deployment. REQUIRED, unlike `environment`: defaulting
+   * a value that gates fiscal submission would silently mis-stamp every registro from a host that
+   * forgot to set it, rather than failing the build. Typed as the union rather than a bare
+   * `string` so an unrepresentable value (`""`, `"staging"`, a stray `process.env.NODE_ENV`) is a
+   * `tsc` error here, not a `registros_entorno_ck` violation discovered only once `recordSale` has
+   * already opened the sale's own transaction — spec §4 forbids blocking a sale on anything but
+   * the sale itself.
    */
-  deploymentEnvironment: string;
+  deploymentEnvironment: Entorno;
   /** Overrides for this installation's software-identity claims. See `SystemInfoDefaults`'s own
    * doc comment for why these are configuration rather than hardcoded constants. */
   systemInfo?: Partial<SystemInfoDefaults>;
@@ -159,7 +163,7 @@ export class VerifactuBackend implements FiscalBackend {
   private readonly clock: TrustedClock;
   private readonly resolveClient: (tenantId: TenantId) => Promise<VerifactuClient>;
   private readonly environment: Environment;
-  private readonly deploymentEnvironment: string;
+  private readonly deploymentEnvironment: Entorno;
   private readonly systemInfo: SystemInfoDefaults;
   private readonly skipRetryMs: number;
 
