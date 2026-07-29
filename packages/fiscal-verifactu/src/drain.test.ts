@@ -1109,7 +1109,11 @@ describe("drain — the deployment-environment guard", () => {
       );
       // ALL THREE stay pendiente — including secuencia 2 and 3, whose own entorno was fine — and
       // NONE of them were ever claimed (intentos untouched at 0): the chain halts entirely behind
-      // the refusal, with no database repair needed once WAITRON_ENV is corrected.
+      // the refusal. Unlike a MISMATCHED entorno, no value of WAITRON_ENV releases this chain —
+      // secuencia 1 was seeded with entorno: null (`fiscal.environment_unknown`, not
+      // `fiscal.environment_mismatch`), and no host configuration ever makes NULL agree. The only
+      // way out is re-registering this till as a SIF (a fresh chain, leaving this one permanently
+      // unfiled) or superuser DDL — not a configuration change.
       expect(rows.rows.map((r) => r.estado)).toEqual(["pendiente", "pendiente", "pendiente"]);
       expect(rows.rows.map((r) => r.intentos)).toEqual([0, 0, 0]);
 

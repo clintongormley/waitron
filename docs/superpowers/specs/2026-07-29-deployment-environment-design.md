@@ -122,8 +122,15 @@ retries — a mismatch is never transient.
 - `entorno` **is NULL** (written before this migration) → refuse, with a distinct code. We cannot
   know where such a record was destined, and guessing is the thing this design prevents.
 
-Both leave the `envios` row unsent rather than failed, so nothing is lost when the operator fixes the
-host's configuration and restarts.
+Both leave the `envios` row unsent rather than failed, so nothing is lost outright — but the two cases
+recover differently, and only one of them recovers via configuration. A **disagreement** is a
+configuration fact: fixing `WAITRON_ENV` and restarting is what releases the row, and the very next
+`drain` pass reclaims it (and its chain) with no database repair. A **NULL** `entorno` has no such
+fix — no value of `WAITRON_ENV` ever makes NULL agree, so the row (and everything behind it on its
+chain) stays refused, pass after pass, until an operator either re-registers the till as a SIF
+(starting a fresh chain and leaving the NULL record permanently unfiled) or reaches for superuser DDL.
+"The operator fixes the host's configuration" is not a remedy for this second case, and this document
+does not claim it is one.
 
 **Why this is fiscal-only, and not a general pattern.** Fiscal has an outbox: a record is created now
 and submitted later, possibly by a host configured differently in between. That gap is what the

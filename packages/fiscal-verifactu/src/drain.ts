@@ -287,8 +287,11 @@ async function drainTenant(
   // WHOLE pass, not reset per chunk: that is what lets a LATER chunk's claim exclude a chain a
   // PREVIOUS chunk already found refused, rather than re-discovering (and re-incidenting) it.
   // Reset to empty on every `drainTenant` call, i.e. fresh each pass — a chain blocked THIS pass
-  // is re-examined, not assumed still-blocked, on the next one (so correcting `WAITRON_ENV`
-  // between passes needs no database repair at all, per that guard's own doc comment).
+  // is re-examined, not assumed still-blocked, on the next one. For a chain blocked on a
+  // MISMATCHED `entorno`, that means correcting `WAITRON_ENV` between passes needs no database
+  // repair at all (that guard's own doc comment). For a chain blocked because a row's `entorno`
+  // is NULL, no value of `WAITRON_ENV` ever makes it agree — re-examining it every pass finds it
+  // refused again, forever; see that guard's own doc comment for what actually releases it.
   const blockedSifIds = new Set<string>();
   while (dueCount > 0) {
     // T1 — claim in its own transaction; ≤1000 due pending rows, ordered by chain sequence
@@ -474,9 +477,15 @@ async function recoverStaleClaims(tx: Transaction, tenantId: string, now: Date):
  * touched, no explicit UPDATE is needed to leave it `pendiente`: the `FOR UPDATE` lock this SELECT
  * holds on it is released like any other when the transaction ends, and nothing else here or in
  * any caller ever sets its `estado`. Also never backed off via `backoffMs` like a transient submit
- * failure would be — a mismatch is a configuration fact, not a fact about AEAT's availability, so
- * only correcting `WAITRON_ENV` and restarting releases the row, not a timer. See `errors.ts`'s own
- * `fiscal.environment_mismatch`/`fiscal.environment_unknown` doc comments.
+ * failure would be — neither refusal is a fact about AEAT's availability, so neither schedules a
+ * timer. But the two refusals release differently, and only one of them releases at all:
+ * `fiscal.environment_mismatch` is a configuration fact, and correcting `WAITRON_ENV` and
+ * restarting is what releases the row. `fiscal.environment_unknown` is not — the row's `entorno`
+ * is NULL, and no value of `WAITRON_ENV` ever makes NULL agree with it, so this guard leaves it
+ * `pendiente` forever with no configuration change able to release it. The only honest remedies
+ * are re-registering the till as a SIF (which starts a fresh chain and leaves this record
+ * permanently unfiled) or superuser DDL — see `errors.ts`'s own `fiscal.environment_mismatch`/
+ * `fiscal.environment_unknown` doc comments.
  *
  * `blockedSifIds` is the chain-order half of the guard, and is exactly as load-bearing as the
  * per-row check above. Rows arrive ordered `(sif_id, secuencia)`, so a refused row's SUCCESSORS on
@@ -494,9 +503,12 @@ async function recoverStaleClaims(tx: Transaction, tenantId: string, now: Date):
  * row(s) stay exactly as untouched-and-`pendiente` as the row that triggered the block — property 2
  * of the fix-round review is "the chain halts behind a refusal, and the HALTED SUCCESSORS ALSO STAY
  * PENDIENTE", not `detenido`: unlike a genuine AEAT rejection, this condition is not something a
- * human resolves through reconciliation — correcting `WAITRON_ENV` alone makes the predecessor's
- * own entorno agree again, and the very next pass reclaims the whole chain in order with no
- * database repair.
+ * human resolves through reconciliation. For a MISMATCHED predecessor, correcting `WAITRON_ENV`
+ * alone makes its own entorno agree again, and the very next pass reclaims the whole chain in
+ * order with no database repair. For a predecessor whose `entorno` is NULL, no configuration
+ * change ever makes it agree — the chain stays blocked, pass after pass, until a human
+ * re-registers the till as a SIF (a fresh chain, leaving the blocked one permanently unfiled) or
+ * runs superuser DDL.
  *
  * **The no-successor-submitted guarantee is per-drainer within one pass, not global** — a known,
  * accepted limitation, not something this task closes. `blockedSifIds` is a plain in-memory `Set`,

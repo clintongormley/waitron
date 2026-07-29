@@ -634,6 +634,17 @@ describe("startServer, against a real container as the deployment role", () => {
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_MIN_TICK_MS: "1000",
         WAITRON_MAX_TICK_MS: "600000",
+        // `seedPendingEnvios`'s default `entorno` is `"production"` (`DEFAULT_ENTORNO`,
+        // drain-fixtures.ts) — without this, `deploymentEnvironment` resolves its own default,
+        // `"preproduction"`, the seeded row's `entorno` disagrees, and `claimBatch`'s
+        // deployment-environment guard refuses it before `resolveClient` (and hence `mtlsFetch`)
+        // is ever reached FOR THAT ROW. This test's assertion happened to still pass either way —
+        // `resolveClient` is called once per tenant with ANY due work, ahead of and regardless of
+        // that per-row check (`drain`'s own top-level loop) — but a passing assertion for the
+        // wrong reason is not what this test claims to cover. Set explicitly so the scenario
+        // actually exercised is "a real submission attempt", not "a refused row that happens to
+        // share a tenant with a resolved transport".
+        WAITRON_ENV: "production",
       });
       try {
         await waitForPass(server.health);
@@ -647,7 +658,15 @@ describe("startServer, against a real container as the deployment role", () => {
       // perpetually due, so deleting it is enough to keep this test order-independent. The
       // `tenant_credentials` row this test also inserted is not read by `envios_tenants_with_work`
       // and is left in place, matching every other tenant/credential this file's suite seeds.
+      //
+      // `incidents` also needs cleanup here, unlike the skip-retry test above: with `WAITRON_ENV`
+      // now agreeing with the seeded `entorno`, the mocked `undici` fetch (this file's own header
+      // comment) still makes the real submission attempt fail, and `drain`'s `client.submit` catch
+      // backs the batch off rather than raising an incident — but this cleanup is kept anyway,
+      // rather than assumed absent, so a future change to that failure path does not silently
+      // leave a row behind for a LATER test in this shared-container suite to trip over.
       await admin.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
+      await admin.execute(sql`delete from incidents where tenant_id = ${seeded.tenantId}`);
     }
   }, 60_000);
 
