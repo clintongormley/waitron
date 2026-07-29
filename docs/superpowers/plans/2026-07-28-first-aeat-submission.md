@@ -217,8 +217,9 @@ Create `apps/server/sql/bootstrap-tenant.sql`. Values arrive as `psql` variables
 --
 -- That requirement belongs to THIS FILE, not to the schema: a caller that chooses the tenant's uuid
 -- itself and sets app.tenant_id to it before inserting satisfies
--- `WITH CHECK (id = current_tenant_id())` as an ordinary non-superuser role. See the committed
--- file's own header for the proof and for why psql cannot do it that way.
+-- `WITH CHECK (id = current_tenant_id())` as an ordinary non-superuser role. This script does not,
+-- because it lets tenants.id DEFAULT — and because no non-superuser role here holds INSERT on
+-- tenants anyway. See the committed file's header for the proof and both reasons.
 --
 -- Deliberately NOT the test seeds: packages/db/src/testing/seed.ts writes 'Test SL' and a NIF from
 -- a counter. Those values would become part of a fiscal record the Agencia Tributaria keeps.

@@ -17,11 +17,21 @@
 -- membership is INSERT on `tenants`, which `app_user` deliberately does not hold (0001 grants it
 -- SELECT only) — so the deployment role cannot create tenants, and a provisioning role must.
 --
--- This file keeps the superuser requirement because psql cannot generate a uuid into a variable
--- before the INSERT that uses it, so `:'tid'` would have to be supplied by hand on the command
--- line. The programmatic provisioning path does it the unprivileged way instead. The distinction
--- matters beyond tidiness: managed Postgres (Neon, Supabase, RDS) grants CREATEDB/CREATEROLE but
--- never true superuser, so "superuser required" would have read as "not deployable there".
+-- This file nonetheless keeps the superuser requirement, for two reasons, NEITHER of which is a
+-- psql limitation. An earlier version of this note claimed psql "cannot generate a uuid into a
+-- variable before the INSERT that uses it" — that is also false (Copilot, PR #4), and this script
+-- already uses `\gset` three times; `select gen_random_uuid() as tid \gset` works and the variable
+-- is usable in `set_config` before any INSERT. The real reasons:
+--
+--   1. This script lets `tenants.id` DEFAULT rather than choosing it, so there is no id to adopt as
+--      the scope. That is this file's choice, changeable in three lines.
+--   2. No non-superuser role in this repository holds INSERT on `tenants` today. Fixing (1) alone
+--      would just move the failure from the RLS check to the grant.
+--
+-- So the rewrite only pays off together with a provisioning role that holds that grant, which is
+-- what the programmatic provisioning path introduces. The distinction matters beyond tidiness:
+-- managed Postgres (Neon, Supabase, RDS) grants CREATEDB/CREATEROLE but never true superuser, so
+-- "superuser required" would have read as "not deployable there".
 --
 -- Deliberately NOT the test seeds: packages/db/src/testing/seed.ts writes 'Test SL' and a NIF from
 -- a counter. Those values would become part of a fiscal record the Agencia Tributaria keeps.
