@@ -651,26 +651,45 @@ describe("startServer, against a real container as the deployment role", () => {
     }
   }, 60_000);
 
-  // Task 3: the boot guard (deployment-guard.ts). Deliberately the LAST test in this describe
-  // block: `stampDeployment` is permanent (a second, different value is refused, not overwritten —
-  // see its own doc comment), so once this stamps the shared container's database as
-  // "preproduction" every real-container test declared ABOVE this one must already have run —
-  // several of them boot with no `WAITRON_ENV` at all (default "preproduction", so a stamp of
-  // "preproduction" would not even break a later one), but the very first test in this block boots
-  // with `WAITRON_ENV: "production"` and would fail this same guard if it ran after this stamp
-  // landed. This is the identical order-dependency the "sleeps on WAITRON_SKIP_RETRY_MS" test above
-  // already documents and accepts for this same shared-container suite.
+  // Task 3: the boot guard (deployment-guard.ts). `stampDeployment` is permanent (a second,
+  // different value is refused, not overwritten — see its own doc comment), so the row this test
+  // writes is deleted in `finally`, the same pattern the seeded `envios` rows above use — this test
+  // is order-independent, not reliant on running last: a stamp left behind would make every LATER
+  // real-container test booting with `WAITRON_ENV: "production"` (the very first test in this
+  // block) fail this same guard for real, which is exactly the order-dependence the "sleeps on
+  // WAITRON_SKIP_RETRY_MS" test above was fixed to no longer have — not a precedent for keeping it
+  // here.
+  //
+  // DATABASE_URL is `runtimeDatabaseUrl` (RUNTIME_ROLE), not `databaseUrl` (PROBE_ROLE) like every
+  // other real-container test in this block: RUNTIME_ROLE carries no CREATE grant at all, so — per
+  // this file's own confirmed finding above (`RUNTIME_ROLE`'s own comment) — ANY attempt to run
+  // `applyMigrations` against it fails immediately with a raw Postgres permission error, even though
+  // this container's schema is already fully migrated (Postgres checks the CREATE privilege before
+  // Drizzle's own `IF NOT EXISTS` ever runs). That is what makes the observed
+  // `deployment.environment_mismatch` code proof of this test's SECOND clause, not just its first:
+  // with an already-migrated schema and PROBE_ROLE's CREATE grant, `applyMigrations` running here
+  // would be an invisible no-op — a guard that fired too LATE (after migrations, rather than before)
+  // would produce this exact same error and pass this exact same assertion. Under RUNTIME_ROLE it
+  // cannot: a late or bypassed guard would surface a permission-denied failure instead, a distinct
+  // and distinguishable error from `deployment.environment_mismatch`. RUNTIME_ROLE still reads the
+  // stamp `assertDeploymentMatches` needs to see: `0010_deployment_stamp.sql` grants `deployment`'s
+  // own `SELECT` to `app_user`, and `RUNTIME_ROLE` is an `app_user` member (this file's own
+  // `beforeAll`).
   it("refuses to start, and runs no migration, against another environment's database", async () => {
     await stampDeployment(admin, "preproduction");
 
-    const error = await captureError(() =>
-      startServer({
-        ...KEY_ENV,
-        DATABASE_URL: roleUrl(pg.uri, PROBE_ROLE, PROBE_PASSWORD),
-        WAITRON_ENV: "production",
-      }),
-    );
-    expect(error).toMatchObject({ code: "deployment.environment_mismatch" });
+    try {
+      const error = await captureError(() =>
+        startServer({
+          ...KEY_ENV,
+          DATABASE_URL: runtimeDatabaseUrl,
+          WAITRON_ENV: "production",
+        }),
+      );
+      expect(error).toMatchObject({ code: "deployment.environment_mismatch" });
+    } finally {
+      await admin.execute(sql`delete from deployment where id = 1`);
+    }
   });
 });
 
