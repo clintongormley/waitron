@@ -34,8 +34,10 @@ export const EXEMPT_PACKAGES = ["verifactu", "fiscal-verifactu"] as const;
 // that names only its own domain's vocabulary, so that a second regime could be added beside
 // Veri*Factu without touching it. `apps/server` is not that — it is the COMPOSITION ROOT, and a
 // composition root's job is to wire the generic layer to a specific regime for real: its structured
-// logs name `drain` (Veri*Factu's own duty), its config reads `WAITRON_AEAT_ENV`, and its coverage
-// comments cite `envios`-derived counters by name. It necessarily speaks both vocabularies in the
+// logs name `drain` (Veri*Factu's own duty), its `aeat-transport.ts` picks AEAT's own SOAP endpoint
+// via `aeatEndpointFor` (deployment-wide `WAITRON_ENV` selects the family; the lookup itself is
+// still AEAT-specific), and its coverage comments cite `envios`-derived counters by name. It
+// necessarily speaks both vocabularies in the
 // same file, on purpose — `boot.ts` importing `@waitron/fiscal-verifactu` IS the point of the
 // package existing. An exemption list that tried to cover everything a composition root legitimately
 // says would end up listing most of `SPANISH_WORDS` below, which asserts nothing.

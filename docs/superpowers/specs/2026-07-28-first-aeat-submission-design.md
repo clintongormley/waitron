@@ -31,6 +31,11 @@ one that does nothing:
 
 Nothing in that table is speculative. The gap is entirely operational.
 
+> **2026-07-29 note:** `WAITRON_AEAT_ENV` (the "Environment knob" row above) was replaced by
+> `WAITRON_ENV` — see the
+> [deployment-environment design](./2026-07-29-deployment-environment-design.md). The table above
+> records the shape as it was at design time and is left unchanged.
+
 ## 2. The certificate we have, and the one question it raises
 
 **A `representante` certificate**, exportable as PKCS#12 with a passphrase, targeting
