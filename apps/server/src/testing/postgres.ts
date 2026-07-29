@@ -1,5 +1,5 @@
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startMigratedPostgres, type RealPostgres } from "@waitron/db/testing/postgres.js";
-import { applyMigrations, manifestSets, migrationOptionsFor } from "../migrations.js";
 
 // Re-exported rather than re-implemented: `boot.test.ts` needs the connection STRING (to hand a
 // spawned process its `DATABASE_URL`), not just a live `Database`.
@@ -20,7 +20,8 @@ export function startRealPostgres(): Promise<RealPostgres> {
       "skipped: PGlite runs every connection as a superuser, so it cannot show whether this " +
       "host works as the non-superuser deployment role.",
     // `applyMigrations` opens and closes its own connection from `uri` — see its doc comment in
-    // `migrations.ts` — so there is no separate migrator `Database` to open or close here.
+    // `@waitron/migrations`'s `apply.ts` — so there is no separate migrator `Database` to open or
+    // close here.
     migrate: (uri) => applyMigrations(uri, migrationOptionsFor(manifestSets(), null)),
   });
 }

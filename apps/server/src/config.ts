@@ -21,7 +21,8 @@ export interface ServerConfig {
    * spec §10 requires: that role cannot run `CREATE SCHEMA IF NOT EXISTS "public"` or
    * `CREATE TABLE IF NOT EXISTS` (Postgres checks the privilege before the `IF NOT EXISTS` even
    * against an already-migrated database — `apps/server/README.md` has the confirmed grant list),
-   * so migrations need a role of their own. `migrations.ts`'s `applyMigrations` is the only reader.
+   * so migrations need a role of their own. `@waitron/migrations`'s `applyMigrations` is the only
+   * reader.
    */
   migrationsDatabaseUrl: string;
   environment: DeploymentEnvironment;

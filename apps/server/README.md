@@ -407,16 +407,16 @@ most — a tenant id and a field NAME, never decrypted material, a Stripe secret
 ## Migrations
 
 Applied at boot, every time, behind a Postgres advisory lock (`MIGRATION_LOCK_KEY` in
-`src/migrations.ts`) so two replicas starting together cannot race the same journal. Drizzle's
-runner is journal-tracked and idempotent, so this is a no-op against a current database — the cost is
-the privilege check described above, not any actual DDL. A migration failure is a boot failure: the
-process logs and exits non-zero rather than starting half-migrated.
+`@waitron/migrations`'s `apply.ts`) so two replicas starting together cannot race the same journal.
+Drizzle's runner is journal-tracked and idempotent, so this is a no-op against a current database —
+the cost is the privilege check described above, not any actual DDL. A migration failure is a boot
+failure: the process logs and exits non-zero rather than starting half-migrated.
 
 ## Build
 
 `pnpm --filter @waitron/server build` runs `scripts/copy-migrations.mjs` (copies every migration
 package's `drizzle/` folder to `dist/drizzle/<set-name>`, reading the same
-`migrations.manifest.json` `src/migrations.ts` itself reads, so the two cannot name different sets)
+`migrations.manifest.json` `@waitron/migrations` itself reads, so the two cannot name different sets)
 and then bundles `src/bin.ts` to `dist/server.js` with esbuild. Run the bundle directly:
 `node dist/server.js`.
 

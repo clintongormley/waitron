@@ -5,7 +5,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { createPostgresDb } from "@waitron/db";
 import { POSTGRES_IMAGE } from "@waitron/db/testing/postgres.js";
-import { applyMigrations, manifestSets, migrationOptionsFor } from "./migrations.js";
+import { applyMigrations } from "./apply.js";
+import { manifestSets, migrationOptionsFor } from "./manifest.js";
 
 let container: StartedPostgreSqlContainer;
 let uri: string;
@@ -30,7 +31,7 @@ describe("applyMigrations under two concurrent hosts", () => {
     ) as { entries: unknown[] };
     // A single connection, used only to READ the journal back afterwards — `applyMigrations` no
     // longer takes a `Database` to migrate over, it opens and closes its own from `uri` (see its
-    // doc comment in migrations.ts), so there is nothing left for a caller-supplied handle to do
+    // doc comment in apply.ts), so there is nothing left for a caller-supplied handle to do
     // during the migration itself.
     const reader = await createPostgresDb(uri);
     try {
@@ -57,7 +58,7 @@ describe("applyMigrations under two concurrent hosts", () => {
       // one connection each, this test could pass whether or not the two were the same session by
       // coincidence. That property — acquire and release on the SAME session, and a migration
       // connection that is never the long-lived pool the rest of the host runs duties over — is
-      // established by reading `applyMigrations` in migrations.ts (a dedicated `pg.Client` for the
+      // established by reading `applyMigrations` in apply.ts (a dedicated `pg.Client` for the
       // lock, a freshly opened and closed `Database` for the migration work, both from the same
       // connection string), not by anything observable from outside like this test.
       await Promise.all([applyMigrations(uri, options), applyMigrations(uri, options)]);

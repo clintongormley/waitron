@@ -46,8 +46,6 @@ declare module "@waitron/shared" {
      * rather than defaulting to a wrong AEAT host in silence.
      */
     "server.credential_unusable": { tenantId: string; purpose: string; field: string };
-    /** A migration folder named by the manifest is absent or carries no Drizzle journal. */
-    "server.migrations_missing": { name: string; folder: string };
     /**
      * No such tenant. `id` is echoed because it is an operator-supplied argument and not a secret —
      * a mistyped UUID identifies nothing on its own, so an error that withheld it would be

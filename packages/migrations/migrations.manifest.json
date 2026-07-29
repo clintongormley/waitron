@@ -1,23 +1,23 @@
 [
-  { "name": "core", "table": "__drizzle_migrations_db", "from": "../../packages/db/drizzle" },
+  { "name": "core", "table": "__drizzle_migrations_db", "from": "../db/drizzle" },
   {
     "name": "fiscal",
     "table": "__drizzle_migrations_fiscal",
-    "from": "../../packages/fiscal-verifactu/drizzle"
+    "from": "../fiscal-verifactu/drizzle"
   },
   {
     "name": "payments",
     "table": "__drizzle_migrations_payments",
-    "from": "../../packages/payments/drizzle"
+    "from": "../payments/drizzle"
   },
   {
     "name": "scheduler",
     "table": "__drizzle_migrations_scheduler",
-    "from": "../../packages/scheduler/drizzle"
+    "from": "../scheduler/drizzle"
   },
   {
     "name": "credentials",
     "table": "__drizzle_migrations_credentials",
-    "from": "../../packages/credentials/drizzle"
+    "from": "../credentials/drizzle"
   }
 ]

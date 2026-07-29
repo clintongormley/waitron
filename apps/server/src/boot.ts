@@ -5,12 +5,12 @@ import { credentialTenants, loadKeyRing } from "@waitron/credentials";
 import { runDue } from "@waitron/scheduler";
 import { StripeReconciler } from "@waitron/payments-stripe";
 import { drain } from "@waitron/fiscal-verifactu";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { loadConfig } from "./config.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { createLogger } from "./logger.js";
-import { applyMigrations, manifestSets, migrationOptionsFor } from "./migrations.js";
 import {
   createHealthState,
   healthApp,

@@ -8,7 +8,7 @@ import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { SCHEDULER_MIGRATIONS } from "@waitron/scheduler";
 import { CREDENTIALS_MIGRATIONS } from "@waitron/credentials";
 import { isAppError } from "@waitron/shared";
-import { manifestSets, migrationOptionsFor } from "./migrations.js";
+import { manifestSets, migrationOptionsFor } from "./manifest.js";
 
 describe("the migration manifest", () => {
   it("names the same journal tables the packages themselves declare", () => {
