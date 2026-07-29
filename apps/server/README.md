@@ -39,7 +39,7 @@ not bind logs a structured `server.listen_failed` JSON line (see ["Log events"](
 exits `1` directly. Bad config, an unloadable key ring, a mismatched deployment environment (see below), a
 failed migration, and an unreachable database instead **throw**, and `bin.ts` has no `try`/`catch` around `startServer` — Node prints the
 `AppError`'s stack to **stderr** as an unhandled rejection and exits non-zero, not as a JSON line on
-the stdout stream a log collector reads. (Catching those four in `bin.ts` and logging them
+the stdout stream a log collector reads. (Catching those five in `bin.ts` and logging them
 structurally the same way would be a real improvement; it is not done here — check stderr for those,
 stdout for a bind failure.) Either way there is no "boots half-configured and retries in the
 background": a supervisor (systemd, Docker's restart policy) is expected to restart the process, and

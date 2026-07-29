@@ -2,6 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **2026-07-29 note:** `WAITRON_AEAT_ENV` was replaced by `WAITRON_ENV` — see the
+> [deployment-environment design](../specs/2026-07-29-deployment-environment-design.md). Every
+> mention of the old name below — in the Architecture summary, the Global Constraints, and the
+> shell commands — records what was true when this plan was written and is left unchanged.
+
 **Goal:** Get one real sale from the deli's till to the Agencia Tributaria's pre-production environment, using the real certificate, and read what comes back.
 
 **Architecture:** No new product code. `apps/server` already resolves a per-tenant certificate from the credential vault, builds an mTLS transport from it, picks the AEAT endpoint from `certKind` + `WAITRON_AEAT_ENV`, and drains pending `envios`. This plan adds two throwaway-shaped artifacts (a read-only pre-production probe, a one-sale script), one committed operational artifact (`bootstrap-tenant.sql`), and then runs the system for real.
@@ -17,12 +22,6 @@
 - **`TESTCONTAINERS_RYUK_DISABLED=true`** for anything that starts a container.
 - **The `.p12` file, its passphrase, and the credential key ring NEVER appear** in a commit, a command argument, a shell history entry, a test fixture, or a Claude transcript. Secrets reach a process through stdin, or through an environment variable set from a silent prompt (`printf` + `stty -echo` + `read -r` — portable; **never bash's `read -p`, which fails in zsh with "no coprocess"**), and nothing else.
 - **Pre-production only.** `WAITRON_AEAT_ENV=preproduction`. No step in this plan may target `production`; switching is a separate, human decision.
-
-> **2026-07-29 note:** `WAITRON_AEAT_ENV` was replaced by `WAITRON_ENV` — see the
-> [deployment-environment design](../specs/2026-07-29-deployment-environment-design.md). This plan's
-> commands below, which still name the old variable, record what was run at the time and are left
-> unchanged.
-
 - **The probe is read-only.** It calls `consultar`, never `submit`. A query files nothing.
 - **Nothing invents the deli's real data.** The NIF, legal name, address and series code come from the human. A test NIF must never reach AEAT.
 
