@@ -2,8 +2,9 @@
 
 **Date:** 2026-07-29
 **Status:** designed, not implemented
-**Depends on:** [the AEAT environment stamp](./2026-07-29-aeat-environment-stamp-design.md), which
-should land first so `instance` can write the stamp rather than bolt it on later.
+**Depends on:** [the deployment environment](./2026-07-29-deployment-environment-design.md), which
+should land first so `instance` can write the stamp, and `tenant` can validate a Stripe credential
+against it, rather than bolting either on later.
 
 ## 1. The problem
 
@@ -83,7 +84,7 @@ Every step establishes what already exists before acting. Running any command tw
 | Roles `waitron_migrator`, `waitron_app`, `waitron_provisioner` | `pg_roles`, verifying **attributes** (`rolcreaterole`, `rolcanlogin`), not merely the name |
 | Grants | `information_schema.role_table_grants` |
 | Migrations | the migrator's existing advisory lock and journal — already idempotent |
-| Environment stamp | the stamp row; refuse if present and disagreeing |
+| Deployment stamp | the stamp row; refuse if present and disagreeing with `WAITRON_ENV` |
 
 `tenant`:
 
@@ -131,7 +132,7 @@ order.
 certificate, the mTLS chain, the endpoint and the response parser — without creating a fiscal
 record.
 
-It then **offers** to record one real sale, and refuses outright when the environment is
+It then **offers** to record one real sale, and refuses outright when `WAITRON_ENV` is
 `production`.
 
 The offer is worded as recording a real sale, showing the invoice number it will consume, because
