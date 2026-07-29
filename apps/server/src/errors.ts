@@ -123,7 +123,7 @@ declare module "@waitron/shared" {
      * Carries the key's ENVIRONMENT, never the key or any prefix of it — the same rule
      * `credentials.invalid_payload` follows by reporting a count rather than field values.
      */
-    "payments.credential_environment_mismatch": {
+    "payment.credential_environment_mismatch": {
       tenantId: string;
       keyEnvironment: string;
       hostEnvironment: string;

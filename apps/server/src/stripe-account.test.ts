@@ -104,7 +104,7 @@ describe("stripeSecretKeyFrom", () => {
       Promise.resolve(stripeSecretKeyFrom({ secretKey: "sk_test_abc123" }, REF, "production")),
     );
     expect(error).toMatchObject({
-      code: "payments.credential_environment_mismatch",
+      code: "payment.credential_environment_mismatch",
       params: {
         tenantId: REF.tenantId,
         keyEnvironment: "preproduction",
@@ -118,7 +118,7 @@ describe("stripeSecretKeyFrom", () => {
       Promise.resolve(stripeSecretKeyFrom({ secretKey: "sk_live_abc123" }, REF, "preproduction")),
     );
     expect(error).toMatchObject({
-      code: "payments.credential_environment_mismatch",
+      code: "payment.credential_environment_mismatch",
       params: { keyEnvironment: "production", hostEnvironment: "preproduction" },
     });
   });

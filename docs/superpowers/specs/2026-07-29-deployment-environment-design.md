@@ -146,7 +146,7 @@ Domain-concept prefixes, per `packages/shared/src/errors.ts`:
 | `deployment.already_stamped` | `stampDeployment`, at provisioning | `stamped`, `requested` |
 | `fiscal.environment_mismatch` | `drain`, per record | `recordId`, `recordEnvironment`, `hostEnvironment` |
 | `fiscal.environment_unknown` | `drain`, per record | `recordId`, `hostEnvironment` |
-| `payments.credential_environment_mismatch` | Stripe credential read, per tenant | `tenantId`, `keyEnvironment`, `hostEnvironment` |
+| `payment.credential_environment_mismatch` | Stripe credential read, per tenant | `tenantId`, `keyEnvironment`, `hostEnvironment` |
 
 `deployment.*` rather than `server.*`: it is a fact about which deployment a database belongs to, not
 about the process, and `apps/server/src/errors.ts` reserves `server.*` for process facts by its own

@@ -544,7 +544,7 @@ it("refuses a test key on a production deployment", () => {
     stripeSecretKeyFrom({ secretKey: "sk_test_abc123" }, REF, "production"),
   );
   expect(error).toMatchObject({
-    code: "payments.credential_environment_mismatch",
+    code: "payment.credential_environment_mismatch",
     params: { tenantId: REF.tenantId, keyEnvironment: "preproduction", hostEnvironment: "production" },
   });
 });
@@ -554,7 +554,7 @@ it("refuses a live key on a pre-production deployment", () => {
     stripeSecretKeyFrom({ secretKey: "sk_live_abc123" }, REF, "preproduction"),
   );
   expect(error).toMatchObject({
-    code: "payments.credential_environment_mismatch",
+    code: "payment.credential_environment_mismatch",
     params: { keyEnvironment: "production", hostEnvironment: "preproduction" },
   });
 });
@@ -609,7 +609,7 @@ Then extend `stripeSecretKeyFrom`, after its existing `undefined` check and befo
 ```typescript
   const keyEnvironment = keyEnvironmentOf(secretKey);
   if (keyEnvironment !== null && keyEnvironment !== environment) {
-    throw new AppError("payments.credential_environment_mismatch", {
+    throw new AppError("payment.credential_environment_mismatch", {
       tenantId: ref.tenantId,
       keyEnvironment,
       hostEnvironment: environment,
@@ -629,7 +629,7 @@ Add to `apps/server/src/errors.ts`:
      * Carries the key's ENVIRONMENT, never the key or any prefix of it — the same rule
      * `credentials.invalid_payload` follows by reporting a count rather than field values.
      */
-    "payments.credential_environment_mismatch": {
+    "payment.credential_environment_mismatch": {
       tenantId: string;
       keyEnvironment: string;
       hostEnvironment: string;
