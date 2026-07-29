@@ -144,8 +144,8 @@ Domain-concept prefixes, per `packages/shared/src/errors.ts`:
 | --- | --- | --- |
 | `deployment.environment_mismatch` | `startServer`, once | `databaseEnvironment`, `hostEnvironment` |
 | `deployment.already_stamped` | `stampDeployment`, at provisioning | `stamped`, `requested` |
-| `fiscal.environment_mismatch` | `drain`, per record | `recordId`, `recordEnvironment`, `hostEnvironment` |
-| `fiscal.environment_unknown` | `drain`, per record | `recordId`, `hostEnvironment` |
+| `fiscal.environment_mismatch` | `drain`, per record | `registroId`, `recordEnvironment`, `hostEnvironment` |
+| `fiscal.environment_unknown` | `drain`, per record | `registroId`, `hostEnvironment` |
 | `payment.credential_environment_mismatch` | Stripe credential read, per tenant | `tenantId`, `keyEnvironment`, `hostEnvironment` |
 
 `deployment.*` rather than `server.*`: it is a fact about which deployment a database belongs to, not

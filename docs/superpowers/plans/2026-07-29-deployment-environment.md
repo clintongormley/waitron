@@ -827,12 +827,12 @@ In `drain.ts`, immediately after `claimBatch` returns and before the batch is se
     const mismatch =
       row.entorno === null
         ? new AppError("fiscal.environment_unknown", {
-            recordId: row.id,
+            registroId: row.id,
             hostEnvironment: deps.environment,
           })
         : row.entorno !== deps.environment
           ? new AppError("fiscal.environment_mismatch", {
-              recordId: row.id,
+              registroId: row.id,
               recordEnvironment: row.entorno,
               hostEnvironment: deps.environment,
             })
@@ -857,13 +857,13 @@ Add both codes to `packages/fiscal-verifactu/src/errors.ts`:
     /** A registro generated for one environment reached a host configured for the other. Never
      * retried: a mismatch is a configuration fact, not a transient failure. */
     "fiscal.environment_mismatch": {
-      recordId: string;
+      registroId: string;
       recordEnvironment: string;
       hostEnvironment: string;
     };
     /** A registro written before `entorno` existed, so nothing recorded where it was destined.
      * Refused rather than assumed — guessing is what this whole design prevents. */
-    "fiscal.environment_unknown": { recordId: string; hostEnvironment: string };
+    "fiscal.environment_unknown": { registroId: string; hostEnvironment: string };
 ```
 
 - [ ] **Step 4: Run to verify they pass, then prove the guard by deletion**

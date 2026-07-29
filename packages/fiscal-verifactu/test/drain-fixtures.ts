@@ -75,8 +75,11 @@ function toAeatDate(isoDate: string): string {
  * `SeededDrainOptions.futureDated`'s 2004/AceptadoConErrores case. Duplicated rather than
  * extending `seedSoldRegistro`'s own signature, to avoid touching a fixture other suites
  * (registro-sif.test.ts) already depend on for this task's own narrower need.
+ *
+ * Exported (Task 6's fix round) for `seedIndependentChain` below, which needs the SAME insert
+ * against a `sif_id` it controls explicitly rather than one `registerSif` mints at random.
  */
-async function insertPendingAlta(
+export async function insertPendingAlta(
   db: Database,
   params: {
     tenantId: string;
@@ -325,4 +328,68 @@ export async function seedSecondChain(
     values (${registroId}, ${seeded.tenantId}, '2026-07-21T00:00:00Z')
   `);
   return { registroId, facturaKey: `${seeded.nif}|${numSerieFactura}|${toAeatDate(PAST_FECHA)}` };
+}
+
+/**
+ * Task 6's fix round (starvation property, I2): mints an INDEPENDENT chain's `registro_sif` row
+ * with an EXPLICIT `sifId`, bypassing `registerSif`'s counter bookkeeping entirely — this chain
+ * needs no real installation-number history, since `drain.ts` never reads `registro_sif` at all,
+ * only `registros_facturacion.sif_id`'s grouping and `envios`. A fresh, throwaway `nif`
+ * (`idSistemaInformatico`/`numeroInstalacion` are likewise arbitrary-but-fixed) keeps this insert
+ * clear of `registro_sif_instalacion_uq`, with no need to touch `contadores_instalacion` at all.
+ *
+ * The explicit id is the whole point: it lets a test force this chain to sort deterministically
+ * relative to another chain under `claimBatch`'s `order by r.sif_id, r.secuencia` —
+ * `registerSif`'s own `defaultRandom()` id gives no such control, and sif_id ordering is otherwise
+ * unobservable and uncontrollable from a test. A near-maximal literal
+ * (`ffffffff-ffff-ffff-ffff-ffffffffffff`) sorts after any randomly-generated UUID with
+ * overwhelming probability, which is what the "does not starve..." test in drain.test.ts relies on
+ * to put this chain's one healthy row LAST, behind a large same-tenant backlog of refused rows.
+ */
+export async function seedIndependentChain(
+  db: Database,
+  seeded: SeededDrain,
+  params: { sifId: string; secuencia: number; entorno?: Entorno | null },
+): Promise<{ registroId: string; facturaKey: string }> {
+  const location = await db.execute<{ id: string }>(sql`
+    insert into locations (tenant_id, name, invoice_locales, operation_description)
+    values (${seeded.tenantId}, 'Sala Z', array['es'], 'Venta en establecimiento')
+    returning id
+  `);
+  const till = await db.execute<{ id: string }>(sql`
+    insert into tills (tenant_id, location_id, name) values (${seeded.tenantId}, ${location.rows[0]!.id}, 'Till Z')
+    returning id
+  `);
+  const tillId = brandTillId(till.rows[0]!.id);
+  await db.execute(sql`
+    insert into invoice_series (tenant_id, till_id, code) values (${seeded.tenantId}, ${tillId}, 'Z')
+  `);
+  // A fresh nif (not `seeded.nif`), so this row's own installation number can just be a fixed
+  // literal with no risk of colliding with `seeded`'s real, `registerSif`-minted chain — this
+  // chain's own NIF is never asserted on anywhere, only its sif_id ordering.
+  const nif = `ZZ${String(seeded.tenantId).replace(/-/g, "").slice(0, 7)}`;
+  await db.execute(sql`
+    insert into registro_sif (id, tenant_id, till_id, nif, id_sistema_informatico, numero_instalacion)
+    values (${params.sifId}, ${seeded.tenantId}, ${tillId}, ${nif}, 'INDEP', 1)
+  `);
+
+  const entorno = params.entorno === undefined ? DEFAULT_ENTORNO : params.entorno;
+  // `registros_huella_ck` requires exactly 64 hex digits (`^[0-9A-F]{64}$`) — "E" (not "Z"), a
+  // distinct valid hex letter from `seedSecondChain`'s own "B" prefix.
+  const huella = `E${String(params.secuencia).padStart(63, "0")}`;
+  const { registroId, numSerieFactura } = await insertPendingAlta(db, {
+    tenantId: seeded.tenantId,
+    tillId,
+    sifId: params.sifId,
+    nif,
+    secuencia: params.secuencia,
+    huella,
+    fecha: PAST_FECHA,
+    entorno,
+  });
+  await db.execute(sql`
+    insert into envios (registro_id, tenant_id, proximo_intento_en)
+    values (${registroId}, ${seeded.tenantId}, '2026-07-21T00:00:00Z')
+  `);
+  return { registroId, facturaKey: `${nif}|${numSerieFactura}|${toAeatDate(PAST_FECHA)}` };
 }

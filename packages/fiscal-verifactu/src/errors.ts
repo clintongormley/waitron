@@ -228,9 +228,15 @@ declare module "@waitron/shared" {
      * pre-production record to the real AEAT is unrecoverable (chains cannot be merged or
      * migrated, and invoice numbers are never reused), which is why this refuses rather than
      * assumes.
+     *
+     * `registroId`, not the brief's own draft `recordId` (M2/M3 of the Task 6 fix-round review):
+     * `incidents` carries no FK back to `registros_facturacion` at all (see
+     * `fiscal.registro_rechazado`'s own doc comment above), so this param is the ONLY traceback
+     * from an incident row to the record it describes — matching this file's other seven codes
+     * that carry one, all named `registroId`, not an eighth spelling of the same concept.
      */
     "fiscal.environment_mismatch": {
-      recordId: string;
+      registroId: string;
       recordEnvironment: string;
       hostEnvironment: string;
     };
@@ -242,8 +248,9 @@ declare module "@waitron/shared" {
      * defaulting the missing value to "assume production": guessing which deployment an
      * un-stamped row belongs to is exactly what this whole guard exists to avoid, and collapsing
      * the two would erase, for the human resolving the incident, whether AEAT ever saw a
-     * disagreeing value or none at all.
+     * disagreeing value or none at all. `registroId`, not `recordId` — same M2/M3 rename and same
+     * reasoning as `fiscal.environment_mismatch` above.
      */
-    "fiscal.environment_unknown": { recordId: string; hostEnvironment: string };
+    "fiscal.environment_unknown": { registroId: string; hostEnvironment: string };
   }
 }

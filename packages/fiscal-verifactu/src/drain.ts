@@ -282,6 +282,14 @@ async function drainTenant(
 
   let t = flujo.tiempoEsperaSeg || TIEMPO_ESPERA_INICIAL_SEG;
   let dueCount = dueCount0;
+  // Chains the environment guard has refused SOMEWHERE in this pass (`claimBatch`'s own doc
+  // comment on `blockedSifIds`) — one `Set`, shared and mutated across every claim below, for the
+  // WHOLE pass, not reset per chunk: that is what lets a LATER chunk's claim exclude a chain a
+  // PREVIOUS chunk already found refused, rather than re-discovering (and re-incidenting) it.
+  // Reset to empty on every `drainTenant` call, i.e. fresh each pass — a chain blocked THIS pass
+  // is re-examined, not assumed still-blocked, on the next one (so correcting `WAITRON_ENV`
+  // between passes needs no database repair at all, per that guard's own doc comment).
+  const blockedSifIds = new Set<string>();
   while (dueCount > 0) {
     // T1 — claim in its own transaction; ≤1000 due pending rows, ordered by chain sequence
     // within each SIF. Any claimed row whose chain already carries an open `rechazado`/
@@ -289,15 +297,32 @@ async function drainTenant(
     // comment) is redirected straight to `detenido` here, in the SAME transaction as the claim —
     // never handed to AEAT, since submitting over an unresolved gap would be submitting out of
     // chain order.
-    const batch = await withTenant(db, tenantId, async (tx) => {
-      const claimed = await claimBatch(tx, tenantId, now, environment, result);
-      return haltOpenChainClaims(tx, claimed, now, result);
-    });
+    //
+    // Retried, not called once: a claim window can come back with rows but nothing sendable —
+    // every row in it belonged to a chain the environment guard just blocked (`claimBatch`'s own
+    // doc comment) — and `blockedSifIds` growing is exactly what lets the NEXT attempt's SELECT
+    // exclude that chain and reach whatever sendable work sorts behind it. Bounded: each iteration
+    // that finds nothing sendable adds at least one NEW sif_id to `blockedSifIds` (this tenant's
+    // own distinct chain count is finite), or `rawCount` is already 0 and the loop stops — so a
+    // backlog of refused rows can cost extra round trips here but can never make sendable work
+    // behind it unreachable, this pass or any later one.
+    let claimed: { sendable: DueRow[]; rawCount: number };
+    for (;;) {
+      claimed = await withTenant(db, tenantId, async (tx) => {
+        const c = await claimBatch(tx, tenantId, now, environment, result, blockedSifIds);
+        const kept = await haltOpenChainClaims(tx, c.sendable, now, result);
+        return { sendable: kept, rawCount: c.rawCount };
+      });
+      if (claimed.sendable.length > 0 || claimed.rawCount === 0) break;
+    }
+    const batch = claimed.sendable;
     // Defensive only: EITHER the countDue/claimBatch race this function's own doc comment
     // describes, OR every row claimed this round was redirected to `detenido` by
-    // `haltOpenChainClaims` above (all due work this round sat on already-halted chains). Either
-    // way nothing here is submittable; the tenant is deferred to its next gated pass rather than
-    // re-attempting immediately, exactly like the race case.
+    // `haltOpenChainClaims` above (all due work this round sat on already-halted chains) — the
+    // retry loop above already exhausted the environment guard's own reason for an empty batch
+    // (`rawCount === 0`, nothing left unblocked to even try). Either way nothing here is
+    // submittable; the tenant is deferred to its next gated pass rather than re-attempting
+    // immediately, exactly like the race case.
     if (batch.length === 0) break;
 
     const cabecera = cabeceraFor(batch[0]!);
@@ -437,18 +462,48 @@ async function recoverStaleClaims(tx: Transaction, tenantId: string, now: Date):
  * concurrency this drainer needs when scaled beyond one process. Proven under REAL contention (not
  * PGlite, which serialises everything onto one backend) by `drain.concurrency.test.ts`.
  *
- * **The deployment-environment guard** (Task 6 of the deployment-environment plan): every SELECTed
- * row's OWN `entorno` (stamped at generation time — `RegistroRow.entorno`, `./registro-row.ts`) is
- * checked against this DRAINING host's `environment` BEFORE the `enviando` UPDATE below runs. A
- * row that disagrees, or carries no `entorno` at all (written before migration 0009 added the
- * column), is EXCLUDED from that UPDATE's id list — never included, never flipped, never reverted
- * — and `raiseIncident` reports it on THIS SAME transaction instead. Because the row is simply
- * never touched, no explicit UPDATE is needed to leave it `pendiente`: the `FOR UPDATE` lock this
- * SELECT holds on it is released like any other when the transaction ends, and nothing else here
- * or in any caller ever sets its `estado`. Also never backed off via `backoffMs` like a transient
- * submit failure would be — a mismatch is a configuration fact, not a fact about AEAT's
- * availability, so only correcting `WAITRON_ENV` and restarting releases the row, not a timer. See
- * `errors.ts`'s own `fiscal.environment_mismatch`/`fiscal.environment_unknown` doc comments.
+ * **The deployment-environment guard** (Task 6 of the deployment-environment plan; chain-order and
+ * starvation properties added in that task's fix round after review). Every SELECTed row's OWN
+ * `entorno` (stamped at generation time — `RegistroRow.entorno`, `./registro-row.ts`) is checked
+ * against this DRAINING host's `environment` BEFORE the `enviando` UPDATE below runs. A row that
+ * disagrees, or carries no `entorno` at all (written before migration 0009 added the column), is
+ * EXCLUDED from that UPDATE's id list — never included, never flipped, never reverted — and
+ * `raiseIncident` reports it on THIS SAME transaction instead. Because the row is simply never
+ * touched, no explicit UPDATE is needed to leave it `pendiente`: the `FOR UPDATE` lock this SELECT
+ * holds on it is released like any other when the transaction ends, and nothing else here or in
+ * any caller ever sets its `estado`. Also never backed off via `backoffMs` like a transient submit
+ * failure would be — a mismatch is a configuration fact, not a fact about AEAT's availability, so
+ * only correcting `WAITRON_ENV` and restarting releases the row, not a timer. See `errors.ts`'s own
+ * `fiscal.environment_mismatch`/`fiscal.environment_unknown` doc comments.
+ *
+ * `blockedSifIds` is the chain-order half of the guard, and is exactly as load-bearing as the
+ * per-row check above. Rows arrive ordered `(sif_id, secuencia)`, so a refused row's SUCCESSORS on
+ * the SAME chain (higher `secuencia`, not yet examined) would otherwise still pass their OWN
+ * entorno check and be handed to AEAT carrying `Encadenamiento.RegistroAnterior` pointing at a
+ * huella AEAT never received — exactly the "submitting out of chain order" `haltOpenChainClaims`'s
+ * own doc comment (below) calls unacceptable, just for a NEWLY-discovered gap rather than an
+ * already-recorded rejection. So: the MOMENT a row is found refused, its `sif_id` is added to
+ * `blockedSifIds` (mutated in place — the caller's SAME `Set` instance, shared across every
+ * `claimBatch` call in this tenant's current pass), and every row on that chain seen AFTERWARDS —
+ * in this same call's iteration, or a LATER call within the same pass, via the `sif_id not in`
+ * exclusion below — is dropped silently, with NO second incident: one incident per newly-blocked
+ * chain per pass, mirroring `haltOpenChainClaims`'s own "flag once, don't duplicate" precedent for
+ * an identical shape of problem (a chain-wide condition, not a fact about any one row). The blocked
+ * row(s) stay exactly as untouched-and-`pendiente` as the row that triggered the block — property 2
+ * of the fix-round review is "the chain halts behind a refusal, and the HALTED SUCCESSORS ALSO STAY
+ * PENDIENTE", not `detenido`: unlike a genuine AEAT rejection, this condition is not something a
+ * human resolves through reconciliation — correcting `WAITRON_ENV` alone makes the predecessor's
+ * own entorno agree again, and the very next pass reclaims the whole chain in order with no
+ * database repair.
+ *
+ * The `sif_id not in (...)` exclusion in the WHERE clause exists for the OTHER property the review
+ * found missing: without it, a claim window entirely filled by refused rows (>= 1000 of them, or
+ * however many distinct blocked chains sort ahead of everything else under `order by sif_id`) would
+ * return the SAME rows to every subsequent `claimBatch` call THIS PASS, since nothing about a
+ * refused row changes its own due-ness — `drainTenant`'s retry loop could never advance past it,
+ * and any genuinely sendable work sorting behind it would starve, this pass and every later one,
+ * forever. Filtering already-blocked chains out of the SELECT itself is what lets a LATER call in
+ * the same pass reach past them to whatever sorts next — see `drainTenant`'s own retry loop.
  */
 async function claimBatch(
   tx: Transaction,
@@ -456,11 +511,14 @@ async function claimBatch(
   now: Date,
   environment: Entorno,
   result: DrainResult,
-): Promise<DueRow[]> {
+  blockedSifIds: Set<string>,
+): Promise<{ sendable: DueRow[]; rawCount: number }> {
+  const alreadyBlocked = blockedSifIds.size > 0 ? [...blockedSifIds] : null;
   const rows = await tx.execute<DueRow>(sql`
     select r.*, e.intentos from envios e
     join registros_facturacion r on r.id = e.registro_id
     where e.tenant_id = ${tenantId} and e.estado = 'pendiente' and e.proximo_intento_en <= ${now.toISOString()}
+      ${alreadyBlocked === null ? sql`` : sql`and r.sif_id not in ${alreadyBlocked}`}
     order by r.sif_id, r.secuencia
     limit ${MAX_REGISTROS_POR_ENVIO}
     for update of e skip locked
@@ -468,15 +526,19 @@ async function claimBatch(
 
   const sendable: DueRow[] = [];
   for (const row of rows.rows) {
+    // A successor of a refusal this SAME call already found (the SQL exclusion above only screens
+    // out chains blocked in an EARLIER call this pass) — dropped with no incident of its own.
+    if (blockedSifIds.has(row.sif_id)) continue;
+
     const mismatch =
       row.entorno === null
         ? new AppError("fiscal.environment_unknown", {
-            recordId: row.id,
+            registroId: row.id,
             hostEnvironment: environment,
           })
         : row.entorno !== environment
           ? new AppError("fiscal.environment_mismatch", {
-              recordId: row.id,
+              registroId: row.id,
               recordEnvironment: row.entorno,
               hostEnvironment: environment,
             })
@@ -484,6 +546,7 @@ async function claimBatch(
     if (mismatch === null) {
       sendable.push(row);
     } else {
+      blockedSifIds.add(row.sif_id);
       await raiseIncident(tx, row, "error", mismatch, now, result);
     }
   }
@@ -498,6 +561,8 @@ async function claimBatch(
     // containing a ROW, not three scalars, which fails with 42883 ("operator does not exist: uuid
     // = record"). Both confirmed live against PGlite while implementing this task. `in ${ids}`,
     // with no extra parens of our own, is the form drizzle's own expansion is already shaped for.
+    // The SAME shape, negated, is what the `sif_id not in ${alreadyBlocked}` fragment above relies
+    // on for its own array parameter.
     await tx.execute(sql`
       update envios set estado = 'enviando', enviado_en = ${now.toISOString()}, intentos = intentos + 1
       where registro_id in ${ids}
@@ -509,7 +574,14 @@ async function claimBatch(
   // one's. Only ever computed for `sendable` rows: a row the environment guard above excluded was
   // never part of that UPDATE, so its own `intentos` was never touched either, and it is never
   // returned from here for a caller to see a bumped value that was never actually persisted.
-  return sendable.map((r) => ({ ...r, intentos: r.intentos + 1 }));
+  //
+  // `rawCount` (this call's `rows.rows.length`, BEFORE partitioning) is what `drainTenant`'s retry
+  // loop uses to tell "everything in this window was refused/blocked, try again past it" apart
+  // from "genuinely nothing left" — `sendable.length` alone cannot distinguish the two.
+  return {
+    sendable: sendable.map((r) => ({ ...r, intentos: r.intentos + 1 })),
+    rawCount: rows.rows.length,
+  };
 }
 
 /**
