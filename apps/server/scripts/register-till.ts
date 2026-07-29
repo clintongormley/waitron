@@ -2,27 +2,21 @@
 // and `record-one-sale.ts`: a bootstrapped till has no `registro_sif` row, and `recordSale` refuses
 // with `sif.not_registered` until it does.
 //
-// A shim, deliberately: everything this does beyond reading argv lives in `src/provision-till.ts`,
-// where it is covered by `src/provision-till.test.ts` against a real database. `scripts/**` is
-// excluded from this package's coverage thresholds as build tooling, and provisioning a till is not
-// tooling — so only the argv/stdout wrapper lives here.
+// A shim: everything beyond reading argv lives in `src/provision-till.ts`, whose header explains
+// why it is there and what it guarantees.
 //
-// Usage — build first, exactly like `dist/server.js`; this repo's `.js`-suffixed relative imports
-// resolve through esbuild's bundler, not through plain `node <file>.ts` (see
-// `record-one-sale.ts`'s header for the same constraint, found the same way):
+// Usage — build first, exactly like `dist/server.js`, for the reason `record-one-sale.ts`'s header
+// records:
 //   pnpm --filter @waitron/server build
 //   DATABASE_URL=postgres://... node apps/server/dist/register-till.js \
 //     <tenantId> <tillId> <idSistemaInformatico>
 //
-// The obligado's NIF is NOT an argument — it is read from the tenant row, so a till can never be
-// registered under an obligado other than the one that owns it. See `provisionTill`'s own note.
-// The connection string is read ONLY from `DATABASE_URL`, never accepted as an argument, so it
-// stays out of shell history and process listings.
+// The obligado's NIF is NOT an argument — see `provisionTill`'s own note. The connection string is
+// read ONLY from `DATABASE_URL`, never accepted as an argument, so it stays out of shell history
+// and process listings.
 //
-// Re-running this against an already-registered till is how a REIMAGED till is re-provisioned: it
-// revokes the live identity, mints a fresh installation number and starts a new chain. That is
-// correct for a replaced till and wrong for a working one — the previous chain is closed either
-// way, so do not run it to "check" anything.
+// Re-running this against an already-registered till is how a REIMAGED till is re-provisioned. It
+// closes the previous chain either way, so do not run it to "check" anything.
 import { createPostgresDb } from "@waitron/db";
 import { tenantId as brandTenantId, tillId as brandTillId } from "@waitron/shared";
 import { provisionTill } from "../src/provision-till.js";

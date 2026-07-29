@@ -464,7 +464,14 @@ Two departures from the sketch above, both deliberate:
    keys onto `tenants` and `tills` and no composite one, and RLS's WITH CHECK only constrains
    `tenant_id` — so a row naming tenant A with a till of tenant B satisfies every constraint in the
    schema. Leaning on RLS to hide the foreign row would not hold for the superuser who provisions the
-   first till of a deployment. Both misses report `server.provision_target_missing`.
+   first till of a deployment. The two misses report `tenant.not_found` and `till.not_found`.
+
+The suite runs on PGlite rather than a container, against this package's grain. `startRealPostgres`'s
+own refusal message justifies itself by "PGlite runs every connection as a superuser, so it cannot
+show whether this host works as the non-superuser deployment role" — and nothing in this suite leaves
+the superuser connection, so that justification does not apply. It is also the *stronger* harness for
+the ownership guard: under RLS a foreign till is hidden regardless, so a container test would still
+pass with the guard deleted. On PGlite it fails, which is how the guard was verified.
 
 **Proven against a throwaway container**, in the order that makes the gap visible:
 
@@ -476,6 +483,28 @@ Two departures from the sketch above, both deliberate:
 | `registros_facturacion` | 1 row, `primer_registro = true`; 1 sale; 1 `pendiente` envío |
 
 Also verified: both failure paths exit non-zero (an operator's `&&` chain depends on it).
+
+**Follow-ups this step raised and deliberately did not take**, all recorded here rather than lost:
+
+1. **`registerSif` should derive the NIF itself, and check ownership itself.** Both invariants above
+   are properties of a *SIF registration*, not of provisioning — enforced today in one caller, while
+   `registerSif` stays callable with any NIF and any till. The package-boundary objection is already
+   dead: `backend.ts` imports `tenants` from `@waitron/db` and reads `tenants.legalName` for
+   `SistemaInformatico.NombreRazon`, the sibling field to `NIF` in the same object. Moving both down
+   would *delete* this module rather than grow it. Deferred only because it is a signature change
+   across ~25 call sites in a package this cycle is not otherwise touching.
+2. **`registro_sif` (and `registros_facturacion`) should carry a composite foreign key** on
+   (tenant_id, till_id) instead of two independent ones. Needs a `UNIQUE (id, tenant_id)` on `tills`
+   first, so it is a migration in `packages/db` *and* one in `packages/fiscal-verifactu`, in that
+   order. Schema workstream, not a provisioning script.
+3. **The `build` script now repeats the same esbuild flag set and `createRequire` banner three
+   times.** Third occurrence is where extraction earns itself; a bump to `--target` is currently a
+   three-site edit inside one string with nothing to catch a miss. Left alone here because collapsing
+   it touches the two pre-existing invocations and `dist/server.js`'s name is load-bearing in both the
+   `bin` field and CI's bundle smoke test.
+4. **`record-one-sale.ts` keeps the older convention** — whole body in `scripts/`, therefore
+   uncovered. Moving its body into `src/` the way this step did would give it the two refusal paths
+   it has never had.
 
 **Record in Task 5:** provisioning a till is a product gap, not just a plan gap. The first customer
 till in a real deployment will hit this too, and the eventual provisioning surface must cover SIF

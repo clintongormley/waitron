@@ -49,19 +49,31 @@ declare module "@waitron/shared" {
     /** A migration folder named by the manifest is absent or carries no Drizzle journal. */
     "server.migrations_missing": { name: string; folder: string };
     /**
-     * Provisioning was pointed at a tenant or a till that this connection cannot see. `id` is
-     * echoed because both are operator-supplied arguments and neither is a secret — an operator who
-     * mistyped one needs to see which of the two ids was rejected, and a UUID identifies nothing on
-     * its own.
+     * No such tenant. `id` is echoed because it is an operator-supplied argument and not a secret —
+     * a mistyped UUID identifies nothing on its own, so an error that withheld it would be
+     * unactionable.
      *
-     * A till of ANOTHER tenant reports `till` rather than a distinct "wrong owner" code, and
-     * deliberately: to a caller scoped to one tenant the two are the same fact, and RLS makes them
-     * literally indistinguishable — a foreign till simply is not there. Reporting them separately
-     * would mean a superuser (who sees the foreign row) got a different error than the deployment
-     * role for the same mistake, and would confirm the existence of another tenant's till to
-     * whoever asked.
+     * Deliberately NOT `server.*`, unlike its neighbours here: the prefix names the DOMAIN CONCEPT,
+     * never the package that happens to throw (packages/shared/src/errors.ts's design note, and
+     * `series.not_found` — renamed twice to converge on exactly this rule). "There is no such
+     * tenant" is a fact about a tenant. It is declared in this file rather than in packages/db,
+     * which owns the table, only because `@waitron/db`'s exports map is enumerated and deliberately
+     * publishes no path to its `errors.ts` — so a consumer cannot follow this repo's "the throwing
+     * file imports the registry directly" convention across that boundary. Move both codes down if
+     * a package ever needs to throw them.
      */
-    "server.provision_target_missing": { target: "tenant" | "till"; id: string };
+    "tenant.not_found": { id: string };
+    /**
+     * No such till *for this tenant*. A till belonging to ANOTHER tenant reports this same code
+     * rather than a distinct "wrong owner" one: to a caller scoped to one tenant the two are the
+     * same fact, and a separate code would confirm the existence of another tenant's till to
+     * whoever asked.
+     *
+     * Note this is enforced by comparing `tills.tenant_id`, NOT by relying on RLS to hide the
+     * foreign row — see `provisionTill`. The two agree for the deployment role; the explicit check
+     * is what makes them agree for a superuser as well.
+     */
+    "till.not_found": { id: string; tenantId: string };
     /**
      * The HTTP listener's socket failed to bind. `code` is the raw OS error Node attaches to the
      * `'error'` event (`EADDRINUSE` for the common case of a fixed default port already taken,
