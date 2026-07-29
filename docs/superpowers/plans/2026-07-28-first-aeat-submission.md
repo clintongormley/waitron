@@ -212,9 +212,14 @@ Create `apps/server/sql/bootstrap-tenant.sql`. Values arrive as `psql` variables
 ```sql
 -- The deli's own rows. Run ONCE, by hand, against a migrated database, as a SUPERUSER (or a role
 -- with BYPASSRLS) — NOT merely as the table owner. Every table this script writes has FORCE ROW
--- LEVEL SECURITY, which denies the owner its usual RLS exemption, and the first INSERT creates the
--- very tenant whose id app.tenant_id would need to be set to. Confirmed live: a non-superuser role
--- made owner of all four tables is denied on the tenants INSERT.
+-- LEVEL SECURITY, which denies the owner its usual RLS exemption. Confirmed live: a non-superuser
+-- role made owner of all four tables is denied on the tenants INSERT.
+--
+-- That requirement belongs to THIS FILE, not to the schema: a caller that chooses the tenant's uuid
+-- itself and sets app.tenant_id to it before inserting satisfies
+-- `WITH CHECK (id = current_tenant_id())` as an ordinary non-superuser role. This script does not,
+-- because it lets tenants.id DEFAULT — and because no non-superuser role here holds INSERT on
+-- tenants anyway. See the committed file's header for the proof and both reasons.
 --
 -- Deliberately NOT the test seeds: packages/db/src/testing/seed.ts writes 'Test SL' and a NIF from
 -- a counter. Those values would become part of a fiscal record the Agencia Tributaria keeps.
