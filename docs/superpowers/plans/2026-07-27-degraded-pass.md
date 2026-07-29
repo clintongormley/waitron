@@ -810,6 +810,11 @@ Delete the boot-time `const resolveClient = aeatClientResolver({…})` at line 1
 
 The existing comment at line 113-118 explaining why `mtlsFetch` is passed directly still applies — move it with the code.
 
+> **2026-07-29 note:** `config.aeatEnv` above is now `config.environment`, sourced from `WAITRON_ENV`
+> rather than `WAITRON_AEAT_ENV` — see the
+> [deployment-environment design](../specs/2026-07-29-deployment-environment-design.md). The snippet
+> above records the shape at the time this plan was written and is left unchanged.
+
 - [ ] **Step 6: Run the suite**
 
 ```bash

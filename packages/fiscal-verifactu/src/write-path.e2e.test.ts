@@ -65,6 +65,7 @@ beforeEach(async () => {
   // transaction and needs its own connection to query against (`backend.ts`'s own doc comment on
   // `VerifactuBackendOptions.db`).
   backend = new VerifactuBackend({
+    deploymentEnvironment: "production",
     clock: steadyClock,
     db,
     resolveClient: staticResolver(fakeClient),

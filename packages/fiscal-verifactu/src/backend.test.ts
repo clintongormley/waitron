@@ -50,6 +50,7 @@ afterAll(async () => {
 beforeEach(async () => {
   ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenantWithSif(db));
   backend = new VerifactuBackend({
+    deploymentEnvironment: "production",
     clock: steadyClock,
     db,
     resolveClient: staticResolver(fakeClient),
@@ -157,6 +158,7 @@ describe("recordVoid — date reconstruction", () => {
   it("reconstructs the annulled invoice's calendar day exactly at +13:00", async () => {
     const { saleId } = await sell();
     const voidBackend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: clockAt(780),
       db,
       resolveClient: staticResolver(fakeClient),
@@ -175,6 +177,7 @@ describe("recordVoid — date reconstruction", () => {
   it("reconstructs the annulled invoice's calendar day exactly at -13:00", async () => {
     const { saleId } = await sell();
     const voidBackend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: clockAt(-780),
       db,
       resolveClient: staticResolver(fakeClient),

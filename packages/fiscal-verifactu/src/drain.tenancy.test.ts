@@ -69,7 +69,7 @@ describe("drain resolves one client per tenant", () => {
     // empty list, so the test does not depend on running before the seeding one.
     const { tenantId: idle } = await seedTenantWithSif(db);
     const { resolveClient, asked } = recordingResolver();
-    await drain({ db, resolveClient, skipRetryMs: SKIP_RETRY_MS }, NOW);
+    await drain({ db, resolveClient, skipRetryMs: SKIP_RETRY_MS, environment: "production" }, NOW);
     expect(asked).not.toContain(idle);
   });
 
@@ -111,6 +111,7 @@ describe("drain resolves one client per tenant", () => {
           return Promise.resolve(aeat.client());
         },
         skipRetryMs: SKIP_RETRY_MS,
+        environment: "production",
       },
       NOW,
     );
@@ -155,6 +156,7 @@ describe("drain resolves one client per tenant", () => {
             new AppError("sif.not_registered", { tenantId, tillId: failingSeed.tillId }),
           ),
         skipRetryMs: SKIP_RETRY_MS,
+        environment: "production",
       },
       NOW,
     );
@@ -190,6 +192,7 @@ describe("drain resolves one client per tenant", () => {
             new AppError("sif.not_registered", { tenantId, tillId: failingSeed.tillId }),
           ),
         skipRetryMs: 90_000,
+        environment: "production",
       },
       NOW,
     );
@@ -232,6 +235,7 @@ describe("drain resolves one client per tenant", () => {
           };
         },
         skipRetryMs: SKIP_RETRY_MS,
+        environment: "production",
       },
       NOW,
     );

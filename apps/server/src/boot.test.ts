@@ -7,7 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Agent } from "undici";
-import { captureError, withTenant, type Database } from "@waitron/db";
+import { captureError, stampDeployment, withTenant, type Database } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 // The exact test-only entry point `packages/fiscal-verifactu`'s OWN tests use to seed a due
@@ -278,7 +278,7 @@ async function waitForEvent(lines: readonly string[], event: string): Promise<Lo
 }
 
 describe("startServer, against a real container as the deployment role", () => {
-  it("boots, pins the tick-clamp mapping, folds settlementLagMs, threads aeatEnv, runs a pass, serves /health and shuts down cleanly", async () => {
+  it("boots, pins the tick-clamp mapping, folds settlementLagMs, threads environment, runs a pass, serves /health and shuts down cleanly", async () => {
     const port = await freePort();
     const [server, sleeping, listening] = await withCapturedStdout(async (lines) => {
       const started = await startServer({
@@ -300,9 +300,9 @@ describe("startServer, against a real container as the deployment role", () => {
         // parses this correctly, and `preproduction` is both the default AND what a silently
         // hardcoded `aeatEndpointFor` argument would also produce, so leaving this unset here would
         // assert nothing I4 didn't already have. "production" only appears on the logged line below
-        // if `config.aeatEnv` genuinely reached `boot.ts`'s runtime, not merely `loadConfig`'s
+        // if `config.environment` genuinely reached `boot.ts`'s runtime, not merely `loadConfig`'s
         // return value in isolation.
-        WAITRON_AEAT_ENV: "production",
+        WAITRON_ENV: "production",
       });
       // loop.ts logs "loop.sleeping" strictly AFTER onPass runs (its own source order, no await in
       // between), so finding this line is also proof the first pass — and onPass -> recordPass —
@@ -319,15 +319,15 @@ describe("startServer, against a real container as the deployment role", () => {
       // .maxTickMs -> sleepMsFor end to end; it is 94327 only if boot.ts's mapping is not swapped.
       expect(sleeping.sleepMs).toBe(94327);
 
-      // I4: `aeatEndpointFor(config.aeatEnv)` is the one config value spec §10 calls irreversible
+      // I4: `aeatEndpointFor(config.environment)` is the one config value spec §10 calls irreversible
       // (production numbering can never be reused), and nothing observed it reaching `boot.ts` at
       // all before this assertion — a hardcoded `aeatEndpointFor("production")` would have passed
       // every other test in the repository. This does not observe the endpoint the resolver itself
       // selects (that needs a seeded `fiscal.aeat` credential and due `envios` work, which this
       // suite deliberately has none of — see the 2026-07-27 addendum to the server-host spec §14),
-      // but it does prove `config.aeatEnv` is not silently dropped between `loadConfig` and the log
-      // line `aeatClientResolver` is built from the same config field beside.
-      expect(listening.aeatEnv).toBe("production");
+      // but it does prove `config.environment` is not silently dropped between `loadConfig` and the
+      // log line `aeatClientResolver` is built from the same config field beside.
+      expect(listening.environment).toBe("production");
       expect(listening.port).toBe(port);
 
       expect(server.health.startedAt).toBeInstanceOf(Date);
@@ -634,6 +634,17 @@ describe("startServer, against a real container as the deployment role", () => {
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_MIN_TICK_MS: "1000",
         WAITRON_MAX_TICK_MS: "600000",
+        // `seedPendingEnvios`'s default `entorno` is `"production"` (`DEFAULT_ENTORNO`,
+        // drain-fixtures.ts) — without this, `deploymentEnvironment` resolves its own default,
+        // `"preproduction"`, the seeded row's `entorno` disagrees, and `claimBatch`'s
+        // deployment-environment guard refuses it before `resolveClient` (and hence `mtlsFetch`)
+        // is ever reached FOR THAT ROW. This test's assertion happened to still pass either way —
+        // `resolveClient` is called once per tenant with ANY due work, ahead of and regardless of
+        // that per-row check (`drain`'s own top-level loop) — but a passing assertion for the
+        // wrong reason is not what this test claims to cover. Set explicitly so the scenario
+        // actually exercised is "a real submission attempt", not "a refused row that happens to
+        // share a tenant with a resolved transport".
+        WAITRON_ENV: "production",
       });
       try {
         await waitForPass(server.health);
@@ -647,9 +658,58 @@ describe("startServer, against a real container as the deployment role", () => {
       // perpetually due, so deleting it is enough to keep this test order-independent. The
       // `tenant_credentials` row this test also inserted is not read by `envios_tenants_with_work`
       // and is left in place, matching every other tenant/credential this file's suite seeds.
+      //
+      // `incidents` also needs cleanup here, unlike the skip-retry test above: with `WAITRON_ENV`
+      // now agreeing with the seeded `entorno`, the mocked `undici` fetch (this file's own header
+      // comment) still makes the real submission attempt fail, and `drain`'s `client.submit` catch
+      // backs the batch off rather than raising an incident — but this cleanup is kept anyway,
+      // rather than assumed absent, so a future change to that failure path does not silently
+      // leave a row behind for a LATER test in this shared-container suite to trip over.
       await admin.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
+      await admin.execute(sql`delete from incidents where tenant_id = ${seeded.tenantId}`);
     }
   }, 60_000);
+
+  // Task 3: the boot guard (deployment-guard.ts). `stampDeployment` is permanent (a second,
+  // different value is refused, not overwritten — see its own doc comment), so the row this test
+  // writes is deleted in `finally`, the same pattern the seeded `envios` rows above use — this test
+  // is order-independent, not reliant on running last: a stamp left behind would make every LATER
+  // real-container test booting with `WAITRON_ENV: "production"` (the very first test in this
+  // block) fail this same guard for real, which is exactly the order-dependence the "sleeps on
+  // WAITRON_SKIP_RETRY_MS" test above was fixed to no longer have — not a precedent for keeping it
+  // here.
+  //
+  // DATABASE_URL is `runtimeDatabaseUrl` (RUNTIME_ROLE), not `databaseUrl` (PROBE_ROLE) like every
+  // other real-container test in this block: RUNTIME_ROLE carries no CREATE grant at all, so — per
+  // this file's own confirmed finding above (`RUNTIME_ROLE`'s own comment) — ANY attempt to run
+  // `applyMigrations` against it fails immediately with a raw Postgres permission error, even though
+  // this container's schema is already fully migrated (Postgres checks the CREATE privilege before
+  // Drizzle's own `IF NOT EXISTS` ever runs). That is what makes the observed
+  // `deployment.environment_mismatch` code proof of this test's SECOND clause, not just its first:
+  // with an already-migrated schema and PROBE_ROLE's CREATE grant, `applyMigrations` running here
+  // would be an invisible no-op — a guard that fired too LATE (after migrations, rather than before)
+  // would produce this exact same error and pass this exact same assertion. Under RUNTIME_ROLE it
+  // cannot: a late or bypassed guard would surface a permission-denied failure instead, a distinct
+  // and distinguishable error from `deployment.environment_mismatch`. RUNTIME_ROLE still reads the
+  // stamp `assertDeploymentMatches` needs to see: `0010_deployment_stamp.sql` grants `deployment`'s
+  // own `SELECT` to `app_user`, and `RUNTIME_ROLE` is an `app_user` member (this file's own
+  // `beforeAll`).
+  it("refuses to start, and runs no migration, against another environment's database", async () => {
+    await stampDeployment(admin, "preproduction");
+
+    try {
+      const error = await captureError(() =>
+        startServer({
+          ...KEY_ENV,
+          DATABASE_URL: runtimeDatabaseUrl,
+          WAITRON_ENV: "production",
+        }),
+      );
+      expect(error).toMatchObject({ code: "deployment.environment_mismatch" });
+    } finally {
+      await admin.execute(sql`delete from deployment where id = 1`);
+    }
+  });
 });
 
 // Neither test below needs the real container `beforeAll` starts for the suite above: both

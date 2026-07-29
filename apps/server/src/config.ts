@@ -2,7 +2,7 @@ import { AppError } from "@waitron/shared";
 import { DEFAULTS } from "@waitron/scheduler";
 import "./errors.js";
 
-export type AeatEnvironment = "production" | "preproduction";
+export type DeploymentEnvironment = "production" | "preproduction";
 
 export interface SchedulerConfig {
   horizonDays: number;
@@ -24,7 +24,7 @@ export interface ServerConfig {
    * so migrations need a role of their own. `migrations.ts`'s `applyMigrations` is the only reader.
    */
   migrationsDatabaseUrl: string;
-  aeatEnv: AeatEnvironment;
+  environment: DeploymentEnvironment;
   httpPort: number;
   /** Defaults to loopback. `/health` (spec §9) is deliberately unauthenticated, which is fine on a
    * loopback listener and less fine on every interface — the body is operational metadata, not a
@@ -114,18 +114,25 @@ function optionalPositiveInt(env: Env, variable: string): number | undefined {
   return parsePositiveInt(env, variable);
 }
 
-/** Exported so one-shot scripts that build their own backend resolve this the same way the host
- * does — the safe default below is not one for a caller to re-derive. */
-export function aeatEnvironment(env: Env): AeatEnvironment {
-  const raw = env.WAITRON_AEAT_ENV;
+/**
+ * Which environment this whole deployment belongs to — AEAT's endpoints, and the Stripe key mode
+ * a tenant's credential must match. ONE setting, not one per provider: there is no legitimate
+ * mixed pair. AEAT pre-production with a live Stripe key means taking real money without filing
+ * it; AEAT production with a test key means filing invoices for money never taken.
+ *
+ * Exported so one-shot scripts that build their own backend resolve this the same way the host
+ * does — the safe default below is not one for a caller to re-derive.
+ */
+export function deploymentEnvironment(env: Env): DeploymentEnvironment {
+  const raw = env.WAITRON_ENV;
   // The DEFAULT is preproduction and production must be typed out. Architecture §9: production
   // numbering can never be reused, even for a test invoice, so this is the one default in the file
   // whose mistake is irreversible.
   if (isUnset(raw)) return "preproduction";
   if (raw !== "production" && raw !== "preproduction") {
     throw new AppError("server.config_invalid", {
-      variable: "WAITRON_AEAT_ENV",
-      reason: "not_an_aeat_environment",
+      variable: "WAITRON_ENV",
+      reason: "not_a_deployment_environment",
     });
   }
   return raw;
@@ -206,7 +213,7 @@ export function loadConfig(env: Env, defaultMigrationsRoot: string): ServerConfi
   return {
     databaseUrl,
     migrationsDatabaseUrl: isUnset(migrationsDatabaseUrl) ? databaseUrl : migrationsDatabaseUrl,
-    aeatEnv: aeatEnvironment(env),
+    environment: deploymentEnvironment(env),
     httpPort,
     httpHost: isUnset(httpHost) ? DEFAULT_HTTP_HOST : httpHost,
     minTickMs,

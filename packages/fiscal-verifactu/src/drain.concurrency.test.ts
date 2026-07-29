@@ -67,11 +67,13 @@ describe("drain — claim concurrency (real Postgres)", () => {
     const dbB = await pg.connect();
     try {
       const a = new VerifactuBackend({
+        deploymentEnvironment: "production",
         clock: seeded.clock,
         db: dbA,
         resolveClient: staticResolver(aeat.client()),
       });
       const b = new VerifactuBackend({
+        deploymentEnvironment: "production",
         clock: seeded.clock,
         db: dbB,
         resolveClient: staticResolver(aeat.client()),
@@ -133,6 +135,7 @@ describe("drain — claim concurrency (real Postgres)", () => {
     const seeded = await seedPendingEnvios(admin, { count: 3 });
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db: admin,
       resolveClient: staticResolver(aeat.client()),
@@ -200,6 +203,7 @@ describe("drain — cross-tenant enumeration seam under RLS (real Postgres, as a
     const appUserDb = await pg.connectAs(DRAIN_PROBE_ROLE, DRAIN_PROBE_PASSWORD);
     try {
       const backend = new VerifactuBackend({
+        deploymentEnvironment: "production",
         clock: t1.clock,
         db: appUserDb,
         resolveClient: staticResolver(aeat.client()),

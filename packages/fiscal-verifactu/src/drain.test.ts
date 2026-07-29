@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { recordSale, recordVoid } from "@waitron/core";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
+import type { TenantId } from "@waitron/shared";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
 import { CORE_MIGRATIONS, asAppUser, createPgliteDb, runMigrations, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -11,6 +12,7 @@ import { backoffMs } from "./drain.js";
 import { ackStateOf } from "./acks.js";
 import {
   appendPendingAlta,
+  seedIndependentChain,
   seedPendingEnvios,
   seedSecondChain,
   type SeededDrain,
@@ -37,6 +39,7 @@ describe("drain — happy path", () => {
     aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     seeded = await seedPendingEnvios(db, { count: 3 }); // 3 pending altas on one till/tenant
     backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -89,6 +92,7 @@ describe("drain — happy path, an anulación row", () => {
     const { tenantId, tillId, seriesId, workingOrderId } = await seedTenantWithSif(db);
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: steadyClock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -132,8 +136,10 @@ describe("drain — happy path, an anulación row", () => {
  * scoped to whichever `VerifactuBackend` instance calls it — so if this describe's beforeEach
  * seeded its own always-pending tenant (the "happy path" describe's convention), a self-built
  * 1001-tenant here would have its `result.batchesSent` count polluted by that OTHER tenant's own
- * envío too. Every other describe in this file fully drains whatever it seeds before its `it`
- * returns, so nothing is left pending for this sweep to pick up.
+ * envío too. Every other describe in this file either fully drains whatever it seeds before its
+ * `it` returns, OR — the "deployment-environment guard" describe below, whose whole point is rows
+ * no backend in this file can ever fully drain — deletes the `envios` rows it seeded in a
+ * `finally`, so nothing is left pending for this sweep to pick up either way.
  */
 describe("drain — batching (the 1001-split)", () => {
   let aeat: ReturnType<typeof createFakeAeat>;
@@ -145,6 +151,7 @@ describe("drain — batching (the 1001-split)", () => {
   it("splits a >1000 backlog at the XSD cap: full 1000-chunk now, the <1000 tail deferred until t", async () => {
     const seeded = await seedPendingEnvios(db, { count: 1001 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -177,6 +184,7 @@ describe("drain — flow control (envio_flujo)", () => {
     aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     seeded = await seedPendingEnvios(db, { count: 3 }); // 3 pending altas on one till/tenant
     backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -207,6 +215,7 @@ describe("drain — flow control (envio_flujo)", () => {
       tiempoEsperaInicial: 10000,
     });
     const backend2 = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(big.client()),
@@ -286,6 +295,7 @@ describe("drain — stale claim recovery", () => {
       `),
     );
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -318,6 +328,7 @@ describe("drain — stale claim recovery", () => {
       `),
     );
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -347,6 +358,7 @@ describe("drain — retry backoff on a transient submit failure", () => {
     };
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(failing),
@@ -389,6 +401,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     const seeded = await seedPendingEnvios(db, { count: 3 }); // secuencia 1,2,3 on one SIF
     aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente"); // reject the middle record
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -426,6 +439,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(db, { count: 1, futureDated: true }); // triggers 2004 → AceptadoConErrores
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -472,6 +486,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     const seeded = await seedPendingEnvios(db, { count: 3 });
     aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente");
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -524,6 +539,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     const seeded = await seedPendingEnvios(db, { count: 3 });
     aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente");
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -602,6 +618,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
   it("TEETH: a 3000 whose RegistroDuplicado is Correcta resolves to aceptado, not rechazado/detenido", async () => {
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -654,6 +671,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
   it("Route A: duplicate_annulled halts detenido, and halts a same-batch successor too, raising a fiscal.duplicado_anulado incident", async () => {
     const seeded = await seedPendingEnvios(db, { count: 2 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -696,6 +714,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
   it("Route B: duplicate_unknown with a matching huella resolves to aceptado", async () => {
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -790,6 +809,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     aeat.dropRegistroDuplicadoDetail(seeded.facturaKeys[0]!);
 
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -850,6 +870,7 @@ describe("drain — halted records get a halted ack (the bulk chain-halt paths)"
     const seeded = await seedPendingEnvios(db, { count: 3 }); // secuencia 1,2,3 on one SIF
     aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente"); // reject the middle record
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -891,6 +912,308 @@ describe("drain — halted records get a halted ack (the bulk chain-halt paths)"
       expect(state).toBe(ackStateOf(env.estado));
     }
   });
+});
+
+/**
+ * Deployment-environment plan, Task 6: `drain` must never submit a registro generated for the
+ * OTHER deployment — submitting a pre-production record to the real AEAT is unrecoverable, since
+ * chains cannot be merged or migrated and invoice numbers are never reused. `claimBatch`
+ * (./drain.ts) checks each claimed row's OWN `entorno` (`seedPendingEnvios`'s new `entorno`
+ * option, defaulting to `"production"` so every OTHER describe in this file keeps submitting
+ * unaffected) against `DrainDeps.environment` — threaded here via
+ * `VerifactuBackendOptions.deploymentEnvironment` — BEFORE ever flipping a row to `enviando`, so a
+ * mismatched or unrecorded row is reported and left `pendiente` rather than submitted or backed
+ * off with `backoffMs` like a transient failure.
+ *
+ * Adapted from the brief's own illustrative snippet to this file's established shape (a real
+ * `VerifactuBackend.drain(now)` call, `withTenant`-scoped assertions against the real `envios`/
+ * `incidents` tables) rather than the bare `drain(db, {...deps, environment})` sketch, which does
+ * not match `drain`'s actual `(deps, now)` signature or this suite's `deps`-free convention.
+ *
+ * **Fix round after review** added two more properties `claimBatch`'s own doc comment covers in
+ * full (chain-order: a refused row's successors must not submit either; starvation: a large
+ * backlog of refused rows must not block sendable work behind it) — see the two new tests below —
+ * and a `finally` per test deleting what it seeded: unlike every OTHER describe in this file, a
+ * refused row is NEVER drained to completion by any backend this file constructs, so leaving it
+ * behind would violate the "batching (1001-split)" describe's own documented assumption (its
+ * header comment, corrected below) that nothing else in this file leaves `envios` rows pending.
+ */
+describe("drain — the deployment-environment guard", () => {
+  it("refuses to submit a registro generated for another environment, leaving it pendiente", async () => {
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    const seeded = await seedPendingEnvios(db, { count: 1, entorno: "preproduction" });
+    try {
+      const backend = new VerifactuBackend({
+        deploymentEnvironment: "production",
+        clock: seeded.clock,
+        db,
+        resolveClient: staticResolver(aeat.client()),
+      });
+      const result = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+
+      expect(result.recordsSubmitted).toBe(0);
+      expect(result.incidentsRaised).toBe(1);
+
+      const envio = await withTenant(db, seeded.tenantId, (tx) =>
+        tx.execute<{ estado: string }>(
+          sql`select estado from envios where tenant_id = ${seeded.tenantId}`,
+        ),
+      );
+      // Left pendiente, not failed: fixing the host's configuration and restarting must be enough.
+      expect(envio.rows[0]!.estado).toBe("pendiente");
+
+      const inc = await withTenant(db, seeded.tenantId, (tx) =>
+        tx.execute<{ code: string; severity: string; params: Record<string, unknown> }>(
+          sql`select code, severity, params from incidents where tenant_id = ${seeded.tenantId}`,
+        ),
+      );
+      expect(inc.rows).toHaveLength(1);
+      expect(inc.rows[0]?.code).toBe("fiscal.environment_mismatch");
+      expect(inc.rows[0]?.severity).toBe("error");
+      // Pinned exactly, not just `toMatchObject` on the environment fields (M3 of the fix-round
+      // review): `registroId` is the ONLY traceback from this incident row to the record it
+      // describes (`incidents` carries no FK onto `registros_facturacion` — `errors.ts`'s own doc
+      // comment) — a wrong value here is the one param failure that makes the incident useless to
+      // whoever is resolving it, and nothing before this asserted it at all.
+      expect(inc.rows[0]?.params).toEqual({
+        registroId: seeded.registroIds[0],
+        recordEnvironment: "preproduction",
+        hostEnvironment: "production",
+      });
+    } finally {
+      // This tenant's row is refused, never drained, by every backend this file constructs — left
+      // in place it would sit `pendiente` forever in this file's SHARED `db`, violating the
+      // "batching (1001-split)" describe's own documented assumption that nothing else here
+      // leaves work behind (its header comment, corrected in this same fix round). Deleting the
+      // `envios` row (not the tenant/registro — `envios_tenants_with_work` reads only this table)
+      // is `boot.test.ts`'s own established pattern for the identical need.
+      await db.execute(sql`delete from envios where tenant_id = ${seeded.tenantId}`);
+    }
+  });
+
+  it("refuses a registro with no recorded environment, distinctly from a mismatch", async () => {
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    const seeded = await seedPendingEnvios(db, { count: 1, entorno: null });
+    try {
+      const backend = new VerifactuBackend({
+        deploymentEnvironment: "production",
+        clock: seeded.clock,
+        db,
+        resolveClient: staticResolver(aeat.client()),
+      });
+      const result = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+
+      expect(result.recordsSubmitted).toBe(0);
+
+      const envio = await withTenant(db, seeded.tenantId, (tx) =>
+        tx.execute<{ estado: string }>(
+          sql`select estado from envios where tenant_id = ${seeded.tenantId}`,
+        ),
+      );
+      expect(envio.rows[0]!.estado).toBe("pendiente");
+
+      const inc = await withTenant(db, seeded.tenantId, (tx) =>
+        tx.execute<{ code: string; params: Record<string, unknown> }>(
+          sql`select code, params from incidents where tenant_id = ${seeded.tenantId}`,
+        ),
+      );
+      expect(inc.rows).toHaveLength(1);
+      // Distinct code from the mismatch test above — a NULL entorno is refused rather than assumed
+      // to be ours, never silently treated as agreeing with the host.
+      expect(inc.rows[0]?.code).toBe("fiscal.environment_unknown");
+      // Same M3 pinning as the mismatch test above — `registroId` is this incident's only
+      // traceback to the record it describes.
+      expect(inc.rows[0]?.params).toEqual({
+        registroId: seeded.registroIds[0],
+        hostEnvironment: "production",
+      });
+    } finally {
+      await db.execute(sql`delete from envios where tenant_id = ${seeded.tenantId}`);
+    }
+  });
+
+  it("submits normally when the environments agree", async () => {
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    const seeded = await seedPendingEnvios(db, { count: 1, entorno: "production" });
+    try {
+      const backend = new VerifactuBackend({
+        deploymentEnvironment: "production",
+        clock: seeded.clock,
+        db,
+        resolveClient: staticResolver(aeat.client()),
+      });
+      const result = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+
+      expect(result.recordsSubmitted).toBeGreaterThan(0);
+      expect(result.recordsAccepted).toBeGreaterThan(0);
+    } finally {
+      // This one DOES fully drain (it's the agreeing-environments case) — deleted anyway, for the
+      // same reason `seedPendingEnvios`-seeding describes elsewhere in this file scope their own
+      // tenant: harmless once accepted, but consistent, and immune to a future edit changing what
+      // this test seeds without remembering to add cleanup.
+      await db.execute(sql`delete from envios where tenant_id = ${seeded.tenantId}`);
+    }
+  });
+
+  /**
+   * I1 of the fix-round review: a refused row's successors on the SAME chain must not submit
+   * either. Before the fix, `haltOpenChainClaims` — which only recognises an OPEN `rechazado`/
+   * `detenido` envío — is blind to a `pendiente` refusal, so secuencia 2 and 3 here would have
+   * gone to AEAT carrying `Encadenamiento.RegistroAnterior` pointing at secuencia 1's huella, a
+   * record AEAT never received. Reachable on the ordinary upgrade path (`deployment-guard.ts` lets
+   * an unstamped database boot, and migration 0009 backfills nothing), not merely hypothetical.
+   */
+  it("halts a chain behind a refused predecessor: no successor submits, and none of them are touched", async () => {
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    // Seeding lives INSIDE the try (I3's own fix-round-2 correction): a throw partway through
+    // seeding — `seedPendingEnvios` succeeding but `appendPendingAlta` failing, say — would
+    // otherwise leave a permanently-`pendiente` row in this shared `db` with no `finally` covering
+    // it at all, the exact hazard I3 was raised to close in the first place. Only the tenant id
+    // (not the whole `seeded` object) escapes into `finally` — TypeScript does not narrow a `let`
+    // across the closures `withTenant`'s own callbacks below create, so keeping `seeded` itself
+    // `const` and scoped to the try body sidesteps that rather than sprinkling `!` assertions.
+    let cleanupTenantId: TenantId | undefined;
+    try {
+      // secuencia 1 is refused (no entorno). `registros_facturacion` is append-only (immutable
+      // triggers block ANY update — this file's own Route B tests rely on the identical fact), so
+      // secuencia 2 and 3 — individually fine, correctly stamped `"production"` from the START —
+      // are added via `appendPendingAlta` (which always stamps `DEFAULT_ENTORNO`) rather than by
+      // mutating rows `seedPendingEnvios` already inserted. Same chain either way:
+      // `appendPendingAlta` extends `seeded`'s own `sif_id`.
+      const seeded = await seedPendingEnvios(db, { count: 1, entorno: null });
+      cleanupTenantId = seeded.tenantId;
+      await appendPendingAlta(db, seeded, 2);
+      await appendPendingAlta(db, seeded, 3);
+
+      const backend = new VerifactuBackend({
+        deploymentEnvironment: "production",
+        clock: seeded.clock,
+        db,
+        resolveClient: staticResolver(aeat.client()),
+      });
+      const result = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+
+      expect(result.recordsSubmitted).toBe(0);
+      // Exactly ONE incident for the whole chain — the first refusal, not one per row — mirroring
+      // `haltOpenChainClaims`'s own "flag once, don't duplicate" precedent for the identical shape
+      // of problem (a chain-wide condition, not a per-row fact).
+      expect(result.incidentsRaised).toBe(1);
+
+      const rows = await withTenant(db, seeded.tenantId, (tx) =>
+        tx.execute<{ secuencia: number; estado: string; intentos: number }>(sql`
+          select r.secuencia, e.estado, e.intentos from envios e
+          join registros_facturacion r on r.id = e.registro_id
+          where e.tenant_id = ${seeded.tenantId}
+          order by r.secuencia
+        `),
+      );
+      // ALL THREE stay pendiente — including secuencia 2 and 3, whose own entorno was fine — and
+      // NONE of them were ever claimed (intentos untouched at 0): the chain halts entirely behind
+      // the refusal. Unlike a MISMATCHED entorno, no value of WAITRON_ENV releases this chain —
+      // secuencia 1 was seeded with entorno: null (`fiscal.environment_unknown`, not
+      // `fiscal.environment_mismatch`), and no host configuration ever makes NULL agree. The only
+      // way out is re-registering this till as a SIF (a fresh chain, leaving this one permanently
+      // unfiled) or superuser DDL — not a configuration change.
+      expect(rows.rows.map((r) => r.estado)).toEqual(["pendiente", "pendiente", "pendiente"]);
+      expect(rows.rows.map((r) => r.intentos)).toEqual([0, 0, 0]);
+
+      const inc = await withTenant(db, seeded.tenantId, (tx) =>
+        tx.execute<{ code: string; params: Record<string, unknown> }>(
+          sql`select code, params from incidents where tenant_id = ${seeded.tenantId}`,
+        ),
+      );
+      expect(inc.rows).toHaveLength(1);
+      expect(inc.rows[0]?.code).toBe("fiscal.environment_unknown");
+      // The incident names the ACTUAL refused row (secuencia 1), not one of the blocked
+      // successors it dragged down with it.
+      expect(inc.rows[0]?.params).toMatchObject({ registroId: seeded.registroIds[0] });
+
+      // Confirms "never submits" concretely, not just via the counters: AEAT's own store holds
+      // none of this chain's identities at all.
+      const stored = aeat.stored();
+      expect(stored.some((s) => s.key.startsWith(`${seeded.nif}|`))).toBe(false);
+    } finally {
+      // Guarded: `cleanupTenantId` is still `undefined` if `seedPendingEnvios` itself threw before
+      // ever assigning it.
+      if (cleanupTenantId !== undefined) {
+        await db.execute(sql`delete from envios where tenant_id = ${cleanupTenantId}`);
+      }
+    }
+  }, 20_000);
+
+  /**
+   * I2/property 3 of the fix-round review: a backlog of refused rows cannot starve sendable work
+   * behind it. `MAX_REGISTROS_POR_ENVIO` (1000) refused rows on one chain fill `claimBatch`'s
+   * ENTIRE first claim window; a `seedIndependentChain` row on a second, UNRELATED chain is forced
+   * to sort strictly LAST (`sifId: "ffffffff-..."`, a near-maximal literal `registerSif`'s own
+   * `defaultRandom()` id could never produce) — so only `drainTenant`'s retry loop, excluding the
+   * now-blocked chain from a SECOND `claimBatch` call, can ever reach it. Before the fix this
+   * healthy row was unreachable, this pass and every later one, since nothing about a refused row
+   * changes its own due-ness.
+   */
+  it("does not starve a sendable row sorting behind a >=1000-row backlog of refused rows on another chain", async () => {
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    // Seeding lives INSIDE the try (I3's own fix-round-2 correction — same reasoning as the
+    // chain-halt test above): a throw between the two seed calls would otherwise leak 1000
+    // permanently-`pendiente` rows into this shared `db` with no `finally` covering them. Only the
+    // tenant id crosses into `finally` — same "avoid narrowing through a closure" reasoning as the
+    // chain-halt test above.
+    let cleanupTenantId: TenantId | undefined;
+    try {
+      const seeded = await seedPendingEnvios(db, { count: 1000, entorno: null });
+      cleanupTenantId = seeded.tenantId;
+      const healthy = await seedIndependentChain(db, seeded, {
+        sifId: "ffffffff-ffff-ffff-ffff-ffffffffffff",
+        secuencia: 1,
+        entorno: "production",
+      });
+
+      const backend = new VerifactuBackend({
+        deploymentEnvironment: "production",
+        clock: seeded.clock,
+        db,
+        resolveClient: staticResolver(aeat.client()),
+      });
+      const result = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+
+      // The healthy row got through despite sorting behind 1000 refused ones.
+      expect(result.recordsSubmitted).toBe(1);
+      expect(result.recordsAccepted).toBe(1);
+      // Exactly one incident for the whole 1000-row blocked chain (property 3: `incidentsRaised`
+      // must not disagree with what was actually written within this ONE pass) — not one per
+      // row, and not re-raised across however many `claimBatch` calls the retry needed.
+      expect(result.incidentsRaised).toBe(1);
+
+      const healthyRow = await withTenant(db, seeded.tenantId, (tx) =>
+        tx.execute<{ estado: string }>(
+          sql`select estado from envios where registro_id = ${healthy.registroId}`,
+        ),
+      );
+      expect(healthyRow.rows[0]?.estado).toBe("aceptado");
+
+      const refused = await withTenant(db, seeded.tenantId, (tx) =>
+        tx.execute<{ count: string }>(sql`
+            select count(*)::text as count from envios
+            where tenant_id = ${seeded.tenantId} and estado = 'pendiente'
+          `),
+      );
+      expect(Number(refused.rows[0]!.count)).toBe(1000);
+
+      const inc = await withTenant(db, seeded.tenantId, (tx) =>
+        tx.execute<{ code: string }>(
+          sql`select code from incidents where tenant_id = ${seeded.tenantId}`,
+        ),
+      );
+      expect(inc.rows).toHaveLength(1);
+      expect(inc.rows[0]?.code).toBe("fiscal.environment_unknown");
+    } finally {
+      // Guarded: `cleanupTenantId` is still `undefined` if `seedPendingEnvios` itself threw before
+      // `seedIndependentChain` (which reuses that same tenant) ever ran.
+      if (cleanupTenantId !== undefined) {
+        await db.execute(sql`delete from envios where tenant_id = ${cleanupTenantId}`);
+      }
+    }
+  }, 30_000);
 });
 
 describe("backoffMs", () => {

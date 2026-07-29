@@ -86,6 +86,7 @@ describe("one pass as the non-superuser deployment role", () => {
         resolveAccount: stripeAccountResolver({
           db: probe,
           ring,
+          environment: "preproduction",
           makeStripe: () => emptyStripe,
         }),
       });
@@ -103,6 +104,7 @@ describe("one pass as the non-superuser deployment role", () => {
                 db: probe,
                 resolveClient: () => Promise.reject(new Error("no due fiscal work in this suite")),
                 skipRetryMs: DEFAULTS.skipRetryMs,
+                environment: "production",
               },
               now,
             ),

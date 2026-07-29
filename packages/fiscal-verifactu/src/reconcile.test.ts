@@ -146,6 +146,7 @@ describe("reconcile — the three audit cases", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 3 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -166,6 +167,7 @@ describe("reconcile — the three audit cases", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 3 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -206,6 +208,7 @@ describe("reconcile — the three audit cases", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -244,6 +247,7 @@ describe("reconcile — the three audit cases", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -299,6 +303,7 @@ describe("reconcile — the three audit cases", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -321,6 +326,7 @@ describe("reconcile — the three audit cases", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -349,6 +355,7 @@ describe("reconcile — the three audit cases", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -389,6 +396,7 @@ describe("reconcile — the three audit cases", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -441,6 +449,7 @@ describe("reconcile — the three audit cases", () => {
     const { tenantId, tillId, seriesId, workingOrderId } = await seedTenantWithSif(db);
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: steadyClock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -497,6 +506,7 @@ describe("reconcile — the three audit cases", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -530,6 +540,7 @@ describe("reconcile — the three audit cases", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -581,6 +592,7 @@ describe("reconcile — the three audit cases", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1, futureDated: true }); // 2004 → AceptadoConErrores
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -624,6 +636,7 @@ describe("reconcile — paging", () => {
       },
     };
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(counting),
@@ -649,6 +662,7 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -669,6 +683,7 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -695,6 +710,7 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -726,6 +742,7 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
       consultar: () => Promise.reject(new Error("reconcile must not consult an empty period")),
     };
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: steadyClock,
       db,
       resolveClient: staticResolver(throwing),
@@ -754,6 +771,7 @@ describe("reconcile — period normalization", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 3 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),

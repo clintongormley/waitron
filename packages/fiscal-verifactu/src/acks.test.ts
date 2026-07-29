@@ -84,6 +84,7 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -110,6 +111,7 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -151,6 +153,7 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 2 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -186,6 +189,7 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -218,6 +222,7 @@ describe("acks — durable transport (pendingAcks / markDelivered)", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 2 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),
@@ -249,6 +254,7 @@ describe("acks — durable transport (pendingAcks / markDelivered)", () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const seeded = await seedPendingEnvios(db, { count: 1 });
     const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: seeded.clock,
       db,
       resolveClient: staticResolver(aeat.client()),

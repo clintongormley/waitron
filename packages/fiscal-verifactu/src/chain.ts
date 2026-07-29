@@ -13,6 +13,7 @@ import { buildAltaRecord, buildAnulacionRecord } from "@waitron/verifactu";
 import { currentSif } from "./registro-sif.js";
 import type { SifRegistration } from "./registro-sif.js";
 import { pointerTo, toRegistroRow } from "./registro-row.js";
+import type { Entorno } from "./registro-row.js";
 import { cadenas } from "./schema/cadenas.js";
 import { registrosFacturacion } from "./schema/registros.js";
 
@@ -35,10 +36,20 @@ const MAX_APPEND_ATTEMPTS = 3;
  * it is this package's own foreign key onto core's `sales`, not an AEAT field, and keeping it out
  * of the arm that becomes `buildAltaRecord`/`buildAnulacionRecord`'s parameter stops it from ever
  * being accidentally hashed.
+ *
+ * `entorno` travels the identical way, for the identical reason: which environment the caller
+ * (`VerifactuBackend`) is generating this record for is this package's own metadata, never AEAT's,
+ * so it lives beside `saleId` rather than inside `input` — the one arm that ever reaches
+ * `buildAltaRecord`/`buildAnulacionRecord` and, from there, `computeHuella`.
  */
 export type PendingRegistro =
-  | { tipo: "alta"; saleId: string; input: Omit<AltaInput, "Encadenamiento"> }
-  | { tipo: "anulacion"; saleId: string; input: Omit<AnulacionInput, "Encadenamiento"> };
+  | { tipo: "alta"; saleId: string; entorno: Entorno; input: Omit<AltaInput, "Encadenamiento"> }
+  | {
+      tipo: "anulacion";
+      saleId: string;
+      entorno: Entorno;
+      input: Omit<AnulacionInput, "Encadenamiento">;
+    };
 
 export interface ChainHead {
   secuencia: number;
@@ -198,6 +209,7 @@ async function attemptAppend(
     saleId: registro.saleId,
     secuencia,
     offsetMinutes: registro.input.offsetMinutes,
+    entorno: registro.entorno,
   });
 
   const [inserted] = await tx

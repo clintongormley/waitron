@@ -23,6 +23,11 @@ Spec: [`docs/superpowers/specs/2026-07-26-server-host-design.md`](../specs/2026-
 - **The pre-push hook runs the full workspace gates (~83s). Do not bypass it.**
 - **`WAITRON_AEAT_ENV` defaults to `preproduction`.** Production numbering can never be reused, so this default must never be flipped for convenience.
 
+> **2026-07-29 note:** `WAITRON_AEAT_ENV` was replaced by `WAITRON_ENV` — see the
+> [deployment-environment design](../specs/2026-07-29-deployment-environment-design.md). This plan,
+> including every `aeatEnv`/`AeatEnvironment` reference below, records what was true when it was
+> written and is left unchanged.
+
 ---
 
 ## File Structure

@@ -4,6 +4,7 @@ import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { appendToChain } from "./chain.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
+import type { Entorno } from "./registro-row.js";
 import { verifyChain } from "./verify.js";
 import { altaFor, anulacionFor, seedSale, seedTill, type SeededTill } from "./testing/seed.js";
 
@@ -188,6 +189,39 @@ describe("verifyChain — detection", () => {
     }
     const result = await db.transaction((tx) => verifyChain(tx, till.tenantId, till.tillId));
     expect(result).toEqual({ ok: true, checked: 2, issues: [] });
+  });
+});
+
+describe("entorno is not part of the huella", () => {
+  // The single most important test in this file. Two records built from IDENTICAL input, differing
+  // ONLY in entorno, must produce the same huella — entorno is Waitron's own metadata, never
+  // AEAT's, and if it ever reached computeHuella's input every chain written under one environment
+  // would become unverifiable under the other.
+  //
+  // A FRESH tenant per call (via seedTill, never the shared module-scope `till`) is what makes both
+  // records a *first* record — same `null` predecessor — so any hash difference between them can
+  // only come from entorno.
+  async function appendOne(entorno: Entorno): Promise<{ id: string; huella: string }> {
+    const fresh = await seedTill(db);
+    const saleId = await seedSale(db, fresh, 1);
+    return db.transaction((tx) =>
+      appendToChain(tx, fresh.tenantId, fresh.tillId, altaFor(saleId, 1, 1, entorno)),
+    );
+  }
+
+  it("hashes identically regardless of environment, because entorno is ours and not AEAT's", async () => {
+    const a = await appendOne("production");
+    const b = await appendOne("preproduction");
+    expect(a.huella).toBe(b.huella);
+
+    // Self-contained, not delegated to chain.test.ts's own "records the environment" test: without
+    // this, a future regression in altaFor's entorno plumbing (e.g. it silently stopped forwarding
+    // the argument) would leave both calls storing the SAME entorno and this test would still pass
+    // — it would no longer be testing what its own name claims.
+    const stored = await db.execute<{ entorno: string }>(
+      sql`select entorno from registros_facturacion where id in (${a.id}, ${b.id}) order by entorno`,
+    );
+    expect(stored.rows.map((r) => r.entorno)).toEqual(["preproduction", "production"]);
   });
 });
 

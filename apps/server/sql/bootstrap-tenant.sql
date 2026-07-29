@@ -13,9 +13,14 @@
 -- tenant it is about to create, and there is no circularity.
 --
 -- Proven on PostgreSQL 18 against the real migrations, as a LOGIN role with `rolsuper = f` and
--- `rolbypassrls = f`: all four inserts below succeed. The only privilege needed beyond `app_user`
--- membership is INSERT on `tenants`, which `app_user` deliberately does not hold (0001 grants it
--- SELECT only) — so the deployment role cannot create tenants, and a provisioning role must.
+-- `rolbypassrls = f`: the four tenant-scoped inserts below succeed. The only privilege needed
+-- beyond `app_user` membership is INSERT on `tenants`, which `app_user` deliberately does not
+-- hold (0001 grants it SELECT only) — so the deployment role cannot create tenants, and a
+-- provisioning role must. The `deployment` stamp INSERT added below has the identical shape:
+-- 0010_deployment_stamp.sql grants `app_user` only SELECT on `deployment`, so INSERT on it needs
+-- the same "beyond app_user" privilege `tenants` does — unproven independently, but nothing about
+-- it is RLS (`deployment` carries none at all; see its own schema comment), so it fails on the
+-- grant, the same way `tenants` does, not on a policy.
 --
 -- This file nonetheless keeps the superuser requirement, for two reasons, NEITHER of which is a
 -- psql limitation. An earlier version of this note claimed psql "cannot generate a uuid into a
@@ -40,11 +45,24 @@
 --   psql "$DATABASE_URL" \
 --     -v nif="B12345678" -v legal_name="Deli SL" -v location_name="Mostrador" \
 --     -v operation_description="Venta en establecimiento" -v till_name="Caja 1" \
---     -v series_code="A" -v locale="es-ES" \
+--     -v series_code="A" -v locale="es-ES" -v environment="production" \
 --     -f apps/server/sql/bootstrap-tenant.sql
+--
+-- `environment` must be "production" or "preproduction" — the SAME value this database's
+-- `WAITRON_ENV` is (or will be) set to. It stamps the `deployment` table's one singleton row via
+-- `on conflict (id) do nothing`, which makes this INSERT safe to re-run for a SECOND (or Nth)
+-- tenant bootstrapped against an ALREADY-STAMPED database: the first tenant's value wins and this
+-- statement becomes a no-op. That silence cuts both ways — this does NOT detect or refuse a
+-- DISAGREEING `environment` argument against an already-stamped database; it simply keeps the
+-- first stamp and says nothing. Passing the wrong value here for a second tenant does not corrupt
+-- anything (the stamp itself does not change), but it also gets no error telling you so.
 \set ON_ERROR_STOP on
 
 begin;
+
+insert into deployment (id, environment)
+values (1, :'environment')
+on conflict (id) do nothing;
 
 insert into tenants (nif, legal_name)
 values (:'nif', :'legal_name')

@@ -16,7 +16,8 @@
 // `node <file>.ts`, which cannot follow a `./record-sale.js` specifier back to the sibling
 // `record-sale.ts` it actually names (confirmed empirically — see this task's own report):
 //   pnpm --filter @waitron/server build
-//   DATABASE_URL=postgres://... node apps/server/dist/record-one-sale.js \
+//   DATABASE_URL=postgres://... WAITRON_ENV=production|preproduction \
+//     node apps/server/dist/record-one-sale.js \
 //     <tenantId> <tillId> <seriesId> <description> <baseAmount> <vatRate> [tipAmount]
 //
 // `baseAmount` is the line's tax-EXCLUSIVE amount (quantity is always 1 — this script records one
@@ -24,13 +25,22 @@
 // defaults to "0.00". The connection string is read ONLY from `DATABASE_URL`, never accepted as
 // an argument — a script that took one would put it in shell history and process listings
 // alongside the sale's own amounts.
+//
+// `WAITRON_ENV` is REQUIRED here, unlike every other caller of `deploymentEnvironment`
+// (`apps/server` itself defaults it to `preproduction`, deliberately the safe reading of "not
+// set"). This script cannot accept that default: it stamps `entorno` onto a row that
+// `registros_facturacion`'s `REVOKE ALL` and `BEFORE UPDATE OR DELETE` trigger make permanently
+// unwritable the instant it is inserted, and a wrong stamp does not just mislabel that one row —
+// `drain` refuses it AND every successor on its chain, every pass, forever, until a human either
+// runs superuser DDL or abandons the chain entirely via `registerSif`. A safe default is the right
+// answer when being wrong costs a retry; it is the wrong answer when being wrong costs a chain.
 import { randomUUID } from "node:crypto";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { createPostgresDb, withTenant } from "@waitron/db";
-import { aeatEnvironment } from "../src/config.js";
+import { deploymentEnvironment } from "../src/config.js";
 import {
   addDecimal,
   decimal,
@@ -50,7 +60,8 @@ const LOCALE = "es-ES";
 function usageError(message: string): never {
   console.error(`record-one-sale: ${message}`);
   console.error(
-    "usage: DATABASE_URL=<...> node apps/server/dist/record-one-sale.js " +
+    "usage: DATABASE_URL=<...> WAITRON_ENV=<production|preproduction> " +
+      "node apps/server/dist/record-one-sale.js " +
       "<tenantId> <tillId> <seriesId> <description> <baseAmount> <vatRate> [tipAmount]",
   );
   process.exit(1);
@@ -98,6 +109,16 @@ async function main(): Promise<void> {
     usageError("DATABASE_URL must be set in the environment");
   }
 
+  // No default accepted here — see this file's header comment. `deploymentEnvironment` below
+  // would happily default an unset/empty value to `"preproduction"`, which is exactly the
+  // failure mode this guard exists to refuse: a shell that forgot `WAITRON_ENV` while pointed at
+  // a PRODUCTION `DATABASE_URL` would otherwise stamp an unrecoverable `preproduction` `entorno`
+  // onto a real chain with no error at all.
+  const rawEnv = process.env.WAITRON_ENV;
+  if (rawEnv === undefined || rawEnv === "") {
+    usageError("WAITRON_ENV must be set in the environment (production or preproduction)");
+  }
+
   const tenant = brandTenantId(tenantArg);
   const till = brandTillId(tillArg);
   const series = brandSeriesId(seriesArg);
@@ -124,12 +145,19 @@ async function main(): Promise<void> {
       clock,
       db,
       // `VerifactuBackendOptions.environment` defaults to `"production"`, which is the wrong default
-      // for a script whose whole plan is pre-production only. `aeatEnvironment` is the host's own
-      // resolver and defaults the other way, deliberately: config.ts calls it "the one default in
-      // the file whose mistake is irreversible", because production numbering can never be reused.
-      // It decides only which QR validation host `verificationUrl` names — this script never
-      // contacts AEAT — but that URL is the one thing it prints for a human to act on.
-      environment: aeatEnvironment(process.env),
+      // for a script whose whole plan is pre-production only. The `deploymentEnvironment(env)`
+      // resolver (imported above, from ../src/config.js — NOT the `deploymentEnvironment` option
+      // key two lines below, which is a different `VerifactuBackendOptions` field entirely) defaults
+      // the other way, deliberately: config.ts calls it "the one default in the file whose mistake
+      // is irreversible", because production numbering can never be reused. Assigned here to
+      // `environment`, it decides only which QR validation host `verificationUrl` names — this
+      // script never contacts AEAT — but that URL is the one thing it prints for a human to act on.
+      environment: deploymentEnvironment(process.env),
+      // Which environment this script is generating the registro FOR — the fact `drain` (Task 6)
+      // will refuse to submit if it disagrees with the host it eventually runs on. Same resolver,
+      // same host config, different field: this one is never read for the QR host and is stored on
+      // the row itself, never hashed (`entorno`, ./schema/registros.ts).
+      deploymentEnvironment: deploymentEnvironment(process.env),
       // Never invoked by `recordSale` (see this file's header comment) — a rejection here would
       // only ever surface a bug in this script or in the backend, not a real AEAT contact.
       resolveClient: () =>

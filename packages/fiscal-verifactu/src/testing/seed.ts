@@ -5,6 +5,7 @@ import type { TenantId, TillId } from "@waitron/shared";
 import type { AltaInput, AnulacionInput, SistemaInformatico } from "@waitron/verifactu";
 import { registerSif } from "../registro-sif.js";
 import type { PendingRegistro } from "../chain.js";
+import type { Entorno } from "../registro-row.js";
 
 export const TEST_NIF = "89890001K";
 
@@ -220,6 +221,10 @@ export function altaFor(
   saleId: string,
   invoiceNumber: number,
   seconds: number,
+  // Defaulted, not required: this fixture has call sites across most of this package's test
+  // suites, and none of them care which environment the record claims — only
+  // chain.test.ts's/verify.test.ts's own entorno-specific tests pass an explicit override.
+  entorno: Entorno = "production",
 ): Extract<PendingRegistro, { tipo: "alta" }> {
   const input: Omit<AltaInput, "Encadenamiento"> = {
     IDEmisorFactura: TEST_NIF,
@@ -242,7 +247,7 @@ export function altaFor(
     generadoEn: new Date(Date.UTC(2026, 6, 20, 17, 20, seconds)),
     offsetMinutes: 120,
   };
-  return { tipo: "alta", saleId, input };
+  return { tipo: "alta", saleId, entorno, input };
 }
 
 /** A minimal anulación against an already-issued invoice. Narrowed return type — see altaFor's
@@ -251,6 +256,8 @@ export function anulacionFor(
   saleId: string,
   invoiceNumber: number,
   seconds: number,
+  // Same default, same reason as altaFor's own entorno parameter above.
+  entorno: Entorno = "production",
 ): Extract<PendingRegistro, { tipo: "anulacion" }> {
   const input: Omit<AnulacionInput, "Encadenamiento"> = {
     IDEmisorFacturaAnulada: TEST_NIF,
@@ -260,5 +267,5 @@ export function anulacionFor(
     generadoEn: new Date(Date.UTC(2026, 6, 20, 17, 20, seconds)),
     offsetMinutes: 120,
   };
-  return { tipo: "anulacion", saleId, input };
+  return { tipo: "anulacion", saleId, entorno, input };
 }

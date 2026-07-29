@@ -31,7 +31,7 @@ import { reconcile as runReconcile } from "./reconcile.js";
 import { currentSif } from "./registro-sif.js";
 import type { SifRegistration } from "./registro-sif.js";
 import { fromRegistroRow } from "./registro-row.js";
-import type { RegistroRow } from "./registro-row.js";
+import type { Entorno, RegistroRow } from "./registro-row.js";
 import { envios } from "./schema/envios.js";
 import { verifyChain } from "./verify.js";
 
@@ -100,6 +100,22 @@ export interface VerifactuBackendOptions {
   /** Which QR validation host to build `verificationUrl`-shaped URLs against. Defaults to
    * `"production"`. */
   environment?: Environment;
+  /**
+   * Which DEPLOYMENT this backend is generating registros for — `Entorno` (`./registro-row.ts`),
+   * not this option's namesake above and not `apps/server`'s `DeploymentEnvironment` type: this
+   * package never imports from `apps/server`, and the two options answer unrelated questions that
+   * only coincidentally share a value space (`"production"` | `"preproduction"`). `environment`
+   * above picks a QR validation HOST; this one is stamped onto every registro's own `entorno`
+   * column (`./registro-row.ts`'s `RegistroRowContext.entorno`) so `drain` (Task 6) can refuse to
+   * submit a record generated for the other deployment. REQUIRED, unlike `environment`: defaulting
+   * a value that gates fiscal submission would silently mis-stamp every registro from a host that
+   * forgot to set it, rather than failing the build. Typed as the union rather than a bare
+   * `string` so an unrepresentable value (`""`, `"staging"`, a stray `process.env.NODE_ENV`) is a
+   * `tsc` error here, not a `registros_entorno_ck` violation discovered only once `recordSale` has
+   * already opened the sale's own transaction — spec §4 forbids blocking a sale on anything but
+   * the sale itself.
+   */
+  deploymentEnvironment: Entorno;
   /** Overrides for this installation's software-identity claims. See `SystemInfoDefaults`'s own
    * doc comment for why these are configuration rather than hardcoded constants. */
   systemInfo?: Partial<SystemInfoDefaults>;
@@ -147,6 +163,7 @@ export class VerifactuBackend implements FiscalBackend {
   private readonly clock: TrustedClock;
   private readonly resolveClient: (tenantId: TenantId) => Promise<VerifactuClient>;
   private readonly environment: Environment;
+  private readonly deploymentEnvironment: Entorno;
   private readonly systemInfo: SystemInfoDefaults;
   private readonly skipRetryMs: number;
 
@@ -165,6 +182,7 @@ export class VerifactuBackend implements FiscalBackend {
     // each one happens to read this field.
     this.resolveClient = (tenantId) => options.resolveClient(tenantId);
     this.environment = options.environment ?? "production";
+    this.deploymentEnvironment = options.deploymentEnvironment;
     this.systemInfo = { ...DEFAULT_SYSTEM_INFO, ...options.systemInfo };
     // Defaulted HERE, like every sibling option above, rather than at the `runDrain` call site
     // below: a `number | undefined` field would let a future SECOND call site forget the `??` and
@@ -250,7 +268,7 @@ export class VerifactuBackend implements FiscalBackend {
       tx,
       sale.tenantId,
       sale.tillId,
-      { tipo: "alta", saleId: sale.saleId, input },
+      { tipo: "alta", saleId: sale.saleId, entorno: this.deploymentEnvironment, input },
       sif,
     );
 
@@ -369,7 +387,7 @@ export class VerifactuBackend implements FiscalBackend {
       tx,
       tenantId,
       tillId,
-      { tipo: "anulacion", saleId, input },
+      { tipo: "anulacion", saleId, entorno: this.deploymentEnvironment, input },
       sif,
     );
 
@@ -427,6 +445,10 @@ export class VerifactuBackend implements FiscalBackend {
    * built, or whose sweep throws, is recorded in `DrainResult.skipped` rather than aborting every
    * OTHER tenant's legally-timed submission — see `drain.ts`'s own `DrainDeps.resolveClient` and
    * `drain`'s own doc comments for the full behaviour and its reasoning.
+   *
+   * Passes `this.deploymentEnvironment` through as `DrainDeps.environment` — Task 6's guard
+   * (`./drain.ts`'s `claimBatch`) refuses any claimed row whose own `entorno` disagrees, or is
+   * unrecorded, rather than ever submitting it.
    */
   async drain(now: Date): Promise<DrainResult> {
     return runDrain(
@@ -434,6 +456,7 @@ export class VerifactuBackend implements FiscalBackend {
         db: this.db,
         resolveClient: this.resolveClient,
         skipRetryMs: this.skipRetryMs,
+        environment: this.deploymentEnvironment,
       },
       now,
     );

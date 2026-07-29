@@ -68,6 +68,7 @@ describe("reconcile under real row-level security", () => {
     const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const backend = new VerifactuBackend({
+        deploymentEnvironment: "production",
         clock: steadyClock,
         db: probe,
         resolveClient: staticResolver(aeat.client()),
@@ -110,6 +111,7 @@ describe("reconcile under real row-level security", () => {
     // Seed via the real drain path (superuser, bypasses RLS) so the record carries a genuine
     // `accepted` ack — the row `deleteAck` must remove.
     const seedBackend = new VerifactuBackend({
+      deploymentEnvironment: "production",
       clock: steadyClock,
       db: admin,
       resolveClient: staticResolver(aeat.client()),
@@ -129,6 +131,7 @@ describe("reconcile under real row-level security", () => {
     const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const backend = new VerifactuBackend({
+        deploymentEnvironment: "production",
         clock: steadyClock,
         db: probe,
         resolveClient: staticResolver(aeat.client()),
