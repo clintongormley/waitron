@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { recordSale, recordVoid } from "@waitron/core";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
+import type { TenantId } from "@waitron/shared";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
 import { CORE_MIGRATIONS, asAppUser, createPgliteDb, runMigrations, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -1064,16 +1065,26 @@ describe("drain — the deployment-environment guard", () => {
    */
   it("halts a chain behind a refused predecessor: no successor submits, and none of them are touched", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    // secuencia 1 is refused (no entorno). `registros_facturacion` is append-only (immutable
-    // triggers block ANY update — this file's own Route B tests rely on the identical fact), so
-    // secuencia 2 and 3 — individually fine, correctly stamped `"production"` from the START —
-    // are added via `appendPendingAlta` (which always stamps `DEFAULT_ENTORNO`) rather than by
-    // mutating rows `seedPendingEnvios` already inserted. Same chain either way: `appendPendingAlta`
-    // extends `seeded`'s own `sif_id`.
-    const seeded = await seedPendingEnvios(db, { count: 1, entorno: null });
-    await appendPendingAlta(db, seeded, 2);
-    await appendPendingAlta(db, seeded, 3);
+    // Seeding lives INSIDE the try (I3's own fix-round-2 correction): a throw partway through
+    // seeding — `seedPendingEnvios` succeeding but `appendPendingAlta` failing, say — would
+    // otherwise leave a permanently-`pendiente` row in this shared `db` with no `finally` covering
+    // it at all, the exact hazard I3 was raised to close in the first place. Only the tenant id
+    // (not the whole `seeded` object) escapes into `finally` — TypeScript does not narrow a `let`
+    // across the closures `withTenant`'s own callbacks below create, so keeping `seeded` itself
+    // `const` and scoped to the try body sidesteps that rather than sprinkling `!` assertions.
+    let cleanupTenantId: TenantId | undefined;
     try {
+      // secuencia 1 is refused (no entorno). `registros_facturacion` is append-only (immutable
+      // triggers block ANY update — this file's own Route B tests rely on the identical fact), so
+      // secuencia 2 and 3 — individually fine, correctly stamped `"production"` from the START —
+      // are added via `appendPendingAlta` (which always stamps `DEFAULT_ENTORNO`) rather than by
+      // mutating rows `seedPendingEnvios` already inserted. Same chain either way:
+      // `appendPendingAlta` extends `seeded`'s own `sif_id`.
+      const seeded = await seedPendingEnvios(db, { count: 1, entorno: null });
+      cleanupTenantId = seeded.tenantId;
+      await appendPendingAlta(db, seeded, 2);
+      await appendPendingAlta(db, seeded, 3);
+
       const backend = new VerifactuBackend({
         deploymentEnvironment: "production",
         clock: seeded.clock,
@@ -1118,7 +1129,11 @@ describe("drain — the deployment-environment guard", () => {
       const stored = aeat.stored();
       expect(stored.some((s) => s.key.startsWith(`${seeded.nif}|`))).toBe(false);
     } finally {
-      await db.execute(sql`delete from envios where tenant_id = ${seeded.tenantId}`);
+      // Guarded: `cleanupTenantId` is still `undefined` if `seedPendingEnvios` itself threw before
+      // ever assigning it.
+      if (cleanupTenantId !== undefined) {
+        await db.execute(sql`delete from envios where tenant_id = ${cleanupTenantId}`);
+      }
     }
   }, 20_000);
 
@@ -1134,13 +1149,21 @@ describe("drain — the deployment-environment guard", () => {
    */
   it("does not starve a sendable row sorting behind a >=1000-row backlog of refused rows on another chain", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    const seeded = await seedPendingEnvios(db, { count: 1000, entorno: null });
-    const healthy = await seedIndependentChain(db, seeded, {
-      sifId: "ffffffff-ffff-ffff-ffff-ffffffffffff",
-      secuencia: 1,
-      entorno: "production",
-    });
+    // Seeding lives INSIDE the try (I3's own fix-round-2 correction — same reasoning as the
+    // chain-halt test above): a throw between the two seed calls would otherwise leak 1000
+    // permanently-`pendiente` rows into this shared `db` with no `finally` covering them. Only the
+    // tenant id crosses into `finally` — same "avoid narrowing through a closure" reasoning as the
+    // chain-halt test above.
+    let cleanupTenantId: TenantId | undefined;
     try {
+      const seeded = await seedPendingEnvios(db, { count: 1000, entorno: null });
+      cleanupTenantId = seeded.tenantId;
+      const healthy = await seedIndependentChain(db, seeded, {
+        sifId: "ffffffff-ffff-ffff-ffff-ffffffffffff",
+        secuencia: 1,
+        entorno: "production",
+      });
+
       const backend = new VerifactuBackend({
         deploymentEnvironment: "production",
         clock: seeded.clock,
@@ -1180,7 +1203,11 @@ describe("drain — the deployment-environment guard", () => {
       expect(inc.rows).toHaveLength(1);
       expect(inc.rows[0]?.code).toBe("fiscal.environment_unknown");
     } finally {
-      await db.execute(sql`delete from envios where tenant_id = ${seeded.tenantId}`);
+      // Guarded: `cleanupTenantId` is still `undefined` if `seedPendingEnvios` itself threw before
+      // `seedIndependentChain` (which reuses that same tenant) ever ran.
+      if (cleanupTenantId !== undefined) {
+        await db.execute(sql`delete from envios where tenant_id = ${cleanupTenantId}`);
+      }
     }
   }, 30_000);
 });

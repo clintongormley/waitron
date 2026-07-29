@@ -316,13 +316,15 @@ async function drainTenant(
       if (claimed.sendable.length > 0 || claimed.rawCount === 0) break;
     }
     const batch = claimed.sendable;
-    // Defensive only: EITHER the countDue/claimBatch race this function's own doc comment
-    // describes, OR every row claimed this round was redirected to `detenido` by
-    // `haltOpenChainClaims` above (all due work this round sat on already-halted chains) — the
-    // retry loop above already exhausted the environment guard's own reason for an empty batch
-    // (`rawCount === 0`, nothing left unblocked to even try). Either way nothing here is
-    // submittable; the tenant is deferred to its next gated pass rather than re-attempting
-    // immediately, exactly like the race case.
+    // Defensive only, and — now that the retry loop above only ever exits with `sendable.length >
+    // 0` or `rawCount === 0` — this can ONLY mean the latter: the countDue/claimBatch race this
+    // function's own doc comment describes (dueCount0 saw work a moment ago that is genuinely gone
+    // by claim time). A round where `haltOpenChainClaims` redirects every claimed row to `detenido`
+    // no longer reaches here at all: that leaves `sendable` empty with `rawCount > 0` (the rows
+    // existed, they just weren't submittable), which does NOT satisfy the retry loop's own break
+    // condition — it loops again, and only stops once a LATER `claimBatch` call sees `rawCount ===
+    // 0` (those rows are `detenido` now, not `pendiente`, so a fresh SELECT no longer finds them).
+    // The tenant is deferred to its next gated pass rather than re-attempting immediately.
     if (batch.length === 0) break;
 
     const cabecera = cabeceraFor(batch[0]!);
@@ -495,6 +497,24 @@ async function recoverStaleClaims(tx: Transaction, tenantId: string, now: Date):
  * human resolves through reconciliation — correcting `WAITRON_ENV` alone makes the predecessor's
  * own entorno agree again, and the very next pass reclaims the whole chain in order with no
  * database repair.
+ *
+ * **The no-successor-submitted guarantee is per-drainer within one pass, not global** — a known,
+ * accepted limitation, not something this task closes. `blockedSifIds` is a plain in-memory `Set`,
+ * process-local to this one `drainTenant()` call; nothing about a block is written anywhere
+ * another drainer's transaction can see, unlike the `rechazado`/`detenido` estados
+ * `haltOpenChainClaims` reads (a real, committed fact any drainer's claim observes). So two
+ * concurrent drainers CAN still submit a successor over an environment-refused predecessor: drainer
+ * A claims and refuses row 1 of chain X, blocking it only in ITS OWN `blockedSifIds`; drainer B,
+ * racing the same tenant, has its `SELECT ... SKIP LOCKED` skip A's locked row 1 (A's claim
+ * transaction is still open) and successfully claim X's later, correctly-stamped rows instead —
+ * B has no way to know A just found this chain's predecessor unsendable, and submits them carrying
+ * `Encadenamiento.RegistroAnterior` pointing at a huella A never sent. Narrow (needs the claim
+ * window to land exactly on this chain's boundary AND B to claim inside A's still-open T1) and NOT
+ * a regression this task introduces — every topology of concurrent drainers had this exact gap
+ * before this guard existed at all, for every successor, unconditionally. Closing it for real would
+ * need the block to be PERSISTED (a real committed fact, like `haltOpenChainClaims`'s own bulk
+ * `detenido` UPDATE) rather than held in one process's memory, which is a deliberate follow-up
+ * design decision, not an oversight in this one.
  *
  * The `sif_id not in (...)` exclusion in the WHERE clause exists for the OTHER property the review
  * found missing: without it, a claim window entirely filled by refused rows (>= 1000 of them, or

@@ -341,10 +341,18 @@ export async function seedSecondChain(
  * The explicit id is the whole point: it lets a test force this chain to sort deterministically
  * relative to another chain under `claimBatch`'s `order by r.sif_id, r.secuencia` —
  * `registerSif`'s own `defaultRandom()` id gives no such control, and sif_id ordering is otherwise
- * unobservable and uncontrollable from a test. A near-maximal literal
- * (`ffffffff-ffff-ffff-ffff-ffffffffffff`) sorts after any randomly-generated UUID with
- * overwhelming probability, which is what the "does not starve..." test in drain.test.ts relies on
- * to put this chain's one healthy row LAST, behind a large same-tenant backlog of refused rows.
+ * unobservable and uncontrollable from a test. The all-`f` literal
+ * (`ffffffff-ffff-ffff-ffff-ffffffffffff`) sorting after any `registerSif`-minted id is not merely
+ * likely, it is STRUCTURALLY GUARANTEED: `registerSif`'s `defaultRandom()` is Postgres's
+ * `gen_random_uuid()`, which always produces a version-4 UUID — byte 6's high nibble is fixed at
+ * `0x4` by the UUID v4 spec, so that byte's value is always in `0x40..0x4F`. Postgres compares
+ * `uuid` bytewise, most significant byte first: for any random v4 id, the comparison against our
+ * all-`0xFF` literal either already resolves in bytes 0-5 (any byte strictly less than `0xFF`
+ * decides it, regardless of what follows), or ties through byte 5 and then reaches byte 6, where
+ * `0x4X < 0xFF` unconditionally. There is no path by which a real v4 UUID reaches or exceeds this
+ * literal — the "does not starve..." test in drain.test.ts relies on this to put this chain's one
+ * healthy row LAST, behind a large same-tenant backlog of refused rows, with certainty rather than
+ * probability.
  */
 export async function seedIndependentChain(
   db: Database,
