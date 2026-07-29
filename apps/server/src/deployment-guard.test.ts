@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, createPgliteDb, runMigrations, stampDeployment } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { captureError } from "@waitron/db";
@@ -9,6 +9,13 @@ let db: Database;
 beforeEach(async () => {
   db = await createPgliteDb();
   await runMigrations(db, CORE_MIGRATIONS);
+});
+
+afterEach(async () => {
+  // Guarded the same way as stripe-account.test.ts's afterAll: if beforeEach itself threw before
+  // assigning db, an unguarded close() here would surface as "Cannot read properties of undefined
+  // (reading 'close')" and mask the real failure.
+  if (db !== undefined) await db.close();
 });
 
 describe("the deployment guard", () => {

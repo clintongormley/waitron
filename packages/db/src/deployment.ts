@@ -5,6 +5,17 @@ import { deployment } from "./schema/deployment.js";
 import "./errors.js";
 
 /**
+ * Which environment a database can be stamped for. A package-local union, deliberately NOT
+ * `apps/server`'s identically-shaped `DeploymentEnvironment` type — this package must never import
+ * from `apps/server` — but a union all the same, not a bare `string`: narrowing this at compile
+ * time is what makes an unrepresentable value (e.g. `"staging"`, a stray `process.env.NODE_ENV`) a
+ * `tsc` error instead of a runtime `deployment_environment_ck` violation (SQLSTATE 23514) discovered
+ * only once `stampDeployment` has already run. Same defect class `packages/fiscal-verifactu`'s
+ * `Entorno` (./registro-row.ts) closes one layer down.
+ */
+export type DeploymentEnvironment = "production" | "preproduction";
+
+/**
  * The environment this database was stamped for, or `null` if it has none.
  *
  * `null` covers BOTH "the table does not exist yet" and "the table is empty", and callers must not
@@ -15,14 +26,21 @@ import "./errors.js";
  * Uses `to_regclass` rather than catching an undefined-table error, because in PostgreSQL a failed
  * statement aborts the enclosing transaction: probing by failure would poison a transaction the
  * caller may still need.
+ *
+ * The return type is narrowed to `DeploymentEnvironment | null`, not a bare `string`, because
+ * `0010_deployment_stamp.sql`'s `deployment_environment_ck` is the thing that makes this honest: no
+ * row can exist in this column outside `'production'`/`'preproduction'`, so a value read back here
+ * is one of those two by construction, never a value merely assumed to be safe.
  */
-export async function readDeploymentEnvironment(db: Database): Promise<string | null> {
+export async function readDeploymentEnvironment(
+  db: Database,
+): Promise<DeploymentEnvironment | null> {
   const present = await db.execute<{ exists: boolean }>(
     sql`select to_regclass('public.deployment') is not null as exists`,
   );
   if (present.rows[0]?.exists !== true) return null;
 
-  const rows = await db.execute<{ environment: string }>(
+  const rows = await db.execute<{ environment: DeploymentEnvironment }>(
     sql`select environment from deployment where id = 1`,
   );
   return rows.rows[0]?.environment ?? null;
@@ -33,7 +51,10 @@ export async function readDeploymentEnvironment(db: Database): Promise<string | 
  * value is refused rather than overwritten, because the rows already written under the first one
  * cannot be moved (the design's §2).
  */
-export async function stampDeployment(db: Database, environment: string): Promise<void> {
+export async function stampDeployment(
+  db: Database,
+  environment: DeploymentEnvironment,
+): Promise<void> {
   const existing = await readDeploymentEnvironment(db);
   if (existing === environment) return;
   if (existing !== null) {

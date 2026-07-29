@@ -11,6 +11,7 @@ export { saleVoids } from "./schema/sale-voids.js";
 export { incidents } from "./schema/incidents.js";
 export type { IncidentSeverity } from "./schema/incidents.js";
 export { readDeploymentEnvironment, stampDeployment } from "./deployment.js";
+export type { DeploymentEnvironment } from "./deployment.js";
 export * from "./schema/deployment.js";
 export { allocateInvoiceNumber } from "./allocate-number.js";
 export { withTenant } from "./tenancy.js";
