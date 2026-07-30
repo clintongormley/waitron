@@ -46,11 +46,11 @@ export function formatStatus(state: InstanceState): string[] {
   // therefore leaves every journal present and that set incomplete — on a first provision, with
   // none of its migrations applied at all, since they share the one transaction.
   //
-  // That state is not dangerous — the host's own `applyMigrations` (`apps/server/src/boot.ts:116`)
-  // finishes the job at its next boot — but it is one this report cannot distinguish from a
-  // complete deployment, and it is one
-  // a re-run of `instance` will NOT repair, since the planner emits `migrate` only when a journal
-  // is missing. So the report says what it read and what that does and does not mean.
+  // This report still cannot distinguish that state from a complete deployment. What it can now do
+  // is name a remedy that works: `planInstance` emits `migrate` unconditionally, so re-running
+  // `instance` applies whatever is pending. The previous wording said the opposite — that
+  // `instance` would NOT repair it, because it planned a migrate only when a journal was missing —
+  // and sent the operator to wait for the host's next boot instead.
   const journalled = new Set(state.inside.migratedSets);
   lines.push("");
   for (const set of manifestSets()) {
@@ -61,8 +61,9 @@ export function formatStatus(state: InstanceState): string[] {
   lines.push(
     "",
     "A journal table is created before its set's migrations run, so `journal present` means",
-    "the set was started, not that it finished. Anything still pending is applied at the",
-    "host's next boot; `instance` plans a migrate only when a journal is MISSING.",
+    "the set was started, not that it finished. This report cannot tell the two apart.",
+    "Re-running `waitron-provision instance` applies anything still pending; so does the",
+    "host at its next boot.",
   );
   lines.push("", `deployment stamp: ${state.inside.stamp ?? "unstamped"}`);
   return lines;

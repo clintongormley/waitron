@@ -32,9 +32,13 @@ export interface RoleFacts {
 
 /** What is observable only once the database itself exists. */
 export interface InsideState {
-  /** Manifest set names whose journal table is present. Not "which migrations ran" — Drizzle's own
-   * runner is journal-tracked and idempotent, so the planner only needs to know whether migrating
-   * is worth attempting at all, and it attempts it whenever anything is missing. */
+  /** Manifest set names whose journal table is present. Not "which migrations ran" — Drizzle creates
+   * the journal table at `drizzle-orm@0.45.2/pg-core/dialect.js:54-55` and only then opens the
+   * transaction the set's migrations run in (`:60`), so a journal can outlive a rolled-back set.
+   *
+   * REPORT ONLY. `formatStatus` (status-command.ts) is the sole consumer. `planInstance` read this
+   * to decide whether to emit `migrate` and no longer does — that gate is exactly what the sentence
+   * above made unsound. */
   migratedSets: string[];
   stamp: DeploymentEnvironment | null;
 }

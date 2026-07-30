@@ -28,7 +28,8 @@ function stateOf(overrides: Partial<InstanceState> = {}): InstanceState {
 const BLANK = stateOf();
 
 /** Everything exists and agrees. `migratedSets` is built from the manifest rather than spelled
- * out, so adding a migration package does not silently reintroduce a `migrate` action here. */
+ * out so it tracks a newly added migration package — but note the plan still carries a `migrate`
+ * regardless, because `planInstance` no longer gates on journal presence. */
 const PROVISIONED = stateOf({
   databaseExists: true,
   roles: {
@@ -285,6 +286,21 @@ describe("runCli instance", () => {
     // test while having created a database.
     expect(h.apply).not.toHaveBeenCalled();
     expect(code).not.toBe(0);
+  });
+
+  it("shows a migrate in the plan for an already-provisioned deployment", async () => {
+    // The operator-facing half of the gate removal. `PROVISIONED` has every manifest set journalled
+    // and the stamp already correct, which is the state that used to plan nothing but two grants.
+    // The wording is asserted verbatim because it is what an operator reads before typing `y`
+    // against a live cluster: "apply every migration set" invited the reading that the tool was
+    // about to re-run all of them.
+    const h = harness({
+      answers: ["n"],
+      state: PROVISIONED,
+      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
+    });
+    await runCli(["instance", "--database", DATABASE, "--environment", "preproduction"], h.deps);
+    expect(h.lines.join("\n")).toContain("apply any pending migrations, in every set");
   });
 
   it("names the cluster it is about to write to, and never the admin's password", async () => {

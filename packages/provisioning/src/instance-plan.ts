@@ -253,7 +253,12 @@ export function describeAction(action: InstanceAction): string {
         action.withGrantOption ? " with grant option" : ""
       }`;
     case "migrate":
-      return "apply every migration set";
+      // Not "apply every migration set". Every set IS handed to the migrator, but Drizzle applies
+      // only what its journal's watermark is behind (`dialect.js:62`), and this line is now printed
+      // on EVERY run — including a fully-migrated no-op, since the planner stopped gating on
+      // journal presence. A line that reads as "re-run all migrations" on a plan an operator is
+      // confirming against a live production cluster claims more than the code does.
+      return "apply any pending migrations, in every set";
     case "stamp":
       return `stamp the database as ${action.environment}`;
   }
