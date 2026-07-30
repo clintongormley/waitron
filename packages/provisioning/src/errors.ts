@@ -29,5 +29,10 @@ declare module "@waitron/shared" {
      * altered: this tool did not create it, does not know its password, and `ALTER ROLE` on
      * something an operator made by hand is not its call. */
     "provisioning.role_unusable": { role: string; missing: string[] };
+    /** `CREATE ROLE` failed. `role` only — never the underlying driver error, and never a `cause`:
+     * the failing statement carries a generated password in its literal text, and both Drizzle's
+     * own wrapped error and Postgres's own error message quote the statement back verbatim. See
+     * `instance-apply.ts`'s `create-role` case for the receipt. */
+    "provisioning.role_creation_failed": { role: string };
   }
 }

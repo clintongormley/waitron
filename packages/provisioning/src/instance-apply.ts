@@ -1,8 +1,10 @@
 import { sql } from "drizzle-orm";
+import { AppError } from "@waitron/shared";
 import { stampDeployment, type Database } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { quoteIdent } from "./identifiers.js";
 import type { InstanceAction } from "./instance-plan.js";
+import "./errors.js";
 
 export interface ApplyDeps {
   /** The admin connection: CREATEDB and CREATEROLE, connected to any database in the cluster. */
@@ -53,11 +55,30 @@ export async function applyInstance(
           // The password is a generated `[A-Za-z0-9_-]{32}` (identifiers.ts) — no quote, no
           // backslash — which is what makes this literal safe without an escape pass. There is no
           // operator-supplied password path anywhere in this package, deliberately.
-          await deps.admin.execute(
-            sql.raw(
-              `create role ${quoteIdent(action.role)} ${attributes} password '${action.password}'${memberships}`,
-            ),
-          );
+          try {
+            await deps.admin.execute(
+              sql.raw(
+                `create role ${quoteIdent(action.role)} ${attributes} password '${action.password}'${memberships}`,
+              ),
+            );
+          } catch {
+            // The statement above embeds the generated password in its literal text, and BOTH
+            // Drizzle's own wrapped failure (`Failed query: create role ... password '<generated>'
+            // ...`) and Postgres's own error message quote that statement back verbatim — verified
+            // directly: the RED transcript for this exact catch, before it existed, was
+            // `Failed query: create role "waitron_migrator" ... password 'wM52o1bF...' in role
+            // "app_user"`, caused by `error: role "app_user" does not exist`. A caller that logs or
+            // prints a caught error verbatim (this package's own `errors.ts` doc comment names the
+            // shape a future CLI uses: `${error.code} ${JSON.stringify(error.params)}`) would put a
+            // credential into a terminal or a log file.
+            //
+            // The original error is deliberately NOT attached as `cause`: Node's default console
+            // formatting recurses into `.cause`, which would leak the same text one level down.
+            // `role` is the only detail worth keeping — it identifies WHICH create-role action
+            // failed without saying why, the same trade `packages/credentials/src/cipher.ts`'s
+            // `open()` makes when it discards a raw crypto error for an analogous reason.
+            throw new AppError("provisioning.role_creation_failed", { role: action.role });
+          }
           break;
         }
         case "grant-membership":
