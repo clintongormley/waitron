@@ -43,10 +43,12 @@ export function formatStatus(state: InstanceState): string[] {
   // the journal table first and only then applies the set's migrations, all inside one
   // transaction, and `packages/db/src/migrate.ts:42` puts that table in `public`, which is where
   // `readInside`'s `to_regclass` probe looks. An `instance` interrupted inside the last set
-  // therefore leaves all five journals present with none of that set's migrations applied.
+  // therefore leaves every journal present and that set incomplete — on a first provision, with
+  // none of its migrations applied at all, since they share the one transaction.
   //
-  // That state is not dangerous — the host's own `applyMigrations` finishes the job at its next
-  // boot — but it is one this report cannot distinguish from a complete deployment, and it is one
+  // That state is not dangerous — the host's own `applyMigrations` (`apps/server/src/boot.ts:116`)
+  // finishes the job at its next boot — but it is one this report cannot distinguish from a
+  // complete deployment, and it is one
   // a re-run of `instance` will NOT repair, since the planner emits `migrate` only when a journal
   // is missing. So the report says what it read and what that does and does not mean.
   const journalled = new Set(state.inside.migratedSets);

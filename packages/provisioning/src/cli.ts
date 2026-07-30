@@ -362,8 +362,10 @@ async function resolveAdminUri(deps: CliDeps): Promise<string> {
  * A string `new URL` cannot parse says so instead of throwing. That branch is reachable, not
  * defensive: `pg` accepts such a string rather than raising — run against this repo's `pg@8.22.0`,
  * `new Client({ connectionString: "host=db.example port=5433 user=adm" })` came back as
- * `{host:"base",port:5432,user:"<OS user>"}` — so a `TypeError` escaping here would reach the
- * operator as `unexpected failure (TypeError)` in place of a plan.
+ * `{host:"base",port:5432,user:"<OS user>",database:"host=db.example port=5433 user=adm"}` — so a
+ * `TypeError` escaping here would reach the operator as `unexpected failure (TypeError)` in place
+ * of a plan. (Whether such a string could then CONNECT was not tested; only that `pg` does not
+ * reject it, which is all this branch's reachability turns on.)
  */
 function describeAdmin(adminUri: string): string {
   let url: URL;

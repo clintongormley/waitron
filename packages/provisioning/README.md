@@ -109,9 +109,10 @@ argument.
 **`journal present` is not `applied`, and the report says so.** All this command can read is whether
 each set's journal TABLE exists. Drizzle creates that table _before_ running the set's migrations
 (`drizzle-orm@0.45.2/pg-core/dialect.js:54-60`), so an `instance` interrupted inside the last set
-leaves every journal present and that set's migrations unapplied — and `instance` will not repair it
-on a re-run, because it plans a `migrate` only when a journal is **missing**. The host does, at its
-next boot. Nothing here is dangerous; it is simply less than "applied" would claim.
+leaves every journal present and that set incomplete — and `instance` will not repair it on a re-run,
+because it plans a `migrate` only when a journal is **missing**. The host does, at its next boot
+(`apps/server/src/boot.ts:116`). Nothing here is dangerous; it is simply less than "applied" would
+claim.
 
 It is also the tool to reach for after a failed `instance`: it names which roles exist.
 
