@@ -217,6 +217,46 @@ describe("runCli", () => {
     expect(h.connect).toHaveBeenCalledWith(ADMIN_URI);
   });
 
+  it("refuses an empty admin connection string on both paths that take one", async () => {
+    // `pg` does not refuse one either, which is the whole hazard. Run against this repo's
+    // `pg@8.22.0`: `new Client({ connectionString: "" })` came back as
+    // `{host:"localhost",port:5432,user:"<OS user>",database:"<OS user>"}`, and `pg-pool@3.14.0`
+    // builds every client with `new this.Client(this.options)` (`index.js:241`) off the same
+    // options object. So an unset or misspelled WAITRON_ADMIN_DATABASE_URL plus a stdin that
+    // answers nothing — the non-interactive shape README.md documents for CI, where `bin.ts`'s
+    // `ask` returns `""` on an exhausted stream or Ctrl+D — would have had `instance` create,
+    // migrate and STAMP a database on whatever cluster answers on localhost:5432. One database per
+    // environment is a fiscal invariant and a stamp is not undoable.
+    for (const command of [
+      ["instance", "--database", DATABASE, "--environment", "preproduction", "--yes"],
+      ["status", "--database", DATABASE],
+    ]) {
+      const h = harness({ env: {}, secrets: [""] });
+      expect(await runCli(command, h.deps)).toBe(1);
+      expect(h.lines.join("\n")).toContain(
+        'provisioning.admin_uri_missing {"variable":"WAITRON_ADMIN_DATABASE_URL"}',
+      );
+      // Nothing was opened, so nothing could be written. The exit code alone would pass against a
+      // version that connected first and complained afterwards.
+      expect(h.connect).not.toHaveBeenCalled();
+      expect(h.apply).not.toHaveBeenCalled();
+    }
+  });
+
+  it("counts an empty env var and a blank answer as nothing supplied, not as a value", async () => {
+    for (const options of [
+      // Set but empty: `resolveAdminUri` falls through to the prompt, which also answers nothing.
+      { env: { WAITRON_ADMIN_DATABASE_URL: "" }, secrets: [""] },
+      // Whitespace only, from the prompt: `.trim()` makes it the same case.
+      { env: {}, secrets: ["   "] },
+    ]) {
+      const h = harness(options);
+      expect(await runCli(["status", "--database", DATABASE], h.deps)).toBe(1);
+      expect(h.lines.join("\n")).toContain("provisioning.admin_uri_missing");
+      expect(h.connect).not.toHaveBeenCalled();
+    }
+  });
+
   it("never echoes the admin connection string back, from either source", async () => {
     for (const h of [
       harness({ answers: ["n"], env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } }),
@@ -245,6 +285,44 @@ describe("runCli instance", () => {
     // test while having created a database.
     expect(h.apply).not.toHaveBeenCalled();
     expect(code).not.toBe(0);
+  });
+
+  it("names the cluster it is about to write to, and never the admin's password", async () => {
+    // A confirmation that cannot reveal the mistake it exists to catch is a weak confirmation. The
+    // summary named a database and an environment and nothing else, so an admin URI pointing at the
+    // WRONG cluster looked exactly like the right one — and that is the fiscally expensive mistake,
+    // because one database per environment is an invariant and `instance` STAMPS whatever it is
+    // pointed at.
+    const h = harness({ answers: ["n"], env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    await runCli(["instance", "--database", DATABASE, "--environment", "preproduction"], h.deps);
+    const printed = h.lines.join("\n");
+    expect(printed).toContain("Cluster: admin@db.example:5432");
+    // Host, port and username. Never the password, and never the whole string.
+    expect(printed).not.toContain("adminsecret");
+    expect(printed).not.toContain(ADMIN_URI);
+  });
+
+  it("names a cluster whose connection string carries no user by host alone", async () => {
+    const h = harness({
+      answers: ["n"],
+      env: { WAITRON_ADMIN_DATABASE_URL: "postgres://db.example:5432/postgres" },
+    });
+    await runCli(["instance", "--database", DATABASE, "--environment", "preproduction"], h.deps);
+    expect(h.lines.join("\n")).toContain("Cluster: db.example:5432");
+  });
+
+  it("says it cannot name the cluster rather than throwing on a non-URL admin string", async () => {
+    // `pg` accepts one rather than raising — run against this repo's `pg@8.22.0`,
+    // `new Client({ connectionString: "host=db.example port=5433 user=adm" })` came back as
+    // `{host:"base",port:5432,user:"<OS user>",database:"host=db.example port=5433 user=adm"}`. So
+    // the `new URL` in the summary is a real throw site, and a bare TypeError reaching the operator
+    // as `unexpected failure (TypeError)` is a worse answer than "I cannot tell you which".
+    const h = harness({
+      answers: ["n"],
+      env: { WAITRON_ADMIN_DATABASE_URL: "host=db.example port=5433 user=adm" },
+    });
+    await runCli(["instance", "--database", DATABASE, "--environment", "preproduction"], h.deps);
+    expect(h.lines.join("\n")).toMatch(/Cluster: .*not a URL/);
   });
 
   it("never puts a generated password in the plan summary", async () => {

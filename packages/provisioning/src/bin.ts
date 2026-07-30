@@ -111,7 +111,18 @@ const SINK = new Writable({
  * resolve — Node printed `Warning: Detected unsettled top-level await` and exited 0, reporting
  * success for a command that never ran. Observed directly with `printf '' | node <probe>` before
  * this race existed; with it, the same input returns `got=[]` and exits 0 through the normal path.
- * `""` is what every caller in `cli.ts` already treats as "not supplied".
+ * `""` is a value no caller in `cli.ts` acts on. It is REFUSED at each of the three that take one —
+ * `--database` by `assertIdentifier` (`provisioning.invalid_identifier`), `--environment` by
+ * `assertEnvironment` (`deployment.unknown_environment`), the admin connection string by
+ * `resolveAdminUri` (`provisioning.admin_uri_missing`) — and at the "Apply this plan?" prompt it is
+ * simply not `y`, so nothing is applied.
+ *
+ * An earlier version of this sentence said `""` was "what every caller in `cli.ts` already treats
+ * as 'not supplied'". That was false in the one place it mattered: `resolveAdminUri` returned the
+ * prompt's answer unchecked, and an empty connection string is one `pg` resolves to
+ * `localhost:5432` as the OS user rather than rejecting. The race below therefore handed a
+ * non-interactive run a live connection to whatever answers there. The guard in `resolveAdminUri`
+ * is what makes the sentence true; it was not true when it was written.
  *
  * `ABORT_ERR` is Ctrl+D at the prompt. It is an operator saying "stop", not a fault, so it becomes
  * the same empty answer rather than a stack trace.

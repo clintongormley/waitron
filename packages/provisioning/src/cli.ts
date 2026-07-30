@@ -40,6 +40,10 @@ export interface CliDeps {
 
 const ENVIRONMENTS: DeploymentEnvironment[] = ["production", "preproduction"];
 
+/** The one environment variable this tool reads a secret from. Named once so the guard that
+ * refuses an empty one and the error that reports it cannot drift apart. */
+const ADMIN_URI_VARIABLE = "WAITRON_ADMIN_DATABASE_URL";
+
 const USAGE = [
   "usage: waitron-provision <command> [options]",
   "",
@@ -157,6 +161,9 @@ async function instance(argv: string[], deps: CliDeps): Promise<number> {
       // diffed"), so even a fully-provisioned database yields the two grant actions. A "nothing to
       // do" branch here would be unreachable code claiming to handle a state that cannot arise.
       deps.io.stdout(`Plan for ${database} (${environment}):`);
+      // Which cluster, so the operator confirming this can see the mistake the summary otherwise
+      // hides — see `describeAdmin`. Never the password.
+      deps.io.stdout(`Cluster: ${describeAdmin(adminUri)}`);
       deps.io.stdout("");
       for (const action of actions) deps.io.stdout(`  ${describeAction(action)}`);
       deps.io.stdout("");
@@ -319,11 +326,53 @@ async function resolveOption(
  * There is no third source, and specifically no flag: the string carries a password, `argv` is
  * world-readable in `ps` and lands in shell history, and `parse` above is `strict` precisely so
  * that adding one is a parse error rather than a silent acceptance.
+ *
+ * **An empty answer is refused, not returned.** The env var was already guarded for `""`; the
+ * prompt's answer was not, and `bin.ts`'s `ask` returns `""` deliberately for an exhausted stdin or
+ * a Ctrl+D. `pg` treats an empty connection string as no connection string at all rather than as an
+ * error — run against this repo's `pg@8.22.0`, `new Client({ connectionString: "" })` resolved to
+ * `{host:"localhost",port:5432,user:"<OS user>",database:"<OS user>"}`, and `pg-pool@3.14.0` builds
+ * its clients with `new this.Client(this.options)` (`index.js:241`) from the same options — so
+ * `instance` would have created, migrated and STAMPED a database on whatever cluster answers there.
+ * See `errors.ts` for why that is the unacceptable failure mode rather than merely a confusing one.
  */
 async function resolveAdminUri(deps: CliDeps): Promise<string> {
-  const fromEnv = deps.env.WAITRON_ADMIN_DATABASE_URL;
+  const fromEnv = deps.env[ADMIN_URI_VARIABLE];
   if (typeof fromEnv === "string" && fromEnv !== "") return fromEnv;
-  return (await deps.io.promptSecret("admin connection string (not shown): ")).trim();
+  const answer = (await deps.io.promptSecret("admin connection string (not shown): ")).trim();
+  if (answer === "") {
+    throw new AppError("provisioning.admin_uri_missing", { variable: ADMIN_URI_VARIABLE });
+  }
+  return answer;
+}
+
+/**
+ * WHICH CLUSTER is about to be written to, for the confirmation an operator gives.
+ *
+ * The plan summary named a database and an environment and nothing else, so it could not reveal
+ * the one mistake it exists to catch: an admin connection string pointing somewhere other than
+ * where the operator believes. That is the fiscally expensive mistake — one database per
+ * environment, a pre-production database is never promoted, and `instance` migrates and STAMPS
+ * whatever it is pointed at.
+ *
+ * Host, port and username. NEVER the password and never the whole string: `README.md`'s "Secrets"
+ * section used to promise the admin's username was never printed either, and was narrowed in the
+ * commit that added this rather than left to contradict the code.
+ *
+ * A string `new URL` cannot parse says so instead of throwing. That branch is reachable, not
+ * defensive: `pg` accepts such a string rather than raising — run against this repo's `pg@8.22.0`,
+ * `new Client({ connectionString: "host=db.example port=5433 user=adm" })` came back as
+ * `{host:"base",port:5432,user:"<OS user>"}` — so a `TypeError` escaping here would reach the
+ * operator as `unexpected failure (TypeError)` in place of a plan.
+ */
+function describeAdmin(adminUri: string): string {
+  let url: URL;
+  try {
+    url = new URL(adminUri);
+  } catch {
+    return "unknown — the admin connection string is not a URL";
+  }
+  return url.username === "" ? url.host : `${url.username}@${url.host}`;
 }
 
 function assertEnvironment(value: string): DeploymentEnvironment {

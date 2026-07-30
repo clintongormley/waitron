@@ -53,6 +53,10 @@ import "@waitron/shared";
  *   (`packages/credentials/src/errors.ts:79-85`): a CLI that could not read an input it needs,
  *   named for the domain of the CLI's work and carrying the thing it failed to read as a param,
  *   exactly as `database` is carried here.
+ * - `admin_uri_missing` names an input THIS TOOL needs, at a moment when nothing has been reached:
+ *   no deployment, no database, no role. `credentials.key_missing`
+ *   (`packages/credentials/src/errors.ts:16`) is the same fact under its own domain's prefix, and
+ *   `server.config_missing` (`apps/server/src/errors.ts:19`) is the same fact under the process's.
  *
  * `deployment.unknown_environment` is the one that does NOT take the prefix: the fact is about a
  * deployment environment, so it sits beside `deployment.already_stamped` (`packages/db`) and
@@ -78,6 +82,25 @@ declare module "@waitron/shared" {
      * operator-typed configuration and `known` is the legal set, which is what lets the refusal be
      * acted on without reading the source. Shaped after `credentials.unknown_purpose`. */
     "deployment.unknown_environment": { value: string; known: string[] };
+    /** Nothing supplied the admin connection string: `WAITRON_ADMIN_DATABASE_URL` was unset or
+     * empty AND the echo-off prompt answered nothing — which is what an exhausted stdin or a Ctrl+D
+     * produces, deliberately, in `bin.ts`'s `ask`.
+     *
+     * Refused rather than passed through, because `pg` does not refuse it either. Run against this
+     * repo's `pg@8.22.0`: `new Client({ connectionString: "" })` resolved to
+     * `{host:"localhost",port:5432,user:"<OS user>",database:"<OS user>"}` — an empty string is
+     * falsy, so nothing is parsed and every default applies — and `pg-pool@3.14.0` builds each
+     * client with `new this.Client(this.options)` (`index.js:241`) off the same options object. So
+     * an unset or misspelled variable plus a non-interactive stdin, which is exactly the shape
+     * `README.md` documents for CI, had `instance` create, migrate and STAMP a database on whatever
+     * cluster answers on localhost:5432. One database per environment is a fiscal invariant and a
+     * stamp cannot be taken back.
+     *
+     * `variable` is our own declared environment-variable NAME, never its value — the shape
+     * `credentials.key_missing` and `server.config_missing` both carry, for the same reason. The
+     * value it names is the one secret this tool takes as INPUT, and printing it is the thing this
+     * whole file forbids. */
+    "provisioning.admin_uri_missing": { variable: string };
     /** A database or role name outside `/^[a-z][a-z0-9_]{0,62}$/`. `value` IS echoed: it is
      * operator-typed configuration, never a secret, and a refusal that withheld it could not be
      * acted on. */

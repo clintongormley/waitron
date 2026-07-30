@@ -75,8 +75,9 @@ need:
 | `waitron_app`         | `DATABASE_URL` — the least-privilege role every duty pass runs over |
 | `waitron_provisioner` | holds `INSERT ON tenants`, which `app_user` deliberately does not   |
 
-It reads what already exists, prints the plan, asks for confirmation (`--yes` skips that), applies,
-then prints the roles.
+It reads what already exists, prints the plan — headed by `Cluster: <user>@<host>:<port>`, so the
+operator confirming it can see which cluster is about to be written to — asks for confirmation
+(`--yes` skips that), applies, then prints the roles.
 
 **What it prints once.** One connection string per role **it created on this run**, then the same
 "stored nowhere, cannot be recovered" framing and screen clear `keyring` uses. A role that **already
@@ -128,29 +129,42 @@ WAITRON_ADMIN_DATABASE_URL=postgres://admin:secret@host:5432/postgres \
   node dist/bin.js instance --database waitron --environment preproduction --yes
 ```
 
-**The admin's CREDENTIALS never appear in anything this tool prints** — not its username, not its
-password, from either source. Parts of the admin URI do, and deliberately: each role connection
-string is the admin's own URI with the userinfo and the database path replaced, so the host, the
-port and any query string (`sslmode=require`, say) are carried through. That is what makes the
-printed string one the host can actually connect with. It is not a claim that no part of the admin
-URI is echoed — an admin URI whose HOST were itself sensitive would still appear.
+If neither source supplies one, the run stops with `provisioning.admin_uri_missing` — it does not
+fall back to a default. `pg` resolves an **empty** connection string to `localhost:5432` as the OS
+user rather than rejecting it, so without that refusal an unset or misspelled variable plus a
+non-interactive stdin would have `instance` create, migrate and **stamp** a database on whatever
+cluster answers there.
+
+**The admin's PASSWORD never appears in anything this tool prints**, from either source, and neither
+does the connection string as a whole. Its **username, host and port do**, deliberately, in two
+places: `instance`'s plan summary prints `Cluster: <user>@<host>:<port>` above the actions, and each
+role connection string is the admin's own URI with the userinfo and the database path replaced, so
+the host, the port and any query string (`sslmode=require`, say) are carried through — which is what
+makes the printed string one the host can actually connect with.
+
+That is a **narrowing** of what this section used to promise, which was that the username never
+appeared either. A confirmation that cannot name the cluster cannot reveal the mistake it exists to
+catch, and that mistake is the fiscally expensive one: one database per environment, and `instance`
+stamps whatever it is pointed at. A username is not a credential on its own, the operator supplied it
+in the first place, and the printed role strings carry usernames regardless.
 
 ## What it refuses, and what to do about it
 
 Every refusal is a structured code and its params on stderr — never a raw driver message, which for
 this package would quote a `CREATE ROLE … PASSWORD '<generated>'` statement back verbatim.
 
-| Code                                   | What happened                                                                    | What to do                                                                                                                                                                                                                               |
-| -------------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `provisioning.invalid_identifier`      | A database or role name outside `^[a-z][a-z0-9_]{0,62}$`                         | Rename it. A database called `Waitron Prod` is a permanent papercut for whoever operates it.                                                                                                                                             |
-| `deployment.unknown_environment`       | `--environment` was not `production` or `preproduction`                          | Type one of the two.                                                                                                                                                                                                                     |
-| `deployment.already_stamped`           | The database is stamped for the OTHER environment                                | Stop. A pre-production database is never promoted — see the fiscal invariants below.                                                                                                                                                     |
-| `provisioning.role_over_privileged`    | A `waitron_*` role already exists carrying `SUPERUSER` or `BYPASSRLS`            | Refused, not adopted: every grant this tool makes sits behind an RLS policy such a role ignores. Drop or fix the role.                                                                                                                   |
-| `provisioning.role_unusable`           | A `waitron_*` role exists but is `NOLOGIN`, or lacks `CREATEROLE`                | Refused rather than `ALTER`ed — this tool did not create it. Fix it by hand, or drop it and re-run.                                                                                                                                      |
-| `provisioning.state_unreadable`        | The admin connection could not reach or read the deployment. `sqlState` says why | `28P01`: wrong password. `42501`: see "When the admin did not create the database" below.                                                                                                                                                |
-| `provisioning.role_creation_failed`    | `CREATE ROLE` failed. `sqlState` says why                                        | `42710`: the role already exists. `42704`: a membership target does not. `42501`: this admin may not — see below.                                                                                                                        |
-| `provisioning.grant_ineffective`       | Every statement ran, and a privilege in `missing` is still absent afterwards     | Almost always the admin lacks grant option on the database or on `public` — see "When the admin did not create the database" below. If the same run also CREATED a role, read "A failed `instance` can orphan a role" before re-running. |
-| `provisioning.membership_grant_failed` | `GRANT <memberOf> TO <role>` failed. `sqlState` says why                         | `42501`: this admin holds no ADMIN OPTION on the role it is granting — see below.                                                                                                                                                        |
+| Code                                   | What happened                                                                       | What to do                                                                                                                                                                                                                               |
+| -------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provisioning.admin_uri_missing`       | Neither `WAITRON_ADMIN_DATABASE_URL` nor the prompt gave an admin connection string | Set the variable, or answer the prompt. Refused rather than defaulted — see "Secrets" above for what `pg` does with an empty one.                                                                                                        |
+| `provisioning.invalid_identifier`      | A database or role name outside `^[a-z][a-z0-9_]{0,62}$`                            | Rename it. A database called `Waitron Prod` is a permanent papercut for whoever operates it.                                                                                                                                             |
+| `deployment.unknown_environment`       | `--environment` was not `production` or `preproduction`                             | Type one of the two.                                                                                                                                                                                                                     |
+| `deployment.already_stamped`           | The database is stamped for the OTHER environment                                   | Stop. A pre-production database is never promoted — see the fiscal invariants below.                                                                                                                                                     |
+| `provisioning.role_over_privileged`    | A `waitron_*` role already exists carrying `SUPERUSER` or `BYPASSRLS`               | Refused, not adopted: every grant this tool makes sits behind an RLS policy such a role ignores. Drop or fix the role.                                                                                                                   |
+| `provisioning.role_unusable`           | A `waitron_*` role exists but is `NOLOGIN`, or lacks `CREATEROLE`                   | Refused rather than `ALTER`ed — this tool did not create it. Fix it by hand, or drop it and re-run.                                                                                                                                      |
+| `provisioning.state_unreadable`        | The admin connection could not reach or read the deployment. `sqlState` says why    | `28P01`: wrong password. `42501`: see "When the admin did not create the database" below.                                                                                                                                                |
+| `provisioning.role_creation_failed`    | `CREATE ROLE` failed. `sqlState` says why                                           | `42710`: the role already exists. `42704`: a membership target does not. `42501`: this admin may not — see below.                                                                                                                        |
+| `provisioning.grant_ineffective`       | Every statement ran, and a privilege in `missing` is still absent afterwards        | Almost always the admin lacks grant option on the database or on `public` — see "When the admin did not create the database" below. If the same run also CREATED a role, read "A failed `instance` can orphan a role" before re-running. |
+| `provisioning.membership_grant_failed` | `GRANT <memberOf> TO <role>` failed. `sqlState` says why                            | `42501`: this admin holds no ADMIN OPTION on the role it is granting — see below.                                                                                                                                                        |
 
 The underlying driver error is deliberately not attached, not even as `cause`: Node's default
 console formatting recurses into `.cause`, which would put a generated password one level down from
