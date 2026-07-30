@@ -61,6 +61,22 @@ declare module "@waitron/shared" {
      * altered: this tool did not create it, does not know its password, and `ALTER ROLE` on
      * something an operator made by hand is not its call. */
     "provisioning.role_unusable": { role: string; missing: string[] };
+    /** Every action ran without error, and at least one privilege is still not there afterwards.
+     *
+     * This is not defensive: PostgreSQL answers a `GRANT` from a role holding no grant option with a
+     * **WARNING, not an error** — the command tag is still `GRANT` and the driver reports success.
+     * Observed directly on `postgres:18-alpine`: as a non-owning `login createdb createrole` admin,
+     * `grant create on database acl_db to r_app` printed `WARNING: no privileges were granted for
+     * "acl_db"`, and `pg_database.datacl` afterwards still read
+     * `{=Tc/owner_a,owner_a=CTc/owner_a,r_mig=C/owner_a}` — no `r_app` entry. Without this check
+     * `instance` reported success and left a deployment whose migrator cannot migrate at the next
+     * boot, which is the worst available failure shape.
+     *
+     * `missing` names each privilege that did not take, in the same words the plan summary used, so
+     * the line an operator reads on failure matches the line they approved. Database names, role
+     * names and privilege words only — the same class of value `provisioning.role_unusable`'s own
+     * `missing` already carries. */
+    "provisioning.grant_ineffective": { database: string; missing: string[] };
     /** Reading what a deployment already has — `pg_database`, `pg_roles`, the journal tables, the
      * deployment stamp — failed at the database. Every command here reads before it decides, so
      * this is where an admin connection that cannot see the target database surfaces, and it is a

@@ -188,6 +188,72 @@ describe("applyInstance against a blank container", () => {
     expect(repaired.roles.waitron_provisioner?.memberOf).toContain("tenant_provisioner");
   });
 
+  it("refuses when a GRANT succeeded and granted nothing", async () => {
+    // The silent failure, end to end against a real cluster. PostgreSQL answers a GRANT from a role
+    // holding no grant option with a WARNING, not an error — the driver reports success — so this
+    // is the one case `applyInstance` could not see by catching. Reproduced directly on this image:
+    // as a non-owning admin, `grant create on database acl_db to r_app` printed
+    // `WARNING: no privileges were granted for "acl_db"` and left `datacl` unchanged.
+    //
+    // `waitron_app` is the grantee because it holds no CREATE on this database and the plan never
+    // gives it one — using `waitron_migrator` would pass for the wrong reason, since the suite's
+    // first test already granted it and the check reads the END STATE rather than what this
+    // statement did.
+    const action = {
+      kind: "grant-database-create",
+      role: "waitron_app",
+      database: DATABASE,
+    } as const;
+    const depsFor = (as: Database) => ({
+      admin: as,
+      database: DATABASE,
+      adminUri,
+      migrationsRoot: null,
+      openTarget: () => createPostgresDb(withDatabase(adminUri, DATABASE)),
+    });
+
+    await admin.execute(sql.raw(`drop role if exists grant_probe_admin`));
+    await admin.execute(
+      sql.raw(`create role grant_probe_admin login createdb createrole password 'g'`),
+    );
+    const probe = await createPostgresDb(
+      roleUrl(withDatabase(pg.uri, DATABASE), "grant_probe_admin", "g"),
+    );
+    try {
+      let thrown: unknown;
+      try {
+        await applyInstance([action], depsFor(probe));
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(isAppError(thrown)).toBe(true);
+      if (!isAppError(thrown)) return;
+      expect(thrown.code).toBe("provisioning.grant_ineffective");
+      expect(thrown.params).toEqual({
+        database: DATABASE,
+        missing: [`create on database ${DATABASE} to waitron_app`],
+      });
+
+      // The negative control, and the deletion proof's other half: the SAME action, run by the
+      // admin that owns the database, takes effect and passes the check. So the refusal above is
+      // about who ran it, not about the action being malformed — and the check is not simply
+      // failing everything.
+      await applyInstance([action], depsFor(admin));
+      const acl = await admin.execute<{ acl: string[] }>(
+        sql`select coalesce(datacl::text[], '{}'::text[]) as acl
+            from pg_database where datname = ${DATABASE}`,
+      );
+      expect(acl.rows[0]?.acl.some((entry) => entry.startsWith("waitron_app=C"))).toBe(true);
+    } finally {
+      await probe.close();
+      // In a `finally` so the suite stays order-independent: the grant above is not part of any
+      // plan, and a later test reading this database's ACL should not find it.
+      await admin.execute(sql.raw(`revoke create on database ${DATABASE} from "waitron_app"`));
+      await admin.execute(sql.raw(`drop role if exists grant_probe_admin`));
+    }
+  });
+
   it("refuses a membership grant the admin holds no ADMIN OPTION for", async () => {
     // The receipt for the operator-facing gap `README.md`'s "When the admin cannot grant
     // `app_user`" section documents, run rather than reasoned about.

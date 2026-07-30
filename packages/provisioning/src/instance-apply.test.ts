@@ -218,3 +218,197 @@ describe("applyInstance's grant-membership failure", () => {
     expect((thrown as Error).cause).toBeUndefined();
   });
 });
+
+describe("applyInstance's post-apply grant verification", () => {
+  /**
+   * A fake cluster that answers the three ACL reads. `datacl`/`nspacl` shapes are the ones a real
+   * `postgres:18-alpine` produced, copied rather than invented:
+   * `{=Tc/owner_a,owner_a=CTc/owner_a,r_mig=C/owner_a}` for a database granted by its owner, and for
+   * `public` granted WITH GRANT OPTION, `pg_database_owner=UC` and `=U` and `r_mig=C*`, each
+   * followed by a slash and `pg_database_owner`.
+   */
+  function cluster(options: { datacl?: string[]; nspacl?: string[]; member?: boolean }) {
+    const answer = (query: { queryChunks: { value?: string[] }[] }) => {
+      const text = query.queryChunks.map((chunk) => chunk.value?.join("") ?? "").join(" ");
+      if (text.includes("pg_database"))
+        return Promise.resolve({ rows: [{ acl: options.datacl ?? [] }] });
+      if (text.includes("pg_namespace"))
+        return Promise.resolve({ rows: [{ acl: options.nspacl ?? [] }] });
+      if (text.includes("pg_auth_members")) {
+        return Promise.resolve({ rows: [{ present: options.member ?? false }] });
+      }
+      return Promise.resolve({ rows: [] });
+    };
+    // `close` is real: `applyInstance`'s `finally` closes whatever `openTarget` returned, and a
+    // fixture without it turned a refusal into `TypeError: target?.close is not a function`.
+    const db = { execute: answer, close: async () => {} } as unknown as Database;
+    return {
+      admin: db,
+      database: "acl_db",
+      adminUri: "postgres://admin@localhost:5432/postgres",
+      migrationsRoot: null,
+      openTarget: (): Promise<Database> => Promise.resolve(db),
+    };
+  }
+
+  const DATABASE_GRANT: InstanceAction[] = [
+    { kind: "grant-database-create", role: "waitron_migrator", database: "acl_db" },
+  ];
+  const SCHEMA_GRANT: InstanceAction[] = [
+    { kind: "grant-schema-create", role: "waitron_migrator", withGrantOption: true },
+  ];
+
+  it("passes when the ACL carries the grant the plan asked for", async () => {
+    await expect(
+      applyInstance(
+        DATABASE_GRANT,
+        cluster({ datacl: ["=Tc/owner_a", "owner_a=CTc/owner_a", "waitron_migrator=C/owner_a"] }),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it("refuses when the GRANT succeeded but the ACL does not carry it", async () => {
+    // The silent case, and the whole reason this check exists: PostgreSQL answers a GRANT from a
+    // role with no grant option with a WARNING, so `execute` resolves and the privilege is absent.
+    let thrown: unknown;
+    try {
+      await applyInstance(
+        DATABASE_GRANT,
+        cluster({ datacl: ["=Tc/owner_a", "owner_a=CTc/owner_a"] }),
+      );
+    } catch (error) {
+      thrown = error;
+    }
+    expect(isAppError(thrown)).toBe(true);
+    if (!isAppError(thrown)) return;
+    expect(thrown.code).toBe("provisioning.grant_ineffective");
+    expect(thrown.params).toEqual({
+      database: "acl_db",
+      missing: ["create on database acl_db to waitron_migrator"],
+    });
+  });
+
+  it("refuses a NULL datacl, which is what a database nobody granted on reads as", async () => {
+    await expect(applyInstance(DATABASE_GRANT, cluster({ datacl: [] }))).rejects.toMatchObject({
+      code: "provisioning.grant_ineffective",
+    });
+  });
+
+  it("treats a bare C as missing when the plan asked for WITH GRANT OPTION", async () => {
+    // The `*` is not cosmetic: the empty-database migrations re-grant CREATE ON SCHEMA public to
+    // each support role they create and then revoke it, and a grant this role cannot pass on fails
+    // partway through that dance (instance-plan.ts). A check that ignored the option would call a
+    // half-provisioned deployment good.
+    await expect(
+      applyInstance(SCHEMA_GRANT, cluster({ nspacl: ["waitron_migrator=C/pg_database_owner"] })),
+    ).rejects.toMatchObject({ code: "provisioning.grant_ineffective" });
+
+    await expect(
+      applyInstance(SCHEMA_GRANT, cluster({ nspacl: ["waitron_migrator=C*/pg_database_owner"] })),
+    ).resolves.toBeUndefined();
+  });
+
+  it("does not mistake PUBLIC's own empty-grantee entry for a role's", async () => {
+    // `=U/pg_database_owner` is the grant to PUBLIC. Matching on a bare `=` rather than `<role>=`
+    // would read it as satisfying any role.
+    await expect(
+      applyInstance(SCHEMA_GRANT, cluster({ nspacl: ["=UC*/pg_database_owner"] })),
+    ).rejects.toMatchObject({ code: "provisioning.grant_ineffective" });
+  });
+
+  it("verifies a membership, and names it when absent", async () => {
+    const action: InstanceAction[] = [
+      { kind: "grant-membership", role: "waitron_app", memberOf: "app_user" },
+    ];
+    await expect(applyInstance(action, cluster({ member: true }))).resolves.toBeUndefined();
+    await expect(applyInstance(action, cluster({ member: false }))).rejects.toMatchObject({
+      code: "provisioning.grant_ineffective",
+      params: { database: "acl_db", missing: ["app_user to waitron_app"] },
+    });
+  });
+
+  it("collects every missing grant rather than stopping at the first", async () => {
+    const actions: InstanceAction[] = [...DATABASE_GRANT, ...SCHEMA_GRANT];
+    let thrown: unknown;
+    try {
+      await applyInstance(actions, cluster({}));
+    } catch (error) {
+      thrown = error;
+    }
+    expect(isAppError(thrown)).toBe(true);
+    if (!isAppError(thrown)) return;
+    // Both, so one re-run fixes everything rather than uncovering the next failure each time.
+    expect(thrown.params).toEqual({
+      database: "acl_db",
+      missing: [
+        "create on database acl_db to waitron_migrator",
+        "create on schema public to waitron_migrator with grant option",
+      ],
+    });
+  });
+
+  it("refuses when the catalog read comes back empty rather than assuming the best", async () => {
+    // A database dropped between the plan and the verification, or a `public` schema that is not
+    // there. `rows[0]` is then undefined, and the only safe reading of "we could not see the ACL"
+    // is that the grant is not proven — not that it is fine.
+    const empty = { execute: () => Promise.resolve({ rows: [] }), close: async () => {} };
+    const deps = {
+      admin: empty as unknown as Database,
+      database: "acl_db",
+      adminUri: "postgres://admin@localhost:5432/postgres",
+      migrationsRoot: null,
+      openTarget: (): Promise<Database> => Promise.resolve(empty as unknown as Database),
+    };
+    await expect(applyInstance(DATABASE_GRANT, deps)).rejects.toMatchObject({
+      code: "provisioning.grant_ineffective",
+    });
+    await expect(applyInstance(SCHEMA_GRANT, deps)).rejects.toMatchObject({
+      code: "provisioning.grant_ineffective",
+    });
+    await expect(
+      applyInstance(
+        [{ kind: "grant-membership", role: "waitron_app", memberOf: "app_user" }],
+        deps,
+      ),
+    ).rejects.toMatchObject({ code: "provisioning.grant_ineffective" });
+  });
+
+  it("checks a schema grant that did NOT ask for the grant option", async () => {
+    // `REQUIREMENTS` gives only `waitron_migrator` a schema grant and always WITH GRANT OPTION, so
+    // nothing in a real plan reaches the plain branch — but `InstanceAction` permits it, and a bare
+    // `C` must satisfy a request that did not ask for the option.
+    const plain: InstanceAction[] = [
+      { kind: "grant-schema-create", role: "waitron_app", withGrantOption: false },
+    ];
+    await expect(
+      applyInstance(plain, cluster({ nspacl: ["waitron_app=C/pg_database_owner"] })),
+    ).resolves.toBeUndefined();
+    await expect(
+      applyInstance(plain, cluster({ nspacl: ["waitron_app=U/pg_database_owner"] })),
+    ).rejects.toMatchObject({
+      code: "provisioning.grant_ineffective",
+      params: { database: "acl_db", missing: ["create on schema public to waitron_app"] },
+    });
+  });
+
+  it("reads nothing at all when the plan carries no grants", async () => {
+    // A plan of only `create-database` must not pay for three catalog reads, and more importantly
+    // must not demand a target connection that may not exist yet.
+    const executed: string[] = [];
+    const admin = {
+      execute: (query: { queryChunks: { value?: string[] }[] }) => {
+        executed.push(query.queryChunks.map((chunk) => chunk.value?.join("") ?? "").join(""));
+        return Promise.resolve({ rows: [] });
+      },
+    } as unknown as Database;
+    await applyInstance([{ kind: "create-database", database: "acl_db" }], {
+      admin,
+      database: "acl_db",
+      adminUri: "postgres://admin@localhost:5432/postgres",
+      migrationsRoot: null,
+      openTarget: (): Promise<Database> =>
+        Promise.reject(new Error("openTarget must not be reached by these actions")),
+    });
+    expect(executed).toEqual(['create database "acl_db"']);
+  });
+});

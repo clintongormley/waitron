@@ -166,9 +166,125 @@ export async function applyInstance(
           break;
       }
     }
+
+    // Every statement above "succeeded". That is not the same as every privilege being present —
+    // see `verifyGrants`.
+    target = await verifyGrants(actions, deps, target);
   } finally {
     await target?.close();
   }
+}
+
+/**
+ * Reads the ACLs back and refuses if a grant did not actually take.
+ *
+ * **Why this exists.** PostgreSQL answers a `GRANT` issued by a role that holds no grant option
+ * with a WARNING, not an error: the command tag is still `GRANT`, the driver reports success, and
+ * nothing was granted. Reproduced on `postgres:18-alpine` — a non-owning `login createdb
+ * createrole` admin ran `grant create on database acl_db to r_app`, got
+ * `WARNING: no privileges were granted for "acl_db"`, and `datacl` was unchanged afterwards.
+ * Without this, `instance` reports success and leaves a deployment whose migrator cannot migrate at
+ * the next boot.
+ *
+ * **Why it reads the ACL DIRECTLY rather than calling `has_database_privilege`.** The objection
+ * `instance-plan.ts` records against reading grants back is specifically about FALSE POSITIVES via
+ * the recursive closure: `has_*_privilege` answers for everything the role can reach, so a role
+ * holding CREATE only through a group reads as satisfied when the direct grant is absent. An ACL
+ * entry has no closure to walk — `pg_database.datacl` and `pg_namespace.nspacl` list the grants
+ * that were literally made, and nothing else. That is the same technique
+ * `instance-apply.rls.test.ts` already uses to see WITH GRANT OPTION, which no `has_*_privilege`
+ * function can report at all. So this adds no new claim about `has_*_privilege` semantics; it makes
+ * none.
+ *
+ * **The membership check is belt-and-braces, and the object checks are not.** A role-membership
+ * `GRANT` without ADMIN OPTION genuinely ERRORS (42501, pinned in `instance-apply.rls.test.ts`), so
+ * `grant-membership` already fails loudly. Only the object-privilege grants have the silent path.
+ * The membership is verified anyway because a revoke racing this run would otherwise pass unnoticed,
+ * but it is not the reason this function exists.
+ *
+ * Returns the target connection so the caller can close whatever was opened — this may be the first
+ * thing to need one, on a plan whose only actions are database-level grants.
+ */
+async function verifyGrants(
+  actions: readonly InstanceAction[],
+  deps: ApplyDeps,
+  open: Database | null,
+): Promise<Database | null> {
+  let target = open;
+  const missing: string[] = [];
+
+  const databaseGrants = actions.filter((action) => action.kind === "grant-database-create");
+  if (databaseGrants.length > 0) {
+    // `coalesce`: `datacl` is NULL on a database nobody has granted anything on, which is a
+    // perfectly ordinary state and not an error to read.
+    const rows = await deps.admin.execute<{ acl: string[] }>(
+      sql`select coalesce(datacl::text[], '{}'::text[]) as acl
+          from pg_database where datname = ${deps.database}`,
+    );
+    const acl = rows.rows[0]?.acl ?? [];
+    for (const action of databaseGrants) {
+      if (!aclHas(acl, action.role, "C", false)) {
+        missing.push(`create on database ${action.database} to ${action.role}`);
+      }
+    }
+  }
+
+  const schemaGrants = actions.filter((action) => action.kind === "grant-schema-create");
+  if (schemaGrants.length > 0) {
+    target ??= await deps.openTarget();
+    const rows = await target.execute<{ acl: string[] }>(
+      sql`select coalesce(nspacl::text[], '{}'::text[]) as acl
+          from pg_namespace where nspname = 'public'`,
+    );
+    const acl = rows.rows[0]?.acl ?? [];
+    for (const action of schemaGrants) {
+      if (!aclHas(acl, action.role, "C", action.withGrantOption)) {
+        const option = action.withGrantOption ? " with grant option" : "";
+        missing.push(`create on schema public to ${action.role}${option}`);
+      }
+    }
+  }
+
+  for (const action of actions) {
+    if (action.kind !== "grant-membership") continue;
+    const rows = await deps.admin.execute<{ present: boolean }>(
+      sql`select exists (
+            select 1 from pg_auth_members m
+            join pg_roles member on member.oid = m.member
+            join pg_roles granted on granted.oid = m.roleid
+            where member.rolname = ${action.role} and granted.rolname = ${action.memberOf}
+          ) as present`,
+    );
+    if (rows.rows[0]?.present !== true) {
+      missing.push(`${action.memberOf} to ${action.role}`);
+    }
+  }
+
+  if (missing.length > 0) {
+    throw new AppError("provisioning.grant_ineffective", { database: deps.database, missing });
+  }
+  return target;
+}
+
+/**
+ * Whether an ACL array carries `privilege` for `role`, directly.
+ *
+ * An ACL item is `<grantee>=<privileges>/<grantor>` — e.g. `r_mig=C/owner_a`, and with WITH GRANT
+ * OPTION the privileges read `C*` instead of `C` (grantor `pg_database_owner` for `public`). Both
+ * were read off a real container. A `*` immediately after a privilege letter is that option;
+ * `instance-apply.rls.test.ts` already pins the same encoding for `nspacl`.
+ *
+ * A grantee of PUBLIC has an EMPTY left-hand side (`=Tc/owner_a`), so matching on `${role}=` cannot
+ * collide with it. Role names here are `^[a-z][a-z0-9_]{0,62}$` (identifiers.ts), which PostgreSQL
+ * never quotes in an ACL, so no unquoting pass is needed.
+ */
+function aclHas(acl: readonly string[], role: string, privilege: string, grantOption: boolean) {
+  const entry = acl.find((item) => item.startsWith(`${role}=`));
+  if (entry === undefined) return false;
+  const granted = entry.slice(role.length + 1).split("/")[0] ?? "";
+  const at = granted.indexOf(privilege);
+  if (at === -1) return false;
+  return !grantOption || granted[at + 1] === "*";
 }
 
 /**
