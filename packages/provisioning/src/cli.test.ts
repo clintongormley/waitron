@@ -588,7 +588,48 @@ describe("runCli instance", () => {
     // so is the difference between a recoverable state and an unusable one: there is no way to
     // learn that password afterwards, so the operator must drop the role and re-run.
     expect(printed).toMatch(/drop/i);
+    // NAMED, not described. `created` is in scope at the point this is printed and holds exactly
+    // the roles this run minted, so telling the operator to run `status` and work out which
+    // `waitron_*` roles to drop asked them to re-derive something already on hand — and to do it
+    // under the one condition where the tool has just failed. BLANK is the fixture, so all three
+    // were created.
+    expect(printed).toContain("DROP ROLE waitron_migrator");
+    expect(printed).toContain("DROP ROLE waitron_app");
+    expect(printed).toContain("DROP ROLE waitron_provisioner");
     expect(printedUris(h.lines)).toEqual([]);
+  });
+
+  it("names only the roles THIS run created, not every role the deployment has", async () => {
+    // The drifted fixture creates one role and leaves two alone. Naming all three would send the
+    // operator to drop two roles whose passwords this tool never generated and whose owners are
+    // still using them — strictly worse than the vague advice this replaced.
+    const drifted = stateOf({
+      databaseExists: true,
+      roles: {
+        waitron_migrator: facts({ createRole: true }),
+        waitron_app: facts(),
+      },
+      inside: PROVISIONED.inside,
+    });
+    const h = harness({
+      state: drifted,
+      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
+      apply: () =>
+        Promise.reject(
+          new AppError("provisioning.grant_ineffective", { database: DATABASE, missing: [] }),
+        ),
+    });
+    expect(
+      await runCli(
+        ["instance", "--database", DATABASE, "--environment", "preproduction", "--yes"],
+        h.deps,
+      ),
+    ).toBe(1);
+
+    const printed = h.lines.join("\n");
+    expect(printed).toContain("DROP ROLE waitron_provisioner");
+    expect(printed).not.toContain("DROP ROLE waitron_migrator");
+    expect(printed).not.toContain("DROP ROLE waitron_app");
   });
 
   it("hands the apply an openTarget pointing at the target database, not the admin's own", async () => {

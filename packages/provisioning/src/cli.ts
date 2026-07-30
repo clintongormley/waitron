@@ -196,15 +196,24 @@ async function instance(argv: string[], deps: CliDeps): Promise<number> {
           // DATABASE inside one), so a role may exist carrying a password this run generated in
           // memory and is now about to lose. A re-run will not recreate it — the planner sees it
           // and leaves it alone — so the only way back is to drop it.
+          //
+          // The roles are NAMED. `created` is right here and holds exactly the roles this run
+          // minted; the previous wording sent the operator to run `status` and work out for
+          // themselves which `waitron_*` roles they had no connection string for, which is
+          // re-deriving something already in scope, at the one moment the tool has just failed.
+          // Only `created`, never `INSTANCE_ROLES`: a role that already existed has an owner and a
+          // password this tool never generated, and telling anyone to drop it would be worse advice
+          // than the vague version.
           deps.io.stderr("");
           deps.io.stderr(
             "The plan failed part-way through. Any role it created before failing now",
           );
           deps.io.stderr("exists with a password that was NOT printed and cannot be recovered.");
-          deps.io.stderr(
-            "Run `waitron-provision status`, DROP ROLE every waitron_* role listed as",
-          );
-          deps.io.stderr("present that you have no connection string for, then run this again.");
+          deps.io.stderr("");
+          deps.io.stderr("This run creates these roles, so drop whichever of them now exist:");
+          for (const action of created) deps.io.stderr(`  DROP ROLE ${action.role};`);
+          deps.io.stderr("");
+          deps.io.stderr("`waitron-provision status` says which are present. Then run this again.");
         }
         throw error;
       }
