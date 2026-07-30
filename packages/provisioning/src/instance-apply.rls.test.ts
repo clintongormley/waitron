@@ -118,11 +118,16 @@ describe("applyInstance against a blank container", () => {
       );
       expect(schemaCreate.rows[0]?.can_create).toBe(true);
 
-      // Neither `has_*_privilege` function can see WITH GRANT OPTION — only `pg_namespace.nspacl`
-      // can. An ACL item's trailing `*` after a privilege letter means that privilege was granted
-      // WITH GRANT OPTION; verified directly against a real container: `grant create on schema
-      // public to probe_role with grant option` produced the acl entry
-      // `probe_role=C*/pg_database_owner`, versus a bare `C` (no `*`) without it.
+      // `nspacl` rather than `has_schema_privilege(…, 'CREATE WITH GRANT OPTION')`, which would
+      // also answer this: the ACL is read directly here for the same reason `verifyGrants` reads it
+      // directly — `has_*` walks the RECURSIVE closure, so a grant reaching the role through a
+      // group would satisfy it, and this test is about the grant `applyInstance` itself made. (An
+      // earlier version of this comment claimed no `has_*` function can see WITH GRANT OPTION at
+      // all. It is wrong: on `postgres:18-alpine`, `has_schema_privilege` returned `t` for a role
+      // holding the option and `f` for one holding a bare `C`.) An ACL item's trailing `*` after a
+      // privilege letter means that privilege was granted WITH GRANT OPTION; verified directly
+      // against a real container: `grant create on schema public to probe_role with grant option`
+      // produced the acl entry `probe_role=C*/pg_database_owner`, versus a bare `C` without it.
       const nsp = await target.execute<{ nspacl: string[] }>(
         sql`select nspacl::text[] as nspacl from pg_namespace where nspname = 'public'`,
       );
@@ -200,11 +205,14 @@ describe("applyInstance against a blank container", () => {
   });
 
   it("refuses when a GRANT succeeded and granted nothing", async () => {
-    // The silent failure, end to end against a real cluster. PostgreSQL answers a GRANT from a role
-    // holding no grant option with a WARNING, not an error — the driver reports success — so this
-    // is the one case `applyInstance` could not see by catching. Reproduced directly on this image:
-    // as a non-owning admin, `grant create on database acl_db to r_app` printed
-    // `WARNING: no privileges were granted for "acl_db"` and left `datacl` unchanged.
+    // The silent failure, end to end against a real cluster. A grantor holding SOME privilege on
+    // the object but no grant option gets a WARNING rather than an error — the driver resolves — so
+    // this is the one case `applyInstance` could not see by catching. (A grantor holding nothing at
+    // all on the object does error, 42501; on a database that takes revoking PUBLIC's default
+    // CONNECT first, so the warning case is the one an admin normally lands in.) Reproduced
+    // directly on this image: as a non-owning admin, `grant create on database acl_db to r_app`
+    // printed `WARNING: no privileges were granted for "acl_db"` and put no `r_app` entry in
+    // `datacl`.
     //
     // `waitron_app` is the grantee because it holds no CREATE on this database and the plan never
     // gives it one — using `waitron_migrator` would pass for the wrong reason, since the suite's

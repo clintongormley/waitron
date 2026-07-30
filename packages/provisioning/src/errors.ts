@@ -129,12 +129,16 @@ declare module "@waitron/shared" {
     "provisioning.role_unusable": { role: string; missing: string[] };
     /** Every action ran without error, and at least one privilege is still not there afterwards.
      *
-     * This is not defensive: PostgreSQL answers a `GRANT` from a role holding no grant option with a
-     * **WARNING, not an error** — the command tag is still `GRANT` and the driver reports success.
-     * Observed directly on `postgres:18-alpine`: as a non-owning `login createdb createrole` admin,
-     * `grant create on database acl_db to r_app` printed `WARNING: no privileges were granted for
-     * "acl_db"`, and `pg_database.datacl` afterwards still read
-     * `{=Tc/owner_a,owner_a=CTc/owner_a,r_mig=C/owner_a}` — no `r_app` entry. Without this check
+     * This is not defensive: PostgreSQL answers a `GRANT` from a grantor that holds some privilege
+     * on the object but no grant option with a **WARNING, not an error** — the command tag is still
+     * `GRANT` and the driver reports success. Observed directly on `postgres:18-alpine`: as a
+     * non-owning `login createdb createrole` admin, `grant create on database acl_db to r_app`
+     * printed `WARNING: no privileges were granted for "acl_db"`, and `pg_database.datacl`
+     * afterwards still read `{=Tc/owner_a,owner_a=CTc/owner_a,r_mig=C/owner_a}` — no `r_app` entry.
+     * (A grantor holding nothing at all errors with 42501 instead; on a database that needs
+     * `PUBLIC`'s default `CONNECT` revoked first, which is why the warning is the usual case.)
+     * `GRANT ALL PRIVILEGES` is quieter still: when only part of the list is grantable it prints no
+     * diagnostic whatsoever. Without this check
      * `instance` reported success and left a deployment whose migrator cannot migrate at the next
      * boot, which is the worst available failure shape.
      *

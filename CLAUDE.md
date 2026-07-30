@@ -168,18 +168,52 @@ A consequence worth knowing: `apps/server` cannot deep-import `packages/db`'s `e
 **Never widen a grant to make a test pass.** `app_user` holds `SELECT` on `tenants` and not `INSERT`
 deliberately — the running POS cannot create tenants.
 
-**A statement PostgreSQL accepted is not a statement that did anything.** A `GRANT` issued by a role
-holding no grant option raises a **WARNING, not an error**: the command tag is still `GRANT`, the
-driver reports success, and nothing is granted. Observed on `postgres:18-alpine` — as a non-owning
-`login createdb createrole` admin, `grant create on database acl_db to r_app` printed
-`WARNING: no privileges were granted for "acl_db"` and left `datacl` unchanged. So read the ACL back
-rather than trusting the tag, and read it **directly** (`pg_database.datacl`, `pg_namespace.nspacl`):
-`has_*_privilege` answers for the recursive closure, so a role holding a privilege only via a group
-reads as satisfied when the direct grant is absent, and no `has_*` function can see `WITH GRANT
-OPTION` at all. Cost: a Critical finding on `feat/provisioning-instance` plus two fix rounds — and
-the first fix then refused **working** deployments, because a grantee holds one ACL entry **per
-grantor** (`r_y=c/owner_a` and `r_y=C/r_mig` coexist, which is exactly what `WITH GRANT OPTION`
-delegation produces) and the check read only the first match.
+**An object-privilege `GRANT` PostgreSQL accepted is not a `GRANT` that did anything.** Whether an
+ineffective `GRANT` is loud or silent turns on what the GRANTOR holds, and the quiet cases are the
+common ones. Run on `postgres:18-alpine` (PostgreSQL 18.4), granting on a database owned by
+`owner_a` from a non-owning `login createdb createrole` admin:
+
+| What the grantor holds on the object | `grant create on database acl_db to r_app`               |
+| ------------------------------------ | -------------------------------------------------------- |
+| nothing at all                       | `ERROR: 42501: permission denied for database acl_db`    |
+| some privilege, no grant option      | `WARNING: no privileges were granted`, tag `GRANT`, rc 0 |
+| grant option on part of the list     | `WARNING: not all privileges were granted`, rc 0         |
+| ditto, but written `GRANT ALL …`     | **no diagnostic at all**, tag `GRANT`, rc 0              |
+
+Three traps in that table. First, the hard error is **harder to reach than it looks**: `PUBLIC` holds
+`CONNECT`/`TEMP` on every database by default, and `aclmask` counts a `PUBLIC` grant as held, so
+every role is in row 2 until someone runs `revoke all on database … from public` — which is what
+made row 1 reachable in the transcript. Second, the partial rows still **land the grantable subset**
+(`r_app=c/mid_role` appeared), so "it warned" does not mean "it did nothing". Third,
+`GRANT ALL PRIVILEGES` suppresses the partial warning entirely — PostgreSQL only raises
+`not all privileges were granted` when the statement listed privileges explicitly.
+
+So read the ACL back rather than trusting the command tag or the absence of a warning. Two things
+the first version of this entry got wrong, both checked here rather than reasoned about:
+
+- **The failing `GRANT` does not leave the ACL untouched.** `datacl` was `NULL` before and
+  `{=Tc/owner_a,owner_a=CTc/owner_a}` after — the privileges are unchanged, but the column is
+  materialised from the implicit default. Never read `datacl IS NULL` as "nothing has been granted
+  here"; a `GRANT` that granted nothing flips it.
+- **`has_*` functions DO see the grant option** — `has_table_privilege(…, 'SELECT WITH GRANT
+OPTION')`, `has_database_privilege(…, 'CREATE WITH GRANT OPTION')`, `has_schema_privilege` and
+  `pg_has_role(…, 'MEMBER WITH ADMIN OPTION')` each returned `t` for a role holding the option and
+  `f` for one holding the bare privilege. The real reason to read `pg_database.datacl` /
+  `pg_namespace.nspacl` directly is **the recursive closure**: `has_database_privilege('r_direct',
+'acl_db2','CREATE')` was `t` while `aclexplode(datacl)` had **zero** entries naming `r_direct`,
+  which held it only through a group. That is a false positive a provisioner must not accept.
+
+**Role-membership `GRANT`s are not in this family at all** — they always ERROR, never warn:
+`grant grp to r_app` from a non-member and from a member without `ADMIN OPTION` both gave
+`ERROR: 42501: permission denied to grant role "grp"`. Code that catches membership failures is
+catching a throw; only object-privilege grants need the read-back.
+
+Cost: a Critical finding on `feat/provisioning-instance` plus two fix rounds — the first fix then
+refused **working** deployments, because a grantee holds one ACL entry **per grantor**
+(`r_y=c/owner_a` and `r_y=C/r_mig` coexist, which is exactly what `WITH GRANT OPTION` delegation
+produces) and the check read only the first match. Then a third round, for this entry: its own
+first version stated row 2 as the unconditional rule and asserted the `has_*` blindness above,
+and four sites had copied the sentence.
 
 **An empty connection string is a valid connection string.** `new Client({ connectionString: "" })`
 resolves to `{host:"localhost",port:5432,user:"<OS user>"}` — the empty string is falsy, so `pg`

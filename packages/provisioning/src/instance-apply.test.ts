@@ -269,7 +269,9 @@ describe("applyInstance's post-apply grant verification", () => {
 
   it("refuses when the GRANT succeeded but the ACL does not carry it", async () => {
     // The silent case, and the whole reason this check exists: PostgreSQL answers a GRANT from a
-    // role with no grant option with a WARNING, so `execute` resolves and the privilege is absent.
+    // grantor that holds some privilege on the object but no grant option with a WARNING, so
+    // `execute` resolves and the privilege is absent. `instance-apply.rls.test.ts` is where that
+    // is reproduced against a real cluster; here the ACL is supplied directly.
     let thrown: unknown;
     try {
       await applyInstance(

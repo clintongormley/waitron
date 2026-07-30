@@ -178,23 +178,32 @@ export async function applyInstance(
 /**
  * Reads the ACLs back and refuses if a grant did not actually take.
  *
- * **Why this exists.** PostgreSQL answers a `GRANT` issued by a role that holds no grant option
- * with a WARNING, not an error: the command tag is still `GRANT`, the driver reports success, and
- * nothing was granted. Reproduced on `postgres:18-alpine` — a non-owning `login createdb
- * createrole` admin ran `grant create on database acl_db to r_app`, got
- * `WARNING: no privileges were granted for "acl_db"`, and `datacl` was unchanged afterwards.
- * Without this, `instance` reports success and leaves a deployment whose migrator cannot migrate at
- * the next boot.
+ * **Why this exists.** An object-privilege `GRANT` that grants nothing is not always an error. When
+ * the grantor holds SOME privilege on the object but no grant option, PostgreSQL answers with a
+ * WARNING: the command tag is still `GRANT`, and the driver resolves. Reproduced on
+ * `postgres:18-alpine` (PostgreSQL 18.4) — a non-owning `login createdb createrole` admin ran
+ * `grant create on database acl_db to r_app` and got
+ * `WARNING: no privileges were granted for "acl_db"` followed by the tag `GRANT`, with no `r_app`
+ * entry in `datacl` afterwards. That is the ordinary shape here rather than an exotic one: `PUBLIC`
+ * holds `CONNECT` on every database by default, so an admin is in the warning case unless someone
+ * has revoked it (with `revoke all on database acl_db from public` first, the same statement
+ * instead raised `ERROR: 42501: permission denied for database acl_db`). Two quieter variants exist
+ * — a partly-grantable list warns `not all privileges were granted` while still landing the
+ * grantable part, and `GRANT ALL PRIVILEGES` in that same situation emits no diagnostic at all.
+ * Without this check, `instance` reports success and leaves a deployment whose migrator cannot
+ * migrate at the next boot.
  *
  * **Why it reads the ACL DIRECTLY rather than calling `has_database_privilege`.** The objection
  * `instance-plan.ts` records against reading grants back is specifically about FALSE POSITIVES via
  * the recursive closure: `has_*_privilege` answers for everything the role can reach, so a role
- * holding CREATE only through a group reads as satisfied when the direct grant is absent. An ACL
- * entry has no closure to walk — `pg_database.datacl` and `pg_namespace.nspacl` list the grants
- * that were literally made, and nothing else. That is the same technique
- * `instance-apply.rls.test.ts` already uses to see WITH GRANT OPTION, which no `has_*_privilege`
- * function can report at all. So this adds no new claim about `has_*_privilege` semantics; it makes
- * none.
+ * holding CREATE only through a group reads as satisfied when the direct grant is absent —
+ * measured on the same image, `has_database_privilege('r_direct','acl_db2','CREATE')` was `t` while
+ * `aclexplode(datacl)` held zero entries naming `r_direct`. An ACL entry has no closure to walk:
+ * `pg_database.datacl` and `pg_namespace.nspacl` list the grants that were literally made, and
+ * nothing else. That is the whole reason, and it is a claim about the CLOSURE, not about the grant
+ * option — `has_database_privilege(…, 'CREATE WITH GRANT OPTION')`, `has_table_privilege`,
+ * `has_schema_privilege` and `pg_has_role(…, 'MEMBER WITH ADMIN OPTION')` all report the option
+ * correctly, and an earlier version of this comment wrongly said they could not.
  *
  * **The membership check is belt-and-braces, and the object checks are not.** A role-membership
  * `GRANT` without ADMIN OPTION genuinely ERRORS (42501, pinned in `instance-apply.rls.test.ts`), so

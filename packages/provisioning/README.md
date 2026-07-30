@@ -195,12 +195,17 @@ admins `adm_a` (which provisioned) and `adm_b` (which did not):
    role to grant it, and an admin that did not create `app_user` holds none:
    `provisioning.role_creation_failed {"role":"waitron_app","sqlState":"42501"}`. The repair path
    for an already-existing role reports `provisioning.membership_grant_failed` with the same code.
-3. **Its grants take effect nowhere, and PostgreSQL calls that success.** A `GRANT` from a role
-   holding no grant option raises a **WARNING, not an error** — observed directly: as a non-owning
-   admin, `grant create on database acl_db to r_app` printed
+3. **Its grants take effect nowhere, and PostgreSQL calls that success.** A `GRANT` from a grantor
+   that holds some privilege on the object but no grant option raises a **WARNING, not an error** —
+   observed directly: as a non-owning admin, `grant create on database acl_db to r_app` printed
    `WARNING: no privileges were granted for "acl_db"` followed by the command tag `GRANT`, and
    `pg_database.datacl` afterwards still read `{=Tc/owner_a,owner_a=CTc/owner_a,r_mig=C/owner_a}`
-   with no `r_app` entry at all. The driver reports success, so nothing can be caught.
+   with no `r_app` entry at all. The driver reports success, so nothing can be caught. A grantor
+   holding _nothing_ on the object errors instead (42501), but on a database that case needs
+   `PUBLIC`'s default `CONNECT` revoked first, so the silent path is the one an admin normally hits.
+   Two quieter variants: a partly-grantable list warns `not all privileges were granted` and still
+   applies the grantable part, and `GRANT ALL PRIVILEGES` in the same situation prints nothing at
+   all.
 
    **This is now detected and refused**, not merely documented. After running its plan,
    `instance` reads the ACLs back **directly** — `pg_database.datacl`, `pg_namespace.nspacl`
@@ -208,7 +213,9 @@ admins `adm_a` (which provisioned) and `adm_b` (which did not):
    `provisioning.grant_ineffective` naming every privilege that is not there. Direct ACL inspection
    is used rather than `has_database_privilege`/`has_schema_privilege` deliberately: those answer
    for the RECURSIVE closure, so a role holding CREATE only through a group reads as satisfied when
-   the direct grant is absent, and neither can see WITH GRANT OPTION at all.
+   the direct grant is absent. (They report WITH GRANT OPTION perfectly well, via the
+   `'CREATE WITH GRANT OPTION'` privilege spelling — an earlier version of this paragraph said they
+   could not. The closure is the reason; the option is not.)
 
 The remedy for 1 and 2, run as the admin that **did** provision the database (or a superuser), and
 tested end to end — after these three statements, `adm_b` ran `instance` to completion, created the
