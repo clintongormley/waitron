@@ -69,6 +69,35 @@ Two defects landed this way: an error code prefixed `payments.` where all twelve
 from being avoided. Error codes are **never renamed once shipped** (see below), so these are free to
 fix before merge and permanent after.
 
+The rule covers **prose, not just identifiers**. A spec described an outage path as manufacturing
+reconciliation _orphans_; in `packages/payments/src/reconcile.ts` an `orphan` is a local captured row
+with no sale, classified without ever consulting the processor's report — the opposite direction from
+what was meant (that is `unmatched`). Borrowing the codebase's vocabulary in a sentence is asserting
+a convention.
+
+### Claims about the outside world need receipts too — and the source's own words
+
+Everything above is illustrated with repo-internal examples, and that framing is why the deli
+hardware cycle produced two defects in one document: the discipline did not feel like it applied to
+vendor docs, pricing pages and browser-support tables. It applies identically, and those claims are
+**harder**, because there is no `grep` or container to fall back on — only the source.
+
+- **A spec's provenance table covers every external claim, not just its numbers.**
+  `docs/superpowers/specs/2026-07-30-deli-hardware-design.md` sourced eight prices and API shapes,
+  then asserted unsourced that "iOS Safari implements none of those APIs" — the claim its
+  load-bearing decision rested on. Copilot caught it; MDN's `browser-compat-data` happened to confirm
+  it. Writing the provenance row is the step that makes you discover you have no URL.
+- **Quote the source, then paraphrase — never only paraphrase.** The same document compressed
+  Square's _"doesn't support splitting a checkout into multiple payments for a single checkout
+  request"_ into "no splitting one checkout into multiple payments". Dropping five words turned a
+  limit on one API call into a product limitation, and would have sent the payment spec designing
+  around a constraint that does not exist. Qualifiers carry the meaning and are exactly what
+  compression removes.
+- **Two sources that appear to contradict each other usually describe different paths.** SumUp's
+  Cloud API docs say the target device must be online; the Solo's product page advertises an offline
+  mode. Both true: the API _push_ needs the device reachable, while offline mode belongs to the
+  device's own standalone flow. Reading either alone gives a wrong design.
+
 ---
 
 ## 2. The gate
