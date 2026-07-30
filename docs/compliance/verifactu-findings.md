@@ -396,7 +396,20 @@ dates was refuted 0-3 during verification. Re-check before planning against them
 
 ## 5. Open risks in the current design
 
+> **Two of these four are closed.** §5.1 (Q2) and §5.2 (Q1) were both settled on primary source on
+> 2026-07-27 and are retained with dated pointers rather than deleted. Only §5.3 and §5.4 are live.
+
 ### 5.1 "The till never submits to AEAT" vs the volcado prohibition
+
+> **CLOSED 2026-07-27 on primary source — pointer added 2026-07-30.** This is Q2, and it is no
+> longer an open risk. AEAT's developer FAQ v1.3 §5 *"Arquitecturas de los SIF"* describes this
+> architecture and declares it valid: the TPV generates the alta record, prints the QR, hands the
+> invoice over, and relays in real time to a backoffice *"para que este último sistema proceda a su
+> envío"*, that backoffice acting *"de instrumento para la remisión del fichero sin más"*. The
+> closure and its quotations live in
+> [asesor-questions.md Q2](asesor-questions.md). The analysis below is retained because knowing
+> which reading won, and why, is worth more than a document that reads as though it were always
+> right.
 
 The architecture has records chain at the till, flow up, and **the nearest node holding the
 certificate submits**. Structurally this resembles the pattern AEAT rejected — records
@@ -419,6 +432,19 @@ The FAQ cuts both ways:
 security decision in the current design and the answer may force certificates onto tills.
 
 ### 5.2 The SIF boundary for a till that syncs in minutes
+
+> **CLOSED 2026-07-27 on primary source — pointer added 2026-07-30.** This is Q1, and it is no
+> longer an open risk. The developer FAQ v1.3 answers it twice: **§5** expressly contemplates a till
+> that generates locally and *"en tiempo real traslade todo ello al backoffice central"* without
+> collapsing the tills into one SIF, and **§4** states that one obligado's *"distintos centros de
+> facturación independientes, como tiendas"* each need their own installation number *"porque se
+> consideran SIF independientes, como si fueran «SIF virtuales»"*. See
+> [asesor-questions.md Q1](asesor-questions.md). What remains unsourced is any primary text
+> addressing **sync frequency** in isolation; that residual is not enough to reopen the risk, and
+> §1 of this document has stated the settled position throughout.
+>
+> This pointer exists because §5 contradicted §1 for three days and misled a later session into
+> treating per-till chains as blocked.
 
 AEAT's ERP-modules FAQ contrasts two cases:
 
