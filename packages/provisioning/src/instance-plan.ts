@@ -113,6 +113,18 @@ export function planInstance(
   const actions: InstanceAction[] = [];
   if (!state.databaseExists) actions.push({ kind: "create-database", database: request.database });
 
+  // Migrate before any LOGIN role is created — not merely before the stamp. `app_user` and
+  // `tenant_provisioner`, the two NOLOGIN roles every REQUIREMENTS entry below names in `memberOf`,
+  // are themselves created by the "core" migration set (0001_tenancy_rls.sql line 18,
+  // 0011_provisioner_role.sql line 58), not by this tool. Emitting `create-role … IN ROLE app_user`
+  // before migrate runs is not a style choice: on a blank cluster `app_user` does not exist yet, and
+  // Postgres refuses the grant outright. Verified directly against a real container with this
+  // ordering reversed: `create role "waitron_migrator" ... in role "app_user"` raised
+  // `error: role "app_user" does not exist` (SQLSTATE 42704, acl.c:get_rolespec_tuple) — the tool
+  // failed on its very first end-to-end run against a blank database.
+  const applied = new Set(state.inside?.migratedSets ?? []);
+  if (manifestSets().some((set) => !applied.has(set.name))) actions.push({ kind: "migrate" });
+
   for (const role of INSTANCE_ROLES) {
     const need = REQUIREMENTS[role];
     const facts = state.roles[role];
@@ -154,8 +166,6 @@ export function planInstance(
     }
   }
 
-  const applied = new Set(state.inside?.migratedSets ?? []);
-  if (manifestSets().some((set) => !applied.has(set.name))) actions.push({ kind: "migrate" });
   if (state.inside?.stamp !== request.environment) {
     actions.push({ kind: "stamp", environment: request.environment });
   }

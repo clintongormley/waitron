@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { isAppError } from "@waitron/shared";
 import { planInstance } from "./instance-plan.js";
 import type { InstanceState, RoleFacts } from "./instance-state.js";
@@ -132,12 +132,20 @@ describe("planInstance against a provisioned deployment", () => {
     state.inside = { migratedSets: ["core"], stamp: "preproduction" };
     // Corrected from the brief: same omission as above — the two migrator grants are always
     // re-issued, so a plan against a provisioned-but-partially-migrated deployment is never just
-    // `[{ kind: "migrate" }]`. Order confirmed empirically (see task-5-report.md): the grants loop
-    // runs before the migrate/stamp tail, so they precede "migrate" here.
+    // `[{ kind: "migrate" }]`.
+    //
+    // Order corrected a second time, from this task's own first version (task-5-report.md), which
+    // had the grants loop run before the migrate/stamp tail and asserted that order here. Task 6's
+    // end-to-end suite (instance-apply.rls.test.ts) ran this plan against a real, blank container
+    // and hit a real Postgres error: `create role "waitron_migrator" ... in role "app_user"` failed
+    // with `role "app_user" does not exist` (SQLSTATE 42704) — `app_user` is created by the "core"
+    // migration set, not by this tool, so on a blank cluster it does not exist until migrate has
+    // run. `planInstance` now emits migrate immediately after `create-database`, before any LOGIN
+    // role, which is why it leads here too.
     expect(planInstance(state, REQUEST, () => "pw")).toEqual([
+      { kind: "migrate" },
       { kind: "grant-database-create", role: "waitron_migrator", database: "waitron" },
       { kind: "grant-schema-create", role: "waitron_migrator", withGrantOption: true },
-      { kind: "migrate" },
     ]);
   });
 });
@@ -188,5 +196,26 @@ describe("planInstance refusals", () => {
     if (!isAppError(thrown)) return;
     expect(thrown.code).toBe("provisioning.role_unusable");
     expect(thrown.params).toEqual({ role: "waitron_migrator", missing: ["LOGIN", "CREATEROLE"] });
+  });
+});
+
+describe("planInstance's injected password()", () => {
+  // Global Constraints: "An existing role's password is never changed." The only way this holds is
+  // if `password()` is called exactly once per role CREATED and never for a role already present —
+  // a spy on the call count is the one thing that can catch a version that calls it unconditionally
+  // (e.g. once per INSTANCE_ROLE regardless of whether `create-role` is even emitted) and still
+  // happens to produce the right `InstanceAction[]`, because the actions built from an unused call
+  // look identical to actions built from none.
+  it("calls password() once per role created, and not at all against a provisioned deployment", () => {
+    const password = vi.fn(() => "pw");
+
+    const fresh = planInstance(blank(), REQUEST, password);
+    const created = fresh.filter((a) => a.kind === "create-role");
+    expect(created).toHaveLength(3);
+    expect(password).toHaveBeenCalledTimes(3);
+
+    password.mockClear();
+    planInstance(provisioned(), REQUEST, password);
+    expect(password).not.toHaveBeenCalled();
   });
 });
