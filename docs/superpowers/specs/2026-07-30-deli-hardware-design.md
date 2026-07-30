@@ -65,9 +65,13 @@ here to size the order of magnitude and must be replaced with real quotes before
 | Gigabit switch, WiFi AP, cabling | — | — | ~€200 | Estimate |
 | **Total** | | | **~€2,030 ex VAT** | |
 
-Optional: a 4G-failover router (~€200). It keeps the fiscal outbox draining through a broadband
-outage, but it is **not** required to keep selling — submission is an outbox and never inline
-(`CLAUDE.md` §5).
+Optional but reassessed upward: a **4G-failover router (~€200)**. Originally justified as keeping the
+fiscal outbox draining, which is real but weak — submission is an outbox and never inline
+(`CLAUDE.md` §5), so an outage delays filing rather than blocking it. The stronger case emerged from
+§5: because the reader carries its own mobile data, the *only* broken link during a broadband outage
+is **our server's** internet. Restore that and the integrated Cloud API path keeps working, which
+turns the outage experience from manual keying back into a normal sale. At €200 against ~€2,030 that
+is the best-value line in the table.
 
 Three notes on quantities. Two printers and two drawers give each counter position its own, which
 matters for cash accountability; one of each is defensible at launch if the positions are adjacent.
@@ -103,11 +107,15 @@ and code already merged:
 | State | Card path |
 | --- | --- |
 | Healthy | The server pushes a checkout to the Solo via SumUp's Cloud API. Fully integrated |
-| Deli broadband down | Staff take the payment **standalone on the Solo**, over the reader's own mobile connection, and record it in the POS as a **Mode 1 manual tender** — already landed |
-| Broadband and mobile both down | Cash. The till keeps chaining sales locally throughout |
+| Deli broadband down, server on 4G failover | Still fully integrated — the reader was never on our network. This is why the optional router in §3 is worth buying |
+| Deli broadband down, no failover | Staff take the payment **standalone on the Solo**, over the reader's own mobile data, and record it in the POS as a **Mode 1 manual tender** — already landed |
+| Reader's mobile signal also drops | The Solo advertises an **offline mode** "as a backup if your signal drops". Its limits are unestablished — see §7 |
+| Everything down | Cash. The till keeps chaining sales locally throughout |
 
-A pleasant side effect: the readers do not depend on the deli LAN at all, so a counter WiFi failure
-does not stop card payment.
+The reader's independence is sourced, not assumed: SumUp state the Solo ships with *"a 4G SIM card
+with free unlimited data so you can accept payments on the go"* and can use WiFi instead where
+available. So the readers do not depend on the deli LAN at all, and a counter WiFi failure does not
+stop card payment.
 
 Two consequences to carry forward.
 
@@ -128,7 +136,12 @@ reconcile audits one `provider` identity. The payment spec (§8) must decide —
 a manual tender to an unmatched record on amount and time window. Left undecided, a fallback running
 all afternoon fills the report with unmatched records.
 
-**This section rests on an unverified claim.** See §7.
+**An apparent contradiction, resolved.** SumUp's Cloud API docs say *"the target device must be
+online, otherwise checkout won't be accepted"*, while the Solo's product page advertises an offline
+mode. Both are true and they describe different paths: the Cloud API **push** needs the device
+reachable from SumUp's servers, whereas offline mode belongs to the device's **own** standalone flow.
+That distinction is why the fallback works at all, and why offline mode cannot be used to rescue the
+integrated path.
 
 ## 6. The peripheral seam
 
@@ -158,15 +171,25 @@ standard and the right first target.
 
 Listed in order of how much rests on it.
 
-1. **That the SumUp Solo has built-in mobile data and operates standalone.** The whole of §5 rests
-   on this. It is reported by third-party reviews, **not** by a SumUp page I was able to read — the
-   product URL 404s. Confirm on SumUp's own material or with sales before treating the outage path
-   as designed. If it is false, D5 forces the native-wrapper route and this design changes shape.
-2. **The actual contracted rates.** The official pricing page says 1.69% pay-as-you-go; a
+1. ~~**That the SumUp Solo has built-in mobile data and operates standalone.**~~ **Closed 2026-07-30
+   on SumUp's own material.** Connectivity: *"a 4G SIM card with free unlimited data so you can
+   accept payments on the go"*, with WiFi as an alternative. Standalone: the reader carries a touch
+   screen holding up to 50 products with saved fixed prices, and issues refunds on the device. Also
+   found, and better than designed for: *"4G, WiFi, and offline mode as a backup if your signal
+   drops"*. §5 no longer rests on an unverified claim.
+2. **Whether standalone and offline operation survive being paired to the Cloud API — and what
+   offline mode's limits are.** This is the *narrowed residual* of item 1, and now the only thing §5
+   still assumes. SumUp's Solo product page says nothing at all about third-party POS or API
+   integration, so the interaction is undocumented in both directions. That pairing can change device
+   behaviour is not hypothetical: Square's Terminal API disables external printer connections while
+   paired (§8). Also unestablished are offline mode's floor limits, value or count caps, and how long
+   it will hold. Ask SumUp both questions together; neither changes the buy list, but the second
+   decides how much of the last two table rows in §5 is real.
+3. **The actual contracted rates.** The official pricing page says 1.69% pay-as-you-go; a
    third-party review said 1.5%. Confirm against the real contract, and ask for the custom rate
    given §2 volumes.
-3. **Six of the eight buy-list lines.** Everything marked Estimate in §3.
-4. **Whether the deli sells barcoded pre-packed goods**, which decides the scanner line.
+4. **Six of the eight buy-list lines.** Everything marked Estimate in §3.
+5. **Whether the deli sells barcoded pre-packed goods**, which decides the scanner line.
 
 ## 8. Deliberately not in this spec
 
@@ -208,5 +231,9 @@ All read 2026-07-30.
 | SumUp refunds — `POST /v0.1/me/refund/{txn_id}`, full or partial; transactions list with a `RECONCILED` status | <https://developer.sumup.com/api/transactions> |
 | Square Terminal API — device-code pairing, `terminal.checkout.updated` webhook or polling, and the four limits in §8 | <https://developer.squareup.com/docs/terminal-api/overview> |
 | Stripe Apps on Devices — custom Android app on S700, 200 MB APK, 8 GB storage, TCP/IP between halves | <https://docs.stripe.com/terminal/features/apps-on-devices/overview> |
+| Solo connectivity and standalone operation — 4G SIM with free unlimited data, WiFi alternative, *"offline mode as a backup if your signal drops"*, on-device product list and refunds | <https://www.sumup.com/en-us/solo-card-reader/> plus SumUp's own Solo FAQ copy |
 
-Not sourced, and flagged in §7: the Solo's built-in connectivity and standalone operation.
+Still unsourced, and now the only such claim in this spec: whether standalone and offline operation
+remain available once the reader is paired to a Cloud API integration, and what offline mode's limits
+are (§7 item 2). Note the earlier product URL `www.sumup.com/es-es/datafonos/solo/` 404s; the
+`en-us/solo-card-reader/` path is the one that resolves.
