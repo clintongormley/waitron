@@ -70,7 +70,7 @@ BEGIN
     SELECT 1 FROM pg_roles WHERE rolname = 'tenant_provisioner' AND NOT rolinherit
   ) THEN
     RAISE EXCEPTION
-      'tenant_provisioner already exists with NOINHERIT — refusing to reuse it, since the GRANT below would be recorded with inherit_option = f and a login role granted this bucket would insert a tenant and then fail on locations, half-provisioning it';
+      'tenant_provisioner already exists with NOINHERIT — refusing to reuse it, since the GRANT below would be recorded with inherit_option = f and a login role granted this bucket would insert a tenant and then fail on locations';
   END IF;
 END
 $$;
