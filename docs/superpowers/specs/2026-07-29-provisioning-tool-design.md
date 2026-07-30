@@ -88,6 +88,17 @@ Every step establishes what already exists before acting. Running any command tw
 
 `tenant`:
 
+> **Superseded detail, 2026-07-30.** The `Tenant` row below gives the idempotency check as
+> "`tenants` by NIF — unique, and the natural key". That check cannot work as specified, and branch
+> `feat/provisioning-cli` disproved it live: `tenants_tenant_isolation`'s
+> `USING (id = current_tenant_id())` hides an EXISTING row from
+> `select … from tenants where nif = …` whenever no tenant scope is set — and a lookup that precedes
+> knowing which tenant it would be has no scope to set. Granting the provisioning role SELECT on
+> `tenants` makes no difference; a grant does not defeat a policy. What works instead: attempt the
+> INSERT and catch `23505` on `tenants_nif_key`. The reasoning and the receipt live in
+> `packages/db/drizzle/0011_provisioner_role.sql`'s comment on its `GRANT INSERT ON "tenants"`. The
+> table below is left as written.
+
 | Step | Existence check |
 | --- | --- |
 | Tenant | `tenants` by NIF — unique, and the natural key |

@@ -3,11 +3,13 @@ import { AppError } from "@waitron/shared";
 import "./errors.js";
 
 /**
- * PostgreSQL's own limit is 63 bytes; this is deliberately narrower than what Postgres would
- * accept. Every name this tool creates is one it also has to embed in a connection string, a SQL
- * DDL statement and a README example, and the intersection of "legal everywhere" is
- * lower-case-and-underscores. A name outside it is refused rather than quoted into working,
- * because a database called `Waitron Prod` is a permanent papercut for whoever operates it.
+ * On LENGTH this agrees with Postgres exactly and narrows nothing: one leading character plus
+ * `{0,62}` is 63, which is the `NAMEDATALEN`-derived maximum an identifier can be.
+ *
+ * The narrowing is the CHARACTER SET. Every name this tool creates is one it also has to embed in a
+ * connection string, a SQL DDL statement and a README example, and the intersection of "legal
+ * everywhere" is lower-case-and-underscores. A name outside it is refused rather than quoted into
+ * working, because a database called `Waitron Prod` is a permanent papercut for whoever operates it.
  */
 const IDENTIFIER = /^[a-z][a-z0-9_]{0,62}$/;
 
