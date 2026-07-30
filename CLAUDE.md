@@ -248,6 +248,16 @@ the 180s `hookTimeout` in `apps/server/vitest.config.ts` fires — observed repe
 never in CI, which is why no config default papers over it. Docker contention on a full `pnpm test`
 shows up separately as `EADDRINUSE` and passes on retry.
 
+**A probe that needs a Unix SOCKET must run inside the container, not on this host.** Bind-mounting
+the socket directory out of a `postgres:18-alpine` container and connecting to it from macOS does not
+work: the socket is created inside Docker Desktop's VM, and `pg` got `connect ECONNREFUSED
+/tmp/c1s/.s.PGSQL.5432` against a server that `pg_isready` reported as accepting connections. A
+scratchpad path also blows the 104-byte `sun_path` limit first — the same probe against a full
+scratchpad path failed `EINVAL` before it could even reach `ECONNREFUSED`. Two wasted rounds on the
+`provisioning.admin_uri_not_a_url` receipt. Run the probe in the container instead
+(`apk add --no-cache nodejs npm && npm i pg@<version>`), where node and the server share a
+namespace; everything that is only PARSING — `new URL` versus `pg`'s own parse — is fine on the host.
+
 **Guard every teardown**: `if (db !== undefined) await db.close()`. An unguarded `afterAll` turns a
 `beforeAll` failure into `Cannot read properties of undefined (reading 'close')` and masks the real
 error. Suites sharing a database must clean up in a `finally` so they are order-independent, not
