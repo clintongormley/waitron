@@ -44,6 +44,19 @@ The house transaction discipline is unchanged; only step 3 is new.
    leaves `PENDING`.
 4. **T2** — `captureAttempting` on `SUCCESSFUL`; `failAttempting` on `FAILED` or `CANCELLED`.
 
+**Only those three statuses resolve a row, and the adapter keys off `status` — never `simple_status`.**
+The documented `status` set is `SUCCESSFUL`, `CANCELLED`, `FAILED`, `PENDING`, `REFUNDED`; the
+separate `simple_status` field carries a wider merchant-facing vocabulary (`PAID_OUT`, `CHARGEBACK`,
+`NON_COLLECTION`, …) which this path must not consume, because those describe the life of settled
+money rather than the outcome of this attempt.
+
+Anything outside `SUCCESSFUL`/`FAILED`/`CANCELLED` — `REFUNDED`, or any value SumUp adds later — is
+**not a basis for T2**. The row stays `attempting` and falls to `resolvePending` (§3), which is the
+same treatment as a timeout and for the same reason: the adapter has not learned an outcome it is
+entitled to act on. `REFUNDED` in particular would mean money moved *and came back*, so neither
+capturing nor failing describes it, and forcing either would write a state the tree cannot justify.
+Log it and let the sweep decide. This is the deliberate opposite of a `default:` branch that guesses.
+
 Two vendor constraints shape this:
 
 - **Checkouts serialise per reader.** *"After the checkout is accepted, the system has 60 seconds to
@@ -77,6 +90,19 @@ are unsure of. Staff retry or take cash.
 (`nextDueAt`, plus counts for a log line) and is driven by the existing recurring-work scheduler.
 It sweeps this provider's `attempting` rows, polls each, and resolves it. Existing adapters return
 all-zeros — exactly how `forward` joined the interface in Mode 2b.
+
+**The sweep must terminate every row it touches**, which §2's deferral makes load-bearing: a status
+outside `SUCCESSFUL`/`FAILED`/`CANCELLED` is deferred *by `collect`* on the grounds that the sweep
+will decide, so the sweep may not defer it in turn or the row is swept forever. `REFUNDED` resolves
+to **`failed` plus an incident** — at sweep time the refund is history rather than a race, so `failed`
+honestly describes a tender that settled nothing, and the incident exists because money moved through
+a payment that never carried a sale, which an operator must see. An unrecognised status likewise
+resolves to `failed` with an incident naming the value, so a vocabulary SumUp adds later surfaces as
+an alert rather than an unbounded queue.
+
+This is the one place the design deliberately writes a terminal state on incomplete information, and
+it is safe only because it happens after the outcome has stopped moving — the same reasoning that
+makes it *unsafe* inside `collect`.
 
 A sibling method rather than widening `forward`: `forward`'s contract is documented as draining *this
 provider's `accepted_offline` rows*, and every adapter's all-zeros implementation was written against
