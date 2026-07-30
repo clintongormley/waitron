@@ -198,3 +198,46 @@ function assertUsable(role: InstanceRole, facts: RoleFacts): void {
   if (REQUIREMENTS[role].createRole && !facts.createRole) missing.push("CREATEROLE");
   if (missing.length > 0) throw new AppError("provisioning.role_unusable", { role, missing });
 }
+
+/**
+ * One plan action, as a line an operator can check.
+ *
+ * The `create-role` case prints the role's attributes and memberships and NOT `action.password`.
+ * That is the whole reason this is a function rather than `JSON.stringify(action)`: the plan is
+ * printed before the confirmation, on a screen that is not cleared afterwards unless something was
+ * created, and `cli.test.ts`'s "never puts a generated password in the plan summary" counts each
+ * password's occurrences in the whole transcript to keep it that way.
+ *
+ * It lives here rather than in `cli.ts` because TWO callers need the identical wording and
+ * `errors.ts` promises they have it: the CLI prints it in the plan summary an operator approves,
+ * and `verifyGrants` (instance-apply.ts) puts it in `provisioning.grant_ineffective`'s `missing`
+ * so the line reporting a failure is the same line that was approved. Two hand-kept copies were
+ * ALREADY out of step — the registry claimed the words matched while `verifyGrants` dropped the
+ * leading `grant`. One function is what makes that promise structural instead of aspirational.
+ * `cli.ts` cannot be the home: `instance-apply.ts` would have to import from it, and `cli.ts`
+ * imports `instance-apply.ts`.
+ */
+export function describeAction(action: InstanceAction): string {
+  switch (action.kind) {
+    case "create-database":
+      return `create database ${action.database}`;
+    case "create-role": {
+      const attributes = ["login", ...(action.createRole ? ["createrole"] : [])];
+      const memberships =
+        action.memberOf.length > 0 ? `, member of ${action.memberOf.join(", ")}` : "";
+      return `create role ${action.role} (${attributes.join(", ")}${memberships})`;
+    }
+    case "grant-membership":
+      return `grant ${action.memberOf} to ${action.role}`;
+    case "grant-database-create":
+      return `grant create on database ${action.database} to ${action.role}`;
+    case "grant-schema-create":
+      return `grant create on schema public to ${action.role}${
+        action.withGrantOption ? " with grant option" : ""
+      }`;
+    case "migrate":
+      return "apply every migration set";
+    case "stamp":
+      return `stamp the database as ${action.environment}`;
+  }
+}

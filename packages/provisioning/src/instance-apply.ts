@@ -4,7 +4,7 @@ import { stampDeployment, type Database } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { quoteIdent } from "./identifiers.js";
 import { sqlStateOf } from "./sql-state.js";
-import type { InstanceAction } from "./instance-plan.js";
+import { describeAction, type InstanceAction } from "./instance-plan.js";
 import "./errors.js";
 
 export interface ApplyDeps {
@@ -230,7 +230,7 @@ async function verifyGrants(
     const acl = rows.rows[0]?.acl ?? [];
     for (const action of databaseGrants) {
       if (!aclHas(acl, action.role, "C", false)) {
-        missing.push(`create on database ${action.database} to ${action.role}`);
+        missing.push(describeAction(action));
       }
     }
   }
@@ -245,8 +245,7 @@ async function verifyGrants(
     const acl = rows.rows[0]?.acl ?? [];
     for (const action of schemaGrants) {
       if (!aclHas(acl, action.role, "C", action.withGrantOption)) {
-        const option = action.withGrantOption ? " with grant option" : "";
-        missing.push(`create on schema public to ${action.role}${option}`);
+        missing.push(describeAction(action));
       }
     }
   }
@@ -262,7 +261,7 @@ async function verifyGrants(
           ) as present`,
     );
     if (rows.rows[0]?.present !== true) {
-      missing.push(`${action.memberOf} to ${action.role}`);
+      missing.push(describeAction(action));
     }
   }
 

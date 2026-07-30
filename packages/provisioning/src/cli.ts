@@ -3,7 +3,7 @@ import { AppError, isAppError } from "@waitron/shared";
 import type { Database, DeploymentEnvironment } from "@waitron/db";
 import { assertIdentifier } from "./identifiers.js";
 import { applyInstance, withDatabase } from "./instance-apply.js";
-import { planInstance, type InstanceAction } from "./instance-plan.js";
+import { describeAction, planInstance, type InstanceAction } from "./instance-plan.js";
 import {
   INSTANCE_ROLES,
   readInstanceState,
@@ -158,7 +158,7 @@ async function instance(argv: string[], deps: CliDeps): Promise<number> {
       // do" branch here would be unreachable code claiming to handle a state that cannot arise.
       deps.io.stdout(`Plan for ${database} (${environment}):`);
       deps.io.stdout("");
-      for (const action of actions) deps.io.stdout(`  ${describe(action)}`);
+      for (const action of actions) deps.io.stdout(`  ${describeAction(action)}`);
       deps.io.stdout("");
 
       if (values.yes !== true) {
@@ -331,40 +331,6 @@ function assertEnvironment(value: string): DeploymentEnvironment {
     throw new AppError("deployment.unknown_environment", { value, known: [...ENVIRONMENTS] });
   }
   return value;
-}
-
-/**
- * One plan action, as a line an operator can check.
- *
- * The `create-role` case prints the role's attributes and memberships and NOT `action.password`.
- * That is the whole reason this is a function rather than `JSON.stringify(action)`: the plan is
- * printed before the confirmation, on a screen that is not cleared afterwards unless something was
- * created, and `cli.test.ts`'s "never puts a generated password in the plan summary" counts each
- * password's occurrences in the whole transcript to keep it that way.
- */
-function describe(action: InstanceAction): string {
-  switch (action.kind) {
-    case "create-database":
-      return `create database ${action.database}`;
-    case "create-role": {
-      const attributes = ["login", ...(action.createRole ? ["createrole"] : [])];
-      const memberships =
-        action.memberOf.length > 0 ? `, member of ${action.memberOf.join(", ")}` : "";
-      return `create role ${action.role} (${attributes.join(", ")}${memberships})`;
-    }
-    case "grant-membership":
-      return `grant ${action.memberOf} to ${action.role}`;
-    case "grant-database-create":
-      return `grant create on database ${action.database} to ${action.role}`;
-    case "grant-schema-create":
-      return `grant create on schema public to ${action.role}${
-        action.withGrantOption ? " with grant option" : ""
-      }`;
-    case "migrate":
-      return "apply every migration set";
-    case "stamp":
-      return `stamp the database as ${action.environment}`;
-  }
 }
 
 /**

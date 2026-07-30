@@ -233,7 +233,7 @@ describe("applyInstance against a blank container", () => {
       expect(thrown.code).toBe("provisioning.grant_ineffective");
       expect(thrown.params).toEqual({
         database: DATABASE,
-        missing: [`create on database ${DATABASE} to waitron_app`],
+        missing: [`grant create on database ${DATABASE} to waitron_app`],
       });
 
       // The negative control, and the deletion proof's other half: the SAME action, run by the

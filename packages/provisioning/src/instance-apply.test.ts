@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import type { Database } from "@waitron/db";
 import { applyInstance } from "./instance-apply.js";
-import type { InstanceAction } from "./instance-plan.js";
+import { describeAction, type InstanceAction } from "./instance-plan.js";
 
 /**
  * The light target, deliberately (CLAUDE.md §4: "pick the lighter one when the heavier one's
@@ -284,7 +284,7 @@ describe("applyInstance's post-apply grant verification", () => {
     expect(thrown.code).toBe("provisioning.grant_ineffective");
     expect(thrown.params).toEqual({
       database: "acl_db",
-      missing: ["create on database acl_db to waitron_migrator"],
+      missing: ["grant create on database acl_db to waitron_migrator"],
     });
   });
 
@@ -370,7 +370,7 @@ describe("applyInstance's post-apply grant verification", () => {
     await expect(applyInstance(action, cluster({ member: true }))).resolves.toBeUndefined();
     await expect(applyInstance(action, cluster({ member: false }))).rejects.toMatchObject({
       code: "provisioning.grant_ineffective",
-      params: { database: "acl_db", missing: ["app_user to waitron_app"] },
+      params: { database: "acl_db", missing: ["grant app_user to waitron_app"] },
     });
   });
 
@@ -388,8 +388,8 @@ describe("applyInstance's post-apply grant verification", () => {
     expect(thrown.params).toEqual({
       database: "acl_db",
       missing: [
-        "create on database acl_db to waitron_migrator",
-        "create on schema public to waitron_migrator with grant option",
+        "grant create on database acl_db to waitron_migrator",
+        "grant create on schema public to waitron_migrator with grant option",
       ],
     });
   });
@@ -434,8 +434,37 @@ describe("applyInstance's post-apply grant verification", () => {
       applyInstance(plain, cluster({ nspacl: ["waitron_app=U/pg_database_owner"] })),
     ).rejects.toMatchObject({
       code: "provisioning.grant_ineffective",
-      params: { database: "acl_db", missing: ["create on schema public to waitron_app"] },
+      params: { database: "acl_db", missing: ["grant create on schema public to waitron_app"] },
     });
+  });
+
+  it("reports each missing grant in the EXACT words the plan summary printed", async () => {
+    // `errors.ts` promises the failure line is the line the operator approved. Pinned against
+    // `describeAction` itself rather than against a copied literal — a literal here would drift the
+    // same way the two hand-kept copies already did, which is the defect this shares one function
+    // to prevent.
+    const actions: InstanceAction[] = [
+      ...DATABASE_GRANT,
+      ...SCHEMA_GRANT,
+      { kind: "grant-membership", role: "waitron_app", memberOf: "app_user" },
+    ];
+    let thrown: unknown;
+    try {
+      await applyInstance(actions, cluster({}));
+    } catch (error) {
+      thrown = error;
+    }
+    expect(isAppError(thrown)).toBe(true);
+    if (!isAppError(thrown)) return;
+    expect(thrown.params).toEqual({
+      database: "acl_db",
+      missing: actions.map((action) => describeAction(action)),
+    });
+    // And the words really are the summary's, leading verb included — asserted against a literal
+    // too, so a `describeAction` that started returning "" would not satisfy the line above alone.
+    expect(describeAction(actions[0] as InstanceAction)).toBe(
+      "grant create on database acl_db to waitron_migrator",
+    );
   });
 
   it("reads nothing at all when the plan carries no grants", async () => {

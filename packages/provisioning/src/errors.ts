@@ -73,9 +73,12 @@ declare module "@waitron/shared" {
      * boot, which is the worst available failure shape.
      *
      * `missing` names each privilege that did not take, in the same words the plan summary used, so
-     * the line an operator reads on failure matches the line they approved. Database names, role
-     * names and privilege words only — the same class of value `provisioning.role_unusable`'s own
-     * `missing` already carries. */
+     * the line an operator reads on failure is the line they approved. That is structural, not a
+     * convention someone has to maintain: both call `describeAction` (instance-plan.ts). An earlier
+     * version of this sentence was simply false — `verifyGrants` formatted its own strings and
+     * dropped the leading `grant` the summary carries. Database names, role names and privilege
+     * words only, the same class of value `provisioning.role_unusable`'s own `missing` already
+     * carries. */
     "provisioning.grant_ineffective": { database: string; missing: string[] };
     /** Reading what a deployment already has — `pg_database`, `pg_roles`, the journal tables, the
      * deployment stamp — failed at the database. Every command here reads before it decides, so
