@@ -77,7 +77,7 @@ fix before merge and permanent after.
 pnpm lint && pnpm typecheck && pnpm format:check && pnpm test
 ```
 
-Three traps that each cost a round trip:
+Four traps that each cost a round trip:
 
 - **CI's `test` job runs `pnpm test:coverage`, not `pnpm test`.** The pre-push hook runs plain
   `pnpm test`, so a coverage-threshold regression passes locally and fails in CI. Before claiming a
@@ -93,6 +93,12 @@ Three traps that each cost a round trip:
   error-code reachability tests, schema-ownership — are invisible to a name-filtered run, so a
   filtered green says nothing about them. Run the package unfiltered before believing a pass. Same
   false-green shape as the two traps above, in a third place.
+
+- **The pre-push log file can be days stale — reproduce, do not read it.** A rejected push pointed
+  at `/tmp/waitron-root-test-run.log`; that file was two days old and named
+  `apps/server/src/migrations.test.ts`, which the branch being pushed had deleted. The real cause was
+  `EADDRINUSE` under Docker contention (§4) and the retry passed. Run the failing command yourself
+  before believing the log names your failure.
 
 On bypassing the hook, see §6 — the hook's own header sanctions `--no-verify` in an emergency, and
 the underlying failure still has to be fixed because CI runs the same checks.
@@ -155,6 +161,18 @@ order-reliant — several tests have been fixed for exactly this.
 still passes with the guard removed is not testing the guard. Do the same for a negative control:
 confirm it fails for the reason you think it does.
 
+**`errors.reachability.test.ts` does not test reachability.** The rule it exists to enforce is real —
+an `errors.ts` unreachable from its package's own barrel is invisible to external consumers — but the
+test does not enforce it. Proven by deletion in `packages/migrations`: remove `import "./errors.js"`
+from the barrel **and** from every other file, and it still passes, because `tsconfig`'s
+`include: ["src"]` makes every file a compilation root regardless of the import graph and
+`vitest run` does not typecheck at all. **Eight packages carry a copy** (`core`, `credentials`, `db`,
+`fiscal`, `fiscal-verifactu`, `migrations`, `payments`, `payments-stripe`) and every one of their
+`include` arrays starts with `"src"` — verified by inspection, so the mechanism is uniform even
+though the deletion was run in one. Closing it needs a `tsc`-based downstream-consumer probe, or an
+`include` narrowed to the barrel's transitive closure. Until then, do not cite these tests as
+evidence that an augmentation is reachable.
+
 ---
 
 ## 5. Fiscal invariants — the unrecoverable ones
@@ -193,6 +211,15 @@ confirm it fails for the reason you think it does.
   comment was the only real finding no other layer caught, both times by checking sibling files.
   Resolve via the GraphQL `resolveReviewThread` mutation with the id passed as a variable.
 - **Verify CI runs belong to the current head SHA** (`gh run list --json databaseId,headSha`).
+- **Name the branch correctly when creating the worktree — renaming it afterwards breaks teardown.**
+  `worktree.py` and `/land-branch` both derive the worktree directory from the branch name, so a
+  branch renamed after the fact desynchronises the two. `/land-branch` then looked for
+  `waitron-feat-provisioning-cli` while the directory was still `waitron-provisioning-instance`,
+  printed `No such file or directory`, and reported `commits: , files: 0` — which reads as an empty
+  branch rather than as a broken path. `worktree.py rm waitron <ORIGINAL-name>` finds it.
+- **An untracked file in the main checkout can block the post-merge `git pull --ff-only`.** A scratch
+  copy of a plan doc, made while planning, stopped the fast-forward once the merge added the tracked
+  version. Diff before deleting — the scratch copy was 113 lines behind what had actually landed.
 
 **Before a PR**, run the gate in §2 yourself rather than relying on the pre-push hook. The hook
 mirrors CI's fast checks but is **not** identical to it — see §2 for the two places they diverge.
