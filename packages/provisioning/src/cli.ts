@@ -170,6 +170,22 @@ async function instance(argv: string[], deps: CliDeps): Promise<number> {
       for (const action of actions) deps.io.stdout(`  ${describeAction(action)}`);
       deps.io.stdout("");
 
+      const created = actions.filter((action) => action.kind === "create-role");
+      if (created.length === 0) {
+        // Disclosed HERE, above the prompt, rather than in `reportRoles` where the same fact used to
+        // surface first. `reportRoles` runs after create, migrate and stamp, so an operator who
+        // would have declined on learning this learnt it too late to decline. The plan is pure and
+        // `created` falls straight out of it, so nothing has to be reached to know it.
+        //
+        // The case is a second database on a cluster that already carries the three roles — the
+        // roles are cluster-global while the database is not — and the reason no string can be
+        // printed is `reportRoles`': this tool did not generate those passwords and cannot read one
+        // back out of `pg_authid`.
+        deps.io.stdout("No connection strings will be printed: every role this needs already");
+        deps.io.stdout("exists, and this tool cannot recover a password it did not generate.");
+        deps.io.stdout("");
+      }
+
       if (values.yes !== true) {
         const answer = (await deps.io.prompt("Apply this plan? [y/N] ")).trim().toLowerCase();
         if (answer !== "y" && answer !== "yes") {
@@ -178,7 +194,6 @@ async function instance(argv: string[], deps: CliDeps): Promise<number> {
         }
       }
 
-      const created = actions.filter((action) => action.kind === "create-role");
       try {
         await deps.apply(actions, {
           admin,

@@ -493,6 +493,44 @@ describe("runCli instance", () => {
     expect(h.cleared()).toBe(0);
   });
 
+  it("warns in the PLAN that no connection string will be printed, before asking", async () => {
+    // The second-database-on-one-cluster case: every `waitron_*` role already exists, so `instance`
+    // creates none and prints no connection string for any of them. That was disclosed only in
+    // `reportRoles`, i.e. after create/migrate/stamp had run — by which point declining is not an
+    // option. `created.length === 0` is knowable from the PLAN, which is pure, so the operator gets
+    // it while "Apply this plan? [y/N]" is still unanswered.
+    const h = harness({ state: PROVISIONED, env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    // Snapshotted at the moment the question is asked, not scanned afterwards: the prompt goes
+    // through `io.prompt` and never reaches the transcript, so "before the prompt" cannot be read
+    // off the finished output — and a warning printed after it is one the operator could not act
+    // on.
+    let seenWhenAsked: string[] | undefined;
+    const deps: CliDeps = {
+      ...h.deps,
+      io: {
+        ...h.deps.io,
+        prompt: async (question) => {
+          if (question.includes("Apply this plan?")) seenWhenAsked = [...h.lines];
+          return "n";
+        },
+      },
+    };
+    expect(
+      await runCli(["instance", "--database", DATABASE, "--environment", "preproduction"], deps),
+    ).toBe(1);
+
+    expect(seenWhenAsked?.join("\n")).toMatch(/No connection strings will be printed/i);
+    expect(h.apply).not.toHaveBeenCalled();
+  });
+
+  it("does not warn about connection strings when the run will print some", async () => {
+    // The negative control: on a first provision all three roles are created, so the warning would
+    // be false. Without this, a version that printed it unconditionally passes the test above.
+    const h = harness({ answers: ["n"], env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    await runCli(["instance", "--database", DATABASE, "--environment", "preproduction"], h.deps);
+    expect(h.lines.join("\n")).not.toMatch(/No connection strings will be printed/i);
+  });
+
   it("summarises a membership repair", async () => {
     // The `grant-membership` action reaches the summary only from a DRIFTED state — every role in
     // BLANK gets its memberships from `CREATE ROLE ... IN ROLE` instead — so it needs its own
