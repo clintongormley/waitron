@@ -120,18 +120,53 @@ default); a migrations-only role that never runs a duty pass does not need it.
 
 ### `WAITRON_MIGRATIONS_DATABASE_URL` — against an empty database (first boot ever)
 
-This case is **not** exercised by this package's own test suite — every test here bootstraps its
-container via the container's own default superuser, which is a real but different shape from "a
-dedicated, non-superuser migrating role bootstrapping a brand-new database" (`packages/db`'s own
-`0001_tenancy_rls.sql` and its siblings are hand-written, custom migrations that create six NOLOGIN
-support roles — `app_user`, `sales_coverage_checker`, `tenant_provisioner`, `credentials_enumerator`,
-`envios_drainer`, `payments_webhook_resolver` — and hand a `SECURITY DEFINER` function's ownership to
-four of them; `app_user` and `tenant_provisioner` own no function. drizzle-kit generates no roles or
-ownership, so none of this is inferred. The grants below were verified by hand against a real
-Postgres 18 container while writing this document, not carried over from an existing automated test,
-and **re-verified on PostgreSQL 18.4 after `0011_provisioner_role.sql` was added**: this exact recipe,
-run as `waitron_migrator` with no superuser and no `BYPASSRLS`, applied all twelve core migrations
-clean. Treat them as correct but re-check if a future migration changes the pattern:
+**There is now a tool that does this for you: [`packages/provisioning`](../../packages/provisioning/README.md).**
+`waitron-provision instance` creates the database, creates `waitron_migrator`, `waitron_app` and
+`waitron_provisioner`, issues both grants below, applies every migration set and writes the
+deployment stamp — printing each new role's connection string once. It issues a **superset** of the
+recipe below, not the same set: it also makes `waitron_migrator` a member of `app_user`, which the
+empty-database recipe deliberately omits (see the note under the SQL — that membership is only
+needed when the same role is also `DATABASE_URL`), and it creates `waitron_app` and
+`waitron_provisioner`, which this recipe is not about at all.
+The SQL below stays as the documented manual fallback, the same way
+`apps/server/sql/bootstrap-tenant.sql` stays as the manual path for creating a tenant.
+
+This case is no longer exercised only by hand. `packages/provisioning/src/instance-apply.rls.test.ts`
+runs the whole sequence against a real `postgres:18-alpine` container **as a role holding exactly
+`login createdb createrole`** — asserted in that suite's own first test, which reads back
+`rolsuper = f` and `rolbypassrls = f` for `current_user` — and that role is what the migrations
+themselves are applied by, because the migrator's URL is composed from its connection string. The
+suite then asserts, against the database rather than against its own model: all five migration sets
+recorded, the three roles present with the right `rolcreaterole` and memberships,
+`has_database_privilege(... 'CREATE')` and `has_schema_privilege('public', 'CREATE')` true for
+`waitron_migrator`, `pg_namespace.nspacl` carrying `waitron_migrator=C*` (the `*` is the WITH GRANT
+OPTION below), and the stamp written. A second plan from the state the first produced carries no
+create and no migrate.
+
+That last assertion reads `nspacl` **directly** rather than asking
+`has_schema_privilege(…, 'CREATE WITH GRANT OPTION')`, and the reason is the recursive closure, not
+the grant option: `has_*` answers for everything a role can reach, so a grant arriving through a
+group reads as satisfied when the direct grant the tool makes is absent — measured on
+`postgres:18-alpine`, `has_database_privilege('r_direct','acl_db2','CREATE')` was `t` while
+`aclexplode(datacl)` held zero entries naming `r_direct`. An earlier version of this sentence said
+no `has_*_privilege` function can see the grant option at all. That is false: they report it via the
+`'<PRIV> WITH GRANT OPTION'` spelling, `has_schema_privilege` returning `t` for a role holding the
+option and `f` for one holding a bare `C` on the same image.
+
+Two things that suite does **not** cover, so do not read it as covering them: it applies the
+migrations over the connection that just created the database, so it says nothing about a
+**different** role taking over migrating later (see "Practical recommendation" below); and it
+proves the membership and grant SHAPE, not that `waitron_app` can run a duty pass — `packages/db`'s
+`provisioner-role.rls.test.ts` is what proves the grant behaviour.
+
+Why any of this needed proving: `packages/db`'s own `0001_tenancy_rls.sql` and its siblings are
+hand-written, custom migrations that create six NOLOGIN support roles — `app_user`,
+`sales_coverage_checker`, `tenant_provisioner`, `credentials_enumerator`, `envios_drainer`,
+`payments_webhook_resolver` — and hand a `SECURITY DEFINER` function's ownership to four of them;
+`app_user` and `tenant_provisioner` own no function. drizzle-kit generates no roles or ownership, so
+none of it is inferred. The recipe below was originally verified by hand against a real Postgres 18
+container and **re-verified on PostgreSQL 18.4 after `0011_provisioner_role.sql` was added**. Treat
+it as correct but re-check if a future migration changes the pattern:
 
 ```sql
 create role waitron_migrator login password '<secret>' createrole;
@@ -185,20 +220,23 @@ already-migrated grants above already give `waitron_migrator`: `to_regclass` (ch
 covered by the blanket `grant select on all tables in schema public` — there is no separate grant to
 add for this table.
 
-**What actually writes the stamp.** `apps/server/sql/bootstrap-tenant.sql` is the only provisioning
-artefact that ships — its `insert into deployment (id, environment) values (1, :'environment') on
-conflict (id) do nothing` is what stamps a database, taking `environment` as one more `-v` argument
-alongside `nif`/`legal_name`/etc. (see that file's own usage comment). The programmatic
-`stampDeployment` function (`@waitron/db`) also exists and is exercised by this package's own test
-suite, but nothing else in this repository calls it — there is no automated provisioning path that
-runs it against a real deployment today.
+**What actually writes the stamp.** Two things now do, and this paragraph said "one" until
+`packages/provisioning` landed:
 
-Concretely, that means a database is stamped if and only if someone ran `bootstrap-tenant.sql`
-against it (or called `stampDeployment` by hand). Every database that predates this feature, and
-every database provisioned WITHOUT running that script — including any bootstrapped before this
-note was written — has never been stamped: it reads `deployment` as `null` and **boots normally,
-with this check inert**, exactly as if the check did not exist. Only a database stamped for the
-OTHER environment refuses.
+- `waitron-provision instance` calls the programmatic `stampDeployment` (`@waitron/db`) as the last
+  action of its plan. `packages/provisioning/src/instance-apply.rls.test.ts` asserts the stamp is
+  present after a real run against a container, so this is an automated provisioning path that runs
+  it against a real database — which is exactly what this paragraph previously said did not exist.
+- `apps/server/sql/bootstrap-tenant.sql`, the manual fallback: its
+  `insert into deployment (id, environment) values (1, :'environment') on conflict (id) do nothing`
+  takes `environment` as one more `-v` argument alongside `nif`/`legal_name`/etc. (see that file's
+  own usage comment).
+
+Concretely, a database is stamped if and only if someone ran one of those two (or called
+`stampDeployment` by hand). Every database that predates this feature, and every database
+provisioned WITHOUT either — including any bootstrapped before this note was written — has never
+been stamped: it reads `deployment` as `null` and **boots normally, with this check inert**, exactly
+as if the check did not exist. Only a database stamped for the OTHER environment refuses.
 
 ## Environment variables
 

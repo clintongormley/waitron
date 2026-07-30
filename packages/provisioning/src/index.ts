@@ -1,6 +1,15 @@
 // The public surface of @waitron/provisioning. Re-exports only — no logic here.
+export { runCli } from "./cli.js";
+export type { CliDeps } from "./cli.js";
 export { assertIdentifier, generatePassword, quoteIdent } from "./identifiers.js";
 export { generateKeyRing, runKeyring } from "./keyring-command.js";
 export type { GeneratedKeyRing } from "./keyring-command.js";
 export type { ProvisioningIo } from "./io.js";
+export { INSTANCE_ROLES, readInstanceState } from "./instance-state.js";
+export type { InstanceRole, InstanceState, InsideState, RoleFacts } from "./instance-state.js";
+export { planInstance } from "./instance-plan.js";
+export type { InstanceAction, InstanceRequest } from "./instance-plan.js";
+export { applyInstance, withDatabase } from "./instance-apply.js";
+export type { ApplyDeps } from "./instance-apply.js";
+export { formatStatus } from "./status-command.js";
 import "./errors.js";

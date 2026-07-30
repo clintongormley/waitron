@@ -62,6 +62,14 @@ being wrong, and the replacement is written with the confidence of having just d
 Apply the same "what would make this false?" pass to your correction that you applied to the
 original.
 
+`feat/provisioning-instance` produced three more in one cycle, each written while correcting an
+adjacent claim: a transaction claim in a rewritten `applyMigrations` comment, a "`pg` authenticates
+lazily on first use" justification that a container disproved within a minute, and a teardown
+comment blaming a failed `DROP ROLE` on the role being a GRANTOR when it was simultaneously a
+grantee, so the two could not be separated. This is the single most productive source of false
+claims in the repository's history — more than first drafts. Budget review effort accordingly: the
+_replacement_ text deserves more scrutiny than the text it replaces, not less.
+
 ### Before asserting a convention, grep the siblings
 
 Two defects landed this way: an error code prefixed `payments.` where all twelve siblings use
@@ -160,6 +168,65 @@ A consequence worth knowing: `apps/server` cannot deep-import `packages/db`'s `e
 **Never widen a grant to make a test pass.** `app_user` holds `SELECT` on `tenants` and not `INSERT`
 deliberately — the running POS cannot create tenants.
 
+**An object-privilege `GRANT` PostgreSQL accepted is not a `GRANT` that did anything.** Whether an
+ineffective `GRANT` is loud or silent turns on what the GRANTOR holds, and the quiet cases are the
+common ones. Run on `postgres:18-alpine` (PostgreSQL 18.4), granting on a database owned by
+`owner_a` from a non-owning `login createdb createrole` admin:
+
+| What the grantor holds on the object | `grant create on database acl_db to r_app`               |
+| ------------------------------------ | -------------------------------------------------------- |
+| nothing at all                       | `ERROR: 42501: permission denied for database acl_db`    |
+| some privilege, no grant option      | `WARNING: no privileges were granted`, tag `GRANT`, rc 0 |
+| grant option on part of the list     | `WARNING: not all privileges were granted`, rc 0         |
+| ditto, but written `GRANT ALL …`     | **no diagnostic at all**, tag `GRANT`, rc 0              |
+
+Three traps in that table. First, the hard error is **harder to reach than it looks**: `PUBLIC` holds
+`CONNECT`/`TEMP` on every database by default, and `aclmask` counts a `PUBLIC` grant as held, so
+every role is in row 2 until someone runs `revoke all on database … from public` — which is what
+made row 1 reachable in the transcript. Second, the partial rows still **land the grantable subset**
+(`r_app=c/mid_role` appeared), so "it warned" does not mean "it did nothing". Third,
+`GRANT ALL PRIVILEGES` suppresses the partial warning entirely — PostgreSQL only raises
+`not all privileges were granted` when the statement listed privileges explicitly.
+
+So read the ACL back rather than trusting the command tag or the absence of a warning. Two things
+the first version of this entry got wrong, both checked here rather than reasoned about:
+
+- **The failing `GRANT` does not leave the ACL untouched.** `datacl` was `NULL` before and
+  `{=Tc/owner_a,owner_a=CTc/owner_a}` after — the privileges are unchanged, but the column is
+  materialised from the implicit default. Never read `datacl IS NULL` as "nothing has been granted
+  here"; a `GRANT` that granted nothing flips it.
+- **`has_*` functions DO see the grant option**, via the `'<PRIV> WITH GRANT OPTION'` spelling.
+  Measured in both directions for three of them — `has_table_privilege(…, 'SELECT WITH GRANT
+OPTION')`, `has_schema_privilege(…, 'CREATE WITH GRANT OPTION')` and
+  `pg_has_role(…, 'MEMBER WITH ADMIN OPTION')` each returned `t` for the role holding the option and
+  `f` for one holding the bare privilege or a plain membership — and in the positive direction for
+  `has_database_privilege(…, 'CONNECT WITH GRANT OPTION')`. The real reason to read
+  `pg_database.datacl` / `pg_namespace.nspacl` directly is **the recursive closure**:
+  `has_database_privilege('r_direct','acl_db2','CREATE')` was `t` while `aclexplode(datacl)` had
+  **zero** entries naming `r_direct`, which held it only through a group. That is a false positive a
+  provisioner must not accept.
+
+**Role-membership `GRANT`s are not in this family at all** — they always ERROR, never warn:
+`grant grp to r_app` from a non-member and from a member without `ADMIN OPTION` both gave
+`ERROR: 42501: permission denied to grant role "grp"`. Code that catches membership failures is
+catching a throw; only object-privilege grants need the read-back.
+
+Cost: a Critical finding on `feat/provisioning-instance` plus two fix rounds — the first fix then
+refused **working** deployments, because a grantee holds one ACL entry **per grantor**
+(`r_y=c/owner_a` and `r_y=C/r_mig` coexist, which is exactly what `WITH GRANT OPTION` delegation
+produces) and the check read only the first match. Then a third round, for this entry: its own
+first version stated row 2 as the unconditional rule and asserted the `has_*` blindness above,
+and four sites had copied the sentence.
+
+**An empty connection string is a valid connection string.** `new Client({ connectionString: "" })`
+resolves to `{host:"localhost",port:5432,user:"<OS user>"}` — the empty string is falsy, so `pg`
+parses nothing and every default applies (run against `pg@8.22.0`; `pg-pool` builds its clients from
+the same options object, `pg-pool/index.js:241`). Anything that reads a connection string from an
+environment variable or a prompt must refuse `""` explicitly. Cost: an Important finding —
+`waitron-provision instance` would have created, migrated and **stamped** a database on whatever
+answers on localhost whenever `WAITRON_ADMIN_DATABASE_URL` was unset and stdin was non-interactive,
+which is the documented CI shape.
+
 ---
 
 ## 4. Testing
@@ -181,6 +248,16 @@ the 180s `hookTimeout` in `apps/server/vitest.config.ts` fires — observed repe
 never in CI, which is why no config default papers over it. Docker contention on a full `pnpm test`
 shows up separately as `EADDRINUSE` and passes on retry.
 
+**A probe that needs a Unix SOCKET must run inside the container, not on this host.** Bind-mounting
+the socket directory out of a `postgres:18-alpine` container and connecting to it from macOS does not
+work: the socket is created inside Docker Desktop's VM, and `pg` got `connect ECONNREFUSED
+/tmp/c1s/.s.PGSQL.5432` against a server that `pg_isready` reported as accepting connections. A
+scratchpad path also blows the 104-byte `sun_path` limit first — the same probe against a full
+scratchpad path failed `EINVAL` before it could even reach `ECONNREFUSED`. Two wasted rounds on the
+`provisioning.admin_uri_not_a_url` receipt. Run the probe in the container instead
+(`apk add --no-cache nodejs npm && npm i pg@<version>`), where node and the server share a
+namespace; everything that is only PARSING — `new URL` versus `pg`'s own parse — is fine on the host.
+
 **Guard every teardown**: `if (db !== undefined) await db.close()`. An unguarded `afterAll` turns a
 `beforeAll` failure into `Cannot read properties of undefined (reading 'close')` and masks the real
 error. Suites sharing a database must clean up in a `finally` so they are order-independent, not
@@ -201,6 +278,28 @@ from the barrel **and** from every other file, and it still passes, because `tsc
 though the deletion was run in one. Closing it needs a `tsc`-based downstream-consumer probe, or an
 `include` narrowed to the barrel's transitive closure. Until then, do not cite these tests as
 evidence that an augmentation is reachable.
+
+**`toMatchObject` checks only the keys you list — a key you never list is never checked at all.**
+That is the loophole, not type-blindness: `expect({memberOf: "{}"}).toMatchObject({memberOf: []})`
+does fail (run under this repo's vitest). The bug survived because `memberOf` appeared in neither
+assertion, so tightening to `toEqual` — which requires every field — is what put it under a matcher
+for the first time.
+
+What it was hiding: `pg_roles.rolname` is PostgreSQL's `name` type, so `array(select g.rolname …)`
+is `name[]` (OID 1003), for which `node-postgres` has no parser — it hands back the wire literal
+(`"{}"`, or `"{app_user}"` when populated) through a field declared `string[]`. `text[]` (OID 1009)
+_is_ parsed, hence the `::text`/`::text[]` casts now in `instance-state.ts`.
+
+**Work the failure out case by case rather than assuming a broken type breaks everything.** The
+sole consumer was `!facts.memberOf.includes(of)` (`instance-plan.ts:151`), and
+`String.prototype.includes` agrees with `Array.prototype.includes` on every input the planner
+actually sees: `"{}".includes("app_user")` is `false` and `"{app_user}".includes("app_user")` is
+`true`, both correct by luck. It diverges in exactly one shape — **substring collision between role
+names**: `"{app_user_probe}".includes("app_user")` is `true` where the array answer is `false`. So
+the failure was a false POSITIVE that silently SKIPS a needed `grant-membership`, not the "reads
+false forever, spurious grants on every run" this entry first claimed — the opposite direction, and
+the quieter one. (`status-command.ts` would have thrown `"{}".join is not a function`, but it
+landed after the fix, so nothing ever hit that.)
 
 ---
 

@@ -17,9 +17,19 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json-summary"],
-      // `src/bin.ts` and `src/testing/**` are listed ahead of existing: the process entry point
-      // and the container helper arrive with `instance`. A path that matches nothing is inert.
-      exclude: [...coverageConfigDefaults.exclude, "src/bin.ts", "src/index.ts", "src/testing/**"],
+      // `src/bin.ts` is the process entry point: every decision it could get wrong lives in
+      // `cli.ts`, which is injected and fully tested, and what remains — a tty, a readline, a
+      // process exit code — is verifiable only by running the built bundle, which the plan does
+      // rather than a test. `scripts/**` is a BUILD step (`copy-migrations.mjs`), not something
+      // this package's tests load at all; `apps/server/vitest.config.ts:41` excludes its own for
+      // the same reason.
+      exclude: [
+        ...coverageConfigDefaults.exclude,
+        "scripts/**",
+        "src/bin.ts",
+        "src/index.ts",
+        "src/testing/**",
+      ],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },
   },
