@@ -58,7 +58,7 @@ const CREATE_ROLE: InstanceAction[] = [
 ];
 
 const GRANT_MEMBERSHIP: InstanceAction[] = [
-  { kind: "grant-membership", role: "waitron_app", of: "app_user" },
+  { kind: "grant-membership", role: "waitron_app", memberOf: "app_user" },
 ];
 
 describe("applyInstance's create-role failure", () => {
@@ -210,7 +210,11 @@ describe("applyInstance's grant-membership failure", () => {
     expect(isAppError(thrown)).toBe(true);
     if (!isAppError(thrown)) return;
     expect(thrown.code).toBe("provisioning.membership_grant_failed");
-    expect(thrown.params).toEqual({ role: "waitron_app", of: "app_user", sqlstate: "42501" });
+    expect(thrown.params).toEqual({
+      role: "waitron_app",
+      memberOf: "app_user",
+      sqlstate: "42501",
+    });
     expect((thrown as Error).cause).toBeUndefined();
   });
 });

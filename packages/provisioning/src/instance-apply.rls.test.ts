@@ -173,7 +173,7 @@ describe("applyInstance against a blank container", () => {
     expect(repair).toContainEqual({
       kind: "grant-membership",
       role: "waitron_provisioner",
-      of: "tenant_provisioner",
+      memberOf: "tenant_provisioner",
     });
 
     await applyInstance(repair, {
@@ -199,7 +199,11 @@ describe("applyInstance against a blank container", () => {
     // completely ordinary thing for an operator to hand this tool on the second or third run: the
     // cluster is already migrated, so whoever migrated it is not necessarily who is running
     // `instance` now.
-    const action = { kind: "grant-membership", role: "waitron_app", of: "app_user" } as const;
+    const action = {
+      kind: "grant-membership",
+      role: "waitron_app",
+      memberOf: "app_user",
+    } as const;
     const depsFor = (as: Database) => ({
       admin: as,
       database: DATABASE,
@@ -236,7 +240,7 @@ describe("applyInstance against a blank container", () => {
       // different one would send them somewhere else.
       expect(thrown.params).toEqual({
         role: "waitron_app",
-        of: "app_user",
+        memberOf: "app_user",
         sqlstate: "42501",
       });
     } finally {

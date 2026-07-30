@@ -329,7 +329,7 @@ function describe(action: InstanceAction): string {
       return `create role ${action.role} (${attributes.join(", ")}${memberships})`;
     }
     case "grant-membership":
-      return `grant ${action.of} to ${action.role}`;
+      return `grant ${action.memberOf} to ${action.role}`;
     case "grant-database-create":
       return `grant create on database ${action.database} to ${action.role}`;
     case "grant-schema-create":

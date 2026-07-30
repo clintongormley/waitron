@@ -129,7 +129,7 @@ describe("planInstance against a provisioned deployment", () => {
     // `state.inside` is already fully migrated and stamped, so neither `migrate` nor `stamp`
     // appears here at all — the loop that would emit them never fires.)
     expect(planInstance(state, REQUEST, () => "pw")).toEqual([
-      { kind: "grant-membership", role: "waitron_provisioner", of: "tenant_provisioner" },
+      { kind: "grant-membership", role: "waitron_provisioner", memberOf: "tenant_provisioner" },
       { kind: "grant-database-create", role: "waitron_migrator", database: "waitron" },
       { kind: "grant-schema-create", role: "waitron_migrator", withGrantOption: true },
     ]);

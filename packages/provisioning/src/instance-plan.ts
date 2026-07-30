@@ -19,7 +19,7 @@ export type InstanceAction =
       createRole: boolean;
       memberOf: string[];
     }
-  | { kind: "grant-membership"; role: InstanceRole; of: string }
+  | { kind: "grant-membership"; role: InstanceRole; memberOf: string }
   | { kind: "grant-database-create"; role: InstanceRole; database: string }
   | { kind: "grant-schema-create"; role: InstanceRole; withGrantOption: boolean }
   | { kind: "migrate" }
@@ -141,7 +141,9 @@ export function planInstance(
       // created `waitron_provisioner` by hand from the README, before 0011 existed, has one
       // holding `app_user` alone. That is repairable without touching the password.
       for (const of of need.memberOf) {
-        if (!facts.memberOf.includes(of)) actions.push({ kind: "grant-membership", role, of });
+        if (!facts.memberOf.includes(of)) {
+          actions.push({ kind: "grant-membership", role, memberOf: of });
+        }
       }
     }
   }

@@ -92,12 +92,20 @@ declare module "@waitron/shared" {
      * generated password is 32 base64url characters (identifiers.ts) and a connection string is
      * longer still, so neither can satisfy five `[0-9A-Z]`. */
     "provisioning.role_creation_failed": { role: string; sqlstate: string | null };
-    /** `GRANT <of> TO <role>` failed — the repair path for a membership that drifted, or that a
-     * hand-made role never had. Same `sqlstate` treatment and same reasoning as
+    /** `GRANT <memberOf> TO <role>` failed — the repair path for a membership that drifted, or that
+     * a hand-made role never had. `memberOf` rather than `of`: this package already names the
+     * concept that way in four places (`instance-state.ts`'s `RoleFacts.memberOf`,
+     * `instance-plan.ts`'s `create-role` action and `REQUIREMENTS`, `status-command.ts`'s report),
+     * and a relational preposition would have been the only one among every code in the registry.
+     * Same `sqlstate` treatment and same reasoning as
      * `provisioning.role_creation_failed` above, minus the password: this statement embeds no
      * secret, and the catch exists because the driver's raw error otherwise escaped `applyInstance`
      * unformatted on a path a real operator reaches (an admin holding CREATEROLE but no ADMIN
      * OPTION on `app_user` — 42501, proven in `instance-apply.rls.test.ts`). */
-    "provisioning.membership_grant_failed": { role: string; of: string; sqlstate: string | null };
+    "provisioning.membership_grant_failed": {
+      role: string;
+      memberOf: string;
+      sqlstate: string | null;
+    };
   }
 }

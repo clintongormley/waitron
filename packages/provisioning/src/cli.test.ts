@@ -441,7 +441,7 @@ describe("runCli instance", () => {
         Promise.reject(
           new AppError("provisioning.membership_grant_failed", {
             role: "waitron_app",
-            of: "app_user",
+            memberOf: "app_user",
             sqlstate: "42501",
           }),
         ),

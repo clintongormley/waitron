@@ -93,7 +93,7 @@ export async function applyInstance(
         case "grant-membership":
           try {
             await deps.admin.execute(
-              sql.raw(`grant ${quoteIdent(action.of)} to ${quoteIdent(action.role)}`),
+              sql.raw(`grant ${quoteIdent(action.memberOf)} to ${quoteIdent(action.role)}`),
             );
           } catch (error) {
             // Caught for DIAGNOSABILITY, not for secrecy — unlike `create-role` above, this
@@ -107,7 +107,7 @@ export async function applyInstance(
             // in `packages/provisioning/README.md`.
             throw new AppError("provisioning.membership_grant_failed", {
               role: action.role,
-              of: action.of,
+              memberOf: action.memberOf,
               sqlstate: sqlstateOf(error),
             });
           }
