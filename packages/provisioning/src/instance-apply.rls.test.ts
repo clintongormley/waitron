@@ -341,8 +341,10 @@ describe("applyInstance against a blank container", () => {
   });
 
   it("refuses a membership grant the admin holds no ADMIN OPTION for", async () => {
-    // The receipt for the operator-facing gap `README.md`'s "When the admin cannot grant
-    // `app_user`" section documents, run rather than reasoned about.
+    // The receipt for the operator-facing gap `README.md`'s "When the admin did not create the
+    // database" section documents — its wall 2 — run rather than reasoned about. An earlier version
+    // of this line cited a heading called "When the admin cannot grant `app_user`", which that file
+    // has never had; `errors.ts`'s `provisioning.state_unreadable` cites the real one correctly.
     //
     // `prov_admin` created `app_user`, and can therefore grant it. Not the container's superuser,
     // which this suite uses for exactly one statement — minting `prov_admin` in `beforeAll` (:42-44)
