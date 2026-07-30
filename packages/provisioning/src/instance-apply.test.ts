@@ -467,6 +467,35 @@ describe("applyInstance's post-apply grant verification", () => {
     );
   });
 
+  it("will not take the grant option from a DIFFERENT entry than the privilege", async () => {
+    // A mutation that survived the whole suite until this test existed: read `C` from one entry and
+    // the `*` from another, and `waitron_migrator=C/owner_a` alongside `waitron_migrator=U*/x`
+    // reads as "CREATE WITH GRANT OPTION" when it is nothing of the sort — CREATE without the
+    // option, plus USAGE with it. The `*` binds to the privilege letter immediately before it, and
+    // only within one ACL item.
+    //
+    // The two preceding tests each need SOME entry to carry `C` and SOME entry to carry `C*`, so
+    // neither can catch a predicate that stops requiring them to be the same entry. That is the
+    // "passes for the wrong reason" shape, sitting in the one function whose whole justification is
+    // that a wrong answer is worse than no check at all.
+    await expect(
+      applyInstance(
+        SCHEMA_GRANT,
+        cluster({ nspacl: ["waitron_migrator=C/owner_a", "waitron_migrator=U*/x"] }),
+      ),
+    ).rejects.toMatchObject({ code: "provisioning.grant_ineffective" });
+
+    // The same shape on `datacl`, where the plan does NOT ask for the option: a bare `C` on its own
+    // entry is enough there, so this pins that the test above fails for the grant-option reason
+    // rather than because a two-entry ACL is rejected outright.
+    await expect(
+      applyInstance(
+        DATABASE_GRANT,
+        cluster({ datacl: ["waitron_migrator=C/owner_a", "waitron_migrator=U*/x"] }),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
   it("reads nothing at all when the plan carries no grants", async () => {
     // A plan of only `create-database` must not pay for three catalog reads, and more importantly
     // must not demand a target connection that may not exist yet.
