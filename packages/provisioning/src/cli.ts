@@ -375,11 +375,14 @@ function describeAdmin(adminUri: string): string {
   return url.username === "" ? url.host : `${url.username}@${url.host}`;
 }
 
-function assertEnvironment(value: string): DeploymentEnvironment {
-  if (value !== "production" && value !== "preproduction") {
-    throw new AppError("deployment.unknown_environment", { value, known: [...ENVIRONMENTS] });
+function assertEnvironment(environment: string): DeploymentEnvironment {
+  if (environment !== "production" && environment !== "preproduction") {
+    throw new AppError("deployment.unknown_environment", {
+      environment,
+      known: [...ENVIRONMENTS],
+    });
   }
-  return value;
+  return environment;
 }
 
 /**

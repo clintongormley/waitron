@@ -78,10 +78,22 @@ declare module "@waitron/shared" {
      * concept, not for this package — it sits beside `deployment.already_stamped`
      * (`packages/db/src/errors.ts`) and `deployment.environment_mismatch`
      * (`apps/server/src/errors.ts`), because the fact is about a deployment environment and the
-     * provisioning CLI is merely where it was typed. Both params ARE echoed: `value` is
+     * provisioning CLI is merely where it was typed. Both params ARE echoed: `environment` is
      * operator-typed configuration and `known` is the legal set, which is what lets the refusal be
-     * acted on without reading the source. Shaped after `credentials.unknown_purpose`. */
-    "deployment.unknown_environment": { value: string; known: string[] };
+     * acted on without reading the source.
+     *
+     * `environment`, not `value`, because that is the shape the sibling this comment cites actually
+     * has: `credentials.unknown_purpose` is `{ purpose, known }`
+     * (`packages/credentials/src/errors.ts:64`) — it names the CONCEPT. So do both `deployment.*`
+     * siblings: `{stamped, requested}` (`packages/db/src/errors.ts:44`) and
+     * `{databaseEnvironment, hostEnvironment}` (`apps/server/src/errors.ts:115`). Every param named
+     * `value` in the whole registry belongs instead to a code about an input that failed a FORMAT
+     * check — `shared.invalid_id`, `shared.invalid_decimal`, `shared.decimal_overflow`,
+     * `server.config_invalid`, `sif.id_sistema_invalid`, and `provisioning.invalid_identifier`
+     * below — where there is no concept left to name. `staging` is a well-formed string that names
+     * no environment, which is the other case. Written as `value` here and renamed while renaming
+     * was still free: this code has not shipped. */
+    "deployment.unknown_environment": { environment: string; known: string[] };
     /** Nothing supplied the admin connection string: `WAITRON_ADMIN_DATABASE_URL` was unset or
      * empty AND the echo-off prompt answered nothing — which is what an exhausted stdin or a Ctrl+D
      * produces, deliberately, in `bin.ts`'s `ask`.

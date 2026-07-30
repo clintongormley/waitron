@@ -742,13 +742,13 @@ describe("the error codes this CLI raises", () => {
     await runCli(["instance", "--database", DATABASE, "--environment", "staging"], h.deps);
     const line = h.lines.find((l) => l.startsWith("deployment.unknown_environment"));
     expect(line).toBeDefined();
-    expect(line).toContain('"value":"staging"');
+    expect(line).toContain('"environment":"staging"');
     expect(line).toContain("preproduction");
   });
 
   it("throws an AppError, not a bare Error, for an unknown environment", () => {
     const error = new AppError("deployment.unknown_environment", {
-      value: "staging",
+      environment: "staging",
       known: ["production", "preproduction"],
     });
     expect(isAppError(error)).toBe(true);
