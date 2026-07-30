@@ -7,6 +7,27 @@ import { sqlStateOf } from "./sql-state.js";
 import { describeAction, type InstanceAction } from "./instance-plan.js";
 import "./errors.js";
 
+/**
+ * A connection to the TARGET database, together with the one call that gives it back.
+ *
+ * `release` exists so that OWNERSHIP is the provider's to state rather than this file's to assume.
+ * `applyInstance` used to `close()` whatever `openTarget` returned, which forced `cli.ts` to dial a
+ * SECOND connection to a database it already had open — `withState` opens one to read the
+ * deployment's state on every re-run, and `createPostgresDb` does a real connect-and-release up
+ * front, so that was a genuine TCP connect and auth handshake per run, not a cheap object. The
+ * alternative, sharing the handle and letting both close it, is worse: `pg` errors on a pool closed
+ * twice.
+ *
+ * The contract is exactly: `applyInstance` calls `release()` once, if and only if it called
+ * `openTarget()`. A provider that OWNS the handle closes it there (the container suites do); a
+ * provider that is LENDING one it closes elsewhere makes `release` a no-op (`cli.ts` does, because
+ * `withState`'s `finally` is the single place its connections die).
+ */
+export interface TargetConnection {
+  db: Database;
+  release(): Promise<void>;
+}
+
 export interface ApplyDeps {
   /** The admin connection: CREATEDB and CREATEROLE, connected to any database in the cluster. */
   admin: Database;
@@ -19,9 +40,10 @@ export interface ApplyDeps {
   adminUri: string;
   /** `null` means "running from source"; otherwise the folder `copy-migrations.mjs` produced. */
   migrationsRoot: string | null;
-  /** Opens a connection to the TARGET database. Called lazily, after `create-database` has run —
-   * on a first provision there is nothing to connect to until then. */
-  openTarget(): Promise<Database>;
+  /** Obtains a connection to the TARGET database. Called lazily and AT MOST ONCE, after
+   * `create-database` has run — on a first provision there is nothing to connect to until then.
+   * It need not be a new connection: see `TargetConnection` for who closes it. */
+  openTarget(): Promise<TargetConnection>;
 }
 
 /**
@@ -39,7 +61,7 @@ export async function applyInstance(
   actions: readonly InstanceAction[],
   deps: ApplyDeps,
 ): Promise<void> {
-  let target: Database | null = null;
+  let target: TargetConnection | null = null;
   try {
     for (const action of actions) {
       switch (action.kind) {
@@ -125,7 +147,7 @@ export async function applyInstance(
           // first provision it is also the first moment one can exist.
           target ??= await deps.openTarget();
           const option = action.withGrantOption ? " with grant option" : "";
-          await target.execute(
+          await target.db.execute(
             sql.raw(`grant create on schema public to ${quoteIdent(action.role)}${option}`),
           );
           break;
@@ -162,7 +184,7 @@ export async function applyInstance(
           // `stampDeployment`, not a raw INSERT: it refuses a DIFFERENT value rather than
           // overwriting it, which is the second of two independent guards against a host meeting
           // the wrong database (the planner's is the first).
-          await stampDeployment(target, action.environment);
+          await stampDeployment(target.db, action.environment);
           break;
       }
     }
@@ -171,7 +193,9 @@ export async function applyInstance(
     // see `verifyGrants`.
     target = await verifyGrants(actions, deps, target);
   } finally {
-    await target?.close();
+    // Exactly once, and only if something above acquired one. Whether that CLOSES the handle is
+    // the provider's decision — see `TargetConnection`.
+    await target?.release();
   }
 }
 
@@ -211,20 +235,21 @@ export async function applyInstance(
  * The membership is verified anyway because a revoke racing this run would otherwise pass unnoticed,
  * but it is not the reason this function exists.
  *
- * Returns the target connection so the caller closes anything this function opened. Today that is
- * always the connection it was GIVEN, never a new one, and the previous version of this sentence
- * claimed otherwise ("this may be the first thing to need one, on a plan whose only actions are
- * database-level grants"). It cannot be: database-level verification reads `pg_database` over
- * `deps.admin`, and the only branch that wants a target is guarded by `schemaGrants.length > 0`,
- * which implies the main loop's own `grant-schema-create` case already opened one. The `??=` below
- * is therefore unreachable today and is kept only because TypeScript cannot see that invariant —
- * not because a caller is expected to hit it.
+ * Returns the target connection so the caller releases anything this function acquired — that is
+ * what keeps `applyInstance`'s single `release()` matched to its single `openTarget()`. Today the
+ * returned handle is always the one it was GIVEN, never a fresh acquisition, and the previous
+ * version of this sentence claimed otherwise ("this may be the first thing to need one, on a plan
+ * whose only actions are database-level grants"). It cannot be: database-level verification reads
+ * `pg_database` over `deps.admin`, and the only branch that wants a target is guarded by
+ * `schemaGrants.length > 0`, which implies the main loop's own `grant-schema-create` case already
+ * acquired one. The `??=` below is therefore unreachable today and is kept only because TypeScript
+ * cannot see that invariant — not because a caller is expected to hit it.
  */
 async function verifyGrants(
   actions: readonly InstanceAction[],
   deps: ApplyDeps,
-  open: Database | null,
-): Promise<Database | null> {
+  open: TargetConnection | null,
+): Promise<TargetConnection | null> {
   let target = open;
   const missing: string[] = [];
 
@@ -247,7 +272,7 @@ async function verifyGrants(
   const schemaGrants = actions.filter((action) => action.kind === "grant-schema-create");
   if (schemaGrants.length > 0) {
     target ??= await deps.openTarget();
-    const rows = await target.execute<{ acl: string[] }>(
+    const rows = await target.db.execute<{ acl: string[] }>(
       sql`select coalesce(nspacl::text[], '{}'::text[]) as acl
           from pg_namespace where nspname = 'public'`,
     );

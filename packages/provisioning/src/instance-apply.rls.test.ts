@@ -46,7 +46,12 @@ describe("applyInstance against a blank container", () => {
       database: DATABASE,
       adminUri,
       migrationsRoot: null,
-      openTarget: () => createPostgresDb(withDatabase(adminUri, DATABASE)),
+      // This suite OWNS every target connection it hands over, so `release` closes it — the
+      // opposite end of the contract from `cli.ts`, which lends one `withState` closes.
+      openTarget: async () => {
+        const db = await createPostgresDb(withDatabase(adminUri, DATABASE));
+        return { db, release: () => db.close() };
+      },
     };
   }
 
@@ -87,7 +92,7 @@ describe("applyInstance against a blank container", () => {
     expect(before.databaseExists).toBe(false);
     await applyInstance(planInstance(before, request), applyDeps);
 
-    const target = await applyDeps.openTarget();
+    const { db: target, release } = await applyDeps.openTarget();
     try {
       const after = await readInstanceState(admin, DATABASE, target);
       expect(after.databaseExists).toBe(true);
@@ -155,7 +160,7 @@ describe("applyInstance against a blank container", () => {
       // idempotent by construction.
       await applyInstance(second, applyDeps);
     } finally {
-      await target.close();
+      await release();
     }
   });
 
@@ -199,7 +204,7 @@ describe("applyInstance against a blank container", () => {
       // The repair under test is what normally puts this back, so a failure ANYWHERE above it
       // leaves the membership revoked for every test that follows. `GRANT` is idempotent, so this
       // is a no-op on the passing path. Originally left out on the grounds that this was the last
-      // test in its `describe`; three have been appended since (:209, :270, :349), and it is safe
+      // test in its `describe`; three have been appended since (:214, :275, :354), and it is safe
       // today only because none of them happens to read `waitron_provisioner`'s memberships —
       // which is a property of those tests, not of this one.
       await admin.execute(sql.raw(`grant tenant_provisioner to waitron_provisioner`));
@@ -353,22 +358,22 @@ describe("applyInstance against a blank container", () => {
     // has never had; `errors.ts`'s `provisioning.state_unreadable` cites the real one correctly.
     //
     // `prov_admin` created `app_user`, and can therefore grant it. The narrow claim this test needs
-    // is about ONE call, not about the file: the `applyInstance` at :88 — the only one that runs a
-    // `migrate` action — was passed `admin`, and `admin` is `prov_admin` (:59-60), not the
-    // container's superuser. `migrate` composes the migrator's URL from `adminUri` (:59), which is
+    // is about ONE call, not about the file: the `applyInstance` at :93 — the only one that runs a
+    // `migrate` action — was passed `admin`, and `admin` is `prov_admin` (:64-65), not the
+    // container's superuser. `migrate` composes the migrator's URL from `adminUri` (:64), which is
     // also `prov_admin`'s, so the `CREATE ROLE app_user` inside the core migration set ran as
     // `prov_admin`. Postgres grants a role admin option on a role it creates (`instance-plan.ts`'s
     // REQUIREMENTS comment says the same about `waitron_migrator`), which is where `prov_admin`'s
     // ability to grant `app_user` comes from.
     //
     // Deliberately NOT claimed, because an earlier version of this comment claimed both and both
-    // are false. (a) "Every `applyInstance` call in this file passes `admin`" — :238, :301 and :399
+    // are false. (a) "Every `applyInstance` call in this file passes `admin`" — :243, :306 and :404
     // each pass a purpose-built under-privileged probe (`grant_probe_admin`, `delegate_admin`,
     // `probe_admin`) precisely so a refusal can be forced; none of them runs a `migrate`, so none
     // affects who owns `app_user`. (b) "The container's superuser is never `ApplyDeps.admin`" — the
-    // second `describe` in this file (:424) binds its own `admin` to `pg.connect()` (:435), which
+    // second `describe` in this file (:429) binds its own `admin` to `pg.connect()` (:440), which
     // `packages/db/src/testing/postgres.ts:52-54` documents as the container's superuser, and
-    // hands it to `applyInstance` at :468. That block is a separate bare container and has no
+    // hands it to `applyInstance` at :476. That block is a separate bare container and has no
     // bearing on this one; the mistake was scoping a per-block fact to the whole file.
     //
     // A SECOND admin, holding exactly the attributes this tool's spec asks for — `login createdb
@@ -450,7 +455,10 @@ describe("applyInstance's create-role failure handling", () => {
       database: DATABASE,
       adminUri: pg.uri,
       migrationsRoot: null,
-      openTarget: () => createPostgresDb(withDatabase(pg.uri, DATABASE)),
+      openTarget: async () => {
+        const db = await createPostgresDb(withDatabase(pg.uri, DATABASE));
+        return { db, release: () => db.close() };
+      },
     };
     const marker = "unmistakable-generated-password-marker";
     const actions: InstanceAction[] = [

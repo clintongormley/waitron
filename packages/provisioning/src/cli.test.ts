@@ -679,7 +679,7 @@ describe("runCli instance", () => {
     const h = harness({
       env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
       apply: async (_actions, applyDeps) => {
-        opened = await applyDeps.openTarget();
+        opened = (await applyDeps.openTarget()).db;
         expect(applyDeps.database).toBe(DATABASE);
         expect(applyDeps.adminUri).toBe(ADMIN_URI);
         expect(applyDeps.migrationsRoot).toBeNull();
@@ -695,6 +695,67 @@ describe("runCli instance", () => {
     expect(h.connect).toHaveBeenCalledWith(
       "postgres://admin:adminsecret@db.example:5432/waitron_demo",
     );
+  });
+
+  it("opens the target database ONCE on a re-run, not once per consumer", async () => {
+    // On every run after the first, `withState` opens a connection to the target to read the
+    // deployment's state, and `applyInstance` then wants one too — on EVERY run, because the
+    // migrator's schema grant is re-issued unconditionally (`instance-plan.ts`). Those used to be
+    // two separate dials of the same database. `createPostgresDb` connects and releases up front,
+    // so the second was a real TCP connect and auth handshake per run, not a cheap object.
+    //
+    // The exact URIs, in order, rather than a count: a count alone would pass against a version
+    // that dialled the ADMIN string twice and never reached the target at all.
+    const h = harness({
+      state: PROVISIONED,
+      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
+      apply: async (_actions, applyDeps) => {
+        const first = await applyDeps.openTarget();
+        expect(first.db).toBeDefined();
+        await first.release();
+      },
+    });
+    expect(
+      await runCli(
+        ["instance", "--database", DATABASE, "--environment", "preproduction", "--yes"],
+        h.deps,
+      ),
+    ).toBe(0);
+
+    expect(h.connect.mock.calls.map((call) => call[0])).toEqual([
+      ADMIN_URI,
+      "postgres://admin:adminsecret@db.example:5432/waitron_demo",
+    ]);
+    // And both are closed exactly once — `release` is a no-op precisely because `withState`'s
+    // `finally` is the single place either handle dies. A version that closed in both would run
+    // this to 3 and, against a real `pg` pool, throw.
+    expect(h.closes()).toBe(2);
+  });
+
+  it("opens the target ONCE on a first provision too, when the apply is what needs it", async () => {
+    // The other half: the database does not exist, so `withState` opens nothing for the state read
+    // and the apply's own request is the first. It must still be one connection, and `withState`
+    // must still be the thing that closes it — the accessor caches into the same slot the `finally`
+    // reads.
+    const h = harness({
+      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
+      apply: async (_actions, applyDeps) => {
+        await (await applyDeps.openTarget()).release();
+        await (await applyDeps.openTarget()).release();
+      },
+    });
+    expect(
+      await runCli(
+        ["instance", "--database", DATABASE, "--environment", "preproduction", "--yes"],
+        h.deps,
+      ),
+    ).toBe(0);
+
+    expect(h.connect.mock.calls.map((call) => call[0])).toEqual([
+      ADMIN_URI,
+      "postgres://admin:adminsecret@db.example:5432/waitron_demo",
+    ]);
+    expect(h.closes()).toBe(2);
   });
 
   it("lets an unrecognised failure from the apply escape to bin.ts", async () => {

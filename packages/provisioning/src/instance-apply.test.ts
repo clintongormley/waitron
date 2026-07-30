@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import type { Database } from "@waitron/db";
-import { applyInstance } from "./instance-apply.js";
+import { applyInstance, type TargetConnection } from "./instance-apply.js";
 import { describeAction, type InstanceAction } from "./instance-plan.js";
 
 /**
@@ -33,7 +33,7 @@ function depsThrowing(error: unknown) {
     database: "waitron_probe",
     adminUri: "postgres://admin@localhost:5432/postgres",
     migrationsRoot: null,
-    openTarget: (): Promise<Database> =>
+    openTarget: (): Promise<TargetConnection> =>
       Promise.reject(new Error("openTarget must not be reached by these actions")),
   };
 }
@@ -186,7 +186,7 @@ describe("applyInstance's create-role statement", () => {
         database: "waitron_probe",
         adminUri: "postgres://admin@localhost:5432/postgres",
         migrationsRoot: null,
-        openTarget: (): Promise<Database> =>
+        openTarget: (): Promise<TargetConnection> =>
           Promise.reject(new Error("openTarget must not be reached by these actions")),
       },
     );
@@ -239,15 +239,17 @@ describe("applyInstance's post-apply grant verification", () => {
       }
       return Promise.resolve({ rows: [] });
     };
-    // `close` is real: `applyInstance`'s `finally` closes whatever `openTarget` returned, and a
-    // fixture without it turned a refusal into `TypeError: target?.close is not a function`.
+    // `close` is real, and `release` calls it: `applyInstance` releases whatever `openTarget`
+    // returned, this fixture OWNS what it hands over, and a fixture without a `close` turned a
+    // refusal into `TypeError: target?.close is not a function`.
     const db = { execute: answer, close: async () => {} } as unknown as Database;
     return {
       admin: db,
       database: "acl_db",
       adminUri: "postgres://admin@localhost:5432/postgres",
       migrationsRoot: null,
-      openTarget: (): Promise<Database> => Promise.resolve(db),
+      openTarget: (): Promise<TargetConnection> =>
+        Promise.resolve({ db, release: () => db.close() }),
     };
   }
 
@@ -406,7 +408,8 @@ describe("applyInstance's post-apply grant verification", () => {
       database: "acl_db",
       adminUri: "postgres://admin@localhost:5432/postgres",
       migrationsRoot: null,
-      openTarget: (): Promise<Database> => Promise.resolve(empty as unknown as Database),
+      openTarget: (): Promise<TargetConnection> =>
+        Promise.resolve({ db: empty as unknown as Database, release: () => empty.close() }),
     };
     await expect(applyInstance(DATABASE_GRANT, deps)).rejects.toMatchObject({
       code: "provisioning.grant_ineffective",
@@ -513,7 +516,7 @@ describe("applyInstance's post-apply grant verification", () => {
       database: "acl_db",
       adminUri: "postgres://admin@localhost:5432/postgres",
       migrationsRoot: null,
-      openTarget: (): Promise<Database> =>
+      openTarget: (): Promise<TargetConnection> =>
         Promise.reject(new Error("openTarget must not be reached by these actions")),
     });
     expect(executed).toEqual(['create database "acl_db"']);

@@ -2,7 +2,7 @@ import { parseArgs } from "node:util";
 import { AppError, isAppError } from "@waitron/shared";
 import type { Database, DeploymentEnvironment } from "@waitron/db";
 import { assertIdentifier } from "./identifiers.js";
-import { applyInstance, withDatabase } from "./instance-apply.js";
+import { applyInstance, withDatabase, type TargetConnection } from "./instance-apply.js";
 import { describeAction, planInstance, type InstanceAction } from "./instance-plan.js";
 import {
   INSTANCE_ROLES,
@@ -155,7 +155,7 @@ async function instance(argv: string[], deps: CliDeps): Promise<number> {
     );
     const adminUri = await resolveAdminUri(deps);
 
-    return await withState(adminUri, database, deps, async (state, admin) => {
+    return await withState(adminUri, database, deps, async (state, admin, openTarget) => {
       const actions = planInstance(state, { database, environment });
 
       // Never empty in practice, and deliberately not special-cased: `planInstance` re-issues every
@@ -200,9 +200,15 @@ async function instance(argv: string[], deps: CliDeps): Promise<number> {
           database,
           adminUri,
           migrationsRoot: deps.migrationsRoot,
-          // Its own connection, not the one `withState` holds: `applyInstance` closes whatever this
-          // returns, and `withState` closes its own — one handle closed twice is an error in `pg`.
-          openTarget: () => deps.connect(withDatabase(adminUri, database)),
+          // `withState`'s accessor, NOT a second dial of the same database. On every re-run
+          // `withState` already holds a connection to the target — it opened one to read the
+          // deployment's state — and the migrator's schema grant is re-issued unconditionally, so
+          // `applyInstance` wants one on every run too. Passing `() => deps.connect(...)` here
+          // opened a second identical connection each time; `createPostgresDb` connects and
+          // releases up front, so that was a real TCP connect and auth handshake, not a cheap
+          // object. See `withState` for why it is safe to lend, and `TargetConnection` for who
+          // closes it.
+          openTarget,
         });
       } catch (error) {
         if (created.length > 0) {
@@ -292,7 +298,11 @@ async function withState(
   adminUri: string,
   database: string,
   deps: CliDeps,
-  body: (state: InstanceState, admin: Database) => Promise<number>,
+  body: (
+    state: InstanceState,
+    admin: Database,
+    openTarget: () => Promise<TargetConnection>,
+  ) => Promise<number>,
 ): Promise<number> {
   let admin: Database;
   try {
@@ -311,7 +321,14 @@ async function withState(
     } catch (error) {
       throw asUnreadable(error, database);
     }
-    return await body(state, admin);
+    // The ONE place a connection to the target is opened, for both the state read above and for
+    // anything `body` hands to `applyInstance`. `release` is a no-op because this function's own
+    // `finally` is what closes it — ownership stated once, here, rather than split across two
+    // files that each half-assume it.
+    return await body(state, admin, async () => {
+      target ??= await deps.connect(withDatabase(adminUri, database));
+      return { db: target, release: async () => {} };
+    });
   } finally {
     // Nested so a failure closing the target cannot skip closing the admin connection. Both are
     // pools; leaking either keeps the process alive after `main` returns.
