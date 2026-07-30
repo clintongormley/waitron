@@ -195,13 +195,16 @@ the first version of this entry got wrong, both checked here rather than reasone
   `{=Tc/owner_a,owner_a=CTc/owner_a}` after — the privileges are unchanged, but the column is
   materialised from the implicit default. Never read `datacl IS NULL` as "nothing has been granted
   here"; a `GRANT` that granted nothing flips it.
-- **`has_*` functions DO see the grant option** — `has_table_privilege(…, 'SELECT WITH GRANT
-OPTION')`, `has_database_privilege(…, 'CREATE WITH GRANT OPTION')`, `has_schema_privilege` and
-  `pg_has_role(…, 'MEMBER WITH ADMIN OPTION')` each returned `t` for a role holding the option and
-  `f` for one holding the bare privilege. The real reason to read `pg_database.datacl` /
-  `pg_namespace.nspacl` directly is **the recursive closure**: `has_database_privilege('r_direct',
-'acl_db2','CREATE')` was `t` while `aclexplode(datacl)` had **zero** entries naming `r_direct`,
-  which held it only through a group. That is a false positive a provisioner must not accept.
+- **`has_*` functions DO see the grant option**, via the `'<PRIV> WITH GRANT OPTION'` spelling.
+  Measured in both directions for three of them — `has_table_privilege(…, 'SELECT WITH GRANT
+OPTION')`, `has_schema_privilege(…, 'CREATE WITH GRANT OPTION')` and
+  `pg_has_role(…, 'MEMBER WITH ADMIN OPTION')` each returned `t` for the role holding the option and
+  `f` for one holding the bare privilege or a plain membership — and in the positive direction for
+  `has_database_privilege(…, 'CONNECT WITH GRANT OPTION')`. The real reason to read
+  `pg_database.datacl` / `pg_namespace.nspacl` directly is **the recursive closure**:
+  `has_database_privilege('r_direct','acl_db2','CREATE')` was `t` while `aclexplode(datacl)` had
+  **zero** entries naming `r_direct`, which held it only through a group. That is a false positive a
+  provisioner must not accept.
 
 **Role-membership `GRANT`s are not in this family at all** — they always ERROR, never warn:
 `grant grp to r_app` from a non-member and from a member without `ADMIN OPTION` both gave
