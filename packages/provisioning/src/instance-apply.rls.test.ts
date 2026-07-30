@@ -118,6 +118,37 @@ describe("applyInstance against a blank container", () => {
     expect(state.roles.waitron_app?.memberOf).toContain("app_user");
     expect(state.roles.waitron_app?.memberOf).not.toContain("tenant_provisioner");
   });
+
+  it("repairs a membership that drifted after provisioning", async () => {
+    // Every membership the first test checked arrived via `CREATE ROLE ... IN ROLE`, because every
+    // role was freshly created there — the SEPARATE `grant-membership` action (the repair path for
+    // a role an operator created by hand, or whose membership was later revoked) is never exercised
+    // by anything above: dropping that `case` from applyInstance's switch would leave every test up
+    // to this point green. Proven end to end here instead: revoke a membership, confirm the planner
+    // notices, apply, confirm it comes back.
+    await admin.execute(sql.raw(`revoke tenant_provisioner from waitron_provisioner`));
+    const drifted = await readInstanceState(admin, DATABASE, null);
+    expect(drifted.roles.waitron_provisioner?.memberOf).not.toContain("tenant_provisioner");
+
+    const request = { database: DATABASE, environment: "preproduction" } as const;
+    const repair = planInstance(drifted, request);
+    expect(repair).toContainEqual({
+      kind: "grant-membership",
+      role: "waitron_provisioner",
+      of: "tenant_provisioner",
+    });
+
+    await applyInstance(repair, {
+      admin,
+      database: DATABASE,
+      adminUri: pg.uri,
+      migrationsRoot: null,
+      openTarget: () => createPostgresDb(withDatabase(pg.uri, DATABASE)),
+    });
+
+    const repaired = await readInstanceState(admin, DATABASE, null);
+    expect(repaired.roles.waitron_provisioner?.memberOf).toContain("tenant_provisioner");
+  });
 });
 
 describe("applyInstance's create-role failure handling", () => {
