@@ -87,6 +87,15 @@ describe("the tenant_provisioner migration's DO block", () => {
       sql`create role tenant_provisioner login password 'x'`,
       /tenant_provisioner already exists with LOGIN — refusing to reuse it/,
     ],
+    // NOINHERIT is the one attribute here that breaks the migration's own MECHANISM rather than its
+    // security boundary: the GRANT at the bottom of 0011 is recorded with inherit_option = f, so a
+    // login role granted this bucket gets its INSERT on tenants and none of app_user's grants. See
+    // 0011's own comment for the live 18.4 receipt, and this test's commit message for the deletion.
+    [
+      "NOINHERIT",
+      sql`create role tenant_provisioner nologin noinherit`,
+      /tenant_provisioner already exists with NOINHERIT — refusing to reuse it/,
+    ],
   ])("refuses a pre-existing tenant_provisioner that has %s", async (_label, create, expected) => {
     const db = await createPgliteDb();
     try {

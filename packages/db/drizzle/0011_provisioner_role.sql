@@ -23,10 +23,23 @@
 -- login role this migration expects to gate that grant. Roles are cluster-global and the test
 -- harness creates many databases in one shared container, so this must stay idempotent — a
 -- correctly-attributed pre-existing role passes silently.
+--
+-- The NOINHERIT check has no sibling to mirror; it guards the mechanism the GRANT at the bottom of
+-- this file depends on. Postgres records the grant's `inherit_option` from the MEMBER's own
+-- `rolinherit` at grant time, so a pre-existing NOINHERIT `tenant_provisioner` takes
+-- `GRANT app_user TO tenant_provisioner` with `inherit_option = f` and the chain silently stops
+-- there — the bucket keeps its own INSERT on `tenants` and passes none of app_user's grants down.
+-- Verified live on PostgreSQL 18.4, with this ELSIF absent: `create role tenant_provisioner nologin
+-- noinherit` before the core set, which then applied clean; `pg_auth_members` recorded
+-- tenant_provisioner -> app_user with `inherit_option = f` while the login role's own membership
+-- read `t`; and as a LOGIN role created `in role tenant_provisioner`, `select count(*) from tenants`
+-- failed `permission denied for table tenants` while the tenant INSERT succeeded — a provisioning
+-- run gets past `tenants` and dies on the next statement, `permission denied for table locations`.
+-- Refusing the role up front is cheaper than diagnosing that.
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'tenant_provisioner') THEN
-    CREATE ROLE tenant_provisioner NOLOGIN;
+    CREATE ROLE tenant_provisioner NOLOGIN NOSUPERUSER;
   ELSIF EXISTS (
     SELECT 1 FROM pg_roles WHERE rolname = 'tenant_provisioner' AND (rolsuper OR rolbypassrls)
   ) THEN
@@ -37,6 +50,11 @@ BEGIN
   ) THEN
     RAISE EXCEPTION
       'tenant_provisioner already exists with LOGIN — refusing to reuse it, since anyone who could authenticate as it directly would gain INSERT on tenants without going through a login role that also holds app_user';
+  ELSIF EXISTS (
+    SELECT 1 FROM pg_roles WHERE rolname = 'tenant_provisioner' AND NOT rolinherit
+  ) THEN
+    RAISE EXCEPTION
+      'tenant_provisioner already exists with NOINHERIT — refusing to reuse it, since the GRANT below would be recorded with inherit_option = f and a login role granted this bucket would insert a tenant and then fail on locations, half-provisioning it';
   END IF;
 END
 $$;
