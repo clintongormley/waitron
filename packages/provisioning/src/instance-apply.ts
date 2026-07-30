@@ -202,8 +202,14 @@ export async function applyInstance(
  * The membership is verified anyway because a revoke racing this run would otherwise pass unnoticed,
  * but it is not the reason this function exists.
  *
- * Returns the target connection so the caller can close whatever was opened — this may be the first
- * thing to need one, on a plan whose only actions are database-level grants.
+ * Returns the target connection so the caller closes anything this function opened. Today that is
+ * always the connection it was GIVEN, never a new one, and the previous version of this sentence
+ * claimed otherwise ("this may be the first thing to need one, on a plan whose only actions are
+ * database-level grants"). It cannot be: database-level verification reads `pg_database` over
+ * `deps.admin`, and the only branch that wants a target is guarded by `schemaGrants.length > 0`,
+ * which implies the main loop's own `grant-schema-create` case already opened one. The `??=` below
+ * is therefore unreachable today and is kept only because TypeScript cannot see that invariant —
+ * not because a caller is expected to hit it.
  */
 async function verifyGrants(
   actions: readonly InstanceAction[],
