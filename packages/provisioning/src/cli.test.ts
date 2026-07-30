@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import type { Database } from "@waitron/db";
 import { manifestSets } from "@waitron/migrations";
 import { runCli } from "./cli.js";
@@ -783,13 +783,5 @@ describe("the error codes this CLI raises", () => {
     expect(line).toBeDefined();
     expect(line).toContain('"environment":"staging"');
     expect(line).toContain("preproduction");
-  });
-
-  it("throws an AppError, not a bare Error, for an unknown environment", () => {
-    const error = new AppError("deployment.unknown_environment", {
-      environment: "staging",
-      known: ["production", "preproduction"],
-    });
-    expect(isAppError(error)).toBe(true);
   });
 });
