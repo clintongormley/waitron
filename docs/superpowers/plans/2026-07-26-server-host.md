@@ -1,5 +1,10 @@
 # `apps/server` — Host Process and Scheduler Loop Implementation Plan
 
+> **Superseded detail, 2026-07-30.** This plan names the error code `server.migrations_missing`.
+> It was renamed to `migrations.set_missing` when `manifest.ts`/`apply.ts` moved out of `apps/server`
+> into `@waitron/migrations` (branch `feat/provisioning-cli`). The text below is left as written;
+> `packages/migrations/src/errors.ts` carries the reasoning for the rename.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build `apps/server`, a long-running process that gives the fiscal `drain` and the Stripe payments reconcile a caller, reading per-tenant credentials from the vault and pacing itself on the `nextDueAt` both duties already return.

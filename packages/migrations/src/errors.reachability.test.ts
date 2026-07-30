@@ -6,9 +6,9 @@ import * as barrel from "./index.js";
  * file nothing imports type-checks locally and vanishes for every consumer. Mirrors
  * packages/credentials/src/errors.reachability.test.ts. */
 describe("the migrations error codes reach the public barrel", () => {
-  it("constructs a server.migrations_missing AppError with typed params", () => {
-    const error = new AppError("server.migrations_missing", { name: "core", folder: "/x" });
-    expect(error.code).toBe("server.migrations_missing");
+  it("constructs a migrations.set_missing AppError with typed params", () => {
+    const error = new AppError("migrations.set_missing", { name: "core", folder: "/x" });
+    expect(error.code).toBe("migrations.set_missing");
     expect(error.params).toEqual({ name: "core", folder: "/x" });
   });
 

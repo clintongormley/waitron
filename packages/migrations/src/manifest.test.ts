@@ -41,7 +41,7 @@ describe("the migration manifest", () => {
     // A real fixture, not the illustrative "/opt/waitron/drizzle" apps/server/src/config.test.ts
     // uses for ROOT: that path is never touched on disk there (loadConfig only plumbs the string
     // through), but migrationOptionsFor's journal check runs in the root branch too — so a
-    // bundle-root test needs a folder that actually exists, or it fails on server.migrations_missing
+    // bundle-root test needs a folder that actually exists, or it fails on migrations.set_missing
     // rather than on the assertion it's meant to check.
     const root = mkdtempSync(join(tmpdir(), "waitron-migrations-"));
     try {
@@ -69,7 +69,7 @@ describe("the migration manifest", () => {
         migrationOptionsFor([{ name: "core", table: "t", from: "x" }], "relative-migrations-root"),
       ),
     );
-    expect(isAppError(error) && error.code).toBe("server.migrations_missing");
+    expect(isAppError(error) && error.code).toBe("migrations.set_missing");
     expect(isAppError(error) && error.params).toMatchObject({
       name: "core",
       folder: join(import.meta.dirname, "..", "relative-migrations-root", "core"),
@@ -85,7 +85,7 @@ describe("the migration manifest", () => {
         migrationOptionsFor([{ name: "core", table: "t", from: "x" }], "/nonexistent-root"),
       ),
     );
-    expect(isAppError(error) && error.code).toBe("server.migrations_missing");
+    expect(isAppError(error) && error.code).toBe("migrations.set_missing");
     expect(isAppError(error) && error.params).toMatchObject({ name: "core" });
   });
 
@@ -102,7 +102,7 @@ describe("the migration manifest", () => {
       const error = await captureError(() =>
         Promise.resolve(migrationOptionsFor([{ name: "core", table: "t", from: "x" }], root)),
       );
-      expect(isAppError(error) && error.code).toBe("server.migrations_missing");
+      expect(isAppError(error) && error.code).toBe("migrations.set_missing");
       expect(isAppError(error) && error.params).toMatchObject({ name: "core" });
     } finally {
       rmSync(root, { recursive: true, force: true });

@@ -59,7 +59,7 @@ export function migrationOptionsFor(
     // clean against an unmigrated database and fail later, somewhere else. This check refuses both
     // up front, before Drizzle ever sees either.
     if (!existsSync(join(migrationsFolder, "meta", "_journal.json"))) {
-      throw new AppError("server.migrations_missing", { name: set.name, folder: migrationsFolder });
+      throw new AppError("migrations.set_missing", { name: set.name, folder: migrationsFolder });
     }
     return { migrationsFolder, migrationsTable: set.table };
   });

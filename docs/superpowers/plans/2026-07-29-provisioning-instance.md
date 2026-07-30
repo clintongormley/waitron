@@ -76,7 +76,7 @@ The second half of §5's claim survives intact — the admin connection string i
 | `packages/migrations/migrations.manifest.json` | The ordered set list. Moved from `apps/server`, `from` paths rebased. |
 | `packages/migrations/src/manifest.ts` | `manifestSets`, `migrationOptionsFor`. Moved verbatim. |
 | `packages/migrations/src/apply.ts` | `applyMigrations`. Moved verbatim. |
-| `packages/migrations/src/errors.ts` | `server.migrations_missing`, moved from `apps/server`. |
+| `packages/migrations/src/errors.ts` | `migrations.set_missing`, moved from `apps/server`. |
 | `packages/db/drizzle/0011_provisioner_role.sql` | The `tenant_provisioner` NOLOGIN bucket + `INSERT ON tenants`. |
 | `packages/provisioning/src/identifiers.ts` | `assertIdentifier`, `quoteIdent`, `generatePassword`. |
 | `packages/provisioning/src/keyring-command.ts` | `generateKeyRing`, `runKeyring`. |
@@ -262,7 +262,7 @@ import "@waitron/shared";
 declare module "@waitron/shared" {
   interface ErrorParams {
     /** A manifest set's folder is absent, or present with no `meta/_journal.json`. */
-    "server.migrations_missing": { name: string; folder: string };
+    "migrations.set_missing": { name: string; folder: string };
   }
 }
 ```
