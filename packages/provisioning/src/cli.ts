@@ -179,8 +179,8 @@ async function instance(argv: string[], deps: CliDeps): Promise<number> {
         //
         // The case is a second database on a cluster that already carries the three roles — the
         // roles are cluster-global while the database is not — and the reason no string can be
-        // printed is `reportRoles`': this tool did not generate those passwords and cannot read one
-        // back out of `pg_authid`.
+        // printed is the one `reportRoles` gives: this tool did not generate those passwords and
+        // cannot read one back out of `pg_authid`.
         deps.io.stdout("No connection strings will be printed: every role this needs already");
         deps.io.stdout("exists, and this tool cannot recover a password it did not generate.");
         deps.io.stdout("");
