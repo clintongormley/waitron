@@ -29,15 +29,37 @@ describe("readInstanceState", () => {
   });
 
   it("reports role attributes, not merely the name", async () => {
-    await admin.execute(sql.raw(`create role waitron_migrator login password 'x' createrole`));
+    // `superuser` on waitron_migrator and `bypassrls` on waitron_app are there so each field's
+    // TRUE branch is exercised somewhere in this suite, not just its false one — a hardcoded
+    // `superuser: false` (or `bypassRls: false`, or `memberOf: []`) would satisfy a test that only
+    // ever saw false/empty values. Neither attribute is a recommendation for how a real deployment
+    // should configure these roles; they exist here purely to give the reader something to assert.
     await admin.execute(
-      sql.raw(`create role waitron_app login password 'x' in role app_user_probe`),
+      sql.raw(`create role waitron_migrator login password 'x' createrole superuser`),
+    );
+    await admin.execute(
+      sql.raw(`create role waitron_app login password 'x' bypassrls in role app_user_probe`),
     );
     const state = await readInstanceState(admin, "waitron_absent", null);
-    expect(state.roles.waitron_migrator).toMatchObject({ canLogin: true, createRole: true });
     // Spec §4: verify ATTRIBUTES, not just the name. A `waitron_migrator` that exists NOLOGIN is
-    // a broken deployment that a name-only check would report as provisioned.
-    expect(state.roles.waitron_app).toMatchObject({ canLogin: true, createRole: false });
+    // a broken deployment that a name-only check would report as provisioned. `toEqual`, not
+    // `toMatchObject`: every field of RoleFacts is pinned, including `memberOf`, so deleting the
+    // `pg_auth_members` join (or hardcoding any of these fields) fails this test rather than
+    // passing it silently.
+    expect(state.roles.waitron_migrator).toEqual({
+      canLogin: true,
+      createRole: true,
+      superuser: true,
+      bypassRls: false,
+      memberOf: [],
+    });
+    expect(state.roles.waitron_app).toEqual({
+      canLogin: true,
+      createRole: false,
+      superuser: false,
+      bypassRls: true,
+      memberOf: ["app_user_probe"],
+    });
     expect(state.roles.waitron_provisioner).toBeUndefined();
   });
 

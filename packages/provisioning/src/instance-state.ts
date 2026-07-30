@@ -64,6 +64,15 @@ export async function readInstanceState(
   );
   const databaseExists = dbRows.rows[0]?.exists === true;
 
+  // The two `::text`/`::text[]` casts below are load-bearing, not decoration. `pg_roles.rolname`
+  // is Postgres's `name` type, so an uncast `array(select g.rolname ...)` is `name[]` — OID 1003 —
+  // and node-postgres's driver has no default parser for that OID: it hands back the wire literal
+  // (e.g. `"{app_user_probe}"`, or `"{}"` when empty) as a raw STRING, not an array. Confirmed
+  // against a real container: the uncast version of this query returned `member_of: "{}"` typeof
+  // "string" for every row, populated or not. OID 1009 (`_text`) IS one of the array types `pg`
+  // parses natively, so casting every element — and the `coalesce` fallback — to `text` is what
+  // makes `member_of` an actual `string[]` rather than a value that only looks like one until a
+  // caller reads it.
   const roleRows = await admin.execute<{
     rolname: string;
     rolcanlogin: boolean;
@@ -74,10 +83,10 @@ export async function readInstanceState(
   }>(sql`
     select r.rolname, r.rolcanlogin, r.rolcreaterole, r.rolsuper, r.rolbypassrls,
            coalesce(
-             array(select g.rolname from pg_auth_members m
+             array(select g.rolname::text from pg_auth_members m
                    join pg_roles g on g.oid = m.roleid
                    where m.member = r.oid),
-             '{}'
+             '{}'::text[]
            ) as member_of
     from pg_roles r
     where r.rolname = any(${sql.raw(`array[${INSTANCE_ROLES.map((r) => `'${r}'`).join(", ")}]`)})
