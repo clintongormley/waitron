@@ -115,7 +115,7 @@ describe("applyInstance's create-role failure", () => {
     // quote that statement back.
     const leaky = Object.assign(
       new Error(
-        "Failed query: create role \"waitron_migrator\" login createrole password " +
+        'Failed query: create role "waitron_migrator" login createrole password ' +
           "'unmistakable-generated-password-marker' in role \"app_user\"",
       ),
       { code: "42704" },
@@ -129,6 +129,20 @@ describe("applyInstance's create-role failure", () => {
     expect((thrown as Error).cause).toBeUndefined();
   });
 
+  it("gives up on a cause chain longer than the bound rather than following it forever", async () => {
+    // A chain that is long but not cyclic: the SQLSTATE sits below the depth bound, so it is not
+    // found. Losing a diagnostic on an absurd error shape is the deliberate trade for a walk that
+    // terminates — reporting `null` is exactly what "no SQLSTATE to be had" already means.
+    let deepest: unknown = Object.assign(new Error("bottom"), { code: "42501" });
+    for (let i = 0; i < 10; i += 1)
+      deepest = Object.assign(new Error(`wrap ${i}`), { cause: deepest });
+
+    const thrown = await thrownBy(CREATE_ROLE, deepest);
+    expect(isAppError(thrown)).toBe(true);
+    if (!isAppError(thrown)) return;
+    expect(thrown.params).toEqual({ role: "waitron_migrator", sqlstate: null });
+  });
+
   it("does not spin on a self-referential cause chain", async () => {
     const cyclic: { message: string; cause?: unknown } = { message: "round and round" };
     cyclic.cause = cyclic;
@@ -136,6 +150,50 @@ describe("applyInstance's create-role failure", () => {
     expect(isAppError(thrown)).toBe(true);
     if (!isAppError(thrown)) return;
     expect(thrown.params).toEqual({ role: "waitron_migrator", sqlstate: null });
+  });
+});
+
+describe("applyInstance's create-role statement", () => {
+  it("emits no IN ROLE clause for a role that is a member of nothing", async () => {
+    // Every role `REQUIREMENTS` (instance-plan.ts) describes today is a member of something, so
+    // nothing else in this package reaches this branch — and a `create role ... login in role`
+    // with an empty list is a syntax error, not a harmless no-op. Recorded rather than asserted
+    // through a container because what is under test is the STRING, not what Postgres does with it.
+    // Every statement in this file is built with `sql.raw`, whose whole text lands in a single
+    // `StringChunk` — `{ queryChunks: [{ value: ["create role ..."] }] }`, confirmed by inspecting
+    // a real `sql.raw` object rather than assumed. Reading it back is what lets this assert the
+    // literal SQL without a database to send it to.
+    const statements: string[] = [];
+    const admin = {
+      execute: (query: { queryChunks: { value: string[] }[] }) => {
+        statements.push(query.queryChunks.map((chunk) => chunk.value.join("")).join(""));
+        return Promise.resolve({ rows: [] });
+      },
+    } as unknown as Database;
+
+    await applyInstance(
+      [
+        {
+          kind: "create-role",
+          role: "waitron_app",
+          password: "generated",
+          createRole: false,
+          memberOf: [],
+        },
+      ],
+      {
+        admin,
+        database: "waitron_probe",
+        adminUri: "postgres://admin@localhost:5432/postgres",
+        migrationsRoot: null,
+        openTarget: (): Promise<Database> =>
+          Promise.reject(new Error("openTarget must not be reached by these actions")),
+      },
+    );
+
+    expect(statements).toHaveLength(1);
+    expect(statements[0]).toBe(`create role "waitron_app" login password 'generated'`);
+    expect(statements[0]).not.toContain("in role");
   });
 });
 

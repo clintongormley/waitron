@@ -15,6 +15,14 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    /** An operator typed something that is not a deployment environment. Named for the DOMAIN
+     * concept, not for this package — it sits beside `deployment.already_stamped`
+     * (`packages/db/src/errors.ts`) and `deployment.environment_mismatch`
+     * (`apps/server/src/errors.ts`), because the fact is about a deployment environment and the
+     * provisioning CLI is merely where it was typed. Both params ARE echoed: `value` is
+     * operator-typed configuration and `known` is the legal set, which is what lets the refusal be
+     * acted on without reading the source. Shaped after `credentials.unknown_purpose`. */
+    "deployment.unknown_environment": { value: string; known: string[] };
     /** A database or role name outside `/^[a-z][a-z0-9_]{0,62}$/`. `value` IS echoed: it is
      * operator-typed configuration, never a secret, and a refusal that withheld it could not be
      * acted on. */
@@ -29,6 +37,20 @@ declare module "@waitron/shared" {
      * altered: this tool did not create it, does not know its password, and `ALTER ROLE` on
      * something an operator made by hand is not its call. */
     "provisioning.role_unusable": { role: string; missing: string[] };
+    /** Reading what a deployment already has — `pg_database`, `pg_roles`, the journal tables, the
+     * deployment stamp — failed at the database. Every command here reads before it decides, so
+     * this is where an admin connection that cannot see the target database surfaces, and it is a
+     * REACHABLE case rather than a defensive one: an admin that did not create the database holds
+     * no privilege on the tables inside it, and `select environment from deployment` fails with
+     * 42501. Observed directly against `postgres:18-alpine` — see `README.md`'s "When the admin did
+     * not create the database" for the transcript and the remedy. 28P01 (a wrong password in the
+     * admin connection string) arrives here too, since `pg` authenticates lazily on first use.
+     *
+     * Raised ONLY when the failure carries a SQLSTATE. Anything else is a bug or a broken socket,
+     * not a fact about this database, and is rethrown unchanged rather than dressed up as one.
+     * `database` is operator-typed and `sqlstate` is five `[0-9A-Z]` characters (sqlstate.ts);
+     * neither can carry the admin connection string that produced it. */
+    "provisioning.state_unreadable": { database: string; sqlstate: string };
     /** `CREATE ROLE` failed. `role` and the SQLSTATE only — never the underlying driver error, and
      * never a `cause`: the failing statement carries a generated password in its literal text, and
      * both Drizzle's own wrapped error and Postgres's own error message quote the statement back

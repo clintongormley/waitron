@@ -38,6 +38,43 @@ describe("formatStatus", () => {
     expect(formatStatus(PROVISIONED).join("\n")).toContain("preproduction");
   });
 
+  it("spells out every attribute that makes a role unusable or unadoptable", () => {
+    // These are the roles `planInstance` REFUSES (`provisioning.role_unusable`,
+    // `provisioning.role_over_privileged`), so this report is what an operator reads immediately
+    // after being refused. A line that said only "present" would send them to `psql` to find out
+    // why. Every branch here corresponds to one refusal reason in instance-plan.ts's
+    // `assertUsable`.
+    const text = formatStatus({
+      database: "waitron",
+      databaseExists: true,
+      roles: {
+        waitron_migrator: {
+          canLogin: false,
+          createRole: false,
+          superuser: false,
+          bypassRls: false,
+          memberOf: [],
+        },
+        waitron_app: {
+          canLogin: true,
+          createRole: false,
+          superuser: true,
+          bypassRls: true,
+          memberOf: ["app_user"],
+        },
+      },
+      inside: { migratedSets: [], stamp: null },
+    }).join("\n");
+
+    expect(text).toContain("role waitron_migrator: present — NOLOGIN, member of nothing");
+    expect(text).toContain("SUPERUSER");
+    expect(text).toContain("BYPASSRLS");
+    // Unstamped is a real, common state — every database provisioned before the stamp existed —
+    // and is reported as such rather than as an empty field.
+    expect(text).toContain("deployment stamp: unstamped");
+    expect(text).toMatch(/migration set core: not applied/);
+  });
+
   it("says the database is absent and stops there", () => {
     const text = formatStatus({
       database: "waitron",

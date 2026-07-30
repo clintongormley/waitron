@@ -240,9 +240,10 @@ export default tseslint.config(
     // `js.configs.recommended` defines no environment, so a plain Node script has no `process`
     // global — unlike a `.ts` file, where `tseslint.configs.recommended` turns `no-undef` off
     // entirely (TS's own checker already catches that class of error, per ts(2304)/ts(2552)).
-    // `apps/server/scripts/copy-migrations.mjs` is the first `.mjs` in this repo, so this zone
-    // has had nothing to cover until now.
-    files: ["apps/server/scripts/**/*.mjs"],
+    // `apps/server/scripts/copy-migrations.mjs` was the first `.mjs` in this repo;
+    // `packages/provisioning/scripts/copy-migrations.mjs` is its near-copy, shipping the same
+    // migration folders beside `waitron-provision`'s own bundle. Both need the same one global.
+    files: ["apps/server/scripts/**/*.mjs", "packages/provisioning/scripts/**/*.mjs"],
     languageOptions: {
       globals: { process: "readonly" },
     },
