@@ -60,7 +60,7 @@ export async function applyInstance(
                 `create role ${quoteIdent(action.role)} ${attributes} password '${action.password}'${memberships}`,
               ),
             );
-          } catch {
+          } catch (error) {
             // The statement above embeds the generated password in its literal text, and BOTH
             // Drizzle's own wrapped failure (`Failed query: create role ... password '<generated>'
             // ...`) and Postgres's own error message quote that statement back verbatim — verified
@@ -73,17 +73,43 @@ export async function applyInstance(
             //
             // The original error is deliberately NOT attached as `cause`: Node's default console
             // formatting recurses into `.cause`, which would leak the same text one level down.
-            // `role` is the only detail worth keeping — it identifies WHICH create-role action
-            // failed without saying why, the same trade `packages/credentials/src/cipher.ts`'s
-            // `open()` makes when it discards a raw crypto error for an analogous reason.
-            throw new AppError("provisioning.role_creation_failed", { role: action.role });
+            // The same trade `packages/credentials/src/cipher.ts`'s `open()` makes when it
+            // discards a raw crypto error for an analogous reason.
+            //
+            // `role` alone was ALL that survived until now, and that cost the operator the one
+            // thing they needed next: 42710 ("already exists"), 42704 ("the membership target does
+            // not exist") and 42501 ("this admin may not") want three different responses and read
+            // identically without the code. `sqlstateOf` is what makes keeping it safe — see its
+            // own comment for why five characters of `[0-9A-Z]` cannot be the password this catch
+            // exists to withhold.
+            throw new AppError("provisioning.role_creation_failed", {
+              role: action.role,
+              sqlstate: sqlstateOf(error),
+            });
           }
           break;
         }
         case "grant-membership":
-          await deps.admin.execute(
-            sql.raw(`grant ${quoteIdent(action.of)} to ${quoteIdent(action.role)}`),
-          );
+          try {
+            await deps.admin.execute(
+              sql.raw(`grant ${quoteIdent(action.of)} to ${quoteIdent(action.role)}`),
+            );
+          } catch (error) {
+            // Caught for DIAGNOSABILITY, not for secrecy — unlike `create-role` above, this
+            // statement embeds nothing sensitive. Without it the driver's own error escaped
+            // `applyInstance` raw, and the likeliest one is not a bug in this tool: an admin
+            // holding `login createdb createrole` that did NOT itself create `app_user` holds no
+            // ADMIN OPTION on it, and PostgreSQL refuses with `permission denied to grant role
+            // "app_user"`. Verified against a real `postgres:18-alpine` container, not reasoned
+            // about — see `instance-apply.rls.test.ts`'s "refuses a membership grant the admin
+            // holds no ADMIN OPTION for", which pins the 42501 this branch reports. The remedy is
+            // in `packages/provisioning/README.md`.
+            throw new AppError("provisioning.membership_grant_failed", {
+              role: action.role,
+              of: action.of,
+              sqlstate: sqlstateOf(error),
+            });
+          }
           break;
         case "grant-database-create":
           await deps.admin.execute(
@@ -142,6 +168,43 @@ export async function applyInstance(
   } finally {
     await target?.close();
   }
+}
+
+/** How far down a `cause` chain to look before giving up. Drizzle puts the driver's error one
+ * level down; the bound exists so a self-referential `cause` cannot spin, not because five levels
+ * are known to be needed. */
+const MAX_CAUSE_DEPTH = 5;
+
+/** Five characters, `[0-9A-Z]` — the shape SQLSTATE is defined to have. */
+const SQLSTATE = /^[0-9A-Z]{5}$/;
+
+/**
+ * The SQLSTATE of a driver failure, or `null` when there is none to be had.
+ *
+ * Nothing but a five-character `[0-9A-Z]` string ever leaves this function, and that is the entire
+ * argument for printing its result into an operator's terminal. It is STRUCTURAL, not a promise
+ * about who calls it: a generated password is 32 base64url characters (identifiers.ts) and a
+ * connection string is longer still, so neither can satisfy the pattern. A non-SQLSTATE error code
+ * that happens to match — Node's `EPIPE` is five upper-case characters — would pass this filter,
+ * and is equally not a secret; the filter is a shape guard, not an identification.
+ *
+ * It walks `.cause` because the code is not on the error `applyInstance` catches: Drizzle wraps the
+ * driver's error rather than re-exposing its fields. That is asserted against the real shape, not
+ * assumed — `instance-apply.rls.test.ts`'s "never lets the generated password reach a thrown error"
+ * forces a genuine failure through a real container and pins `sqlstate: "42704"`, which is only
+ * reachable through this walk.
+ */
+function sqlstateOf(error: unknown): string | null {
+  let current: unknown = error;
+  for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
+    if (typeof current !== "object" || current === null) return null;
+    const code: unknown = (current as { code?: unknown }).code;
+    if (typeof code === "string" && SQLSTATE.test(code)) return code;
+    const cause: unknown = (current as { cause?: unknown }).cause;
+    if (cause === current) return null;
+    current = cause;
+  }
+  return null;
 }
 
 function withDatabase(uri: string, database: string): string {

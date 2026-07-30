@@ -6,7 +6,7 @@ import { applyInstance } from "./instance-apply.js";
 import type { InstanceAction } from "./instance-plan.js";
 import { planInstance } from "./instance-plan.js";
 import { readInstanceState } from "./instance-state.js";
-import { startBarePostgres, type RealPostgres } from "./testing/postgres.js";
+import { roleUrl, startBarePostgres, type RealPostgres } from "./testing/postgres.js";
 
 const DATABASE = "waitron_instance_suite";
 
@@ -153,6 +153,65 @@ describe("applyInstance against a blank container", () => {
     const repaired = await readInstanceState(admin, DATABASE, null);
     expect(repaired.roles.waitron_provisioner?.memberOf).toContain("tenant_provisioner");
   });
+
+  it("refuses a membership grant the admin holds no ADMIN OPTION for", async () => {
+    // The receipt for the operator-facing gap `README.md`'s "When the admin cannot grant
+    // `app_user`" section documents, run rather than reasoned about.
+    //
+    // The container's own superuser created `app_user` (by running the migrations through
+    // `applyInstance` above) and can therefore grant it. A SECOND admin, holding exactly the
+    // attributes this tool's spec asks for — `login createdb createrole`, no superuser, no
+    // BYPASSRLS — did not create it, holds no ADMIN OPTION on it, and is refused. That admin is a
+    // completely ordinary thing for an operator to hand this tool on the second or third run: the
+    // cluster is already migrated, so whoever migrated it is not necessarily who is running
+    // `instance` now.
+    const action = { kind: "grant-membership", role: "waitron_app", of: "app_user" } as const;
+    const depsFor = (as: Database) => ({
+      admin: as,
+      database: DATABASE,
+      adminUri: pg.uri,
+      migrationsRoot: null,
+      openTarget: () => createPostgresDb(withDatabase(pg.uri, DATABASE)),
+    });
+
+    // The negative control, first: this EXACT action, run by an admin that DOES hold admin option,
+    // succeeds. Without it, a 42501 below would be consistent with the action itself being
+    // ill-formed — re-granting a membership `waitron_app` already holds — rather than with the
+    // admin lacking a privilege. It is not: the difference between the two runs is only who runs
+    // it.
+    await applyInstance([action], depsFor(admin));
+
+    await admin.execute(sql.raw(`drop role if exists probe_admin`));
+    await admin.execute(sql.raw(`create role probe_admin login createdb createrole password 'p'`));
+    const probe = await createPostgresDb(
+      roleUrl(withDatabase(pg.uri, DATABASE), "probe_admin", "p"),
+    );
+    try {
+      let thrown: unknown;
+      try {
+        await applyInstance([action], depsFor(probe));
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(isAppError(thrown)).toBe(true);
+      if (!isAppError(thrown)) return;
+      expect(thrown.code).toBe("provisioning.membership_grant_failed");
+      // 42501 is `insufficient_privilege`. Pinned rather than merely asserting "some code": the
+      // README tells an operator that THIS code means "grant your admin ADMIN OPTION", and a
+      // different one would send them somewhere else.
+      expect(thrown.params).toEqual({
+        role: "waitron_app",
+        of: "app_user",
+        sqlstate: "42501",
+      });
+    } finally {
+      await probe.close();
+      // In a `finally` so the suite is order-independent rather than order-reliant: the tests
+      // after this one read `pg_roles`, and a leftover `probe_admin` is a role they did not create.
+      await admin.execute(sql.raw(`drop role if exists probe_admin`));
+    }
+  });
 });
 
 describe("applyInstance's create-role failure handling", () => {
@@ -207,7 +266,12 @@ describe("applyInstance's create-role failure handling", () => {
     expect(isAppError(thrown)).toBe(true);
     if (!isAppError(thrown)) return;
     expect(thrown.code).toBe("provisioning.role_creation_failed");
-    expect(thrown.params).toEqual({ role: "waitron_migrator" });
+    // `sqlstate` is the receipt for `sqlstateOf`'s `.cause` walk (instance-apply.ts): 42704 is
+    // `undefined_object`, which is what a missing membership target raises, and it is reachable
+    // here ONLY through that walk — Drizzle's own wrapper carries no `code` of its own. A hand-
+    // built two-level error in `instance-apply.test.ts` asserts the same walk; this one asserts
+    // that the REAL driver shape is the one it was built for.
+    expect(thrown.params).toEqual({ role: "waitron_migrator", sqlstate: "42704" });
     // The exact shape `src/errors.ts`'s doc comment says a future CLI prints:
     // `${error.code} ${JSON.stringify(error.params)}`.
     expect(`${thrown.code} ${JSON.stringify(thrown.params)}`).not.toContain(marker);

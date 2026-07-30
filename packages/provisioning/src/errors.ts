@@ -29,10 +29,24 @@ declare module "@waitron/shared" {
      * altered: this tool did not create it, does not know its password, and `ALTER ROLE` on
      * something an operator made by hand is not its call. */
     "provisioning.role_unusable": { role: string; missing: string[] };
-    /** `CREATE ROLE` failed. `role` only — never the underlying driver error, and never a `cause`:
-     * the failing statement carries a generated password in its literal text, and both Drizzle's
-     * own wrapped error and Postgres's own error message quote the statement back verbatim. See
-     * `instance-apply.ts`'s `create-role` case for the receipt. */
-    "provisioning.role_creation_failed": { role: string };
+    /** `CREATE ROLE` failed. `role` and the SQLSTATE only — never the underlying driver error, and
+     * never a `cause`: the failing statement carries a generated password in its literal text, and
+     * both Drizzle's own wrapped error and Postgres's own error message quote the statement back
+     * verbatim. See `instance-apply.ts`'s `create-role` case for the receipt.
+     *
+     * `sqlstate` is `sqlstateOf`'s output (instance-apply.ts) — five characters of `[0-9A-Z]`, or
+     * `null`. It is what tells an operator which of "already exists" (42710), "the membership
+     * target does not exist" (42704) and "this admin is not allowed to" (42501) they hit; `role`
+     * alone sent them to the Postgres log for that. Safe by SHAPE rather than by promise: a
+     * generated password is 32 base64url characters (identifiers.ts) and a connection string is
+     * longer still, so neither can satisfy five `[0-9A-Z]`. */
+    "provisioning.role_creation_failed": { role: string; sqlstate: string | null };
+    /** `GRANT <of> TO <role>` failed — the repair path for a membership that drifted, or that a
+     * hand-made role never had. Same `sqlstate` treatment and same reasoning as
+     * `provisioning.role_creation_failed` above, minus the password: this statement embeds no
+     * secret, and the catch exists because the driver's raw error otherwise escaped `applyInstance`
+     * unformatted on a path a real operator reaches (an admin holding CREATEROLE but no ADMIN
+     * OPTION on `app_user` — 42501, proven in `instance-apply.rls.test.ts`). */
+    "provisioning.membership_grant_failed": { role: string; of: string; sqlstate: string | null };
   }
 }
