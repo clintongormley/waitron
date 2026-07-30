@@ -116,10 +116,11 @@ describe("planInstance against a provisioned deployment", () => {
     // migrator grants (grant-database-create, grant-schema-create) that the implementation always
     // re-issues regardless of what else changed in the plan — see the "re-issued, not diffed"
     // comment on REQUIREMENTS in instance-plan.ts. Order confirmed empirically by running this
-    // suite (see task-5-report.md): the two migrator grants are emitted before the membership
-    // grant, because the implementation's grant loop runs before the migrate/stamp tail but after
-    // the create-role/grant-membership loop — the membership grant for waitron_provisioner is
-    // produced by the earlier loop, then the migrator's two grants by the later one.
+    // suite: `grant-membership` for waitron_provisioner is emitted FIRST — it comes from the
+    // create-role/grant-membership loop over INSTANCE_ROLES — and the migrator's two grants come
+    // SECOND, from the separate, unconditional grants loop that runs after it. (This fixture's
+    // `state.inside` is already fully migrated and stamped, so neither `migrate` nor `stamp`
+    // appears here at all — the loop that would emit them never fires.)
     expect(planInstance(state, REQUEST, () => "pw")).toEqual([
       { kind: "grant-membership", role: "waitron_provisioner", of: "tenant_provisioner" },
       { kind: "grant-database-create", role: "waitron_migrator", database: "waitron" },
