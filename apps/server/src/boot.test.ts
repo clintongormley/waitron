@@ -15,9 +15,9 @@ import { loadKeyRing, putCredential } from "@waitron/credentials";
 // `@waitron/payments/test/seed.js` from `packages/payments-stripe`'s suites): no `exports` map
 // restricts either package, so the deep import resolves the same way a same-package one would.
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { DEFAULT_MIGRATIONS_ROOT, startServer, type StartedServer } from "./boot.js";
 import { DUTY_BUDGET_MS } from "./health.js";
-import { manifestSets, migrationOptionsFor } from "./migrations.js";
 import { DRAIN_DUTY } from "./pass.js";
 import { roleUrl, startRealPostgres, type RealPostgres } from "./testing/postgres.js";
 import { mintMtlsMaterial } from "./testing/tls.js";

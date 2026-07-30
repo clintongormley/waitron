@@ -16,27 +16,62 @@
 -- `rolbypassrls = f`: the four tenant-scoped inserts below succeed. The only privilege needed
 -- beyond `app_user` membership is INSERT on `tenants`, which `app_user` deliberately does not
 -- hold (0001 grants it SELECT only) — so the deployment role cannot create tenants, and a
--- provisioning role must. The `deployment` stamp INSERT added below has the identical shape:
--- 0010_deployment_stamp.sql grants `app_user` only SELECT on `deployment`, so INSERT on it needs
--- the same "beyond app_user" privilege `tenants` does — unproven independently, but nothing about
--- it is RLS (`deployment` carries none at all; see its own schema comment), so it fails on the
--- grant, the same way `tenants` does, not on a policy.
+-- provisioning role must.
 --
--- This file nonetheless keeps the superuser requirement, for two reasons, NEITHER of which is a
--- psql limitation. An earlier version of this note claimed psql "cannot generate a uuid into a
--- variable before the INSERT that uses it" — that is also false (Copilot, PR #4), and this script
--- already uses `\gset` three times; `select gen_random_uuid() as tid \gset` works and the variable
--- is usable in `set_config` before any INSERT. The real reasons:
+-- This file nonetheless keeps the superuser requirement, and not for a psql limitation. An
+-- earlier version of this note claimed psql "cannot generate a uuid into a variable before the
+-- INSERT that uses it" — that is also false (Copilot, PR #4), and this script already uses `\gset`
+-- four times below, one per `returning id` clause (:104, :108, :112, :116 — counted, not recalled;
+-- the note this replaces said three); `select gen_random_uuid() as tid \gset` works and the
+-- variable is usable in `set_config` before any INSERT.
 --
---   1. This script lets `tenants.id` DEFAULT rather than choosing it, so there is no id to adopt as
---      the scope. That is this file's choice, changeable in three lines.
---   2. No non-superuser role in this repository holds INSERT on `tenants` today. Fixing (1) alone
---      would just move the failure from the RLS check to the grant.
+-- THE REASON, and there is only one. This script lets `tenants.id` DEFAULT rather than choosing it,
+-- so there is no id to set `app.tenant_id` to and no scope to adopt before the INSERT that needs
+-- one. `tenants_tenant_isolation`'s WITH CHECK (id = current_tenant_id()) therefore refuses the
+-- row — and because 0001 applies FORCE ROW LEVEL SECURITY, it refuses it for the TABLE OWNER too,
+-- which is why the header above says superuser or BYPASSRLS rather than "the owner is enough".
+-- Verified live on PostgreSQL 18.4 against the real migrations, running THIS file with psql as a
+-- LOGIN role with `rolsuper = f` and `rolbypassrls = f` that OWNS all 12 public tables: the
+-- `deployment` statement reported `INSERT 0 1` and the `tenants` statement then failed with
+-- `ERROR:  new row violates row-level security policy for table "tenants"`.
 --
--- So the rewrite only pays off together with a provisioning role that holds that grant, which is
--- what the programmatic provisioning path introduces. The distinction matters beyond tidiness:
--- managed Postgres (Neon, Supabase, RDS) grants CREATEDB/CREATEROLE but never true superuser, so
--- "superuser required" would have read as "not deployable there".
+-- That one thing is also the whole fix. The SAME owner role, running a copy of this script whose
+-- only change is `select gen_random_uuid() as tid \gset` and
+-- `select set_config('app.tenant_id', :'tid', true)` ahead of an explicit `id` in the `tenants`
+-- INSERT, ran every statement in the file — the `deployment` stamp included — and COMMITted.
+-- Changeable in three lines; not a property of the schema.
+--
+-- WHAT THE `deployment` STAMP REQUIRES, since an earlier version of this note got it wrong twice
+-- over. It claimed "no non-superuser role holds INSERT on `deployment`", and made that a SECOND,
+-- independent blocker that had to be fixed together with the RLS one. Both halves are false, and
+-- the shape of the role is what the claim was missing:
+--
+--   * A MERE GRANTEE really is blocked here, and it is the script's FIRST statement, so it never
+--     reaches `tenants` at all. No migration in this repository GRANTs INSERT on `deployment` to
+--     anything — 0010_deployment_stamp.sql grants `app_user` SELECT only, and `tenant_provisioner`
+--     (packages/db/drizzle/0011_provisioner_role.sql) grants INSERT on `tenants` alone. Verified
+--     live on 18.4: as a LOGIN role holding `app_user` + `tenant_provisioner` membership and
+--     owning nothing, this file fails on its `insert into deployment` (:98) with
+--     `ERROR:  permission denied for table deployment`.
+--
+--   * THE TABLE OWNER is not. Ownership carries INSERT implicitly, with no GRANT involved — and
+--     unlike every other table this script writes, `deployment` carries no row-level security at
+--     all (`relrowsecurity = f`, `relforcerowsecurity = f`, confirmed on the migrated database;
+--     see 0010's own schema comment for why), so there is no FORCE RLS to strip the owner of its
+--     usual exemption either. The `INSERT 0 1` in the owner run above is that receipt, from a
+--     role with `rolsuper = f` and `rolbypassrls = f`.
+--
+-- So which statement stops you depends on the role you use: a mere grantee stops at `deployment`,
+-- the table owner gets past it and stops at `tenants`, and only superuser or BYPASSRLS gets
+-- through the file AS WRITTEN. The programmatic provisioning path (not this script) picks the uuid
+-- itself and so needs neither.
+--
+-- Two of the receipts above this line predate the role they now sit beside, so read them in order:
+-- the `\gset` correction is PR #4 (`d3bfb9e`) and the `app_user`-holds-SELECT-only finding is
+-- PR #5 (`4fb3db0`), both written before `tenant_provisioner` existed (`02c5f5e`) and so neither
+-- used it. Keeping the requirement narrow matters beyond tidiness: managed Postgres (Neon,
+-- Supabase, RDS) grants CREATEDB/CREATEROLE but never true superuser, so a blanket "superuser
+-- required" would have read as "not deployable there".
 --
 -- Deliberately NOT the test seeds: packages/db/src/testing/seed.ts writes 'Test SL' and a NIF from
 -- a counter. Those values would become part of a fiscal record the Agencia Tributaria keeps.

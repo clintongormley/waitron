@@ -8,7 +8,7 @@ import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { SCHEDULER_MIGRATIONS } from "@waitron/scheduler";
 import { CREDENTIALS_MIGRATIONS } from "@waitron/credentials";
 import { isAppError } from "@waitron/shared";
-import { manifestSets, migrationOptionsFor } from "./migrations.js";
+import { manifestSets, migrationOptionsFor } from "./manifest.js";
 
 describe("the migration manifest", () => {
   it("names the same journal tables the packages themselves declare", () => {
@@ -38,11 +38,11 @@ describe("the migration manifest", () => {
   });
 
   it("resolves under a bundle root by name", () => {
-    // A real fixture, not the illustrative "/opt/waitron/drizzle" config.test.ts uses for ROOT:
-    // that path is never touched on disk there (loadConfig only plumbs the string through), but
-    // migrationOptionsFor's journal check runs in the root branch too — so a bundle-root test
-    // needs a folder that actually exists, or it fails on server.migrations_missing rather than
-    // on the assertion it's meant to check.
+    // A real fixture, not the illustrative "/opt/waitron/drizzle" apps/server/src/config.test.ts
+    // uses for ROOT: that path is never touched on disk there (loadConfig only plumbs the string
+    // through), but migrationOptionsFor's journal check runs in the root branch too — so a
+    // bundle-root test needs a folder that actually exists, or it fails on migrations.set_missing
+    // rather than on the assertion it's meant to check.
     const root = mkdtempSync(join(tmpdir(), "waitron-migrations-"));
     try {
       mkdirSync(join(root, "core", "meta"), { recursive: true });
@@ -64,12 +64,17 @@ describe("the migration manifest", () => {
     // resolve differently depending on where the process happens to be launched from. There is no
     // real folder at the computed path, so this reaches the same throw as the tests below; the
     // assertion is on the resolved `folder`, not on success.
+    //
+    // "against this package" is a statement about running FROM SOURCE, which is the only way this
+    // suite ever runs. In a bundle `import.meta.url` is the bundle's own URL and the base moves with
+    // it — `migrationOptionsFor`'s own doc comment carries the built-artefact receipt. Do not read
+    // this test as pinning `packages/migrations` for the shipped form.
     const error = await captureError(() =>
       Promise.resolve(
         migrationOptionsFor([{ name: "core", table: "t", from: "x" }], "relative-migrations-root"),
       ),
     );
-    expect(isAppError(error) && error.code).toBe("server.migrations_missing");
+    expect(isAppError(error) && error.code).toBe("migrations.set_missing");
     expect(isAppError(error) && error.params).toMatchObject({
       name: "core",
       folder: join(import.meta.dirname, "..", "relative-migrations-root", "core"),
@@ -85,7 +90,7 @@ describe("the migration manifest", () => {
         migrationOptionsFor([{ name: "core", table: "t", from: "x" }], "/nonexistent-root"),
       ),
     );
-    expect(isAppError(error) && error.code).toBe("server.migrations_missing");
+    expect(isAppError(error) && error.code).toBe("migrations.set_missing");
     expect(isAppError(error) && error.params).toMatchObject({ name: "core" });
   });
 
@@ -102,7 +107,7 @@ describe("the migration manifest", () => {
       const error = await captureError(() =>
         Promise.resolve(migrationOptionsFor([{ name: "core", table: "t", from: "x" }], root)),
       );
-      expect(isAppError(error) && error.code).toBe("server.migrations_missing");
+      expect(isAppError(error) && error.code).toBe("migrations.set_missing");
       expect(isAppError(error) && error.params).toMatchObject({ name: "core" });
     } finally {
       rmSync(root, { recursive: true, force: true });

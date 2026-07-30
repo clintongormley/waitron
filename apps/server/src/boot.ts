@@ -5,12 +5,12 @@ import { credentialTenants, loadKeyRing } from "@waitron/credentials";
 import { runDue } from "@waitron/scheduler";
 import { StripeReconciler } from "@waitron/payments-stripe";
 import { drain } from "@waitron/fiscal-verifactu";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { loadConfig } from "./config.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { createLogger } from "./logger.js";
-import { applyMigrations, manifestSets, migrationOptionsFor } from "./migrations.js";
 import {
   createHealthState,
   healthApp,
@@ -37,7 +37,7 @@ export interface StartedServer {
  * Next to the bundle: `scripts/copy-migrations.mjs` puts them there, so `<dist>/drizzle` exists for
  * a built artefact. Run from source instead, this same expression resolves to
  * `apps/server/src/drizzle` — which does not exist — and `migrationOptionsFor` fails loud with
- * `server.migrations_missing`; `WAITRON_MIGRATIONS_DIR` (`config.ts`'s own override, see
+ * `migrations.set_missing`; `WAITRON_MIGRATIONS_DIR` (`config.ts`'s own override, see
  * `config.test.ts`) is the supported from-source route, not this default. `fileURLToPath`, not
  * `.pathname`: a path containing a space would otherwise arrive percent-encoded, and `.pathname` is
  * never absolute on Windows — `migrationOptionsFor`'s own relative-root fallback exists only to

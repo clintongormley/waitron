@@ -25,8 +25,16 @@ command that was run or a cited `file:line`. The good pattern already exists in 
 
 Two false claims shipped in one day for want of this. `bootstrap-tenant.sql` asserted superuser was
 unavoidable — it is not, and ninety seconds with a container disproved it. Its _correction_ then
-asserted psql "cannot generate a uuid into a variable", contradicted by the same file's own three
+asserted psql "cannot generate a uuid into a variable", contradicted by the same file's own four
 uses of `\gset`.
+
+That correction's own _replacement_ then went on to claim "no non-superuser role holds INSERT on
+`deployment`" and built two independent blockers on it. Also false — a non-superuser role that
+**owns** the table holds INSERT implicitly, and `deployment` carries no RLS to strip its exemption —
+and it stood for three commits. When a claim names a privilege, name the role SHAPE it holds it by:
+owner, grantee, or member. "Non-superuser role" unqualified is how that one got through. (The same
+round also found the `\gset` count was three in two files at once, this one included. A count
+repeated in a second place is a count to recheck in both.)
 
 **Reading is not verification.** That superuser claim survived a correction pass, a four-agent
 simplify, a fresh-context review and Copilot — four layers, all reading, all checking whether it was
@@ -69,7 +77,7 @@ fix before merge and permanent after.
 pnpm lint && pnpm typecheck && pnpm format:check && pnpm test
 ```
 
-Two traps that each cost a round trip:
+Three traps that each cost a round trip:
 
 - **CI's `test` job runs `pnpm test:coverage`, not `pnpm test`.** The pre-push hook runs plain
   `pnpm test`, so a coverage-threshold regression passes locally and fails in CI. Before claiming a
@@ -77,6 +85,14 @@ Two traps that each cost a round trip:
 - **The pre-push hook does not run `--frozen-lockfile`.** Moving a dependency between
   `dependencies` and `devDependencies` passes locally and fails CI at the install step. Run
   `pnpm install` and commit the lockfile.
+- **A filtered test run does not load a package's guard suites.**
+  `pnpm --filter @waitron/db test provisioner-role` was green while
+  `pnpm --filter @waitron/db test:coverage` failed on the same tree: the filter never loaded
+  `english-only.test.ts`, which rejected `'Venta en establecimiento'` in a new fixture (`venta` is in
+  `SPANISH_WORDS`). Cross-cutting suites that police the WHOLE package — the vocabulary guard, the
+  error-code reachability tests, schema-ownership — are invisible to a name-filtered run, so a
+  filtered green says nothing about them. Run the package unfiltered before believing a pass. Same
+  false-green shape as the two traps above, in a third place.
 
 On bypassing the hook, see §6 — the hook's own header sanctions `--no-verify` in an emergency, and
 the underlying failure still has to be fixed because CI runs the same checks.

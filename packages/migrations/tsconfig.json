@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    // Explicit, though `moduleResolution: "bundler"` in tsconfig.base.json already implies it under
+    // TypeScript 5: `src/manifest.ts` imports `../migrations.manifest.json`, and this is the only
+    // package in the repo that imports JSON at all. Verified both directions — setting this to
+    // false fails with `TS2732 Cannot find module '../migrations.manifest.json'`, and switching
+    // moduleResolution to nodenext still passes, so the default is doing the work today. Stated
+    // anyway so a future base-config change, or a cleanup pass like the one that removed this flag
+    // from apps/server in the same branch (where nothing imports JSON), cannot silently break it.
+    "resolveJsonModule": true,
+    "types": ["vitest/globals"]
+  },
+  "include": ["src", "test"]
+}
