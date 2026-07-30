@@ -84,7 +84,7 @@ describe("applyInstance against a blank container", () => {
     expect(rows.rows[0]?.rolbypassrls).toBe(false);
   });
 
-  it("takes a blank cluster to a migrated, stamped, granted database — and then plans nothing", async () => {
+  it("takes a blank cluster to a migrated, stamped, granted database — and then plans only the idempotent grants and a migrate", async () => {
     const applyDeps = deps(admin);
     const request = { database: DATABASE, environment: "preproduction" } as const;
 
@@ -150,14 +150,17 @@ describe("applyInstance against a blank container", () => {
       expect(migratorAcl).toMatch(/=C\*/);
 
       // The idempotency claim, made against reality rather than against the planner's own model:
-      // a second plan from the state the first one produced carries no create and no migrate.
+      // a second plan from the state the first one produced carries no create and no stamp.
+      // `migrate` is not part of that claim — instance-plan.ts now pushes it unconditionally, for
+      // the same reason as the two grants below, so it is expected here too rather than absent.
       const second = planInstance(after, request);
       expect(second).not.toContainEqual(expect.objectContaining({ kind: "create-role" }));
       expect(second).not.toContainEqual(expect.objectContaining({ kind: "create-database" }));
-      expect(second).not.toContainEqual({ kind: "migrate" });
+      expect(second).toContainEqual({ kind: "migrate" });
       expect(second).not.toContainEqual(expect.objectContaining({ kind: "stamp" }));
-      // Applying it again must also not throw — the grants are the only thing left, and they are
-      // idempotent by construction.
+      // Applying it again must also not throw. The grants are idempotent by construction, and
+      // re-running `migrate` is too: `dialect.js:62` applies a migration only when the journal's
+      // watermark is behind it, which it never is here.
       await applyInstance(second, applyDeps);
     } finally {
       await release();
