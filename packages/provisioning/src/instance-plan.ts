@@ -80,9 +80,16 @@ const REQUIREMENTS: Record<
  * State + request → the actions that close the gap, or a throw.
  *
  * Pure, and deliberately so: every refusal and every idempotency rule in spec §4 is here, where a
- * unit test can reach it without a container. An empty result means "everything is already
- * present" — which is what lets the CLI report a no-op rather than asking an operator to confirm
- * one.
+ * unit test can reach it without a container.
+ *
+ * **The result is never empty.** `waitron_migrator`'s two grants are pushed unconditionally at the
+ * bottom of this function — see "Grants are re-issued on every run rather than diffed" there — so a
+ * deployment that already has everything still yields exactly those two, which
+ * `instance-plan.test.ts`'s "plans only the idempotent grants" pins with an exhaustive `toEqual`.
+ * An earlier version of this paragraph said an empty result was "what lets the CLI report a no-op".
+ * That contradicted `cli.ts`'s own plan-summary comment, and `cli.ts` was the one that was right:
+ * a "nothing to do" branch there would be unreachable code claiming to handle a state that cannot
+ * arise.
  *
  * `password` is injected so a test can pin it. It is called ONCE PER ROLE CREATED and never for a
  * role that already exists: this tool does not know the password of a role it did not just make,
