@@ -7,6 +7,9 @@ export default defineConfig({
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
+    // One fork: @vitest/coverage-v8 under-merges BRANCH coverage across fork workers, and this
+    // package is small enough that a handful of mis-merged branches sinks the ratio. Same finding
+    // as packages/payments, packages/scheduler and packages/credentials.
     poolOptions: { forks: { singleFork: true } },
     coverage: {
       provider: "v8",

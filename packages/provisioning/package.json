@@ -4,11 +4,7 @@
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
-  "bin": {
-    "waitron-provision": "./dist/bin.js"
-  },
   "scripts": {
-    "build": "node scripts/copy-migrations.mjs && esbuild src/bin.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/bin.js --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

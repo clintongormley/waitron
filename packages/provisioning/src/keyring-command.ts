@@ -25,19 +25,6 @@ export function generateKeyRing(random: (bytes: number) => Buffer = randomBytes)
   return { key: key.toString("base64"), version: 1 };
 }
 
-/** `ESC[3J` clears the scrollback buffer, `ESC[H` homes the cursor, `ESC[2J` clears the screen.
- * All three, in that order — `ESC[2J` alone leaves the key one scroll away. Written as `\u001B`
- * escapes, never as literal control bytes: this constant is read and copied by humans.
- *
- * Exported (not just module-private) because `runKeyring` never writes it directly — it calls
- * `io.clearScreen()`, and the only implementation of that in this task is the test double in
- * `keyring-command.test.ts`. The real implementation, wired up wherever this package's `bin.ts`
- * is written, needs this exact sequence; exporting it now gives that future file one place to
- * get it from rather than a second copy invented independently. Also what keeps this otherwise
- * module-private constant from tripping this repo's `noUnusedLocals` — verified: unexported it
- * fails `tsc --noEmit` with `TS6133: 'CLEAR_SCREEN' is declared but its value is never read`. */
-export const CLEAR_SCREEN = "\u001B[3J\u001B[H\u001B[2J";
-
 /**
  * Generates the credential key ring, prints it ONCE, and clears the terminal on acknowledgement.
  *

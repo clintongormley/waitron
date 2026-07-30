@@ -1,14 +1,9 @@
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createPostgresDb, type Database } from "./client.js";
+import type { Database } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "./testing/errors.js";
-import {
-  roleUrl,
-  runMigrationSets,
-  startMigratedPostgres,
-  type RealPostgres,
-} from "./testing/postgres.js";
+import { runMigrationSets, startMigratedPostgres, type RealPostgres } from "./testing/postgres.js";
 
 const PASSWORD = "provisioner_suite_password";
 
@@ -46,7 +41,7 @@ describe("tenant_provisioner", () => {
   });
 
   it("lets a member insert the tenant whose scope it adopts", async () => {
-    const db = await createPostgresDb(roleUrl(pg.uri, "provisioner_login", PASSWORD));
+    const db = await pg.connectAs("provisioner_login", PASSWORD);
     try {
       const id = "11111111-1111-4111-8111-111111111111";
       await db.transaction(async (tx) => {
@@ -70,7 +65,7 @@ describe("tenant_provisioner", () => {
   });
 
   it("refuses a role holding app_user alone, on the GRANT and not the policy", async () => {
-    const db = await createPostgresDb(roleUrl(pg.uri, "app_only_login", PASSWORD));
+    const db = await pg.connectAs("app_only_login", PASSWORD);
     try {
       const id = "22222222-2222-4222-8222-222222222222";
       const error = await captureError(() =>

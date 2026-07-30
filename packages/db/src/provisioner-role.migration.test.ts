@@ -37,52 +37,62 @@ describe("the tenant_provisioner migration's DO block", () => {
     }
   });
 
-  it("refuses a pre-existing tenant_provisioner that has SUPERUSER", async () => {
+  // Nothing this migration does gives `tenant_provisioner` SELECT on `tenants` directly — it
+  // inherits it, and the locations/tills/invoice_series grants, through membership of `app_user`.
+  // Asserted here because the inheritance is the whole reason the "member of both" pairing is a
+  // property of the schema rather than an instruction a caller has to remember: drop the
+  // `GRANT app_user TO tenant_provisioner` from 0011 and this goes red.
+  it("is a member of app_user, so it inherits app_user's grants", async () => {
     const db = await createPgliteDb();
     try {
-      // No other harness in this package's suites ever produces this input — a BADLY-attributed
-      // pre-existing tenant_provisioner. `startMigratedPostgres` starts a fresh container per
-      // call, so it is role-free. `describeEachTarget`'s postgres target is NOT: per its own doc
-      // comment (harness.ts:24-36) and `postgresTarget`'s own (:104-108), it makes a fresh
-      // DATABASE per test inside ONE shared container/cluster for the whole suite, so
-      // cluster-global objects — tenant_provisioner among them — persist from the second test
-      // onward. That still never produces THIS input, though: every persisted tenant_provisioner
-      // there was created by 0011's own DO block, so it is always correctly attributed
-      // (NOLOGIN/NOSUPERUSER/NOBYPASSRLS), and a later test's migration run simply passes the
-      // idempotent `IF NOT EXISTS` branch silently — never one of the ELSIFs below. So it is
-      // simulated by hand: create the badly-attributed role first, THEN let the real
-      // CORE_MIGRATIONS set (which includes 0011) run against it and hit the DO block's ELSIF.
-      await db.execute(sql`create role tenant_provisioner superuser`);
-      const error = await captureError(() => runMigrations(db, CORE_MIGRATIONS));
-      expect(pgErrorMessage(error)).toMatch(
-        /tenant_provisioner already exists with SUPERUSER or BYPASSRLS — refusing to grant it INSERT on tenants/,
-      );
+      await runMigrations(db, CORE_MIGRATIONS);
+      const members = await db.execute<{ rolname: string }>(sql`
+        select g.rolname
+        from pg_auth_members m
+        join pg_roles g on g.oid = m.roleid
+        join pg_roles r on r.oid = m.member
+        where r.rolname = 'tenant_provisioner'
+      `);
+      expect(members.rows.map((r) => r.rolname)).toContain("app_user");
     } finally {
       await db.close();
     }
   });
 
-  it("refuses a pre-existing tenant_provisioner that has BYPASSRLS", async () => {
+  // One case per refusal branch of the DO block. `it.each` rather than three near-identical bodies
+  // — the same shape `packages/provisioning/src/identifiers.test.ts` uses for its own refusal set.
+  // The label is in the test name so a failure says WHICH attribute stopped being refused.
+  //
+  // The bad input has to be made by hand: no harness in this package produces a badly-attributed
+  // pre-existing `tenant_provisioner`. `startMigratedPostgres` starts a fresh container per call,
+  // so it is role-free. `describeEachTarget`'s postgres target is NOT — per its own doc comment
+  // (harness.ts:24-36) and `postgresTarget`'s (:104-108) it makes a fresh DATABASE per test inside
+  // ONE shared container/cluster, so cluster-global objects persist from the second test onward.
+  // Even there the role was created by 0011's own DO block and so is correctly attributed, and a
+  // later run passes the idempotent `IF NOT EXISTS` branch silently — never one of the ELSIFs. So
+  // each case below creates the bad role first, THEN lets the real CORE_MIGRATIONS set run at it.
+  it.each([
+    [
+      "SUPERUSER",
+      sql`create role tenant_provisioner superuser`,
+      /tenant_provisioner already exists with SUPERUSER or BYPASSRLS — refusing to grant it INSERT on tenants/,
+    ],
+    [
+      "BYPASSRLS",
+      sql`create role tenant_provisioner nosuperuser bypassrls`,
+      /tenant_provisioner already exists with SUPERUSER or BYPASSRLS — refusing to grant it INSERT on tenants/,
+    ],
+    [
+      "LOGIN",
+      sql`create role tenant_provisioner login password 'x'`,
+      /tenant_provisioner already exists with LOGIN — refusing to reuse it/,
+    ],
+  ])("refuses a pre-existing tenant_provisioner that has %s", async (_label, create, expected) => {
     const db = await createPgliteDb();
     try {
-      await db.execute(sql`create role tenant_provisioner nosuperuser bypassrls`);
+      await db.execute(create);
       const error = await captureError(() => runMigrations(db, CORE_MIGRATIONS));
-      expect(pgErrorMessage(error)).toMatch(
-        /tenant_provisioner already exists with SUPERUSER or BYPASSRLS — refusing to grant it INSERT on tenants/,
-      );
-    } finally {
-      await db.close();
-    }
-  });
-
-  it("refuses a pre-existing tenant_provisioner that has LOGIN", async () => {
-    const db = await createPgliteDb();
-    try {
-      await db.execute(sql`create role tenant_provisioner login password 'x'`);
-      const error = await captureError(() => runMigrations(db, CORE_MIGRATIONS));
-      expect(pgErrorMessage(error)).toMatch(
-        /tenant_provisioner already exists with LOGIN — refusing to reuse it/,
-      );
+      expect(pgErrorMessage(error)).toMatch(expected);
     } finally {
       await db.close();
     }
