@@ -109,9 +109,12 @@ describe("tenant_provisioner", () => {
           sql`select count(*)::text as count from tenants`,
         );
         expect(rows.rows[0]?.count).toBe("1");
+        // `Hostelería` and a `Fixture …` name, matching every other locations fixture in this
+        // package (schema/sale-voids.test.ts, schema/incidents.test.ts). `english-only.ts` lists
+        // `venta` in SPANISH_WORDS, so a descriptive Spanish value here fails that guard.
         await tx.execute(
           sql`insert into locations (tenant_id, name, invoice_locales, operation_description)
-              values (${id}, 'Mostrador', array['es-ES'], 'Venta en establecimiento')`,
+              values (${id}, 'Fixture Provisioned Location', array['es-ES'], 'Hostelería')`,
         );
       });
     } finally {
