@@ -307,11 +307,29 @@ describe("applyInstance against a blank container", () => {
       await delegate.close();
       // In a `finally` so the suite stays order-independent — these grants belong to no plan.
       //
-      // CASCADE, and the order, are both load-bearing: `delegate_admin` is the GRANTOR of
-      // `waitron_app=C/delegate_admin`, and a role cannot be dropped while an ACL entry it granted
-      // survives — `drop role` failed here with `role "delegate_admin" cannot be dropped because
-      // some objects depend on it` until this revoke cascaded. `admin`'s own revoke above cannot
-      // remove it either: a revoke only touches grants the revoking role itself made.
+      // CASCADE, and the order, are both load-bearing. Stated as the experiments that were run,
+      // because the general rule they suggest is one I did NOT isolate (see the last paragraph).
+      //
+      // Against a standalone `postgres:18-alpine`, with `datacl` reading
+      // `{…,deleg=C*/owner_a,r_y=c/owner_a,r_y=C/deleg}`:
+      //
+      // - `revoke all on database acl_db from r_y`, run as the database OWNER, left `r_y=C/deleg`
+      //   in place. Run again as the SUPERUSER, it still left `r_y=C/deleg` in place. So the
+      //   revoke of `waitron_app` above does not clear the delegate's grant, and no amount of
+      //   privilege on the revoking role changes that.
+      // - `revoke create on database acl_db from deleg` without CASCADE errored:
+      //   `ERROR: dependent privileges exist / HINT: Use CASCADE to revoke them too.`
+      // - `drop role deleg` errored: `ERROR: role "deleg" cannot be dropped because some objects
+      //   depend on it / DETAIL: privileges for database acl_db`.
+      // - `revoke all on database acl_db from deleg cascade` then left `datacl` as
+      //   `{=Tc/owner_a,owner_a=CTc/owner_a}` — the delegate's own entry AND the entry it had
+      //   granted, both gone — and `drop role deleg` then succeeded.
+      //
+      // What is NOT established: that being a GRANTOR is what blocks the drop. `deleg` was
+      // simultaneously a GRANTEE (`deleg=C*/owner_a`), and that entry on its own is enough to
+      // block it. Reaching grantor-only state would need the non-cascade revoke that PostgreSQL
+      // refuses above, so the two conditions could not be separated here. The remedy below is what
+      // was verified; the cause is not.
       await admin.execute(
         sql.raw(`revoke all on database ${quoteIdent(DATABASE)} from "waitron_app"`),
       );
