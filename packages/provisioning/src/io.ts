@@ -4,9 +4,24 @@
 export interface ProvisioningIo {
   stdout(line: string): void;
   stderr(line: string): void;
-  /** Reads one line from the tty, echoed. Never used for a secret: an echo-off path is a separate
-   * method, and no command in this package needs one yet. */
+  /** Reads one line from the tty, ECHOED. Never used for a secret — that is `promptSecret`'s job,
+   * and the split is the whole reason there are two methods rather than one with a flag. */
   prompt(question: string): Promise<string>;
+  /**
+   * Reads one line from the tty with the echo turned OFF, for a value that must not appear on the
+   * screen or in a screen recording.
+   *
+   * The one thing this package reads through it today is the admin connection string, which carries
+   * a password. It is a PROMPT and never a flag, because `argv` is world-readable in `ps` and lands
+   * in shell history — the constraint `src/errors.ts`'s header states, and `cli.test.ts`'s
+   * "refuses any flag that would put a secret in argv" pins. `WAITRON_ADMIN_DATABASE_URL` is the
+   * only other way in.
+   *
+   * A real terminal implementation turns off `echo` for the duration and restores it afterwards,
+   * whether or not the read succeeded. Whatever is read is returned to the caller and never printed
+   * back, not even truncated: a connection string's password is not a prefix of anything safe.
+   */
+  promptSecret(question: string): Promise<string>;
   /**
    * Clears the screen AND the scrollback, so a key that has just been displayed is not one scroll
    * away.

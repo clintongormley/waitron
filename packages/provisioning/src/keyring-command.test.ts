@@ -17,6 +17,13 @@ function recordingIo(
     stdout: (line) => lines.push(line),
     stderr: (line) => lines.push(line),
     prompt: async () => queue.shift() ?? "",
+    // `runKeyring` must never reach this: it PRINTS a secret it generated and reads nothing back
+    // but an acknowledgement. Throwing rather than returning "" is what makes that assertion
+    // rather than an assumption — a future edit that read the key ring back through an echo-off
+    // prompt would fail here instead of passing quietly.
+    promptSecret: async () => {
+      throw new Error("runKeyring must not read a secret");
+    },
     clearScreen: () => {
       cleared += 1;
     },
@@ -85,6 +92,9 @@ describe("runKeyring", () => {
         order.push("prompt");
         await answered;
         return "";
+      },
+      promptSecret: async () => {
+        throw new Error("runKeyring must not read a secret");
       },
       clearScreen: () => order.push("clear"),
     };
