@@ -277,14 +277,25 @@ async function verifyGrants(
  * A grantee of PUBLIC has an EMPTY left-hand side (`=Tc/owner_a`), so matching on `${role}=` cannot
  * collide with it. Role names here are `^[a-z][a-z0-9_]{0,62}$` (identifiers.ts), which PostgreSQL
  * never quotes in an ACL, so no unquoting pass is needed.
+ *
+ * EVERY matching entry is examined, not the first. One grantee gets one entry PER GRANTOR, and this
+ * function returned a false NEGATIVE while it used `find`: read off a real container, `owner_a`
+ * granting CONNECT to `r_y` and then `r_mig` granting CREATE produced
+ * `{…,r_y=c/owner_a,r_y=C/r_mig}`, and inspecting only `r_y=c/owner_a` reported CREATE missing
+ * while `has_database_privilege('r_y','acl_db','CREATE')` was `t`. That is a spurious refusal of a
+ * working deployment — worse than the silent gap this check exists to close, by this function's own
+ * justification. A second grantor arises exactly where `README.md` says it does: WITH GRANT OPTION
+ * delegation, the same path that lets a non-owning admin issue these grants at all.
  */
 function aclHas(acl: readonly string[], role: string, privilege: string, grantOption: boolean) {
-  const entry = acl.find((item) => item.startsWith(`${role}=`));
-  if (entry === undefined) return false;
-  const granted = entry.slice(role.length + 1).split("/")[0] ?? "";
-  const at = granted.indexOf(privilege);
-  if (at === -1) return false;
-  return !grantOption || granted[at + 1] === "*";
+  return acl
+    .filter((item) => item.startsWith(`${role}=`))
+    .some((entry) => {
+      const granted = entry.slice(role.length + 1).split("/")[0] ?? "";
+      const at = granted.indexOf(privilege);
+      if (at === -1) return false;
+      return !grantOption || granted[at + 1] === "*";
+    });
 }
 
 /**

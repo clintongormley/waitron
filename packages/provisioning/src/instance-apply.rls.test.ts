@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import { createPostgresDb, type Database } from "@waitron/db";
+import { quoteIdent } from "./identifiers.js";
 import { applyInstance } from "./instance-apply.js";
 import type { InstanceAction } from "./instance-plan.js";
 import { planInstance } from "./instance-plan.js";
@@ -251,6 +252,73 @@ describe("applyInstance against a blank container", () => {
       // plan, and a later test reading this database's ACL should not find it.
       await admin.execute(sql.raw(`revoke create on database ${DATABASE} from "waitron_app"`));
       await admin.execute(sql.raw(`drop role if exists grant_probe_admin`));
+    }
+  });
+
+  it("accepts a grant that arrived from a SECOND grantor, not the database owner", async () => {
+    // The false-negative `aclHas` shipped with, against a real cluster rather than a copied ACL
+    // string. One grantee gets one ACL entry PER GRANTOR: give `waitron_app` CONNECT from the
+    // owner and CREATE from a delegate, and `datacl` carries two `waitron_app=` entries. Checking
+    // only the first reported the CREATE grant missing and refused a deployment that had it.
+    //
+    // The delegate route is not contrived — it is the `WITH GRANT OPTION` path `README.md`
+    // documents for letting a non-owning admin issue these grants.
+    const action = {
+      kind: "grant-database-create",
+      role: "waitron_app",
+      database: DATABASE,
+    } as const;
+
+    await admin.execute(sql.raw(`drop role if exists delegate_admin`));
+    await admin.execute(sql.raw(`create role delegate_admin login password 'd'`));
+    await admin.execute(
+      sql.raw(
+        `grant create on database ${quoteIdent(DATABASE)} to delegate_admin with grant option`,
+      ),
+    );
+    // CONNECT from the OWNER, so the owner's own entry for waitron_app exists and does not carry
+    // CREATE. This is the entry that used to be found first and answered for the whole role.
+    await admin.execute(
+      sql.raw(`grant connect on database ${quoteIdent(DATABASE)} to "waitron_app"`),
+    );
+    const delegate = await createPostgresDb(
+      roleUrl(withDatabase(pg.uri, DATABASE), "delegate_admin", "d"),
+    );
+    try {
+      // CREATE from the DELEGATE, producing the second entry.
+      await applyInstance([action], {
+        admin: delegate,
+        database: DATABASE,
+        adminUri,
+        migrationsRoot: null,
+        openTarget: () => createPostgresDb(withDatabase(adminUri, DATABASE)),
+      });
+
+      const acl = await admin.execute<{ acl: string[] }>(
+        sql`select coalesce(datacl::text[], '{}'::text[]) as acl
+            from pg_database where datname = ${DATABASE}`,
+      );
+      const entries = (acl.rows[0]?.acl ?? []).filter((entry) => entry.startsWith("waitron_app="));
+      // The premise of the whole test: TWO entries, and the CREATE one is not the only one.
+      expect(entries.length).toBeGreaterThan(1);
+      expect(entries.some((entry) => entry.includes("=c"))).toBe(true);
+      expect(entries.some((entry) => /=[^/]*C/.test(entry))).toBe(true);
+    } finally {
+      await delegate.close();
+      // In a `finally` so the suite stays order-independent — these grants belong to no plan.
+      //
+      // CASCADE, and the order, are both load-bearing: `delegate_admin` is the GRANTOR of
+      // `waitron_app=C/delegate_admin`, and a role cannot be dropped while an ACL entry it granted
+      // survives — `drop role` failed here with `role "delegate_admin" cannot be dropped because
+      // some objects depend on it` until this revoke cascaded. `admin`'s own revoke above cannot
+      // remove it either: a revoke only touches grants the revoking role itself made.
+      await admin.execute(
+        sql.raw(`revoke all on database ${quoteIdent(DATABASE)} from "waitron_app"`),
+      );
+      await admin.execute(
+        sql.raw(`revoke all on database ${quoteIdent(DATABASE)} from delegate_admin cascade`),
+      );
+      await admin.execute(sql.raw(`drop role if exists delegate_admin`));
     }
   });
 

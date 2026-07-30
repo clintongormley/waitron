@@ -308,6 +308,53 @@ describe("applyInstance's post-apply grant verification", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("finds the privilege when the grantee holds SEVERAL entries from several grantors", async () => {
+    // One grantee gets one ACL entry PER GRANTOR, not one entry total. Read off a real
+    // `postgres:18-alpine`: `owner_a` granted CONNECT to `r_y`, then `r_mig` — holding `C*` —
+    // granted CREATE, and `datacl` became
+    // `{=Tc/owner_a,owner_a=CTc/owner_a,r_mig=C*/owner_a,r_y=c/owner_a,r_y=C/r_mig}`. Two `r_y=`
+    // entries. A check that inspects only the FIRST match reads `c` (CONNECT), fails to find `C`
+    // (CREATE), and refuses a deployment that is in fact correctly granted —
+    // `has_database_privilege('r_y','acl_db','CREATE')` was `t` at that moment.
+    //
+    // A spurious refusal of a working deployment is worse than the silent gap this whole check
+    // exists to close, so this is the one it must not get wrong. The second grantor arrives via
+    // WITH GRANT OPTION delegation, which `README.md` documents as a supported path.
+    const twoGrantors = [
+      "=Tc/owner_a",
+      "owner_a=CTc/owner_a",
+      "waitron_migrator=c/owner_a",
+      "waitron_migrator=C/r_mig",
+    ];
+    await expect(
+      applyInstance(DATABASE_GRANT, cluster({ datacl: twoGrantors })),
+    ).resolves.toBeUndefined();
+  });
+
+  it("finds WITH GRANT OPTION on a later entry than the first", async () => {
+    // The same shape against the `*` bit: a non-option entry sorting first must not hide an
+    // option-carrying entry behind it.
+    await expect(
+      applyInstance(
+        SCHEMA_GRANT,
+        cluster({
+          nspacl: ["waitron_migrator=C/owner_a", "waitron_migrator=C*/pg_database_owner"],
+        }),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it("still refuses when NO entry carries the privilege", async () => {
+    // The negative control for the two above: several entries, none of them CREATE. Without it,
+    // a mutation that simply returned `true` for any matching grantee would pass them both.
+    await expect(
+      applyInstance(
+        DATABASE_GRANT,
+        cluster({ datacl: ["waitron_migrator=c/owner_a", "waitron_migrator=T/r_mig"] }),
+      ),
+    ).rejects.toMatchObject({ code: "provisioning.grant_ineffective" });
+  });
+
   it("does not mistake PUBLIC's own empty-grantee entry for a role's", async () => {
     // `=U/pg_database_owner` is the grant to PUBLIC. Matching on a bare `=` rather than `<role>=`
     // would read it as satisfying any role.
