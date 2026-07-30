@@ -21,5 +21,13 @@ declare module "@waitron/shared" {
     "provisioning.invalid_identifier": { kind: "database" | "role"; value: string };
     /** The CSPRNG returned the wrong number of bytes. `byteLength` is a size, never material. */
     "provisioning.key_generation_failed": { byteLength: number };
+    /** A role this tool would use already exists carrying SUPERUSER or BYPASSRLS. Refused rather
+     * than adopted: every grant `instance` is about to make sits behind an RLS policy that such a
+     * role ignores outright — the same refusal `0001_tenancy_rls.sql` makes for `app_user`. */
+    "provisioning.role_over_privileged": { role: string; superuser: boolean; bypassRls: boolean };
+    /** A role exists but cannot log in, or lacks an attribute it needs. Refused rather than
+     * altered: this tool did not create it, does not know its password, and `ALTER ROLE` on
+     * something an operator made by hand is not its call. */
+    "provisioning.role_unusable": { role: string; missing: string[] };
   }
 }

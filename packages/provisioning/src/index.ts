@@ -5,4 +5,6 @@ export type { GeneratedKeyRing } from "./keyring-command.js";
 export type { ProvisioningIo } from "./io.js";
 export { INSTANCE_ROLES, readInstanceState } from "./instance-state.js";
 export type { InstanceRole, InstanceState, InsideState, RoleFacts } from "./instance-state.js";
+export { planInstance } from "./instance-plan.js";
+export type { InstanceAction, InstanceRequest } from "./instance-plan.js";
 import "./errors.js";
