@@ -3,7 +3,7 @@ import { AppError } from "@waitron/shared";
 import { stampDeployment, type Database } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { quoteIdent } from "./identifiers.js";
-import { sqlstateOf } from "./sqlstate.js";
+import { sqlStateOf } from "./sql-state.js";
 import type { InstanceAction } from "./instance-plan.js";
 import "./errors.js";
 
@@ -80,12 +80,12 @@ export async function applyInstance(
             // `role` alone was ALL that survived until now, and that cost the operator the one
             // thing they needed next: 42710 ("already exists"), 42704 ("the membership target does
             // not exist") and 42501 ("this admin may not") want three different responses and read
-            // identically without the code. `sqlstateOf` is what makes keeping it safe — see its
+            // identically without the code. `sqlStateOf` is what makes keeping it safe — see its
             // own comment for why five characters of `[0-9A-Z]` cannot be the password this catch
             // exists to withhold.
             throw new AppError("provisioning.role_creation_failed", {
               role: action.role,
-              sqlstate: sqlstateOf(error),
+              sqlState: sqlStateOf(error),
             });
           }
           break;
@@ -108,7 +108,7 @@ export async function applyInstance(
             throw new AppError("provisioning.membership_grant_failed", {
               role: action.role,
               memberOf: action.memberOf,
-              sqlstate: sqlstateOf(error),
+              sqlState: sqlStateOf(error),
             });
           }
           break;

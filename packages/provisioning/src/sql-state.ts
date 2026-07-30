@@ -19,14 +19,14 @@ const SQLSTATE = /^[0-9A-Z]{5}$/;
  * It walks `.cause` because the code is not on the error its callers catch: Drizzle wraps the
  * driver's error rather than re-exposing its fields. That is asserted against the real shape, not
  * assumed — `instance-apply.rls.test.ts`'s "never lets the generated password reach a thrown error"
- * forces a genuine failure through a real container and pins `sqlstate: "42704"`, which is only
+ * forces a genuine failure through a real container and pins `sqlState: "42704"`, which is only
  * reachable through this walk.
  *
  * It lives in its own module rather than beside one of its two callers because both `cli.ts` (which
  * classifies a failed READ) and `instance-apply.ts` (which classifies a failed WRITE) need exactly
  * this, and the safety argument above is the kind that must not be maintained in two copies.
  */
-export function sqlstateOf(error: unknown): string | null {
+export function sqlStateOf(error: unknown): string | null {
   let current: unknown = error;
   for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
     if (typeof current !== "object" || current === null) return null;

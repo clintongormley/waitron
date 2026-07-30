@@ -71,28 +71,28 @@ describe("applyInstance's create-role failure", () => {
     expect(isAppError(thrown)).toBe(true);
     if (!isAppError(thrown)) return;
     expect(thrown.code).toBe("provisioning.role_creation_failed");
-    expect(thrown.params).toEqual({ role: "waitron_migrator", sqlstate: "42710" });
+    expect(thrown.params).toEqual({ role: "waitron_migrator", sqlState: "42710" });
   });
 
   it("finds a SQLSTATE that the driver's wrapper buried under .cause", async () => {
     // Drizzle does not re-expose the pg error's `code` on its own wrapper; it attaches the original
     // as `cause`. Asserted here against a hand-built two-level shape, and against the REAL Drizzle
     // shape in `instance-apply.rls.test.ts` ("never lets the generated password reach a thrown
-    // error", which pins `sqlstate: "42704"` from an actual container).
+    // error", which pins `sqlState: "42704"` from an actual container).
     const buried = Object.assign(new Error("Failed query: create role ..."), {
       cause: Object.assign(new Error('role "app_user" does not exist'), { code: "42704" }),
     });
     const thrown = await thrownBy(CREATE_ROLE, buried);
     expect(isAppError(thrown)).toBe(true);
     if (!isAppError(thrown)) return;
-    expect(thrown.params).toEqual({ role: "waitron_migrator", sqlstate: "42704" });
+    expect(thrown.params).toEqual({ role: "waitron_migrator", sqlState: "42704" });
   });
 
   it("reports null rather than inventing one when there is no SQLSTATE", async () => {
     const thrown = await thrownBy(CREATE_ROLE, new Error("the pool is closed"));
     expect(isAppError(thrown)).toBe(true);
     if (!isAppError(thrown)) return;
-    expect(thrown.params).toEqual({ role: "waitron_migrator", sqlstate: null });
+    expect(thrown.params).toEqual({ role: "waitron_migrator", sqlState: null });
   });
 
   it("refuses a `code` that is not SQLSTATE-shaped", async () => {
@@ -106,7 +106,7 @@ describe("applyInstance's create-role failure", () => {
     );
     expect(isAppError(thrown)).toBe(true);
     if (!isAppError(thrown)) return;
-    expect(thrown.params).toEqual({ role: "waitron_migrator", sqlstate: null });
+    expect(thrown.params).toEqual({ role: "waitron_migrator", sqlState: null });
   });
 
   it("still never lets the generated password reach the thrown error", async () => {
@@ -140,7 +140,7 @@ describe("applyInstance's create-role failure", () => {
     const thrown = await thrownBy(CREATE_ROLE, deepest);
     expect(isAppError(thrown)).toBe(true);
     if (!isAppError(thrown)) return;
-    expect(thrown.params).toEqual({ role: "waitron_migrator", sqlstate: null });
+    expect(thrown.params).toEqual({ role: "waitron_migrator", sqlState: null });
   });
 
   it("does not spin on a self-referential cause chain", async () => {
@@ -149,7 +149,7 @@ describe("applyInstance's create-role failure", () => {
     const thrown = await thrownBy(CREATE_ROLE, cyclic);
     expect(isAppError(thrown)).toBe(true);
     if (!isAppError(thrown)) return;
-    expect(thrown.params).toEqual({ role: "waitron_migrator", sqlstate: null });
+    expect(thrown.params).toEqual({ role: "waitron_migrator", sqlState: null });
   });
 });
 
@@ -213,7 +213,7 @@ describe("applyInstance's grant-membership failure", () => {
     expect(thrown.params).toEqual({
       role: "waitron_app",
       memberOf: "app_user",
-      sqlstate: "42501",
+      sqlState: "42501",
     });
     expect((thrown as Error).cause).toBeUndefined();
   });

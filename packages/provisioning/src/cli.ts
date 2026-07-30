@@ -12,7 +12,7 @@ import {
 } from "./instance-state.js";
 import type { ProvisioningIo } from "./io.js";
 import { runKeyring } from "./keyring-command.js";
-import { sqlstateOf } from "./sqlstate.js";
+import { sqlStateOf } from "./sql-state.js";
 import { formatStatus } from "./status-command.js";
 import "./errors.js";
 
@@ -274,9 +274,9 @@ async function withState(
  * asUnreadable(...)` and TypeScript still sees the path as terminating.
  */
 function asUnreadable(error: unknown, database: string): unknown {
-  const sqlstate = sqlstateOf(error);
-  if (sqlstate === null) return error;
-  return new AppError("provisioning.state_unreadable", { database, sqlstate });
+  const sqlState = sqlStateOf(error);
+  if (sqlState === null) return error;
+  return new AppError("provisioning.state_unreadable", { database, sqlState });
 }
 
 /** A flag's value, or the answer to a question. An empty flag (`--database=`) counts as absent. */

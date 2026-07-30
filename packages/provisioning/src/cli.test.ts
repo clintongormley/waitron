@@ -442,7 +442,7 @@ describe("runCli instance", () => {
           new AppError("provisioning.membership_grant_failed", {
             role: "waitron_app",
             memberOf: "app_user",
-            sqlstate: "42501",
+            sqlState: "42501",
           }),
         ),
     });
@@ -454,7 +454,7 @@ describe("runCli instance", () => {
     expect(code).toBe(1);
     const printed = h.lines.join("\n");
     expect(printed).toContain("provisioning.membership_grant_failed");
-    expect(printed).toContain('"sqlstate":"42501"');
+    expect(printed).toContain('"sqlState":"42501"');
     // A half-applied plan can leave a role created with a password this run never printed. Saying
     // so is the difference between a recoverable state and an unusable one: there is no way to
     // learn that password afterwards, so the operator must drop the role and re-run.
@@ -532,7 +532,7 @@ describe("runCli instance", () => {
     expect(code).toBe(1);
     const printed = h.lines.join("\n");
     expect(printed).toContain("provisioning.state_unreadable");
-    expect(printed).toContain('"sqlstate":"42501"');
+    expect(printed).toContain('"sqlState":"42501"');
     expect(printed).toContain(`"database":"${DATABASE}"`);
     // The driver's own message quotes the failed query back. Never printed.
     expect(printed).not.toContain("Failed query");
@@ -547,7 +547,7 @@ describe("runCli instance", () => {
     });
     expect(await runCli(["status", "--database", DATABASE], h.deps)).toBe(1);
     expect(h.lines.join("\n")).toContain(
-      'provisioning.state_unreadable {"database":"waitron_demo","sqlstate":"42501"}',
+      'provisioning.state_unreadable {"database":"waitron_demo","sqlState":"42501"}',
     );
   });
 
@@ -565,7 +565,7 @@ describe("runCli instance", () => {
     );
     expect(await runCli(["status", "--database", DATABASE], h.deps)).toBe(1);
     expect(h.lines.join("\n")).toContain(
-      'provisioning.state_unreadable {"database":"waitron_demo","sqlstate":"28P01"}',
+      'provisioning.state_unreadable {"database":"waitron_demo","sqlState":"28P01"}',
     );
     expect(h.readState).not.toHaveBeenCalled();
   });

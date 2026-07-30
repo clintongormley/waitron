@@ -241,7 +241,7 @@ describe("applyInstance against a blank container", () => {
       expect(thrown.params).toEqual({
         role: "waitron_app",
         memberOf: "app_user",
-        sqlstate: "42501",
+        sqlState: "42501",
       });
     } finally {
       await probe.close();
@@ -304,12 +304,12 @@ describe("applyInstance's create-role failure handling", () => {
     expect(isAppError(thrown)).toBe(true);
     if (!isAppError(thrown)) return;
     expect(thrown.code).toBe("provisioning.role_creation_failed");
-    // `sqlstate` is the receipt for `sqlstateOf`'s `.cause` walk (instance-apply.ts): 42704 is
+    // `sqlState` is the receipt for `sqlStateOf`'s `.cause` walk (instance-apply.ts): 42704 is
     // `undefined_object`, which is what a missing membership target raises, and it is reachable
     // here ONLY through that walk — Drizzle's own wrapper carries no `code` of its own. A hand-
     // built two-level error in `instance-apply.test.ts` asserts the same walk; this one asserts
     // that the REAL driver shape is the one it was built for.
-    expect(thrown.params).toEqual({ role: "waitron_migrator", sqlstate: "42704" });
+    expect(thrown.params).toEqual({ role: "waitron_migrator", sqlState: "42704" });
     // The exact shape `src/errors.ts`'s doc comment says a future CLI prints:
     // `${error.code} ${JSON.stringify(error.params)}`.
     expect(`${thrown.code} ${JSON.stringify(thrown.params)}`).not.toContain(marker);

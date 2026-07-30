@@ -142,9 +142,9 @@ this package would quote a `CREATE ROLE … PASSWORD '<generated>'` statement ba
 | `deployment.already_stamped`           | The database is stamped for the OTHER environment                                | Stop. A pre-production database is never promoted — see the fiscal invariants below.                                   |
 | `provisioning.role_over_privileged`    | A `waitron_*` role already exists carrying `SUPERUSER` or `BYPASSRLS`            | Refused, not adopted: every grant this tool makes sits behind an RLS policy such a role ignores. Drop or fix the role. |
 | `provisioning.role_unusable`           | A `waitron_*` role exists but is `NOLOGIN`, or lacks `CREATEROLE`                | Refused rather than `ALTER`ed — this tool did not create it. Fix it by hand, or drop it and re-run.                    |
-| `provisioning.state_unreadable`        | The admin connection could not reach or read the deployment. `sqlstate` says why | `28P01`: wrong password. `42501`: see "When the admin did not create the database" below.                              |
-| `provisioning.role_creation_failed`    | `CREATE ROLE` failed. `sqlstate` says why                                        | `42710`: the role already exists. `42704`: a membership target does not. `42501`: this admin may not — see below.      |
-| `provisioning.membership_grant_failed` | `GRANT <of> TO <role>` failed. `sqlstate` says why                               | `42501`: this admin holds no ADMIN OPTION on the role it is granting — see below.                                      |
+| `provisioning.state_unreadable`        | The admin connection could not reach or read the deployment. `sqlState` says why | `28P01`: wrong password. `42501`: see "When the admin did not create the database" below.                              |
+| `provisioning.role_creation_failed`    | `CREATE ROLE` failed. `sqlState` says why                                        | `42710`: the role already exists. `42704`: a membership target does not. `42501`: this admin may not — see below.      |
+| `provisioning.membership_grant_failed` | `GRANT <memberOf> TO <role>` failed. `sqlState` says why                         | `42501`: this admin holds no ADMIN OPTION on the role it is granting — see below.                                      |
 
 The underlying driver error is deliberately not attached, not even as `cause`: Node's default
 console formatting recurses into `.cause`, which would put a generated password one level down from
@@ -161,10 +161,10 @@ admins `adm_a` (which provisioned) and `adm_b` (which did not):
 
 1. **It cannot read the state.** Tables inside the database are owned by whoever created them, so
    the deployment-stamp read fails and `instance` prints
-   `provisioning.state_unreadable {"database":"wp","sqlstate":"42501"}`.
+   `provisioning.state_unreadable {"database":"wp","sqlState":"42501"}`.
 2. **It cannot create a role that is a member of `app_user`.** PostgreSQL requires ADMIN OPTION on a
    role to grant it, and an admin that did not create `app_user` holds none:
-   `provisioning.role_creation_failed {"role":"waitron_app","sqlstate":"42501"}`. The repair path
+   `provisioning.role_creation_failed {"role":"waitron_app","sqlState":"42501"}`. The repair path
    for an already-existing role reports `provisioning.membership_grant_failed` with the same code.
 3. **It grants nothing, silently.** This one is NOT reported, and is the reason for the
    recommendation above. PostgreSQL answers a `GRANT` from a role without grant option with a

@@ -77,27 +77,27 @@ declare module "@waitron/shared" {
      *
      * Raised ONLY when the failure carries a SQLSTATE. Anything else is a bug or a broken socket,
      * not a fact about this database, and is rethrown unchanged rather than dressed up as one.
-     * `database` is operator-typed and `sqlstate` is five `[0-9A-Z]` characters (sqlstate.ts);
+     * `database` is operator-typed and `sqlState` is five `[0-9A-Z]` characters (sql-state.ts);
      * neither can carry the admin connection string that produced it. */
-    "provisioning.state_unreadable": { database: string; sqlstate: string };
+    "provisioning.state_unreadable": { database: string; sqlState: string };
     /** `CREATE ROLE` failed. `role` and the SQLSTATE only — never the underlying driver error, and
      * never a `cause`: the failing statement carries a generated password in its literal text, and
      * both Drizzle's own wrapped error and Postgres's own error message quote the statement back
      * verbatim. See `instance-apply.ts`'s `create-role` case for the receipt.
      *
-     * `sqlstate` is `sqlstateOf`'s output (sqlstate.ts) — five characters of `[0-9A-Z]`, or
+     * `sqlState` is `sqlStateOf`'s output (sql-state.ts) — five characters of `[0-9A-Z]`, or
      * `null`. It is what tells an operator which of "already exists" (42710), "the membership
      * target does not exist" (42704) and "this admin is not allowed to" (42501) they hit; `role`
      * alone sent them to the Postgres log for that. Safe by SHAPE rather than by promise: a
      * generated password is 32 base64url characters (identifiers.ts) and a connection string is
      * longer still, so neither can satisfy five `[0-9A-Z]`. */
-    "provisioning.role_creation_failed": { role: string; sqlstate: string | null };
+    "provisioning.role_creation_failed": { role: string; sqlState: string | null };
     /** `GRANT <memberOf> TO <role>` failed — the repair path for a membership that drifted, or that
      * a hand-made role never had. `memberOf` rather than `of`: this package already names the
      * concept that way in four places (`instance-state.ts`'s `RoleFacts.memberOf`,
      * `instance-plan.ts`'s `create-role` action and `REQUIREMENTS`, `status-command.ts`'s report),
      * and a relational preposition would have been the only one among every code in the registry.
-     * Same `sqlstate` treatment and same reasoning as
+     * Same `sqlState` treatment and same reasoning as
      * `provisioning.role_creation_failed` above, minus the password: this statement embeds no
      * secret, and the catch exists because the driver's raw error otherwise escaped `applyInstance`
      * unformatted on a path a real operator reaches (an admin holding CREATEROLE but no ADMIN
@@ -105,7 +105,7 @@ declare module "@waitron/shared" {
     "provisioning.membership_grant_failed": {
       role: string;
       memberOf: string;
-      sqlstate: string | null;
+      sqlState: string | null;
     };
   }
 }
