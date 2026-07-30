@@ -13,7 +13,7 @@ Everything here lands in `packages/payments`. `packages/payments-stripe` is not 
 
 ## 1. The problem this actually fixes
 
-The [Slice B handoff](../../handoffs/2026-07-25-payment-reconcile-a-and-b-landed.md) recorded a
+The Slice B handoff (`2026-07-25-payment-reconcile-a-and-b-landed.md`, untracked scratch since handoffs were gitignored — `git show 86229c8:docs/handoffs/2026-07-25-payment-reconcile-a-and-b-landed.md`) recorded a
 mismatch on the reversal path and proposed a fix. The mismatch is real; the proposed fix is not the
 right one, and the reasoning matters more than the change.
 

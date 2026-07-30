@@ -16,7 +16,7 @@ the rest is `apps/server`.
 
 ## 1. The problem, corrected
 
-The [`apps/server` handoff](../../handoffs/2026-07-27-apps-server-landed.md) §7 lists four
+The `apps/server` handoff (`2026-07-27-apps-server-landed.md`, untracked scratch since handoffs were gitignored — `git show 86229c8:docs/handoffs/2026-07-27-apps-server-landed.md`) §7 lists four
 deferrals. **One of them is already done**, and one is not what it claims.
 
 **Already done: terminal-outcome logging.** The handoff says "*a `failed` or `parked` reconcile run

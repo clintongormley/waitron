@@ -17,7 +17,7 @@ The cycle adds one `exports` map, one shared container helper and one shared ten
 
 ## 1. Four recorded claims, checked against the code
 
-The [`apps/server` degraded-pass handoff](../../handoffs/2026-07-28-degraded-pass-landed.md) §6 and
+The `apps/server` degraded-pass handoff (`2026-07-28-degraded-pass-landed.md`, untracked scratch since handoffs were gitignored — `git show 86229c8:docs/handoffs/2026-07-28-degraded-pass-landed.md`) §6 and
 the standing follow-up note both priced this work from claims written from memory of a branch rather
 than from a re-read of it. Checking them first changed the shape of the cycle — the third cycle
 running in which it did.
