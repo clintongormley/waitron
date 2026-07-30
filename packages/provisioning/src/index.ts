@@ -7,4 +7,6 @@ export { INSTANCE_ROLES, readInstanceState } from "./instance-state.js";
 export type { InstanceRole, InstanceState, InsideState, RoleFacts } from "./instance-state.js";
 export { planInstance } from "./instance-plan.js";
 export type { InstanceAction, InstanceRequest } from "./instance-plan.js";
+export { applyInstance } from "./instance-apply.js";
+export type { ApplyDeps } from "./instance-apply.js";
 import "./errors.js";
