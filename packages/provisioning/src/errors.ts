@@ -13,17 +13,48 @@ import "@waitron/shared";
  * actually asking.
  *
  * The honest objection, stated rather than skirted: "provisioning" already denotes something ELSE
- * in this repository. `apps/server/src/provision-till.ts`'s `provisionTill` registers a till as a
- * Veri*Factu SIF, and that is provisioning too — of a till, not of a deployment. So the prefix is
- * not the unambiguous domain name the convention would ideally get; it is the accurate one for what
- * these codes are about, and the ambiguity is real. It is kept because
- * `provisioning.invalid_identifier` and `provisioning.key_generation_failed` SHIPPED in PR #8
- * (`git show main:packages/provisioning/src/errors.ts`), and codes are never renamed once shipped —
- * a wrong one is deprecated and a new one added beside it. Splitting this file between a shipped
- * `provisioning.*` and some newer prefix would be worse than either alone. A future code about a
- * TILL's provisioning should not land here.
+ * in this repository. `apps/server/src/provision-till.ts`'s `provisionTill` (line 119) registers a
+ * till as a Veri*Factu SIF, and that is provisioning too — of a till, not of a deployment. So the
+ * prefix is not the unambiguous domain name the convention would ideally get; it is the accurate
+ * one for what these codes are about, and the ambiguity is real. A future code about a TILL's
+ * provisioning should not land here.
  *
- * `deployment.unknown_environment` deliberately does not take the prefix: the fact is about a
+ * Two of these are settled regardless of how that objection lands: `provisioning.invalid_identifier`
+ * and `provisioning.key_generation_failed` SHIPPED in PR #8
+ * (`git show main:packages/provisioning/src/errors.ts`), and codes are never renamed once shipped —
+ * a wrong one is deprecated and a new one added beside it.
+ *
+ * **That is not why the others kept the prefix**, and an earlier version of this paragraph said it
+ * was: it argued that splitting the file between a shipped `provisioning.*` and a newer prefix
+ * "would be worse than either alone". The premise is false. A registry carrying several prefixes is
+ * this repository's NORM: `apps/server/src/errors.ts` holds six in one file (`server.*` at :19,
+ * :34, :48, :98, :106; `tenant.*` :63; `till.*` :74; `sif.*` :90; `deployment.*` :115; `payment.*`
+ * :124), `packages/core/src/errors.ts` holds `sale.*` and `chain.*`,
+ * `packages/fiscal/src/errors.ts` holds `clock.*` and `fiscal.*`, `packages/db/src/errors.ts` holds
+ * `series.*` and `deployment.*` across two codes — and this very file mixes, at
+ * `deployment.unknown_environment` below. Splitting was available, so each unshipped code was
+ * re-decided on its own merits. Each kept `provisioning.*`, for these reasons:
+ *
+ * - `role_over_privileged`, `role_unusable`, `role_creation_failed`, `membership_grant_failed`,
+ *   `grant_ineffective`: none is a general fact about a role or about a grant. Each is a refusal or
+ *   a failure OF THIS ACTIVITY — "a role this tool would adopt carries BYPASSRLS", "a grant this
+ *   run issued did not take". A `role.*` or `grant.*` code should be true of any role or grant
+ *   anywhere, and none of these is.
+ * - `state_unreadable` is the one worth arguing, because its own text opens with "reading what a
+ *   DEPLOYMENT already has" and it carries a `database` param, which makes `deployment.*` look
+ *   natural. It is wrong on both counts. `deployment.*` here denotes the environment STAMP and
+ *   nothing else — `deployment.already_stamped` (`packages/db/src/errors.ts:44`),
+ *   `deployment.environment_mismatch` (`apps/server/src/errors.ts:115`) and
+ *   `deployment.unknown_environment` below are all about WHICH ENVIRONMENT a deployment belongs to,
+ *   and this code is about none of that. Two of the four things it covers are `pg_database` and
+ *   `pg_roles`, which are cluster-global and readable with no deployment in existence
+ *   (`instance-state.ts:45-46`), and its 28P01 case fails at the CONNECT, before any deployment has
+ *   been reached at all. Its structural sibling is `credentials.payload_unreadable`
+ *   (`packages/credentials/src/errors.ts:79-85`): a CLI that could not read an input it needs,
+ *   named for the domain of the CLI's work and carrying the thing it failed to read as a param,
+ *   exactly as `database` is carried here.
+ *
+ * `deployment.unknown_environment` is the one that does NOT take the prefix: the fact is about a
  * deployment environment, so it sits beside `deployment.already_stamped` (`packages/db`) and
  * `deployment.environment_mismatch` (`apps/server`) instead.
  *
