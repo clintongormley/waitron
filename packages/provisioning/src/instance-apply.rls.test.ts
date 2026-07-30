@@ -111,9 +111,13 @@ describe("applyInstance against a blank container", () => {
     }
   });
 
-  it("leaves waitron_app able to run a duty pass and unable to create a tenant", async () => {
-    // The two halves of "least privilege" that actually matter, proven rather than asserted.
-    // README.md's own grant recipe is hand-verified only; this is the automated replacement.
+  it("gives waitron_app membership of app_user, and not tenant_provisioner", async () => {
+    // Checks the two membership EDGES least privilege depends on — not any ability. This does not
+    // prove waitron_app can run a duty pass, nor that it is refused an INSERT on tenants; it proves
+    // the membership shape those abilities are built on. Actually connecting as the role to prove
+    // the ability itself is deliberately out of scope here: `packages/db`'s
+    // `provisioner-role.rls.test.ts` already proves the grant behaviour with known passwords, and
+    // this suite proves the provisioning, not the policy.
     const state = await readInstanceState(admin, DATABASE, null);
     expect(state.roles.waitron_app?.memberOf).toContain("app_user");
     expect(state.roles.waitron_app?.memberOf).not.toContain("tenant_provisioner");
