@@ -94,16 +94,24 @@ database- or schema-level `CREATE` at all).
 cluster end to end. Verified through the built bundle, not inferred: against a `postgres:18-alpine`
 container, a role created with `create role probe_admin login createdb createrole password 'probe'`
 ran `instance` to completion — five migration sets applied, three roles created, both grants made,
-the stamp written — and `status` then reported every set `applied` and `deployment stamp:
-preproduction`. That matters because managed Postgres (Neon, Supabase, RDS) grants `CREATEDB` and
+the stamp written — and `status` then reported all five migration sets present and `deployment
+stamp: preproduction`. (That run predates the wording change described under `status` below; it
+printed `applied` where the tool now prints `journal present`.) That matters because managed Postgres (Neon, Supabase, RDS) grants `CREATEDB` and
 `CREATEROLE` but never true superuser.
 
 ### `status`
 
 Prints what the deployment has: whether the database exists, each role's attributes and memberships,
-which migration sets are applied, and the deployment stamp. Reads only; writes nothing. It carries
+which migration sets have a journal, and the deployment stamp. Reads only; writes nothing. It carries
 no secret by construction — see `src/status-command.ts`'s doc comment for the field-by-field
 argument.
+
+**`journal present` is not `applied`, and the report says so.** All this command can read is whether
+each set's journal TABLE exists. Drizzle creates that table _before_ running the set's migrations
+(`drizzle-orm@0.45.2/pg-core/dialect.js:54-60`), so an `instance` interrupted inside the last set
+leaves every journal present and that set's migrations unapplied — and `instance` will not repair it
+on a re-run, because it plans a `migrate` only when a journal is **missing**. The host does, at its
+next boot. Nothing here is dangerous; it is simply less than "applied" would claim.
 
 It is also the tool to reach for after a failed `instance`: it names which roles exist.
 

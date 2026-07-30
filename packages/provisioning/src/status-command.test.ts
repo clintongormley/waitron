@@ -72,7 +72,23 @@ describe("formatStatus", () => {
     // Unstamped is a real, common state — every database provisioned before the stamp existed —
     // and is reported as such rather than as an empty field.
     expect(text).toContain("deployment stamp: unstamped");
-    expect(text).toMatch(/migration set core: not applied/);
+    expect(text).toMatch(/migration set core: journal absent/);
+  });
+
+  it("reports a journal's existence, never that a set finished", () => {
+    // `readInside` reads `to_regclass('public.<journal table>')` and nothing else
+    // (instance-state.ts), and Drizzle creates that table BEFORE applying any of the set's
+    // migrations, then applies them all inside ONE transaction —
+    // `drizzle-orm@0.45.2/pg-core/dialect.js:54-60`, with `migrationsSchema: "public"` set at
+    // `packages/db/src/migrate.ts:42`, which is the schema this probe looks in. So an `instance`
+    // interrupted inside the LAST set leaves all five journals present and zero of that set's
+    // migrations applied; `planInstance` then plans no `migrate`, so re-running `instance` does not
+    // repair it — only the host does, because `boot.ts` calls `applyMigrations`. A line reading
+    // "applied" would have claimed a certainty the read cannot support.
+    const text = formatStatus(PROVISIONED).join("\n");
+    expect(text).toContain("migration set core: journal present");
+    expect(text).toContain("migration set scheduler: journal absent");
+    expect(text).toContain("was started, not that it finished");
   });
 
   it("says the database is absent and stops there", () => {

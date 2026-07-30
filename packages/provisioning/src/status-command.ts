@@ -37,11 +37,31 @@ export function formatStatus(state: InstanceState): string[] {
     return lines;
   }
 
-  const applied = new Set(state.inside.migratedSets);
+  // "journal present", not "applied". `InsideState.migratedSets` is the set names whose journal
+  // TABLE exists (instance-state.ts says so at its own declaration), and that is strictly weaker
+  // than "every migration in the set ran": `drizzle-orm@0.45.2/pg-core/dialect.js:54-60` creates
+  // the journal table first and only then applies the set's migrations, all inside one
+  // transaction, and `packages/db/src/migrate.ts:42` puts that table in `public`, which is where
+  // `readInside`'s `to_regclass` probe looks. An `instance` interrupted inside the last set
+  // therefore leaves all five journals present with none of that set's migrations applied.
+  //
+  // That state is not dangerous — the host's own `applyMigrations` finishes the job at its next
+  // boot — but it is one this report cannot distinguish from a complete deployment, and it is one
+  // a re-run of `instance` will NOT repair, since the planner emits `migrate` only when a journal
+  // is missing. So the report says what it read and what that does and does not mean.
+  const journalled = new Set(state.inside.migratedSets);
   lines.push("");
   for (const set of manifestSets()) {
-    lines.push(`migration set ${set.name}: ${applied.has(set.name) ? "applied" : "not applied"}`);
+    lines.push(
+      `migration set ${set.name}: ${journalled.has(set.name) ? "journal present" : "journal absent"}`,
+    );
   }
+  lines.push(
+    "",
+    "A journal table is created before its set's migrations run, so `journal present` means",
+    "the set was started, not that it finished. Anything still pending is applied at the",
+    "host's next boot; `instance` plans a migrate only when a journal is MISSING.",
+  );
   lines.push("", `deployment stamp: ${state.inside.stamp ?? "unstamped"}`);
   return lines;
 }
