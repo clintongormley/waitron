@@ -203,9 +203,27 @@ second on reach, and Adyen or Redsys later on the same shape.
 
 Square matters for reuse specifically: a merchant with a Square Terminal can keep it, buy a cheap
 tablet, and run Waitron — the Terminal API pairs a third-party POS to the device by device code.
-Limits to design against: no splitting one checkout into multiple payments, no cash, no external
-printer while paired, and completed checkouts deleted after 30 days, which needs checking against
-our reconcile lookback.
+Limits to design against: no cash, no external printer while paired, and completed checkouts deleted
+after 30 days, which needs checking against our reconcile lookback.
+
+**Not** a limit, despite how the reference reads: *"the Terminal API doesn't support splitting a
+checkout into multiple payments for a single checkout request."* That constrains one request, not
+one sale. Square documents split tender as *"the seller creates multiple Terminal checkout requests
+that address each part of the total payment amount"* — so the split lives in our domain model and
+the processor just charges cards, which is what we want anyway. Our schema already represents it:
+`payments.sale_id` is nullable under a **non-unique** index, and the unique keys are
+`(tenant_id, id)` and `(tenant_id, provider, payment_ref)`, so N payment rows may share one sale.
+Fiscally it changes nothing — payments reference sales, sales are what chain, so N tenders still
+produce one registro.
+
+Take the variant where **we** compute the amounts and send N independent checkouts, not the one that
+passes Square an `order_id` and reads authorised totals back via `RetrieveOrder`. The order-linked
+form puts our domain state in the processor, is regionally gated on order-ID support (unchecked for
+Spain), and has no SumUp or Stripe equivalent — it would break the one-shape-many-adapters premise
+above. The genuine work is not the split but the **partial failure**: one checkout captures, the next
+declines, and a sale is left part-tendered. That state machine is provider-neutral and belongs in the
+payment spec. None of it is deli scope — split tender is Restaurant phase
+([2026-07-18-pos-architecture-design.md](2026-07-18-pos-architecture-design.md) §2 #10).
 
 **Also deferred:** the self-order kiosk (D2); scales and metrology (D4); and whether Waitron can run
 *on* Square hardware — undetermined. What exists is developer-forum threads from 2020 to 2024 asking
