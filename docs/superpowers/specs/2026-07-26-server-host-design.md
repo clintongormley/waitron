@@ -3,7 +3,7 @@
 **Date:** 2026-07-26
 **Status:** Approved in brainstorming.
 **Sub-project:** C (first half). Follows A (`packages/credentials`, landed `9e85d8a`); B (`DueAtDuty`)
-was cancelled — see [`2026-07-26-provider-tenant-scoping-landed.md`](../../handoffs/2026-07-26-provider-tenant-scoping-landed.md) §2.
+was cancelled — see §2 of `2026-07-26-provider-tenant-scoping-landed.md`, untracked scratch since handoffs were gitignored — `git show 86229c8:docs/handoffs/2026-07-26-provider-tenant-scoping-landed.md`.
 
 Amends [`2026-07-25-recurring-work-scheduler-design.md`](2026-07-25-recurring-work-scheduler-design.md)
 §2's honest cost (*"nothing runs until that host exists"*) and its §8 (the reconcile adapter's owner).
