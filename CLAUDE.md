@@ -266,15 +266,27 @@ though the deletion was run in one. Closing it needs a `tsc`-based downstream-co
 `include` narrowed to the barrel's transitive closure. Until then, do not cite these tests as
 evidence that an augmentation is reachable.
 
-**Assert exhaustively — a loose assertion hides a wrong TYPE, not just a wrong value.**
-`pg_roles.rolname` is PostgreSQL's `name` type, so `array(select g.rolname …)` is `name[]` (OID
-1003), for which `node-postgres` has no parser: it hands back the wire literal — the raw string
-`"{}"` — through a field declared `string[]`. Cost: `RoleFacts.memberOf` on
-`feat/provisioning-instance` was never an array, so every `facts.memberOf.includes(role)` was
-`String.prototype.includes` and would have read false forever, making the planner emit spurious
-`grant-membership` actions on every run. Nothing caught it until a `toMatchObject` was tightened to
-an exact `toEqual`. Cast to `::text`/`::text[]` when reading a `name`, and prefer the exhaustive
-matcher.
+**`toMatchObject` checks only the keys you list — a key you never list is never checked at all.**
+That is the loophole, not type-blindness: `expect({memberOf: "{}"}).toMatchObject({memberOf: []})`
+does fail (run under this repo's vitest). The bug survived because `memberOf` appeared in neither
+assertion, so tightening to `toEqual` — which requires every field — is what put it under a matcher
+for the first time.
+
+What it was hiding: `pg_roles.rolname` is PostgreSQL's `name` type, so `array(select g.rolname …)`
+is `name[]` (OID 1003), for which `node-postgres` has no parser — it hands back the wire literal
+(`"{}"`, or `"{app_user}"` when populated) through a field declared `string[]`. `text[]` (OID 1009)
+_is_ parsed, hence the `::text`/`::text[]` casts now in `instance-state.ts`.
+
+**Work the failure out case by case rather than assuming a broken type breaks everything.** The
+sole consumer was `!facts.memberOf.includes(of)` (`instance-plan.ts:151`), and
+`String.prototype.includes` agrees with `Array.prototype.includes` on every input the planner
+actually sees: `"{}".includes("app_user")` is `false` and `"{app_user}".includes("app_user")` is
+`true`, both correct by luck. It diverges in exactly one shape — **substring collision between role
+names**: `"{app_user_probe}".includes("app_user")` is `true` where the array answer is `false`. So
+the failure was a false POSITIVE that silently SKIPS a needed `grant-membership`, not the "reads
+false forever, spurious grants on every run" this entry first claimed — the opposite direction, and
+the quieter one. (`status-command.ts` would have thrown `"{}".join is not a function`, but it
+landed after the fix, so nothing ever hit that.)
 
 ---
 
