@@ -3,19 +3,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import { createPostgresDb, type Database } from "@waitron/db";
 import { quoteIdent } from "./identifiers.js";
-import { applyInstance } from "./instance-apply.js";
+import { applyInstance, withDatabase } from "./instance-apply.js";
 import type { InstanceAction } from "./instance-plan.js";
 import { planInstance } from "./instance-plan.js";
 import { readInstanceState } from "./instance-state.js";
 import { roleUrl, startBarePostgres, type RealPostgres } from "./testing/postgres.js";
 
 const DATABASE = "waitron_instance_suite";
-
-function withDatabase(uri: string, database: string): string {
-  const u = new URL(uri);
-  u.pathname = `/${database}`;
-  return u.toString();
-}
 
 describe("applyInstance against a blank container", () => {
   let pg: RealPostgres;

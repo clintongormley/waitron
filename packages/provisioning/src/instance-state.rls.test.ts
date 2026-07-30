@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createPostgresDb, type Database } from "@waitron/db";
+import { withDatabase } from "./instance-apply.js";
 import { readInstanceState } from "./instance-state.js";
 import { startBarePostgres, type RealPostgres } from "./testing/postgres.js";
 
@@ -65,7 +66,7 @@ describe("readInstanceState", () => {
 
   it("reports the migrated sets and the stamp once the database exists", async () => {
     await admin.execute(sql.raw(`create database waitron_present`));
-    const target = await createPostgresDb(targetUri(pg.uri, "waitron_present"));
+    const target = await createPostgresDb(withDatabase(pg.uri, "waitron_present"));
     try {
       const empty = await readInstanceState(admin, "waitron_present", target);
       expect(empty.databaseExists).toBe(true);
@@ -75,10 +76,3 @@ describe("readInstanceState", () => {
     }
   });
 });
-
-/** The container's own URI with the database path swapped. */
-function targetUri(uri: string, database: string): string {
-  const u = new URL(uri);
-  u.pathname = `/${database}`;
-  return u.toString();
-}
