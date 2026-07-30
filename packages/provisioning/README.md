@@ -40,7 +40,7 @@ absent and lets `@waitron/migrations` resolve each set from `packages/migrations
 There is no `tenant` command yet. Creating a tenant, a location, a till and a series is still
 `apps/server/sql/bootstrap-tenant.sql` plus `register-till`, per spec §4 and §6.
 
-```
+```text
 usage: waitron-provision <command> [options]
 
   keyring                                            generate the credential key ring
@@ -128,7 +128,12 @@ WAITRON_ADMIN_DATABASE_URL=postgres://admin:secret@host:5432/postgres \
   node dist/bin.js instance --database waitron --environment preproduction --yes
 ```
 
-Nothing this tool prints ever contains the admin connection string, from either source.
+**The admin's CREDENTIALS never appear in anything this tool prints** — not its username, not its
+password, from either source. Parts of the admin URI do, and deliberately: each role connection
+string is the admin's own URI with the userinfo and the database path replaced, so the host, the
+port and any query string (`sslmode=require`, say) are carried through. That is what makes the
+printed string one the host can actually connect with. It is not a claim that no part of the admin
+URI is echoed — an admin URI whose HOST were itself sensitive would still appear.
 
 ## What it refuses, and what to do about it
 

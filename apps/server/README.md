@@ -122,8 +122,12 @@ default); a migrations-only role that never runs a duty pass does not need it.
 
 **There is now a tool that does this for you: [`packages/provisioning`](../../packages/provisioning/README.md).**
 `waitron-provision instance` creates the database, creates `waitron_migrator`, `waitron_app` and
-`waitron_provisioner` with these exact attributes, issues these exact grants, applies every
-migration set and writes the deployment stamp — printing each new role's connection string once.
+`waitron_provisioner`, issues both grants below, applies every migration set and writes the
+deployment stamp — printing each new role's connection string once. It issues a **superset** of the
+recipe below, not the same set: it also makes `waitron_migrator` a member of `app_user`, which the
+empty-database recipe deliberately omits (see the note under the SQL — that membership is only
+needed when the same role is also `DATABASE_URL`), and it creates `waitron_app` and
+`waitron_provisioner`, which this recipe is not about at all.
 The SQL below stays as the documented manual fallback, the same way
 `apps/server/sql/bootstrap-tenant.sql` stays as the manual path for creating a tenant.
 
