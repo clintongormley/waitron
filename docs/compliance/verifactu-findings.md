@@ -407,7 +407,8 @@ dates was refuted 0-3 during verification. Re-check before planning against them
 > invoice over, and relays in real time to a backoffice *"para que este último sistema proceda a su
 > envío"*, that backoffice acting *"de instrumento para la remisión del fichero sin más"*. The
 > closure and its quotations live in
-> [asesor-questions.md Q2](asesor-questions.md). The analysis below is retained because knowing
+> [asesor-questions.md Q2](asesor-questions.md#q2-may-a-node-other-than-the-till-transmit-the-tills-records-to-aeat).
+> The analysis below is retained because knowing
 > which reading won, and why, is worth more than a document that reads as though it were always
 > right.
 
@@ -439,7 +440,8 @@ security decision in the current design and the answer may force certificates on
 > collapsing the tills into one SIF, and **§4** states that one obligado's *"distintos centros de
 > facturación independientes, como tiendas"* each need their own installation number *"porque se
 > consideran SIF independientes, como si fueran «SIF virtuales»"*. See
-> [asesor-questions.md Q1](asesor-questions.md). What remains unsourced is any primary text
+> [asesor-questions.md Q1](asesor-questions.md#q1-is-a-till-that-syncs-to-a-shared-backend-within-minutes-an-independent-sif).
+> What remains unsourced is any primary text
 > addressing **sync frequency** in isolation; that residual is not enough to reopen the risk, and
 > §1 of this document has stated the settled position throughout.
 >

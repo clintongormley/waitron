@@ -16,7 +16,7 @@ first adapter, rather than a shopping list.
 
 | # | Decision |
 | --- | --- |
-| D1 | **The till must be general-purpose hardware; the card reader need not be.** A device running Waitron may not be a locked POS appliance. A reader bound to one PSP is acceptable — card data is the acquirer's problem by design (`pos-architecture-design.md` §1) |
+| D1 | **The till must be general-purpose hardware; the card reader need not be.** A device running Waitron may not be a locked POS appliance. A reader bound to one PSP is acceptable — card data is the acquirer's problem by design ([2026-07-18-pos-architecture-design.md](2026-07-18-pos-architecture-design.md) §1) |
 | D2 | **Launch is two counter positions plus one handheld.** A self-order kiosk and further counter positions are wanted eventually but are not bought now |
 | D3 | **Peripheral drivers run on the local server**, not in the till browser |
 | D4 | **No weighed goods at the deli.** Scales, the priced-label parser and the metrology question all leave the launch path |
@@ -24,10 +24,22 @@ first adapter, rather than a shopping list.
 | D6 | **SumUp is the recommended acquirer**, with the existing Stripe path retained rather than removed |
 
 D3 is the load-bearing one. Putting drivers in the browser via WebUSB/WebSerial would have been
-simpler, but iOS Safari implements none of those APIs, which silently locks every future user's
-till platform to Chrome or Android. Since the local server already exists — mandatory above one
-till, and on the same box for a single-till venue (`pos-architecture-design.md` §5) — hosting the
-drivers there costs nothing and makes till platform a free choice permanently.
+simpler, but **neither API is available in Safari, on the desktop or on iOS**, which would silently
+lock every future user's till platform to Chrome or Android.
+
+> **The receipt.** MDN's `browser-compat-data`, read 2026-07-30:
+> [`api/USB.json`](https://github.com/mdn/browser-compat-data/blob/main/api/USB.json) and
+> [`api/Serial.json`](https://github.com/mdn/browser-compat-data/blob/main/api/Serial.json) both
+> record `safari: version_added: false` and `safari_ios: "mirror"` — mirroring desktop Safari, so
+> also false. WebUSB is Chrome 61+; Web Serial is Chrome 89 on desktop but only **Chrome Android
+> 138**, so even on the supported platform it is recent. MDN labels both *"Limited availability —
+> not Baseline because it does not work in some of the most widely-used browsers."* This is a claim
+> about Safari specifically; it is **not** a claim that no iOS browser can ever do it, which would
+> need separate evidence about alternative engines under the EU DMA.
+
+Since the local server already exists — mandatory above one till, and on the same box for a
+single-till venue ([2026-07-18-pos-architecture-design.md](2026-07-18-pos-architecture-design.md)
+§5) — hosting the drivers there costs nothing and makes till platform a free choice permanently.
 
 ## 2. Sizing assumption
 
