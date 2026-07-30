@@ -166,27 +166,37 @@ describe("applyInstance against a blank container", () => {
     // to this point green. Proven end to end here instead: revoke a membership, confirm the planner
     // notices, apply, confirm it comes back.
     await admin.execute(sql.raw(`revoke tenant_provisioner from waitron_provisioner`));
-    const drifted = await readInstanceState(admin, DATABASE, null);
-    expect(drifted.roles.waitron_provisioner?.memberOf).not.toContain("tenant_provisioner");
+    try {
+      const drifted = await readInstanceState(admin, DATABASE, null);
+      expect(drifted.roles.waitron_provisioner?.memberOf).not.toContain("tenant_provisioner");
 
-    const request = { database: DATABASE, environment: "preproduction" } as const;
-    const repair = planInstance(drifted, request);
-    expect(repair).toContainEqual({
-      kind: "grant-membership",
-      role: "waitron_provisioner",
-      memberOf: "tenant_provisioner",
-    });
+      const request = { database: DATABASE, environment: "preproduction" } as const;
+      const repair = planInstance(drifted, request);
+      expect(repair).toContainEqual({
+        kind: "grant-membership",
+        role: "waitron_provisioner",
+        memberOf: "tenant_provisioner",
+      });
 
-    await applyInstance(repair, {
-      admin,
-      database: DATABASE,
-      adminUri,
-      migrationsRoot: null,
-      openTarget: () => createPostgresDb(withDatabase(adminUri, DATABASE)),
-    });
+      await applyInstance(repair, {
+        admin,
+        database: DATABASE,
+        adminUri,
+        migrationsRoot: null,
+        openTarget: () => createPostgresDb(withDatabase(adminUri, DATABASE)),
+      });
 
-    const repaired = await readInstanceState(admin, DATABASE, null);
-    expect(repaired.roles.waitron_provisioner?.memberOf).toContain("tenant_provisioner");
+      const repaired = await readInstanceState(admin, DATABASE, null);
+      expect(repaired.roles.waitron_provisioner?.memberOf).toContain("tenant_provisioner");
+    } finally {
+      // The repair under test is what normally puts this back, so a failure ANYWHERE above it
+      // leaves the membership revoked for every test that follows. `GRANT` is idempotent, so this
+      // is a no-op on the passing path. Originally left out on the grounds that this was the last
+      // test in its `describe`; three have been appended since (:202, :268, :353), and it is safe
+      // today only because none of them happens to read `waitron_provisioner`'s memberships —
+      // which is a property of those tests, not of this one.
+      await admin.execute(sql.raw(`grant tenant_provisioner to waitron_provisioner`));
+    }
   });
 
   it("refuses when a GRANT succeeded and granted nothing", async () => {
