@@ -140,8 +140,18 @@ suite then asserts, against the database rather than against its own model: all 
 recorded, the three roles present with the right `rolcreaterole` and memberships,
 `has_database_privilege(... 'CREATE')` and `has_schema_privilege('public', 'CREATE')` true for
 `waitron_migrator`, `pg_namespace.nspacl` carrying `waitron_migrator=C*` (the `*` is the WITH GRANT
-OPTION below — no `has_*_privilege` function can see it), and the stamp written. A second plan from
-the state the first produced carries no create and no migrate.
+OPTION below), and the stamp written. A second plan from the state the first produced carries no
+create and no migrate.
+
+That last assertion reads `nspacl` **directly** rather than asking
+`has_schema_privilege(…, 'CREATE WITH GRANT OPTION')`, and the reason is the recursive closure, not
+the grant option: `has_*` answers for everything a role can reach, so a grant arriving through a
+group reads as satisfied when the direct grant the tool makes is absent — measured on
+`postgres:18-alpine`, `has_database_privilege('r_direct','acl_db2','CREATE')` was `t` while
+`aclexplode(datacl)` held zero entries naming `r_direct`. An earlier version of this sentence said
+no `has_*_privilege` function can see the grant option at all. That is false: they report it via the
+`'<PRIV> WITH GRANT OPTION'` spelling, `has_schema_privilege` returning `t` for a role holding the
+option and `f` for one holding a bare `C` on the same image.
 
 Two things that suite does **not** cover, so do not read it as covering them: it applies the
 migrations over the connection that just created the database, so it says nothing about a
