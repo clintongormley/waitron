@@ -137,8 +137,11 @@ describe("runCli", () => {
     // `allowPositionals: false` rejects independently of `strict`. `--flag=value` binds the value to
     // the flag regardless of whether the flag is known, so `strict: true` is the only thing
     // standing between it and an accepted secret.
+    // ALL THREE commands, not the two that take options: `keyring` takes none and used to discard
+    // its argv entirely, so `keyring --password hunter2` printed the key ring and exited 0 while
+    // USAGE and README both promised such a flag was a parse error.
     for (const flag of ["--password", "--key", "--admin-password"]) {
-      for (const command of ["instance", "status"]) {
+      for (const command of ["keyring", "instance", "status"]) {
         expect(await runCli([command, flag, "hunter2"], harness().deps)).toBe(2);
         expect(await runCli([command, `${flag}=hunter2`], harness().deps)).toBe(2);
       }
@@ -150,7 +153,7 @@ describe("runCli", () => {
     // WAITRON_ADMIN_DATABASE_URL or an echo-off prompt and from nowhere else. Pinned separately
     // from the loop above because `--admin-url` is the one an operator is most likely to try:
     // earlier drafts of this tool's own usage text advertised it.
-    for (const command of ["instance", "status"]) {
+    for (const command of ["keyring", "instance", "status"]) {
       const h = harness();
       expect(await runCli([command, "--admin-url", ADMIN_URI], h.deps)).toBe(2);
       expect(h.connect).not.toHaveBeenCalled();
@@ -165,6 +168,15 @@ describe("runCli", () => {
     const h = harness();
     expect(await runCli(["status", "waitron_demo"], h.deps)).toBe(2);
     expect(h.connect).not.toHaveBeenCalled();
+  });
+
+  it("rejects a stray positional after keyring, which takes no options at all", async () => {
+    const h = harness();
+    expect(await runCli(["keyring", "extra"], h.deps)).toBe(2);
+    // The refusal must come BEFORE the key ring is generated and printed — a tool that printed an
+    // unrecoverable key and then complained about an argument would be worse than one that ignored
+    // the argument.
+    expect(h.lines.join("\n")).not.toContain("WAITRON_CREDENTIALS_KEY=");
   });
 
   it("keyring needs no database and no admin connection", async () => {

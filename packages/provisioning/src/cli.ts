@@ -71,7 +71,7 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
   const [command, ...rest] = argv;
   switch (command) {
     case "keyring":
-      return runKeyring(deps.io);
+      return keyring(rest, deps);
     case "instance":
       return instance(rest, deps);
     case "status":
@@ -96,6 +96,30 @@ function parse<T extends NonNullable<Parameters<typeof parseArgs>[0]>["options"]
   options: T,
 ) {
   return parseArgs({ args: argv, options, strict: true, allowPositionals: false });
+}
+
+/**
+ * `keyring` takes no options — and parses its arguments anyway, which is the whole point.
+ *
+ * Discarding `argv` here instead left a hole in the guarantee `USAGE` and `README.md` both state
+ * universally. Verified through the built bundle before this function existed:
+ * `node dist/bin.js keyring --admin-url=postgres://admin:hunter2@h/db --password hunter2` printed
+ * the key ring and exited 0. Nothing read or printed the flags, so no secret leaked out of the
+ * tool — but the operator had just been told such a flag would be REFUSED, and their shell history
+ * now held a connection string on the strength of that. A guarantee that holds for two commands out
+ * of three is not the guarantee the documentation makes.
+ *
+ * `parse(argv, {})` with no declared options means every flag is unknown and every positional is
+ * stray, so `strict: true` and `allowPositionals: false` reject the lot.
+ */
+async function keyring(argv: string[], deps: CliDeps): Promise<number> {
+  try {
+    parse(argv, {});
+  } catch {
+    deps.io.stderr(USAGE);
+    return 2;
+  }
+  return runKeyring(deps.io);
 }
 
 async function instance(argv: string[], deps: CliDeps): Promise<number> {
