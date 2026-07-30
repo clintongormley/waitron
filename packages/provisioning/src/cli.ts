@@ -360,12 +360,23 @@ async function resolveAdminUri(deps: CliDeps): Promise<string> {
  * commit that added this rather than left to contradict the code.
  *
  * A string `new URL` cannot parse says so instead of throwing. That branch is reachable, not
- * defensive: `pg` accepts such a string rather than raising — run against this repo's `pg@8.22.0`,
- * `new Client({ connectionString: "host=db.example port=5433 user=adm" })` came back as
- * `{host:"base",port:5432,user:"<OS user>",database:"host=db.example port=5433 user=adm"}` — so a
- * `TypeError` escaping here would reach the operator as `unexpected failure (TypeError)` in place
- * of a plan. (Whether such a string could then CONNECT was not tested; only that `pg` does not
- * reject it, which is all this branch's reachability turns on.)
+ * defensive, and the bar is higher than "`pg` does not reject it": `describeAdmin` is called at
+ * :166, inside `withState`, which has already CONNECTED (`deps.connect(adminUri)`) and read state
+ * twice. So the string reaching here is one `pg` connected with, and the two parsers disagree about
+ * a real, working one — a Unix-socket directory path. Run against this repo's `pg@8.22.0`,
+ * `new Client({ connectionString: "/var/run/postgresql" })` came back as
+ * `{host:"/var/run/postgresql",port:5432,...}` and, against a `postgres:18-alpine` container
+ * reached over that socket, `connect()` succeeded and `select inet_server_addr() is null` returned
+ * true; `new URL("/var/run/postgresql")` throws `TypeError: Invalid URL`. So a `TypeError`
+ * escaping here would reach the operator as `unexpected failure (TypeError)` in place of a plan.
+ *
+ * An earlier version of this comment cited `"host=db.example port=5433 user=adm"` instead. That
+ * example does show `pg` and `new URL` disagreeing, but it cannot reach this function: `pg` parses
+ * it to `{host:"base"}` and connecting fails first with `getaddrinfo ENOTFOUND base`, so
+ * `withState`'s connect `catch` fires before any plan is printed. (`ENOTFOUND` is nine characters,
+ * so `sqlStateOf`'s five-character SQLSTATE pattern does not match it and `asUnreadable` rethrows
+ * the driver's error unchanged rather than wrapping it in `provisioning.state_unreadable` — which
+ * is a separate question from reachability, and not one this branch turns on.)
  */
 function describeAdmin(adminUri: string): string {
   let url: URL;
