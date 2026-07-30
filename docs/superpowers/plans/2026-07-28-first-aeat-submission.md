@@ -6,6 +6,31 @@
 > [deployment-environment design](../specs/2026-07-29-deployment-environment-design.md). Every
 > mention of the old name below — in the Architecture summary, the Global Constraints, and the
 > shell commands — records what was true when this plan was written and is left unchanged.
+>
+> **2026-07-30 note — Task 2 Step 2 and Task 2 Step 4 are superseded by a tool.**
+> `waitron-provision instance` ([`packages/provisioning`](../../../packages/provisioning/README.md))
+> now creates the database, creates `waitron_migrator`, `waitron_app` and `waitron_provisioner`,
+> issues the grants, applies every migration set and writes the deployment stamp, printing each new
+> role's connection string once. Three things below are out of date as a result, and are left as
+> written because they record what was true on 2026-07-28:
+>
+> - **Task 2 Step 2's finding** ("an operator provisioning a database has no way to run migrations
+>   without also starting the duty loop … the next person will look for a `--migrate-only` flag and
+>   not find one") is closed. `waitron-provision instance` migrates without starting a duty loop.
+> - **Task 2 Step 4's** "recorded there as hand-verified rather than test-covered" no longer
+>   describes `apps/server/README.md`. That section (line 121 onward, "against an empty database")
+>   was rewritten: line 134 now says the case "is no longer exercised only by hand" and cites
+>   `packages/provisioning/src/instance-apply.rls.test.ts`, which runs the whole sequence against a
+>   real `postgres:18-alpine` container as a role holding exactly `login createdb createrole`. The
+>   SQL recipe stays as the documented manual fallback.
+> - **Task 2 Step 4's** "migrate by booting the host against the database once" still works and is
+>   no longer the recommended path: run `waitron-provision instance` instead, then
+>   `bootstrap-tenant.sql` as written. Note the tool issues a **superset** of the README recipe —
+>   `apps/server/README.md` says which parts and why.
+>
+> Two things it does **not** change: the key ring must still exist before the host boots, and there
+> is still no `tenant` command, so `bootstrap-tenant.sql` remains the way to create the deli's
+> tenant. `waitron-provision keyring` is now the way to generate the key ring.
 
 **Goal:** Get one real sale from the deli's till to the Agencia Tributaria's pre-production environment, using the real certificate, and read what comes back.
 
