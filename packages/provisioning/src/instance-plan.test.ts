@@ -42,6 +42,13 @@ describe("planInstance against a blank cluster", () => {
     // and the stamp needs the `deployment` table that only migrating creates.
     expect(kinds.indexOf("migrate")).toBeLessThan(kinds.indexOf("stamp"));
     expect(kinds.indexOf("create-database")).toBeLessThan(kinds.indexOf("migrate"));
+    // Pins the ordering bug 12af388 fixed, in the pure planner itself rather than only in the
+    // container suite that found it: `app_user`/`tenant_provisioner` are created BY migrate, and
+    // every `create-role` action below bakes a membership in one of them straight into `CREATE
+    // ROLE ... IN ROLE`, so a create-role emitted before migrate runs fails on a real blank
+    // cluster. `indexOf("create-role")` returns the FIRST of the three — exactly the one this
+    // ordering matters for.
+    expect(kinds.indexOf("migrate")).toBeLessThan(kinds.indexOf("create-role"));
   });
 
   it("gives the migrator CREATEROLE and a grantable CREATE ON SCHEMA", () => {
