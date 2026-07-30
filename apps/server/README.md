@@ -68,8 +68,9 @@ the privilege for those statements **before** it evaluates whether the object al
 role with only ordinary duty-level grants (`app_user` membership, nothing else) fails on the very
 first statement even though every migration is a no-op. Against an **empty** database, the
 migrations that create `app_user`, `sales_coverage_checker`, `envios_drainer`,
-`payments_webhook_resolver` and `credentials_enumerator` need `CREATEROLE` and a temporary
-ownership-transfer dance that a plain duty-level role cannot do at all. Neither case is satisfiable
+`payments_webhook_resolver`, `credentials_enumerator` and `tenant_provisioner` need `CREATEROLE`,
+and four of those six also need a temporary ownership-transfer dance that a plain duty-level role
+cannot do at all. Neither case is satisfiable
 by the role spec §10 actually wants running the process day to day — hence the split.
 
 ### `DATABASE_URL` — the deployment role, always
@@ -122,11 +123,15 @@ default); a migrations-only role that never runs a duty pass does not need it.
 This case is **not** exercised by this package's own test suite — every test here bootstraps its
 container via the container's own default superuser, which is a real but different shape from "a
 dedicated, non-superuser migrating role bootstrapping a brand-new database" (`packages/db`'s own
-`0001_tenancy_rls.sql` and its siblings are hand-written, custom migrations that create five NOLOGIN
-support roles and hand a `SECURITY DEFINER` function's ownership to each one — drizzle-kit generates
-no roles or ownership, so none of this is inferred). The grants below were verified by hand against a
-real Postgres 18 container while writing this document, not carried over from an existing automated
-test — treat them as correct but re-check if a future migration changes the pattern:
+`0001_tenancy_rls.sql` and its siblings are hand-written, custom migrations that create six NOLOGIN
+support roles — `app_user`, `sales_coverage_checker`, `tenant_provisioner`, `credentials_enumerator`,
+`envios_drainer`, `payments_webhook_resolver` — and hand a `SECURITY DEFINER` function's ownership to
+four of them; `app_user` and `tenant_provisioner` own no function. drizzle-kit generates no roles or
+ownership, so none of this is inferred. The grants below were verified by hand against a real
+Postgres 18 container while writing this document, not carried over from an existing automated test,
+and **re-verified on PostgreSQL 18.4 after `0011_provisioner_role.sql` was added**: this exact recipe,
+run as `waitron_migrator` with no superuser and no `BYPASSRLS`, applied all twelve core migrations
+clean. Treat them as correct but re-check if a future migration changes the pattern:
 
 ```sql
 create role waitron_migrator login password '<secret>' createrole;
@@ -138,10 +143,14 @@ grant create on schema public to waitron_migrator with grant option;
 ```
 
 `CREATEROLE` is what lets this role run `CREATE ROLE app_user NOLOGIN`, `CREATE ROLE
-sales_coverage_checker NOLOGIN NOSUPERUSER`, and the other three — and, because Postgres grants the
+sales_coverage_checker NOLOGIN NOSUPERUSER`, and the other four — and, because Postgres grants the
 creating role admin option on a role it just created, is also what lets the same role run each
 migration's `GRANT <support_role> TO CURRENT_USER WITH INHERIT FALSE` / `REVOKE … FROM CURRENT_USER`
-pair without any further grant.
+pair, and `0011_provisioner_role.sql`'s `GRANT app_user TO tenant_provisioner`, without any further
+grant. That last one is where "the same role keeps running every migration" stops being merely
+convenient: a role that did NOT create `app_user` holds no admin option on it and that GRANT fails
+with `permission denied to grant role "app_user"` — observed on 18.4 (see the note in
+`0011_provisioner_role.sql`, and the "Practical recommendation" below).
 
 **Practical recommendation:** if the same role keeps running every migration for the lifetime of the
 database — the common case, and the one that also answers the "new migration" gap noted above from
