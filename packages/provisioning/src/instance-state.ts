@@ -3,7 +3,13 @@ import { readDeploymentEnvironment, type Database, type DeploymentEnvironment } 
 import { manifestSets } from "@waitron/migrations";
 import { assertIdentifier } from "./identifiers.js";
 
-/** The three LOGIN roles a deployment needs, by the names `apps/server/README.md` already uses. */
+/**
+ * The three LOGIN roles a deployment needs. `waitron_migrator` and `waitron_app` are the names
+ * `apps/server/README.md` already uses (e.g. lines 83, 104, 137 — checked directly, not assumed).
+ * `waitron_provisioner` does not appear anywhere in that file; it originates in
+ * `docs/superpowers/specs/2026-07-29-provisioning-tool-design.md` (§2's "a third role", and §4's
+ * idempotency table), which is where this package's own third role first comes from.
+ */
 export const INSTANCE_ROLES = ["waitron_migrator", "waitron_app", "waitron_provisioner"] as const;
 export type InstanceRole = (typeof INSTANCE_ROLES)[number];
 
