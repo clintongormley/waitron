@@ -472,11 +472,25 @@ function roleUri(adminUri: string, role: string, password: string, database: str
   return u.toString();
 }
 
-/** Prints an AppError's CODE and structured params — never a raw message, and never a value. Params
- * are field names, identifiers and SQLSTATEs by construction (see errors.ts). */
+/**
+ * An `AppError` as the one line this tool ever prints for it: the CODE and the structured params,
+ * never a raw message and never a value. Params are field names, identifiers, environment-variable
+ * names and SQLSTATEs by construction — `errors.ts`'s header is what keeps that true.
+ *
+ * Exported because `bin.ts` prints the SAME line for an `AppError` that escaped `runCli` entirely,
+ * and it had its own copy of this template. Two implementations of "never a message" is one too
+ * many when the message is what carries `CREATE ROLE … PASSWORD '<generated>'`, and `bin.ts` is on
+ * the coverage-excluded side, so the copy that could drift was the one no test would catch.
+ */
+export function formatAppError(error: AppError): string {
+  return `${error.code} ${JSON.stringify(error.params)}`;
+}
+
+/** Reports an `AppError` and rethrows anything else — a database fault or a bug is not something
+ * this file understood, and flattening it into an exit code would claim otherwise. */
 function reportFailure(error: unknown, deps: CliDeps): number {
   if (isAppError(error)) {
-    deps.io.stderr(`${error.code} ${JSON.stringify(error.params)}`);
+    deps.io.stderr(formatAppError(error));
     return 1;
   }
   throw error;

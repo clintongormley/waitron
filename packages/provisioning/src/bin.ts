@@ -6,7 +6,7 @@ import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { createPostgresDb } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
-import { runCli } from "./cli.js";
+import { formatAppError, runCli } from "./cli.js";
 import { applyInstance } from "./instance-apply.js";
 import { readInstanceState } from "./instance-state.js";
 
@@ -69,9 +69,11 @@ async function main(): Promise<number> {
     // `CREATE ROLE … PASSWORD '<generated>'`. `error.name` is printed instead — a class name cannot
     // carry a password; a message can.
     if (isAppError(error)) {
-      // Code and structured params only. `src/errors.ts`'s header is the constraint that makes this
+      // Code and structured params only, through `cli.ts`'s own formatter rather than a second copy
+      // of the template — this file is excluded from coverage, so a copy here is the one that could
+      // drift without a test noticing. `src/errors.ts`'s header is the constraint that makes the
       // line safe: no param declared there carries key material, a password or a connection string.
-      process.stderr.write(`${error.code} ${JSON.stringify(error.params)}\n`);
+      process.stderr.write(`${formatAppError(error)}\n`);
       return 1;
     }
     const name = error instanceof Error ? error.name : "UnknownError";
