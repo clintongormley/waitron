@@ -361,10 +361,19 @@ tests alongside the code.
 
 - Specs live in `docs/superpowers/specs/`, plans in `docs/superpowers/plans/`, session handoffs in
   `docs/handoffs/`.
-- **These are committed here, deliberately** — unlike some sibling repos, where `docs/superpowers/`
-  is gitignored as local scratch. In Waitron a plan doubles as the operator's runbook (the AEAT
-  submission plan is executed by a human at a terminal), so it belongs in history. Do not gitignore
-  them.
+- **Specs and plans are committed here, deliberately** — unlike some sibling repos, where
+  `docs/superpowers/` is gitignored as local scratch. In Waitron a plan doubles as the operator's
+  runbook (the AEAT submission plan is executed by a human at a terminal), so it belongs in history.
+  Do not gitignore them.
+- **Handoffs are NOT.** `docs/handoffs/` is gitignored: a handoff is scratch that carries context to
+  the next session, not a record anyone reads twice. Write one, leave it uncommitted, and delete it
+  once the work it describes is finished. Do not branch for one and **do not open a PR for one** —
+  that spends a CI run and a review cycle on a document whose whole life is one session. The
+  intended end state is that `docs/superpowers/` joins it; until that happens, only handoffs are
+  ignored.
+- **A handoff is therefore the wrong place for anything durable.** If a lesson would still matter in
+  three sessions, it belongs in this file (§7); if a follow-up is unclaimed work, it belongs
+  somewhere that outlives the directory it is written in.
 - Historical docs record what was true when written. Add a dated pointer rather than rewriting their
   history to pretend they always said the current thing.
 
