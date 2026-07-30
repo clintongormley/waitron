@@ -62,6 +62,14 @@ being wrong, and the replacement is written with the confidence of having just d
 Apply the same "what would make this false?" pass to your correction that you applied to the
 original.
 
+`feat/provisioning-instance` produced three more in one cycle, each written while correcting an
+adjacent claim: a transaction claim in a rewritten `applyMigrations` comment, a "`pg` authenticates
+lazily on first use" justification that a container disproved within a minute, and a teardown
+comment blaming a failed `DROP ROLE` on the role being a GRANTOR when it was simultaneously a
+grantee, so the two could not be separated. This is the single most productive source of false
+claims in the repository's history — more than first drafts. Budget review effort accordingly: the
+_replacement_ text deserves more scrutiny than the text it replaces, not less.
+
 ### Before asserting a convention, grep the siblings
 
 Two defects landed this way: an error code prefixed `payments.` where all twelve siblings use
@@ -160,6 +168,28 @@ A consequence worth knowing: `apps/server` cannot deep-import `packages/db`'s `e
 **Never widen a grant to make a test pass.** `app_user` holds `SELECT` on `tenants` and not `INSERT`
 deliberately — the running POS cannot create tenants.
 
+**A statement PostgreSQL accepted is not a statement that did anything.** A `GRANT` issued by a role
+holding no grant option raises a **WARNING, not an error**: the command tag is still `GRANT`, the
+driver reports success, and nothing is granted. Observed on `postgres:18-alpine` — as a non-owning
+`login createdb createrole` admin, `grant create on database acl_db to r_app` printed
+`WARNING: no privileges were granted for "acl_db"` and left `datacl` unchanged. So read the ACL back
+rather than trusting the tag, and read it **directly** (`pg_database.datacl`, `pg_namespace.nspacl`):
+`has_*_privilege` answers for the recursive closure, so a role holding a privilege only via a group
+reads as satisfied when the direct grant is absent, and no `has_*` function can see `WITH GRANT
+OPTION` at all. Cost: a Critical finding on `feat/provisioning-instance` plus two fix rounds — and
+the first fix then refused **working** deployments, because a grantee holds one ACL entry **per
+grantor** (`r_y=c/owner_a` and `r_y=C/r_mig` coexist, which is exactly what `WITH GRANT OPTION`
+delegation produces) and the check read only the first match.
+
+**An empty connection string is a valid connection string.** `new Client({ connectionString: "" })`
+resolves to `{host:"localhost",port:5432,user:"<OS user>"}` — the empty string is falsy, so `pg`
+parses nothing and every default applies (run against `pg@8.22.0`; `pg-pool` builds its clients from
+the same options object, `pg-pool/index.js:241`). Anything that reads a connection string from an
+environment variable or a prompt must refuse `""` explicitly. Cost: an Important finding —
+`waitron-provision instance` would have created, migrated and **stamped** a database on whatever
+answers on localhost whenever `WAITRON_ADMIN_DATABASE_URL` was unset and stdin was non-interactive,
+which is the documented CI shape.
+
 ---
 
 ## 4. Testing
@@ -201,6 +231,16 @@ from the barrel **and** from every other file, and it still passes, because `tsc
 though the deletion was run in one. Closing it needs a `tsc`-based downstream-consumer probe, or an
 `include` narrowed to the barrel's transitive closure. Until then, do not cite these tests as
 evidence that an augmentation is reachable.
+
+**Assert exhaustively — a loose assertion hides a wrong TYPE, not just a wrong value.**
+`pg_roles.rolname` is PostgreSQL's `name` type, so `array(select g.rolname …)` is `name[]` (OID
+1003), for which `node-postgres` has no parser: it hands back the wire literal — the raw string
+`"{}"` — through a field declared `string[]`. Cost: `RoleFacts.memberOf` on
+`feat/provisioning-instance` was never an array, so every `facts.memberOf.includes(role)` was
+`String.prototype.includes` and would have read false forever, making the planner emit spurious
+`grant-membership` actions on every run. Nothing caught it until a `toMatchObject` was tightened to
+an exact `toEqual`. Cast to `::text`/`::text[]` when reading a `name`, and prefer the exhaustive
+matcher.
 
 ---
 
