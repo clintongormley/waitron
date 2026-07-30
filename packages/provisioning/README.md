@@ -96,8 +96,8 @@ container, a role created with `create role probe_admin login createdb createrol
 ran `instance` to completion — five migration sets applied, three roles created, both grants made,
 the stamp written — and `status` then reported all five migration sets present and `deployment
 stamp: preproduction`. (That run predates the wording change described under `status` below; it
-printed `applied` where the tool now prints `journal present`.) That matters because managed Postgres (Neon, Supabase, RDS) grants `CREATEDB` and
-`CREATEROLE` but never true superuser.
+printed `applied` where the tool now prints `journal present`.) That matters because managed
+Postgres (Neon, Supabase, RDS) grants `CREATEDB` and `CREATEROLE` but never true superuser.
 
 ### `status`
 
@@ -242,6 +242,22 @@ Running `instance` as the admin that created the database is still the recommend
 is one fewer moving part rather than because delegation does not work. And note the irony: onward
 delegation is precisely what produces a second grantor for the same grantee, which is the ACL shape
 that made `aclHas` refuse a correctly-granted deployment until it was fixed to read every entry.
+
+### A second database on the same cluster prints no connection strings
+
+Roles are **cluster-global**; databases are not. So an `instance` against a _new_ database on a
+cluster that already carries `waitron_migrator`, `waitron_app` and `waitron_provisioner` plans no
+`create-role` at all, and the run ends with "already existed — no connection string" for all three
+and exit 0. The database is created, migrated, granted and stamped correctly — what is missing is any
+way to connect to it, unless the strings printed by the **first** provision were kept. Those roles do
+work against the new database with their original passwords; this tool simply cannot re-print them,
+because `pg_authid` stores only a hash.
+
+Not a fiscal hazard: stamps are per-database and `stampDeployment` refuses a disagreeing one
+independently of the planner. It is, however, one credential across two databases — PostgreSQL grants
+`CONNECT` to `PUBLIC` by default (the `=Tc/owner_a` entry in the `datacl` transcript above), so the
+same `DATABASE_URL` reaches both. For a production and a pre-production deployment, use separate
+clusters.
 
 ### A failed `instance` can orphan a role
 
