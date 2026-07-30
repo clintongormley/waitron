@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import { createPostgresDb, type Database } from "@waitron/db";
@@ -66,6 +67,34 @@ describe("applyInstance against a blank container", () => {
         "app_user",
         "tenant_provisioner",
       ]);
+
+      // The "granted" half of the test's own title, proven rather than implied by non-throwing
+      // SQL: `RoleFacts` carries no grant field, so nothing above actually checks that
+      // grant-database-create/grant-schema-create did anything. `has_database_privilege` answers
+      // for database-level CREATE from any connection in the cluster; `has_schema_privilege` needs
+      // the TARGET database, since `public` is per-database.
+      const dbCreate = await admin.execute<{ can_create: boolean }>(
+        sql`select has_database_privilege('waitron_migrator', ${DATABASE}, 'CREATE') as can_create`,
+      );
+      expect(dbCreate.rows[0]?.can_create).toBe(true);
+
+      const schemaCreate = await target.execute<{ can_create: boolean }>(
+        sql`select has_schema_privilege('waitron_migrator', 'public', 'CREATE') as can_create`,
+      );
+      expect(schemaCreate.rows[0]?.can_create).toBe(true);
+
+      // Neither `has_*_privilege` function can see WITH GRANT OPTION — only `pg_namespace.nspacl`
+      // can. An ACL item's trailing `*` after a privilege letter means that privilege was granted
+      // WITH GRANT OPTION; verified directly against a real container: `grant create on schema
+      // public to probe_role with grant option` produced the acl entry
+      // `probe_role=C*/pg_database_owner`, versus a bare `C` (no `*`) without it.
+      const nsp = await target.execute<{ nspacl: string[] }>(
+        sql`select nspacl::text[] as nspacl from pg_namespace where nspname = 'public'`,
+      );
+      const migratorAcl = nsp.rows[0]?.nspacl.find((entry) =>
+        entry.startsWith("waitron_migrator="),
+      );
+      expect(migratorAcl).toMatch(/=C\*/);
 
       // The idempotency claim, made against reality rather than against the planner's own model:
       // a second plan from the state the first one produced carries no create and no migrate.
