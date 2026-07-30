@@ -9,4 +9,5 @@ export { planInstance } from "./instance-plan.js";
 export type { InstanceAction, InstanceRequest } from "./instance-plan.js";
 export { applyInstance } from "./instance-apply.js";
 export type { ApplyDeps } from "./instance-apply.js";
+export { formatStatus } from "./status-command.js";
 import "./errors.js";
