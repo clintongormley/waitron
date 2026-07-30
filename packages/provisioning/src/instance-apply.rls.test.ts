@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import { createPostgresDb, type Database } from "@waitron/db";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { quoteIdent } from "./identifiers.js";
 import { applyInstance, withDatabase, type ApplyDeps } from "./instance-apply.js";
 import type { InstanceAction } from "./instance-plan.js";
@@ -40,16 +41,16 @@ describe("applyInstance against a blank container", () => {
    * privileged admin (`grant_probe_admin`, `delegate_admin`, `probe_admin`) and watching it be
    * refused; everything else about the deps is identical.
    */
-  function deps(as: Database): ApplyDeps {
+  function deps(as: Database, database: string = DATABASE): ApplyDeps {
     return {
       admin: as,
-      database: DATABASE,
+      database,
       adminUri,
       migrationsRoot: null,
       // This suite OWNS every target connection it hands over, so `release` closes it — the
       // opposite end of the contract from `cli.ts`, which lends one `withState` closes.
       openTarget: async () => {
-        const db = await createPostgresDb(withDatabase(adminUri, DATABASE));
+        const db = await createPostgresDb(withDatabase(adminUri, database));
         return { db, release: () => db.close() };
       },
     };
@@ -425,6 +426,79 @@ describe("applyInstance against a blank container", () => {
       // In a `finally` so the suite is order-independent rather than order-reliant: the tests
       // after this one read `pg_roles`, and a leftover `probe_admin` is a role they did not create.
       await admin.execute(sql.raw(`drop role if exists probe_admin`));
+    }
+  });
+
+  it("repairs a set whose journal survived a rolled-back migration", async () => {
+    // The defect the migrate gate left open, end to end. `migratedSets` is journal-TABLE existence,
+    // and Drizzle creates that table at `drizzle-orm@0.45.2/pg-core/dialect.js:54-55` — OUTSIDE the
+    // transaction it opens at `:60` for the set's migrations. So an `instance` killed inside a set
+    // rolls the migrations back and leaves the journal behind: every journal present, one set
+    // empty. The old planner read that as "done", planned no `migrate`, and let this command grant,
+    // stamp and exit 0 against a deployment whose last set had never run.
+    //
+    // Built FORWARDS rather than by damaging a migrated database. Damaging one would need each
+    // set's table list and would have to respect the foreign keys `packages/migrations/src/apply.ts`
+    // records (core carries `tenants`, which every other set references), and none of that is under
+    // test. The simpler-looking variant — pre-create all five journals against an empty database —
+    // does NOT reproduce this defect: `deployment` is itself created by a migration, and
+    // `stampDeployment` INSERTs into it after `readDeploymentEnvironment` returns null for an absent
+    // table (`packages/db/src/deployment.ts:39-41`), so the old tool would have FAILED on the stamp
+    // rather than exiting 0. A test built that way would pass while demonstrating the wrong thing.
+    const database = "waitron_interrupted_suite";
+    const sets = manifestSets();
+    const last = sets[sets.length - 1];
+    if (last === undefined) throw new Error("the manifest is empty");
+
+    await admin.execute(sql.raw(`create database ${quoteIdent(database)}`));
+    try {
+      // Every set but the last, applied for real by the real migrator.
+      await applyMigrations(
+        withDatabase(adminUri, database),
+        migrationOptionsFor(sets.slice(0, -1), null),
+      );
+
+      const target = await createPostgresDb(withDatabase(adminUri, database));
+      try {
+        // The last set's journal, by hand, in Drizzle's own shape (`dialect.js:48-51`) and with no
+        // rows — which is exactly what the rolled-back transaction leaves behind.
+        await target.execute(
+          sql.raw(
+            `create table ${quoteIdent(last.table)} (
+               id serial primary key, hash text not null, created_at bigint
+             )`,
+          ),
+        );
+
+        const state = await readInstanceState(admin, database, target);
+        // The precondition, asserted rather than assumed: every journal reads as present, so the
+        // OLD planner would have seen nothing to do here.
+        expect(state.inside?.migratedSets).toEqual(sets.map((set) => set.name));
+        // And the set really is empty — no table of its own yet.
+        const before = await target.execute<{ present: boolean }>(
+          sql`select to_regclass('public.tenant_credentials') is not null as present`,
+        );
+        expect(before.rows[0]?.present).toBe(false);
+
+        const request = { database, environment: "preproduction" } as const;
+        const actions = planInstance(state, request);
+        expect(actions).toContainEqual({ kind: "migrate" });
+
+        await applyInstance(actions, deps(admin, database));
+
+        // Assert against the SCHEMA, not the journal: journal presence is the very signal being
+        // shown to be insufficient, so re-reading it would prove nothing.
+        const after = await target.execute<{ present: boolean }>(
+          sql`select to_regclass('public.tenant_credentials') is not null as present`,
+        );
+        expect(after.rows[0]?.present).toBe(true);
+      } finally {
+        await target.close();
+      }
+    } finally {
+      // In a `finally` so the suite stays order-independent. `admin` is connected to another
+      // database in the same cluster, so it can drop this one.
+      await admin.execute(sql.raw(`drop database if exists ${quoteIdent(database)} with (force)`));
     }
   });
 });
