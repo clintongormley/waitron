@@ -199,9 +199,27 @@ grant tenant_provisioner to <new_admin> with admin option;
 
 It does **not** address 3, and is not claimed to: it hands the new admin no grant option on the
 database or on `public`, so a run that genuinely still needed those grants would now stop with
-`provisioning.grant_ineffective` rather than pass silently. Making a different admin able to issue
-them means giving it the database — `alter database <db> owner to <new_admin>` — which is why
-running `instance` as the admin that created the database remains the recommendation.
+`provisioning.grant_ineffective` rather than pass silently.
+
+If you do need a different admin to issue them, two more statements are enough — run as the owner:
+
+```sql
+grant create on database <db> to <new_admin> with grant option;
+-- inside <db>:
+grant create on schema public to <new_admin> with grant option;
+```
+
+Verified on `postgres:18-alpine`, because an earlier version of this section claimed the opposite —
+that the only way was to hand over the database with `alter database <db> owner to <new_admin>`.
+That was a necessity claim with no receipt, and it is false: after the two grants above, `r_mig` —
+a plain role that owns nothing, with `owner_a` still the database owner — granted CREATE onward to
+two further roles, leaving `r_x=C/r_mig` and `r_y=C/r_mig` in `datacl` and `r_x=C/r_mig` in
+`nspacl`.
+
+Running `instance` as the admin that created the database is still the recommendation, because it
+is one fewer moving part rather than because delegation does not work. And note the irony: onward
+delegation is precisely what produces a second grantor for the same grantee, which is the ACL shape
+that made `aclHas` refuse a correctly-granted deployment until it was fixed to read every entry.
 
 ### A failed `instance` can orphan a role
 
