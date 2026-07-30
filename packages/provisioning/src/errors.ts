@@ -3,8 +3,15 @@ import "@waitron/shared";
 /**
  * `packages/provisioning`'s contribution to the shared error registry.
  *
- * NO PARAM HERE EVER CARRIES A GENERATED PASSWORD, A KEY, OR A CONNECTION STRING. `bin.ts` prints
- * an AppError's params verbatim to stderr, which is an operator's scrollback.
+ * NO PARAM HERE EVER CARRIES A GENERATED PASSWORD, A KEY, OR A CONNECTION STRING.
+ *
+ * The receipt is the SIBLING CLI, not this package's own entry point: `src/bin.ts` does not exist
+ * yet — it arrives with `instance`, and is already listed ahead of existing in this package's
+ * `vitest.config.ts` coverage exclusions for that reason. The shape it will follow is
+ * `packages/credentials/src/cli.ts:277`, which prints `${error.code} ${JSON.stringify(error.params)}`
+ * to stderr, i.e. into an operator's scrollback. So this is the constraint on every param added
+ * here from now on, stated before the printer lands rather than after — nothing under `src/` prints
+ * params today.
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
