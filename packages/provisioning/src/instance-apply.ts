@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { stampDeployment, type Database } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { quoteIdent } from "./identifiers.js";
+import { quoteIdent, quoteLiteral } from "./identifiers.js";
 import { sqlStateOf } from "./sql-state.js";
 import { describeAction, type InstanceAction } from "./instance-plan.js";
 import "./errors.js";
@@ -74,13 +74,19 @@ export async function applyInstance(
             action.memberOf.length > 0
               ? ` in role ${action.memberOf.map(quoteIdent).join(", ")}`
               : "";
-          // The password is a generated `[A-Za-z0-9_-]{32}` (identifiers.ts) — no quote, no
-          // backslash — which is what makes this literal safe without an escape pass. There is no
-          // operator-supplied password path anywhere in this package, deliberately.
+          // The password goes through `quoteLiteral`, not straight into `'…'`. For every password
+          // this tool generates that changes nothing — base64url is `[A-Za-z0-9_-]{32}`
+          // (identifiers.ts), no quote and no backslash, so the emitted SQL is byte-identical to
+          // what it was. It is there because `applyInstance` and `InstanceAction` are EXPORTED
+          // (`index.ts`) and `password` is typed `string`: the old safety was a property of one
+          // caller rather than of the code, and this package's own `instance-apply.rls.test.ts`
+          // already passes a hand-written password down this path. `CREATE ROLE` is a utility
+          // statement and takes no bind parameters, so building the literal is the only option and
+          // escaping it is the whole defence.
           try {
             await deps.admin.execute(
               sql.raw(
-                `create role ${quoteIdent(action.role)} ${attributes} password '${action.password}'${memberships}`,
+                `create role ${quoteIdent(action.role)} ${attributes} password ${quoteLiteral(action.password)}${memberships}`,
               ),
             );
           } catch (error) {
