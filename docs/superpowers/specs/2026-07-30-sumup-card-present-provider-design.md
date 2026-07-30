@@ -5,11 +5,10 @@
 **Scope:** `@waitron/payments-sumup` — a card-present provider whose outcome arrives asynchronously —
 plus the one neutral addition it needs.
 
-> **Companion document, not yet on `main`.** The hardware this runs on, and the economics that chose
-> SumUp over Stripe, are in `docs/superpowers/specs/2026-07-30-deli-hardware-design.md`, in flight as
-> **PR #7**. References to it below are deliberately unlinked until it lands; link them when it does.
-> Nothing in this design depends on that one being accepted — if the deli buys different readers, the
-> shape here is unchanged.
+The hardware this runs on, and the economics that chose SumUp over Stripe, are in
+[2026-07-30-deli-hardware-design.md](2026-07-30-deli-hardware-design.md) §4 (landed in PR #7) and are
+not restated here. Nothing in this design depends on that one, though — if the deli buys different
+readers, the shape below is unchanged.
 
 **Why this exists.** Stripe Mode 2a, SumUp's Cloud API and Square's Terminal API are the same
 topology: our server pushes a checkout to a networked reader over HTTPS and the outcome comes back.
@@ -50,7 +49,7 @@ Two vendor constraints shape this:
 - **Checkouts serialise per reader.** *"After the checkout is accepted, the system has 60 seconds to
   start the payment on the target device, and during this time, any other checkout for the same
   device will be rejected."* One reader is one queue; a second counter position needs a second reader,
-  which §3 of the hardware spec already buys.
+  which [2026-07-30-deli-hardware-design.md](2026-07-30-deli-hardware-design.md) §3 already buys.
 - **`Terminate Checkout` exists and we deliberately do not call it on timeout.** Forcing a definite
   answer races the customer: they may complete the tap in the instant we terminate, and we would then
   have recorded a decline against a real payment. An unknown is safer than a possible lie.
@@ -145,8 +144,9 @@ Listed because the CLAUDE.md §1 rule applies to vendor documentation as much as
    `verifyAndParse`'s contract is *"throws on a bad signature"*, which is only honourable if reader
    events are signed.
 3. **Whether `void` maps onto the refund endpoint** (§5).
-4. **Whether standalone operation survives Cloud API pairing**, carried over from the hardware spec
-   §7 — it decides whether the outage path in that document is real. Square's Terminal API disables
+4. **Whether standalone operation survives Cloud API pairing**, carried over from
+   [2026-07-30-deli-hardware-design.md](2026-07-30-deli-hardware-design.md) §7 — it decides whether
+   the outage path in that document is real. Square's Terminal API disables
    external printer connections while paired, so pairing changing device behaviour is not
    hypothetical.
 
