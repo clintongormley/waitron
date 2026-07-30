@@ -24,11 +24,29 @@ export function manifestSets(): MigrationSet[] {
 /**
  * Where each set's SQL actually lives.
  *
- * `root === null` means "running from source": resolve each `from` against this package. Otherwise
- * every set lives at `<root>/<name>` — an ABSOLUTE `root` is used as-is; a RELATIVE one resolves
- * against this package's own directory (`packages/migrations`), the same base the from-source branch
- * uses, never the process's current working directory. Which shape a caller passes is that caller's
- * own choice, not something this package can assume from its one existing consumer: a caller that
+ * `root === null` means "running from source": resolve each `from` against `here`'s parent.
+ * Otherwise every set lives at `<root>/<name>` — an ABSOLUTE `root` is used as-is; a RELATIVE one
+ * resolves against that same `here`-derived base, never the process's current working directory.
+ *
+ * What that base IS is not a constant, because `here` comes from `import.meta.url`:
+ *
+ * - **From source** (tests, dev) `here` is `packages/migrations/src`, so a relative root resolves
+ *   under `packages/migrations`. `manifest.test.ts`'s "resolves a relative root against this
+ *   package" asserts exactly that, against `import.meta.dirname`.
+ * - **Inside a bundle** `esbuild --bundle` collapses `import.meta.url` to the BUNDLE's own URL, so
+ *   `here` is whatever directory the bundle sits in and a relative root resolves under ITS parent.
+ *   Verified against the real artefact rather than reasoned about: `pnpm --filter @waitron/server
+ *   build`, then `WAITRON_MIGRATIONS_DIR=relative-migrations-root node dist/server.js` threw
+ *   `migrations.set_missing` with
+ *   `folder: '<repo>/apps/server/relative-migrations-root/core'` — under `apps/server`, because the
+ *   bundle is `apps/server/dist/server.js`. An earlier version of this comment named
+ *   `packages/migrations` unconditionally; before the extraction the same sentence named
+ *   `apps/server`, which was true of the bundle and false of the source tree. Today's only SHIPPED
+ *   form is the bundle, so a reader who takes "`packages/migrations`" literally is wrong about
+ *   production.
+ *
+ * Which shape a caller passes is that caller's own choice, not something this package can assume
+ * from its one existing consumer: a caller that
  * builds an absolute path beside its own bundle (`apps/server`'s `scripts/copy-migrations.mjs` does
  * this) never exercises the relative case, while a caller relaying an operator-supplied value —
  * `apps/server`'s `WAITRON_MIGRATIONS_DIR` is one such value — may be relaying a relative one,

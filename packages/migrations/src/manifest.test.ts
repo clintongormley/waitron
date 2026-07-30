@@ -64,6 +64,11 @@ describe("the migration manifest", () => {
     // resolve differently depending on where the process happens to be launched from. There is no
     // real folder at the computed path, so this reaches the same throw as the tests below; the
     // assertion is on the resolved `folder`, not on success.
+    //
+    // "against this package" is a statement about running FROM SOURCE, which is the only way this
+    // suite ever runs. In a bundle `import.meta.url` is the bundle's own URL and the base moves with
+    // it — `migrationOptionsFor`'s own doc comment carries the built-artefact receipt. Do not read
+    // this test as pinning `packages/migrations` for the shipped form.
     const error = await captureError(() =>
       Promise.resolve(
         migrationOptionsFor([{ name: "core", table: "t", from: "x" }], "relative-migrations-root"),
