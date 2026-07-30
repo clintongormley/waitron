@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import { createPostgresDb, type Database } from "@waitron/db";
 import { quoteIdent } from "./identifiers.js";
-import { applyInstance, withDatabase } from "./instance-apply.js";
+import { applyInstance, withDatabase, type ApplyDeps } from "./instance-apply.js";
 import type { InstanceAction } from "./instance-plan.js";
 import { planInstance } from "./instance-plan.js";
 import { readInstanceState } from "./instance-state.js";
@@ -29,6 +29,26 @@ describe("applyInstance against a blank container", () => {
    */
   let admin: Database;
   let adminUri: string;
+
+  /**
+   * `ApplyDeps` for this container, over whichever connection is playing the admin.
+   *
+   * Five tests below built this same four-field shape by hand — two of them as a verbatim
+   * duplicated helper — so adding a field to `ApplyDeps` meant five hand-edits, and four of them
+   * silently still compiling if one were missed only in the fifth. Parameterised on `as` because
+   * the whole point of three of those tests is running the SAME action as a DIFFERENT, under-
+   * privileged admin (`grant_probe_admin`, `delegate_admin`, `probe_admin`) and watching it be
+   * refused; everything else about the deps is identical.
+   */
+  function deps(as: Database): ApplyDeps {
+    return {
+      admin: as,
+      database: DATABASE,
+      adminUri,
+      migrationsRoot: null,
+      openTarget: () => createPostgresDb(withDatabase(adminUri, DATABASE)),
+    };
+  }
 
   beforeAll(async () => {
     pg = await startBarePostgres();
@@ -60,20 +80,14 @@ describe("applyInstance against a blank container", () => {
   });
 
   it("takes a blank cluster to a migrated, stamped, granted database — and then plans nothing", async () => {
-    const deps = {
-      admin,
-      database: DATABASE,
-      adminUri,
-      migrationsRoot: null,
-      openTarget: () => createPostgresDb(withDatabase(adminUri, DATABASE)),
-    };
+    const applyDeps = deps(admin);
     const request = { database: DATABASE, environment: "preproduction" } as const;
 
     const before = await readInstanceState(admin, DATABASE, null);
     expect(before.databaseExists).toBe(false);
-    await applyInstance(planInstance(before, request), deps);
+    await applyInstance(planInstance(before, request), applyDeps);
 
-    const target = await deps.openTarget();
+    const target = await applyDeps.openTarget();
     try {
       const after = await readInstanceState(admin, DATABASE, target);
       expect(after.databaseExists).toBe(true);
@@ -139,7 +153,7 @@ describe("applyInstance against a blank container", () => {
       expect(second).not.toContainEqual(expect.objectContaining({ kind: "stamp" }));
       // Applying it again must also not throw — the grants are the only thing left, and they are
       // idempotent by construction.
-      await applyInstance(second, deps);
+      await applyInstance(second, applyDeps);
     } finally {
       await target.close();
     }
@@ -177,13 +191,7 @@ describe("applyInstance against a blank container", () => {
         memberOf: "tenant_provisioner",
       });
 
-      await applyInstance(repair, {
-        admin,
-        database: DATABASE,
-        adminUri,
-        migrationsRoot: null,
-        openTarget: () => createPostgresDb(withDatabase(adminUri, DATABASE)),
-      });
+      await applyInstance(repair, deps(admin));
 
       const repaired = await readInstanceState(admin, DATABASE, null);
       expect(repaired.roles.waitron_provisioner?.memberOf).toContain("tenant_provisioner");
@@ -191,7 +199,7 @@ describe("applyInstance against a blank container", () => {
       // The repair under test is what normally puts this back, so a failure ANYWHERE above it
       // leaves the membership revoked for every test that follows. `GRANT` is idempotent, so this
       // is a no-op on the passing path. Originally left out on the grounds that this was the last
-      // test in its `describe`; three have been appended since (:202, :268, :353), and it is safe
+      // test in its `describe`; three have been appended since (:209, :270, :349), and it is safe
       // today only because none of them happens to read `waitron_provisioner`'s memberships —
       // which is a property of those tests, not of this one.
       await admin.execute(sql.raw(`grant tenant_provisioner to waitron_provisioner`));
@@ -217,14 +225,6 @@ describe("applyInstance against a blank container", () => {
       role: "waitron_app",
       database: DATABASE,
     } as const;
-    const depsFor = (as: Database) => ({
-      admin: as,
-      database: DATABASE,
-      adminUri,
-      migrationsRoot: null,
-      openTarget: () => createPostgresDb(withDatabase(adminUri, DATABASE)),
-    });
-
     await admin.execute(sql.raw(`drop role if exists grant_probe_admin`));
     await admin.execute(
       sql.raw(`create role grant_probe_admin login createdb createrole password 'g'`),
@@ -235,7 +235,7 @@ describe("applyInstance against a blank container", () => {
     try {
       let thrown: unknown;
       try {
-        await applyInstance([action], depsFor(probe));
+        await applyInstance([action], deps(probe));
       } catch (error) {
         thrown = error;
       }
@@ -252,7 +252,7 @@ describe("applyInstance against a blank container", () => {
       // admin that owns the database, takes effect and passes the check. So the refusal above is
       // about who ran it, not about the action being malformed — and the check is not simply
       // failing everything.
-      await applyInstance([action], depsFor(admin));
+      await applyInstance([action], deps(admin));
       const acl = await admin.execute<{ acl: string[] }>(
         sql`select coalesce(datacl::text[], '{}'::text[]) as acl
             from pg_database where datname = ${DATABASE}`,
@@ -298,13 +298,7 @@ describe("applyInstance against a blank container", () => {
     );
     try {
       // CREATE from the DELEGATE, producing the second entry.
-      await applyInstance([action], {
-        admin: delegate,
-        database: DATABASE,
-        adminUri,
-        migrationsRoot: null,
-        openTarget: () => createPostgresDb(withDatabase(adminUri, DATABASE)),
-      });
+      await applyInstance([action], deps(delegate));
 
       const acl = await admin.execute<{ acl: string[] }>(
         sql`select coalesce(datacl::text[], '{}'::text[]) as acl
@@ -359,22 +353,22 @@ describe("applyInstance against a blank container", () => {
     // has never had; `errors.ts`'s `provisioning.state_unreadable` cites the real one correctly.
     //
     // `prov_admin` created `app_user`, and can therefore grant it. The narrow claim this test needs
-    // is about ONE call, not about the file: the `applyInstance` at :80 — the only one that runs a
-    // `migrate` action — was passed `admin`, and `admin` is `prov_admin` (:45-46), not the
-    // container's superuser. `migrate` composes the migrator's URL from `adminUri` (:45), which is
+    // is about ONE call, not about the file: the `applyInstance` at :88 — the only one that runs a
+    // `migrate` action — was passed `admin`, and `admin` is `prov_admin` (:59-60), not the
+    // container's superuser. `migrate` composes the migrator's URL from `adminUri` (:59), which is
     // also `prov_admin`'s, so the `CREATE ROLE app_user` inside the core migration set ran as
     // `prov_admin`. Postgres grants a role admin option on a role it creates (`instance-plan.ts`'s
     // REQUIREMENTS comment says the same about `waitron_migrator`), which is where `prov_admin`'s
     // ability to grant `app_user` comes from.
     //
     // Deliberately NOT claimed, because an earlier version of this comment claimed both and both
-    // are false. (a) "Every `applyInstance` call in this file passes `admin`" — :244, :307 and :419
+    // are false. (a) "Every `applyInstance` call in this file passes `admin`" — :238, :301 and :399
     // each pass a purpose-built under-privileged probe (`grant_probe_admin`, `delegate_admin`,
     // `probe_admin`) precisely so a refusal can be forced; none of them runs a `migrate`, so none
     // affects who owns `app_user`. (b) "The container's superuser is never `ApplyDeps.admin`" — the
-    // second `describe` in this file (:444) binds its own `admin` to `pg.connect()` (:455), which
+    // second `describe` in this file (:424) binds its own `admin` to `pg.connect()` (:435), which
     // `packages/db/src/testing/postgres.ts:52-54` documents as the container's superuser, and
-    // hands it to `applyInstance` at :488. That block is a separate bare container and has no
+    // hands it to `applyInstance` at :468. That block is a separate bare container and has no
     // bearing on this one; the mistake was scoping a per-block fact to the whole file.
     //
     // A SECOND admin, holding exactly the attributes this tool's spec asks for — `login createdb
@@ -387,20 +381,12 @@ describe("applyInstance against a blank container", () => {
       role: "waitron_app",
       memberOf: "app_user",
     } as const;
-    const depsFor = (as: Database) => ({
-      admin: as,
-      database: DATABASE,
-      adminUri,
-      migrationsRoot: null,
-      openTarget: () => createPostgresDb(withDatabase(adminUri, DATABASE)),
-    });
-
     // The negative control, first: this EXACT action, run by an admin that DOES hold admin option,
     // succeeds. Without it, a 42501 below would be consistent with the action itself being
     // ill-formed — re-granting a membership `waitron_app` already holds — rather than with the
     // admin lacking a privilege. It is not: the difference between the two runs is only who runs
     // it.
-    await applyInstance([action], depsFor(admin));
+    await applyInstance([action], deps(admin));
 
     await admin.execute(sql.raw(`drop role if exists probe_admin`));
     await admin.execute(sql.raw(`create role probe_admin login createdb createrole password 'p'`));
@@ -410,7 +396,7 @@ describe("applyInstance against a blank container", () => {
     try {
       let thrown: unknown;
       try {
-        await applyInstance([action], depsFor(probe));
+        await applyInstance([action], deps(probe));
       } catch (error) {
         thrown = error;
       }
