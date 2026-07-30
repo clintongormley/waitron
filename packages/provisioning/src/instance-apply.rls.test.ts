@@ -364,19 +364,30 @@ describe("applyInstance against a blank container", () => {
     // of this line cited a heading called "When the admin cannot grant `app_user`", which that file
     // has never had; `errors.ts`'s `provisioning.state_unreadable` cites the real one correctly.
     //
-    // `prov_admin` created `app_user`, and can therefore grant it. Not the container's superuser,
-    // which this suite uses for exactly one statement — minting `prov_admin` in `beforeAll` (:42-44)
-    // — and never as `ApplyDeps.admin`: every `applyInstance` call in this file passes `admin`, the
-    // non-superuser role, and the `migrate` action composes the migrator's URL from `adminUri`
-    // (:45), so the `CREATE ROLE app_user` inside the core migration set ran as `prov_admin` too.
-    // Postgres grants a role admin option on a role it creates (`instance-plan.ts`'s REQUIREMENTS
-    // comment says the same about `waitron_migrator`), which is where `prov_admin`'s ability to
-    // grant `app_user` comes from. A SECOND admin, holding exactly the attributes this tool's spec
-    // asks for — `login createdb createrole`, no superuser, no BYPASSRLS — did not create it, holds
-    // no ADMIN OPTION on it, and is refused. That admin is a
-    // completely ordinary thing for an operator to hand this tool on the second or third run: the
-    // cluster is already migrated, so whoever migrated it is not necessarily who is running
-    // `instance` now.
+    // `prov_admin` created `app_user`, and can therefore grant it. The narrow claim this test needs
+    // is about ONE call, not about the file: the `applyInstance` at :80 — the only one that runs a
+    // `migrate` action — was passed `admin`, and `admin` is `prov_admin` (:45-46), not the
+    // container's superuser. `migrate` composes the migrator's URL from `adminUri` (:45), which is
+    // also `prov_admin`'s, so the `CREATE ROLE app_user` inside the core migration set ran as
+    // `prov_admin`. Postgres grants a role admin option on a role it creates (`instance-plan.ts`'s
+    // REQUIREMENTS comment says the same about `waitron_migrator`), which is where `prov_admin`'s
+    // ability to grant `app_user` comes from.
+    //
+    // Deliberately NOT claimed, because an earlier version of this comment claimed both and both
+    // are false. (a) "Every `applyInstance` call in this file passes `admin`" — :244, :307 and :419
+    // each pass a purpose-built under-privileged probe (`grant_probe_admin`, `delegate_admin`,
+    // `probe_admin`) precisely so a refusal can be forced; none of them runs a `migrate`, so none
+    // affects who owns `app_user`. (b) "The container's superuser is never `ApplyDeps.admin`" — the
+    // second `describe` in this file (:444) binds its own `admin` to `pg.connect()` (:455), which
+    // `packages/db/src/testing/postgres.ts:52-54` documents as the container's superuser, and
+    // hands it to `applyInstance` at :488. That block is a separate bare container and has no
+    // bearing on this one; the mistake was scoping a per-block fact to the whole file.
+    //
+    // A SECOND admin, holding exactly the attributes this tool's spec asks for — `login createdb
+    // createrole`, no superuser, no BYPASSRLS — did not create `app_user`, holds no ADMIN OPTION on
+    // it, and is refused. That admin is a completely ordinary thing for an operator to hand this
+    // tool on the second or third run: the cluster is already migrated, so whoever migrated it is
+    // not necessarily who is running `instance` now.
     const action = {
       kind: "grant-membership",
       role: "waitron_app",
