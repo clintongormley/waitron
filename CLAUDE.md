@@ -25,8 +25,16 @@ command that was run or a cited `file:line`. The good pattern already exists in 
 
 Two false claims shipped in one day for want of this. `bootstrap-tenant.sql` asserted superuser was
 unavoidable — it is not, and ninety seconds with a container disproved it. Its _correction_ then
-asserted psql "cannot generate a uuid into a variable", contradicted by the same file's own three
+asserted psql "cannot generate a uuid into a variable", contradicted by the same file's own four
 uses of `\gset`.
+
+That correction's own _replacement_ then went on to claim "no non-superuser role holds INSERT on
+`deployment`" and built two independent blockers on it. Also false — a non-superuser role that
+**owns** the table holds INSERT implicitly, and `deployment` carries no RLS to strip its exemption —
+and it stood for three commits. When a claim names a privilege, name the role SHAPE it holds it by:
+owner, grantee, or member. "Non-superuser role" unqualified is how that one got through. (The same
+round also found the `\gset` count was three in two files at once, this one included. A count
+repeated in a second place is a count to recheck in both.)
 
 **Reading is not verification.** That superuser claim survived a correction pass, a four-agent
 simplify, a fresh-context review and Copilot — four layers, all reading, all checking whether it was
