@@ -7,7 +7,10 @@
 > mention of the old name below — in the Architecture summary, the Global Constraints, and the
 > shell commands — records what was true when this plan was written and is left unchanged.
 >
-> **2026-07-30 note — Task 2 Step 2 and Task 2 Step 4 are superseded by a tool.**
+> **2026-07-30 note — three claims inside Task 2 Steps 2 and 4 are superseded by a tool.**
+> The STEPS themselves still stand: Step 2's rehearsal of `bootstrap-tenant.sql` against a throwaway
+> container is still how you avoid debugging SQL against the real database, and Step 4 is still how
+> the deli's tenant gets created. What is out of date is narrower, and listed below.
 > `waitron-provision instance` ([`packages/provisioning`](../../../packages/provisioning/README.md))
 > now creates the database, creates `waitron_migrator`, `waitron_app` and `waitron_provisioner`,
 > issues the grants, applies every migration set and writes the deployment stamp, printing each new
