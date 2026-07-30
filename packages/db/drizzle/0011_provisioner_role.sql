@@ -3,10 +3,26 @@
 --
 -- It exists for exactly one grant `app_user` deliberately does not hold: INSERT on `tenants`.
 -- 0001 grants `app_user` SELECT only, so the running POS cannot create tenants — only a
--- provisioning connection can. Everything else a new tenant needs (locations, tills,
--- invoice_series, and SELECT on tenants itself) `app_user` already grants, so this bucket is
--- granted `app_user` and INHERITS them rather than carrying a second copy — see the GRANT at the
+-- provisioning connection can. Everything else a new tenant needs — locations, tills,
+-- invoice_series, and SELECT on `tenants` itself — `app_user` already grants, so this bucket is
+-- granted `app_user` and INHERITS it rather than carrying a second copy; see the GRANT at the
 -- bottom of this file.
+--
+-- Be clear about the size of what that membership confers, because it is NOT those four grants.
+-- It is app_user's WHOLE surface, present and future, across every migration set — `GRANT … TO
+-- app_user` appears on 24 tables when grepped across all five packages' `drizzle/` folders (the
+-- fiscal chain and `envios`, `tenant_credentials`, `payments`/`payment_refunds`,
+-- `scheduled_runs`, `acks` including DELETE, `working_orders`, the sales tables …) plus EXECUTE
+-- on four functions, three of them the SECURITY DEFINER tenant-enumeration seams. On the migrated
+-- core set alone, `information_schema.role_table_grants` reports app_user on 12 tables. A grant
+-- added to `app_user` by any future migration lands here too, since this is a membership and not
+-- a snapshot.
+--
+-- That is deliberate and it is NOT a widening: a login role that is a member of both buckets —
+-- what `apps/server/README.md`'s own `create role waitron_app … in role app_user` prescribes for
+-- the deployment role, and what `provisioner-role.rls.test.ts` builds — has had exactly this
+-- surface all along. The membership only moves where it comes from. What must stay narrow is the
+-- grant BELOW: INSERT on `tenants`, and nothing else, is what this bucket adds on top.
 --
 -- This removes a PRIVILEGE failure, not a POLICY one. `tenants_tenant_isolation`'s
 -- WITH CHECK (id = current_tenant_id()) still applies in full: a provisioning caller must choose
@@ -63,17 +79,32 @@ $$;
 GRANT USAGE ON SCHEMA public TO tenant_provisioner;
 --> statement-breakpoint
 
--- Membership of `app_user`, so this bucket inherits SELECT on tenants and the
--- locations/tills/invoice_series grants instead of restating them. Postgres's default INHERIT
--- means a LOGIN role granted THIS bucket alone gets all of them transitively, which is what makes
--- the "member of both" pairing an enforced property of the schema rather than an instruction a
--- future tool or an operator at a psql prompt has to remember.
+-- Membership of `app_user`, so this bucket inherits app_user's whole surface (see the header) —
+-- SELECT on tenants and the locations/tills/invoice_series grants among it — instead of restating
+-- any of it. Postgres's default INHERIT means a LOGIN role granted THIS bucket alone gets all of
+-- them transitively, which is what makes the "member of both" pairing an enforced property of the
+-- schema rather than an instruction a future tool or an operator at a psql prompt has to remember.
+-- The DO block's NOINHERIT branch is what keeps "default INHERIT" from being an assumption.
 --
--- Proven on PostgreSQL 18.4, and proven by deletion: with this GRANT in place, a LOGIN role
--- created `in role tenant_provisioner` ALONE (its only direct membership, confirmed via
--- pg_auth_members) both reads and inserts. `revoke app_user from tenant_provisioner` and the same
--- role's read fails "permission denied for table ...". Re-running the GRANT is a NOTICE, not an
--- error, so this stays idempotent against a cluster where a sibling database already applied it.
+-- Proven on PostgreSQL 18.4, and proven by deletion — `provisioner_only_login` in
+-- `packages/db/src/provisioner-role.rls.test.ts` is that experiment, kept: a LOGIN role created
+-- `in role tenant_provisioner` ALONE (its only direct membership, asserted from pg_auth_members)
+-- inserts a tenant, reads it back, and inserts its location. Comment this GRANT out and the read
+-- fails `permission denied for table tenants` (42501).
+--
+-- Idempotency, narrowed to what was actually observed: re-running the GRANT AS THE SAME GRANTOR is
+-- a NOTICE, not an error — `NOTICE: role "tenant_provisioner" has already been granted membership
+-- in role "app_user" by role "postgres"`, then `GRANT ROLE` — so this stays re-runnable against a
+-- cluster where a sibling database already applied it, which is the case the test harness produces.
+-- It is NOT unconditionally idempotent. Run by a DIFFERENT, non-superuser CREATEROLE role that did
+-- not create `app_user` and so holds no admin option on it, the same statement fails:
+--   ERROR:  permission denied to grant role "app_user"
+--   DETAIL:  Only roles with the ADMIN option on role "app_user" may grant this role.
+-- Unreachable today, and worth knowing why rather than trusting it: applying the core set as that
+-- second role already dies earlier in the set, at `0005_sales.sql:277`'s
+-- `GRANT sales_coverage_checker TO CURRENT_USER`, with the same class of error
+-- (`permission denied to grant role "sales_coverage_checker"`). Both observed on 18.4 against a
+-- cluster whose roles a superuser had created.
 GRANT app_user TO tenant_provisioner;
 --> statement-breakpoint
 
