@@ -144,6 +144,38 @@ user rather than rejecting it, so without that refusal an unset or misspelled va
 non-interactive stdin would have `instance` create, migrate and **stamp** a database on whatever
 cluster answers there.
 
+**It must be a URL** — `postgres://user:pass@host:port/database`. `pg` also accepts a libpq
+keyword/value string (`host=… port=… user=…`) and a bare Unix-socket directory path
+(`/var/run/postgresql`), and this tool refuses both with `provisioning.admin_uri_not_a_url` before
+it connects. That is a real refusal of something that works, not a formatting preference: measured
+inside a `postgres:18-alpine` container (PostgreSQL 18.4) with this repo's `pg@8.22.0`, the socket
+path connected successfully (`select inet_server_addr() is null` → `t`) while
+`new URL("/var/run/postgresql")` threw `TypeError: Invalid URL` in the same process. `instance`
+re-points the admin string at the target database — for the state read, for the migrator's URL and
+for each role's printed connection string — and every one of those is a `new URL`, so a form only
+`pg` can parse is one this tool cannot carry. Re-serialising a keyword/value string with a
+different database, user and password is the alternative, and getting it wrong points `migrate` and
+`stamp` at the wrong database, which one-database-per-environment makes unrecoverable.
+
+**A socket-only cluster is still reachable** — spell the socket directory as a URL host, libpq's own
+percent-encoded form:
+
+```bash
+WAITRON_ADMIN_DATABASE_URL='postgresql://postgres@%2Fvar%2Frun%2Fpostgresql/postgres'
+```
+
+Run in the same container: `pg` parsed that to `{host:"/var/run/postgresql",user:"postgres"}`,
+connected over the socket (`inet_server_addr() is null` → `t`), and it survives this tool's
+re-pointing — `withDatabase(…, "waitron_probe_db")` produced
+`postgresql://postgres@%2Fvar%2Frun%2Fpostgresql/waitron_probe_db`, which connected to that
+database over the same socket, and `roleUri` produced
+`postgresql://waitron_app:pw@%2Fvar%2Frun%2Fpostgresql/waitron_probe_db`, which `pg` parsed back to
+the right host, user, password and database. `postgresql://user@localhost/db?host=/var/run/postgresql`
+was measured to work the same way. What does **not** work is dropping the user
+(`postgresql:///postgres?host=/var/run/postgresql` failed with
+`no PostgreSQL user name specified in startup packet`, 28000) or leaving the host empty with a user
+present (`postgresql://postgres@/postgres?host=…`, which `new URL` itself rejects).
+
 **The admin's PASSWORD never appears in anything this tool prints**, from either source, and neither
 does the connection string as a whole. Its **username, host and port do**, deliberately, in two
 places: `instance`'s plan summary prints `Cluster: <user>@<host>:<port>` above the actions, and each
@@ -165,6 +197,7 @@ this package would quote a `CREATE ROLE … PASSWORD '<generated>'` statement ba
 | Code                                   | What happened                                                                       | What to do                                                                                                                                                                                                                               |
 | -------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `provisioning.admin_uri_missing`       | Neither `WAITRON_ADMIN_DATABASE_URL` nor the prompt gave an admin connection string | Set the variable, or answer the prompt. Refused rather than defaulted — see "Secrets" above for what `pg` does with an empty one.                                                                                                        |
+| `provisioning.admin_uri_not_a_url`     | The admin connection string is not a URL `new URL` can parse                        | Spell it `postgres://user:pass@host:port/database`. A libpq keyword/value string or a bare socket path is refused before connecting — see "Secrets" above, including the URL spelling for a socket-only cluster.                         |
 | `provisioning.invalid_identifier`      | A database or role name outside `^[a-z][a-z0-9_]{0,62}$`                            | Rename it. A database called `Waitron Prod` is a permanent papercut for whoever operates it.                                                                                                                                             |
 | `deployment.unknown_environment`       | `--environment` was not `production` or `preproduction`                             | Type one of the two.                                                                                                                                                                                                                     |
 | `deployment.already_stamped`           | The database is stamped for the OTHER environment                                   | Stop. A pre-production database is never promoted — see the fiscal invariants below.                                                                                                                                                     |

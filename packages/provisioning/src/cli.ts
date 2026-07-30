@@ -58,6 +58,8 @@ const USAGE = [
   "The admin connection string is NOT an option. It carries a password, and argv is",
   "world-readable in `ps` and lands in shell history, so it is read from",
   "WAITRON_ADMIN_DATABASE_URL or from an echo-off prompt — and from nowhere else.",
+  "It must be a URL: postgres://user:pass@host:port/database. A libpq keyword/value",
+  "string or a bare socket path is refused — see README.md, 'Secrets'.",
   "",
   "There is no `tenant` yet: see docs/superpowers/specs/2026-07-29-provisioning-tool-design.md.",
 ].join("\n");
@@ -335,8 +337,29 @@ async function resolveOption(
  * its clients with `new this.Client(this.options)` (`index.js:241`) from the same options — so
  * `instance` would have created, migrated and STAMPED a database on whatever cluster answers there.
  * See `errors.ts` for why that is the unacceptable failure mode rather than merely a confusing one.
+ *
+ * **A string that is not a URL is refused too**, and this is the ONE place that decides it, for
+ * both commands and both sources. `pg` accepts forms `new URL` rejects — measured, not assumed:
+ * inside a `postgres:18-alpine` container (PostgreSQL 18.4) with this repo's `pg@8.22.0`, the
+ * connection string `/var/run/postgresql` parsed to `{host:"/var/run/postgresql",port:5432}`,
+ * `connect()` succeeded and `select inet_server_addr() is null` returned `t`, while
+ * `new URL("/var/run/postgresql")` threw `TypeError: Invalid URL` in the same process. Every
+ * consumer of this string after this function re-points it with `new URL` — `withState`'s
+ * `withDatabase`, the migrator's URL in `instance-apply.ts`, `roleUri` for each printed connection
+ * string, `describeAdmin` for the plan summary — so a form only `pg` accepts is a form this tool
+ * cannot carry. `errors.ts` records why the fix is a refusal rather than a conninfo parser.
  */
 async function resolveAdminUri(deps: CliDeps): Promise<string> {
+  const uri = await readAdminUri(deps);
+  // `URL.canParse` rather than a try/catch: there is then no caught error object in scope for a
+  // future edit to print, and the error thrown here carries no part of the string by construction.
+  if (!URL.canParse(uri)) {
+    throw new AppError("provisioning.admin_uri_not_a_url", { variable: ADMIN_URI_VARIABLE });
+  }
+  return uri;
+}
+
+async function readAdminUri(deps: CliDeps): Promise<string> {
   const fromEnv = deps.env[ADMIN_URI_VARIABLE];
   if (typeof fromEnv === "string" && fromEnv !== "") return fromEnv;
   const answer = (await deps.io.promptSecret("admin connection string (not shown): ")).trim();
@@ -359,32 +382,17 @@ async function resolveAdminUri(deps: CliDeps): Promise<string> {
  * section used to promise the admin's username was never printed either, and was narrowed in the
  * commit that added this rather than left to contradict the code.
  *
- * A string `new URL` cannot parse says so instead of throwing. That branch is reachable, not
- * defensive, and the bar is higher than "`pg` does not reject it": `describeAdmin` is called at
- * :166, inside `withState`, which has already CONNECTED (`deps.connect(adminUri)`) and read state
- * twice. So the string reaching here is one `pg` connected with, and the two parsers disagree about
- * a real, working one — a Unix-socket directory path. Run against this repo's `pg@8.22.0`,
- * `new Client({ connectionString: "/var/run/postgresql" })` came back as
- * `{host:"/var/run/postgresql",port:5432,...}` and, against a `postgres:18-alpine` container
- * reached over that socket, `connect()` succeeded and `select inet_server_addr() is null` returned
- * true; `new URL("/var/run/postgresql")` throws `TypeError: Invalid URL`. So a `TypeError`
- * escaping here would reach the operator as `unexpected failure (TypeError)` in place of a plan.
- *
- * An earlier version of this comment cited `"host=db.example port=5433 user=adm"` instead. That
- * example does show `pg` and `new URL` disagreeing, but it cannot reach this function: `pg` parses
- * it to `{host:"base"}` and connecting fails first with `getaddrinfo ENOTFOUND base`, so
- * `withState`'s connect `catch` fires before any plan is printed. (`ENOTFOUND` is nine characters,
- * so `sqlStateOf`'s five-character SQLSTATE pattern does not match it and `asUnreadable` rethrows
- * the driver's error unchanged rather than wrapping it in `provisioning.state_unreadable` — which
- * is a separate question from reachability, and not one this branch turns on.)
+ * `new URL` cannot throw here, and that is a fact about `resolveAdminUri` rather than about this
+ * function: it refuses a string `new URL` cannot parse before returning one, so the only strings
+ * that reach here have already been parsed once. This used to carry its own `try`/`catch`
+ * returning "unknown — the admin connection string is not a URL", which was the right answer while
+ * such a string could get this far. It no longer can, and the case it existed for — a Unix-socket
+ * directory path such as `/var/run/postgresql`, which `pg` connects with and `new URL` rejects —
+ * is now refused up front, because `withDatabase` and `roleUri` needed the same parse and threw a
+ * bare `TypeError` at it after `migrate` and `stamp` had already run.
  */
 function describeAdmin(adminUri: string): string {
-  let url: URL;
-  try {
-    url = new URL(adminUri);
-  } catch {
-    return "unknown — the admin connection string is not a URL";
-  }
+  const url = new URL(adminUri);
   return url.username === "" ? url.host : `${url.username}@${url.host}`;
 }
 

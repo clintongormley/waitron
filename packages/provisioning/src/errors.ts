@@ -113,6 +113,38 @@ declare module "@waitron/shared" {
      * value it names is the one secret this tool takes as INPUT, and printing it is the thing this
      * whole file forbids. */
     "provisioning.admin_uri_missing": { variable: string };
+    /** The admin connection string was supplied and is not a URL `new URL` can parse.
+     *
+     * Refused rather than accepted, because `pg` and `new URL` disagree about real, WORKING
+     * connection strings and this tool needs both to agree. Run inside a `postgres:18-alpine`
+     * container (PostgreSQL 18.4) with this repo's `pg@8.22.0` and the connection string
+     * `/var/run/postgresql`: pg parsed it to `{host:"/var/run/postgresql",port:5432}`, `connect()`
+     * succeeded, and `select inet_server_addr() is null` returned `t` — a live connection over the
+     * cluster's Unix socket. `new URL("/var/run/postgresql")` threw `TypeError: Invalid URL` in the
+     * same process.
+     *
+     * `pg` is not the only consumer here. This tool RE-POINTS the admin string at another database
+     * three times — `withDatabase` for the state read and for the migrator's URL
+     * (`instance-apply.ts`), `roleUri` for each printed connection string (`cli.ts`) — and each is a
+     * `new URL`. With the socket path above, `withDatabase(uri, "waitron_prod")` and
+     * `roleUri(uri, "waitron_app", "pw", "waitron_prod")` both threw `TypeError: Invalid URL`. On
+     * the `instance` path that throw landed in `reportRoles`, i.e. AFTER `create database`,
+     * `migrate` and `stamp` had run, and reached the operator as `unexpected failure (TypeError)`
+     * (`bin.ts`'s catch-all) with three generated passwords lost.
+     *
+     * Supporting the non-URL forms properly was the alternative and was rejected: re-pointing a
+     * libpq keyword/value string at a different database, user and password means parsing and
+     * re-serialising conninfo (quoting, escaping, `host=` vs `hostaddr=`), and a mistake there
+     * points `migrate` and `stamp` at the WRONG database — which one database per environment
+     * makes unrecoverable. Refusing the form this tool cannot re-point is the honest answer.
+     *
+     * `variable` is our own declared environment-variable NAME — the same param
+     * `provisioning.admin_uri_missing` carries, and named for the same reason: the string itself may
+     * carry a password in every form `pg` accepts (`host=db.example password=hunter2` is one), so it
+     * is never echoed. The variable is named even when this run read the string from the echo-off
+     * prompt instead; it is where the tool reads it from, and the operator's fix goes in one of
+     * those two places. */
+    "provisioning.admin_uri_not_a_url": { variable: string };
     /** A database or role name outside `/^[a-z][a-z0-9_]{0,62}$/`. `value` IS echoed: it is
      * operator-typed configuration, never a secret, and a refusal that withheld it could not be
      * acted on. */

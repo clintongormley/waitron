@@ -311,18 +311,57 @@ describe("runCli instance", () => {
     expect(h.lines.join("\n")).toContain("Cluster: db.example:5432");
   });
 
-  it("says it cannot name the cluster rather than throwing on a non-URL admin string", async () => {
-    // `pg` accepts one rather than raising — run against this repo's `pg@8.22.0`,
-    // `new Client({ connectionString: "host=db.example port=5433 user=adm" })` came back as
-    // `{host:"base",port:5432,user:"<OS user>",database:"host=db.example port=5433 user=adm"}`. So
-    // the `new URL` in the summary is a real throw site, and a bare TypeError reaching the operator
-    // as `unexpected failure (TypeError)` is a worse answer than "I cannot tell you which".
-    const h = harness({
-      answers: ["n"],
-      env: { WAITRON_ADMIN_DATABASE_URL: "host=db.example port=5433 user=adm" },
-    });
-    await runCli(["instance", "--database", DATABASE, "--environment", "preproduction"], h.deps);
-    expect(h.lines.join("\n")).toMatch(/Cluster: .*not a URL/);
+  it("refuses an admin connection string that is not a URL, from either source", async () => {
+    // `pg` accepts connection-string forms `new URL` rejects, and at least one of them WORKS. Run
+    // inside a `postgres:18-alpine` container (PostgreSQL 18.4) with this repo's `pg@8.22.0`, over
+    // the connection string `/var/run/postgresql`: pg parsed it to
+    // `{host:"/var/run/postgresql",port:5432}`, `connect()` succeeded, and
+    // `select inet_server_addr() is null` returned `t` — a live connection over the cluster's Unix
+    // socket. `new URL("/var/run/postgresql")` threw `TypeError: Invalid URL` in the same process.
+    // The keyword form is the same disagreement without a working connection: pg parsed
+    // `host=db.example port=5433 user=adm` to `{host:"base"}` and `new URL` threw.
+    //
+    // This tool RE-POINTS that string at another database in three places — `withDatabase` for the
+    // state read and for the migrator's URL (`instance-apply.ts`), `roleUri` for each printed
+    // connection string — and every one of them is a `new URL`. Verified directly: with the socket
+    // path as the argument, both `withDatabase(uri, "waitron_prod")` and
+    // `roleUri(uri, "waitron_app", "pw", "waitron_prod")` threw `TypeError: Invalid URL`. So the
+    // socket form used to reach `withDatabase` as a WORKING admin connection and leave as
+    // `unexpected failure (TypeError)` (`bin.ts`'s catch-all) — on the `instance` path, after
+    // `create database`, `migrate` and `stamp` had already run.
+    //
+    // Refused up front instead of half-supported: see `resolveAdminUri`.
+    for (const uri of ["/var/run/postgresql", "host=db.example port=5433 user=adm"]) {
+      for (const source of [
+        { env: { WAITRON_ADMIN_DATABASE_URL: uri } },
+        { env: {}, secrets: [uri] },
+      ]) {
+        for (const command of [
+          ["instance", "--database", DATABASE, "--environment", "preproduction", "--yes"],
+          ["status", "--database", DATABASE],
+        ]) {
+          const h = harness(source);
+          expect(await runCli(command, h.deps)).toBe(1);
+          expect(h.lines.join("\n")).toContain(
+            'provisioning.admin_uri_not_a_url {"variable":"WAITRON_ADMIN_DATABASE_URL"}',
+          );
+          // Nothing was opened and nothing was applied. The exit code alone would pass against a
+          // version that connected, created and migrated first and threw on the way out.
+          expect(h.connect).not.toHaveBeenCalled();
+          expect(h.apply).not.toHaveBeenCalled();
+        }
+      }
+    }
+  });
+
+  it("never echoes a refused non-URL connection string back", async () => {
+    // The refusal above prints a CODE and the variable's NAME. The string itself can carry a
+    // password in every form pg accepts — `host=db.example password=hunter2` is one — so it is
+    // withheld for the same reason `provisioning.admin_uri_missing` withholds it.
+    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: "host=db.example password=hunter2" } });
+    expect(await runCli(["status", "--database", DATABASE], h.deps)).toBe(1);
+    expect(h.lines.join("\n")).not.toContain("hunter2");
+    expect(h.lines.join("\n")).not.toContain("db.example");
   });
 
   it("never puts a generated password in the plan summary", async () => {

@@ -319,6 +319,13 @@ function aclHas(acl: readonly string[], role: string, privilege: string, grantOp
  * `readInstanceState` reads through, and a second copy of four lines that decide which database a
  * migration runs against is not four lines worth saving. Every other component of the URI —
  * credentials, host, port, query parameters such as `sslmode` — is carried through untouched.
+ *
+ * **`uri` must be one `new URL` can parse**, and `cli.ts`'s `resolveAdminUri` is what guarantees
+ * that for every caller here: `pg` accepts forms `new URL` rejects — a Unix-socket directory path
+ * such as `/var/run/postgresql` is one it genuinely CONNECTS with — and this function threw a bare
+ * `TypeError` at them. The refusal lives at the one place the string enters the tool rather than
+ * here, so no caller has to remember it and `applyInstance` cannot fail half-way through a plan for
+ * a reason the plan summary could have caught.
  */
 export function withDatabase(uri: string, database: string): string {
   const u = new URL(uri);
