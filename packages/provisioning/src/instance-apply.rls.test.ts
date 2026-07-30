@@ -344,10 +344,16 @@ describe("applyInstance against a blank container", () => {
     // The receipt for the operator-facing gap `README.md`'s "When the admin cannot grant
     // `app_user`" section documents, run rather than reasoned about.
     //
-    // The container's own superuser created `app_user` (by running the migrations through
-    // `applyInstance` above) and can therefore grant it. A SECOND admin, holding exactly the
-    // attributes this tool's spec asks for — `login createdb createrole`, no superuser, no
-    // BYPASSRLS — did not create it, holds no ADMIN OPTION on it, and is refused. That admin is a
+    // `prov_admin` created `app_user`, and can therefore grant it. Not the container's superuser,
+    // which this suite uses for exactly one statement — minting `prov_admin` in `beforeAll` (:42-44)
+    // — and never as `ApplyDeps.admin`: every `applyInstance` call in this file passes `admin`, the
+    // non-superuser role, and the `migrate` action composes the migrator's URL from `adminUri`
+    // (:45), so the `CREATE ROLE app_user` inside the core migration set ran as `prov_admin` too.
+    // Postgres grants a role admin option on a role it creates (`instance-plan.ts`'s REQUIREMENTS
+    // comment says the same about `waitron_migrator`), which is where `prov_admin`'s ability to
+    // grant `app_user` comes from. A SECOND admin, holding exactly the attributes this tool's spec
+    // asks for — `login createdb createrole`, no superuser, no BYPASSRLS — did not create it, holds
+    // no ADMIN OPTION on it, and is refused. That admin is a
     // completely ordinary thing for an operator to hand this tool on the second or third run: the
     // cluster is already migrated, so whoever migrated it is not necessarily who is running
     // `instance` now.
