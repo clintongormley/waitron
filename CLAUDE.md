@@ -77,7 +77,7 @@ fix before merge and permanent after.
 pnpm lint && pnpm typecheck && pnpm format:check && pnpm test
 ```
 
-Two traps that each cost a round trip:
+Three traps that each cost a round trip:
 
 - **CI's `test` job runs `pnpm test:coverage`, not `pnpm test`.** The pre-push hook runs plain
   `pnpm test`, so a coverage-threshold regression passes locally and fails in CI. Before claiming a
@@ -85,6 +85,14 @@ Two traps that each cost a round trip:
 - **The pre-push hook does not run `--frozen-lockfile`.** Moving a dependency between
   `dependencies` and `devDependencies` passes locally and fails CI at the install step. Run
   `pnpm install` and commit the lockfile.
+- **A filtered test run does not load a package's guard suites.**
+  `pnpm --filter @waitron/db test provisioner-role` was green while
+  `pnpm --filter @waitron/db test:coverage` failed on the same tree: the filter never loaded
+  `english-only.test.ts`, which rejected `'Venta en establecimiento'` in a new fixture (`venta` is in
+  `SPANISH_WORDS`). Cross-cutting suites that police the WHOLE package — the vocabulary guard, the
+  error-code reachability tests, schema-ownership — are invisible to a name-filtered run, so a
+  filtered green says nothing about them. Run the package unfiltered before believing a pass. Same
+  false-green shape as the two traps above, in a third place.
 
 On bypassing the hook, see §6 — the hook's own header sanctions `--no-verify` in an emergency, and
 the underlying failure still has to be fixed because CI runs the same checks.
