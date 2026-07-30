@@ -18,25 +18,59 @@ function withDatabase(uri: string, database: string): string {
 
 describe("applyInstance against a blank container", () => {
   let pg: RealPostgres;
+  /** The container's own default superuser. Used ONLY to mint `admin` below, never as `ApplyDeps.admin`. */
+  let superuser: Database;
+  /**
+   * A NON-SUPERUSER admin: exactly `login createdb createrole`, no `SUPERUSER`, no `BYPASSRLS` —
+   * the privilege `docs/superpowers/specs/2026-07-29-provisioning-tool-design.md` §2 says this
+   * command needs, and no more.
+   *
+   * Every test below runs `applyInstance` over THIS connection, and `adminUri` is what the
+   * `migrate` action composes the migrator's URL from, so the five migration sets are applied by
+   * this role too. That is the whole point: `apps/server/README.md`'s empty-database recipe is
+   * about a dedicated non-superuser role bootstrapping a brand-new database, and a suite that
+   * connected as the container's superuser would exercise a real but DIFFERENT shape — the exact
+   * gap that README admitted about itself.
+   */
   let admin: Database;
+  let adminUri: string;
 
   beforeAll(async () => {
     pg = await startBarePostgres();
-    admin = await pg.connect();
+    superuser = await pg.connect();
+    await superuser.execute(
+      sql.raw(`create role prov_admin login createdb createrole password 'prov'`),
+    );
+    adminUri = roleUrl(pg.uri, "prov_admin", "prov");
+    admin = await createPostgresDb(adminUri);
   });
 
   afterAll(async () => {
     if (admin !== undefined) await admin.close();
+    if (superuser !== undefined) await superuser.close();
     if (pg !== undefined) await pg.stop();
+  });
+
+  it("holds no superuser and no BYPASSRLS", async () => {
+    // The negative control for every test below. Without it, a future change to
+    // `startBarePostgres` or to `roleUrl` that silently connected as the superuser again would
+    // leave the whole suite passing while proving nothing about the privilege level — which is the
+    // one property `apps/server/README.md` now cites this file for.
+    const rows = await admin.execute<{ rolsuper: boolean; rolbypassrls: boolean; me: string }>(
+      sql`select current_user as me, rolsuper, rolbypassrls from pg_roles where rolname = current_user`,
+    );
+    expect(rows.rows[0]?.me).toBe("prov_admin");
+    expect(rows.rows[0]?.rolsuper).toBe(false);
+    expect(rows.rows[0]?.rolbypassrls).toBe(false);
   });
 
   it("takes a blank cluster to a migrated, stamped, granted database — and then plans nothing", async () => {
     const deps = {
       admin,
       database: DATABASE,
-      adminUri: pg.uri,
+      adminUri,
       migrationsRoot: null,
-      openTarget: () => createPostgresDb(withDatabase(pg.uri, DATABASE)),
+      openTarget: () => createPostgresDb(withDatabase(adminUri, DATABASE)),
     };
     const request = { database: DATABASE, environment: "preproduction" } as const;
 
@@ -145,9 +179,9 @@ describe("applyInstance against a blank container", () => {
     await applyInstance(repair, {
       admin,
       database: DATABASE,
-      adminUri: pg.uri,
+      adminUri,
       migrationsRoot: null,
-      openTarget: () => createPostgresDb(withDatabase(pg.uri, DATABASE)),
+      openTarget: () => createPostgresDb(withDatabase(adminUri, DATABASE)),
     });
 
     const repaired = await readInstanceState(admin, DATABASE, null);
@@ -169,9 +203,9 @@ describe("applyInstance against a blank container", () => {
     const depsFor = (as: Database) => ({
       admin: as,
       database: DATABASE,
-      adminUri: pg.uri,
+      adminUri,
       migrationsRoot: null,
-      openTarget: () => createPostgresDb(withDatabase(pg.uri, DATABASE)),
+      openTarget: () => createPostgresDb(withDatabase(adminUri, DATABASE)),
     });
 
     // The negative control, first: this EXACT action, run by an admin that DOES hold admin option,
