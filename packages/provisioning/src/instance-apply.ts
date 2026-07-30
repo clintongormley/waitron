@@ -29,11 +29,10 @@ export interface ApplyDeps {
  * NOT one transaction, and it cannot be: PostgreSQL refuses `CREATE DATABASE` inside a transaction
  * block. Verified directly, on the same `postgres:18-alpine` image this package's tests run
  * against: `BEGIN; CREATE DATABASE probe_db; COMMIT;` over `psql` raised
- * `ERROR: CREATE DATABASE cannot run inside a transaction block`. `applyMigrations` separately opens
- * transactions of its own via Drizzle's migrator, which could not run inside a transaction this
- * function held open either. A partial application is therefore possible — which is exactly why the
- * planner is idempotent and the CLI re-reads state on every run rather than tracking progress in a
- * file (spec §3: no configuration file, as input or as state).
+ * `ERROR: CREATE DATABASE cannot run inside a transaction block`. A partial application is
+ * therefore possible — which is exactly why the planner is idempotent and the CLI re-reads state
+ * on every run rather than tracking progress in a file (spec §3: no configuration file, as input or
+ * as state).
  */
 export async function applyInstance(
   actions: readonly InstanceAction[],
