@@ -83,6 +83,23 @@ with no sale, classified without ever consulting the processor's report — the 
 what was meant (that is `unmatched`). Borrowing the codebase's vocabulary in a sentence is asserting
 a convention.
 
+### A behaviour change retires every receipt about the old behaviour, not just the ones in your diff
+
+`fix/provisioning-migrate-gate` made `instance` plan `migrate` on every run, corrected the comment
+sitting on top of the gate, and left the identical claim standing in three sibling documents the
+branch never opened. The expensive one was a documented **procedure**: `packages/provisioning`'s
+README told an operator that three `GRANT`s let a second admin run `instance` to completion, with an
+end-to-end receipt saying it had been tested. Run in both directions on `postgres:18-alpine`, that
+procedure now dies at `42501 permission denied for database` on `CREATE SCHEMA IF NOT EXISTS
+"public"`, while the pre-change build completes it — a documented recovery path turned into a broken
+one. Three per-task reviews missed it, each seeing only its own diff.
+
+So after changing behaviour, grep the OLD behaviour across `docs/`, every `README.md` and every test
+comment — and read the **runbooks and the test-assertion summaries**, not only the prose describing
+the thing you changed. A README sentence paraphrasing what a test asserts is a receipt too
+(`apps/server/README.md` said a second plan "carries no create and no migrate" while the branch was
+inverting that very assertion), and it goes stale the moment the assertion is inverted.
+
 ### Claims about the outside world need receipts too — and the source's own words
 
 Everything above is illustrated with repo-internal examples, and that framing is why the deli
