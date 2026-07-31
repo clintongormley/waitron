@@ -80,13 +80,14 @@ difference is stated here so nothing quietly widens it.
 A venue with no internet loses asynchronous card confirmation — the provider cannot reach anyone —
 and cannot commission a new till until the link returns. It keeps trading on the tills it has.
 
-## 4. What the cloud stores: four shapes
+## 4. What the cloud stores
 
 | Shape | Contents | Mutability |
 | --- | --- | --- |
 | **Fiscal archive** | `registros_facturacion`, keyed to the SIF lifetime that produced them (§5) | **Append-only.** The source is immutable by trigger — `REVOKE ALL`, an append-only trigger and a TRUNCATE-blocking trigger (`packages/fiscal-verifactu/drizzle/0001_registros_inmutables.sql`) — so a mutable copy could silently disagree with the venue's own. |
 | **Submission state** | `envios` | **Mutable, deliberately.** `packages/fiscal-verifactu/src/schema/envios.ts` describes it as "the delivery state that mutates constantly… submission state cannot live on an immutable table", and `app_user` holds `UPDATE` on it. An append-only copy would freeze every archived record at `pendiente` and report a fully-filed venue as unsubmitted. |
-| **History** | Sales, invoices, payments, incidents | Append-only; immutable once closed at the source. |
+| **History** | Sales and invoices | Append-only; immutable once closed at the source. |
+| **Mutable history** | `payments`, `incidents` | **Mutable, like `envios`.** A payment moves `attempting` → `captured`/`failed` and an `accepted_offline` one settles later (`packages/payments/src/store.ts`); an incident gains `acknowledged_at`/`acknowledged_by`. `app_user` holds `UPDATE` on both locally. Frozen in the archive, every card payment reads as still in flight and every acknowledged incident stays open. See §9. |
 | **Configuration** | Tenant identity (`tenant_id`), catalogue, locations, till registry **including each `tills.id`**, the `invoice_series` definitions (`code`, `purpose`, `till_id` — but NOT `next_number`, see Counters), staff, sealed credentials, hardware settings | **Versioned snapshots**, not current-state. |
 | **Counters** | `invoice_series.next_number` (venue is authoritative; the cloud holds a high-water mark), `contadores_instalacion.proximo_numero` (the **cloud** is authoritative for subscribers — §6a) | **Monotonic.** Synced continuously, never versioned, never rolled back. The two flow in opposite directions and that is deliberate: see below. |
 
@@ -97,7 +98,7 @@ drag the invoice counter backwards with the menu and reissue numbers already use
 till advances `next_number` on every sale, so a counter inside a whole-config snapshot produces a new
 snapshot per invoice rather than the kilobytes the design claims.
 
-They are therefore their own shape, with one rule: **a counter may only ever move forward.** Sync
+Counters are therefore their own row, with one rule: **a counter may only ever move forward.** Sync
 carries the high-water mark; restore resumes past it (§5); nothing may set either counter to a value
 at or below one already observed.
 
