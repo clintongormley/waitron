@@ -122,26 +122,71 @@ and the `dialect.js:54-60` receipt stay exactly as they are.
 `instance-plan.ts`'s header paragraph ("**The result is never empty**") stays true and gains
 `migrate` as a second reason alongside the two unconditional grants.
 
-## 4. Cost, and one consequence that is not yet verified
+## 4. Cost, and the consequence that was measured
 
 **Cost per no-op run**, read off `apply.ts:32-55` rather than measured: one dedicated `pg.Client`
 connect for the lock, a `pg_advisory_lock`/`pg_advisory_unlock` pair, one `createPostgresDb`, and one
 journal read per manifest set. No timing is claimed here, and none is needed — the alternative is a
 gate that silently skips required work.
 
-**The consequence I have not reproduced.** An admin that can read inside the target database but
-cannot create objects in it: today a fully-journalled re-run plans no `migrate` and exits 0; after
-this change it attempts migrations and may fail 42501.
+**The consequence, now measured rather than reasoned about.** An admin that can read inside the
+target database but cannot create objects in it: before this change a fully-journalled re-run
+planned no `migrate` and exited 0; after this change it attempts migrations, and does fail.
+
+Reproduced in a container, not extrapolated: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter
+@waitron/provisioning test instance-apply.rls`, against `postgres:18-alpine`
+(`instance-apply.rls.test.ts`'s "a partially-privileged admin reads state but fails the migrate"). A
+role holding `CONNECT` on the target database and `SELECT` on `deployment`, but no `CREATE` on
+`public` and no ownership of either object, is created and probed with its own credentials for every
+step, including `migrate`'s own internal reconnect (see the note on the probe's first draft, below).
+`readInstanceState` over that role succeeds completely — all five manifest sets read as journalled,
+the stamp reads `preproduction` — so this admin reaches the planner, which emits `{ kind: "migrate" }`
+as its first action, exactly as §2/§3 above describe. `applyInstance` then fails on that action with:
+
+```
+DrizzleQueryError: Failed query: CREATE SCHEMA IF NOT EXISTS "public"
+cause: error: permission denied for database waitron_instance_suite
+  code: '42501', file: 'aclchk.c', routine: 'aclcheck_error'
+```
+
+raised inside `drizzle-orm@0.45.2/pg-core/dialect.ts:85` (`PgDialect.migrate`), reached via
+`packages/db/src/migrate.ts:48` → `packages/migrations/src/apply.ts:45` →
+`packages/provisioning/src/instance-apply.ts:183` (the `migrate` case) — before any journal table is
+even read. Drizzle's own migrator issues `CREATE SCHEMA IF NOT EXISTS "public"` unconditionally at
+the start of every `migrate` call, whether or not the schema already exists, and schema creation is a
+database-level `CREATE` privilege in PostgreSQL — exactly the one this admin was deliberately never
+granted.
+
+**The failure is not one of this package's `AppError`s.** `instance-apply.ts`'s `migrate` case
+carries no `try`/`catch`, unlike `create-role` and `grant-membership`, so the raw driver failure
+reaches the caller unclassified. Traced rather than run: `cli.ts`'s `reportFailure` rethrows anything
+that is not an `AppError`, and `bin.ts`'s top-level catch prints `unexpected failure
+(DrizzleQueryError)` — the class name, never the message, for the same reason that file gives for a
+`CREATE ROLE` failure. Reclassifying this into a `provisioning.*` code is a real gap this measurement
+surfaces; it is recorded here, not fixed here — out of scope for a docs-and-reproduction task.
+
+**A narrower shape was not tested, and nothing is claimed about it.** This role held no `CREATE` on
+the database at all, which is what let schema creation fail first, before a single journal table was
+read. Whether an admin holding `CREATE` on the database but refused only on the already-existing
+`public` schema specifically would get further — past schema creation and into the journal reads
+themselves, perhaps failing later or not at all — is a different, narrower fixture this measurement
+does not speak to.
+
+**A defect in the reproduction's own first draft, worth recording alongside the finding.** The test
+helper this suite already had, `deps(as, database)`, builds `ApplyDeps` by closing over the outer
+`adminUri` regardless of `as`, so an initial `deps(probeAdmin)` ran the `migrate` action's internal
+reconnect (`applyMigrations(withDatabase(deps.adminUri, ...))`) as the fully-privileged admin instead
+of the role under test, and printed a spurious "APPLY SUCCEEDED" that measured the wrong role
+entirely. The committed test builds `ApplyDeps` by hand instead, with `adminUri` scoped to the probed
+role, so every action — including `migrate`'s own reconnect — genuinely runs as the under-privileged
+admin.
 
 The adjacent case is already refused earlier — `cli.ts:283-287` records, from a run through the built
 bundle, that an admin which did not create the target database fails the stamp read with
 `permission denied for table deployment` (42501) and surfaces as `provisioning.state_unreadable`
-before the planner is ever called. **That receipt does not cover a partially-privileged admin**, and
-extrapolating from it is precisely the move §1 of `CLAUDE.md` forbids.
-
-**Implementation must therefore do one of two things and say which:** reproduce the partially-
-privileged admin in a container and record what happens, or state in the commit that the consequence
-is unverified. It must not be asserted in either direction from reading.
+before the planner is ever called. That receipt is for a differently-deprived admin — one refused
+before the planner runs at all — and the measurement above is what now covers the partially-
+privileged admin this section used to leave open.
 
 ## 5. Testing
 
