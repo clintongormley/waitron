@@ -282,3 +282,38 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm --filter @waitron/shared mutation
+
+  # The single required status check. Everything above is wired into it, so job ids above this
+  # point are free to be added, renamed, sharded or conditionally skipped without touching branch
+  # protection — which is what makes the scoping in
+  # docs/superpowers/specs/2026-07-31-scoped-ci-design.md possible at all. Before this job, each id
+  # was required by name (ruleset 19899160), so any rename silently broke the ruleset and any
+  # skipped job left a pull request waiting for a status that would never report.
+  #
+  # `if: always()` is what makes it report at all when something upstream is skipped: without it,
+  # GitHub skips a job whose `needs` were skipped, and a skipped required check never satisfies
+  # branch protection.
+  ci:
+    if: always()
+    needs:
+      - static-analysis
+      - typecheck
+      - test
+      - mutation-verifactu
+      - mutation-shared
+    runs-on: ubuntu-latest
+    steps:
+      # `skipped` must PASS: scoping works by skipping, and a skipped job means "this change could
+      # not affect that check", not "that check did not run". `cancelled` must FAIL: ci.yml sets
+      # cancel-in-progress, and a superseded run reporting green would let a stale result satisfy
+      # branch protection. Getting that pair backwards turns this job into a rubber stamp, which is
+      # why Task 3 verifies both directions against the real workflow rather than reasoning about
+      # them.
+      - name: Fail if any needed job did not succeed
+        if: >-
+          contains(needs.*.result, 'failure') ||
+          contains(needs.*.result, 'cancelled')
+        run: |
+          echo "A required job did not succeed:"
+          echo '${{ toJSON(needs) }}'
+          exit 1
