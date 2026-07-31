@@ -1,10 +1,27 @@
 name: CI
 
-# Three independent jobs so a failure is legible at a glance and each can be
-# required separately in branch protection. Job ids below (static-analysis,
-# typecheck, test) are what GitHub reports as each job's check name — once a
-# ruleset requires them by name, renaming a job here silently breaks that
-# ruleset. Treat these ids as a stable public interface.
+# `ci` is the only job in this file that branch protection requires. Ruleset 19899160 requires
+# exactly three contexts — read back on 2026-07-31 with:
+#
+#   gh api repos/:owner/:repo/rulesets/19899160 \
+#     --jq '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context'
+#
+#   LICENSE is unmodified Elastic License 2.0
+#   Every commit is signed off
+#   ci
+#
+# The other two are produced by licence.yml, whose `licence-integrity` and `dco` jobs set those
+# strings as their `name:` (licence.yml:13 and :23), so `ci` is this file's entire interface to
+# branch protection.
+#
+# The job ids below are therefore NOT a stable public interface, and removing that property is the
+# whole point of the `ci` job. Until the ruleset was changed, five ids here were required by name:
+# renaming one silently broke the ruleset, and skipping one left a pull request waiting for a status
+# that would never report. Both of those are now free moves, which is what makes the scoping in
+# docs/superpowers/specs/2026-07-31-scoped-ci-design.md possible at all.
+#
+# The one rule that replaces it: every other job in this file must appear in `ci`'s `needs`. A job
+# that does not is reporting to nothing — it could fail while the pull request stays green.
 
 on:
   push:
@@ -93,8 +110,15 @@ jobs:
               | node .github/scripts/changed-scope.mjs heavy >> "$GITHUB_OUTPUT"
           fi
 
-  # Lint + format check. Cheapest job, no Playwright/Chromium involved.
-  static-analysis:
+  # Always runs, on every path, including a documentation-only change — Prettier is the only tool
+  # here that reads prose, and the repo-level suite is what proves the `changes` job's own
+  # classifier still works. Both are cheap enough that gating them would save nothing.
+  #
+  # Worth knowing precisely what `format:check` covers: .prettierignore lists `docs/`, so
+  # root-level Markdown (CLAUDE.md, README.md, CONTRIBUTING.md) IS checked and nothing under docs/
+  # is. Established by malforming a file in each location — `prettier --check` reports an ignored
+  # path and a clean path identically, so the obvious probe proves nothing.
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -113,6 +137,32 @@ jobs:
       - run: pnpm lint
 
       - run: pnpm format:check
+
+      # The repo-level project only (`vitest run` at the root, NOT `pnpm test`, which would also run
+      # every package). Covers .github/scripts/changed-scope.mjs — if the classifier is wrong, every
+      # gating decision below is wrong, so it must run even on the paths it would otherwise skip.
+      - run: pnpm vitest run --coverage
+
+  # The bundles operators actually run. Nothing else in this workflow builds them: dist/ is
+  # gitignored, both bin.ts files are excluded from coverage, and typecheck and test run against
+  # TypeScript source. Gated on `code` because a Markdown edit cannot change an esbuild bundle.
+  bundle-smoke:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
 
       # Nothing else in this workflow builds packages/credentials's bundle: dist/ is gitignored,
       # bin.ts is excluded from coverage, and the SDD ledger records this exact artifact shipping
@@ -232,6 +282,8 @@ jobs:
 
   # TypeScript project-wide type check. No Playwright/Chromium involved.
   typecheck:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
