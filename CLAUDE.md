@@ -510,6 +510,16 @@ tests alongside the code.
   memory, which drifts and cannot be reviewed, and several of those notes still point at pull
   request numbers that no longer exist. The legal and administrative track is separate, in
   `docs/compliance/action-plan.md`.
+
+  **The moment it goes stale most reliably is a MERGE**, and that is not covered by the sentence
+  above, because the change that lands the work is written before the work has landed. The scoped-CI
+  cycle left two rows describing #27 as "in flight on `feat/ci-scoped-testing`" — a branch deleted by
+  the merge itself — and the same merge produced follow-ups that lived only in pull-request comments,
+  which is nowhere anyone looks later. `/land-branch` now carries a step for this (update the
+  backlog, record every pending issue, then report what changed). That step is the guard; this
+  paragraph is only the receipt for why it exists. **A written rule with standing violations needs a
+  guard, not another paragraph** — §7 says so, and this rule had just violated itself.
+
 - Specs live in `docs/superpowers/specs/`, plans in `docs/superpowers/plans/`, session handoffs in
   `docs/handoffs/`.
 - **Specs and plans are committed here, deliberately** — unlike some sibling repos, where

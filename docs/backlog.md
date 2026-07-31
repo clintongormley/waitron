@@ -40,7 +40,7 @@ reprioritisation rather than assumed.
 | **Sale settlement model** — design | **Merged** (#20) |
 | **This backlog** | **Merged** (#21) |
 | **Pre-push hook skips deletions** | **Merged** (#23) |
-| **Scoped CI** — stop running every check on every push | PR 1 **merged** (#25); PR 2 in flight on `feat/ci-scoped-testing`. Detail under **Debt and odd jobs** |
+| **Scoped CI** — stop running every check on every push | **Done.** Both merged: #25 (the `ci` gate) and #27 (the scoping). Against the 7m20s baseline: a documentation-only pull request now takes **44s**, and a full unfiltered `push` on `main` **4m12s**. Two follow-ups remain under **Debt and odd jobs** |
 | **Cloud storage model** — design | **Merged** (#19), corrected by **#22** |
 | **Sale settlement model** — implementation plan | Not written. **The next build step** |
 | **Close Q13 and Q15 on primary source** | Not started. Cheaper than hiring — see below |
@@ -178,22 +178,30 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
 - **`errors.reachability.test.ts` does not test reachability.** Proven by deletion. Eight packages
   carry a copy. Closing it needs a `tsc`-based downstream probe or a narrowed `include`. See
   `CLAUDE.md` §4 — do not cite these tests as evidence in the meantime
-- **CI ran every check on every push — the fix is in flight.** A Markdown-only change cost the same
+- **CI ran every check on every push — done, both PRs merged.** A Markdown-only change cost the same
   7m20s as a migration. Designed in
   [2026-07-31-scoped-ci-design.md](superpowers/specs/2026-07-31-scoped-ci-design.md), built to
   [2026-07-31-scoped-ci.md](superpowers/plans/2026-07-31-scoped-ci.md). **Two PRs, deliberately** —
   renaming `test` in the same PR that introduces the gate would block on a required check that can no
-  longer report. PR 1 ([#25](https://github.com/clintongormley/waitron/pull/25)) **merged**: the
-  aggregate `ci` job, and ruleset 19899160 now requires `ci` alone rather than five job ids. PR 2
-  (branch `feat/ci-scoped-testing`) is **open**: the `changes` gate, the `static-analysis` split,
-  the two-way test shard, and scoping for both mutation jobs and both test shards. **First
-  measurement, on a code change
-  that skipped `test-heavy`:** run `30650089655` (head `4926cf5`) spanned **4m8s** against the 7m20s
-  baseline. That run still carried `mutation-verifactu` ungated at 3m26s of the 4m8s, and every
-  other job finished 1m39s in; scoping the two mutation jobs landed after that run. **Measured on
-  the branch as it now stands:** run `30653487133` (head `b440b0f`) spanned **1m26s**, and the
-  docs-only path spanned **44s** (run `30652341473`, a throwaway PR based on the branch so its whole
-  diff was documentation)
+  longer report. [#25](https://github.com/clintongormley/waitron/pull/25) added the aggregate `ci`
+  job, and ruleset 19899160 now requires `ci` alone rather than five job ids;
+  [#27](https://github.com/clintongormley/waitron/pull/27) added the `changes` gate, the
+  `static-analysis` split, the two-way test shard, and scoping for both mutation jobs and both test
+  shards. Measured — every row is a `CI`-workflow run, and only the last is a `push` on `main`; the
+  other three are `pull_request` runs on the branch named beside them:
+
+  | Change | Wall clock | Run |
+  | --- | --- | --- |
+  | documentation only | **44s** | `30664369447` — this pull request, on `docs/backlog-scoped-ci-landed` |
+  | one package, or CI/root config | **1m26s** | `30655777867` — on `feat/ci-scoped-testing` |
+  | a dependency of `packages/db` | 4m17s | `30652426111` — on the throwaway `probe/dependency` |
+  | **any code, merged to `main`** — full suite, nothing skipped | **4m12s** | `30663706544` — the `push` run for #27 |
+
+  That last row is the safety net and is not optional: the package scoping is exactly right about
+  package-graph coupling and blind to everything else — a root config, a shared fixture, an
+  environment variable — so `main` re-runs everything unfiltered and a too-narrow scope surfaces
+  within minutes of landing rather than never. A documentation-only merge skips there too, which is
+  why the docs gate and the scoping are two separate decisions
 - **`test-light` reports `success` without saying what it ran.** The larger half of this entry is
   **done**: the shard now gates on a `light` boolean emitted from the `changes` job's existing
   single `pnpm ls`, so a resolved scope that is empty, or that holds nothing but `@waitron/db`,
