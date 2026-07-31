@@ -226,9 +226,10 @@ export function formatScope({ kind, packages }) {
 // checkout, with no `node_modules` directory anywhere in it, `pnpm ls -r --depth -1 --json` exited 0
 // with 3917 bytes on stdout, nothing on stderr, and all 16 entries (2026-08-01, pnpm 9.15.0).
 //
-// stdout carries the two lines and NOTHING else: the hook reads it with `sed`, so a stray line
-// there becomes a bogus scope. The human-readable reason goes to stderr, where the hook prints it
-// for whoever is watching the push.
+// stdout carries the two lines and NOTHING else: the hook reads it with `sed -n 's/^scope=//p'` and
+// `sed -n 's/^packages=//p'`, so a stray line that happened to carry either prefix would become a
+// bogus scope. The human-readable reason goes to stderr, where the hook prints it for whoever is
+// watching the push.
 //
 // Ignored for coverage because the tests run it in a CHILD process, and the v8 provider only
 // measures the module graph loaded into the test process — so this block reads as 0% however

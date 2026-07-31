@@ -7,30 +7,33 @@
 # several runs are quoted the spread is quoted with them, because the first run of anything here is
 # consistently the slowest.
 #
-#   classify the push               always     44-48ms on a documentation-only push (5 runs),
-#                                              241-243ms when there is code to attribute (5 runs).
-#                                              The difference is one `pnpm ls -r --depth -1 --json`
-#                                              (191-200ms over 10 runs), which scripts/changed-
-#                                              packages.mjs only runs when the answer needs it.
-#                                              Decides every gate below, so it goes first.
-#   sign-off (DCO)                  always     7-9ms for one commit (5 runs). Every commit in the
+#   sign-off (DCO)                  always     7-8ms for one commit (5 runs). Every commit in the
 #                                              push range needs a Signed-off-by trailer; same regex
 #                                              and same per-commit loop as licence.yml's `dco` job.
-#                                              This is the check the branch was written for and it
-#                                              is the cheapest thing here, so nothing precedes it
-#                                              but the classification it depends on.
-#   pnpm install --frozen-lockfile  always     966ms (3 runs: 1181/985/966, everything already
-#                                              installed), and exactly the check CI's every job runs
-#                                              first. Moving a dependency between `dependencies` and
-#                                              `devDependencies` passes a plain `pnpm install` and
-#                                              fails CI at the install step — CLAUDE.md §2 carries
-#                                              that as a trap this closes. It also repairs a stale
-#                                              `node_modules` (CLAUDE.md §6), which is why it runs
-#                                              on the documentation path too rather than being
-#                                              gated on a manifest change.
-#   pnpm format:check               always     1903ms (3 runs: 2024/1903/1921). The ONLY step that
-#                                              reads prose, so it runs on a documentation-only push.
-#   pnpm lint                       code       1662ms (3 runs: 1986/1685/1662)
+#                                              This is the check the branch was written for and the
+#                                              cheapest thing here, so it goes FIRST — see the
+#                                              receipt beside the classifier for why it can.
+#   classify the push               always     46-51ms on a documentation-only push (5 runs),
+#                                              241-248ms when there is code to attribute (5 runs).
+#                                              The difference is one `pnpm ls -r --depth -1 --json`
+#                                              (192-201ms over 10 runs), which scripts/changed-
+#                                              packages.mjs only runs when the answer needs it.
+#                                              Decides every gate below it.
+#   pnpm install --frozen-lockfile  always     967-1049ms (3 runs, everything already installed).
+#                                              Seven of ci.yml's nine jobs run it as their first
+#                                              `run` step; `changes` never installs at all (its own
+#                                              comment says so) and the `ci` aggregator has no
+#                                              install either, and neither of licence.yml's two jobs
+#                                              installs. Moving a dependency between `dependencies`
+#                                              and `devDependencies` passes a plain `pnpm install`
+#                                              and fails those seven at the install step —
+#                                              CLAUDE.md §2 carries that as a trap this closes. It
+#                                              also repairs a stale `node_modules` (CLAUDE.md §6),
+#                                              which is why it runs on the documentation path too
+#                                              rather than being gated on a manifest change.
+#   pnpm format:check               always     1912-2066ms (3 runs). The ONLY step that reads prose,
+#                                              so it runs on a documentation-only push.
+#   pnpm lint                       code       1681-1860ms (3 runs)
 #   pnpm typecheck                  code       scoped to the changed packages and their dependents
 #   pnpm test:coverage              code       ditto — and `test:coverage`, NOT `test`: CI's shards
 #                                              run coverage thresholds and a plain `pnpm test` does
@@ -39,10 +42,22 @@
 #
 # A DOCUMENTATION-ONLY push stops after `format:check`, and that split is measured, not assumed:
 #
-#   * `pnpm lint` is `eslint .`, and `pnpm exec eslint . --format json` on 2026-08-01 reported 419
-#     files: 412 `.ts`, 6 `.mjs`, 1 `.js`. Zero Markdown files, and zero files under `docs/`. So
-#     eslint cannot read anything a documentation-only push contains, and skipping it removes
-#     ~1.7s from that path for no loss of coverage.
+#   * `pnpm lint` is `eslint .`, and `pnpm exec eslint . --format json` on 2026-08-01 linted zero
+#     Markdown files and zero files under `docs/` — so of what is in the tree TODAY, eslint reads
+#     nothing a documentation-only push contains, and skipping it removes ~1.7s from that path for
+#     no loss of coverage. (Deliberately not a file count: a number that moves is a receipt that
+#     goes stale, CLAUDE.md §2. The zeros are the load-bearing part.)
+#
+#     That is a fact about today's file inventory, NOT a property of the two configurations, and
+#     they do not agree. `eslint.config.js` ignores only `dist`, `node_modules`, `__screenshots__`
+#     and `coverage` — not `docs/` — while `isInertPath` calls anything under `docs/` documentation
+#     whatever its extension. So a `docs/**/*.ts` file would be linted by `pnpm lint` and skipped by
+#     this path. Measured on 2026-08-01 by feeding eslint one unused declaration on stdin under
+#     three names: `--stdin-filename docs/probe.ts` reported
+#     `@typescript-eslint/no-unused-vars` and exited 1, `docs/probe.md` reported
+#     `File ignored because no matching configuration was supplied` and exited 0, and
+#     `dist/probe.ts` reported `File ignored because of a matching ignore pattern` and exited 0.
+#     Nothing enforces the gap staying shut; the first `.ts` under `docs/` opens it.
 #   * `pnpm format:check` is NOT skipped, because prettier genuinely can fail on such a push.
 #     `.prettierignore` lists `docs/`, but a root-level Markdown file is not covered by it:
 #     `pnpm exec prettier --file-info docs/backlog.md` gives `{"ignored": true}` while
@@ -81,14 +96,43 @@
 #   * The `bundle-smoke` BUILDS. Nothing here builds an esbuild bundle, so the failure modes that
 #     job exists for — a collapsed `import.meta.url`, a CJS require under `--format=esm` — are
 #     invisible to this hook by construction. See ci.yml's own comments on that job.
+#   * THE CROSS-PACKAGE GUARD SUITES IN `packages/db`, on any scoped push that does not reach
+#     `packages/db`. This is a regression the scoping introduces locally: before it, the hook ran
+#     `pnpm test` unscoped, so they ran on every push. Two of them scan other packages' trees from
+#     `packages/db/src`:
+#
+#       guarded-teardowns.test.ts   the guard CLAUDE.md §4 names; scans `packages/` and `apps/` from
+#                                   the repository root. Grepped on 2026-08-01: it is the ONLY file
+#                                   under `packages/` or `apps/` that resolves the repo root
+#                                   (`join(import.meta.dirname, "..", "..", "..")`).
+#       english-only.test.ts        scans the seven generic packages (db, core, fiscal, shared,
+#                                   payments, scheduler, credentials) from `PACKAGES_ROOT`.
+#
+#     Measured on 2026-08-01: `pnpm --filter "...@waitron/ui" ls -r --depth -1 --json` lists
+#     @waitron/ui alone, and `--filter "...@waitron/payments"` lists six packages, none of them
+#     @waitron/db. So a push touching only `packages/ui` or only `packages/payments` runs neither
+#     guard, and CI does not make it up on the pull request either — ci.yml gates `test-heavy` on
+#     @waitron/db being in scope. Their first run is the unfiltered `main` merge. This is
+#     CLAUDE.md §2's "a filtered test run does not load a package's guard suites", one level up:
+#     the filter is now over PACKAGES rather than over test names. Recorded as a follow-up in
+#     docs/backlog.md; not fixed here.
+#   * ANY TEST AT ALL, when the scope holds only packages with no `test:coverage` script. Measured
+#     on 2026-08-01: `pnpm --filter "...@waitron/bench-pglite" test:coverage` prints `None of the
+#     selected packages has a "test:coverage" script` and exits 0, and the end-to-end hook run on a
+#     crafted `bench/pglite-throughput` push reported `all checks passed in 7s`. Honest today —
+#     that package deliberately has no tests (bench/pglite-throughput/README.md) — but nothing
+#     enforces a future member declaring the script. Same shape ci.yml already records for
+#     `test-light`. Also a docs/backlog.md follow-up.
 #
 # In a hurry / hook is wrong? Bypass with: git push --no-verify
 # Please still fix the underlying failure — CI runs the same checks and will block the PR either
 # way.
 #
-# EDITING THIS FILE: husky runs it as `sh -e "$0"` (.husky/_/h, last line), and `-e` is unforgiving
-# in two places this script relies on. Measured with the same /bin/sh husky gets here (bash 3.2.57
-# in sh mode): `sh -e -c 'x=$(false); echo reached'` prints NOTHING and exits 1, and
+# EDITING THIS FILE: husky runs it as `sh -e "$s" "$@"` — .husky/_/h LINE 17, where `$s` is this
+# file's path, built from `$0` at lines 3-4 of that file. Its LAST line is line 22, `exit $c`, which
+# reports this script's exit code back to git. `-e` is unforgiving in two places this script relies
+# on. Measured with the same /bin/sh husky gets here (bash 3.2.57 in sh mode):
+# `sh -e -c 'x=$(false); echo reached'` prints NOTHING and exits 1, and
 # `sh -e -c 'echo hi | grep -q nope; echo reached'` does the same. So every command substitution
 # that can fail carries `|| <fallback>`, and every `grep` sits inside an `if`. An unguarded one does
 # not misbehave — it kills the hook silently, mid-gate, with a bare exit code. Re-run on
@@ -262,8 +306,20 @@ run_step() {
 # property of the COMMITS, not of the code they carry, and CI's `dco` job makes no exception for
 # prose either.
 check_signoff() {
-  # Nothing to walk. The range was undetermined, which the message above has already reported; this
-  # step cannot check commits it could not enumerate, and says so rather than passing quietly.
+  # Nothing to walk. TWO different pushes land here, and only one of them has already been reported:
+  #
+  #   the range was undetermined       `range_unknown` cleared `commits`, and the "could not work
+  #                                    out what this push adds" message above named it.
+  #   the range was determined and is  a rewind — the local sha is behind the remote one, so
+  #   EMPTY                            `rev-list <remote>..<local>` lists nothing while
+  #                                    `diff <remote>..<local>` still names the reverted paths.
+  #                                    Nothing has been printed about it at all.
+  #
+  # Run on 2026-08-01 with a crafted rewind (`refs/heads/x <parent> refs/heads/x <child>`, the child
+  # touching `docs/backlog.md`): `rev-list` was empty, `diff --name-only` printed `docs/backlog.md`,
+  # and the hook printed this line with no preceding message of any kind. So this message has to
+  # stand on its own rather than lean on one above it — which is why it names the consequence
+  # (licence.yml still checks) instead of the cause.
   if [ -z "$commits" ]; then
     echo "  no commit range — sign-off not checked here; licence.yml's dco job still will"
     return 0
@@ -284,12 +340,22 @@ check_signoff() {
   return 0
 }
 
+run_step "sign-off (DCO)" "git rebase --signoff <base>   (or: git commit -s --amend)" check_signoff
+
 # ONE classifier call answers both questions. stdout carries two lines and nothing else; the reason
 # goes to stderr, where it has already been printed by the time this reads the result.
 #
 #   scope=documentation   every changed path is prose
 #   scope=global          run everything
 #   scope=packages        `packages=` names what to narrow to
+#
+# It runs AFTER the sign-off check, which it does not feed: `check_signoff` reads `$commits` alone,
+# and the ref loop above has already determined that. Run on 2026-08-01 against a crafted push
+# carrying one unsigned commit, with the classifier's interpreter taken away
+# (`env -i HOME=$HOME PATH=/usr/bin:/bin:/usr/sbin:/sbin sh -e .husky/pre-push origin url`, node
+# being at /opt/homebrew/bin/node): the classifier printed `node: command not found`, the scope fell
+# back to the whole workspace, and the sign-off step still named the offending commit and still
+# exited 1.
 echo "pre-push: working out what this push can affect..."
 scope_output=$(printf '%s\n' "$changed_paths" | node scripts/changed-packages.mjs) || scope_output=""
 scope_kind=$(printf '%s\n' "$scope_output" | sed -n 's/^scope=//p') || scope_kind=""
@@ -326,7 +392,6 @@ if [ "$scope_kind" = "packages" ] && [ -n "$scope_packages" ]; then
   scope_label="$scope_packages + dependents"
 fi
 
-run_step "sign-off (DCO)" "git rebase --signoff <base>   (or: git commit -s --amend)" check_signoff
 run_step "install (--frozen-lockfile)" "pnpm install --frozen-lockfile" \
   pnpm install --frozen-lockfile
 run_step "format check" "pnpm format:check" pnpm format:check

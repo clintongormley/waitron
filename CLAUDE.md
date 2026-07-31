@@ -517,11 +517,20 @@ landed after the fix, so nothing ever hit that.)
   version. Diff before deleting — the scratch copy was 113 lines behind what had actually landed.
 
 **Before a PR**, run the gate in §2 yourself rather than relying on the pre-push hook. The hook
-mirrors CI's fast checks but is **not** identical to it — see §2 for where they diverge, in both
-directions: the hook is broader (it runs the whole workspace, while CI's shards narrow to what a
-pull request can reach) and shallower (no coverage thresholds, no `--frozen-lockfile`, no mutation).
-Bypassing the hook with `--no-verify` is for emergencies only, and the underlying failure still
-needs fixing because CI runs the same checks.
+mirrors CI's fast checks but is **not** identical to it — see §2 for where they diverge. Since
+`feat/scoped-pre-push-hook` the differences are narrower than this paragraph used to claim, and in
+the opposite direction: the hook **narrows** too (`typecheck` and `test:coverage` run over the
+changed packages and their dependents, the same shape as CI's shards), it **does** run coverage
+thresholds (`test:coverage`, not `test`) and it **does** run `pnpm install --frozen-lockfile`. What
+is still CI-only is **mutation testing** and the **`bundle-smoke` builds**, so a green hook does not
+imply a green CI. Both narrow, so a green from either is evidence about the packages that ran; the
+unfiltered `main` merge is the only run that covers the rest. Bypassing the hook with `--no-verify`
+is for emergencies only, and the underlying failure still needs fixing because CI runs the same
+checks.
+
+The four-command gate at the top of §2 is now the **shallower** of the two — it ends in plain
+`pnpm test`, with no coverage thresholds and no `--frozen-lockfile`. Run it for the whole-workspace
+breadth the hook no longer gives you, not for depth.
 
 **Before a release** (when there is a release process — there is none yet), update the docs and
 tests alongside the code.

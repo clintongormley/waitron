@@ -403,10 +403,17 @@ this file is a paraphrase of it.)
 
 Coverage thresholds ARE in the hook now — `test:coverage` is the same script CI's shards run, and
 closing that gap is most of why the hook was rewritten. **Mutation testing and the `bundle-smoke`
-builds are still deliberately out**, so a green hook does not imply a green CI; the hook's own
-header names both and gives the measurement behind each. Both the hook and CI narrow on a change,
-so a green from either is evidence about the packages that ran. A merge to `main` is the only run
-that is unfiltered, and that is what verifies the narrowing was right.
+builds are still deliberately out**, so a green hook does not imply a green CI. The hook's own
+header names both, with a measurement behind the first and only a reason behind the second:
+mutation testing because `mutation-verifactu` alone was 3m26s of a 4m8s CI run, and `bundle-smoke`
+because nothing the hook runs builds an esbuild bundle, so that job's failure modes are invisible to
+it by construction. Two further gaps are listed beside them, and both are consequences of the
+scoping rather than choices: `packages/db`'s two cross-package guard suites do not run on a scoped
+push that does not reach `packages/db`, and a scope holding only packages with no `test:coverage`
+script runs no tests at all while still reporting success. Read that list before treating a green
+hook as evidence. Both the hook and CI narrow on a change, so a green from either is evidence
+about the packages that ran. A merge to `main` is the only run that is unfiltered, and that is what
+verifies the narrowing was right.
 
 `pnpm install` wires the hook up automatically (via the root `prepare` script), including on a
 fresh clone — nothing else to set up.

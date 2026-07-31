@@ -332,7 +332,8 @@ describe("formatScope", () => {
 // The CLI is only reachable by running the file, so these spawn it. What they add over the unit
 // tests above is what no exported function can show: that it resolves the REAL workspace by running
 // `pnpm ls -r --depth -1 --json` itself, and that the two streams stay apart — the hook reads
-// stdout with `grep`/`cut`, so a stray line there becomes a bogus scope.
+// stdout with `sed -n 's/^scope=//p'` and `sed -n 's/^packages=//p'`, so a stray line there that
+// happened to start with either prefix would become a bogus scope.
 describe("the CLI", () => {
   const repoRoot = join(import.meta.dirname, "..");
   const script = join(import.meta.dirname, "changed-packages.mjs");
@@ -371,7 +372,7 @@ describe("the CLI", () => {
     expect(run("\n").stdout).toBe("scope=global\npackages=\n");
   });
 
-  it("puts the reason on stderr, where the hook's grep cannot reach it", () => {
+  it("puts the reason on stderr, where the hook's sed cannot reach it", () => {
     const { stdout, stderr } = run("packages/db/src/index.ts\n");
     expect(stderr).toContain("@waitron/db");
     expect(stdout).not.toContain("changed-packages:");
