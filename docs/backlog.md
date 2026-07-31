@@ -225,11 +225,14 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   paired to SumUp's cloud service. If it does not, the outage path in
   [the deli hardware design](superpowers/specs/2026-07-30-deli-hardware-design.md) §5 has to be
   rewritten — that document assumes a card can still be taken when the internet is down, which is the
-  whole reason the hardware was chosen. Square's equivalent API disables external printers while
-  paired, so pairing changing a device's behaviour is not hypothetical. The other three: whether we may
-  *supply* the idempotency key rather than only read it back, whether reader webhooks are signed the
-  same way online ones are, and whether `void` maps onto the refund endpoint. Worth confirming the
-  contracted rate at the same time — the published page says 1.69%, a third-party review said 1.5%
+  whole reason the hardware was chosen. The other three: whether we may *supply* the idempotency key
+  rather than only read it back, whether reader webhooks are signed the same way online ones are, and
+  whether `void` maps onto the refund endpoint. Both specs carry provenance tables; **this entry
+  deliberately restates no external fact of its own** — including the comparison with Square's API and
+  the card rates, which are sourced in the hardware design (§7 and its provenance table) and are the
+  kind of vendor claim that goes stale silently if copied into a second place. Read them there. The
+  rates in particular are already flagged there as needing confirmation against an actual contract,
+  not a pricing page
 
 ---
 
