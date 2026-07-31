@@ -11,6 +11,22 @@ priority. Q9 is referenced from other documents; do not renumber it.
 
 Last revised **2026-07-27**.
 
+> **⚠ Read before sending, 2026-07-31.** Some questions here are premised on Waitron **hosting the
+> client's fiscal system**. Q11 puts it as *"Nosotros alojamos y operamos su sistema de facturación:
+> la clave privada se genera en el servidor que la utiliza y nunca sale de él, pero ese servidor lo
+> operamos nosotros, no el cliente"* — quoted rather than paraphrased, because this is the one file
+> whose purpose is handing exact Spanish to a paid professional. `docs/superpowers/specs/2026-07-31-cloud-storage-model-design.md` abolishes that
+> premise: the cloud is a sync root that never holds the key ring, the fiscal certificate stays on the
+> client's own local server sealed under a key ring only they hold, and **the local server always
+> submits**. A question built on the old premise buys an answer to a situation that will not exist.
+>
+> Affected at least: Q11 (its "Why it matters" block and Spanish text), Q12, and
+> `getting-to-production.md`'s "One consequence of Model A when we host".
+> **Re-read every question against the new architecture before paying for answers**, and note the
+> replacement question that design raises instead: *does the RRSIF reach a backup archive that is not
+> itself a SIF, and if so under what terms?* (that spec's §8). Individual questions are left as
+> written rather than rewritten in place, per `CLAUDE.md` §6.
+
 ---
 
 ## mdiago's replies — 2026-07-27

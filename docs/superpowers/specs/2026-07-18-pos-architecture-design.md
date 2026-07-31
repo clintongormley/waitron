@@ -359,6 +359,13 @@ the cloud uses **the same protocol** a till uses to sync to it.
 
 One sync implementation, tested once.
 
+> **Superseded row, 2026-07-31.** "Cloud SaaS, no local hardware | till → cloud" is no longer a
+> supported deployment. `2026-07-31-cloud-storage-model-design.md` establishes the cloud as a **sync
+> root only, never a primary store**: every venue runs a local server as its system of record. That
+> topology would have made the cloud a live transactional store for those tenants and put one schema
+> under several software versions at once — with no version telemetry anywhere in the tree to reason
+> about it. The other three rows stand, and the table is left as written.
+
 ### Directional asymmetry
 
 **Sales flow up and never conflict.** Each till owns its own invoice series and is the
@@ -489,6 +496,13 @@ This separation is what keeps a regulatory dependency off the critical path of t
 on a counter. Records chain locally, flow up, and **the nearest node holding the certificate
 submits** — the cloud for cloud tenants, the local server otherwise. A local server keeps
 submitting even while a till is offline.
+
+> **Superseded clause, 2026-07-31.** "the cloud for cloud tenants" no longer applies.
+> `2026-07-31-cloud-storage-model-design.md` §3 and §6 make cloud-side submission impossible by
+> construction: the cloud is a sync root that never holds the key ring, and the fiscal certificate is
+> sealed under a key ring only the operator holds. **The local server always submits.** The rest of
+> this paragraph — that the till never submits, and that a local server keeps submitting while a till
+> is offline — is unaffected and still holds.
 
 This is a security win and an availability win at once.
 
