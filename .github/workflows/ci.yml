@@ -266,7 +266,6 @@ jobs:
   # packages/verifactu — so it gates every PR at break: 90. Contrast packages/db, where every
   # test boots PGlite and the cost profile resembles packages/ui's weekly ungated run.
   mutation-shared:
-    if: false # probe: reverted in the next commit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
