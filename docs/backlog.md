@@ -40,7 +40,7 @@ reprioritisation rather than assumed.
 | **Sale settlement model** — design | **Merged** (#20) |
 | **This backlog** | **Merged** (#21) |
 | **Pre-push hook skips deletions** | **Merged** (#23) |
-| **Scoped CI** — stop running every check on every push | **Done.** Both merged: #25 (the `ci` gate) and #27 (the scoping). Measured on `main`: a docs-only change 44s against the 7m20s baseline, a full unfiltered `main` run 4m12s. Two follow-ups remain under **Debt and odd jobs** |
+| **Scoped CI** — stop running every check on every push | **Done.** Both merged: #25 (the `ci` gate) and #27 (the scoping). Against the 7m20s baseline: a documentation-only pull request now takes **44s**, and a full unfiltered `push` on `main` **4m12s**. Two follow-ups remain under **Debt and odd jobs** |
 | **Cloud storage model** — design | **Merged** (#19), corrected by **#22** |
 | **Sale settlement model** — implementation plan | Not written. **The next build step** |
 | **Close Q13 and Q15 on primary source** | Not started. Cheaper than hiring — see below |
@@ -187,14 +187,15 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   job, and ruleset 19899160 now requires `ci` alone rather than five job ids;
   [#27](https://github.com/clintongormley/waitron/pull/27) added the `changes` gate, the
   `static-analysis` split, the two-way test shard, and scoping for both mutation jobs and both test
-  shards. Measured, in descending order of how often you will meet them:
+  shards. Measured — every row is a `CI`-workflow run, and only the last is a `push` on `main`; the
+  other three are `pull_request` runs on the branch named beside them:
 
   | Change | Wall clock | Run |
   | --- | --- | --- |
-  | documentation only | **44s** | `30652341473` |
-  | one package, or CI/root config | **~1m30s** | `30655777867` |
-  | a dependency of `packages/db` | 4m17s | `30652426111` |
-  | **any code, merged to `main`** — full suite, nothing skipped | **4m12s** | `30663706576` |
+  | documentation only | **44s** | `30664369447` — this pull request, on `docs/backlog-scoped-ci-landed` |
+  | one package, or CI/root config | **1m26s** | `30655777867` — on `feat/ci-scoped-testing` |
+  | a dependency of `packages/db` | 4m17s | `30652426111` — on the throwaway `probe/dependency` |
+  | **any code, merged to `main`** — full suite, nothing skipped | **4m12s** | `30663706544` — the `push` run for #27 |
 
   That last row is the safety net and is not optional: the package scoping is exactly right about
   package-graph coupling and blind to everything else — a root config, a shared fixture, an

@@ -519,6 +519,7 @@ tests alongside the code.
   backlog, record every pending issue, then report what changed). That step is the guard; this
   paragraph is only the receipt for why it exists. **A written rule with standing violations needs a
   guard, not another paragraph** — §7 says so, and this rule had just violated itself.
+
 - Specs live in `docs/superpowers/specs/`, plans in `docs/superpowers/plans/`, session handoffs in
   `docs/handoffs/`.
 - **Specs and plans are committed here, deliberately** — unlike some sibling repos, where
