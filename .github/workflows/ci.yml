@@ -301,19 +301,59 @@ jobs:
 
       - run: pnpm typecheck
 
-  # Real-Chromium browser tests plus V8 coverage thresholds. The only job
-  # that needs Playwright's browser download, so it's the only one that pays
-  # for it.
-  test:
+  # packages/db alone. It is 189s of the old 387s `pnpm test:coverage` step AND a topological
+  # barrier: `pnpm -r` orders by dependency, so seven packages could not start until it finished.
+  # On its own runner it stops blocking anything.
+  test-heavy:
+    needs: changes
+    # Gated on `heavy`, not on the scope filter. Two inclusion filters are OR-ed rather than
+    # intersected, so `--filter "$SCOPE" --filter "@waitron/db"` would run this 189s suite on every
+    # code change; and `@waitron/db[<base>]` misses db when one of db's own dependencies changed.
+    # The `changes` job resolves membership properly and answers here with a boolean.
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true'
     runs-on: ubuntu-latest
     env:
-      # packages/db's harness skips its real-Postgres target when Docker is
-      # absent. That is right on a laptop and wrong here: the skipped target is
-      # the only one that can observe lock contention and non-superuser RLS, so
-      # a runner without Docker would report green having checked neither.
+      # packages/db's harness skips its real-Postgres target when Docker is absent. That is right on
+      # a laptop and wrong here: the skipped target is the only one that can observe lock contention
+      # and non-superuser RLS, so a runner without Docker would report green having checked neither.
       REQUIRE_DOCKER: "1"
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # No scope filter here: the `changes` job already decided this shard has work to do, so the
+      # only question left is which package, and that is always packages/db.
+      - name: Run the db shard
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+        run: pnpm --filter "@waitron/db" test:coverage
+
+  # Everything except packages/db. --no-sort removes the dependency ordering, which earns nothing
+  # for tests: all 15 workspace members resolve to ./src/*.ts and no test imports a sibling's dist/,
+  # so nothing here consumes a build artefact. (`build` DOES need the ordering — this flag is on the
+  # test invocation only.)
+  test-light:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    env:
+      REQUIRE_DOCKER: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v6
         with:
@@ -336,6 +376,9 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
+      # Only this shard needs a browser — @waitron/ui is the sole Chromium consumer, and test-heavy
+      # pays nothing for it.
+      #
       # `pnpm exec` at the repo root does not resolve a bin scoped to a
       # workspace member (only `pnpm -w exec` walks up for root-level bins),
       # so plain `pnpm exec playwright ...` fails here with "Command
@@ -351,11 +394,27 @@ jobs:
       # is never part of what actions/cache restored above.
       - run: pnpm --filter @waitron/ui exec playwright install --with-deps chromium
 
-      # Runs the full suite under V8 coverage and enforces the thresholds in
-      # packages/ui/vitest.config.ts — a coverage-threshold miss fails the job
-      # the same way a failing test would. Subsumes plain `pnpm test`, so this
-      # is the only test invocation in the pipeline.
-      - run: pnpm test:coverage
+      # Exclusions SUBTRACT from the scoped set rather than being OR-ed with it — measured: with one
+      # commit touching packages/db, `--filter "...[main]"` gives 11 packages and adding
+      # `--filter "!@waitron/db"` gives the same 11 minus db. That is what makes this shard "the
+      # scoped set, minus what test-heavy already ran".
+      #
+      # The `-n "$SCOPE"` guard is load-bearing, not defensive decoration: on main SCOPE is the
+      # empty string, and `pnpm --filter ""` is neither "no filter" nor "match nothing". Measured on
+      # pnpm 9.15.0 with this workspace: it exits 1 with
+      # `ERROR  Unsupported package selector: {"exclude":false,…}` before selecting anything, so
+      # without the guard every main run would fail this shard outright.
+      - name: Run the light shard
+        env:
+          SCOPE: ${{ needs.changes.outputs.scope }}
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+        run: |
+          set -euo pipefail
+          if [ -n "$SCOPE" ]; then
+            pnpm --filter "$SCOPE" --filter "!@waitron/db" --no-sort test:coverage
+          else
+            pnpm --filter "!@waitron/db" --no-sort test:coverage
+          fi
 
   # Mutation testing for packages/verifactu only. Unlike packages/ui — whose
   # mutation run is weekly in mutation.yml because each mutant reruns the full
@@ -365,6 +424,8 @@ jobs:
   # which is why it carries a hard threshold (break: 90) while packages/ui
   # publishes a score without failing on it.
   mutation-verifactu:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -395,6 +456,8 @@ jobs:
   # packages/verifactu — so it gates every PR at break: 90. Contrast packages/db, where every
   # test boots PGlite and the cost profile resembles packages/ui's weekly ungated run.
   mutation-shared:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
