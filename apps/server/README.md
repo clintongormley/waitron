@@ -141,7 +141,11 @@ recorded, the three roles present with the right `rolcreaterole` and memberships
 `has_database_privilege(... 'CREATE')` and `has_schema_privilege('public', 'CREATE')` true for
 `waitron_migrator`, `pg_namespace.nspacl` carrying `waitron_migrator=C*` (the `*` is the WITH GRANT
 OPTION below), and the stamp written. A second plan from the state the first produced carries no
-create and no migrate.
+create and no stamp — it **does** carry `migrate`, which `instance` now emits on every run rather
+than only when a journal table is missing (`packages/provisioning/src/instance-apply.rls.test.ts`
+asserts `toContainEqual({ kind: "migrate" })` on exactly that second plan, and applies it again to
+show the re-run is a no-op). This sentence said "no create and no migrate" until the gate was
+removed.
 
 That last assertion reads `nspacl` **directly** rather than asking
 `has_schema_privilege(…, 'CREATE WITH GRANT OPTION')`, and the reason is the recursive closure, not
