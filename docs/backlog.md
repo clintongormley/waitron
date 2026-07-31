@@ -186,21 +186,29 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   longer report. PR 1 ([#25](https://github.com/clintongormley/waitron/pull/25)) **merged**: the
   aggregate `ci` job, and ruleset 19899160 now requires `ci` alone rather than five job ids. PR 2
   (branch `feat/ci-scoped-testing`) is **open**: the `changes` gate, the `static-analysis` split,
-  the two-way test shard, and scoping for both mutation jobs. **First measurement, on a code change
+  the two-way test shard, and scoping for both mutation jobs and both test shards. **First
+  measurement, on a code change
   that skipped `test-heavy`:** run `30650089655` (head `4926cf5`) spanned **4m8s** against the 7m20s
   baseline. That run still carried `mutation-verifactu` ungated at 3m26s of the 4m8s, and every
   other job finished 1m39s in; scoping the two mutation jobs landed after that run. **Measured on
   the branch as it now stands:** run `30653487133` (head `b440b0f`) spanned **1m26s**, and the
   docs-only path spanned **44s** (run `30652341473`, a throwaway PR based on the branch so its whole
   diff was documentation)
-- **`test-light` is the one shard with no membership gate**, so on a change touching no package it
-  still provisions a runner, runs `pnpm install` and `playwright install --with-deps chromium`
-  before finding nothing to do — the longest job of run `30653487133` at ~48s, for zero test
-  execution (`None of the selected packages has a "test:coverage" script`, exit 0). A `light`
-  boolean out of the `changes` job's existing single `pnpm ls` would remove it at no extra cost.
-  Second, smaller half: a `test-light` that matched nothing and one that ran the whole workspace
-  both report `success`, and only the step log tells them apart — worth making the job say which.
-  Found by the base-to-tip review of PR 2, not by any per-task pass
+- **`test-light` reports `success` without saying what it ran.** The larger half of this entry is
+  **done**: the shard now gates on a `light` boolean emitted from the `changes` job's existing
+  single `pnpm ls`, so a resolved scope that is empty, or that holds nothing but `@waitron/db`,
+  skips it instead of provisioning a runner, running `pnpm install` and
+  `playwright install --with-deps chromium` before finding nothing to do — 48s of run
+  `30653487133` (18:01:36 → 18:02:24, its longest job) for zero test execution. What is **still
+  open** is the reporting half: a `test-light` that ran two packages and one that ran the whole
+  workspace both report `success`, and only the step log tells them apart. One scope the new gate
+  does not help with, for the same reason — it answers "is a package other than `@waitron/db` in
+  scope?", not "does any selected package have a `test:coverage` script?". `@waitron/bench-pglite`
+  has no such script, so a change touching only it gives `light=true` and the step still prints
+  `None of the selected packages has a "test:coverage" script`, exit 0 (run in this workspace:
+  `pnpm --filter "@waitron/bench-pglite" --filter "!@waitron/db" --no-sort test:coverage`). Both
+  remaining halves are the same fix — make the job name the packages it selected. Found by the
+  base-to-tip review of PR 2, not by any per-task pass
 - **`packages/db`'s test suite is 189s**, mostly one Testcontainers Postgres per suite. It is now its
   own CI shard (`test-heavy`), which stops it blocking the other packages but does not make it any
   shorter. Sharing a container across suites beats every CI-config change combined, but it means

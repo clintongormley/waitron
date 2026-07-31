@@ -47,6 +47,7 @@ jobs:
       code: ${{ steps.classify.outputs.code }}
       scope: ${{ steps.classify.outputs.scope }}
       heavy: ${{ steps.gates.outputs.heavy }}
+      light: ${{ steps.gates.outputs.light }}
       verifactu: ${{ steps.gates.outputs.verifactu }}
       shared: ${{ steps.gates.outputs.shared }}
     steps:
@@ -121,13 +122,18 @@ jobs:
           printf '%s\n' "$paths" | node .github/scripts/changed-scope.mjs >> "$GITHUB_OUTPUT"
           echo "scope=$scope" >> "$GITHUB_OUTPUT"
 
-      # Which per-package jobs have anything to do? Three today — the heavy test shard and the two
-      # mutation runs — and none of them CAN be expressed as a filter on the job itself; see
-      # gateOutputs' own comment for the two wrong formulations and why each fails.
+      # Which gated jobs have anything to do? Four today — both test shards and the two mutation
+      # runs — and none of them CAN be expressed as a filter on the job itself; see gateOutputs' own
+      # comment for the two wrong formulations and why each fails.
       #
-      # ONE `pnpm ls` for all three. Not mainly for the time — measured locally, the query is 0.20s
-      # against the node script's 0.04s, so three of them would cost well under a second — but
-      # because all three gates are answers about the SAME resolved scope. Resolving it once makes
+      # Three of the four ask whether one named package is in the resolved scope. `light` does not:
+      # test-light's own filter SUBTRACTS @waitron/db, so it has work when the scope holds anything
+      # other than db — which is why a gate is a predicate over the scope rather than a package
+      # name. See SCOPE_GATES in .github/scripts/changed-scope.mjs.
+      #
+      # ONE `pnpm ls` for all four. Not mainly for the time — measured locally, the query is 0.20s
+      # against the node script's 0.04s, so four of them would cost well under a second — but
+      # because all four gates are answers about the SAME resolved scope. Resolving it once makes
       # them consistent by construction, and keeps this step from growing a stanza per gated job.
       #
       # `--unscoped` is main, where there is no scope to resolve and everything must run: the script
@@ -385,7 +391,15 @@ jobs:
   # test invocation only.)
   test-light:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    # `light` is not a membership gate like the other three: the step below subtracts @waitron/db
+    # from the scope, so this job has work when the resolved scope holds ANY package other than db.
+    #
+    # It gated on `code` alone until this was added, which meant a code change touching no package
+    # at all still got a runner. Read off run 30653487133 (`gh run view 30653487133 --json jobs`):
+    # this job was that run's longest at 48s (18:01:36 → 18:02:24) and its "Run the light shard"
+    # step printed `None of the selected packages has a "test:coverage" script` — a `pnpm install`
+    # and a `playwright install --with-deps chromium` for zero test execution, reported as success.
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.light == 'true'
     runs-on: ubuntu-latest
     env:
       REQUIRE_DOCKER: "1"

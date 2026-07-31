@@ -45,8 +45,11 @@ export function classify(paths) {
 /** The package the heavy shard exists for: 189s of the old 387s test step, on its own runner. */
 export const HEAVY_PACKAGE = "@waitron/db";
 
+/** A gate that fires when one named package is in the resolved scope — three of the four. */
+const membership = (packageName) => (inScope) => inScope.has(packageName);
+
 /**
- * Every job gated on one package being in the resolved scope, in the order the CLI emits them.
+ * Every gated job, as a predicate over the resolved scope, in the order the CLI emits them.
  *
  * `heavy` was the first, and the two mutation jobs joined it on a measurement rather than a
  * principle. Read off run 30650089655 (`gh run view 30650089655 --json createdAt,updatedAt,jobs`,
@@ -55,14 +58,28 @@ export const HEAVY_PACKAGE = "@waitron/db";
  * change at all, however far from `packages/verifactu` or `packages/shared`. That made mutation the
  * critical path for the common case, which is most of what the scoping was for.
  *
+ * `light` joined them for the same kind of reason and is the one gate that is NOT membership of a
+ * named package, which is why an entry holds a PREDICATE rather than a package name. test-light
+ * runs `--filter "$SCOPE" --filter "!@waitron/db"`, so it has work exactly when the resolved scope
+ * holds something other than the heavy package — true when db is in scope alongside anything else,
+ * false when db is the whole of it. Read off run 30653487133 (`gh run view 30653487133 --json
+ * jobs`): gated on `code` alone, test-light was that run's LONGEST job — 18:01:36 → 18:02:24, 48s
+ * — and its "Run the light shard" step printed `None of the selected packages has a
+ * "test:coverage" script`. A runner, a `pnpm install` and a `playwright install --with-deps
+ * chromium` for zero test execution, reported as success.
+ *
+ * The `inScope === null` fail-closed case is NOT a gate's business: `gateOutputs` applies it before
+ * calling any predicate, so a predicate only ever sees a real Set and cannot forget the check.
+ *
  * This list is the single source of truth for the gate names: ci.yml's `changes` job reads them
  * from here (including for the unscoped `main` run), so adding a gate is one edit here plus the job
  * that consumes it.
  */
 export const SCOPE_GATES = [
-  { output: "heavy", packageName: HEAVY_PACKAGE },
-  { output: "verifactu", packageName: "@waitron/verifactu" },
-  { output: "shared", packageName: "@waitron/shared" },
+  { output: "heavy", covers: membership(HEAVY_PACKAGE) },
+  { output: "light", covers: (inScope) => [...inScope].some((name) => name !== HEAVY_PACKAGE) },
+  { output: "verifactu", covers: membership("@waitron/verifactu") },
+  { output: "shared", covers: membership("@waitron/shared") },
 ];
 
 /**
@@ -115,12 +132,13 @@ export function packagesInScope(scopedPackagesJson) {
  *
  * Pass `null` for "no narrowing applies": an unscoped run on `main`, or a `pnpm ls` result that
  * could not be parsed. Both fail closed to every gate running, because running a job that was not
- * needed costs runner time while skipping one that was needed ships an untested package.
+ * needed costs runner time while skipping one that was needed ships an untested package. That check
+ * lives HERE rather than in the gates, so no gate can be written without it.
  *
- * Membership of the RESOLVED SCOPE is the only formulation that is right in all three cases, and
- * the two obvious alternatives are both wrong. The design spec §3.6 measured this for
- * `@waitron/db`; the mechanism is the same whichever package a gate names, so the receipt below is
- * quoted in db's own terms rather than restated as a general claim nobody ran:
+ * The RESOLVED SCOPE is the only thing worth asking about, and the two obvious alternatives are
+ * both wrong. The design spec §3.6 measured this for `@waitron/db`; the mechanism is the same
+ * whichever package a gate is about, so the receipt below is quoted in db's own terms rather than
+ * restated as a general claim nobody ran:
  *
  *   - a second inclusion filter (`--filter "<scope>" --filter "@waitron/db"`) is OR-ed, not
  *     intersected, so it runs the 189s suite on every code change whether or not db is involved;
@@ -128,9 +146,10 @@ export function packagesInScope(scopedPackagesJson) {
  *     so it selects NOTHING when one of db's own dependencies changed — a false skip, which is the
  *     dangerous direction.
  *
- * The scope is changed-packages-and-their-dependents, so a gate fires when its package changed OR
- * when its package depends on something that changed. For the two mutation gates the second half is
- * inert today and will not stay that way by itself. Run in this workspace on 2026-07-31,
+ * The scope is changed-packages-and-their-dependents, so a membership gate fires when its package
+ * changed OR when its package depends on something that changed. For the two mutation gates the
+ * second half is inert today and will not stay that way by itself. Run in this workspace on
+ * 2026-07-31,
  * `pnpm --filter "@waitron/shared..." ls --depth -1` and
  * `pnpm --filter "@waitron/verifactu..." ls --depth -1` each print exactly one line, that package
  * itself, so neither has a workspace dependency to inherit a change from. Nothing enforces that,
@@ -139,7 +158,7 @@ export function packagesInScope(scopedPackagesJson) {
  */
 export function gateOutputs(inScope) {
   return SCOPE_GATES.map(
-    ({ output, packageName }) => `${output}=${inScope === null || inScope.has(packageName)}`,
+    ({ output, covers }) => `${output}=${inScope === null || covers(inScope)}`,
   ).join("\n");
 }
 
