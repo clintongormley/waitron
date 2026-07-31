@@ -8,6 +8,7 @@ import { applyInstance, withDatabase, type ApplyDeps } from "./instance-apply.js
 import type { InstanceAction } from "./instance-plan.js";
 import { planInstance } from "./instance-plan.js";
 import { readInstanceState } from "./instance-state.js";
+import { sqlStateOf } from "./sql-state.js";
 import { roleUrl, startBarePostgres, type RealPostgres } from "./testing/postgres.js";
 
 const DATABASE = "waitron_instance_suite";
@@ -499,6 +500,108 @@ describe("applyInstance against a blank container", () => {
       // In a `finally` so the suite stays order-independent. `admin` is connected to another
       // database in the same cluster, so it can drop this one.
       await admin.execute(sql.raw(`drop database if exists ${quoteIdent(database)} with (force)`));
+    }
+  });
+
+  it("a partially-privileged admin reads state but fails the migrate", async () => {
+    // The spec's open consequence (2026-07-30-provisioning-migrate-gate-design.md §4), reproduced
+    // rather than reasoned about. `partial_admin` can reach the target database and read
+    // `deployment`, but holds no CREATE on its `public` schema and does not own it — enough
+    // privilege to get past `withState`'s state read, which is the shape the design doc could not
+    // settle by reading alone.
+    await admin.execute(sql.raw(`drop role if exists partial_admin`));
+    await admin.execute(sql.raw(`create role partial_admin login createdb createrole password 'p'`));
+    await admin.execute(
+      sql.raw(`grant connect on database ${quoteIdent(DATABASE)} to partial_admin`),
+    );
+
+    const owner = await createPostgresDb(withDatabase(adminUri, DATABASE));
+    try {
+      await owner.execute(sql.raw(`grant select on deployment to partial_admin`));
+      // Deliberately NO `grant create on schema public to partial_admin`.
+    } finally {
+      await owner.close();
+    }
+
+    const probeUri = roleUrl(withDatabase(pg.uri, DATABASE), "partial_admin", "p");
+    // TWO handles: `readInstanceState` takes an admin connection AND a target connection, and both
+    // must be this role for the measurement to mean anything. Closed in a `finally` each.
+    const probeAdmin = await createPostgresDb(probeUri);
+    try {
+      const probeTarget = await createPostgresDb(probeUri);
+      try {
+        const state = await readInstanceState(probeAdmin, DATABASE, probeTarget);
+        // The precondition this test is about: a FULLY-journalled re-run, the exact state that used
+        // to make the old, gated planner emit no `migrate` and exit 0 (task 1-3's own tests already
+        // pin that the new planner does not do that; this asserts the state this admin actually
+        // reads is the state the spec's open question is about, not merely assumed to be).
+        expect(state.databaseExists).toBe(true);
+        expect(state.inside?.migratedSets).toEqual(manifestSets().map((set) => set.name));
+        expect(state.inside?.stamp).toBe("preproduction");
+
+        const request = { database: DATABASE, environment: "preproduction" } as const;
+        const actions = planInstance(state, request);
+        expect(actions).toContainEqual({ kind: "migrate" });
+
+        // NOT the file's `deps(...)` helper: it closes over the outer `adminUri` (`prov_admin`'s
+        // connection string) regardless of which `Database` is passed as `as`, so `deps(probeAdmin)`
+        // would still run the `migrate` action's internal reconnect
+        // (`applyMigrations(withDatabase(deps.adminUri, ...))`, instance-apply.ts) as the fully
+        // privileged `prov_admin` — measuring the wrong role and, on this exact fixture, printing
+        // "APPLY SUCCEEDED" for a reason unrelated to `partial_admin`'s own privilege. `adminUri`
+        // here is `probeUri`, so every action, including `migrate`'s own reconnect, runs as
+        // `partial_admin`.
+        const probeDeps: ApplyDeps = {
+          admin: probeAdmin,
+          database: DATABASE,
+          adminUri: probeUri,
+          migrationsRoot: null,
+          openTarget: async () => {
+            const db = await createPostgresDb(probeUri);
+            return { db, release: () => db.close() };
+          },
+        };
+
+        let thrown: unknown;
+        try {
+          await applyInstance(actions, probeDeps);
+        } catch (error) {
+          thrown = error;
+        }
+
+        // NOT wrapped as a `provisioning.*` `AppError`: `instance-apply.ts`'s `migrate` case carries
+        // no `try`/`catch`, unlike `create-role` and `grant-membership`, so the raw driver failure
+        // and its SQLSTATE are what actually reaches a caller — `bin.ts` prints
+        // `unexpected failure (DrizzleQueryError)` for exactly this shape. Recorded as measured,
+        // not fixed: reclassifying it is outside this task's scope.
+        expect(isAppError(thrown)).toBe(false);
+        // Reached via Drizzle's own migrator issuing `CREATE SCHEMA IF NOT EXISTS "public"`
+        // unconditionally at the start of `migrate` (`drizzle-orm@0.45.2/pg-core/dialect.ts:85`),
+        // before any journal table is read — the statement itself needs CREATE on the DATABASE,
+        // which `partial_admin` was deliberately never granted. `sqlStateOf` is the same "walk
+        // `.cause`" helper `instance-apply.ts` itself uses to classify a driver failure.
+        expect(sqlStateOf(thrown)).toBe("42501");
+      } finally {
+        await probeTarget.close();
+      }
+    } finally {
+      await probeAdmin.close();
+      // Both grants below were made BY `admin` (`prov_admin`, the database's real owner) — the
+      // first over `admin`'s own connection (database-level, needs no particular database selected),
+      // the second over a fresh connection to `DATABASE` itself, since a table-level REVOKE has to
+      // run against the database the table lives in. Without both, `drop role` below fails 2BP01
+      // ("role ... cannot be dropped because some objects depend on it") — reproduced once, before
+      // this cleanup existed.
+      await admin.execute(
+        sql.raw(`revoke connect on database ${quoteIdent(DATABASE)} from partial_admin`),
+      );
+      const cleanupOwner = await createPostgresDb(withDatabase(adminUri, DATABASE));
+      try {
+        await cleanupOwner.execute(sql.raw(`revoke select on deployment from partial_admin`));
+      } finally {
+        await cleanupOwner.close();
+      }
+      await admin.execute(sql.raw(`drop role if exists partial_admin`));
     }
   });
 });
