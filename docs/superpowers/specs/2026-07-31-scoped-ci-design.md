@@ -128,11 +128,21 @@ changes ─┬─> lint                  ALWAYS runs, never gated
          ├─> typecheck             if code
          ├─> test-heavy            if code AND db is in scope · packages/db alone
          ├─> test-light            if code · the scoped set minus db, --no-sort
-         ├─> mutation-verifactu    if code
-         └─> mutation-shared       if code
+         ├─> mutation-verifactu    if code AND verifactu is in scope
+         └─> mutation-shared       if code AND shared is in scope
                     ↓
                    ci              always; the only required check
 ```
+
+> **Amended 2026-07-31, after the first scoped run.** The two mutation lines above read `if code`
+> when this was written — the same gate as `bundle-smoke` and `typecheck`, on the reasoning in §1
+> that a mutation run over a pure-Node package is cheap. Measured on run `30650089655`
+> (`gh run view 30650089655 --json createdAt,updatedAt,jobs`, head `4926cf5`), it is not: the run
+> spanned **4m8s**, `mutation-verifactu` was **3m26s** of it (17:10:35→17:14:01), and every other
+> job had finished by 17:11:40 — 1m39s in, with `test-heavy` skipped outright. So one ungated job
+> set the floor for every pull request in the repository, including the ones nowhere near
+> `packages/verifactu`, which is most of what the scoping was for. Both now gate on membership of
+> the resolved scope by the §3.6 mechanism.
 
 ### 3.2 What runs when
 
@@ -282,6 +292,35 @@ scope is right in all three columns.
 
 The membership query needs no `pnpm install` — `pnpm ls --filter … --json` resolves from the
 workspace manifests alone (verified in a clone with no `node_modules`).
+
+> **Amended 2026-07-31, after the first scoped run.** This section described the mechanism as
+> `test-heavy`'s alone. It is now shared by three jobs — `test-heavy`, `mutation-verifactu` and
+> `mutation-shared` (see §3.1's amendment for the measurement that moved the last two) — so the
+> `changes` job resolves the scope **once** and emits one boolean per gated job from that single
+> `pnpm ls`. The gate list lives in `SCOPE_GATES` in `.github/scripts/changed-scope.mjs`, including
+> for the unscoped `main` run, so adding a gated job does not need the list writing out a second
+> time in `ci.yml` — forgetting that would leave the new job never running on `main`, the one
+> direction nothing else in this design would notice.
+>
+> Note what membership does and does not buy the two mutation gates. The scope is
+> changed-packages-**and-their-dependents**, so a gate fires when its own package changed or when
+> its package depends on something that changed. The second half is inert for these two today —
+> run in this workspace on 2026-07-31:
+>
+> ```text
+> $ pnpm --filter "@waitron/shared..." ls --depth -1
+> @waitron/shared@0.0.0 …/packages/shared (PRIVATE)
+>
+> $ pnpm --filter "@waitron/verifactu..." ls --depth -1
+> @waitron/verifactu@0.0.0 …/packages/verifactu (PRIVATE)
+> ```
+>
+> One line each: neither has a workspace dependency to inherit a change from. Nothing enforces that
+> and it is one `package.json` edit from being false, which is why the gate resolves membership
+> rather than matching a package name against the diff. The other direction is already populated —
+> `pnpm --filter "...@waitron/shared" ls --depth -1 --json` returns **12** entries and
+> `...@waitron/verifactu` returns **5**, each count including the named package itself — but that is
+> what a change to either fans OUT to, and gating is about what fans IN.
 
 Coverage thresholds are per-package, so no cross-shard aggregation is needed. A scoped pull request
 only enforces the thresholds of packages that ran; the unfiltered `main` run enforces all of them.

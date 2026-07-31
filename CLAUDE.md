@@ -148,12 +148,22 @@ Traps that each cost a round trip (deliberately uncounted — the last version o
   `.github/workflows/ci.yml` splits it into `test-heavy` (`packages/db` alone) and `test-light`
   (everything else, `--no-sort`).
 - **CI does not run every check on every push.** `ci.yml`'s `changes` job skips the expensive jobs
-  outright when every changed path is documentation, and on a pull request narrows both test shards
-  to the changed packages and their dependents. `main` always runs the full unfiltered suite, and
-  that run is what verifies the narrowing was right. So a green pull request is evidence about the
-  packages that RAN — read the `changes` job's log for its `code`, `scope` and `heavy` outputs before
-  treating it as evidence about the workspace. Design:
+  outright when every changed path is documentation, and on a pull request narrows the two test
+  shards and both mutation jobs to the changed packages and their dependents. `main` always runs the
+  full unfiltered suite, and that run is what verifies the narrowing was right. So a green pull
+  request is evidence about the packages that RAN — read the `changes` job's log for its `code` and
+  `scope` outputs and its per-job `heavy` / `verifactu` / `shared` gates before treating it as
+  evidence about the workspace. Design:
   `docs/superpowers/specs/2026-07-31-scoped-ci-design.md`.
+- **A cheap job can still be the critical path, and only the whole-run measurement shows it.**
+  `mutation-verifactu` was gated on `code` alone because a mutation run over a pure-Node package is
+  cheap _per mutant_. Read off the first scoped run
+  (`gh run view 30650089655 --json createdAt,updatedAt,jobs`, head `4926cf5`): 4m8s wall clock, of
+  which that one job was 3m26s, with every other job finished 1m39s in. It was therefore the floor
+  for every pull request in the repository, including the ones nowhere near `packages/verifactu` —
+  and the per-job reasoning that put it there could not have shown that, because the number it
+  turned on is a property of the run, not of the job. Before calling a job cheap enough to leave
+  ungated, sort that run's jobs by duration.
 - **The scoping filter silently matches nothing in a `git worktree`, and all feature work here
   happens in one**, so it is the first thing anyone testing that filter will hit. Measured on pnpm
   9.15.0 in `waitron-feat-ci-scoped-testing`: `pnpm --filter "...[main]" ls --depth -1` printed

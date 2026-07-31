@@ -185,9 +185,12 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   renaming `test` in the same PR that introduces the gate would block on a required check that can no
   longer report. PR 1 ([#25](https://github.com/clintongormley/waitron/pull/25)) **merged**: the
   aggregate `ci` job, and ruleset 19899160 now requires `ci` alone rather than five job ids. PR 2
-  (branch `feat/ci-scoped-testing`) is **open**: the `changes` gate, the `static-analysis` split, and
-  the two-way test shard. **The saving is not yet measured** — 7m20s is a real baseline, the
-  post-change figure is not, and a projection is not a measurement
+  (branch `feat/ci-scoped-testing`) is **open**: the `changes` gate, the `static-analysis` split,
+  the two-way test shard, and scoping for both mutation jobs. **First measurement, on a code change
+  that skipped `test-heavy`:** run `30650089655` (head `4926cf5`) spanned **4m8s** against the 7m20s
+  baseline. That run still carried `mutation-verifactu` ungated at 3m26s of the 4m8s, and every
+  other job finished 1m39s in; scoping the two mutation jobs landed after it, so **the figure for
+  the branch as it now stands is not yet measured** — a projection is not a measurement
 - **`packages/db`'s test suite is 189s**, mostly one Testcontainers Postgres per suite. It is now its
   own CI shard (`test-heavy`), which stops it blocking the other packages but does not make it any
   shorter. Sharing a container across suites beats every CI-config change combined, but it means

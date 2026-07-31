@@ -1,7 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { classify, formatOutput, isInertPath, needsHeavyShard } from "./changed-scope.mjs";
+import {
+  SCOPE_GATES,
+  classify,
+  formatOutput,
+  gateOutputs,
+  isInertPath,
+  packagesInScope,
+} from "./changed-scope.mjs";
 
 describe("isInertPath", () => {
   it.each(["docs/backlog.md", "docs/superpowers/specs/some-design.md", "docs/compliance/x.md"])(
@@ -68,27 +75,92 @@ describe("classify", () => {
   });
 });
 
-describe("needsHeavyShard", () => {
-  const ls = (...names) => JSON.stringify(names.map((name) => ({ name })));
+const ls = (...names) => JSON.stringify(names.map((name) => ({ name })));
 
-  it("is true when @waitron/db is in the resolved scope", () => {
-    expect(needsHeavyShard(ls("@waitron/db", "@waitron/payments"))).toBe(true);
+describe("packagesInScope", () => {
+  it("reads the package names out of a pnpm ls result", () => {
+    expect(packagesInScope(ls("@waitron/db", "@waitron/payments"))).toEqual(
+      new Set(["@waitron/db", "@waitron/payments"]),
+    );
   });
 
-  it("is false when it is not", () => {
-    expect(needsHeavyShard(ls("@waitron/payments", "@waitron/server"))).toBe(false);
+  it("reads an empty result as an empty scope, which means nothing matched", () => {
+    expect(packagesInScope("")).toEqual(new Set());
+    expect(packagesInScope("   ")).toEqual(new Set());
+    expect(packagesInScope("[]")).toEqual(new Set());
   });
 
-  it("is false for an empty scope, which means nothing matched", () => {
-    expect(needsHeavyShard("")).toBe(false);
-    expect(needsHeavyShard("   ")).toBe(false);
-    expect(needsHeavyShard("[]")).toBe(false);
+  // null is "we do not know", which gateOutputs turns into every gate running. Separate from the
+  // empty set, which is the definite answer "nothing matched".
+  it("returns null when the output cannot be parsed", () => {
+    expect(packagesInScope("No projects matched the filters")).toBe(null);
+  });
+});
+
+describe("gateOutputs", () => {
+  /** The gate lines as an object, so a test can assert one gate without pinning the others' order. */
+  const gates = (inScope) =>
+    Object.fromEntries(
+      gateOutputs(inScope)
+        .split("\n")
+        .map((line) => {
+          const [name, value] = line.split("=");
+          return [name, value];
+        }),
+    );
+
+  it("emits one line per gate, in SCOPE_GATES order", () => {
+    expect(gateOutputs(new Set()).split("\n")).toEqual(
+      SCOPE_GATES.map((gate) => `${gate.output}=false`),
+    );
   });
 
-  // Fails CLOSED: unparseable output means we do not know, and running a shard we did not need
-  // costs 189s, while skipping one we did need ships an untested packages/db.
-  it("is true when the output cannot be parsed", () => {
-    expect(needsHeavyShard("No projects matched the filters")).toBe(true);
+  // The three assertions the old needsHeavyShard carried, now expressed through the general path:
+  // membership of the resolved scope, and nothing else, decides the heavy shard.
+  it("runs the heavy shard when @waitron/db is in the resolved scope, and not otherwise", () => {
+    expect(gates(packagesInScope(ls("@waitron/db", "@waitron/payments"))).heavy).toBe("true");
+    expect(gates(packagesInScope(ls("@waitron/payments", "@waitron/server"))).heavy).toBe("false");
+    expect(gates(packagesInScope("")).heavy).toBe("false");
+  });
+
+  it("runs mutation-verifactu only when @waitron/verifactu is in the resolved scope", () => {
+    expect(gates(packagesInScope(ls("@waitron/verifactu"))).verifactu).toBe("true");
+    expect(gates(packagesInScope(ls("@waitron/db", "@waitron/payments"))).verifactu).toBe("false");
+  });
+
+  it("runs mutation-shared only when @waitron/shared is in the resolved scope", () => {
+    expect(gates(packagesInScope(ls("@waitron/shared"))).shared).toBe("true");
+    expect(gates(packagesInScope(ls("@waitron/db", "@waitron/payments"))).shared).toBe("false");
+  });
+
+  // A package in scope must not switch on a gate belonging to a different package. Measured
+  // dependency fact behind this: `pnpm --filter "@waitron/verifactu..." ls --depth -1` is
+  // @waitron/verifactu alone, so verifactu changing pulls in its DEPENDENTS (fiscal-verifactu,
+  // migrations, provisioning, server) and never @waitron/shared.
+  it("keeps the gates independent of each other", () => {
+    const scope = packagesInScope(
+      ls("@waitron/verifactu", "@waitron/fiscal-verifactu", "@waitron/server"),
+    );
+    expect(gates(scope)).toEqual({ heavy: "false", verifactu: "true", shared: "false" });
+  });
+
+  // Fails CLOSED, in both of the two ways the caller can say "no narrowing applies": an unparseable
+  // pnpm ls result (packagesInScope returned null) and an unscoped run on main, where there is no
+  // scope to resolve at all. Running a job that was not needed costs runner time; skipping one that
+  // was needed ships an untested package.
+  it("runs every gate when the scope is unknown", () => {
+    expect(gateOutputs(null).split("\n")).toEqual(SCOPE_GATES.map((gate) => `${gate.output}=true`));
+    expect(gateOutputs(packagesInScope("No projects matched the filters"))).toBe(gateOutputs(null));
+  });
+});
+
+describe("SCOPE_GATES", () => {
+  it("names the three packages whose membership gates a job", () => {
+    expect(SCOPE_GATES).toEqual([
+      { output: "heavy", packageName: "@waitron/db" },
+      { output: "verifactu", packageName: "@waitron/verifactu" },
+      { output: "shared", packageName: "@waitron/shared" },
+    ]);
   });
 });
 
@@ -131,11 +203,15 @@ describe("the CLI", () => {
     expect(run("\n").stdout).toBe("code=true\n");
   });
 
-  it("answers the heavy subcommand from pnpm ls output", () => {
-    const ls = JSON.stringify([{ name: "@waitron/db" }, { name: "@waitron/shared" }]);
-    expect(run(ls, "heavy").stdout).toBe("heavy=true\n");
-    expect(run(JSON.stringify([{ name: "@waitron/shared" }]), "heavy").stdout).toBe(
-      "heavy=false\n",
+  // One `pnpm ls` invocation answers every gate. The `changes` job appends this stdout verbatim to
+  // $GITHUB_OUTPUT, so the line ORDER does not matter to it but the line COUNT does — a fourth line
+  // here would become a fourth job output.
+  it("answers the gates subcommand from one pnpm ls result", () => {
+    expect(run(ls("@waitron/db", "@waitron/shared"), "gates").stdout).toBe(
+      "heavy=true\nverifactu=false\nshared=true\n",
+    );
+    expect(run(ls("@waitron/payments"), "gates").stdout).toBe(
+      "heavy=false\nverifactu=false\nshared=false\n",
     );
   });
 
@@ -143,8 +219,27 @@ describe("the CLI", () => {
   // bytes on stdout, zero on stderr, exit 0 — not `[]`, and no message. Measured on pnpm 9.15.0
   // against `--filter "@waitron/nonexistent"`, `--filter "...[main]"` and
   // `--filter "...[origin/main]"`, in both a worktree and a fresh clone.
-  it("reads an empty pnpm ls result as no work for the heavy shard", () => {
-    expect(run("", "heavy").stdout).toBe("heavy=false\n");
+  it("reads an empty pnpm ls result as no work for any gated job", () => {
+    expect(run("", "gates").stdout).toBe("heavy=false\nverifactu=false\nshared=false\n");
+  });
+
+  // main has no scope to resolve, so there is no `pnpm ls` to run. The flag keeps the gate list in
+  // ONE place: adding a gate must not need a second edit in ci.yml, because forgetting that edit
+  // would leave the new job never running on main — the silent direction.
+  //
+  // A resolved scope is fed in anyway, and must be ignored: that is what shows the flag decides on
+  // its own rather than falling through to whatever happens to be on stdin.
+  it("emits every gate for an unscoped run, ignoring stdin entirely", () => {
+    expect(run(ls("@waitron/payments"), "gates", "--unscoped").stdout).toBe(
+      "heavy=true\nverifactu=true\nshared=true\n",
+    );
+    expect(run("", "gates", "--unscoped").stdout).toBe("heavy=true\nverifactu=true\nshared=true\n");
+  });
+
+  it("fails closed to every gate when pnpm ls output cannot be parsed", () => {
+    expect(run("No projects matched the filters", "gates").stdout).toBe(
+      "heavy=true\nverifactu=true\nshared=true\n",
+    );
   });
 
   it("puts the reason on stderr, where it cannot reach $GITHUB_OUTPUT", () => {

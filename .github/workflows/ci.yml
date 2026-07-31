@@ -46,7 +46,9 @@ jobs:
     outputs:
       code: ${{ steps.classify.outputs.code }}
       scope: ${{ steps.classify.outputs.scope }}
-      heavy: ${{ steps.heavy.outputs.heavy }}
+      heavy: ${{ steps.gates.outputs.heavy }}
+      verifactu: ${{ steps.gates.outputs.verifactu }}
+      shared: ${{ steps.gates.outputs.shared }}
     steps:
       # fetch-depth: 0 is load-bearing. The default is 1, which leaves no merge base to diff
       # against and no history for pnpm's own change detection — both would then silently report
@@ -104,19 +106,29 @@ jobs:
           printf '%s\n' "$paths" | node .github/scripts/changed-scope.mjs >> "$GITHUB_OUTPUT"
           echo "scope=$scope" >> "$GITHUB_OUTPUT"
 
-      # Does the heavy shard have anything to do? This CANNOT be expressed as a filter on the shard
-      # itself — see needsHeavyShard's own comment for the two wrong formulations and why each
-      # fails. An unscoped run (main) always needs it.
-      - id: heavy
+      # Which per-package jobs have anything to do? Three today — the heavy test shard and the two
+      # mutation runs — and none of them CAN be expressed as a filter on the job itself; see
+      # gateOutputs' own comment for the two wrong formulations and why each fails.
+      #
+      # ONE `pnpm ls` for all three. Not mainly for the time — measured locally, the query is 0.20s
+      # against the node script's 0.04s, so three of them would cost well under a second — but
+      # because all three gates are answers about the SAME resolved scope. Resolving it once makes
+      # them consistent by construction, and keeps this step from growing a stanza per gated job.
+      #
+      # `--unscoped` is main, where there is no scope to resolve and everything must run: the script
+      # emits every gate as true from its own SCOPE_GATES list, so a gate added there does not also
+      # need adding here. Getting that wrong would leave a new job never running on main, which is
+      # the direction nothing else would notice.
+      - id: gates
         env:
           SCOPE: ${{ steps.classify.outputs.scope }}
         run: |
           set -euo pipefail
           if [ -z "$SCOPE" ]; then
-            echo "heavy=true" >> "$GITHUB_OUTPUT"
+            node .github/scripts/changed-scope.mjs gates --unscoped >> "$GITHUB_OUTPUT"
           else
             pnpm --filter "$SCOPE" ls --depth -1 --json 2>/dev/null \
-              | node .github/scripts/changed-scope.mjs heavy >> "$GITHUB_OUTPUT"
+              | node .github/scripts/changed-scope.mjs gates >> "$GITHUB_OUTPUT"
           fi
 
   # Always runs, on every path, including a documentation-only change — Prettier is the only tool
@@ -432,9 +444,21 @@ jobs:
   # test means an unverifiable hash chain rather than a misaligned button,
   # which is why it carries a hard threshold (break: 90) while packages/ui
   # publishes a score without failing on it.
+  #
+  # "Cheap enough to gate every PR" was true of the job in isolation and false of the workflow.
+  # Read off this branch's first scoped run with
+  # `gh run view 30650089655 --json createdAt,updatedAt,jobs` (head 4926cf5): the run spanned 4m8s,
+  # THIS JOB ran 17:10:35→17:14:01 of it (3m26s), and every other job was finished by 17:11:40 —
+  # 1m39s in, with test-heavy skipped outright. Gated on `code` alone it ran on any code change at
+  # all, so it set the floor for every pull request in the repository, including the ones nowhere
+  # near packages/verifactu.
+  #
+  # So it now gates on membership of the resolved scope, exactly as test-heavy does, and for the
+  # same reason a filter on the job cannot express it (see gateOutputs in
+  # .github/scripts/changed-scope.mjs). On main the scope is empty and this always runs.
   mutation-verifactu:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.verifactu == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -462,11 +486,19 @@ jobs:
 
   # packages/shared is pure functions over strings and BigInt: no browser, no database, no
   # async. That makes it the cheapest mutation target in the repo — cheaper than
-  # packages/verifactu — so it gates every PR at break: 90. Contrast packages/db, where every
-  # test boots PGlite and the cost profile resembles packages/ui's weekly ungated run.
+  # packages/verifactu — so it runs at break: 90 rather than publishing a score the way packages/ui
+  # does. Contrast packages/db, where every test boots PGlite and the cost profile resembles
+  # packages/ui's weekly ungated run.
+  #
+  # It gated every pull request until this gate was added; it now gates the ones whose resolved
+  # scope contains packages/shared, by the same membership mechanism as mutation-verifactu above.
+  # Cheapness is not on its own a reason to run: this job took 55s on run 30650089655 (17:10:36 →
+  # 17:11:31) and was nowhere near that run's critical path — but a job the diff could not have
+  # affected has nothing to say about it, whatever it costs, and scoping only the expensive one of a
+  # matched pair would leave the mechanism reading as a special case rather than as the rule.
   mutation-shared:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.shared == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
