@@ -88,6 +88,22 @@ Two of the four are not idle curiosity — they check assumptions **already buil
 firm with demonstrated technical depth on encadenamiento or RRSIF architecture was verified — every
 candidate turned out to be a marketing page. Assume you will be educating whoever you hire."*
 
+### Read this before engaging anyone: some questions are premised on an architecture we abandoned
+
+[#19](https://github.com/clintongormley/waitron/pull/19) (*"The cloud is a sync root, not a shared
+system of record"*, merged 2026-07-31) put a banner at the top of `asesor-questions.md` warning that
+several questions assume **Waitron hosts the client's fiscal system**. Under the design it
+establishes, the cloud never holds the key ring, the certificate stays on the client's own local
+server, and that server always submits. Q11 and Q12 are named as affected, and its instruction is
+blunt: *«re-read every question against the new architecture before paying for answers»* — a question
+built on the old premise buys an answer to a situation that will not exist.
+
+**So the advisor task is not just "engage someone".** It is: re-read the whole list against the
+current architecture, drop or rewrite what the cloud design invalidated, add the replacement question
+that design raises (does the RRSIF reach a backup archive that is not itself a SIF?), *then* engage.
+
+Q13, Q14 and Q15 post-date that design and do not depend on hosting, so they are unaffected.
+
 ### Task: try to close Q13 and Q15 on primary source first
 
 **Q5(b) was closed without asking anyone** — RD 1619/2012 art. 6.1.a) states it plainly, and reading
