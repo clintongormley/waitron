@@ -435,6 +435,12 @@ tests alongside the code.
 
 **Docs:**
 
+- **`docs/backlog.md` answers "what should I work on?"** — what is in flight, what is next, and the
+  reasoning for the order. Read it before starting anything unprompted, and **update it in the same
+  change that makes it stale**. It exists because nothing else did: priorities lived in session
+  memory, which drifts and cannot be reviewed, and several of those notes still point at pull
+  request numbers that no longer exist. The legal and administrative track is separate, in
+  `docs/compliance/action-plan.md`.
 - Specs live in `docs/superpowers/specs/`, plans in `docs/superpowers/plans/`, session handoffs in
   `docs/handoffs/`.
 - **Specs and plans are committed here, deliberately** — unlike some sibling repos, where
