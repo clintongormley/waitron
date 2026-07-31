@@ -48,7 +48,7 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
-  await db.close();
+  if (db !== undefined) await db.close();
 });
 
 // Each test seeds a FRESH tenant (its own till, series and working order) with a distinct NIF, so

@@ -43,8 +43,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await admin.close();
-  await pg.stop();
+  if (admin !== undefined) await admin.close();
+  if (pg !== undefined) await pg.stop();
 });
 
 // More than one row, but well within one envío (MAX_REGISTROS_POR_ENVIO = 1000) — this suite is

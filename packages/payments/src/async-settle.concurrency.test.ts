@@ -45,8 +45,8 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
-  await admin.close();
-  await pg.stop();
+  if (admin !== undefined) await admin.close();
+  if (pg !== undefined) await pg.stop();
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");

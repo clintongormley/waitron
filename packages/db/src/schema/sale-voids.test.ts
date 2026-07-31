@@ -138,7 +138,7 @@ describeEachTarget("sale_voids — tenant isolation", (target) => {
   });
 
   afterEach(async () => {
-    await db.close();
+    if (db !== undefined) await db.close();
   });
 
   it("hides another tenant's sale void from the app role", async () => {

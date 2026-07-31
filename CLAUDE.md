@@ -283,9 +283,19 @@ scratchpad path failed `EINVAL` before it could even reach `ECONNREFUSED`. Two w
 (`apk add --no-cache nodejs npm && npm i pg@<version>`), where node and the server share a
 namespace; everything that is only PARSING — `new URL` versus `pg`'s own parse — is fine on the host.
 
-**Guard every teardown**: `if (db !== undefined) await db.close()`. An unguarded `afterAll` turns a
-`beforeAll` failure into `Cannot read properties of undefined (reading 'close')` and masks the real
-error. Suites sharing a database must clean up in a `finally` so they are order-independent, not
+**Guard every teardown**: `if (db !== undefined) await db.close()`. **Enforced** —
+`packages/db/src/guarded-teardowns.test.ts` scans every `*.test.ts` under `packages/` and `apps/` and
+fails on an unguarded closer inside `afterAll`/`afterEach`. It was added after a hand count said 41
+and the guard found **94**; that count had already been recorded wrongly twice before, which is why
+it is now a test rather than a paragraph.
+
+What it costs, measured rather than assumed (scratch suite, `beforeAll` throwing a known error, run
+both ways under vitest): unguarded reports **two** errors, the real one _and_ the
+`Cannot read properties of undefined` — guarded reports **one**. The spurious error accompanies the
+real one rather than replacing it, so this is about attention, not suppression: it doubles the
+failure count, and when several suites fail together the real cause is what gets scrolled past.
+
+Suites sharing a database must clean up in a `finally` so they are order-independent, not
 order-reliant — several tests have been fixed for exactly this.
 
 **Prove a guard by deletion.** Remove the check, confirm the test fails, restore it. A test that

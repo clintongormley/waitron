@@ -102,7 +102,7 @@ describe.runIf(POSTGRES_COVERED)("createPostgresDb", () => {
   });
 
   afterAll(async () => {
-    await container.stop();
+    if (container !== undefined) await container.stop();
   });
 
   it("returns a database that answers a query", async () => {

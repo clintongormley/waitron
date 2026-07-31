@@ -41,7 +41,7 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
-  await db.close();
+  if (db !== undefined) await db.close();
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");

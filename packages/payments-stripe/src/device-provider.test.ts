@@ -23,7 +23,7 @@ beforeAll(async () => {
   await runMigrations(db, PAYMENTS_MIGRATIONS);
 }, 60_000);
 afterAll(async () => {
-  await db.close();
+  if (db !== undefined) await db.close();
 });
 
 const AT = new Date("2026-07-24T10:00:00Z");

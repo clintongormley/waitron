@@ -30,7 +30,7 @@ beforeAll(async () => {
   await runMigrations(db, PAYMENTS_MIGRATIONS);
 }, 60_000);
 afterAll(async () => {
-  await db.close();
+  if (db !== undefined) await db.close();
 });
 
 const noSleep = (): Promise<void> => Promise.resolve();

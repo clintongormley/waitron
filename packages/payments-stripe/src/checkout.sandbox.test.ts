@@ -31,7 +31,7 @@ d("Stripe test-mode sandbox: hosted Checkout Session", () => {
   }, 120_000);
 
   afterAll(async () => {
-    await db.close();
+    if (db !== undefined) await db.close();
   });
 
   it("creates a real test-mode Checkout Session and writes an initiated row", async () => {

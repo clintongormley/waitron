@@ -24,8 +24,8 @@ beforeAll(async () => {
   );
 });
 afterAll(async () => {
-  await admin.close();
-  await pg.stop();
+  if (admin !== undefined) await admin.close();
+  if (pg !== undefined) await pg.stop();
 });
 
 const SETTLED = new Date("2026-07-23T10:00:00Z");

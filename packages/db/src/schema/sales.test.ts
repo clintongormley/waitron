@@ -135,7 +135,7 @@ describeEachTarget("sales — the commercial record", (target) => {
   });
 
   afterEach(async () => {
-    await db.close();
+    if (db !== undefined) await db.close();
   });
 
   it("keeps total, tip_amount and amount_charged as three distinct values", async () => {
@@ -288,7 +288,7 @@ describeEachTarget("sales — locale snapshot", (target) => {
   });
 
   afterEach(async () => {
-    await db.close();
+    if (db !== undefined) await db.close();
   });
 
   it("snapshots the ordered invoice_locales as at issuance", async () => {
@@ -341,7 +341,7 @@ describeEachTarget("sales — tender coverage", (target) => {
   });
 
   afterEach(async () => {
-    await db.close();
+    if (db !== undefined) await db.close();
   });
 
   it("accepts a split tender covering the amount across two rows", async () => {
@@ -506,7 +506,7 @@ describeEachTarget("sales — immutability as the app role", (target) => {
   });
 
   afterEach(async () => {
-    await db.close();
+    if (db !== undefined) await db.close();
   });
 
   it("refuses to update a sale's total as the app role", async () => {
@@ -708,7 +708,7 @@ describeEachTarget("sales — fiscal_state", (target) => {
   });
 
   afterEach(async () => {
-    await db.close();
+    if (db !== undefined) await db.close();
   });
 
   it("records fiscal_backend and fiscal_state in the same transaction as the sale", async () => {

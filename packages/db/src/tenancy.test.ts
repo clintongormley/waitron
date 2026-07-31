@@ -87,7 +87,7 @@ describeEachTarget("tenant isolation", (target) => {
   // "FATAL: terminating connection due to administrator command" rejection
   // rather than a test failure.
   afterEach(async () => {
-    await db.close();
+    if (db !== undefined) await db.close();
   });
 
   it("returns only the calling tenant's locations", async () => {
@@ -260,7 +260,7 @@ describeEachTarget("invoice_locales", (target) => {
   });
 
   afterEach(async () => {
-    await db.close();
+    if (db !== undefined) await db.close();
   });
 
   const insertLocales = async (invoiceLocales: string[]): Promise<unknown> => {

@@ -23,7 +23,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db.close();
+  if (db !== undefined) await db.close();
 });
 
 /** Runs `fn` inside a tenant transaction, as the non-owner application role. */

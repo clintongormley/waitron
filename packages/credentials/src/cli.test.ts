@@ -37,7 +37,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db.close();
+  if (db !== undefined) await db.close();
 });
 
 interface Harness {

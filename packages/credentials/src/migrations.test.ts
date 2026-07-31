@@ -25,7 +25,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db.close();
+  if (db !== undefined) await db.close();
 });
 
 /** A well-formed row body, so each test below varies exactly one thing. */

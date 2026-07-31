@@ -54,7 +54,7 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
-  await db.close();
+  if (db !== undefined) await db.close();
 });
 
 beforeEach(async () => {

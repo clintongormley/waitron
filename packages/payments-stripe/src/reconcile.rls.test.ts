@@ -34,8 +34,8 @@ beforeAll(async () => {
 }, 180_000);
 
 afterAll(async () => {
-  await admin.close();
-  await pg.stop();
+  if (admin !== undefined) await admin.close();
+  if (pg !== undefined) await pg.stop();
 });
 
 const OLD = new Date("2026-07-01T12:00:00Z");

@@ -72,7 +72,7 @@ describeEachTarget("incidents schema", (target) => {
   });
 
   afterEach(async () => {
-    await db.close();
+    if (db !== undefined) await db.close();
   });
 
   it("hides another tenant's incidents from the app role", async () => {

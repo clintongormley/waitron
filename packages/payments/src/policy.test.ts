@@ -40,7 +40,7 @@ describe("getPaymentPolicy", () => {
     await runMigrations(db, PAYMENTS_MIGRATIONS);
   }, 60_000);
   afterAll(async () => {
-    await db.close();
+    if (db !== undefined) await db.close();
   });
   beforeEach(async () => {
     await db.execute(sql`truncate payment_policy cascade`);

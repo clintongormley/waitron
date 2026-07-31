@@ -19,7 +19,7 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
-  await db.close();
+  if (db !== undefined) await db.close();
 });
 
 /** Appends `n` altas in generation order. */

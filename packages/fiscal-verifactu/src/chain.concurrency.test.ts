@@ -36,8 +36,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await admin.close();
-  await pg.stop();
+  if (admin !== undefined) await admin.close();
+  if (pg !== undefined) await pg.stop();
 });
 
 // No truncate-and-reseed here: registros_facturacion's append-only trigger

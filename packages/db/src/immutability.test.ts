@@ -62,7 +62,7 @@ describeEachTarget("immutability", (target) => {
   // describe-level teardown, and it surfaces as an unhandled FATAL 57P01
   // rejection rather than a test failure.
   afterEach(async () => {
-    await db.close();
+    if (db !== undefined) await db.close();
   });
 
   it("permits SELECT and INSERT from the application role", async () => {
@@ -215,7 +215,7 @@ describeEachTarget("immutability", (target) => {
     });
 
     afterEach(async () => {
-      await rlsDb.close();
+      if (rlsDb !== undefined) await rlsDb.close();
     });
 
     /**

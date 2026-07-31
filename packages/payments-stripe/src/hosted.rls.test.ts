@@ -29,8 +29,8 @@ beforeAll(async () => {
 }, 180_000);
 
 afterAll(async () => {
-  await admin.close();
-  await pg.stop();
+  if (admin !== undefined) await admin.close();
+  if (pg !== undefined) await pg.stop();
 });
 
 describe("hosted initiated rows under real row-level security", () => {

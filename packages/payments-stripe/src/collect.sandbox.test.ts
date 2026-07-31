@@ -70,7 +70,7 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
     if (locationId) {
       await stripe.terminal.locations.del(locationId).catch(() => {});
     }
-    await db.close();
+    if (db !== undefined) await db.close();
   });
 
   it("drives a real test-mode PaymentIntent to captured", async () => {

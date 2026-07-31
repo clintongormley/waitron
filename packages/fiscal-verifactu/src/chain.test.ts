@@ -31,7 +31,7 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
-  await db.close();
+  if (db !== undefined) await db.close();
 });
 
 async function records(): Promise<

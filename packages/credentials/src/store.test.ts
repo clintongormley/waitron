@@ -48,7 +48,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db.close();
+  if (db !== undefined) await db.close();
 });
 
 /** A tenant per test. `store.test.ts` in packages/scheduler is an order-dependent chain over one

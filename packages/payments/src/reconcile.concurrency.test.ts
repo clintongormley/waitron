@@ -20,8 +20,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await admin.close();
-  await pg.stop();
+  if (admin !== undefined) await admin.close();
+  if (pg !== undefined) await pg.stop();
 });
 
 const NOW = new Date("2026-07-25T12:00:00Z");

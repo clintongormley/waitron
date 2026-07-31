@@ -27,8 +27,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await admin.close();
-  await pg.stop();
+  if (admin !== undefined) await admin.close();
+  if (pg !== undefined) await pg.stop();
 });
 
 describe("pendingCount under real row-level security", () => {
