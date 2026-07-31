@@ -64,19 +64,34 @@ jobs:
         with:
           version: 9.15.0
 
-      # Deliberately NO `cache: pnpm`, unlike every other job here. setup-node's cache-save runs as
-      # a post-job step, and with `cache: pnpm` it looks for the pnpm store — which this job never
-      # creates, because it never installs. The store is absent, so the post-step fails with
-      # `Path Validation Error: Path(s) specified in the action for caching do(es) not exist`, and
-      # that fails the whole job AFTER its outputs are already set. Observed on the first real run
-      # of this workflow (run 30649750798): `code`, `scope` and `heavy` were all computed and set
-      # correctly, `changes` still reported failure, and every downstream job skipped.
+      # `package-manager-cache: false` is REQUIRED here, and dropping `cache: pnpm` is not enough —
+      # that input defaults to true in actions/setup-node@v5, which then auto-detects pnpm and
+      # caches anyway. This is the only job in the file that never runs `pnpm install`, so the pnpm
+      # store never exists, and setup-node's post-job cache-SAVE fails on the missing path:
       #
-      # There is nothing to cache here anyway: the job runs `pnpm ls` and one node script, both of
+      #   ##[error]Path Validation Error: Path(s) specified in the action for caching
+      #   do(es) not exist, hence no cache is being saved.
+      #
+      # That fails the job AFTER its outputs are already set, so `changes` reports failure while
+      # having computed every gate correctly, and every downstream job skips.
+      #
+      # It is worth knowing WHY this took two attempts, because the first fix looked like it worked.
+      # Whether the post-step saves at all depends on the RESTORE outcome, so the bug only fires on
+      # a cold cache:
+      #
+      #   run 30651421691  `Cache hit …` → post-step `not saving cache` → job PASSED
+      #   run 30652021468  `pnpm cache is not found` → post-step saves → Path Validation → job FAILED
+      #
+      # Both ran a `changes` job with no `cache:` input. The first passed only because another job
+      # had already warmed that key; the second was a pull request whose base was not `main`, so it
+      # had a different cache scope and started cold. A job that passes or fails on whether a cache
+      # happens to be warm is a false green, so the cache is turned off outright rather than left to
+      # chance. Nothing here is worth caching: the job runs `pnpm ls` and one node script, both of
       # which read the workspace manifests only.
       - uses: actions/setup-node@v5
         with:
           node-version-file: ".nvmrc"
+          package-manager-cache: false
 
       - id: classify
         env:
