@@ -39,7 +39,8 @@ reprioritisation rather than assumed.
 | --- | --- |
 | **Sale settlement model** — design | **Merged** (#20) |
 | **This backlog** | **Merged** (#21) |
-| **Pre-push hook skips deletions** | **PR #23, open.** Also carries this update |
+| **Pre-push hook skips deletions** | **Merged** (#23) |
+| **Cloud storage model** — design | **Merged** (#19), corrected by **#22** |
 | **Sale settlement model** — implementation plan | Not written. **The next build step** |
 | **Close Q13 and Q15 on primary source** | Not started. Cheaper than hiring — see below |
 | **Consolidate the session-memory notes** | Not started. They predate this file and now overlap it — see below |
@@ -101,8 +102,22 @@ blunt: *«re-read every question against the new architecture before paying for 
 built on the old premise buys an answer to a situation that will not exist.
 
 **So the advisor task is not just "engage someone".** It is: re-read the whole list against the
-current architecture, drop or rewrite what the cloud design invalidated, add the replacement question
-that design raises (does the RRSIF reach a backup archive that is not itself a SIF?), *then* engage.
+current architecture, drop or rewrite what the cloud design invalidated, add the replacement
+questions that design raises, *then* engage.
+
+**Which replacement questions, corrected 2026-07-31.** An earlier version of this paragraph named
+one: *"does the RRSIF reach a backup archive that is not itself a SIF?"* **Do not ask that.**
+[#22](https://github.com/clintongormley/waitron/pull/22) retired it — the RRSIF governs invoicing
+*systems*, and an archive issues nothing, so the cloud spec had already answered its own question.
+Worse, it pointed at the regulation least likely to apply. The rules that do govern records once they
+exist are in the **ROF** (RD 1619/2012), and the three real questions are written out in
+[the cloud storage design](superpowers/specs/2026-07-31-cloud-storage-model-design.md) §8a: whether we
+count as a *tercero* holding records on the client's behalf, whether that puts a prior-notification
+duty on every client whose records we keep outside Spain, and whether the online-access requirement
+binds us or only them.
+
+**One of those may decide where the cloud is allowed to run**, which makes it worth answering before
+anything is built rather than after — see the same spec's §10.
 
 Q13, Q14 and Q15 post-date that design and do not depend on hosting, so they are unaffected.
 
@@ -167,10 +182,31 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
 - **An open product question** — the orphan drift gate holds a customer's money pending a human, and
   the hold is unbounded today because nothing re-sweeps a closed period. Defensible before
   production; deserves a decision before it
+- **A second open product question** — `waitron-provision instance` now applies any pending database
+  migrations every time it runs ([#16](https://github.com/clintongormley/waitron/pull/16)), and
+  `status` tells operators to re-run it. Against a shop that is trading, that can lock tables until
+  the migration finishes. Whether it should be gated — a flag, a refusal, a louder confirmation —
+  is undecided. **Smaller than it first looked:** the cloud design (#19) gives every venue its own
+  database and its own server, so the blast radius is one shop rather than every customer at once,
+  which is what an earlier framing of this question assumed
 - **Fiscal follow-ups** — a partial index on `acks`, a sargable reconcile period filter. Both gated
   on scale that does not exist yet
 - **Provisioning and credentials follow-ups** — test-infra duplication, `bin.ts` connect-before-
-  validate ordering, `rotate` coupled to `PURPOSES`
+  validate ordering, `rotate` coupled to `PURPOSES`. Four more carried from
+  [#11](https://github.com/clintongormley/waitron/pull/11), none claimed: password redaction in
+  `applyInstance` is enforced by listing the statements that carry a secret rather than structurally,
+  so the next statement added is unsafe by default; `bin.ts`'s `ask()` is real logic on the
+  coverage-excluded side and has already shipped one bug; `ApplyDeps.database` and the action list are
+  two sources of truth for the same database name; and an order-tracking test fixture is duplicated in
+  two suites
+- **The `tenant` command is unplanned**, and its design carries a known defect: the
+  [provisioning tool design](superpowers/specs/2026-07-29-provisioning-tool-design.md) §4 gives its
+  idempotency check as "look up `tenants` by NIF", which cannot work — the row-level security policy
+  hides a tenant from a connection that has not already said which tenant it is, which a lookup
+  *preceding* that knowledge cannot do. Attempt the insert and catch the unique-violation instead.
+  The spec carries a dated note; the mechanism still needs replacing
+- **Stripe is unprovisioned for the deli.** The payments code is complete and verified against a live
+  sandbox, but no real account exists for the venue that has to be trading by January
 
 ---
 
@@ -191,6 +227,16 @@ Three specific problems, all present today:
 What to do: move anything that is genuinely a *task* into this file, keep in memory only what memory
 is for — durable preferences and hard-won lessons that change how work is done — and delete the
 rest. Strip or annotate the dead PR numbers wherever the surrounding fact is still worth keeping.
+
+**A worked precedent, 2026-07-31.** The same treatment was applied to a session handoff rather than a
+memory note, and it is the shape to copy. `docs/handoffs/2026-07-31-migrate-gate-landed.md`
+listed six loose ends in a file that is **not committed** — `docs/handoffs/` is gitignored, so
+everything in it disappears the moment someone tidies up, which `CLAUDE.md` §6 tells them to do once
+the work is finished. Its unclaimed items are now in the sections above; its history is in the git
+log; the file was deleted. Two of its items had also gone stale in ways only a check against the tree
+would reveal — one had already shipped, and one open question had been narrowed by a later design
+decision. **Do not migrate a note without first checking each item against the current tree**; the
+value is in what has changed since it was written, not in the copying.
 
 ---
 
