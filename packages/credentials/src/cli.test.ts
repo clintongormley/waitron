@@ -1,10 +1,11 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations, type Database } from "@waitron/db";
+import { describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS } from "@waitron/db";
 import { runCli, type CliDeps } from "./cli.js";
 import { loadKeyRing, type KeyRing } from "./keyring.js";
 import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 
 const RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 3).toString("base64"),
@@ -28,17 +29,7 @@ const STRIPE_JSON = JSON.stringify({
   cancelUrl: "https://example.test/no",
 });
 
-let db: Database;
-
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, CREDENTIALS_MIGRATIONS);
-});
-
-afterAll(async () => {
-  if (db !== undefined) await db.close();
-});
+const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
 
 interface Harness {
   deps: CliDeps;
@@ -53,7 +44,7 @@ function harness(stdin = "", files: Record<string, string> = {}, ring: KeyRing =
     out,
     err,
     deps: {
-      db,
+      db: suite.db,
       ring,
       io: {
         stdout: (line) => out.push(line),
@@ -71,20 +62,20 @@ function harness(stdin = "", files: Record<string, string> = {}, ring: KeyRing =
 
 describe("waitron-credentials set", () => {
   it("provisions a credential from stdin", async () => {
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const h = harness(STRIPE_JSON);
     const code = await runCli(
       ["set", "--tenant", tenantId, "--purpose", "payments.stripe"],
       h.deps,
     );
     expect(code).toBe(0);
-    const rows = await db.execute<{ n: number }>(sql`
+    const rows = await suite.db.execute<{ n: number }>(sql`
       select count(*)::int as n from tenant_credentials where tenant_id = ${tenantId}`);
     expect(rows.rows[0]!.n).toBe(1);
   });
 
   it("provisions from --file", async () => {
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const h = harness("", { "/creds.json": STRIPE_JSON });
     const code = await runCli(
       ["set", "--tenant", tenantId, "--purpose", "payments.stripe", "--file", "/creds.json"],
@@ -109,7 +100,7 @@ describe("waitron-credentials set", () => {
     //   directly against node:util). `--value=<json>` binds the value to the flag regardless of
     //   whether the flag is known, so `strict: true` is the ONLY thing standing between this and
     //   an accepted secret. That is what makes this test airtight.
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const h = harness(STRIPE_JSON);
     const code = await runCli(
       ["set", "--tenant", tenantId, "--purpose", "payments.stripe", `--value=${STRIPE_JSON}`],
@@ -119,7 +110,7 @@ describe("waitron-credentials set", () => {
   });
 
   it("rejects an unknown purpose and names the legal ones", async () => {
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const h = harness(STRIPE_JSON);
     const code = await runCli(["set", "--tenant", tenantId, "--purpose", "nope"], h.deps);
     expect(code).not.toBe(0);
@@ -160,7 +151,7 @@ describe("waitron-credentials set", () => {
   });
 
   it("rejects an unreadable --file path instead of throwing", async () => {
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const h = harness();
     const code = await runCli(
       ["set", "--tenant", tenantId, "--purpose", "payments.stripe", "--file", "/missing.json"],
@@ -180,7 +171,7 @@ describe("waitron-credentials set", () => {
     // Simulates what bin.ts's TTY guard does — readStdin rejecting — without needing a real
     // process or terminal. Proves cli.ts's own wrapping (not just bin.ts's) is what stands between
     // this and an uncaught rejection.
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const h = harness();
     h.deps.io.readStdin = () => Promise.reject(new Error("stdin is a TTY"));
     const code = await runCli(
@@ -197,14 +188,14 @@ describe("waitron-credentials set", () => {
     // Pins `isPurpose`'s hasOwnProperty check, not `purpose in PURPOSES`: every plain object
     // inherits `toString`, so `"toString" in PURPOSES` is true even though it names no purpose
     // this package provisions. If the guard is ever loosened to `in`, this must go red.
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const h = harness(STRIPE_JSON);
     const code = await runCli(["set", "--tenant", tenantId, "--purpose", "toString"], h.deps);
     expect(code).not.toBe(0);
   });
 
   it("rejects a payload with a typo'd field", async () => {
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const h = harness(JSON.stringify({ secret_key: "x" }));
     const code = await runCli(
       ["set", "--tenant", tenantId, "--purpose", "payments.stripe"],
@@ -214,7 +205,7 @@ describe("waitron-credentials set", () => {
   });
 
   it("rejects malformed JSON without echoing what it read", async () => {
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const h = harness("{not json, sk_live_LEAK");
     const code = await runCli(
       ["set", "--tenant", tenantId, "--purpose", "payments.stripe"],
@@ -230,7 +221,7 @@ describe("waitron-credentials set", () => {
   // non-zero assertion stays green while the operand it is meant to pin is gone. The same guard in
   // `store.ts` already has one test per operand; this is that standard carried into the CLI.
   it("rejects valid JSON that is not an object (an array)", async () => {
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const h = harness(JSON.stringify(["sk_live_LEAK"]));
     const code = await runCli(
       ["set", "--tenant", tenantId, "--purpose", "payments.stripe"],
@@ -246,7 +237,7 @@ describe("waitron-credentials set", () => {
     // TypeError — a non-AppError that `reportFailure` rethrows, so `runCli` REJECTS instead of
     // returning an exit code, breaking the contract its own doc comment states. Reachable from a
     // `jq` filter that matched nothing, or a template rendering an unset variable.
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const h = harness("null");
     const code = await runCli(
       ["set", "--tenant", tenantId, "--purpose", "payments.stripe"],
@@ -256,7 +247,7 @@ describe("waitron-credentials set", () => {
   });
 
   it("rejects valid JSON that is a bare scalar", async () => {
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const h = harness("5");
     const code = await runCli(
       ["set", "--tenant", tenantId, "--purpose", "payments.stripe"],
@@ -266,14 +257,14 @@ describe("waitron-credentials set", () => {
   });
 
   it("rejects a missing --purpose", async () => {
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const h = harness(STRIPE_JSON);
     const code = await runCli(["set", "--tenant", tenantId], h.deps);
     expect(code).not.toBe(0);
   });
 
   it("rejects an unrecognized flag rather than silently ignoring it", async () => {
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const h = harness(STRIPE_JSON);
     const code = await runCli(
       ["set", "--tenant", tenantId, "--purpose", "payments.stripe", "--bogus", "x"],
@@ -298,7 +289,7 @@ describe("waitron-credentials set", () => {
 
 describe("waitron-credentials list", () => {
   it("prints metadata and never a value", async () => {
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const set = harness(STRIPE_JSON);
     await runCli(["set", "--tenant", tenantId, "--purpose", "payments.stripe"], set.deps);
 
@@ -312,7 +303,7 @@ describe("waitron-credentials list", () => {
   });
 
   it("enumerates across tenants when --tenant is omitted", async () => {
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const set = harness(STRIPE_JSON);
     await runCli(["set", "--tenant", tenantId, "--purpose", "payments.stripe"], set.deps);
 
@@ -341,7 +332,7 @@ describe("waitron-credentials list", () => {
 
 describe("waitron-credentials delete", () => {
   it("removes a provisioned credential", async () => {
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const set = harness(STRIPE_JSON);
     await runCli(["set", "--tenant", tenantId, "--purpose", "payments.stripe"], set.deps);
 
@@ -349,13 +340,13 @@ describe("waitron-credentials delete", () => {
     expect(
       await runCli(["delete", "--tenant", tenantId, "--purpose", "payments.stripe"], h.deps),
     ).toBe(0);
-    const rows = await db.execute<{ n: number }>(sql`
+    const rows = await suite.db.execute<{ n: number }>(sql`
       select count(*)::int as n from tenant_credentials where tenant_id = ${tenantId}`);
     expect(rows.rows[0]!.n).toBe(0);
   });
 
   it("reports a non-zero code when there was nothing to delete", async () => {
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const h = harness();
     const code = await runCli(
       ["delete", "--tenant", tenantId, "--purpose", "payments.stripe"],
@@ -365,7 +356,7 @@ describe("waitron-credentials delete", () => {
   });
 
   it("rejects a missing --purpose", async () => {
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const h = harness();
     const code = await runCli(["delete", "--tenant", tenantId], h.deps);
     expect(code).not.toBe(0);
@@ -388,7 +379,7 @@ describe("waitron-credentials delete", () => {
     // row, so both currently return a non-zero code — 2/USAGE for the former, 1/"no such
     // credential" for the latter. A plain `code !== 0` check cannot tell them apart; asserting the
     // exact code and USAGE text is what makes this mutation-checkable.
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const h = harness();
     const code = await runCli(["delete", "--tenant", tenantId, "--purpose", "nope"], h.deps);
     expect(code).toBe(2);
@@ -406,7 +397,7 @@ describe("waitron-credentials delete", () => {
   });
 
   it("rejects an unrecognized flag rather than silently ignoring it", async () => {
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const h = harness();
     const code = await runCli(
       ["delete", "--tenant", tenantId, "--purpose", "payments.stripe", "--bogus", "x"],
@@ -418,7 +409,7 @@ describe("waitron-credentials delete", () => {
 
 describe("waitron-credentials rotate", () => {
   it("reports what it did and never a value", async () => {
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const set = harness(STRIPE_JSON);
     await runCli(["set", "--tenant", tenantId, "--purpose", "payments.stripe"], set.deps);
 
@@ -445,7 +436,7 @@ describe("waitron-credentials rotate", () => {
     // was already dropped, while rows are still stamped with that retired version. Same
     // fail-fast, resolve-don't-reject contract every other command in this file gets from
     // `reportFailure` — `rotate` did not have it until this test was added.
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const set = harness(STRIPE_JSON);
     await runCli(["set", "--tenant", tenantId, "--purpose", "payments.stripe"], set.deps);
 
@@ -462,7 +453,7 @@ describe("waitron-credentials rotate", () => {
 
 describe("there is deliberately no `get` command", () => {
   it("refuses to print a decrypted credential", async () => {
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const set = harness(STRIPE_JSON);
     await runCli(["set", "--tenant", tenantId, "--purpose", "payments.stripe"], set.deps);
 

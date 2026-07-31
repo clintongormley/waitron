@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
   tenantId as brandTenantId,
@@ -8,39 +8,29 @@ import {
 } from "@waitron/shared";
 import { getPaymentByRef, insertInitiated, resolvePaymentTenant } from "@waitron/payments";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
-import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { startRealPostgres } from "./testing/postgres.js";
 import { FakeStripeHosted } from "./testing/fake-stripe-hosted.js";
 import { StripeHostedProvider } from "./hosted-provider.js";
 
 const PROBE_ROLE = "rls_probe_hosted";
 const PROBE_PASSWORD = "probe";
 
-let pg: RealPostgres;
-let admin: Database;
-
-beforeAll(async () => {
-  pg = await startRealPostgres();
-  admin = await pg.connect();
-  // `execute(string)` runs verbatim (drizzle wraps a plain string in sql.raw internally), so this
-  // needs no drizzle-orm import — payments-stripe does not depend on it. Mirrors stripe.rls.test.ts.
-  await admin.execute(
-    `create role ${PROBE_ROLE} login password '${PROBE_PASSWORD}' in role app_user`,
-  );
-}, 180_000);
-
-afterAll(async () => {
-  if (admin !== undefined) await admin.close();
-  if (pg !== undefined) await pg.stop();
+// `timeoutMs` carries over this suite's own 180s hook timeout, which the helper's 60s default
+// would otherwise narrow — a container start includes pulling the image on a cold runner.
+const suite = useRealPostgres({
+  start: startRealPostgres,
+  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
+  timeoutMs: 180_000,
 });
 
 describe("hosted initiated rows under real row-level security", () => {
   it("isolates an initiated stripe row by tenant and resolves it untenanted by session id", async () => {
-    const a = await seedWorkingOrder(admin, "B31111111");
-    const b = await seedWorkingOrder(admin, "B32222222");
+    const a = await seedWorkingOrder(suite.admin, "B31111111");
+    const b = await seedWorkingOrder(suite.admin, "B32222222");
     const key = { tenantId: a.tenantId, provider: "stripe", paymentRef: "hosted-r1" };
     const sessionId = "cs_rls_hosted";
 
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       // The store call initiate makes — written as rls_probe, scoped to tenant A via withTenant.
       // `insertInitiated`'s NewPayment fields are plain strings (no branding needed here).
@@ -75,8 +65,8 @@ describe("hosted initiated rows under real row-level security", () => {
   // The third adapter that carried the same impossible "TENANT-SCOPED `Database` handle"
   // requirement. It scopes from `params.tenantId` now — `initiate` is its only database method.
   it("initiate() writes its initiated row when handed the only Database handle the API can build", async () => {
-    const t = await seedWorkingOrder(admin, freshNif());
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const t = await seedWorkingOrder(suite.admin, freshNif());
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const provider = new StripeHostedProvider({ client: new FakeStripeHosted(), db: probe });
       const res = await provider.initiate({

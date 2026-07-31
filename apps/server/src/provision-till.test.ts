@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { FISCAL_MIGRATIONS } from "@waitron/fiscal-verifactu";
 import { tenantId as brandTenantId, tillId as brandTillId } from "@waitron/shared";
 import type { TenantId, TillId } from "@waitron/shared";
@@ -29,17 +29,7 @@ const ID_SIF = "WT";
 // never survives `tenantId()`'s brand.
 const ABSENT = "00000000-0000-0000-0000-000000000000";
 
-let db: Database;
-
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, FISCAL_MIGRATIONS);
-}, 60_000);
-
-afterAll(async () => {
-  if (db !== undefined) await db.close();
-});
+const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS], timeoutMs: 60_000 });
 
 interface Bootstrapped {
   tenantId: TenantId;
@@ -71,20 +61,20 @@ function nextNif(): string {
  */
 async function bootstrapTenant(): Promise<Bootstrapped> {
   const nif = nextNif();
-  const tenant = await db.execute<{ id: string }>(sql`
+  const tenant = await suite.db.execute<{ id: string }>(sql`
     insert into tenants (nif, legal_name) values (${nif}, 'Deli SL') returning id`);
   const tenantId = brandTenantId(tenant.rows[0]!.id);
 
-  const location = await db.execute<{ id: string }>(sql`
+  const location = await suite.db.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
     values (${tenantId}, 'Mostrador', array['es-ES'], 'Venta en establecimiento') returning id`);
 
-  const till = await db.execute<{ id: string }>(sql`
+  const till = await suite.db.execute<{ id: string }>(sql`
     insert into tills (tenant_id, location_id, name)
     values (${tenantId}, ${location.rows[0]!.id}, 'Caja 1') returning id`);
   const tillId = brandTillId(till.rows[0]!.id);
 
-  await db.execute(sql`
+  await suite.db.execute(sql`
     insert into invoice_series (tenant_id, till_id, code) values (${tenantId}, ${tillId}, 'A')`);
 
   return { tenantId, tillId, nif };
@@ -94,7 +84,7 @@ describe("provisioning a till that bootstrap-tenant.sql created", () => {
   it("registers it under the tenant's own NIF, which is never an argument", async () => {
     const { tenantId, tillId, nif } = await bootstrapTenant();
 
-    const registration = await provisionTill(db, {
+    const registration = await provisionTill(suite.db, {
       tenantId,
       tillId,
       idSistemaInformatico: ID_SIF,
@@ -104,7 +94,7 @@ describe("provisioning a till that bootstrap-tenant.sql created", () => {
     expect(registration.numeroInstalacion).toBe(1);
 
     // The row `currentSif` would read back — the thing `recordSale` was missing.
-    const live = await db.execute<{
+    const live = await suite.db.execute<{
       nif: string;
       id_sistema_informatico: string;
       numero_instalacion: number;
@@ -118,7 +108,7 @@ describe("provisioning a till that bootstrap-tenant.sql created", () => {
     const theirs = await bootstrapTenant();
 
     await expect(
-      provisionTill(db, {
+      provisionTill(suite.db, {
         tenantId: mine.tenantId,
         tillId: theirs.tillId,
         idSistemaInformatico: ID_SIF,
@@ -128,7 +118,7 @@ describe("provisioning a till that bootstrap-tenant.sql created", () => {
       params: { id: theirs.tillId, tenantId: mine.tenantId },
     });
 
-    const written = await db.execute(
+    const written = await suite.db.execute(
       sql`select 1 from registro_sif where till_id = ${theirs.tillId}`,
     );
     expect(written.rows).toEqual([]);
@@ -138,7 +128,7 @@ describe("provisioning a till that bootstrap-tenant.sql created", () => {
     const { tillId } = await bootstrapTenant();
 
     await expect(
-      provisionTill(db, {
+      provisionTill(suite.db, {
         tenantId: brandTenantId(ABSENT),
         tillId,
         idSistemaInformatico: ID_SIF,
@@ -156,13 +146,15 @@ describe("provisioning a till that bootstrap-tenant.sql created", () => {
     const { tenantId, tillId } = await bootstrapTenant();
 
     await expect(
-      provisionTill(db, { tenantId, tillId, idSistemaInformatico: bad }),
+      provisionTill(suite.db, { tenantId, tillId, idSistemaInformatico: bad }),
     ).rejects.toMatchObject({
       code: "sif.id_sistema_invalid",
       params: { value: bad, maxLength: 2 },
     });
 
-    const written = await db.execute(sql`select 1 from registro_sif where till_id = ${tillId}`);
+    const written = await suite.db.execute(
+      sql`select 1 from registro_sif where till_id = ${tillId}`,
+    );
     expect(written.rows).toEqual([]);
   });
 });

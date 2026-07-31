@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
   seriesId as brandSeriesId,
@@ -24,17 +24,9 @@ import type { SeededForSale } from "../test/seed.js";
 // transaction, so the payment, the sale, and the association commit atomically. That is the whole
 // point: manual mode has no §4 orphan window.
 
-let db: Database;
-
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, PAYMENTS_MIGRATIONS);
-  await FakeFiscalBackend.install(db);
-}, 60_000);
-
-afterAll(async () => {
-  if (db !== undefined) await db.close();
+const pg = usePgliteDb({
+  migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
+  setup: (db) => FakeFiscalBackend.install(db),
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -83,10 +75,10 @@ function buildInput(s: SeededForSale, settledAt: Date): RecordSaleInput {
 
 describe("manual card tender -> recordSale -> associate (atomic, no provider)", () => {
   it("records the sale, the manual payment, and the association in one transaction", async () => {
-    const backend = new FakeFiscalBackend(db);
-    const s = await seedForSale(db, backend, freshNif());
+    const backend = new FakeFiscalBackend(pg.db);
+    const s = await seedForSale(pg.db, backend, freshNif());
 
-    const saleId = await db.transaction(async (tx) => {
+    const saleId = await pg.db.transaction(async (tx) => {
       const recorded = await recordSale(tx, backend, buildInput(s, BASE));
       const manual = await recordManualCardPayment(tx, {
         tenantId: s.tenantId,
@@ -104,7 +96,7 @@ describe("manual card tender -> recordSale -> associate (atomic, no provider)", 
       return recorded.saleId;
     });
 
-    const rows = await db.execute<{
+    const rows = await pg.db.execute<{
       provider: string;
       state: string;
       sale_id: string | null;
@@ -123,12 +115,12 @@ describe("manual card tender -> recordSale -> associate (atomic, no provider)", 
   });
 
   it("rolls the manual payment back with the sale — no orphan row", async () => {
-    const backend = new FakeFiscalBackend(db);
-    const s = await seedForSale(db, backend, freshNif());
+    const backend = new FakeFiscalBackend(pg.db);
+    const s = await seedForSale(pg.db, backend, freshNif());
     const boom = new Error("boom");
 
     await expect(
-      db.transaction(async (tx) => {
+      pg.db.transaction(async (tx) => {
         await recordSale(tx, backend, buildInput(s, BASE));
         await recordManualCardPayment(tx, {
           tenantId: s.tenantId,
@@ -141,7 +133,7 @@ describe("manual card tender -> recordSale -> associate (atomic, no provider)", 
       }),
     ).rejects.toBe(boom);
 
-    const rows = await db.execute<{ count: string }>(
+    const rows = await pg.db.execute<{ count: string }>(
       sql`select count(*)::text as count from payments where tenant_id = ${s.tenantId}`,
     );
     expect(rows.rows[0].count).toBe("0");

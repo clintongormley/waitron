@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   AppError,
   compareDecimal,
@@ -16,22 +16,14 @@ import { FakeStripeDevice } from "./testing/fake-stripe-device.js";
 import { StripeOnDeviceProvider } from "./device-provider.js";
 import { freshNif, seedPaymentPolicy, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 
-let db: Database;
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, PAYMENTS_MIGRATIONS);
-}, 60_000);
-afterAll(async () => {
-  if (db !== undefined) await db.close();
-});
+const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 const AT = new Date("2026-07-24T10:00:00Z");
 
 /** An on-device provider is a per-till, therefore per-tenant, object, so the tenant has to exist
  * before the provider does. Mirrors `provider.test.ts`'s `providerFor`. */
 function providerFor(client: FakeStripeDevice, s: { tenantId: string }): StripeOnDeviceProvider {
-  return new StripeOnDeviceProvider({ client, db, tenantId: brandTenantId(s.tenantId) });
+  return new StripeOnDeviceProvider({ client, db: pg.db, tenantId: brandTenantId(s.tenantId) });
 }
 
 function collectParams(
@@ -49,12 +41,12 @@ function collectParams(
 
 describe("StripeOnDeviceProvider.collect", () => {
   it("online capture writes a captured row with the PI id in external_ref", async () => {
-    const s = await seedWorkingOrder(db, freshNif());
+    const s = await seedWorkingOrder(pg.db, freshNif());
     const provider = providerFor(new FakeStripeDevice(), s);
     const r = await provider.collect(collectParams(s));
     expect(r.state).toBe("captured");
     expect(r.settledAt).not.toBeNull();
-    const row = await db.transaction((tx) =>
+    const row = await pg.db.transaction((tx) =>
       getPaymentByRef(tx, { tenantId: s.tenantId, provider: "stripe", paymentRef: r.paymentRef }),
     );
     expect(row?.state).toBe("captured");
@@ -62,8 +54,8 @@ describe("StripeOnDeviceProvider.collect", () => {
   });
 
   it("accepted_offline (policy allows, consent given, under cap) chains immediately with offline:true", async () => {
-    const s = await seedWorkingOrder(db, freshNif());
-    await seedPaymentPolicy(db, s.tenantId, "accept_offline", "50.00");
+    const s = await seedWorkingOrder(pg.db, freshNif());
+    await seedPaymentPolicy(pg.db, s.tenantId, "accept_offline", "50.00");
     const client = new FakeStripeDevice();
     client.nextCollect("offline"); // the gate must ACCEPT (policy + consent + under cap) for the device to store
     const provider = providerFor(client, s);
@@ -74,7 +66,7 @@ describe("StripeOnDeviceProvider.collect", () => {
   });
 
   it("gate refuses offline (no policy) → device yields network_unavailable → nothing persisted", async () => {
-    const s = await seedWorkingOrder(db, freshNif());
+    const s = await seedWorkingOrder(pg.db, freshNif());
     // No policy row → resolveOfflineDecision refuses → offlineAllowed=false is passed to the device →
     // the offline scenario yields network_unavailable. This makes the gate wiring load-bearing.
     const client = new FakeStripeDevice();
@@ -83,7 +75,7 @@ describe("StripeOnDeviceProvider.collect", () => {
     const r = await provider.collect(collectParams(s, true));
     expect(r.state).toBe("network_unavailable");
     expect(r.settledAt).toBeNull();
-    const row = await db.transaction((tx) =>
+    const row = await pg.db.transaction((tx) =>
       getPaymentByRef(tx, { tenantId: s.tenantId, provider: "stripe", paymentRef: r.paymentRef }),
     );
     expect(row).toBeUndefined();
@@ -95,7 +87,7 @@ describe("StripeOnDeviceProvider.collect", () => {
     // no local row — reconcile's `missingLocal`. Without these keys such a settlement can never be
     // named to a till, so nobody is told about money we hold no record of. Mirrors
     // hosted-provider.test.ts's "stamps the working order and payment ref into the session metadata".
-    const s = await seedWorkingOrder(db, freshNif());
+    const s = await seedWorkingOrder(pg.db, freshNif());
     const client = new FakeStripeDevice();
     const provider = providerFor(client, s);
     const r = await provider.collect(collectParams(s));
@@ -106,13 +98,13 @@ describe("StripeOnDeviceProvider.collect", () => {
   });
 
   it("declined writes a failed row", async () => {
-    const s = await seedWorkingOrder(db, freshNif());
+    const s = await seedWorkingOrder(pg.db, freshNif());
     const client = new FakeStripeDevice();
     client.nextCollect("declined");
     const provider = providerFor(client, s);
     const r = await provider.collect(collectParams(s));
     expect(r.state).toBe("failed");
-    const row = await db.transaction((tx) =>
+    const row = await pg.db.transaction((tx) =>
       getPaymentByRef(tx, { tenantId: s.tenantId, provider: "stripe", paymentRef: r.paymentRef }),
     );
     expect(row?.state).toBe("failed");
@@ -121,8 +113,8 @@ describe("StripeOnDeviceProvider.collect", () => {
 
 describe("StripeOnDeviceProvider tenant mis-wiring", () => {
   it("refuses a collect whose params name a different tenant than the provider serves, before charging", async () => {
-    const mine = await seedWorkingOrder(db, freshNif());
-    const other = await seedWorkingOrder(db, freshNif());
+    const mine = await seedWorkingOrder(pg.db, freshNif());
+    const other = await seedWorkingOrder(pg.db, freshNif());
     const client = new FakeStripeDevice();
     const provider = providerFor(client, mine);
 
@@ -141,10 +133,10 @@ describe("StripeOnDeviceProvider tenant mis-wiring", () => {
     // `tenantId()` validates case-insensitively and returns the value unchanged, so a host reading
     // its tenant from config in upper case and a caller carrying the canonical lower-case form
     // Postgres renders hold the SAME tenant. A `!==` comparison would reject every sale.
-    const s = await seedWorkingOrder(db, freshNif());
+    const s = await seedWorkingOrder(pg.db, freshNif());
     const provider = new StripeOnDeviceProvider({
       client: new FakeStripeDevice(),
-      db,
+      db: pg.db,
       tenantId: brandTenantId(s.tenantId.toUpperCase()),
     });
     const r = await provider.collect(collectParams(s));
@@ -154,8 +146,8 @@ describe("StripeOnDeviceProvider tenant mis-wiring", () => {
 
 describe("StripeOnDeviceProvider.forward", () => {
   it("settles a cleared offline payment and declines a refused one (+ one incident), empty queue = zeros", async () => {
-    const s = await seedWorkingOrder(db, freshNif());
-    await seedPaymentPolicy(db, s.tenantId, "accept_offline", "50.00");
+    const s = await seedWorkingOrder(pg.db, freshNif());
+    await seedPaymentPolicy(pg.db, s.tenantId, "accept_offline", "50.00");
     const client = new FakeStripeDevice();
     const provider = providerFor(client, s);
 
@@ -175,15 +167,15 @@ describe("StripeOnDeviceProvider.forward", () => {
       nextDueAt: null,
     });
 
-    const rowA = await db.transaction((tx) =>
+    const rowA = await pg.db.transaction((tx) =>
       getPaymentByRef(tx, { tenantId: s.tenantId, provider: "stripe", paymentRef: a.paymentRef }),
     );
-    const rowB = await db.transaction((tx) =>
+    const rowB = await pg.db.transaction((tx) =>
       getPaymentByRef(tx, { tenantId: s.tenantId, provider: "stripe", paymentRef: b.paymentRef }),
     );
     expect(rowA?.state).toBe("settled");
     expect(rowB?.state).toBe("declined");
-    const incidents = await db.transaction((tx) => openIncidents(tx, brandTillId(s.tillId)));
+    const incidents = await pg.db.transaction((tx) => openIncidents(tx, brandTillId(s.tillId)));
     expect(incidents).toHaveLength(1);
     expect(incidents[0].code).toBe("payment.offline_forward_declined");
 
@@ -197,8 +189,8 @@ describe("StripeOnDeviceProvider.forward", () => {
   });
 
   it("reports a nextDueAt while a ref is still pending on the device", async () => {
-    const s = await seedWorkingOrder(db, freshNif());
-    await seedPaymentPolicy(db, s.tenantId, "accept_offline", "50.00");
+    const s = await seedWorkingOrder(pg.db, freshNif());
+    await seedPaymentPolicy(pg.db, s.tenantId, "accept_offline", "50.00");
     const client = new FakeStripeDevice();
     const provider = providerFor(client, s);
 
@@ -213,7 +205,7 @@ describe("StripeOnDeviceProvider.forward", () => {
     const result = await provider.forward(AT);
 
     // Precondition: `b` really is still outstanding.
-    const rowB = await db.transaction((tx) =>
+    const rowB = await pg.db.transaction((tx) =>
       getPaymentByRef(tx, { tenantId: s.tenantId, provider: "stripe", paymentRef: b.paymentRef }),
     );
     expect(rowB?.state).toBe("accepted_offline");
@@ -231,9 +223,9 @@ describe("StripeOnDeviceProvider.forward tenant isolation", () => {
     // incidentally. Under PGlite the RLS policy is bypassed (superuser), so the predicate is the
     // ONLY thing scoping this — which is exactly the condition it was added to defend, and the
     // reason a hermetic forward test means anything.
-    const mine = await seedWorkingOrder(db, freshNif());
-    const theirs = await seedWorkingOrder(db, freshNif());
-    await seedPaymentPolicy(db, theirs.tenantId, "accept_offline", "50.00");
+    const mine = await seedWorkingOrder(pg.db, freshNif());
+    const theirs = await seedWorkingOrder(pg.db, freshNif());
+    await seedPaymentPolicy(pg.db, theirs.tenantId, "accept_offline", "50.00");
 
     const theirClient = new FakeStripeDevice();
     theirClient.nextCollect("offline");
@@ -246,7 +238,7 @@ describe("StripeOnDeviceProvider.forward tenant isolation", () => {
     const result = await providerFor(myClient, mine).forward(AT);
 
     expect(result).toEqual({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
-    const row = await db.transaction((tx) =>
+    const row = await pg.db.transaction((tx) =>
       getPaymentByRef(tx, {
         tenantId: theirs.tenantId,
         provider: "stripe",
@@ -259,7 +251,7 @@ describe("StripeOnDeviceProvider.forward tenant isolation", () => {
 
 describe("StripeOnDeviceProvider reversals", () => {
   it("refunds a captured payment; a Stripe-refused refund leaves state unchanged", async () => {
-    const s = await seedWorkingOrder(db, freshNif());
+    const s = await seedWorkingOrder(pg.db, freshNif());
     const client = new FakeStripeDevice();
     const provider = providerFor(client, s);
     const paid = await provider.collect(collectParams(s));
@@ -273,7 +265,7 @@ describe("StripeOnDeviceProvider reversals", () => {
   });
 
   it("void: reverses a captured payment to voided", async () => {
-    const s = await seedWorkingOrder(db, freshNif());
+    const s = await seedWorkingOrder(pg.db, freshNif());
     const client = new FakeStripeDevice();
     const provider = providerFor(client, s);
     const paid = await provider.collect(collectParams(s));
@@ -283,7 +275,7 @@ describe("StripeOnDeviceProvider reversals", () => {
   });
 
   it("partialRefund: reports the refunded amount, not the capture, and sets partially_refunded", async () => {
-    const s = await seedWorkingOrder(db, freshNif());
+    const s = await seedWorkingOrder(pg.db, freshNif());
     const client = new FakeStripeDevice();
     const provider = providerFor(client, s);
     const paid = await provider.collect(collectParams(s)); // amount 10.00

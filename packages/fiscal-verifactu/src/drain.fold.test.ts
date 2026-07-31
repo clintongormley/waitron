@@ -1,8 +1,9 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import type { VerifactuClient } from "@waitron/verifactu";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations, type Database } from "@waitron/db";
+import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
@@ -25,17 +26,7 @@ const unreachableClient: VerifactuClient = {
   consultar: () => Promise.reject(new Error("this test's gated tenant must never consult")),
 };
 
-let db: Database;
-
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, FISCAL_MIGRATIONS);
-}, 60_000);
-
-afterAll(async () => {
-  if (db !== undefined) await db.close();
-});
+const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
 
 /**
  * `drain.tenancy.test.ts`'s own "THE FOLD" test moved here (see that file's comment on why):
@@ -52,24 +43,24 @@ describe("drain — folds the skip-retry interval as a minimum against a healthy
   it("prefers a successful tenant's earlier gate over the skip-retry interval", async () => {
     // The skipping tenant: due work, but its resolver rejects — contributes nothing of its own to
     // `nextDueAt`, only the skip-retry interval below.
-    const failingSeed = await seedPendingEnvios(db, { count: 1 });
+    const failingSeed = await seedPendingEnvios(pg.db, { count: 1 });
     const failing = failingSeed.tenantId;
 
     // The gate-deferred tenant: due work too, but its OWN gate is already 30s out — inside the
     // 5-minute skip-retry interval. `envios_tenants_with_work` (0004's migration) matches it on
     // its `pendiente` row alone; `envio_flujo` plays no part in enumeration, only in what
     // `drainTenant` does once it gets there.
-    const gatedSeed = await seedPendingEnvios(db, { count: 1 });
+    const gatedSeed = await seedPendingEnvios(pg.db, { count: 1 });
     const gated = gatedSeed.tenantId;
     const gateAt = new Date(NOW.getTime() + 30_000);
-    await db.execute(sql`
+    await pg.db.execute(sql`
       insert into envio_flujo (tenant_id, proximo_envio_en, tiempo_espera_seg)
       values (${gated}, ${gateAt.toISOString()}, 30)
     `);
 
     const result = await drain(
       {
-        db,
+        db: pg.db,
         resolveClient: (tenantId) =>
           tenantId === failing
             ? Promise.reject(
@@ -92,7 +83,7 @@ describe("drain — folds the skip-retry interval as a minimum against a healthy
   });
 
   it("prefers the skip-retry interval over a successful tenant's later gate", async () => {
-    // A DEDICATED, single-tenant PGlite instance, not this file's shared `db` — mirroring
+    // A DEDICATED, single-tenant PGlite instance, not the suite's own `pg.db` — mirroring
     // `drain.tenancy.test.ts`'s own last test. The assertion below is exact (`toEqual`, not
     // `.some(...)`), so a due-but-not-yet-submitted tenant left behind by the test above — its gate
     // 30s out, genuinely earlier than everything this test seeds — would otherwise still be

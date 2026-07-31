@@ -1,38 +1,43 @@
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withTenant, type Database } from "@waitron/db";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import type { TenantId } from "@waitron/shared";
 import { dayPeriod } from "./derive.js";
 import { claimGap, claimRow, completeRun, enqueueSuccessor, readSnapshot } from "./store.js";
-import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { startRealPostgres } from "./testing/postgres.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
 const DUTY = "test.duty";
 const NOW = new Date("2026-07-25T04:00:00Z");
 
-let pg: RealPostgres;
+const suite = useRealPostgres({ start: startRealPostgres });
+
+/**
+ * The two racing writers, plus a third connection used only to observe them — never to write.
+ *
+ * These are this suite's own, not `useRealPostgres`'s single `admin`: the races below need each
+ * side on its own backend process, which is what `RealPostgres.connect()` promises per call (see
+ * its doc comment). `suite.admin` seeds the tenant and takes no part in any race.
+ */
 let a: Database;
 let b: Database;
-/** A third connection, used only to observe the other two — never to write. */
 let probe: Database;
 let tenantId: TenantId;
 
 beforeAll(async () => {
-  pg = await startRealPostgres();
-  a = await pg.connect();
-  b = await pg.connect();
-  probe = await pg.connect();
-  tenantId = await seedTenant(a);
+  a = await suite.pg.connect();
+  b = await suite.pg.connect();
+  probe = await suite.pg.connect();
+  tenantId = await seedTenant(suite.admin);
 });
 
 // Guarded so a beforeAll failure cannot mask itself: each teardown runs only if its resource was
-// actually created. The four *.rls.test.ts files in packages/payments share an unconditional
-// afterAll that leaks the container on a beforeAll failure — do not reproduce it here.
+// actually created. The container and `suite.admin` are torn down by `useRealPostgres` itself.
 afterAll(async () => {
   if (a !== undefined) await a.close();
   if (b !== undefined) await b.close();
   if (probe !== undefined) await probe.close();
-  if (pg !== undefined) await pg.stop();
 });
 
 /**

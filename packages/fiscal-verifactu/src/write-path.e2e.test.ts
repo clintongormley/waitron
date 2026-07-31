@@ -1,20 +1,12 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { eq, sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
 import { buildQrPayload, computeHuella } from "@waitron/verifactu";
 import type { RegistroAlta } from "@waitron/verifactu";
-import {
-  CORE_MIGRATIONS,
-  asAppUser,
-  createPgliteDb,
-  incidents,
-  runMigrations,
-  sales,
-  withTenant,
-} from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, incidents, sales, withTenant } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
@@ -26,7 +18,6 @@ import { registrosFacturacion } from "./schema/registros.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
-let db: Database;
 let backend: VerifactuBackend;
 let tenantId: TenantId;
 let tillId: TillId;
@@ -47,18 +38,10 @@ let workingOrderId: WorkingOrderId;
  * hash, and a `pendiente` sidecar row exists. The fake writes to none of these tables at all, so
  * every one of these assertions would pass against a module that silently no-ops.
  */
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, FISCAL_MIGRATIONS);
-}, 60_000);
-
-afterAll(async () => {
-  if (db !== undefined) await db.close();
-});
+const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenantWithSif(db));
+  ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenantWithSif(pg.db));
   // **Deviation from the brief.** The brief constructed `new VerifactuBackend({ clock:
   // steadyClock })`. The real constructor also requires `db`: `pendingCount(tenantId, tillId)` is the one
   // `FiscalBackend` method with no `tx` parameter at all, so it cannot participate in a caller's
@@ -67,13 +50,13 @@ beforeEach(async () => {
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
-    db,
+    db: pg.db,
     resolveClient: staticResolver(fakeClient),
   });
 });
 
 async function sell(overrides: Record<string, unknown> = {}) {
-  return withTenant(db, tenantId, async (tx) => {
+  return withTenant(pg.db, tenantId, async (tx) => {
     await asAppUser(tx);
     return recordSale(
       tx,
@@ -89,7 +72,7 @@ async function sell(overrides: Record<string, unknown> = {}) {
  * why the two are not interchangeable: a `timestamptz` column renders differently through each
  * path). Mirrors `./verify.ts`'s and `./chain.test.ts`'s identical convention. */
 async function rawRegistro(saleId: string): Promise<RegistroRow> {
-  const { rows } = await db.execute<RegistroRow>(
+  const { rows } = await pg.db.execute<RegistroRow>(
     sql`select * from registros_facturacion where sale_id = ${saleId}`,
   );
   const row = rows[0];
@@ -100,7 +83,7 @@ async function rawRegistro(saleId: string): Promise<RegistroRow> {
 describe("the write path against the real Veri*Factu backend", () => {
   it("inserts one registro de alta carrying the sale's identity", async () => {
     const { saleId } = await sell();
-    const rows = await db
+    const rows = await pg.db
       .select()
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.saleId, saleId));
@@ -118,7 +101,7 @@ describe("the write path against the real Veri*Factu backend", () => {
     // slower) and reseeds a new tenant per test rather than truncating, so an earlier test's row
     // would otherwise be read here instead of this test's own. Scoped by `saleId`.
     const { saleId } = await sell();
-    const [row] = await db
+    const [row] = await pg.db
       .select()
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.saleId, saleId));
@@ -164,11 +147,11 @@ describe("the write path against the real Veri*Factu backend", () => {
 
   it("advances the chain head to the record it just wrote", async () => {
     const { saleId } = await sell();
-    const [registro] = await db
+    const [registro] = await pg.db
       .select()
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.saleId, saleId));
-    const [head] = await db.select().from(cadenas).where(eq(cadenas.tillId, tillId));
+    const [head] = await pg.db.select().from(cadenas).where(eq(cadenas.tillId, tillId));
     expect(head?.secuencia).toBe(1);
     expect(head?.ultimaHuella).toBe(registro?.huella);
     expect(head?.ultimoRegistroId).toBe(registro?.id);
@@ -177,11 +160,11 @@ describe("the write path against the real Veri*Factu backend", () => {
   it("chains the second sale onto the first sale's actual huella", async () => {
     const first = await sell();
     const second = await sell();
-    const [a] = await db
+    const [a] = await pg.db
       .select()
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.saleId, first.saleId));
-    const [b] = await db
+    const [b] = await pg.db
       .select()
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.saleId, second.saleId));
@@ -193,11 +176,11 @@ describe("the write path against the real Veri*Factu backend", () => {
 
   it("inserts the submission sidecar row as pending, with nothing sent", async () => {
     const { saleId } = await sell();
-    const [registro] = await db
+    const [registro] = await pg.db
       .select()
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.saleId, saleId));
-    const [sidecar] = await db.select().from(envios).where(eq(envios.registroId, registro!.id));
+    const [sidecar] = await pg.db.select().from(envios).where(eq(envios.registroId, registro!.id));
     expect(sidecar?.estado).toBe("pendiente");
     expect(sidecar?.intentos).toBe(0);
     // The CSV is unrecoverable once lost and arrives only with a submission response, so it must
@@ -233,25 +216,25 @@ describe("the write path against the real Veri*Factu backend", () => {
     // and confirm the module's own tables roll back too. A module holding its own connection
     // would leave all three behind.
     await expect(
-      withTenant(db, tenantId, async (tx) => {
+      withTenant(pg.db, tenantId, async (tx) => {
         await asAppUser(tx);
         await recordSale(tx, backend, saleInput({ tenantId, tillId, seriesId, workingOrderId }));
         throw new Error("simulated crash after the fiscal write");
       }),
     ).rejects.toThrow("simulated crash");
 
-    expect(await db.select().from(sales).where(eq(sales.tenantId, tenantId))).toHaveLength(0);
+    expect(await pg.db.select().from(sales).where(eq(sales.tenantId, tenantId))).toHaveLength(0);
     expect(
-      await db
+      await pg.db
         .select()
         .from(registrosFacturacion)
         .where(eq(registrosFacturacion.tenantId, tenantId)),
     ).toHaveLength(0);
-    expect(await db.select().from(envios).where(eq(envios.tenantId, tenantId))).toHaveLength(0);
+    expect(await pg.db.select().from(envios).where(eq(envios.tenantId, tenantId))).toHaveLength(0);
     // The chain head row itself still exists — `seedTenantWithSif`'s own `registerSif` call
     // created it at provisioning time, in a transaction that already committed — but its
     // `secuencia` is untouched by the rolled-back sale.
-    const [head] = await db.select().from(cadenas).where(eq(cadenas.tillId, tillId));
+    const [head] = await pg.db.select().from(cadenas).where(eq(cadenas.tillId, tillId));
     expect(head?.secuencia).toBe(0);
   });
 
@@ -289,10 +272,15 @@ describe("the write path against the real Veri*Factu backend", () => {
     // incident was raised, because nothing here failed.
     const { saleId } = await sell();
 
-    expect(await db.select().from(sales).where(eq(sales.id, saleId))).toHaveLength(1);
+    expect(await pg.db.select().from(sales).where(eq(sales.id, saleId))).toHaveLength(1);
     expect(
-      await db.select().from(registrosFacturacion).where(eq(registrosFacturacion.saleId, saleId)),
+      await pg.db
+        .select()
+        .from(registrosFacturacion)
+        .where(eq(registrosFacturacion.saleId, saleId)),
     ).toHaveLength(1);
-    expect(await db.select().from(incidents).where(eq(incidents.tillId, tillId))).toHaveLength(0);
+    expect(await pg.db.select().from(incidents).where(eq(incidents.tillId, tillId))).toHaveLength(
+      0,
+    );
   });
 });

@@ -1,13 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  createPgliteDb,
-  runMigrations,
-  withTenant,
-  type Database,
-} from "@waitron/db";
+import { beforeEach, describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS, createPgliteDb, withTenant } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { AppError, tenantId as brandTenantId } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
 // Side-effect only: this test constructs a real `AppError<"payment.reconcile_unsettled">`, and
@@ -29,28 +24,19 @@ const HORIZON_START = new Date("2026-06-01T00:00:00Z");
 const SKIP_RETRY_MS = DEFAULTS.skipRetryMs;
 const AFTER_SKIP_RETRY = new Date(NOW.getTime() + SKIP_RETRY_MS);
 
-let db: Database;
 let tenantId: TenantId;
 
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, SCHEDULER_MIGRATIONS);
-});
-
-afterAll(async () => {
-  if (db !== undefined) await db.close();
-});
+const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS] });
 
 beforeEach(async () => {
-  tenantId = await seedTenant(db);
+  tenantId = await seedTenant(suite.db);
 });
 
 function deps(
   duties: SchedulerDeps["duties"],
   overrides: Partial<SchedulerDeps> = {},
 ): SchedulerDeps {
-  return { db, duties, ...DEFAULTS, ...overrides };
+  return { db: suite.db, duties, ...DEFAULTS, ...overrides };
 }
 
 describe("runDue", () => {
@@ -76,9 +62,9 @@ describe("runDue", () => {
     // Explicitly scoped to `tenantId`, unlike the brief's original text: `withTenant`'s own doc
     // comment warns PGlite connects as superuser and bypasses RLS entirely, "which is precisely
     // why the tests must not rely on it" — and this describe block's earlier tests already leave
-    // their own `duty = 'test.duty'` rows behind under other tenants in the same shared `db`.
+    // their own `duty = 'test.duty'` rows behind under other tenants in the same shared `suite.db`.
     // Without this filter the query over-matches the moment it runs after any prior test.
-    const stored = await withTenant(db, tenantId, (tx) =>
+    const stored = await withTenant(suite.db, tenantId, (tx) =>
       tx.execute<{ summary: Record<string, unknown> }>(
         sql`select summary from scheduled_runs where duty = 'test.duty' and tenant_id = ${tenantId}`,
       ),
@@ -110,7 +96,7 @@ describe("runDue", () => {
       outcome: "failed",
       errorCode: "payment.reconcile_unsettled",
     });
-    const snapshot = await withTenant(db, tenantId, (tx) =>
+    const snapshot = await withTenant(suite.db, tenantId, (tx) =>
       readSnapshot(tx, { tenantId, duty: "test.duty", horizonStart: HORIZON_START }),
     );
     // 15 minutes: backoffBaseMs * 2^(attempts-1), attempts = 1. Store timestamps are normalised
@@ -142,7 +128,7 @@ describe("runDue", () => {
     }
     const after = await runDue(deps([duty]), [tenantId], at);
 
-    const snapshot = await withTenant(db, tenantId, (tx) =>
+    const snapshot = await withTenant(suite.db, tenantId, (tx) =>
       readSnapshot(tx, { tenantId, duty: "test.duty", horizonStart: HORIZON_START }),
     );
     // A parked row is non-terminal in neither sense: it stays visible in the snapshot, but it is
@@ -285,7 +271,7 @@ describe("runDue", () => {
   });
 
   it("isolates one tenant's failure from another's", async () => {
-    const other = await seedTenant(db);
+    const other = await seedTenant(suite.db);
     const duty = new FakeDuty("test.duty", (call) =>
       call.tenantId === tenantId
         ? Promise.reject(new Error("boom"))
@@ -300,7 +286,7 @@ describe("runDue", () => {
   it("runs every duty for every tenant", async () => {
     const one = new FakeDuty("duty.one");
     const two = new FakeDuty("duty.two");
-    const other = await seedTenant(db);
+    const other = await seedTenant(suite.db);
     const result = await runDue(deps([one, two]), [tenantId, other], NOW);
 
     expect(result.ran).toHaveLength(4);
@@ -318,14 +304,14 @@ describe("runDue", () => {
   // `completeRun` with ITS OWN (now-superseded) `startedAt`, the ownership fence rejects it.
   it("treats a completion lost to a mid-flight reclaim as 'this attempt owns nothing' — absent from ran", async () => {
     const duty = new FakeDuty("test.duty", async (call) => {
-      const snapshot = await withTenant(db, tenantId, (tx) =>
+      const snapshot = await withTenant(suite.db, tenantId, (tx) =>
         readSnapshot(tx, { tenantId, duty: "test.duty", horizonStart: HORIZON_START }),
       );
       const row = snapshot.rows.find(
         (r) => new Date(r.periodFrom).getTime() === call.period.from.getTime(),
       );
       const reclaimAt = new Date(call.now.getTime() + DEFAULTS.staleAfterMs + 1);
-      const reclaimed = await withTenant(db, tenantId, (tx) =>
+      const reclaimed = await withTenant(suite.db, tenantId, (tx) =>
         reclaimStale(tx, { id: row!.id, now: reclaimAt, staleAfterMs: DEFAULTS.staleAfterMs }),
       );
       // Confirms the reclaim actually won — otherwise the rest of this test would be asserting
@@ -341,7 +327,7 @@ describe("runDue", () => {
 
     // The row itself must still read exactly as the reclaim left it — running, at the reclaim's
     // attempt count — never overwritten by the lost attempt's (rejected) completion.
-    const snapshot = await withTenant(db, tenantId, (tx) =>
+    const snapshot = await withTenant(suite.db, tenantId, (tx) =>
       readSnapshot(tx, { tenantId, duty: "test.duty", horizonStart: HORIZON_START }),
     );
     expect(snapshot.rows[0]).toMatchObject({ state: "running", attempts: 2 });
@@ -379,7 +365,7 @@ describe("runDue", () => {
     const period = dayPeriod(new Date("2026-07-24T00:00:00Z"));
     // Simulate a crashed process: claim the period directly (bypassing `runDue`, which always
     // completes what it claims) and never call `completeRun`.
-    const stranded = await withTenant(db, tenantId, (tx) =>
+    const stranded = await withTenant(suite.db, tenantId, (tx) =>
       claimGap(tx, { tenantId, duty: "test.duty", period, now: NOW }),
     );
     expect(stranded).not.toBeNull();
@@ -396,7 +382,7 @@ describe("runDue", () => {
     expect(result.ran).toHaveLength(1);
     expect(result.ran[0]).toMatchObject({ outcome: "succeeded", generation: 0 });
 
-    const snapshot = await withTenant(db, tenantId, (tx) =>
+    const snapshot = await withTenant(suite.db, tenantId, (tx) =>
       readSnapshot(tx, { tenantId, duty: "test.duty", horizonStart: HORIZON_START }),
     );
     // Exactly one row for the period — a RECLAIM of the stranded row, not a second row inserted

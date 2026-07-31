@@ -8,27 +8,20 @@ import {
   withTenant,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
 
-let db: Database;
-
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, FISCAL_MIGRATIONS);
-  await seedTenantTillSif(db);
-});
-
-afterAll(async () => {
-  if (db !== undefined) await db.close();
+const pg = usePgliteDb({
+  migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS],
+  setup: seedTenantTillSif,
 });
 
 /** Runs `fn` inside a tenant transaction, as the non-owner application role. */
 async function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, TENANT_A.id, async (tx) => {
+  return withTenant(pg.db, TENANT_A.id, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -107,7 +100,7 @@ describe("registros_facturacion is immutable, as the app role", () => {
     // The layered proof. Revocation fires first, so the two tests above never reach the trigger —
     // and a trigger nobody has ever seen fire is not a backstop, it is a comment. Grant the
     // privilege inside a transaction that rolls back, and watch the second layer catch it.
-    await withTenant(db, TENANT_A.id, async (tx) => {
+    await withTenant(pg.db, TENANT_A.id, async (tx) => {
       await tx.execute(sql`grant update, delete on registros_facturacion to app_user`);
       await tx.execute(sql`set local role app_user`);
       await insertRegistro(tx, 4);
@@ -135,7 +128,7 @@ describe("registros_facturacion is immutable, as the app role", () => {
     // purposes regardless of whether any row currently uses it; adding `acks` reproduced the same
     // 42501 until it too was granted. All three must be granted, or this test fails on a
     // permissions error and never reaches the statement trigger under test at all.
-    await withTenant(db, TENANT_A.id, async (tx) => {
+    await withTenant(pg.db, TENANT_A.id, async (tx) => {
       await tx.execute(
         sql`grant truncate on registros_facturacion, envios, cadenas, acks to app_user`,
       );
@@ -187,7 +180,7 @@ describe("row-level security on every tenant-scoped table in this package", () =
   }
 
   it("requires ENABLE and FORCE on every tenant_id-bearing table this package created", async () => {
-    const tables = await tenantScopedTables(db);
+    const tables = await tenantScopedTables(pg.db);
     const names = tables.map((t) => t.relname);
 
     // A guard that discovers nothing passes every assertion below it — the same shape of
@@ -219,7 +212,7 @@ describe("row-level security on every tenant-scoped table in this package", () =
     // Teeth check: immutability.sql.md's Part 4 warning made concrete. FORCE and CREATE POLICY
     // both succeed with no error when ENABLE was skipped — they are silently inert, not merely
     // unreliable — so a compliance check that only asked "did FORCE succeed" would stay green on
-    // exactly the mistake this recipe warns about. A fresh database, not the shared `db` above:
+    // exactly the mistake this recipe warns about. A fresh database, not the suite's own `pg.db`:
     // this probe is scaffolding for the guard itself, not part of the product schema.
     const probeDb = await createPgliteDb();
     await runMigrations(probeDb, CORE_MIGRATIONS);

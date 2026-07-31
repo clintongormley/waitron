@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
   tenantId as brandTenantId,
@@ -13,7 +13,7 @@ import {
   insertCapturedPayment,
   listAcceptedOffline,
 } from "@waitron/payments";
-import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { startRealPostgres } from "./testing/postgres.js";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { FakeStripeDevice } from "./testing/fake-stripe-device.js";
 import { StripeOnDeviceProvider } from "./device-provider.js";
@@ -21,29 +21,22 @@ import { StripeOnDeviceProvider } from "./device-provider.js";
 const PROBE_ROLE = "rls_probe_device";
 const PROBE_PASSWORD = "probe";
 
-let pg: RealPostgres;
-let admin: Database;
-
-beforeAll(async () => {
-  pg = await startRealPostgres();
-  admin = await pg.connect();
-  await admin.execute(
-    `create role ${PROBE_ROLE} login password '${PROBE_PASSWORD}' in role app_user`,
-  );
-});
-afterAll(async () => {
-  if (admin !== undefined) await admin.close();
-  if (pg !== undefined) await pg.stop();
+// `timeoutMs` restates this package's own vitest `hookTimeout` (180s), which the helper's 60s
+// default would otherwise narrow — a container start includes pulling the image on a cold runner.
+const suite = useRealPostgres({
+  start: startRealPostgres,
+  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
+  timeoutMs: 180_000,
 });
 
 const SETTLED = new Date("2026-07-24T10:00:00Z");
 
 describe("on-device accepted_offline lifecycle under real row-level security", () => {
   it("lists and reads its own tenant's offline payment, and only its own", async () => {
-    const tenantA = await seedWorkingOrder(admin, "B41111111");
-    const tenantB = await seedWorkingOrder(admin, "B42222222");
+    const tenantA = await seedWorkingOrder(suite.admin, "B41111111");
+    const tenantB = await seedWorkingOrder(suite.admin, "B42222222");
 
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const key = { tenantId: tenantA.tenantId, provider: "stripe", paymentRef: "dev-off-1" };
 
@@ -85,8 +78,8 @@ describe("on-device accepted_offline lifecycle under real row-level security", (
   });
 
   it("forward() clears an offline payment when given the only Database handle the API can build", async () => {
-    const t = await seedWorkingOrder(admin, freshNif());
-    await withTenant(admin, t.tenantId, (tx) =>
+    const t = await seedWorkingOrder(suite.admin, freshNif());
+    await withTenant(suite.admin, t.tenantId, (tx) =>
       insertAcceptedOffline(tx, {
         tenantId: t.tenantId,
         workingOrderId: t.workingOrderId,
@@ -103,7 +96,7 @@ describe("on-device accepted_offline lifecycle under real row-level security", (
     // handle" instead, which cannot exist (`withTenant` scopes transaction-locally, from inside a
     // transaction it opens itself), and `forward` consequently listed zero rows under a real role.
     // This asserts it works when handed the handle a host can actually supply.
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const client = new FakeStripeDevice();
       client.queueResult({ settled: ["dev-off-fwd"], declined: [] });
@@ -116,7 +109,7 @@ describe("on-device accepted_offline lifecycle under real row-level security", (
       const result = await provider.forward(new Date("2026-07-24T11:00:00Z"));
       expect(result.forwarded).toBe(1);
 
-      const row = await withTenant(admin, t.tenantId, (tx) =>
+      const row = await withTenant(suite.admin, t.tenantId, (tx) =>
         getPaymentByRef(tx, {
           tenantId: t.tenantId,
           provider: "stripe",
@@ -130,8 +123,8 @@ describe("on-device accepted_offline lifecycle under real row-level security", (
   });
 
   it("collect() captures on the same handle — the interactive till path, not just forward", async () => {
-    const t = await seedWorkingOrder(admin, freshNif());
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const t = await seedWorkingOrder(suite.admin, freshNif());
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const provider = new StripeOnDeviceProvider({
         client: new FakeStripeDevice(),
@@ -155,8 +148,8 @@ describe("on-device accepted_offline lifecycle under real row-level security", (
   // "the reversal fails closed with payment.not_found — for a payment that is sitting right
   // there… it fails every single time." `tenantId` is required there now.
   it("refund() reverses a captured payment on the only Database handle the API can build", async () => {
-    const t = await seedWorkingOrder(admin, freshNif());
-    await withTenant(admin, t.tenantId, (tx) =>
+    const t = await seedWorkingOrder(suite.admin, freshNif());
+    await withTenant(suite.admin, t.tenantId, (tx) =>
       insertCapturedPayment(tx, {
         tenantId: t.tenantId,
         workingOrderId: t.workingOrderId,
@@ -168,7 +161,7 @@ describe("on-device accepted_offline lifecycle under real row-level security", (
       }),
     );
 
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const provider = new StripeOnDeviceProvider({
         client: new FakeStripeDevice(),

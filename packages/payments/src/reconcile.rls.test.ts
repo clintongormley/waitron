@@ -1,13 +1,13 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { Database } from "@waitron/db";
+import { describe, expect, it } from "vitest";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import { decimal, tenantId as brandTenantId } from "@waitron/shared";
 import { recordIncidentOnce } from "@waitron/core";
 import { withTenant } from "@waitron/db";
 import { reconcilePayments, DEFAULT_SETTLEMENT_LAG_MS } from "./reconcile.js";
 import { insertCapturedPayment } from "./store.js";
 import { FakeSettlementReport } from "./testing/fake-settlement-report.js";
-import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { startRealPostgres } from "./testing/postgres.js";
 import { seedWorkingOrder } from "../test/seed.js";
 
 // A non-superuser LOGIN role inheriting app_user's grants. Being non-superuser is what makes RLS
@@ -20,20 +20,11 @@ import { seedWorkingOrder } from "../test/seed.js";
 const PROBE_ROLE = "reconcile_rls_probe";
 const PROBE_PASSWORD = "probe";
 
-let pg: RealPostgres;
-let admin: Database;
-
-beforeAll(async () => {
-  pg = await startRealPostgres();
-  admin = await pg.connect();
-  await admin.execute(
-    sql.raw(`create role ${PROBE_ROLE} login password '${PROBE_PASSWORD}' in role app_user`),
-  );
-});
-
-afterAll(async () => {
-  if (admin !== undefined) await admin.close();
-  if (pg !== undefined) await pg.stop();
+// vitest.config.ts's hookTimeout, which this container start had before the helper's 60s default.
+const postgres = useRealPostgres({
+  start: startRealPostgres,
+  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
+  timeoutMs: 180_000,
 });
 
 const NOW = new Date("2026-07-25T12:00:00Z");
@@ -47,8 +38,8 @@ describe("reconcile under real row-level security", () => {
   it("sweeps, raises an incident and stamps the marker as a non-superuser app_user member", async () => {
     // Seeded as the superuser (admin) — RLS is bypassed for this setup, which is fine: the
     // working_order chain being seeded isn't the thing under test, the sweep below is.
-    const seeded = await seedWorkingOrder(admin, "B33333333");
-    await withTenant(admin, seeded.tenantId, (tx) =>
+    const seeded = await seedWorkingOrder(postgres.admin, "B33333333");
+    await withTenant(postgres.admin, seeded.tenantId, (tx) =>
       insertCapturedPayment(tx, {
         tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
@@ -60,10 +51,10 @@ describe("reconcile under real row-level security", () => {
       }),
     );
     // Abandoned + no sale_id is the orphan shape: the sweep should reverse it, not just report it.
-    await admin.execute(sql`
+    await postgres.admin.execute(sql`
       update working_orders set status = 'abandoned' where id = ${seeded.workingOrderId}`);
 
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const probe = await postgres.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const reversed: string[] = [];
       const result = await reconcilePayments(
@@ -101,7 +92,7 @@ describe("reconcile under real row-level security", () => {
     // superuser, outside the probe's tenant scope. TWO incidents, not one: `rls-1` is abandoned
     // with no sale_id (orphan) AND unmatched by the empty report past the settlement-lag tolerance
     // (unsettled) — classify()'s classes are independent predicates, not a switch, so both fire.
-    const inc = await admin.execute<{ code: string; severity: string }>(
+    const inc = await postgres.admin.execute<{ code: string; severity: string }>(
       sql`select code, severity from incidents where tenant_id = ${seeded.tenantId} order by code`,
     );
     expect(inc.rows).toEqual([
@@ -109,16 +100,16 @@ describe("reconcile under real row-level security", () => {
       { code: "payment.reconcile_unsettled", severity: "warning" },
     ]);
 
-    const marker = await admin.execute<{ reconcile_remediated_at: string | null }>(
+    const marker = await postgres.admin.execute<{ reconcile_remediated_at: string | null }>(
       sql`select reconcile_remediated_at from payments where payment_ref = 'rls-1'`,
     );
     expect(marker.rows[0]?.reconcile_remediated_at).not.toBeNull();
   });
 
   it("sees nothing for a tenant it is not scoped to", async () => {
-    const mine = await seedWorkingOrder(admin, "B44444444");
-    const theirs = await seedWorkingOrder(admin, "B55555555");
-    await withTenant(admin, theirs.tenantId, (tx) =>
+    const mine = await seedWorkingOrder(postgres.admin, "B44444444");
+    const theirs = await seedWorkingOrder(postgres.admin, "B55555555");
+    await withTenant(postgres.admin, theirs.tenantId, (tx) =>
       insertCapturedPayment(tx, {
         tenantId: theirs.tenantId,
         workingOrderId: theirs.workingOrderId,
@@ -130,7 +121,7 @@ describe("reconcile under real row-level security", () => {
       }),
     );
 
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const probe = await postgres.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const result = await reconcilePayments(
         {

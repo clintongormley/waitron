@@ -1,5 +1,5 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { readFileSync, readdirSync } from "node:fs";
+import { basename, join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -11,138 +11,174 @@ import { describe, expect, it } from "vitest";
  *
  * **The experiment, run rather than assumed.** A scratch suite with a `beforeAll` that throws a
  * known error, run twice under vitest — once with `res!.stop()` in the teardown, once with
- * `if (res !== undefined) res.stop()`:
+ * `if (res !== undefined) res.stop()`: unguarded reported **two** errors, the real one AND the
+ * `TypeError`; guarded reported **one**. So the spurious error accompanies the real one rather than
+ * replacing it. That still matters — it doubles the failure count, and when several suites time out
+ * together the real cause is what gets scrolled past.
  *
- * - unguarded → **two** errors reported, the real one AND the `TypeError`;
- * - guarded → **one**, the real one alone.
+ * **This guard is a backstop, not the primary defence.** `@waitron/db/testing/lifecycle.js` owns the
+ * hooks for the suites that use it, so they cannot write a teardown at all, guarded or otherwise.
+ * What remains in scope here is the residue that legitimately builds its own resources —
+ * `client.test.ts` and `migrate.test.ts` construct containers because they are the unit tests OF the
+ * constructor and the migrator, and `testing/postgres.test.ts` tests the very surface the helper is
+ * built on.
  *
- * So the spurious error accompanies the real one rather than replacing it — CLAUDE.md's "masks" is
- * about attention, not suppression. That still matters: it doubles the failure count, and when
- * several suites time out together the real cause is what gets scrolled past.
+ * ## Two limits, stated because neither is obvious
  *
- * The rule was already written down and still had dozens of violations, which is exactly the kind
- * of convention that needs a guard rather than a paragraph. A hand count of these has been recorded
- * wrongly twice before; this file makes counting a non-issue.
+ * 1. **It cannot see a suite with no teardown at all.** It inspects closers INSIDE
+ *    `afterAll`/`afterEach`; a suite that creates a resource per test and never closes one is
+ *    invisible. That is not theoretical — `packages/fiscal-verifactu/src/registro-sif.test.ts` was
+ *    leaking 13 PGlite instances per run with no teardown whatsoever, and this guard passed the
+ *    whole time. It was found by reading, not by scanning.
+ * 2. **`isGuarded` proves a check exists in the hook, not that it covers this call.** See its own
+ *    doc comment.
  *
- * **Self-contained rather than split into `guarded-teardowns.ts` + a test**, unlike
- * `english-only.ts` next door. This is test hygiene, not domain logic: nothing imports it, and
- * putting a file-scanner in `src/` non-test surface would buy coverage obligations for a scanner
- * whose only consumer is this file. `no-provider-vocabulary.test.ts` and `no-hardcoded-chrome.test.ts`
- * take the same self-contained shape.
+ * ## Why not an ESLint rule
+ *
+ * `eslint.config.js` is the repo's existing cross-package enforcement surface, and a
+ * `no-restricted-syntax` selector over the real AST is both faster and more precise than comment
+ * stripping. It was rejected for one reason: an esquery selector can only mandate the `?.` form,
+ * whereas the tree contains 172 teardown closers of which ~78 already use `if (x !== undefined)` —
+ * the form CLAUDE.md documents. Lint would therefore mean a 172-site rewrite to a different
+ * canonical form, not a fix. If the canonical form ever changes, revisit this.
+ *
+ * **Self-contained rather than split into a module plus a test**, unlike `english-only.ts` next
+ * door: nothing imports it, and putting a file-scanner in `src/` non-test surface would buy coverage
+ * obligations for a scanner whose only consumer is this file.
  */
 
-/** From `packages/db/src` up to the repo root — one level higher than `english-only.ts`'s
- * `PACKAGES_ROOT`, because this guard covers `apps/` too (see `SCAN_ROOTS`). */
+/** From `packages/db/src` up to the repo root — one level above `english-only.ts`'s
+ * `PACKAGES_ROOT`, because this guard covers `apps/` too. */
 const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
 
 /**
- * **`apps/` is IN scope here, deliberately, and this differs from `english-only.ts`.** That guard
- * excludes `apps/*` by a recorded decision because vocabulary is a domain concern owned by the
- * packages. A masked teardown error is not a domain concern — it wastes the same debugging hour
- * wherever it happens — so there is no principled reason to exempt an app. If a third root appears,
- * add it here.
+ * **`apps/` is IN scope, deliberately, unlike `english-only.ts`.** That guard excludes `apps/*`
+ * because vocabulary is a domain concern owned by the packages. A masked teardown error is not a
+ * domain concern — it wastes the same debugging hour wherever it happens.
  */
 const SCAN_ROOTS = ["packages", "apps"] as const;
 
-/** Methods that release a resource acquired in `beforeAll`/`beforeEach`. `end` covers node-postgres
- * pools; `stop` covers Testcontainers; `close` covers this repo's `Database`. */
+/** Directories never descended into. Filtered DURING traversal, not after: a post-filter walk of
+ * `packages/` enumerated ~996,000 entries to find ~190 files, because pnpm's workspace links make
+ * `node_modules` vast. Filtering here takes it to single-digit milliseconds. */
+const SKIP_DIRECTORIES = new Set(["node_modules", "dist", "coverage", ".turbo", ".vite"]);
+
+/** Methods that release a resource. `end` covers node-postgres pools; `stop` covers Testcontainers;
+ * `close` covers this repo's `Database`. A resource exposing `dispose`/`destroy` would escape — the
+ * cost of a hand-maintained list, accepted because the tree has none. */
 const CLOSERS = ["close", "stop", "end"] as const;
 
-/**
- * This file exempts itself, as `english-only.ts` exempts its own two files. The detector's fixtures
- * below are teardown snippets held in template literals, and `stripComments` is deliberately naive
- * about string literals — so scanning this file reports its own fixtures. Exempting it costs
- * nothing: it acquires no resource and therefore has no teardown of its own to get wrong.
- */
+/** This file's own fixtures are teardown snippets in template literals, and `stripComments` is
+ * deliberately naive about string literals, so scanning itself reports them. `english-only.ts`
+ * exempts its own two files for the same reason. Costs nothing: it acquires no resource. */
 const SELF = "guarded-teardowns.test.ts";
 
-function isSkippable(relPath: string): boolean {
-  const parts = relPath.split(sep);
-  if (parts[parts.length - 1] === SELF) return true;
-  return parts.includes("node_modules") || parts.includes("dist") || parts.includes("coverage");
-}
+const CLOSER_PATTERN = new RegExp(
+  `\\b([A-Za-z_][\\w$]*)\\s*\\.\\s*(${CLOSERS.join("|")})\\s*\\(\\s*\\)`,
+  "g",
+);
+const TEARDOWN_HOOK = /\bafter(?:All|Each)\s*\(/g;
 
-function testFiles(): string[] {
-  const found: string[] = [];
-  for (const root of SCAN_ROOTS) {
-    const abs = join(REPO_ROOT, root);
-    for (const rel of readdirSync(abs, { recursive: true, encoding: "utf8" })) {
-      if (!rel.endsWith(".test.ts") || isSkippable(rel)) continue;
-      found.push(join(abs, rel));
+function collectTestFiles(directory: string, found: string[]): void {
+  let entries;
+  try {
+    entries = readdirSync(directory, { withFileTypes: true });
+  } catch {
+    // A concurrently-written tree (another agent's coverage output, a parallel build) can delete a
+    // directory between listing its parent and reading it. Observed twice. A guard that crashes on
+    // that reports a scan failure as a teardown failure, which is the confusion it exists to end.
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      // `withFileTypes` reports a symlinked directory as a symlink, not a directory, so this also
+      // stops the combinatorial descent through pnpm's workspace links.
+      if (!SKIP_DIRECTORIES.has(entry.name)) collectTestFiles(join(directory, entry.name), found);
+    } else if (entry.name.endsWith(".test.ts") && entry.name !== SELF) {
+      found.push(join(directory, entry.name));
     }
   }
-  return found.sort();
+}
+
+/** Memoised: the tree does not change mid-run, and this used to be walked twice per suite. */
+let cachedFiles: string[] | undefined;
+function testFiles(): string[] {
+  if (cachedFiles === undefined) {
+    const found: string[] = [];
+    for (const root of SCAN_ROOTS) collectTestFiles(join(REPO_ROOT, root), found);
+    cachedFiles = found;
+  }
+  return cachedFiles;
 }
 
 /**
- * Blanks block comments to equivalent whitespace (preserving line numbers so reported line numbers
- * stay true) and drops trailing line comments. Mirrors `english-only.ts`'s
- * `blankBlockComments`/`dropLineComment`, duplicated rather than imported for the reason
- * `no-provider-vocabulary.test.ts` records: neither helper is exported.
+ * Blanks block comments to whitespace (preserving line numbers) and drops line comments.
  *
- * Naive about `//` inside string literals. That is acceptable here and not in a vocabulary guard:
- * the worst case is a comment mentioning `db.close()` being treated as code, which can only produce
- * a FALSE POSITIVE — a demand to guard something already fine — never a false negative that lets a
- * real unguarded teardown through.
+ * The `(^|[^:])` guard on the line-comment pattern is load-bearing and mirrors `english-only.ts`'s
+ * `dropLineComment`: without it, `const uri = "postgres://host/db"; await db.close();` loses
+ * everything after `postgres:` and the teardown vanishes from the scan — a FALSE NEGATIVE. An
+ * earlier revision of this file omitted it while claiming false negatives were impossible, and 21
+ * test files in this tree contain a `postgres://` literal.
  */
 function stripComments(source: string): string {
   return source
     .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, " "))
-    .replace(/\/\/[^\n]*/g, "");
+    .split("\n")
+    .map((line) => line.replace(/(^|[^:])\/\/.*$/, "$1"))
+    .join("\n");
 }
 
-/** Extract the `{ ... }` body that follows `startIndex`, by brace matching. Returns null when the
- * hook has no block body (e.g. a bare arrow expression), which no teardown in this tree uses. */
+/** The `{ ... }` block following `startIndex`, by brace matching. */
 function blockAfter(source: string, startIndex: number): { body: string; offset: number } | null {
   const open = source.indexOf("{", startIndex);
   if (open === -1) return null;
   let depth = 0;
-  for (let i = open; i < source.length; i++) {
-    if (source[i] === "{") depth++;
-    else if (source[i] === "}") {
-      depth--;
-      if (depth === 0) return { body: source.slice(open, i + 1), offset: open };
+  for (let index = open; index < source.length; index++) {
+    if (source[index] === "{") depth++;
+    else if (source[index] === "}" && --depth === 0) {
+      return { body: source.slice(open, index + 1), offset: open };
     }
   }
   return null;
 }
 
-/** True when `body` proves `identifier` was checked before use — `?.`, an `if`, an explicit
- * `!== undefined`, or a `&&` short-circuit. */
-function isGuarded(body: string, identifier: string): boolean {
-  const id = identifier.replace(/[$]/g, "\\$&");
+/**
+ * True when `statement` — the single line holding the call, not the whole hook — checks
+ * `identifier` first.
+ *
+ * **Scoped to the line deliberately.** Searching the whole hook body accepted
+ * `{ if (db !== undefined) await truncate(db); await db.close(); }`, where the check guards a
+ * different call: a false negative. Line scope can only err the other way, demanding a guard on a
+ * multi-line `if (db !== undefined) { await db.close(); }` — of which this tree has none, all 134
+ * guards being the single-line form CLAUDE.md documents.
+ */
+function isGuarded(statement: string, identifier: string): boolean {
   return [
-    new RegExp(`\\b${id}\\s*\\?\\.`),
-    new RegExp(`if\\s*\\(\\s*!?\\s*${id}\\b`),
-    new RegExp(`\\b${id}\\s*!==\\s*undefined`),
-    new RegExp(`\\b${id}\\s*&&`),
-  ].some((pattern) => pattern.test(body));
+    new RegExp(`\\b${identifier}\\s*\\?\\.`),
+    new RegExp(`if\\s*\\(\\s*!?\\s*${identifier}\\b`),
+    new RegExp(`\\b${identifier}\\s*!==\\s*undefined`),
+    new RegExp(`\\b${identifier}\\s*&&`),
+  ].some((pattern) => pattern.test(statement));
 }
 
-export interface Finding {
+interface Finding {
   file: string;
   line: number;
   expression: string;
 }
 
-/** Scan one file's source for unguarded closers inside teardown hooks. Exported shape kept simple
- * so the controls below can drive it with inline fixtures rather than real files. */
-export function findUnguarded(source: string, file = "<inline>"): Finding[] {
+function findUnguarded(source: string, file = "<inline>"): Finding[] {
   const clean = stripComments(source);
+  const lines = clean.split("\n");
   const findings: Finding[] = [];
-  const hook = /\bafter(?:All|Each)\s*\(/g;
-  const closer = new RegExp(
-    `\\b([A-Za-z_$][\\w$]*)\\s*\\.\\s*(${CLOSERS.join("|")})\\s*\\(\\s*\\)`,
-    "g",
-  );
 
-  for (let hookMatch = hook.exec(clean); hookMatch !== null; hookMatch = hook.exec(clean)) {
-    const block = blockAfter(clean, hookMatch.index);
+  for (const hook of clean.matchAll(TEARDOWN_HOOK)) {
+    const block = blockAfter(clean, hook.index);
     if (block === null) continue;
-    for (let call = closer.exec(block.body); call !== null; call = closer.exec(block.body)) {
+    for (const call of block.body.matchAll(CLOSER_PATTERN)) {
       const [expression, identifier] = call;
-      if (isGuarded(block.body, identifier)) continue;
       const line = clean.slice(0, block.offset + call.index).split("\n").length;
+      if (identifier === undefined || isGuarded(lines[line - 1] ?? "", identifier)) continue;
       findings.push({ file, line, expression });
     }
   }
@@ -150,25 +186,24 @@ export function findUnguarded(source: string, file = "<inline>"): Finding[] {
 }
 
 describe("the scan itself", () => {
-  // Without this, every assertion below passes vacuously against an empty set — the exact shape of
-  // vacuous test this project has already shipped seven of.
   const files = testFiles();
 
+  // Without these, every assertion below passes vacuously against an empty set — the exact shape of
+  // vacuous test this project has already shipped seven of.
   it("finds test files across every scanned root", () => {
     expect(files.length).toBeGreaterThan(50);
     for (const root of SCAN_ROOTS) {
-      expect(files.some((f) => f.includes(`${sep}${root}${sep}`))).toBe(true);
+      expect(files.some((file) => file.includes(`${sep}${root}${sep}`))).toBe(true);
     }
   });
 
   it("reaches packages/db's own suites", () => {
-    expect(files.some((f) => f.endsWith(join("db", "src", "client.test.ts")))).toBe(true);
+    expect(files.some((file) => file.endsWith(join("db", "src", "client.test.ts")))).toBe(true);
   });
 
-  it("exempts only itself, and does so", () => {
-    expect(files.some((f) => f.endsWith(SELF))).toBe(false);
-    // The exemption is by exact filename, so a sibling with a similar name stays in scope.
-    expect(isSkippable(join("packages", "db", "src", "client.test.ts"))).toBe(false);
+  it("skips node_modules, and exempts only itself", () => {
+    expect(files.some((file) => file.split(sep).includes("node_modules"))).toBe(false);
+    expect(files.some((file) => basename(file) === SELF)).toBe(false);
   });
 });
 
@@ -181,23 +216,34 @@ describe("the detector itself", () => {
   });
 
   it("accepts each guard form", () => {
-    const guarded = [
+    for (const source of [
       `afterAll(async () => {\n  if (db !== undefined) await db.close();\n});`,
       `afterAll(async () => {\n  if (db) await db.close();\n});`,
       `afterAll(async () => {\n  await db?.close();\n});`,
       `afterAll(async () => {\n  db && (await db.close());\n});`,
-    ];
-    for (const source of guarded) expect(findUnguarded(source)).toEqual([]);
+    ]) {
+      expect(findUnguarded(source)).toEqual([]);
+    }
   });
 
-  // Negative control: the detector must not fire on a closer OUTSIDE a teardown hook, which is the
-  // ordinary case (`await db.close()` at the end of an `it`) and vastly more common than the defect.
+  // Negative control: a closer outside a hook is the ordinary case and far more common than the
+  // defect, so a detector that flagged it would also have gone green against the tree.
   it("ignores closers outside teardown hooks", () => {
     expect(findUnguarded(`it("works", async () => {\n  await db.close();\n});`)).toEqual([]);
   });
 
   it("ignores a closer that only appears in a comment", () => {
     expect(findUnguarded(`afterAll(async () => {\n  // await db.close();\n});`)).toEqual([]);
+  });
+
+  it("is not fooled by a URL in a string literal", () => {
+    const source = `afterAll(async () => {\n  const uri = "postgres://h/db"; await db.close();\n});`;
+    expect(findUnguarded(source)).toHaveLength(1);
+  });
+
+  it("does not accept a guard that covers a different call", () => {
+    const source = `afterAll(async () => {\n  if (db !== undefined) await truncate(db);\n  await db.close();\n});`;
+    expect(findUnguarded(source)).toHaveLength(1);
   });
 
   it("covers stop and end, not just close", () => {
@@ -208,10 +254,11 @@ describe("the detector itself", () => {
 
 describe("every teardown in the tree", () => {
   it("guards the resource it releases", () => {
-    const findings = testFiles().flatMap((file) =>
-      findUnguarded(readFileSync(file, "utf8"), relative(REPO_ROOT, file)),
+    const report = testFiles().flatMap((file) =>
+      findUnguarded(readFileSync(file, "utf8"), relative(REPO_ROOT, file)).map(
+        (finding) => `${finding.file}:${finding.line} — ${finding.expression}`,
+      ),
     );
-    const report = findings.map((f) => `${f.file}:${f.line} — ${f.expression}`).sort();
     expect(report).toEqual([]);
   });
 });

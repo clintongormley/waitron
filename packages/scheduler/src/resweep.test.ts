@@ -1,11 +1,6 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  createPgliteDb,
-  runMigrations,
-  withTenant,
-  type Database,
-} from "@waitron/db";
+import { beforeEach, describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { TenantId } from "@waitron/shared";
 import { SCHEDULER_MIGRATIONS } from "./migrations.js";
 import { DEFAULTS, type LedgerSnapshot } from "./derive.js";
@@ -20,29 +15,20 @@ const TOMORROW = new Date("2026-07-26T04:00:00Z");
 const HORIZON_START = new Date("2026-06-01T00:00:00Z");
 const DUTY = "test.duty";
 
-let db: Database;
 let tenantId: TenantId;
 
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, SCHEDULER_MIGRATIONS);
-});
-
-afterAll(async () => {
-  if (db !== undefined) await db.close();
-});
+const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS] });
 
 beforeEach(async () => {
-  tenantId = await seedTenant(db);
+  tenantId = await seedTenant(suite.db);
 });
 
 function deps(duties: SchedulerDeps["duties"]): SchedulerDeps {
-  return { db, duties, ...DEFAULTS };
+  return { db: suite.db, duties, ...DEFAULTS };
 }
 
 function snapshotOf(): Promise<LedgerSnapshot> {
-  return withTenant(db, tenantId, (tx) =>
+  return withTenant(suite.db, tenantId, (tx) =>
     readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: HORIZON_START }),
   );
 }
@@ -85,7 +71,7 @@ describe("resweepAfter", () => {
   it("does not report a re-sweep time for a successor the guard refused", async () => {
     const soon = new Date("2026-07-25T05:00:00Z");
     const duty = new FakeDuty(DUTY, async (call) => {
-      await withTenant(db, tenantId, (tx) =>
+      await withTenant(suite.db, tenantId, (tx) =>
         tx.insert(scheduledRuns).values({
           tenantId,
           duty: DUTY,
@@ -161,7 +147,7 @@ describe("resweepAfter", () => {
     // 90 days back, which no gap derivation would ever reach.
     const old = new Date("2026-04-20T00:00:00Z");
     const duty = new FakeDuty(DUTY, () => Promise.resolve({ summary: {} }));
-    await withTenant(db, tenantId, async (tx) => {
+    await withTenant(suite.db, tenantId, async (tx) => {
       await tx.insert(scheduledRuns).values({
         tenantId,
         duty: DUTY,
@@ -193,12 +179,12 @@ describe("resweepAfter", () => {
         (r) => new Date(r.periodFrom).getTime() === call.period.from.getTime(),
       )!;
       const reclaimAt = new Date(call.now.getTime() + DEFAULTS.staleAfterMs + 1);
-      const reclaimed = await withTenant(db, tenantId, (tx) =>
+      const reclaimed = await withTenant(suite.db, tenantId, (tx) =>
         reclaimStale(tx, { id: row.id, now: reclaimAt, staleAfterMs: DEFAULTS.staleAfterMs }),
       );
       expect(reclaimed).not.toBeNull();
       // The reclaiming runner finishes its own attempt first, leaving the row terminal.
-      const won = await withTenant(db, tenantId, (tx) =>
+      const won = await withTenant(suite.db, tenantId, (tx) =>
         completeRun(tx, {
           id: reclaimed!.id,
           startedAt: reclaimed!.startedAt,

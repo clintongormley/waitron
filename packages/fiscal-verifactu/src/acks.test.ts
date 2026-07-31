@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations, withTenant } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { AckState } from "@waitron/fiscal";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { VerifactuBackend } from "./backend.js";
@@ -30,22 +30,14 @@ const PERIOD = { year: "2026", month: "07" };
 // falls back to when a lost-ack row carries no `enviado_en`.
 const CLOCK_INSTANT = new Date("2026-03-01T13:05:00+01:00");
 
-let db: Database;
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, FISCAL_MIGRATIONS);
-}, 60_000);
-afterAll(async () => {
-  if (db !== undefined) await db.close();
-});
+const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
 
 // Real per-test isolation (deliberately NOT drain.test.ts's shared-and-accumulating convention):
 // acks/envios/incidents carry no append-only trigger, so truncating them before each test leaves
 // only THIS test's freshly-seeded rows. registros_facturacion is append-only and left behind —
 // harmless, since nothing here reaches a registro except through its own envios/acks row.
 beforeEach(async () => {
-  await db.execute(sql`truncate table acks, incidents, envios cascade`);
+  await pg.db.execute(sql`truncate table acks, incidents, envios cascade`);
 });
 
 // A `type`, not an `interface`: `tx.execute<T>` constrains `T` to `Record<string, unknown>`, which
@@ -59,7 +51,7 @@ type AckRow = {
 };
 
 async function acksFor(tenantId: string): Promise<AckRow[]> {
-  const { rows } = await withTenant(db, tenantId, (tx) =>
+  const { rows } = await withTenant(pg.db, tenantId, (tx) =>
     tx.execute<AckRow>(
       sql`select registro_id, state, csv, submitted_at, delivered_at from acks where tenant_id = ${tenantId}`,
     ),
@@ -71,7 +63,7 @@ async function envioFor(
   tenantId: string,
   registroId: string,
 ): Promise<{ estado: string; csv: string | null; enviado_en: string | null }> {
-  const { rows } = await withTenant(db, tenantId, (tx) =>
+  const { rows } = await withTenant(pg.db, tenantId, (tx) =>
     tx.execute<{ estado: string; csv: string | null; enviado_en: string | null }>(
       sql`select estado, csv, enviado_en from envios where registro_id = ${registroId}`,
     ),
@@ -82,11 +74,11 @@ async function envioFor(
 describe("acks — production atomicity (drainer + reconcile)", () => {
   it("writes an ack atomically when the drainer sets a terminal estado", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
-    const seeded = await seedPendingEnvios(db, { count: 1 });
+    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
     const backend = new VerifactuBackend({
       deploymentEnvironment: "production",
       clock: seeded.clock,
-      db,
+      db: pg.db,
       resolveClient: staticResolver(aeat.client()),
     });
 
@@ -109,23 +101,23 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
 
   it("reconcile writes/updates an ack when it corrects a lostAck (pendiente → accepted)", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
-    const seeded = await seedPendingEnvios(db, { count: 1 });
+    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
     const backend = new VerifactuBackend({
       deploymentEnvironment: "production",
       clock: seeded.clock,
-      db,
+      db: pg.db,
       resolveClient: staticResolver(aeat.client()),
     });
     await backend.drain(DRAIN_AT); // AEAT now holds it Correcta; ours aceptado; drainer wrote an ack
 
     // Model a genuinely lost acknowledgement: our side never persisted the response, so it still
     // reads `pendiente`, has no CSV, was never claimed (`enviado_en` null), and carries no ack.
-    await withTenant(db, seeded.tenantId, (tx) =>
+    await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute(
         sql`update envios set estado = 'pendiente', confirmado_en = null, csv = null, enviado_en = null where tenant_id = ${seeded.tenantId}`,
       ),
     );
-    await db.execute(sql`truncate table acks`);
+    await pg.db.execute(sql`truncate table acks`);
 
     const result = await backend.reconcile(seeded.tenantId, PERIOD);
 
@@ -151,11 +143,11 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
 
   it("INVARIANT: every ack agrees with the committed envios.estado it reflects (drain + reconcile)", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
-    const seeded = await seedPendingEnvios(db, { count: 2 });
+    const seeded = await seedPendingEnvios(pg.db, { count: 2 });
     const backend = new VerifactuBackend({
       deploymentEnvironment: "production",
       clock: seeded.clock,
-      db,
+      db: pg.db,
       resolveClient: staticResolver(aeat.client()),
     });
 
@@ -163,16 +155,16 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
     await backend.drain(DRAIN_AT);
 
     // Producer 2 — force record 0 into a lost-ack state and let reconcile correct + re-ack it.
-    await withTenant(db, seeded.tenantId, (tx) =>
+    await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute(
         sql`update envios set estado = 'pendiente', confirmado_en = null, csv = null where registro_id = ${seeded.registroIds[0]}`,
       ),
     );
-    await db.execute(sql`delete from acks where registro_id = ${seeded.registroIds[0]}`);
+    await pg.db.execute(sql`delete from acks where registro_id = ${seeded.registroIds[0]}`);
     await backend.reconcile(seeded.tenantId, PERIOD);
 
     // The load-bearing invariant: for EVERY acked row, acks.state === ackStateOf(envios.estado).
-    const { rows } = await withTenant(db, seeded.tenantId, (tx) =>
+    const { rows } = await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute<{ state: string; estado: string }>(sql`
         select a.state, e.estado
         from acks a join envios e on e.registro_id = a.registro_id
@@ -187,20 +179,20 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
 
   it("is idempotent: a second reconcile after a correction finds a clean match and does not double-write", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
-    const seeded = await seedPendingEnvios(db, { count: 1 });
+    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
     const backend = new VerifactuBackend({
       deploymentEnvironment: "production",
       clock: seeded.clock,
-      db,
+      db: pg.db,
       resolveClient: staticResolver(aeat.client()),
     });
     await backend.drain(DRAIN_AT);
-    await withTenant(db, seeded.tenantId, (tx) =>
+    await withTenant(pg.db, seeded.tenantId, (tx) =>
       tx.execute(
         sql`update envios set estado = 'pendiente', confirmado_en = null, csv = null where tenant_id = ${seeded.tenantId}`,
       ),
     );
-    await db.execute(sql`truncate table acks`);
+    await pg.db.execute(sql`truncate table acks`);
 
     const first = await backend.reconcile(seeded.tenantId, PERIOD);
     expect(first.lostAck).toHaveLength(1); // corrected on the first pass
@@ -220,54 +212,56 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
 describe("acks — durable transport (pendingAcks / markDelivered)", () => {
   it("pendingAcks returns undelivered acks; markDelivered clears them", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
-    const seeded = await seedPendingEnvios(db, { count: 2 });
+    const seeded = await seedPendingEnvios(pg.db, { count: 2 });
     const backend = new VerifactuBackend({
       deploymentEnvironment: "production",
       clock: seeded.clock,
-      db,
+      db: pg.db,
       resolveClient: staticResolver(aeat.client()),
     });
     await backend.drain(DRAIN_AT); // two accepted records → two acks
 
-    const before = await pendingAcks(db, seeded.tenantId);
+    const before = await pendingAcks(pg.db, seeded.tenantId);
     expect(before).toHaveLength(2);
     expect(before.map((a) => a.recordId).sort()).toEqual([...seeded.registroIds].sort());
     expect(before.every((a) => a.state === "accepted")).toBe(true);
     expect(before.every((a) => a.csv !== null)).toBe(true);
     expect(before.every((a) => a.submittedAt instanceof Date)).toBe(true);
 
-    await markDelivered(db, seeded.tenantId, seeded.registroIds[0]!);
+    await markDelivered(pg.db, seeded.tenantId, seeded.registroIds[0]!);
 
-    const after = await pendingAcks(db, seeded.tenantId);
+    const after = await pendingAcks(pg.db, seeded.tenantId);
     expect(after.map((a) => a.recordId)).toEqual([seeded.registroIds[1]]);
   });
 
   it("writeAck writes nothing for a non-terminal estado (a record with no ack keeps counting)", async () => {
     // Cert-expired at the DB level: the submission never happened, the row is still `pendiente`, so
     // no ack is produced. Mirrors the projection's cert-expired case one layer down.
-    const seeded = await seedPendingEnvios(db, { count: 1 });
-    await withTenant(db, seeded.tenantId, (tx) => writeAck(tx, seeded.registroIds[0]!, DRAIN_AT));
+    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
+    await withTenant(pg.db, seeded.tenantId, (tx) =>
+      writeAck(tx, seeded.registroIds[0]!, DRAIN_AT),
+    );
     expect(await acksFor(seeded.tenantId)).toHaveLength(0);
   });
 
   it("deleteAck removes a record's ack row, and is a no-op when there is none", async () => {
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
-    const seeded = await seedPendingEnvios(db, { count: 1 });
+    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
     const backend = new VerifactuBackend({
       deploymentEnvironment: "production",
       clock: seeded.clock,
-      db,
+      db: pg.db,
       resolveClient: staticResolver(aeat.client()),
     });
     await backend.drain(DRAIN_AT); // writes an `accepted` ack
 
     expect(await acksFor(seeded.tenantId)).toHaveLength(1);
 
-    await withTenant(db, seeded.tenantId, (tx) => deleteAck(tx, seeded.registroIds[0]!));
+    await withTenant(pg.db, seeded.tenantId, (tx) => deleteAck(tx, seeded.registroIds[0]!));
     expect(await acksFor(seeded.tenantId)).toHaveLength(0);
 
     // Idempotent: deleting an already-absent ack does not throw.
-    await withTenant(db, seeded.tenantId, (tx) => deleteAck(tx, seeded.registroIds[0]!));
+    await withTenant(pg.db, seeded.tenantId, (tx) => deleteAck(tx, seeded.registroIds[0]!));
     expect(await acksFor(seeded.tenantId)).toHaveLength(0);
   });
 });

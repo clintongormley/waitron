@@ -283,17 +283,18 @@ scratchpad path failed `EINVAL` before it could even reach `ECONNREFUSED`. Two w
 (`apk add --no-cache nodejs npm && npm i pg@<version>`), where node and the server share a
 namespace; everything that is only PARSING — `new URL` versus `pg`'s own parse — is fine on the host.
 
-**Guard every teardown**: `if (db !== undefined) await db.close()`. **Enforced** —
-`packages/db/src/guarded-teardowns.test.ts` scans every `*.test.ts` under `packages/` and `apps/` and
-fails on an unguarded closer inside `afterAll`/`afterEach`. It was added after a hand count said 41
-and the guard found **94**; that count had already been recorded wrongly twice before, which is why
-it is now a test rather than a paragraph.
+**Don't own a database in a suite — let a helper own it.** `usePgliteDb` and `useRealPostgres`
+(`@waitron/db/testing/lifecycle.js`) register their own `beforeAll`/`afterAll` and hand back an
+accessor that **throws** rather than returning `undefined` if read before setup. A suite using them
+cannot write a broken teardown, because it writes no teardown. Reach for a raw
+`beforeAll`/`afterAll` pair only when the suite legitimately builds its own resource — a unit test
+_of_ the constructor, or a race needing several distinct connections.
 
-What it costs, measured rather than assumed (scratch suite, `beforeAll` throwing a known error, run
-both ways under vitest): unguarded reports **two** errors, the real one _and_ the
-`Cannot read properties of undefined` — guarded reports **one**. The spurious error accompanies the
-real one rather than replacing it, so this is about attention, not suppression: it doubles the
-failure count, and when several suites fail together the real cause is what gets scrolled past.
+**Where you must, guard it**: `if (db !== undefined) await db.close()`. **Enforced** by
+`packages/db/src/guarded-teardowns.test.ts`, which also records what an unguarded teardown costs,
+why an ESLint rule was rejected, and the two things the guard cannot see. Read it before changing
+it — a convention this file had already stated was violated in 94 places, which is the general
+lesson: **a written rule with standing violations needs a guard, not another paragraph.**
 
 Suites sharing a database must clean up in a `finally` so they are order-independent, not
 order-reliant — several tests have been fixed for exactly this.

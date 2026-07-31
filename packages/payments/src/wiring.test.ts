@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
   seriesId as brandSeriesId,
@@ -28,23 +28,15 @@ import type { SeededForSale } from "../test/seed.js";
 // THE SAME TRANSACTION as the sale, so the linkage is atomic. It is the first consumer of
 // `@waitron/core` (a dev dependency) from this package.
 
-let db: Database;
-
-beforeAll(async () => {
-  db = await createPgliteDb();
-  // The core schema (tenants/locations/tills/invoice_series/sales/sale_lines/tenders) plus this
-  // package's own `payments`/`payment_refunds`. Both are needed: the payment rows and the sale
-  // rows both get written in this file.
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, PAYMENTS_MIGRATIONS);
-  // Creates the fake backend's own `fake_till_registrations`/`fake_fiscal_records` tables. Without
-  // it `registerTill`/`recordSale` fail with "relation fake_fiscal_records does not exist" — the
-  // same install `record-sale.test.ts` performs.
-  await FakeFiscalBackend.install(db);
-}, 60_000);
-
-afterAll(async () => {
-  if (db !== undefined) await db.close();
+// The core schema (tenants/locations/tills/invoice_series/sales/sale_lines/tenders) plus this
+// package's own `payments`/`payment_refunds`. Both are needed: the payment rows and the sale
+// rows both get written in this file. The setup step creates the fake backend's own
+// `fake_till_registrations`/`fake_fiscal_records` tables. Without it `registerTill`/`recordSale`
+// fail with "relation fake_fiscal_records does not exist" — the same install
+// `record-sale.test.ts` performs.
+const pg = usePgliteDb({
+  migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
+  setup: (db) => FakeFiscalBackend.install(db),
 });
 
 // Each test seeds a FRESH tenant (its own till, series and working order), so nothing is truncated
@@ -115,9 +107,9 @@ function buildInput(
 
 describe("collect -> recordSale -> associate (the payment seam, end to end)", () => {
   it("settles a tender, chains the sale, and associates the payment atomically", async () => {
-    const backend = new FakeFiscalBackend(db);
-    const s = await seedForSale(db, backend, freshNif());
-    const provider = new FakePaymentProvider(db, s.tenantId);
+    const backend = new FakeFiscalBackend(pg.db);
+    const s = await seedForSale(pg.db, backend, freshNif());
+    const provider = new FakePaymentProvider(pg.db, s.tenantId);
 
     // 1. The payment settles the tender.
     const paid = await provider.collect({
@@ -132,7 +124,7 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
     // 2. The sale and the associate-back happen in ONE transaction, so the linkage is atomic with
     //    the sale it points at (the composite FK `payments_sale_fk` is satisfied within the tx
     //    because the sale row already exists there).
-    const saleId = await db.transaction(async (tx) => {
+    const saleId = await pg.db.transaction(async (tx) => {
       const recorded = await recordSale(tx, backend, buildInput(s, paid));
       await associatePaymentWithSale(tx, {
         tenantId: s.tenantId,
@@ -144,7 +136,7 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
     });
 
     // 3. After commit, the payment row carries the committed sale's id.
-    const row = await db.transaction((tx) =>
+    const row = await pg.db.transaction((tx) =>
       getPaymentByRef(tx, { tenantId: s.tenantId, provider: "fake", paymentRef: paid.paymentRef }),
     );
     expect(row?.saleId).toBe(saleId);
@@ -152,9 +144,9 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
   });
 
   it("refuses the sale when the payment failed and leaves the tender unsettled", async () => {
-    const backend = new FakeFiscalBackend(db);
-    const s = await seedForSale(db, backend, freshNif());
-    const provider = new FakePaymentProvider(db, s.tenantId);
+    const backend = new FakeFiscalBackend(pg.db);
+    const s = await seedForSale(pg.db, backend, freshNif());
+    const provider = new FakePaymentProvider(pg.db, s.tenantId);
     provider.failNextCollect();
 
     const paid = await provider.collect({
@@ -171,7 +163,7 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
     // transaction directly (no Drizzle wrapper) and its `code` is asserted exactly as the sibling
     // core test does.
     await expect(
-      db.transaction((tx) => recordSale(tx, backend, buildInput(s, paid))),
+      pg.db.transaction((tx) => recordSale(tx, backend, buildInput(s, paid))),
     ).rejects.toMatchObject({ code: "sale.tender_unsettled" });
   });
 });

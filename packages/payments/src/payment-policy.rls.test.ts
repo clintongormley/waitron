@@ -1,11 +1,10 @@
-import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import { decimal } from "@waitron/shared";
 import { getPaymentByRef, insertAcceptedOffline } from "./store.js";
 import { getPaymentPolicy } from "./policy.js";
-import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { startRealPostgres } from "./testing/postgres.js";
 import { seedPaymentPolicy, seedWorkingOrder } from "../test/seed.js";
 
 // A non-superuser LOGIN role distinct from payments.rls.test.ts's `rls_probe` so the two suites'
@@ -13,31 +12,23 @@ import { seedPaymentPolicy, seedWorkingOrder } from "../test/seed.js";
 const PROBE_ROLE = "rls_probe_policy";
 const PROBE_PASSWORD = "probe";
 
-let pg: RealPostgres;
-let admin: Database;
-
-beforeAll(async () => {
-  pg = await startRealPostgres();
-  admin = await pg.connect();
-  await admin.execute(
-    sql.raw(`create role ${PROBE_ROLE} login password '${PROBE_PASSWORD}' in role app_user`),
-  );
-});
-afterAll(async () => {
-  if (admin !== undefined) await admin.close();
-  if (pg !== undefined) await pg.stop();
+// vitest.config.ts's hookTimeout, which this container start had before the helper's 60s default.
+const postgres = useRealPostgres({
+  start: startRealPostgres,
+  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
+  timeoutMs: 180_000,
 });
 
 const SETTLED = new Date("2026-07-23T10:00:00Z");
 
 describe("payment_policy + offline payments under real row-level security", () => {
   it("an app_user role reads its own tenant's policy and offline payment, and only its own", async () => {
-    const tenantA = await seedWorkingOrder(admin, "B31111111");
-    const tenantB = await seedWorkingOrder(admin, "B32222222");
+    const tenantA = await seedWorkingOrder(postgres.admin, "B31111111");
+    const tenantB = await seedWorkingOrder(postgres.admin, "B32222222");
     // Seed A's policy as superuser (RLS bypassed for setup).
-    await seedPaymentPolicy(admin, tenantA.tenantId, "accept_offline", "40.00");
+    await seedPaymentPolicy(postgres.admin, tenantA.tenantId, "accept_offline", "40.00");
 
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const probe = await postgres.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       // INSERT an accepted_offline payment as rls_probe, scoped to A — proves INSERT grant + WITH CHECK.
       await withTenant(probe, tenantA.tenantId, (tx) =>

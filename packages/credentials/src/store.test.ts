@@ -1,13 +1,6 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  asAppUser,
-  createPgliteDb,
-  runMigrations,
-  withTenant,
-  type Database,
-} from "@waitron/db";
+import { describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import { hasCode } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
 import { aadFor, seal } from "./cipher.js";
@@ -23,6 +16,7 @@ import {
 } from "./store.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { captured } from "./testing/captured.js";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 
 const K1 = Buffer.alloc(32, 1).toString("base64");
 const K2 = Buffer.alloc(32, 2).toString("base64");
@@ -39,31 +33,21 @@ const STRIPE = {
   cancelUrl: "https://example.test/no",
 };
 
-let db: Database;
-
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, CREDENTIALS_MIGRATIONS);
-});
-
-afterAll(async () => {
-  if (db !== undefined) await db.close();
-});
+const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
 
 /** A tenant per test. `store.test.ts` in packages/scheduler is an order-dependent chain over one
  * shared key and it bit during a later fix; this suite pays one insert per test to avoid that. */
 async function freshTenant(): Promise<TenantId> {
-  return seedTenant(db);
+  return seedTenant(suite.db);
 }
 
 describe("putCredential and getCredential", () => {
   it("round-trips a payload through the database", async () => {
     const tenantId = await freshTenant();
-    await withTenant(db, tenantId, (tx) =>
+    await withTenant(suite.db, tenantId, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
-    const actual = await withTenant(db, tenantId, (tx) =>
+    const actual = await withTenant(suite.db, tenantId, (tx) =>
       getCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe" }),
     );
     expect(actual).toEqual(STRIPE);
@@ -71,10 +55,10 @@ describe("putCredential and getCredential", () => {
 
   it("stores no plaintext in the row", async () => {
     const tenantId = await freshTenant();
-    await withTenant(db, tenantId, (tx) =>
+    await withTenant(suite.db, tenantId, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
-    const rows = await db.execute<{ blob: string }>(sql`
+    const rows = await suite.db.execute<{ blob: string }>(sql`
       select encode(ciphertext, 'escape') as blob from tenant_credentials
       where tenant_id = ${tenantId}`);
     expect(rows.rows[0]!.blob).not.toContain("sk_test_x");
@@ -82,14 +66,14 @@ describe("putCredential and getCredential", () => {
 
   it("overwrites an existing purpose rather than failing on the primary key", async () => {
     const tenantId = await freshTenant();
-    await withTenant(db, tenantId, (tx) =>
+    await withTenant(suite.db, tenantId, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
     const updated = { ...STRIPE, secretKey: "sk_test_rotated" };
-    await withTenant(db, tenantId, (tx) =>
+    await withTenant(suite.db, tenantId, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: updated }),
     );
-    const actual = await withTenant(db, tenantId, (tx) =>
+    const actual = await withTenant(suite.db, tenantId, (tx) =>
       getCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe" }),
     );
     expect(actual).toEqual(updated);
@@ -97,10 +81,10 @@ describe("putCredential and getCredential", () => {
 
   it("stamps the ring's current key version", async () => {
     const tenantId = await freshTenant();
-    await withTenant(db, tenantId, (tx) =>
+    await withTenant(suite.db, tenantId, (tx) =>
       putCredential(tx, RING_V2_ONLY, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
-    const rows = await db.execute<{ key_version: number }>(sql`
+    const rows = await suite.db.execute<{ key_version: number }>(sql`
       select key_version from tenant_credentials where tenant_id = ${tenantId}`);
     expect(rows.rows[0]!.key_version).toBe(2);
   });
@@ -124,14 +108,14 @@ describe("putCredential and getCredential", () => {
     // mean the UPDATE branch's `updatedAt` set line actually ran — deterministic regardless of how
     // fast the two puts complete.
     const tenantId = await freshTenant();
-    await withTenant(db, tenantId, (tx) =>
+    await withTenant(suite.db, tenantId, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
     const BACKDATED = "2020-01-01T00:00:00Z";
-    await db.execute(sql`
+    await suite.db.execute(sql`
       update tenant_credentials set updated_at = ${BACKDATED}
       where tenant_id = ${tenantId} and purpose = 'payments.stripe'`);
-    const before = await db.execute<{ updated_at: string }>(sql`
+    const before = await suite.db.execute<{ updated_at: string }>(sql`
       select updated_at from tenant_credentials where tenant_id = ${tenantId}`);
     const rotated = loadKeyRing({
       WAITRON_CREDENTIALS_KEY: K2,
@@ -140,14 +124,14 @@ describe("putCredential and getCredential", () => {
       WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "1",
     });
     const updated = { ...STRIPE, secretKey: "sk_test_rotated" };
-    await withTenant(db, tenantId, (tx) =>
+    await withTenant(suite.db, tenantId, (tx) =>
       putCredential(tx, rotated, { tenantId, purpose: "payments.stripe", value: updated }),
     );
-    const after = await db.execute<{ key_version: number; updated_at: string }>(sql`
+    const after = await suite.db.execute<{ key_version: number; updated_at: string }>(sql`
       select key_version, updated_at from tenant_credentials where tenant_id = ${tenantId}`);
     expect(after.rows[0]!.key_version).toBe(2);
     expect(after.rows[0]!.updated_at).not.toBe(before.rows[0]!.updated_at);
-    const actual = await withTenant(db, tenantId, (tx) =>
+    const actual = await withTenant(suite.db, tenantId, (tx) =>
       getCredential(tx, rotated, { tenantId, purpose: "payments.stripe" }),
     );
     expect(actual).toEqual(updated);
@@ -157,14 +141,14 @@ describe("putCredential and getCredential", () => {
     const tenantId = await freshTenant();
     // The row count is read via `tx.execute`, INSIDE the same still-open transaction
     // `putCredential` ran in — not via the top-level `db` handle afterward. `withTenant` wraps
-    // this whole callback in `db.transaction(...)`, which rolls back the ENTIRE transaction on an
+    // this whole callback in `suite.db.transaction(...)`, which rolls back the ENTIRE transaction on an
     // uncaught throw regardless of where inside it the throw happened, so a post-hoc external
     // count can never tell "validated before the insert" apart from "validated after it" — both
     // end at 0 rows once the transaction unwinds. `captured` here catches the AppError itself
     // (rather than letting it escape `withTenant`'s callback), so the transaction commits
     // normally; the SELECT below observes whatever `putCredential` actually did before failing,
     // not what a rollback erased on its behalf.
-    const n = await withTenant(db, tenantId, async (tx) => {
+    const n = await withTenant(suite.db, tenantId, async (tx) => {
       const error = await captured(() =>
         putCredential(tx, RING_V1, {
           tenantId,
@@ -183,7 +167,7 @@ describe("putCredential and getCredential", () => {
   it("raises credentials.missing for a purpose that was never provisioned", async () => {
     const tenantId = await freshTenant();
     const error = await captured(() =>
-      withTenant(db, tenantId, (tx) =>
+      withTenant(suite.db, tenantId, (tx) =>
         getCredential(tx, RING_V1, { tenantId, purpose: "fiscal.aeat" }),
       ),
     );
@@ -192,7 +176,7 @@ describe("putCredential and getCredential", () => {
 
   it("raises credentials.decrypt_failed when the ring's key is wrong", async () => {
     const tenantId = await freshTenant();
-    await withTenant(db, tenantId, (tx) =>
+    await withTenant(suite.db, tenantId, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
     // Same VERSION, different key material — the operator replaced the key without rotating.
@@ -201,7 +185,7 @@ describe("putCredential and getCredential", () => {
       WAITRON_CREDENTIALS_KEY_VERSION: "1",
     });
     const error = await captured(() =>
-      withTenant(db, tenantId, (tx) =>
+      withTenant(suite.db, tenantId, (tx) =>
         getCredential(tx, wrong, { tenantId, purpose: "payments.stripe" }),
       ),
     );
@@ -210,11 +194,11 @@ describe("putCredential and getCredential", () => {
 
   it("raises credentials.key_version_unknown when the ring lost the row's key", async () => {
     const tenantId = await freshTenant();
-    await withTenant(db, tenantId, (tx) =>
+    await withTenant(suite.db, tenantId, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
     const error = await captured(() =>
-      withTenant(db, tenantId, (tx) =>
+      withTenant(suite.db, tenantId, (tx) =>
         getCredential(tx, RING_V2_ONLY, { tenantId, purpose: "payments.stripe" }),
       ),
     );
@@ -225,7 +209,7 @@ describe("putCredential and getCredential", () => {
     // The reason key_version is a column and not a constant. A rotate killed half-way leaves rows
     // on both versions, and the vault must keep serving both until it is re-run.
     const tenantId = await freshTenant();
-    await withTenant(db, tenantId, (tx) =>
+    await withTenant(suite.db, tenantId, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
     const both = loadKeyRing({
@@ -234,17 +218,17 @@ describe("putCredential and getCredential", () => {
       WAITRON_CREDENTIALS_KEY_PREVIOUS: K1,
       WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "1",
     });
-    await withTenant(db, tenantId, (tx) =>
+    await withTenant(suite.db, tenantId, (tx) =>
       putCredential(tx, both, {
         tenantId,
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" },
       }),
     );
-    const onV1 = await withTenant(db, tenantId, (tx) =>
+    const onV1 = await withTenant(suite.db, tenantId, (tx) =>
       getCredential(tx, both, { tenantId, purpose: "payments.stripe" }),
     );
-    const onV2 = await withTenant(db, tenantId, (tx) =>
+    const onV2 = await withTenant(suite.db, tenantId, (tx) =>
       getCredential(tx, both, { tenantId, purpose: "fiscal.aeat" }),
     );
     expect(onV1).toEqual(STRIPE);
@@ -266,7 +250,7 @@ describe("getCredential — a row that decrypts to something that is not a crede
     plaintext: string,
   ): Promise<void> {
     const sealed = seal(RING_V1.current.key, aadFor(tenantId, purpose), plaintext);
-    await withTenant(db, tenantId, (tx) =>
+    await withTenant(suite.db, tenantId, (tx) =>
       tx.insert(tenantCredentials).values({
         tenantId,
         purpose,
@@ -284,7 +268,7 @@ describe("getCredential — a row that decrypts to something that is not a crede
     // `SyntaxError` would otherwise quote verbatim into its own message.
     await sealRawRow(tenantId, "payments.stripe", "sk_live_51ABCDEF");
     const error = await captured(() =>
-      withTenant(db, tenantId, (tx) =>
+      withTenant(suite.db, tenantId, (tx) =>
         getCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe" }),
       ),
     );
@@ -298,7 +282,7 @@ describe("getCredential — a row that decrypts to something that is not a crede
     const tenantId = await freshTenant();
     await sealRawRow(tenantId, "payments.stripe", "null");
     const error = await captured(() =>
-      withTenant(db, tenantId, (tx) =>
+      withTenant(suite.db, tenantId, (tx) =>
         getCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe" }),
       ),
     );
@@ -314,7 +298,7 @@ describe("getCredential — a row that decrypts to something that is not a crede
     const tenantId = await freshTenant();
     await sealRawRow(tenantId, "payments.stripe", JSON.stringify(["sk_live_x"]));
     const error = await captured(() =>
-      withTenant(db, tenantId, (tx) =>
+      withTenant(suite.db, tenantId, (tx) =>
         getCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe" }),
       ),
     );
@@ -329,7 +313,7 @@ describe("getCredential — a row that decrypts to something that is not a crede
     const tenantId = await freshTenant();
     await sealRawRow(tenantId, "payments.stripe", JSON.stringify("sk_live_x"));
     const error = await captured(() =>
-      withTenant(db, tenantId, (tx) =>
+      withTenant(suite.db, tenantId, (tx) =>
         getCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe" }),
       ),
     );
@@ -340,7 +324,7 @@ describe("getCredential — a row that decrypts to something that is not a crede
 describe("tryGetCredential", () => {
   it("returns null rather than throwing when nothing is provisioned", async () => {
     const tenantId = await freshTenant();
-    const actual = await withTenant(db, tenantId, (tx) =>
+    const actual = await withTenant(suite.db, tenantId, (tx) =>
       tryGetCredential(tx, RING_V1, { tenantId, purpose: "fiscal.aeat" }),
     );
     expect(actual).toBeNull();
@@ -350,14 +334,14 @@ describe("tryGetCredential", () => {
 describe("deleteCredential", () => {
   it("removes the row and reports that it did", async () => {
     const tenantId = await freshTenant();
-    await withTenant(db, tenantId, (tx) =>
+    await withTenant(suite.db, tenantId, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
-    const deleted = await withTenant(db, tenantId, (tx) =>
+    const deleted = await withTenant(suite.db, tenantId, (tx) =>
       deleteCredential(tx, { tenantId, purpose: "payments.stripe" }),
     );
     expect(deleted).toBe(true);
-    const after = await withTenant(db, tenantId, (tx) =>
+    const after = await withTenant(suite.db, tenantId, (tx) =>
       tryGetCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe" }),
     );
     expect(after).toBeNull();
@@ -365,7 +349,7 @@ describe("deleteCredential", () => {
 
   it("reports false when there was nothing to delete", async () => {
     const tenantId = await freshTenant();
-    const deleted = await withTenant(db, tenantId, (tx) =>
+    const deleted = await withTenant(suite.db, tenantId, (tx) =>
       deleteCredential(tx, { tenantId, purpose: "payments.stripe" }),
     );
     expect(deleted).toBe(false);
@@ -375,7 +359,7 @@ describe("deleteCredential", () => {
 describe("listCredentials", () => {
   it("returns metadata and never a value", async () => {
     const tenantId = await freshTenant();
-    await withTenant(db, tenantId, (tx) =>
+    await withTenant(suite.db, tenantId, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
     // listCredentials(tx) carries no explicit tenant filter — its scoping IS the RLS policy
@@ -383,7 +367,7 @@ describe("listCredentials", () => {
     // superuser and bypasses RLS unconditionally, so without asAppUser this assertion would pass
     // for the wrong reason — the row count would only ever match by accident of test order. Same
     // precedent as packages/core's incidents.test.ts.
-    const rows = await withTenant(db, tenantId, async (tx) => {
+    const rows = await withTenant(suite.db, tenantId, async (tx) => {
       await asAppUser(tx);
       return listCredentials(tx);
     });

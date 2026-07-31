@@ -1,33 +1,41 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { Database } from "./client.js";
+import { beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "./testing/errors.js";
-import { runMigrationSets, startMigratedPostgres, type RealPostgres } from "./testing/postgres.js";
+import { useRealPostgres } from "./testing/lifecycle.js";
+import { runMigrationSets, startMigratedPostgres } from "./testing/postgres.js";
 
 const PASSWORD = "provisioner_suite_password";
 
 describe("tenant_provisioner", () => {
-  let pg: RealPostgres;
-  let admin: Database;
+  // `timeoutMs` restates this package's own vitest `hookTimeout` (120s), which the helper's 60s
+  // default would otherwise narrow: see vitest.config.ts — the figure covers pulling the Postgres
+  // image on a cold runner, which is measured in minutes rather than seconds.
+  const suite = useRealPostgres({
+    start: () =>
+      startMigratedPostgres({
+        dockerRequired:
+          "The tenant_provisioner suite requires a running Docker daemon. It cannot be skipped: " +
+          "PGlite runs every connection as a superuser, which bypasses both the grant check and " +
+          "the RLS policy this suite exists to tell apart.",
+        migrate: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
+      }),
+    timeoutMs: 120_000,
+  });
 
+  // Three roles rather than the helper's single `probeRole`: what this suite compares is the
+  // MEMBERSHIP each one holds, so they have to be created as a set and read as a set. Registered
+  // after the helper's own hook, which vitest runs first — and which, if it throws, stops this one
+  // from running at all (verified on vitest 3.2.7), so `suite.admin` is never read unstarted.
   beforeAll(async () => {
-    pg = await startMigratedPostgres({
-      dockerRequired:
-        "The tenant_provisioner suite requires a running Docker daemon. It cannot be skipped: " +
-        "PGlite runs every connection as a superuser, which bypasses both the grant check and " +
-        "the RLS policy this suite exists to tell apart.",
-      migrate: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
-    });
-    admin = await pg.connect();
     // Two LOGIN roles differing in ONE membership: the whole point of the suite is that the
     // difference between them is the grant, not anything about RLS.
-    await admin.execute(
+    await suite.admin.execute(
       sql.raw(
         `create role provisioner_login login password '${PASSWORD}' in role app_user, tenant_provisioner`,
       ),
     );
-    await admin.execute(
+    await suite.admin.execute(
       sql.raw(`create role app_only_login login password '${PASSWORD}' in role app_user`),
     );
     // A THIRD role, and the only one in this file that `GRANT app_user TO tenant_provisioner`
@@ -35,23 +43,15 @@ describe("tenant_provisioner", () => {
     // `tenant_provisioner` ALONE, so everything `app_user` grants reaches it transitively or not
     // at all. `provisioner_login` above holds `app_user` DIRECTLY, which is why deleting that GRANT
     // from 0011 left this whole suite green before this role existed.
-    await admin.execute(
+    await suite.admin.execute(
       sql.raw(
         `create role provisioner_only_login login password '${PASSWORD}' in role tenant_provisioner`,
       ),
     );
   });
 
-  afterAll(async () => {
-    // GUARDED teardown. An unguarded afterAll turns a beforeAll failure into "Cannot read
-    // properties of undefined (reading 'close')" and masks the real error — the pattern this repo
-    // is trying to stop repeating.
-    if (admin !== undefined) await admin.close();
-    if (pg !== undefined) await pg.stop();
-  });
-
   it("lets a member insert the tenant whose scope it adopts", async () => {
-    const db = await pg.connectAs("provisioner_login", PASSWORD);
+    const db = await suite.pg.connectAs("provisioner_login", PASSWORD);
     try {
       const id = "11111111-1111-4111-8111-111111111111";
       await db.transaction(async (tx) => {
@@ -80,7 +80,7 @@ describe("tenant_provisioner", () => {
   // `app_user` carries SELECT on `tenants` and the locations/tills/invoice_series grants down to it.
   // Proven by deletion — see this file's own commit message.
   it("provisions through the bucket's membership alone, without app_user granted directly", async () => {
-    const db = await pg.connectAs("provisioner_only_login", PASSWORD);
+    const db = await suite.pg.connectAs("provisioner_only_login", PASSWORD);
     try {
       const memberships = await db.execute<{ rolname: string }>(sql`
         select g.rolname
@@ -123,7 +123,7 @@ describe("tenant_provisioner", () => {
   });
 
   it("refuses a role holding app_user alone, on the GRANT and not the policy", async () => {
-    const db = await pg.connectAs("app_only_login", PASSWORD);
+    const db = await suite.pg.connectAs("app_only_login", PASSWORD);
     try {
       const id = "22222222-2222-4222-8222-222222222222";
       const error = await captureError(() =>

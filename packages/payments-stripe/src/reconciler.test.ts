@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations, withTenant } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { beforeEach, describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { decimal, tenantId as brandTenantId } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS, insertCapturedPayment, insertInitiated } from "@waitron/payments";
 import { seedWorkingOrder, freshNif } from "@waitron/payments/test/seed.js";
@@ -8,20 +8,10 @@ import { StripeReconciler } from "./reconciler.js";
 import { FakeStripeReport } from "./testing/fake-stripe-report.js";
 import { FakeStripe } from "./testing/fake-stripe.js";
 
-let db: Database;
-
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, PAYMENTS_MIGRATIONS);
-}, 60_000);
-
-afterAll(async () => {
-  if (db !== undefined) await db.close();
-});
+const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 beforeEach(async () => {
-  await db.execute("truncate incidents, payment_refunds, payments cascade");
+  await pg.db.execute("truncate incidents, payment_refunds, payments cascade");
 });
 
 const NOW = new Date("2026-07-25T12:00:00Z");
@@ -33,7 +23,7 @@ function reconciler(
   refunder: FakeStripe = new FakeStripe(),
 ): StripeReconciler {
   return new StripeReconciler({
-    db,
+    db: pg.db,
     resolveAccount: () => Promise.resolve({ report: client, refund: refunder }),
   });
 }
@@ -46,7 +36,7 @@ async function abandonedOrphan(params: {
   paymentRef: string;
   externalRef: string;
 }): Promise<void> {
-  await withTenant(db, params.tenantId, (tx) =>
+  await withTenant(pg.db, params.tenantId, (tx) =>
     insertCapturedPayment(tx, {
       tenantId: params.tenantId,
       workingOrderId: params.workingOrderId,
@@ -57,7 +47,7 @@ async function abandonedOrphan(params: {
       settledAt: OLD,
     }),
   );
-  await db.execute(
+  await pg.db.execute(
     `update working_orders set status = 'abandoned' where id = '${params.workingOrderId}'`,
   );
 }
@@ -68,9 +58,9 @@ describe("StripeReconciler", () => {
   });
 
   it("matches a terminal row by its payment intent and reports no mismatch", async () => {
-    const seeded = await seedWorkingOrder(db, freshNif());
+    const seeded = await seedWorkingOrder(pg.db, freshNif());
     // No sale, but the working order is still open, so this is not an orphan — the clean case.
-    await withTenant(db, seeded.tenantId, (tx) =>
+    await withTenant(pg.db, seeded.tenantId, (tx) =>
       insertCapturedPayment(tx, {
         tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
@@ -94,8 +84,8 @@ describe("StripeReconciler", () => {
   });
 
   it("matches a HOSTED row by its checkout session id, which the ledger never carries", async () => {
-    const seeded = await seedWorkingOrder(db, freshNif());
-    await withTenant(db, seeded.tenantId, (tx) =>
+    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    await withTenant(pg.db, seeded.tenantId, (tx) =>
       insertInitiated(tx, {
         tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
@@ -120,7 +110,7 @@ describe("StripeReconciler", () => {
   });
 
   it("reports a settlement with no local row as missingLocal", async () => {
-    const seeded = await seedWorkingOrder(db, freshNif());
+    const seeded = await seedWorkingOrder(pg.db, freshNif());
     const client = new FakeStripeReport({
       settlements: [
         { paymentIntentId: "pi_ghost", chargeId: "ch_ghost", amountMinor: 1000, settledAt: OLD },
@@ -145,11 +135,11 @@ describe("StripeReconciler", () => {
     // would be set by the floor rather than by the lag and this test would stop proving that the one
     // value reached both consumers. Two days: not the seven-day default (so the override is really
     // honoured), comfortably above the floor (so the lag is what sets both edges).
-    const seeded = await seedWorkingOrder(db, freshNif());
+    const seeded = await seedWorkingOrder(pg.db, freshNif());
     const LAG_MS = 2 * 24 * 60 * 60 * 1000;
     const client = new FakeStripeReport();
     const r = new StripeReconciler({
-      db,
+      db: pg.db,
       resolveAccount: () => Promise.resolve({ report: client, refund: new FakeStripe() }),
       settlementLagMs: LAG_MS,
     });
@@ -170,11 +160,11 @@ describe("StripeReconciler", () => {
   });
 
   it("resolves a per-tenant account for every sweep", async () => {
-    const seeded = await seedWorkingOrder(db, freshNif());
+    const seeded = await seedWorkingOrder(pg.db, freshNif());
     const asked: string[] = [];
     const client = new FakeStripeReport();
     const r = new StripeReconciler({
-      db,
+      db: pg.db,
       resolveAccount: (tenantId) => {
         asked.push(tenantId);
         return Promise.resolve({ report: client, refund: new FakeStripe() });
@@ -185,7 +175,7 @@ describe("StripeReconciler", () => {
   });
 
   it("auto-reverses a hosted orphan by resolving its session to a payment intent", async () => {
-    const seeded = await seedWorkingOrder(db, freshNif());
+    const seeded = await seedWorkingOrder(pg.db, freshNif());
     await abandonedOrphan({
       tenantId: seeded.tenantId,
       workingOrderId: seeded.workingOrderId,
@@ -215,7 +205,7 @@ describe("StripeReconciler", () => {
     // The other half of the resolver: a non-`cs_` ref IS already the identifier `stripe.refunds`
     // wants, so it must pass straight through — the report client is never consulted for it. This
     // report carries no sessions at all, so a lookup would resolve to null and fail the reversal.
-    const seeded = await seedWorkingOrder(db, freshNif());
+    const seeded = await seedWorkingOrder(pg.db, freshNif());
     await abandonedOrphan({
       tenantId: seeded.tenantId,
       workingOrderId: seeded.workingOrderId,
@@ -247,7 +237,7 @@ describe("StripeReconciler", () => {
     // A session with no PaymentIntent behind it: nobody paid, so there is nothing to hand back.
     // `payment.not_found` is the honest outcome — reported, incident-raised, and (because the
     // marker was stamped before the attempt) never attempted again.
-    const seeded = await seedWorkingOrder(db, freshNif());
+    const seeded = await seedWorkingOrder(pg.db, freshNif());
     await abandonedOrphan({
       tenantId: seeded.tenantId,
       workingOrderId: seeded.workingOrderId,

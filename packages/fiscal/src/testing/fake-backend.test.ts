@@ -1,7 +1,6 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, decimal, saleId, seriesId, tenantId, tillId } from "@waitron/shared";
-import type { Database } from "@waitron/db";
-import { createPgliteDb } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { SaleForFiscalRecord } from "../backend.js";
 import { FakeFiscalBackend } from "./fake-backend.js";
 
@@ -9,7 +8,6 @@ const TENANT = tenantId("3f2504e0-4f89-41d3-9a0c-0305e82c3301");
 const TILL_A = tillId("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
 const TILL_B = tillId("6ba7b810-9dad-11d1-80b4-00c04fd430c9");
 
-let db: Database;
 let backend: FakeFiscalBackend;
 
 function saleOn(till: typeof TILL_A, invoiceNumber: number): SaleForFiscalRecord {
@@ -29,23 +27,18 @@ function saleOn(till: typeof TILL_A, invoiceNumber: number): SaleForFiscalRecord
   };
 }
 
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await FakeFiscalBackend.install(db);
-});
-
-afterAll(async () => {
-  if (db !== undefined) await db.close();
-});
+// No migration set at all: the fake's own `fake_till_registrations`/`fake_fiscal_records` tables
+// are the only schema this suite touches, and `install` creates them.
+const suite = usePgliteDb({ migrations: [], setup: (db) => FakeFiscalBackend.install(db) });
 
 beforeEach(async () => {
-  await FakeFiscalBackend.truncate(db);
-  backend = new FakeFiscalBackend(db);
+  await FakeFiscalBackend.truncate(suite.db);
+  backend = new FakeFiscalBackend(suite.db);
 });
 
 describe("registration", () => {
   it("records a registration and returns an opaque registration id", () => {
-    return db.transaction(async (tx) => {
+    return suite.db.transaction(async (tx) => {
       const registration = await backend.registerTill(tx, TILL_A, { tenantId: TENANT });
       expect(registration.tillId).toBe(TILL_A);
       expect(registration.registrationId).toMatch(/^fake-/);
@@ -56,13 +49,13 @@ describe("registration", () => {
     // A stub that recorded regardless would let packages/core skip registration entirely and
     // every core test would still pass, right up to the point where a real backend refuses.
     await expect(
-      db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1))),
+      suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1))),
     ).rejects.toThrowError(AppError);
   });
 
   it("names the till in the refusal params", async () => {
     try {
-      await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
+      await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
       expect.unreachable("recordSale should have thrown");
     } catch (error) {
       expect((error as AppError).code).toBe("fiscal.till_not_registered");
@@ -72,17 +65,19 @@ describe("registration", () => {
 });
 
 describe("recordSale", () => {
-  beforeEach(() => db.transaction((tx) => backend.registerTill(tx, TILL_A, { tenantId: TENANT })));
+  beforeEach(() =>
+    suite.db.transaction((tx) => backend.registerTill(tx, TILL_A, { tenantId: TENANT })),
+  );
 
   it("returns a ref naming the backend and the record", async () => {
-    const ref = await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
+    const ref = await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
     expect(ref.backend).toBe("fake");
     expect(ref.recordId).toMatch(/^fake-/);
     expect(ref.state).toBe("pending");
   });
 
   it("stores the exact total it was given, digit for digit", async () => {
-    await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
+    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
     const [record] = await backend.recordsFor(TILL_A);
     expect(record.total).toBe("12.10");
   });
@@ -91,22 +86,22 @@ describe("recordSale", () => {
     // The money boundary, asserted at the interface rather than trusted. A number arriving
     // through an `as never` cast is exactly how a float reaches a fiscal record in practice.
     const sale = { ...saleOn(TILL_A, 1), total: 12.1 as never };
-    await expect(db.transaction((tx) => backend.recordSale(tx, sale))).rejects.toThrowError(
+    await expect(suite.db.transaction((tx) => backend.recordSale(tx, sale))).rejects.toThrowError(
       AppError,
     );
   });
 
   it("assigns strictly increasing sequences within a till", async () => {
-    await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
-    await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 2)));
+    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
+    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 2)));
     const sequences = (await backend.recordsFor(TILL_A)).map((r) => r.sequence);
     expect(sequences).toEqual([1, 2]);
   });
 
   it("numbers tills independently of each other", async () => {
-    await db.transaction((tx) => backend.registerTill(tx, TILL_B, { tenantId: TENANT }));
-    await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
-    await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_B, 1)));
+    await suite.db.transaction((tx) => backend.registerTill(tx, TILL_B, { tenantId: TENANT }));
+    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
+    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_B, 1)));
     expect((await backend.recordsFor(TILL_A)).map((r) => r.sequence)).toEqual([1]);
     expect((await backend.recordsFor(TILL_B)).map((r) => r.sequence)).toEqual([1]);
   });
@@ -118,7 +113,7 @@ describe("recordSale", () => {
     // records nothing" would pass against the fake while the property was untested. The fake
     // therefore writes through the same transaction as everything else.
     await expect(
-      db.transaction(async (tx) => {
+      suite.db.transaction(async (tx) => {
         await backend.recordSale(tx, saleOn(TILL_A, 1));
         throw new Error("rolled back by the caller");
       }),
@@ -128,26 +123,28 @@ describe("recordSale", () => {
 });
 
 describe("checkIntegrity", () => {
-  beforeEach(() => db.transaction((tx) => backend.registerTill(tx, TILL_A, { tenantId: TENANT })));
+  beforeEach(() =>
+    suite.db.transaction((tx) => backend.registerTill(tx, TILL_A, { tenantId: TENANT })),
+  );
 
   it("reports how many records it checked, not merely that it is happy", async () => {
-    await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
-    await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 2)));
-    const report = await db.transaction((tx) => backend.checkIntegrity(tx, TENANT, TILL_A));
+    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
+    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 2)));
+    const report = await suite.db.transaction((tx) => backend.checkIntegrity(tx, TENANT, TILL_A));
     expect(report).toEqual({ ok: true, checked: 2, issues: [] });
   });
 
   it("reports zero checked on a till with no records, without complaining", async () => {
     // The start-of-chain case in generic clothing: nothing recorded is a normal state, not a
     // failure. A backend for a regime with nothing to check answers exactly this shape.
-    const report = await db.transaction((tx) => backend.checkIntegrity(tx, TENANT, TILL_A));
+    const report = await suite.db.transaction((tx) => backend.checkIntegrity(tx, TENANT, TILL_A));
     expect(report).toEqual({ ok: true, checked: 0, issues: [] });
   });
 
   it("surfaces an injected issue", async () => {
-    await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
+    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
     backend.breakIntegrity(TILL_A, { code: "fake.tampered", params: { sequence: 1 } });
-    const report = await db.transaction((tx) => backend.checkIntegrity(tx, TENANT, TILL_A));
+    const report = await suite.db.transaction((tx) => backend.checkIntegrity(tx, TENANT, TILL_A));
     expect(report.ok).toBe(false);
     expect(report.issues).toEqual([{ code: "fake.tampered", params: { sequence: 1 } }]);
   });
@@ -156,44 +153,46 @@ describe("checkIntegrity", () => {
     // The requirement AEAT states outright: «la facturación por este motivo NUNCA debe
     // interrumpirse». Without an injectable failure the fake could not exercise this at all,
     // and packages/core would ship the opposite behaviour untested.
-    await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
+    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
     backend.breakIntegrity(TILL_A, { code: "fake.tampered", params: { sequence: 1 } });
-    const ref = await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 2)));
+    const ref = await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 2)));
     expect(ref.recordId).toMatch(/^fake-/);
     expect((await backend.recordsFor(TILL_A)).map((r) => r.sequence)).toEqual([1, 2]);
   });
 
   it("recovers when the injected issue is cleared", async () => {
-    await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
+    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
     backend.breakIntegrity(TILL_A, { code: "fake.tampered", params: { sequence: 1 } });
     backend.restoreIntegrity(TILL_A);
-    expect((await db.transaction((tx) => backend.checkIntegrity(tx, TENANT, TILL_A))).ok).toBe(
-      true,
-    );
+    expect(
+      (await suite.db.transaction((tx) => backend.checkIntegrity(tx, TENANT, TILL_A))).ok,
+    ).toBe(true);
   });
 });
 
 describe("pendingCount", () => {
-  beforeEach(() => db.transaction((tx) => backend.registerTill(tx, TILL_A, { tenantId: TENANT })));
+  beforeEach(() =>
+    suite.db.transaction((tx) => backend.registerTill(tx, TILL_A, { tenantId: TENANT })),
+  );
 
   it("counts records that have not been acknowledged", async () => {
-    await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
-    await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 2)));
+    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
+    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 2)));
     expect(await backend.pendingCount(TENANT, TILL_A)).toBe(2);
   });
 
   it("drops when a record is acknowledged, so it is not a constant", async () => {
     // A stub returning the record count would pass the test above and fail this one. That pair
     // is the difference between a count and a number.
-    const ref = await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
-    await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 2)));
+    const ref = await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
+    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 2)));
     await backend.acknowledge(ref.recordId);
     expect(await backend.pendingCount(TENANT, TILL_A)).toBe(1);
   });
 
   it("is scoped to one till", async () => {
-    await db.transaction((tx) => backend.registerTill(tx, TILL_B, { tenantId: TENANT }));
-    await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
+    await suite.db.transaction((tx) => backend.registerTill(tx, TILL_B, { tenantId: TENANT }));
+    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
     expect(await backend.pendingCount(TENANT, TILL_B)).toBe(0);
   });
 
@@ -203,11 +202,13 @@ describe("pendingCount", () => {
 });
 
 describe("drain", () => {
-  beforeEach(() => db.transaction((tx) => backend.registerTill(tx, TILL_A, { tenantId: TENANT })));
+  beforeEach(() =>
+    suite.db.transaction((tx) => backend.registerTill(tx, TILL_A, { tenantId: TENANT })),
+  );
 
   it("acknowledges pending records so pendingCount drops to zero", async () => {
-    await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
-    await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 2)));
+    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
+    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 2)));
     const before = await backend.pendingCount(TENANT, TILL_A);
     expect(before).toBeGreaterThan(0);
     const result = await backend.drain(new Date("2026-07-21T00:00:00Z"));
@@ -218,12 +219,14 @@ describe("drain", () => {
 });
 
 describe("recordVoid", () => {
-  beforeEach(() => db.transaction((tx) => backend.registerTill(tx, TILL_A, { tenantId: TENANT })));
+  beforeEach(() =>
+    suite.db.transaction((tx) => backend.registerTill(tx, TILL_A, { tenantId: TENANT })),
+  );
 
   it("refuses to void a sale that was never recorded", async () => {
     const unknown = saleId("00000000-0000-0000-0000-000000000000");
     try {
-      await db.transaction((tx) => backend.recordVoid(tx, unknown, "staff error"));
+      await suite.db.transaction((tx) => backend.recordVoid(tx, unknown, "staff error"));
       expect.unreachable("recordVoid should have thrown");
     } catch (error) {
       expect((error as AppError).code).toBe("fiscal.sale_not_recorded");
@@ -234,8 +237,10 @@ describe("recordVoid", () => {
     // Once recorded, nothing is ever edited. A void is a new record referencing the old one,
     // and the two interleave in generation order.
     const sale = saleOn(TILL_A, 1);
-    await db.transaction((tx) => backend.recordSale(tx, sale));
-    const ref = await db.transaction((tx) => backend.recordVoid(tx, sale.saleId, "staff error"));
+    await suite.db.transaction((tx) => backend.recordSale(tx, sale));
+    const ref = await suite.db.transaction((tx) =>
+      backend.recordVoid(tx, sale.saleId, "staff error"),
+    );
     const records = await backend.recordsFor(TILL_A);
     expect(records.map((r) => r.kind)).toEqual(["sale", "void"]);
     expect(records.map((r) => r.sequence)).toEqual([1, 2]);
@@ -244,7 +249,9 @@ describe("recordVoid", () => {
 });
 
 describe("reconcile", () => {
-  beforeEach(() => db.transaction((tx) => backend.registerTill(tx, TILL_A, { tenantId: TENANT })));
+  beforeEach(() =>
+    suite.db.transaction((tx) => backend.registerTill(tx, TILL_A, { tenantId: TENANT })),
+  );
 
   it("counts zero for a tenant with no records, without complaining", async () => {
     // The start-of-period case in generic clothing, mirroring checkIntegrity's identical
@@ -264,7 +271,7 @@ describe("reconcile", () => {
   it("reports a clean audit when a pending record has no reported state yet", async () => {
     // In-flight tolerance: local 'pending' + no reported state at all is ordinary, not a
     // mismatch — the regime simply has not gotten to it yet.
-    await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
+    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
     const result = await backend.reconcile(TENANT, { year: "2027", month: "03" });
     expect(result.checked).toBe(1);
     expect(result.lostAck).toEqual([]);
@@ -273,7 +280,7 @@ describe("reconcile", () => {
   });
 
   it("reports a clean audit when an acknowledged record is reported accepted", async () => {
-    const sale = await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
+    const sale = await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
     await backend.acknowledge(sale.recordId);
     backend.setReportedState(sale.recordId, "accepted");
     const result = await backend.reconcile(TENANT, { year: "2027", month: "03" });
@@ -284,7 +291,7 @@ describe("reconcile", () => {
   });
 
   it("classifies a pending record the regime already reported on as lostAck", async () => {
-    const sale = await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
+    const sale = await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
     backend.setReportedState(sale.recordId, "accepted");
     const result = await backend.reconcile(TENANT, { year: "2027", month: "03" });
     expect(result.lostAck).toEqual([
@@ -295,7 +302,7 @@ describe("reconcile", () => {
   });
 
   it("classifies an acknowledged record the regime has no trace of as noTrace", async () => {
-    const sale = await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
+    const sale = await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
     await backend.acknowledge(sale.recordId);
     // No setReportedState call at all: the regime has nothing recorded for this record.
     const result = await backend.reconcile(TENANT, { year: "2027", month: "03" });
@@ -307,7 +314,7 @@ describe("reconcile", () => {
   });
 
   it("classifies an acknowledged record the regime rejected as drift", async () => {
-    const sale = await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
+    const sale = await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
     await backend.acknowledge(sale.recordId);
     backend.setReportedState(sale.recordId, "rejected");
     const result = await backend.reconcile(TENANT, { year: "2027", month: "03" });
@@ -326,9 +333,9 @@ describe("reconcile", () => {
 
   it("counts only the records belonging to the requested tenant", async () => {
     const otherTenant = tenantId("6ba7b810-9dad-11d1-80b4-00c04fd430ca");
-    await db.transaction((tx) => backend.registerTill(tx, TILL_B, { tenantId: otherTenant }));
-    await db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
-    await db.transaction((tx) =>
+    await suite.db.transaction((tx) => backend.registerTill(tx, TILL_B, { tenantId: otherTenant }));
+    await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(TILL_A, 1)));
+    await suite.db.transaction((tx) =>
       backend.recordSale(tx, { ...saleOn(TILL_B, 1), tenantId: otherTenant }),
     );
     const result = await backend.reconcile(TENANT, { year: "2027", month: "03" });

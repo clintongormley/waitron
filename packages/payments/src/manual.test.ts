@@ -1,34 +1,24 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { beforeEach, describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { decimal } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { MANUAL_PROVIDER, recordManualCardPayment, recordManualRefund } from "./manual.js";
 import { freshNif, seedWorkingOrder } from "../test/seed.js";
 
-let db: Database;
-
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, PAYMENTS_MIGRATIONS);
-}, 60_000);
-
-afterAll(async () => {
-  if (db !== undefined) await db.close();
-});
+const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 beforeEach(async () => {
-  await db.execute(sql`truncate payment_refunds, payments cascade`);
+  await pg.db.execute(sql`truncate payment_refunds, payments cascade`);
 });
 
 const SETTLED = new Date("2026-07-23T09:00:00Z");
 
 describe("recordManualCardPayment", () => {
   it("writes a captured row under the manual provider, with external_ref and a minted manual- ref", async () => {
-    const seeded = await seedWorkingOrder(db, freshNif());
-    const result = await db.transaction((tx) =>
+    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const result = await pg.db.transaction((tx) =>
       recordManualCardPayment(tx, {
         tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
@@ -41,7 +31,7 @@ describe("recordManualCardPayment", () => {
     expect(result.paymentRef.startsWith("manual-")).toBe(true);
     expect(result.settledAt).toBe(SETTLED);
 
-    const rows = await db.execute<{
+    const rows = await pg.db.execute<{
       provider: string;
       state: string;
       amount: string;
@@ -62,8 +52,8 @@ describe("recordManualCardPayment", () => {
   });
 
   it("leaves external_ref null when the operation number is not supplied", async () => {
-    const seeded = await seedWorkingOrder(db, freshNif());
-    const result = await db.transaction((tx) =>
+    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const result = await pg.db.transaction((tx) =>
       recordManualCardPayment(tx, {
         tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
@@ -71,7 +61,7 @@ describe("recordManualCardPayment", () => {
         settledAt: SETTLED,
       }),
     );
-    const rows = await db.execute<{ external_ref: string | null }>(
+    const rows = await pg.db.execute<{ external_ref: string | null }>(
       sql`select external_ref from payments where payment_ref = ${result.paymentRef} and tenant_id = ${seeded.tenantId}`,
     );
     expect(rows.rows[0].external_ref).toBeNull();
@@ -80,8 +70,8 @@ describe("recordManualCardPayment", () => {
 
 describe("recordManualRefund", () => {
   it("records a refund under the manual provider and advances the payment to refunded", async () => {
-    const seeded = await seedWorkingOrder(db, freshNif());
-    const paid = await db.transaction((tx) =>
+    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const paid = await pg.db.transaction((tx) =>
       recordManualCardPayment(tx, {
         tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
@@ -89,7 +79,7 @@ describe("recordManualRefund", () => {
         settledAt: SETTLED,
       }),
     );
-    const refunded = await db.transaction((tx) =>
+    const refunded = await pg.db.transaction((tx) =>
       recordManualRefund(tx, {
         tenantId: seeded.tenantId,
         paymentRef: paid.paymentRef,
@@ -98,7 +88,7 @@ describe("recordManualRefund", () => {
     );
     expect(refunded.state).toBe("refunded");
 
-    const rows = await db.execute<{ provider: string; amount: string }>(sql`
+    const rows = await pg.db.execute<{ provider: string; amount: string }>(sql`
       select provider, amount from payment_refunds
       where payment_ref = ${paid.paymentRef} and tenant_id = ${seeded.tenantId}
     `);

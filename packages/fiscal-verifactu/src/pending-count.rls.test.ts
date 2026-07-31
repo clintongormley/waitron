@@ -1,10 +1,9 @@
-import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { Database } from "@waitron/db";
+import { describe, expect, it } from "vitest";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import { VerifactuBackend } from "./backend.js";
 import { appendToChain } from "./chain.js";
 import { envios } from "./schema/envios.js";
-import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 import { altaFor, seedSale, seedTill, type SeededTill } from "./testing/seed.js";
 import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
@@ -15,35 +14,25 @@ import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixt
 const PROBE_ROLE = "rls_probe";
 const PROBE_PASSWORD = "probe";
 
-let pg: RealPostgres;
-let admin: Database;
-
-beforeAll(async () => {
-  pg = await startRealPostgres();
-  admin = await pg.connect();
-  await admin.execute(
-    sql.raw(`create role ${PROBE_ROLE} login password '${PROBE_PASSWORD}' in role app_user`),
-  );
-});
-
-afterAll(async () => {
-  if (admin !== undefined) await admin.close();
-  if (pg !== undefined) await pg.stop();
+const suite = useRealPostgres({
+  start: startRealPostgres,
+  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
+  timeoutMs: CONTAINER_SETUP_TIMEOUT_MS,
 });
 
 describe("pendingCount under real row-level security", () => {
   it("counts the tenant's pending records when run as an RLS-subject role", async () => {
-    const till: SeededTill = await seedTill(admin, "A");
+    const till: SeededTill = await seedTill(suite.admin, "A");
     // Seed one pending envios row for this tenant, all as the superuser (which bypasses RLS).
     // seedTill returns { tenantId, tillId, seriesId, sifId } — no saleId, so seedSale mints one.
-    const saleId = await seedSale(admin, till, 1);
-    const appended = await admin.transaction((tx) =>
+    const saleId = await seedSale(suite.admin, till, 1);
+    const appended = await suite.admin.transaction((tx) =>
       appendToChain(tx, till.tenantId, till.tillId, altaFor(saleId, 1, 1)),
     );
-    await admin.insert(envios).values({ registroId: appended.id, tenantId: till.tenantId });
+    await suite.admin.insert(envios).values({ registroId: appended.id, tenantId: till.tenantId });
 
     // Run pendingCount as rls_probe: a non-superuser, so the tenant-isolation policy is enforced.
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const backend = new VerifactuBackend({
         deploymentEnvironment: "production",

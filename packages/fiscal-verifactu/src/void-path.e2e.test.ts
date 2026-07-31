@@ -1,9 +1,9 @@
 import { asc, eq, sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { recordSale, recordVoid } from "@waitron/core";
 import { computeHuella } from "@waitron/verifactu";
-import { CORE_MIGRATIONS, asAppUser, createPgliteDb, runMigrations, withTenant } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { SaleId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
@@ -15,7 +15,6 @@ import { registrosFacturacion } from "./schema/registros.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
-let db: Database;
 let backend: VerifactuBackend;
 let tenantId: TenantId;
 let tillId: TillId;
@@ -34,35 +33,27 @@ let workingOrderId: WorkingOrderId;
  * own huella recomputable from its own stored columns, its own pending sidecar row, and it advances
  * the REAL chain head — none of which a fake backend's own bookkeeping tables can demonstrate.
  */
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, FISCAL_MIGRATIONS);
-}, 60_000);
-
-afterAll(async () => {
-  if (db !== undefined) await db.close();
-});
+const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenantWithSif(db));
+  ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenantWithSif(pg.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
-    db,
+    db: pg.db,
     resolveClient: staticResolver(fakeClient),
   });
 });
 
 async function sell() {
-  return withTenant(db, tenantId, async (tx) => {
+  return withTenant(pg.db, tenantId, async (tx) => {
     await asAppUser(tx);
     return recordSale(tx, backend, saleInput({ tenantId, tillId, seriesId, workingOrderId }));
   });
 }
 
 async function voidSale(saleId: SaleId, reason = "staff error") {
-  return withTenant(db, tenantId, async (tx) => {
+  return withTenant(pg.db, tenantId, async (tx) => {
     await asAppUser(tx);
     return recordVoid(tx, backend, saleId, reason);
   });
@@ -75,7 +66,7 @@ async function voidSale(saleId: SaleId, reason = "staff error") {
  * annuls it both carry it, per `packages/fiscal-verifactu/src/chain.ts`'s own `PendingRegistro`
  * shape (the anulación's `saleId` is the sale it annuls, not an identity of its own). */
 async function rawAnulacion(saleId: string): Promise<RegistroRow> {
-  const { rows } = await db.execute<RegistroRow>(
+  const { rows } = await pg.db.execute<RegistroRow>(
     sql`select * from registros_facturacion where sale_id = ${saleId} and tipo_registro = 'anulacion'`,
   );
   const row = rows[0];
@@ -94,7 +85,7 @@ describe("alta and anulación interleave in one chain", () => {
     const b = await sell();
     await voidSale(a.saleId);
 
-    const rows = await db
+    const rows = await pg.db
       .select()
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.tenantId, tenantId))
@@ -133,7 +124,7 @@ describe("alta and anulación interleave in one chain", () => {
   it("gives the anulación its own pending sidecar row", async () => {
     const a = await sell();
     await voidSale(a.saleId);
-    const rows = await db.select().from(envios).where(eq(envios.tenantId, tenantId));
+    const rows = await pg.db.select().from(envios).where(eq(envios.tenantId, tenantId));
     // Two registros, two sidecars. An anulación that shared the alta's row would be submitted to
     // AEAT never or twice, both unrecoverable.
     expect(rows).toHaveLength(2);
@@ -144,7 +135,7 @@ describe("alta and anulación interleave in one chain", () => {
     const a = await sell();
     await voidSale(a.saleId);
     const row = await rawAnulacion(a.saleId);
-    const [head] = await db.select().from(cadenas).where(eq(cadenas.tillId, tillId));
+    const [head] = await pg.db.select().from(cadenas).where(eq(cadenas.tillId, tillId));
     expect(head?.secuencia).toBe(2);
     expect(head?.ultimaHuella).toBe(row.huella);
   });

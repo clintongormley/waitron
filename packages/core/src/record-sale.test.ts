@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, seriesId as brandSeriesId } from "@waitron/shared";
 import type { SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
 // **Deviation from the brief.** The brief imports `FakeFiscalBackend` from `@waitron/fiscal/testing`
@@ -15,21 +15,18 @@ import {
   CORE_MIGRATIONS,
   asAppUser,
   captureError,
-  createPgliteDb,
   invoiceSeries,
   pgErrorCode,
-  runMigrations,
   saleLines,
   sales,
   tenders,
   withTenant,
 } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { formatInvoiceNumber, recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { seedTenant } from "../test/fixtures.js";
 
-let db: Database;
 let tenantId: TenantId;
 let tillId: TillId;
 let seriesId: SeriesId;
@@ -49,22 +46,18 @@ let workingOrderId: WorkingOrderId;
 // boundary zone's `files` glob is `packages/core/**/*.ts`, with no `*.test.ts` carve-out) would
 // trip the very generic-layer boundary this task was asked to re-verify. Runs core migrations
 // only.
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
+const suite = usePgliteDb({
+  migrations: [CORE_MIGRATIONS],
   // Not in the brief at all: `FakeFiscalBackend.recordSale`/`registerTill`/`checkIntegrity` read
   // and write `fake_till_registrations`/`fake_fiscal_records`, and nothing creates those tables
   // except this call. Omitting it fails every test in this file with "relation
   // fake_fiscal_records does not exist" — caught in this task's own red phase.
-  await FakeFiscalBackend.install(db);
-}, 60_000);
-
-afterAll(async () => {
-  if (db !== undefined) await db.close();
+  setup: (db) => FakeFiscalBackend.install(db),
+  timeoutMs: 60_000,
 });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenant(db));
+  ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenant(suite.db));
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -146,7 +139,7 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
  * assertion with that error instead of the one under test.
  */
 async function run(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
-  return withTenant(db, tenantId, async (tx) => {
+  return withTenant(suite.db, tenantId, async (tx) => {
     // Never as the owner. An owner bypasses RLS and can disable any trigger, so an owner-run
     // write-path test would prove the code runs, not that the application role is permitted to
     // run it.
@@ -168,7 +161,7 @@ async function run(backend: FiscalBackend, overrides: Partial<RecordSaleInput> =
  * means once the database is shared across the file.
  */
 async function countRows(table: string): Promise<number> {
-  const result = await db.execute<{ n: number }>(
+  const result = await suite.db.execute<{ n: number }>(
     sql`select count(*)::int as n from ${sql.raw(table)} where tenant_id = ${tenantId}`,
   );
   return result.rows[0]!.n;
@@ -212,23 +205,25 @@ describe("formatInvoiceNumber", () => {
 
 describe("recordSale — the happy path", () => {
   it("allocates the next number from the series and stamps it on the sale", async () => {
-    const { saleId } = await run(new FakeFiscalBackend(db));
-    const [row] = await db.select().from(sales).where(eq(sales.id, saleId));
+    const { saleId } = await run(new FakeFiscalBackend(suite.db));
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
     expect(row?.invoiceNumber).toBe(1);
   });
 
   it("advances the series counter so the second sale gets the next number", async () => {
-    const backend = new FakeFiscalBackend(db);
+    const backend = new FakeFiscalBackend(suite.db);
     await run(backend);
     const second = await run(backend);
-    const [row] = await db.select().from(sales).where(eq(sales.id, second.saleId));
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, second.saleId));
     expect(row?.invoiceNumber).toBe(2);
   });
 
   it("inserts exactly one sale, its two lines and its one tender", async () => {
-    const { saleId } = await run(new FakeFiscalBackend(db));
-    expect(await db.select().from(saleLines).where(eq(saleLines.saleId, saleId))).toHaveLength(2);
-    expect(await db.select().from(tenders).where(eq(tenders.saleId, saleId))).toHaveLength(1);
+    const { saleId } = await run(new FakeFiscalBackend(suite.db));
+    expect(
+      await suite.db.select().from(saleLines).where(eq(saleLines.saleId, saleId)),
+    ).toHaveLength(2);
+    expect(await suite.db.select().from(tenders).where(eq(tenders.saleId, saleId))).toHaveLength(1);
     expect(await countRows("sales")).toBe(1);
   });
 
@@ -237,8 +232,8 @@ describe("recordSale — the happy path", () => {
     // record. Fixture values are deliberately different from each other and from their sum, so
     // an implementation that copied the wrong field cannot produce the expected row by
     // coincidence.
-    const { saleId } = await run(new FakeFiscalBackend(db));
-    const [row] = await db.select().from(sales).where(eq(sales.id, saleId));
+    const { saleId } = await run(new FakeFiscalBackend(suite.db));
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
     expect(row?.total).toBe("14.41");
     expect(row?.tipAmount).toBe("1.90");
     expect(row?.amountCharged).toBe("16.31");
@@ -247,8 +242,8 @@ describe("recordSale — the happy path", () => {
   it("snapshots the locale list as at issuance", async () => {
     // A receipt reprinted a year later must read identically to the one the customer took, so
     // the list is copied onto the sale rather than read back from configuration at print time.
-    const { saleId } = await run(new FakeFiscalBackend(db));
-    const [row] = await db.select().from(sales).where(eq(sales.id, saleId));
+    const { saleId } = await run(new FakeFiscalBackend(suite.db));
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
     expect(row?.invoiceLocales).toEqual(["es-ES", "ca-ES"]);
   });
 
@@ -258,7 +253,7 @@ describe("recordSale — the happy path", () => {
     // on the real type (`packages/fiscal/src/backend.ts`); those describe chaining/huella
     // concepts that belong to a regime's own module, never the generic interface. Assertions
     // below are against the fields that actually exist.
-    const backend = new FakeFiscalBackend(db);
+    const backend = new FakeFiscalBackend(suite.db);
     const { fiscal } = await run(backend);
     expect(fiscal.backend).toBe("fake");
     expect(fiscal.recordId).toMatch(/^fake-\d{8}$/);
@@ -275,7 +270,7 @@ describe("recordSale — the happy path", () => {
     // packages/fiscal-verifactu/src/write-path.e2e.test.ts for that assertion against the REAL
     // backend). Observed here via `FakeFiscalBackend`'s own `recordsFor` accessor rather than a
     // spy — the fake's one intentional test-only affordance for this.
-    const backend = new FakeFiscalBackend(db);
+    const backend = new FakeFiscalBackend(suite.db);
     await run(backend);
     const [record] = await backend.recordsFor(tillId);
     expect(record?.invoiceNumber).toBe(1);
@@ -290,7 +285,7 @@ describe("recordSale — the happy path", () => {
     // exactly what packages/fiscal-verifactu/src/write-path.e2e.test.ts's real Desglose
     // assertions are for — but it does prove the grouping arithmetic runs without error and
     // still lands on the sale's own taxable total.
-    const backend = new FakeFiscalBackend(db);
+    const backend = new FakeFiscalBackend(suite.db);
     await run(backend, {
       total: "9.68",
       tipAmount: "0.32",
@@ -322,7 +317,7 @@ describe("recordSale — the happy path", () => {
 describe("recordSale — the order of operations", () => {
   it("verifies the chain before allocating a number", async () => {
     const observed: number[] = [];
-    const fake = new FakeFiscalBackend(db);
+    const fake = new FakeFiscalBackend(suite.db);
     const backend = wrapBackend(fake, {
       async checkIntegrity(tx, tenant, till) {
         // Read the counter from inside the verification call. If allocation had already run,
@@ -361,9 +356,9 @@ describe("recordSale — the order of operations", () => {
         anchorAgeSeconds: 0,
       };
     });
-    const backend = new FakeFiscalBackend(db);
+    const backend = new FakeFiscalBackend(suite.db);
     const { saleId, fiscal } = await run(backend, { clock: drifting });
-    const [row] = await db.select().from(sales).where(eq(sales.id, saleId));
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
     expect(ticks).toBe(1);
     expect(new Date(row!.issuedAt).getTime()).toBe(fiscal.issuedAt.getTime());
   });
@@ -381,7 +376,7 @@ describe("recordSale — no fiscal condition blocks a sale", () => {
     // params, recordId? }`), never an `AppError` instance (an `IntegrityReport` is persisted and
     // displayed, and an `Error` does not survive JSON — `packages/fiscal/src/backend.ts`'s own
     // doc comment on `IntegrityIssue`).
-    const backend = new FakeFiscalBackend(db);
+    const backend = new FakeFiscalBackend(suite.db);
     const issue: IntegrityIssue = { code: "chain.verification_failed", params: { sequence: 4 } };
     backend.breakIntegrity(tillId, issue);
     const { saleId } = await run(backend);
@@ -398,7 +393,7 @@ describe("recordSale — no fiscal condition blocks a sale", () => {
       confidence: "degraded",
       anchorAgeSeconds: 999,
     }));
-    await run(new FakeFiscalBackend(db), { clock: degraded });
+    await run(new FakeFiscalBackend(suite.db), { clock: degraded });
     expect(await countRows("sales")).toBe(1);
   });
 
@@ -416,7 +411,7 @@ describe("recordSale — the fiscal record is created when ALL tenders settle", 
     // The alternative chains records for sales that never happened, correctable only by issuing
     // a rectifying record later.
     await expect(
-      run(new FakeFiscalBackend(db), {
+      run(new FakeFiscalBackend(suite.db), {
         tenders: [
           { method: "cash", amount: "5.00", settledAt: BASE },
           { method: "card", amount: "11.31", settledAt: null },
@@ -431,7 +426,7 @@ describe("recordSale — the fiscal record is created when ALL tenders settle", 
 
   it("writes nothing when the settled tenders do not cover the amount due", async () => {
     await expect(
-      run(new FakeFiscalBackend(db), {
+      run(new FakeFiscalBackend(suite.db), {
         tenders: [{ method: "cash", amount: "5.00", settledAt: BASE }],
       }),
     ).rejects.toMatchObject({ code: "sale.tender_shortfall" });
@@ -439,7 +434,7 @@ describe("recordSale — the fiscal record is created when ALL tenders settle", 
   });
 
   it("chains nothing when a tender has not settled", async () => {
-    const backend = new FakeFiscalBackend(db);
+    const backend = new FakeFiscalBackend(suite.db);
     await expect(
       run(backend, { tenders: [{ method: "card", amount: "16.31", settledAt: null }] }),
     ).rejects.toBeInstanceOf(AppError);
@@ -448,7 +443,7 @@ describe("recordSale — the fiscal record is created when ALL tenders settle", 
 
   it("records exactly one chained sale when the declined tender is retried", async () => {
     // The retry path end to end: decline, then settle. Two calls, one sale.
-    const backend = new FakeFiscalBackend(db);
+    const backend = new FakeFiscalBackend(suite.db);
     await expect(
       run(backend, { tenders: [{ method: "card", amount: "16.31", settledAt: null }] }),
     ).rejects.toBeInstanceOf(AppError);
@@ -458,7 +453,7 @@ describe("recordSale — the fiscal record is created when ALL tenders settle", 
   });
 
   it("accepts a split tender that settles across several payments", async () => {
-    await run(new FakeFiscalBackend(db), {
+    await run(new FakeFiscalBackend(suite.db), {
       tenders: [
         { method: "cash", amount: "6.31", settledAt: BASE },
         { method: "card", amount: "10.00", settledAt: BASE },
@@ -474,7 +469,7 @@ describe("recordSale — atomicity", () => {
     // The worst outcome this design has is a partial write here: an invoice that exists
     // commercially and not fiscally, with a customer holding a receipt for a record that was
     // never legally recorded. Nothing may survive.
-    const fake = new FakeFiscalBackend(db);
+    const fake = new FakeFiscalBackend(suite.db);
     const exploding = wrapBackend(fake, {
       recordSale: () => {
         throw new Error("simulated fiscal backend outage");
@@ -496,9 +491,9 @@ describe("recordSale — numbering", () => {
     // `DrizzleQueryError` wrapper (its `.code` is undefined; the real SQLSTATE lives on
     // `.cause.code`), so the SQLSTATE is read via `captureError`/`pgErrorCode` instead, per this
     // task's own governing context.
-    await run(new FakeFiscalBackend(db));
+    await run(new FakeFiscalBackend(suite.db));
     const error = await captureError(() =>
-      withTenant(db, tenantId, async (tx) => {
+      withTenant(suite.db, tenantId, async (tx) => {
         await asAppUser(tx);
         await tx.insert(sales).values({
           tenantId,
@@ -524,15 +519,15 @@ describe("recordSale — numbering", () => {
     // Documented so the behaviour is deliberate rather than discovered. Under a `next_number`
     // COLUMN the allocating UPDATE is transactional, so a rollback un-allocates. That is safe —
     // the number never reached a committed sale, so reissuing it is not reuse.
-    const fake = new FakeFiscalBackend(db);
+    const fake = new FakeFiscalBackend(suite.db);
     const exploding = wrapBackend(fake, {
       recordSale: () => {
         throw new Error("simulated fiscal backend outage");
       },
     });
     await expect(run(exploding)).rejects.toThrow("simulated fiscal backend outage");
-    const { saleId } = await run(new FakeFiscalBackend(db));
-    const [row] = await db.select().from(sales).where(eq(sales.id, saleId));
+    const { saleId } = await run(new FakeFiscalBackend(suite.db));
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
     expect(row?.invoiceNumber).toBe(1);
   });
 });
@@ -540,7 +535,7 @@ describe("recordSale — numbering", () => {
 describe("recordSale — series validation", () => {
   it("rejects a series that does not exist", async () => {
     await expect(
-      run(new FakeFiscalBackend(db), {
+      run(new FakeFiscalBackend(suite.db), {
         seriesId: brandSeriesId("00000000-0000-4000-8000-000000000000"),
       }),
     ).rejects.toMatchObject({ code: "sale.series_not_found" });
@@ -550,9 +545,9 @@ describe("recordSale — series validation", () => {
     // A till may own N series, but a series belongs to exactly one till. Allocating from another
     // till's series would have two chains issuing from one counter, which no constraint
     // downstream can detect.
-    const other = await seedTenant(db, { tenantId });
+    const other = await seedTenant(suite.db, { tenantId });
     await expect(
-      run(new FakeFiscalBackend(db), { seriesId: other.seriesId }),
+      run(new FakeFiscalBackend(suite.db), { seriesId: other.seriesId }),
     ).rejects.toMatchObject({ code: "sale.series_wrong_till" });
   });
 });

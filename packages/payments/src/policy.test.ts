@@ -1,7 +1,7 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { CORE_MIGRATIONS } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { decimal } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { getPaymentPolicy, resolveOfflineDecision } from "./policy.js";
@@ -33,29 +33,21 @@ describe("resolveOfflineDecision (the pure gate)", () => {
 });
 
 describe("getPaymentPolicy", () => {
-  let db: Database;
-  beforeAll(async () => {
-    db = await createPgliteDb();
-    await runMigrations(db, CORE_MIGRATIONS);
-    await runMigrations(db, PAYMENTS_MIGRATIONS);
-  }, 60_000);
-  afterAll(async () => {
-    if (db !== undefined) await db.close();
-  });
+  const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
   beforeEach(async () => {
-    await db.execute(sql`truncate payment_policy cascade`);
+    await pg.db.execute(sql`truncate payment_policy cascade`);
   });
 
   it("returns undefined for a tenant with no policy row", async () => {
-    const s = await seedWorkingOrder(db, freshNif());
-    const row = await db.transaction((tx) => getPaymentPolicy(tx, s.tenantId));
+    const s = await seedWorkingOrder(pg.db, freshNif());
+    const row = await pg.db.transaction((tx) => getPaymentPolicy(tx, s.tenantId));
     expect(row).toBeUndefined();
   });
 
   it("reads back a tenant's policy row", async () => {
-    const s = await seedWorkingOrder(db, freshNif());
-    await seedPaymentPolicy(db, s.tenantId, "accept_offline", "75.00");
-    const row = await db.transaction((tx) => getPaymentPolicy(tx, s.tenantId));
+    const s = await seedWorkingOrder(pg.db, freshNif());
+    await seedPaymentPolicy(pg.db, s.tenantId, "accept_offline", "75.00");
+    const row = await pg.db.transaction((tx) => getPaymentPolicy(tx, s.tenantId));
     expect(row).toEqual({ offlineMode: "accept_offline", offlineAmountCap: "75.00" });
   });
 });

@@ -1,9 +1,9 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import { markDelivered, pendingAcks, writeAck } from "./acks.js";
-import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 
 // A non-superuser LOGIN role that inherits app_user's grants — the same probe shape
@@ -15,20 +15,10 @@ const PROBE_ROLE = "acks_rls_probe";
 const PROBE_PASSWORD = "probe";
 const NOW = new Date("2026-07-21T00:01:00Z");
 
-let pg: RealPostgres;
-let admin: Database;
-
-beforeAll(async () => {
-  pg = await startRealPostgres();
-  admin = await pg.connect();
-  await admin.execute(
-    sql.raw(`create role ${PROBE_ROLE} login password '${PROBE_PASSWORD}' in role app_user`),
-  );
-});
-
-afterAll(async () => {
-  if (admin !== undefined) await admin.close();
-  if (pg !== undefined) await pg.stop();
+const suite = useRealPostgres({
+  start: startRealPostgres,
+  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
+  timeoutMs: CONTAINER_SETUP_TIMEOUT_MS,
 });
 
 /**
@@ -43,12 +33,12 @@ describe("acks under real row-level security", () => {
   it("writes, reads, and delivers an ack as an RLS-subject member of app_user", async () => {
     // Seed one record as the superuser (bypasses RLS) and mark it aceptado so ackStateOf →
     // accepted. Stamp `enviado_en` so submitted_at is the claim instant, not the coalesce fallback.
-    const seeded = await seedPendingEnvios(admin, { count: 1 });
-    await admin.execute(
+    const seeded = await seedPendingEnvios(suite.admin, { count: 1 });
+    await suite.admin.execute(
       sql`update envios set estado = 'aceptado', enviado_en = ${NOW.toISOString()} where tenant_id = ${seeded.tenantId}`,
     );
 
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       // writeAck reads envios and inserts into acks — both inside `withTenant`, so
       // current_tenant_id() matches this tenant and satisfies acks' WITH CHECK. Without the GUC the
@@ -67,7 +57,7 @@ describe("acks under real row-level security", () => {
     }
 
     // The ack was genuinely committed under RLS — read it back as the superuser.
-    const { rows } = await admin.execute<{ state: string; delivered_at: string | null }>(
+    const { rows } = await suite.admin.execute<{ state: string; delivered_at: string | null }>(
       sql`select state, delivered_at from acks where tenant_id = ${seeded.tenantId}`,
     );
     expect(rows).toHaveLength(1);

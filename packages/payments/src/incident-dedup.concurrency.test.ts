@@ -1,28 +1,20 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import { AppError, tenantId as brandTenantId, tillId as brandTillId } from "@waitron/shared";
 import { recordIncidentOnce } from "@waitron/core";
-import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { startRealPostgres } from "./testing/postgres.js";
 import { freshNif, seedWorkingOrder } from "../test/seed.js";
 
-let pg: RealPostgres;
-let admin: import("@waitron/db").Database;
-
-beforeAll(async () => {
-  pg = await startRealPostgres();
-  admin = await pg.connect();
-});
-afterAll(async () => {
-  if (admin !== undefined) await admin.close();
-  if (pg !== undefined) await pg.stop();
-});
+// vitest.config.ts's hookTimeout, which this container start had before the helper's 60s default.
+const postgres = useRealPostgres({ start: startRealPostgres, timeoutMs: 180_000 });
 
 const AT = new Date("2026-07-24T10:00:00Z");
 
 describe("recordIncidentOnce is race-safe: concurrent same-key raises collapse to one open incident", () => {
   it("an orphan (sale_id NULL) raise blocks a concurrent same-key raise, which then de-dups", async () => {
-    const s = await seedWorkingOrder(admin, freshNif());
+    const s = await seedWorkingOrder(postgres.admin, freshNif());
     const raiseInput = {
       tenantId: brandTenantId(s.tenantId),
       tillId: brandTillId(s.tillId),
@@ -35,8 +27,8 @@ describe("recordIncidentOnce is race-safe: concurrent same-key raises collapse t
       detectedAt: AT,
     };
 
-    const holder = await pg.connect();
-    const waiter = await pg.connect();
+    const holder = await postgres.pg.connect();
+    const waiter = await postgres.pg.connect();
     let release: () => void = () => {};
     let holding: Promise<unknown> | undefined;
     try {
@@ -74,7 +66,7 @@ describe("recordIncidentOnce is race-safe: concurrent same-key raises collapse t
       const waiterResult = await waiting;
       expect(waiterResult).toBe(false); // deduped against the now-committed incident
 
-      const { rows } = await admin.execute<{ n: string }>(sql`
+      const { rows } = await postgres.admin.execute<{ n: string }>(sql`
         select count(*)::text as n from incidents
         where tenant_id = ${s.tenantId} and code = 'payment.offline_forward_declined'
           and sale_id is null and acknowledged_at is null`);

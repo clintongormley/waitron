@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { beforeEach, describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
   tenantId as brandTenantId,
@@ -15,20 +15,10 @@ import { FakeReconciler } from "./testing/fake-reconciler.js";
 import { FakeSettlementReport } from "./testing/fake-settlement-report.js";
 import { freshNif, seedWorkingOrder } from "../test/seed.js";
 
-let db: Database;
-
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, PAYMENTS_MIGRATIONS);
-}, 60_000);
-
-afterAll(async () => {
-  if (db !== undefined) await db.close();
-});
+const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 beforeEach(async () => {
-  await db.execute(sql`truncate incidents, payment_refunds, payments cascade`);
+  await pg.db.execute(sql`truncate incidents, payment_refunds, payments cascade`);
 });
 
 /**
@@ -43,8 +33,8 @@ beforeEach(async () => {
  */
 describe("the orphan backstop, end to end", () => {
   it("collects, loses the sale, and lets the sweep reverse it and warn the till", async () => {
-    const seeded = await seedWorkingOrder(db, freshNif());
-    const provider = new FakePaymentProvider(db, seeded.tenantId);
+    const seeded = await seedWorkingOrder(pg.db, freshNif());
+    const provider = new FakePaymentProvider(pg.db, seeded.tenantId);
 
     // 1. Real capture through the provider — the money moves.
     const captured = await provider.collect({
@@ -56,7 +46,7 @@ describe("the orphan backstop, end to end", () => {
     expect(captured.state).toBe("captured");
 
     // 2. recordSale never happens; the customer leaves and the order is abandoned.
-    await db.execute(sql`
+    await pg.db.execute(sql`
       update working_orders set status = 'abandoned' where id = ${seeded.workingOrderId}`);
 
     // 3. The report is empty on purpose — its contents cannot matter here either way.
@@ -69,7 +59,7 @@ describe("the orphan backstop, end to end", () => {
     //    the whole finding.
     const now = new Date();
     const report = new FakeSettlementReport([]);
-    const reconciler = new FakeReconciler(db, report);
+    const reconciler = new FakeReconciler(pg.db, report);
     const period = { from: new Date(now.getTime() - 3_600_000), to: new Date(now.getTime() + 1) };
 
     const result = await reconciler.reconcile(brandTenantId(seeded.tenantId), period, now);
@@ -81,7 +71,9 @@ describe("the orphan backstop, end to end", () => {
     expect(reconciler.reversed).toEqual([captured.paymentRef]);
 
     // 5. And the till sees exactly one incident, through the UI's own query.
-    const incidents = await db.transaction((tx) => openIncidents(tx, brandTillId(seeded.tillId)));
+    const incidents = await pg.db.transaction((tx) =>
+      openIncidents(tx, brandTillId(seeded.tillId)),
+    );
     expect(incidents.map((i) => i.code)).toEqual(["payment.reconcile_orphan"]);
     expect(incidents[0].params.count).toBe(1);
   });

@@ -1,12 +1,6 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  createPgliteDb,
-  runMigrations,
-  withTenant,
-  type Database,
-} from "@waitron/db";
+import { beforeEach, describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
 import { hasCode } from "@waitron/shared";
 import { aadFor, seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
@@ -15,6 +9,7 @@ import { tenantCredentials } from "./schema/tenant-credentials.js";
 import { getCredential, putCredential, rotateCredentials } from "./store.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { captured } from "./testing/captured.js";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 
 const K1 = Buffer.alloc(32, 1).toString("base64");
 const K2 = Buffer.alloc(32, 2).toString("base64");
@@ -38,17 +33,7 @@ const STRIPE = {
   cancelUrl: "https://example.test/no",
 };
 
-let db: Database;
-
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, CREDENTIALS_MIGRATIONS);
-});
-
-afterAll(async () => {
-  if (db !== undefined) await db.close();
-});
+const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
 
 /**
  * `rotateCredentials` is the one function in this package whose declared job is to sweep the WHOLE
@@ -81,43 +66,43 @@ afterAll(async () => {
  * rotation does not cross tenants when the connection is not a superuser).
  */
 beforeEach(async () => {
-  await db.execute(sql`truncate tenant_credentials cascade`);
+  await suite.db.execute(sql`truncate tenant_credentials cascade`);
 });
 
 describe("rotateCredentials", () => {
   it("re-seals every row onto the current key and advances its version", async () => {
-    const tenantId = await seedTenant(db);
-    await withTenant(db, tenantId, (tx) =>
+    const tenantId = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
 
-    const result = await rotateCredentials(db, RING_BOTH);
+    const result = await rotateCredentials(suite.db, RING_BOTH);
     expect(result.rotated).toBe(1);
     expect(result.alreadyCurrent).toBe(0);
 
-    const versions = await db.execute<{ key_version: number }>(sql`
+    const versions = await suite.db.execute<{ key_version: number }>(sql`
       select key_version from tenant_credentials where tenant_id = ${tenantId}`);
     expect(versions.rows[0]!.key_version).toBe(2);
 
     // Readable with the new key ALONE — the old key can now be retired.
-    const actual = await withTenant(db, tenantId, (tx) =>
+    const actual = await withTenant(suite.db, tenantId, (tx) =>
       getCredential(tx, RING_V2_ONLY, { tenantId, purpose: "payments.stripe" }),
     );
     expect(actual).toEqual(STRIPE);
   });
 
   it("is idempotent — a second run rotates nothing", async () => {
-    const tenantId = await seedTenant(db);
-    await withTenant(db, tenantId, (tx) =>
+    const tenantId = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, (tx) =>
       putCredential(tx, RING_V1, {
         tenantId,
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AA", passphrase: "p", certKind: "sello" },
       }),
     );
-    const first = await rotateCredentials(db, RING_BOTH);
+    const first = await rotateCredentials(suite.db, RING_BOTH);
     expect(first.rotated).toBe(1);
-    const second = await rotateCredentials(db, RING_BOTH);
+    const second = await rotateCredentials(suite.db, RING_BOTH);
     expect(second.rotated).toBe(0);
     expect(second.alreadyCurrent).toBe(1);
   });
@@ -132,11 +117,11 @@ describe("rotateCredentials", () => {
     // `previous`, so this test cannot distinguish "select the key by the row's own key_version"
     // from "always try `previous`". That per-row selection property is pinned separately by
     // store.test.ts's "serves a row on either ring member" test.
-    const tenantId = await seedTenant(db);
-    await withTenant(db, tenantId, (tx) =>
+    const tenantId = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
-    await withTenant(db, tenantId, (tx) =>
+    await withTenant(suite.db, tenantId, (tx) =>
       putCredential(tx, RING_BOTH, {
         tenantId,
         purpose: "fiscal.aeat",
@@ -144,22 +129,22 @@ describe("rotateCredentials", () => {
       }),
     );
 
-    const result = await rotateCredentials(db, RING_BOTH);
+    const result = await rotateCredentials(suite.db, RING_BOTH);
     expect(result.rotated).toBe(1);
     expect(result.alreadyCurrent).toBe(1);
 
-    const rows = await db.execute<{ n: number }>(sql`
+    const rows = await suite.db.execute<{ n: number }>(sql`
       select count(*)::int as n from tenant_credentials
       where tenant_id = ${tenantId} and key_version = 2`);
     expect(rows.rows[0]!.n).toBe(2);
   });
 
   it("refuses to run without a previous key when rows still need one", async () => {
-    const tenantId = await seedTenant(db);
-    await withTenant(db, tenantId, (tx) =>
+    const tenantId = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
-    const error = await captured(() => rotateCredentials(db, RING_V2_ONLY));
+    const error = await captured(() => rotateCredentials(suite.db, RING_V2_ONLY));
     expect(hasCode(error, "credentials.key_version_unknown")).toBe(true);
   });
 
@@ -173,10 +158,10 @@ describe("rotateCredentials", () => {
     // (RING_BOTH.previous), so this is `credentials.decrypt_failed` (wrong key material), not
     // `credentials.key_version_unknown` — a different one of tryGetCredential's three throw codes
     // than the "refuses to run without a previous key" case above.
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const strangerKey = Buffer.alloc(32, 9);
     const sealed = seal(strangerKey, aadFor(tenantId, "payments.stripe"), JSON.stringify(STRIPE));
-    await withTenant(db, tenantId, (tx) =>
+    await withTenant(suite.db, tenantId, (tx) =>
       tx.insert(tenantCredentials).values({
         tenantId,
         purpose: "payments.stripe",
@@ -187,11 +172,11 @@ describe("rotateCredentials", () => {
       }),
     );
 
-    const error = await captured(() => rotateCredentials(db, RING_BOTH));
+    const error = await captured(() => rotateCredentials(suite.db, RING_BOTH));
     expect(hasCode(error, "credentials.decrypt_failed")).toBe(true);
 
     // No phantom success, no partial write: the row is exactly as it was sealed.
-    const row = await db.execute<{ key_version: number }>(sql`
+    const row = await suite.db.execute<{ key_version: number }>(sql`
       select key_version from tenant_credentials where tenant_id = ${tenantId}`);
     expect(row.rows[0]!.key_version).toBe(1);
   });
@@ -205,11 +190,11 @@ describe("rotateCredentials", () => {
     // with raw bytes, bypassing `putCredential` — the same technique as
     // credentials.rls.test.ts's "ordering-probe" row — since this row is never meant to be
     // decrypted; only the iv/auth-tag LENGTH constraints need satisfying, not real ciphertext.
-    const tenantId = await seedTenant(db);
-    await withTenant(db, tenantId, (tx) =>
+    const tenantId = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
-    await withTenant(db, tenantId, (tx) =>
+    await withTenant(suite.db, tenantId, (tx) =>
       tx.insert(tenantCredentials).values({
         tenantId,
         purpose: "legacy.retired-purpose",
@@ -220,10 +205,10 @@ describe("rotateCredentials", () => {
       }),
     );
 
-    const result = await rotateCredentials(db, RING_BOTH);
+    const result = await rotateCredentials(suite.db, RING_BOTH);
     expect(result.rotated).toBe(1);
 
-    const rows = await db.execute<{ purpose: string; key_version: number }>(sql`
+    const rows = await suite.db.execute<{ purpose: string; key_version: number }>(sql`
       select purpose, key_version from tenant_credentials
       where tenant_id = ${tenantId} order by purpose`);
     const legacy = rows.rows.find((r) => r.purpose === "legacy.retired-purpose");
@@ -244,12 +229,12 @@ describe("rotateCredentials", () => {
     // tenant Q's row too, looks it up as `{tenantId: P, purpose: Q's purpose}`, and finds nothing.
     // This is the SAME `value === null` branch the production race would hit, reached by a
     // different, deterministic route — not a claim that this test represents concurrent deletion.
-    const p = await seedTenant(db);
-    const q = await seedTenant(db);
-    await withTenant(db, p, (tx) =>
+    const p = await seedTenant(suite.db);
+    const q = await seedTenant(suite.db);
+    await withTenant(suite.db, p, (tx) =>
       putCredential(tx, RING_V1, { tenantId: p, purpose: "payments.stripe", value: STRIPE }),
     );
-    await withTenant(db, q, (tx) =>
+    await withTenant(suite.db, q, (tx) =>
       putCredential(tx, RING_V1, {
         tenantId: q,
         purpose: "fiscal.aeat",
@@ -257,13 +242,13 @@ describe("rotateCredentials", () => {
       }),
     );
 
-    const result = await rotateCredentials(db, RING_BOTH);
+    const result = await rotateCredentials(suite.db, RING_BOTH);
     // Exactly 2: P's own row and Q's own row, each rotated exactly once when its OWN tenant's pass
     // reaches it. Before M6's fix, the spurious `{tenantId: P, purpose: "fiscal.aeat"}` lookup
     // during P's pass (finding nothing) still incremented `rotated`, making this 3.
     expect(result.rotated).toBe(2);
 
-    const versions = await db.execute<{ tenant_id: string; key_version: number }>(sql`
+    const versions = await suite.db.execute<{ tenant_id: string; key_version: number }>(sql`
       select tenant_id, key_version from tenant_credentials where tenant_id in (${p}, ${q})`);
     expect(versions.rows).toHaveLength(2);
     for (const row of versions.rows) expect(row.key_version).toBe(2);

@@ -1,15 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Agent, errors as undiciErrors, fetch as undiciFetch } from "undici";
-import {
-  CORE_MIGRATIONS,
-  captureError,
-  createPgliteDb,
-  runMigrations,
-  withTenant,
-} from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, withTenant } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
-import type { KeyRing } from "@waitron/credentials";
 import { isAppError } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
 import type { Cabecera, EnvioRegistro } from "@waitron/verifactu";
@@ -38,28 +31,30 @@ const KEY_ENV = {
 // about parsing — `createClient` parses, and its own suite covers that.
 const MINIMAL_SOAP_BODY = '<?xml version="1.0"?><Envelope><Body/></Envelope>';
 
-let db: Database;
-let ring: KeyRing;
-let material: MtlsMaterial;
+const suite = usePgliteDb({
+  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
+  timeoutMs: 120_000,
+});
+const ring = loadKeyRing(KEY_ENV);
+const material: MtlsMaterial = mintMtlsMaterial();
+
+// The local TLS listener is this suite's own; only the database is `usePgliteDb`'s. The teardown is
+// guarded because a `startMtlsServer` that threw would otherwise be reported twice — once really,
+// once as a spurious `Cannot read properties of undefined (reading 'close')`. See
+// `packages/db/src/guarded-teardowns.test.ts`'s header for the experiment that measured that.
 let server: MtlsServer;
 
 beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, CREDENTIALS_MIGRATIONS);
-  ring = loadKeyRing(KEY_ENV);
-  material = mintMtlsMaterial();
   server = await startMtlsServer(material, MINIMAL_SOAP_BODY);
 }, 120_000);
 
 afterAll(async () => {
   if (server !== undefined) await server.close();
-  if (db !== undefined) await db.close();
 });
 
 async function provision(certKind: string): Promise<TenantId> {
-  const tenantId = await seedTenant(db);
-  await withTenant(db, tenantId, (tx) =>
+  const tenantId = await seedTenant(suite.db);
+  await withTenant(suite.db, tenantId, (tx) =>
     putCredential(tx, ring, {
       tenantId,
       purpose: "fiscal.aeat",
@@ -87,7 +82,7 @@ describe("aeatEndpointFor", () => {
 describe("readCertMaterial", () => {
   it("decodes the PFX and the kind", async () => {
     const tenantId = await provision("sello");
-    const read = await readCertMaterial(db, ring, tenantId);
+    const read = await readCertMaterial(suite.db, ring, tenantId);
     expect(read.certKind).toBe("sello");
     expect(read.passphrase).toBe(material.clientPassphrase);
     expect(read.pfx.equals(material.clientPfx)).toBe(true);
@@ -95,14 +90,14 @@ describe("readCertMaterial", () => {
 
   it("rejects a certKind that is not one of the two kinds", async () => {
     const tenantId = await provision("wildcard");
-    const error = await captureError(() => readCertMaterial(db, ring, tenantId));
+    const error = await captureError(() => readCertMaterial(suite.db, ring, tenantId));
     expect(isAppError(error) && error.code).toBe("server.credential_unusable");
     expect(isAppError(error) && error.params).toMatchObject({ field: "certKind" });
   });
 
   it("fails with credentials.missing when the tenant has no fiscal credential at all", async () => {
-    const tenantId = await seedTenant(db);
-    const error = await captureError(() => readCertMaterial(db, ring, tenantId));
+    const tenantId = await seedTenant(suite.db);
+    const error = await captureError(() => readCertMaterial(suite.db, ring, tenantId));
     // The vault's own code, not ours: absence is the vault's fact to report, and drain's per-tenant
     // containment records whichever code arrives.
     expect(isAppError(error) && error.code).toBe("credentials.missing");
@@ -177,7 +172,7 @@ describe("the resolved client over a real client-certificate handshake", () => {
     // actually depends on, so it is the one thing this test must not let through unobserved.
     let seenCertKind: CertKind | undefined;
     const resolver = aeatClientResolver({
-      db,
+      db: suite.db,
       ring,
       endpointFor: (certKind) => {
         seenCertKind = certKind;
@@ -214,7 +209,7 @@ describe("the resolved client over a real client-certificate handshake", () => {
     // fixture and a realistic PFX shape, not a gap in the test.
     const tenantId = await provision("representante");
     const resolver = aeatClientResolver({
-      db,
+      db: suite.db,
       ring,
       endpointFor: () => server.origin,
       fetchFor: (m) => mtlsFetch(m),
@@ -264,7 +259,7 @@ describe("aeatClientResolver lifetime", () => {
     const tenantB = await provision("representante");
     const closed: string[] = [];
     const resolver = aeatClientResolver({
-      db,
+      db: suite.db,
       ring,
       endpointFor: () => "https://example.test/soap",
       fetchFor: (m) => ({
@@ -295,7 +290,7 @@ describe("aeatClientResolver lifetime", () => {
     let n = 0;
     const resolver = aeatClientResolver(
       {
-        db,
+        db: suite.db,
         ring,
         endpointFor: () => "https://example.test/soap",
         fetchFor: () => ({
@@ -336,7 +331,7 @@ describe("aeatClientResolver lifetime", () => {
     const logged: Array<[string, string, Record<string, unknown> | undefined]> = [];
     const resolver = aeatClientResolver(
       {
-        db,
+        db: suite.db,
         ring,
         endpointFor: () => "https://example.test/soap",
         fetchFor: () => ({
@@ -376,7 +371,7 @@ describe("aeatClientResolver lifetime", () => {
     let n = 0;
     const resolver = aeatClientResolver(
       {
-        db,
+        db: suite.db,
         ring,
         endpointFor: () => "https://example.test/soap",
         fetchFor: () => ({
@@ -423,7 +418,7 @@ describe("aeatClientResolver lifetime", () => {
     let n = 0;
     const resolver = aeatClientResolver(
       {
-        db,
+        db: suite.db,
         ring,
         endpointFor: () => "https://example.test/soap",
         fetchFor: () => ({

@@ -1,7 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations, withTenant } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
   seriesId as brandSeriesId,
@@ -25,17 +25,9 @@ import type { SeededForSale } from "@waitron/payments/test/seed.js";
 import { FakeStripeHosted } from "./testing/fake-stripe-hosted.js";
 import { StripeHostedProvider } from "./hosted-provider.js";
 
-let db: Database;
-
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, PAYMENTS_MIGRATIONS);
-  await FakeFiscalBackend.install(db);
-}, 60_000);
-
-afterAll(async () => {
-  if (db !== undefined) await db.close();
+const pg = usePgliteDb({
+  migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
+  setup: (db) => FakeFiscalBackend.install(db),
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -85,9 +77,9 @@ function buildInput(
 
 describe("stripe hosted: initiate -> webhook -> settle -> recordSale -> associate (end to end)", () => {
   it("initiates, settles from the completed webhook, chains the sale, and associates the payment", async () => {
-    const backend = new FakeFiscalBackend(db);
-    const s = await seedForSale(db, backend, freshNif());
-    const provider = new StripeHostedProvider({ client: new FakeStripeHosted(), db });
+    const backend = new FakeFiscalBackend(pg.db);
+    const s = await seedForSale(pg.db, backend, freshNif());
+    const provider = new StripeHostedProvider({ client: new FakeStripeHosted(), db: pg.db });
     const paymentRef = randomUUID();
 
     // 1. initiate — mints the session, writes the initiated row (working order stays open).
@@ -110,10 +102,10 @@ describe("stripe hosted: initiate -> webhook -> settle -> recordSale -> associat
 
     // 3. The (deferred) app-level orchestrator: resolve the tenant untenanted, then settle + chain +
     //    associate in one tenant-scoped transaction.
-    const tenantId = await resolvePaymentTenant(db, event!.provider, event!.externalRef);
+    const tenantId = await resolvePaymentTenant(pg.db, event!.provider, event!.externalRef);
     expect(tenantId).toBe(s.tenantId);
 
-    const saleId = await withTenant(db, tenantId!, async (tx) => {
+    const saleId = await withTenant(pg.db, tenantId!, async (tx) => {
       const row = await settleInitiated(tx, {
         provider: event!.provider,
         externalRef: event!.externalRef,
@@ -135,7 +127,7 @@ describe("stripe hosted: initiate -> webhook -> settle -> recordSale -> associat
     });
 
     // 4. After commit: the payment is captured, associated, and still carries the session external_ref.
-    const finalRow = await db.transaction((tx) =>
+    const finalRow = await pg.db.transaction((tx) =>
       getPaymentByRef(tx, { tenantId: s.tenantId, provider: "stripe", paymentRef }),
     );
     expect(finalRow?.state).toBe("captured");
