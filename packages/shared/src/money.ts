@@ -196,3 +196,5 @@ export function assertMoney(value: Decimal): Decimal {
 // path one autocomplete away from every call site in the repo, and the resulting defect is
 // invisible: totals that are individually plausible, disagree by a cent, and are already signed
 // into an immutable record by the time anyone reconciles them.
+
+// probe: touch a dependency of packages/db. Throwaway branch, never merged.
