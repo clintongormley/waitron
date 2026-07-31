@@ -397,6 +397,39 @@ rather than freezing it.
 
 ---
 
+### Q15. Short payment — a discount, or a bad debt? (added 2026-07-31)
+
+**Why it matters.** It happens at the counter: the bill is €70, the customer is paying cash and is
+€5 short, and staff accept €65 as payment in full. The two readings have different consequences and
+the till has to record one of them.
+
+- **A discount** — the sale really was €65. Taxable base €65, VAT on €65, one invoice, nothing
+  outstanding. The reduction has to reach the bill *before* the invoice is issued.
+- **A bad debt** — the sale was €70 and €5 is uncollectible. VAT stays due on €70 unless the base is
+  formally modified, which for €5 nobody will ever do.
+
+We assume the first for anything of this size, and want to know where the boundary sits — and
+whether the answer changes once the invoice has already been handed over, since then reducing it
+requires a factura rectificativa.
+
+Cash rounding is the same shape at higher frequency: if cash totals are rounded to the nearest five
+cents, the cash never matches the invoice exactly.
+
+> **(a)** Cuando un cliente no dispone del importe completo y el establecimiento acepta un importe
+> inferior como pago total, ¿debe documentarse como un descuento — reduciendo la base imponible y
+> emitiendo la factura por el importe efectivamente cobrado — o como un crédito incobrable que
+> mantiene la base imponible original?
+>
+> **(b)** ¿Cambia la respuesta si la factura ya se había expedido y entregado al cliente antes de
+> conocerse el importe finalmente cobrado? En ese caso, ¿procede una factura rectificativa por
+> diferencias?
+>
+> **(c)** Si se redondean los importes en efectivo al múltiplo de cinco céntimos más próximo, ¿debe
+> el redondeo figurar como una línea o un descuento en la propia factura, de modo que el importe
+> facturado y el cobrado coincidan?
+
+---
+
 ## USEFUL — reduces uncertainty, not blocking
 
 ### Q6. Consequences of breaching the hourly-retry duty

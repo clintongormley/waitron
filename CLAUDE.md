@@ -269,6 +269,20 @@ produces) and the check read only the first match. Then a third round, for this 
 first version stated row 2 as the unconditional rule and asserted the `has_*` blindness above,
 and four sites had copied the sentence.
 
+**No backwards-compatibility or data-migration code until Waitron is in production.** Nothing is
+deployed, so there is no data anyone needs preserved: schema changes drop and recreate, developer
+databases are recreated, and CI builds fresh every run. A backfill for an empty database is code
+that must still be written, reviewed, tested and maintained, and it buys nothing.
+
+The cost that produced this rule was worse than wasted effort. The first draft of
+`2026-07-31-sale-settlement-model-design.md` §6 carried a backfill moving each sale's tip onto one of
+its tenders — and it could only ever be a **guess**, because the old schema recorded one tip per sale
+and never which payer left it. A migration that invents data is worse than one that discards it: the
+invented values are indistinguishable from real ones afterwards. Delete the backfill; do not write a
+cleverer one.
+
+This rule expires the day a real venue is live. Add the entry that replaces it in the same change.
+
 **An empty connection string is a valid connection string.** `new Client({ connectionString: "" })`
 resolves to `{host:"localhost",port:5432,user:"<OS user>"}` — the empty string is falsy, so `pg`
 parses nothing and every default applies (run against `pg@8.22.0`; `pg-pool` builds its clients from

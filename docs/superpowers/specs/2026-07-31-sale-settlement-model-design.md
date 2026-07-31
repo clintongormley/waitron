@@ -258,6 +258,45 @@ A point-in-time check invites a later transaction to add another tender and chan
 `tenders` keeps a trigger — a different one: **reject any INSERT for a sale that already has a
 `sale_settlements` row.** Non-deferred, one existence check.
 
+### What the check refuses, and why that is the point
+
+Take the case that motivates loosening it: the bill is €70, the customer is paying cash, they are
+€5 short, and staff decide to accept €65 as payment in full.
+
+**The check refuses, and it is right to.** An invoice of €70 declares €70 of turnover and carries VAT
+on €70. Collect €65 against it and the venue pays tax on €5 it never received. What the check is
+stopping is not the transaction — it is the misdeclaration.
+
+**The remedy is to change the bill, never to relax the check.** If €65 is what is being accepted,
+€65 is what the sale was: a discount, and the invoice should say so. Which means the reduction has
+to reach the working order **before** the sale is recorded.
+
+That lands differently in the two modes, and it is a much stronger argument for the ordering in §8
+than the one that section originally gave:
+
+| Mode | What happens |
+| --- | --- |
+| `immediate` (pay first) | The shortfall is discovered before anything is written. Drop the bill to €65, then record. The check passes because €65 = €65. Nothing to undo |
+| `deferred` (print first) | A €70 invoice is already in the customer's hand. Correcting it needs a **factura rectificativa** — the thing piece 4 builds |
+
+§8 justified gating piece 3 on disputed bills, which sounds occasional. **Every short payment needs
+the same remedy**, as does every "take a fiver off" — so the gate is load-bearing, not precautionary.
+
+**Cash rounding is the same shape and far more frequent.** If cash totals are rounded to the nearest
+five cents, the cash never equals the invoice exactly. It has to be a line on the bill before the
+sale is recorded, not a discrepancy tolerated afterwards. Worth settling early precisely because it
+recurs.
+
+**Partial payment is a different thing, and newly expressible.** €50 paid against €70 with the rest
+promised is not an underpayment — it is an unfinished one. Write the tenders, do not write the
+`sale_settlements` row, and the sale stands as legitimately outstanding. The old model could not
+represent that at all, because settlement and existence were the same event.
+
+> **Not ours to decide.** Whether "we accepted less" is a **discount** (the sale really was €65) or a
+> **bad debt** (the sale was €70 and €5 is uncollectible, VAT still due on €70, with its own formal
+> recovery process) is an accountant question with different paperwork attached. For €5 in a deli it
+> is plainly a discount, but the till has to know which it is recording. Asked as Q15.
+
 ---
 
 ## 6. Migration `0012`
@@ -266,24 +305,24 @@ Ordered, in one migration:
 
 1. `tenders.tip_amount` + its two checks, and `tenders_amount_ck` retightened to `amount > 0`
 2. `CREATE TABLE sale_settlements` + immutability and TRUNCATE triggers + RLS + policy + grants
-3. **Backfill** (below)
-4. Replace `sales_assert_tenders_cover`'s body
-5. Drop the two deferred constraint triggers; create the `sale_settlements` coverage trigger and the
+3. Replace `sales_assert_tenders_cover`'s body
+4. Drop the two deferred constraint triggers; create the `sale_settlements` coverage trigger and the
    `tenders` post-settlement guard
-6. Drop `sales.tip_amount`, `sales.amount_charged` and their two checks
+5. Drop `sales.tip_amount`, `sales.amount_charged` and their two checks
 
-**The backfill** assigns each existing sale's tip to its earliest tender —
-`ORDER BY settled_at, id LIMIT 1`, deterministic and independent of uuid ordering — and writes a
-`sale_settlements` row for every existing sale. It runs after step 1, so every surviving tender is
-positive by then. The settlement row is correct by construction: under the old model a `sales` row
-could not exist unless its tenders already covered `amount_charged`. The tip assignment is a **guess
-with no information behind it** — the old schema recorded one tip per sale and never which payer
-left it — so it is only defensible because the alternative is losing the figure. Where a sale
-carries a non-zero tip and no tender at all, the old CHECK made that reachable only at
-`total + tip_amount = 0`; the backfill **asserts** rather than guessing there.
+**There is no backfill, deliberately.** Nothing is deployed, so no data exists that anyone needs
+preserved. A first draft of this section carried one — assigning each existing sale's tip to its
+earliest tender — and it was a **guess with no information behind it**, because the old schema
+recorded one tip per sale and never which payer left it. Writing careful preservation code for data
+that does not exist buys nothing and has to be maintained and tested like anything else.
 
-Nothing is deployed, so there is no production data — but dev and CI databases run this path, so it
-still has to be right.
+Developer databases are recreated; CI builds fresh every run. Any row that would have needed
+migrating is test data, and test data is regenerated, not preserved.
+
+> **This is a project-wide rule, not a decision local to this migration.** Until Waitron is in
+> production, schema changes drop and recreate. Recorded in `CLAUDE.md` §3 so the next session does
+> not default to writing preservation code for an empty database — and so the rule gets deleted
+> deliberately, in the change that makes it false, rather than silently outliving its reason.
 
 `packages/db/drizzle` is sequentially numbered and carries `meta/_journal.json`. `0011` is current;
 two branches adding migrations in parallel collide on the journal every time. This is why the four
