@@ -369,11 +369,26 @@ producer would repeat the `errors.reachability.test.ts` shape: a guard that look
 The obligation is recorded instead — see §9.3 and the pointer added to sub-project 7 in the phasing
 table.
 
-Piece 4 has an unresolved prerequisite already on the books: *"Asesor Q5(b) — whether rectificativas
-require their own series — is unverified"*
-([sales-spine design §3](2026-07-19-sales-spine-and-fiscal-layer-design.md)). `N series per till` is
-already supported, so it is answerable either way, but it should be answered before the numbering is
-built.
+**Piece 4's prerequisite is now closed.** The sales-spine design recorded *"Asesor Q5(b) — whether
+rectificativas require their own series — is unverified"*
+([§3](2026-07-19-sales-spine-and-fiscal-layer-design.md)). It is verified: RD 1619/2012 art. 6.1.a)
+makes it obligatory *«en todo caso»*
+([verifactu-findings.md §10.1](../../compliance/verifactu-findings.md)). `N series per till` already
+supports it, so piece 4 starts with the numbering question settled rather than open.
+
+**A fifth piece surfaced while closing it, and it is not part of piece 4.** When a customer who
+received a simplified invoice asks for a proper one with their tax details, the correct document is
+a **factura de canje, `TipoFactura` F3** — and AEAT is explicit that it *«no tiene la consideración
+de rectificativa»*, that the simplified invoices must **not** be annulled, that one F3 may exchange
+many of them, and that its registro must name them in `FacturasSustituidas`
+([findings §10.2](../../compliance/verifactu-findings.md)).
+
+`packages/verifactu` already types `F3`, `FacturasRectificadas` and `FacturasSustituidas`. Nothing
+above it uses them: `fiscal-verifactu/src/backend.ts:257` emits
+`sale.counterparty === null ? "F2" : "F1"` and no third case, and `sales` carries no reference to
+another invoice. A restaurant is asked for a proper invoice routinely, so this is ordinary trade
+rather than an edge case — it wants its own spec, sequenced with piece 4 since both touch the chain
+and both add `packages/db` migrations.
 
 ---
 
@@ -471,6 +486,8 @@ server-driven WiFi ESC/POS printer is, and stays consistent with D3 of the deli 
 | Pre-facturas lawful; pre-issuance mutation lawful; preservation on issuance; art. 29.2.j LGT direct effect from Oct 2021 | Same document, §11 and the duplicate-RF section |
 | Invoice issued at the moment of the operation; copy required; immediate transmission; electronic delivery needs consent | [RD 1619/2012, arts. 2, 9, 11, 18 (BOE)](https://www.boe.es/buscar/act.php?id=BOE-A-2012-14696) |
 | Tips outside the VAT base, not invoiced | **Secondary** — asesor commentary citing DGT consulta vinculante 2174-03. Not read at source. See §9.2 |
+| A specific series for rectificativas is obligatory | [RD 1619/2012 art. 6.1.a) (BOE)](https://www.boe.es/buscar/act.php?id=BOE-A-2012-14696), read via both the consolidated and original renderings |
+| F3 canje is not a rectificativa; no annulment; `FacturasSustituidas`; V2543-06 | AEAT developer FAQ, worked examples for rectifying simplified invoices |
 | No production reader of `amount_charged` | `rg 'amountCharged\|amount_charged' packages apps`, 2026-07-31 |
 | No writer of working orders | `rg -l 'workingOrderLines\|workingOrders' packages/*/src apps/*/src`, 2026-07-31 |
 | Only one site inserts tenders; refunds do not | `rg 'insert\(tenders\)' packages/core/src packages/payments/src packages/payments-stripe/src`, 2026-07-31 |

@@ -572,6 +572,66 @@ or QR-only cannot replace paper without consent.
 
 ---
 
+## 10. Rectificativas need their own series — and F3 canje is not a rectificativa (added 2026-07-31)
+
+### 10.1 A separate series for rectificativas is mandatory. Q5(b) is closed
+
+RD 1619/2012 art. 6.1.a), after permitting optional separate series *«cuando existan razones que lo
+justifiquen»*:
+
+> «No obstante, será obligatoria, en todo caso, la expedición en series específicas de las facturas
+> siguientes: […] **Las rectificativas.**»
+
+Read twice from the BOE, through the consolidated text (`buscar/act.php`) and the original
+(`buscar/doc.php`). **The two renderings list a different number of items** — five and three — which
+is consistent with later amendments adding to the list; the item that matters appears in both, and
+neither includes facturas simplificadas.
+
+Two consequences:
+
+- **Q5(b) — answered: yes, mandatory.** No longer a prerequisite for the rectificativa cycle.
+- **Q5(c) — partly answered.** Simplified invoices are absent from a list introduced by *«en todo
+  caso»*, so no separate series is *required* for them. AEAT's own worked examples nonetheless use
+  `S-0001` for simplified, `F-0001` for ordinary and `R0001`/`RS-0001` for rectificativas — practice,
+  not obligation.
+- **Q5(a) — still open.** The article's example is *«cuando el obligado a su expedición cuente con
+  varios establecimientos»* — several *establishments*, which is not the same as several tills inside
+  one. The per-till series conclusion still rests on AEAT's per-TPV SIF guidance.
+
+### 10.2 F3 — the "make me a proper invoice" case, which we do not model
+
+A customer who received a simplified invoice and then asks for a full one with their tax details
+does **not** trigger a rectificativa. The correct document is a **factura de canje, `TipoFactura`
+F3**, and AEAT is explicit that it is a different animal:
+
+> «No tiene la consideración de rectificativa (2º párrafo del artículo 15.6 del […] "ROF" […]), por
+> lo que no estamos ante un caso de rectificación (no procede rectificar las facturas simplificadas
+> canjeadas por el mero hecho de canjearlas con una factura tipo F3). […] Siempre debe llevar el
+> destinatario de la misma.»
+
+The rules that fall out of AEAT's worked examples:
+
+- **Do not annul the simplified invoices being exchanged.** The F3 key itself prevents double
+  counting — *«el importe total […] de una factura de canje F3 NO se volverá a tener en cuenta a
+  efectos tributarios porque ya se declaró a medida que se fueron expidiendo las facturas
+  simplificadas a las que canjea»*.
+- **One F3 may exchange many simplified invoices** across a period, *«permitido por el ROF […] de
+  acuerdo con la consulta vinculante V2543-06»*.
+- **The F3's registro must identify what it replaces**, in the `FacturasSustituidas` block.
+- AEAT warns separately not to collect the money twice — *«deberá tenerse cuidado de no cobrar dos
+  veces el importe, se haga con cargo a los tiques o a la factura de canje»*.
+
+Rectifying a *simplified* invoice, by contrast, is `TipoFactura` **R5** with `TipoRectificativa` `I`
+(por diferencias) and a negative `ImporteTotal`, followed by a fresh F3 if the customer had one.
+
+**Where we stand.** `packages/verifactu` already types `F3` and both `FacturasRectificadas` and
+`FacturasSustituidas`. Nothing above them uses either: `fiscal-verifactu/src/backend.ts:257` emits
+`sale.counterparty === null ? "F2" : "F1"` and no third case, and `sales` has no column referencing
+another invoice. A restaurant is asked for a proper invoice routinely, so this is ordinary trade, not
+an edge case.
+
+---
+
 ## Sources
 
 | Source | Type |

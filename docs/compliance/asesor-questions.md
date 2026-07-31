@@ -322,6 +322,12 @@ with one reliable till and one in a dead spot is a realistic configuration.
 
 ### Q5. Series requirements — the part we could not source
 
+> **(b) CLOSED on primary source, 2026-07-31.** RD 1619/2012 art. 6.1.a) makes a specific series
+> for rectificativas obligatory *«en todo caso»* — read twice from the BOE. **(c) partly answered**:
+> simplified invoices are absent from that mandatory list. **(a) remains open** — the article's
+> example is *varios establecimientos*, not several tills in one. See
+> [verifactu-findings.md §10.1](verifactu-findings.md). Do not re-ask (b).
+
 **Why it matters.** We assume one series per till. Research confirmed the chaining rules but
 never verified the underlying series permission in RD 1619/2012 art. 6.1.a. Low risk, but it
 is the foundation of the numbering scheme. The rectificativa question is the practical one:
