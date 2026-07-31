@@ -510,7 +510,9 @@ describe("applyInstance against a blank container", () => {
     // privilege to get past `withState`'s state read, which is the shape the design doc could not
     // settle by reading alone.
     await admin.execute(sql.raw(`drop role if exists partial_admin`));
-    await admin.execute(sql.raw(`create role partial_admin login createdb createrole password 'p'`));
+    await admin.execute(
+      sql.raw(`create role partial_admin login createdb createrole password 'p'`),
+    );
     await admin.execute(
       sql.raw(`grant connect on database ${quoteIdent(DATABASE)} to partial_admin`),
     );
