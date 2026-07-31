@@ -206,13 +206,18 @@ themselves, perhaps failing later or not at all — is a different, narrower fix
 does not speak to.
 
 **A defect in the reproduction's own first draft, worth recording alongside the finding.** The test
-helper this suite already had, `deps(as, database)`, builds `ApplyDeps` by closing over the outer
+helper this suite already had, `deps(as, database)`, built `ApplyDeps` by closing over the outer
 `adminUri` regardless of `as`, so an initial `deps(probeAdmin)` ran the `migrate` action's internal
 reconnect (`applyMigrations(withDatabase(deps.adminUri, ...))`) as the fully-privileged admin instead
 of the role under test, and printed a spurious "APPLY SUCCEEDED" that measured the wrong role
-entirely. The committed test builds `ApplyDeps` by hand instead, with `adminUri` scoped to the probed
-role, so every action — including `migrate`'s own reconnect — genuinely runs as the under-privileged
-admin.
+entirely. The helper now takes a third parameter, `uri`, defaulting to that same outer `adminUri`;
+the committed test passes `probeUri`, so every action — including `migrate`'s own reconnect — runs as
+the under-privileged admin. That the parameter is load-bearing was proven by mutation rather than
+argued: dropping it (`deps(probe, DATABASE)`) and running
+`TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/provisioning test instance-apply.rls -t "a
+partially-privileged admin reads state but fails the migrate"` fails at
+`instance-apply.rls.test.ts:610` with `AssertionError: expected null to be '42501'` — nothing was
+thrown, because the migrate ran as `prov_admin`.
 
 The adjacent case is already refused earlier — `cli.ts:283-287` records, from a run through the built
 bundle, that an admin which did not create the target database fails the stamp read with
@@ -278,3 +283,14 @@ does not load a package's cross-cutting guard suites — then
 The four remaining follow-ups from the handoff's §5 — structural password redaction, extracting
 `createTerminalIo` out of `bin.ts`, collapsing `ApplyDeps.database` against the action list, and the
 duplicated order-tracking IO fixture. None is a dependency of this change.
+
+**Making `status` say what actually applied** is deferred here rather than merely rejected, and is
+recorded so a future session does not re-derive the decision from scratch. §2's "Alternatives
+rejected" turns down comparing journal ROWS against each set's `meta/_journal.json` **for the
+planner** — the planner does not need that precision, because re-running an idempotent migrator is
+cheaper than a check that can be wrong. But the same comparison would let `status` report
+"core: 4 of 4 applied" instead of `journal present`, and that is a real improvement this change
+deliberately does not make: it would pull the migrations root, and therefore a filesystem read, into
+a command that is DB-introspection-only today. The reasoning against it is about the planner; anyone
+revisiting it **for the report** is looking at a different trade-off and should weigh it afresh
+rather than treating §2 as having settled it.
