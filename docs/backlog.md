@@ -37,8 +37,13 @@ reprioritisation rather than assumed.
 
 | What | State |
 | --- | --- |
-| **Sale settlement model** — design | PR #20, open. Docs only |
-| **Sale settlement model** — implementation plan | Not written. The next thing to do |
+| **Sale settlement model** — design | **PR #20, open and unmerged.** Docs only. CI green, Copilot's three findings fixed and answered |
+| **This backlog** | **PR #21, open and unmerged.** Docs only |
+| **Sale settlement model** — implementation plan | Not written. The next build step, once #20 lands |
+| **Close Q13 and Q15 on primary source** | Not started. Cheaper than hiring — see below |
+| **Consolidate the session-memory notes** | Not started. They predate this file and now overlap it — see below |
+
+Both PRs are waiting on a merge decision, not on work.
 
 ---
 
@@ -83,9 +88,24 @@ Two of the four are not idle curiosity — they check assumptions **already buil
 firm with demonstrated technical depth on encadenamiento or RRSIF architecture was verified — every
 candidate turned out to be a marketing page. Assume you will be educating whoever you hire."*
 
-Q5(b) was closed on primary source rather than by asking. Q13 and Q15 may be closable the same way —
-DGT consultas through PETETE — and that is cheaper than hiring. Worth one research cycle before
-concluding an advisor is required.
+### Task: try to close Q13 and Q15 on primary source first
+
+**Q5(b) was closed without asking anyone** — RD 1619/2012 art. 6.1.a) states it plainly, and reading
+the BOE took minutes. Two of the remaining questions may go the same way, and that is worth an
+afternoon before committing to a relationship the research above says will need managing.
+
+- **Q13 (tips).** Every secondary source cites **DGT consulta vinculante 2174-03**, and none of them
+  was read at source. Start there, in [PETETE](https://petete.tributos.hacienda.gob.es/consultas/).
+  Highest value of the four: the answer is already assumed by the schema, by `record-sale.ts`, and by
+  a test pinning tips out of the huella.
+- **Q15 (short payment).** Discount versus bad debt is well-trodden ground in DGT doctrine; the
+  card-present wrinkle — one capture exceeding the invoice — may not be.
+- **Q14 (precuenta)** is the one least likely to yield, since it turns on whether AEAT's
+  *prefactura* list is exhaustive, which is an interpretive question rather than a stated rule.
+
+Record whatever is found in [compliance/verifactu-findings.md](compliance/verifactu-findings.md)
+and mark the question closed in `asesor-questions.md`, following the Q5(b) precedent — do not leave a
+closed question sitting in the open list.
 
 ---
 
@@ -127,6 +147,26 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   on scale that does not exist yet
 - **Provisioning and credentials follow-ups** — test-infra duplication, `bin.ts` connect-before-
   validate ordering, `rotate` coupled to `PURPOSES`
+
+---
+
+## Task: consolidate the session-memory notes against this file
+
+The per-topic memory entries were the only record of priorities before this file existed, and now
+they overlap it. Left alone they will disagree with it, and memory is the copy nobody can review.
+
+Three specific problems, all present today:
+
+- **Dangling references.** Entries cite pull requests up to #35. The repository was recreated for the
+  licence change and numbering restarted at #1, so those point at nothing. Commit SHAs in them
+  dangle for the same reason.
+- **Overlap.** Several are titled "follow-ups" and hold exactly what the **Debt and odd jobs**
+  section above now holds.
+- **A known contradiction.** One entry records that `CLAUDE.md` still says the opposite of it.
+
+What to do: move anything that is genuinely a *task* into this file, keep in memory only what memory
+is for — durable preferences and hard-won lessons that change how work is done — and delete the
+rest. Strip or annotate the dead PR numbers wherever the surrounding fact is still worth keeping.
 
 ---
 
