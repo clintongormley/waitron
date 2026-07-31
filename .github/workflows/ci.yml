@@ -16,6 +16,83 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Works out what the rest of the workflow needs to do. Everything below gates on its outputs.
+  #
+  # Two independent decisions, deliberately not merged into one (design §3.2):
+  #   `code`  — is there anything here that is not prose? If not, only `lint` runs, on pull requests
+  #             AND on main, so a documentation merge costs nothing in either place.
+  #   `scope` — on a pull request, narrow the test shards to the packages that changed and the
+  #             packages that depend on them. On main, run everything, because that unfiltered run
+  #             is what verifies the narrowing was right.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+      scope: ${{ steps.classify.outputs.scope }}
+      heavy: ${{ steps.heavy.outputs.heavy }}
+    steps:
+      # fetch-depth: 0 is load-bearing. The default is 1, which leaves no merge base to diff
+      # against and no history for pnpm's own change detection — both would then silently report
+      # "nothing changed" and skip the entire suite.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # Needed for the `pnpm ls` membership query below. No `pnpm install` is required — `pnpm ls
+      # --filter` resolves from the workspace manifests alone (verified in a clone with no
+      # node_modules present).
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - id: classify
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags origin "$BASE_REF"
+            paths=$(git diff --name-only "origin/$BASE_REF...HEAD")
+            # Changed packages AND THEIR DEPENDENTS. The ellipsis goes on the LEFT — `[ref]...`
+            # is the other direction (a package and its dependencies) and would test the wrong set.
+            scope="...[origin/$BASE_REF]"
+          else
+            case "$BEFORE" in
+              # An all-zero `before` means a new branch or a force-push: no usable base, so no diff.
+              # Emit nothing and let the classifier fail closed to a full run.
+              *[!0]*) paths=$(git diff --name-only "$BEFORE" "$SHA") ;;
+              *) echo "no usable base ref ($BEFORE) — running everything" >&2; paths="" ;;
+            esac
+            # main always runs the full suite: it is what verifies the pull request's narrowing.
+            scope=""
+          fi
+
+          printf '%s\n' "$paths" | node .github/scripts/changed-scope.mjs >> "$GITHUB_OUTPUT"
+          echo "scope=$scope" >> "$GITHUB_OUTPUT"
+
+      # Does the heavy shard have anything to do? This CANNOT be expressed as a filter on the shard
+      # itself — see needsHeavyShard's own comment for the two wrong formulations and why each
+      # fails. An unscoped run (main) always needs it.
+      - id: heavy
+        env:
+          SCOPE: ${{ steps.classify.outputs.scope }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SCOPE" ]; then
+            echo "heavy=true" >> "$GITHUB_OUTPUT"
+          else
+            pnpm --filter "$SCOPE" ls --depth -1 --json 2>/dev/null \
+              | node .github/scripts/changed-scope.mjs heavy >> "$GITHUB_OUTPUT"
+          fi
+
   # Lint + format check. Cheapest job, no Playwright/Chromium involved.
   static-analysis:
     runs-on: ubuntu-latest

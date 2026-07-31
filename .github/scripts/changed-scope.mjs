@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 // Decides whether a change can affect anything but prose, so CI can skip the expensive jobs when it
 // cannot. Design: docs/superpowers/specs/2026-07-31-scoped-ci-design.md §3.4.
 //
@@ -72,3 +74,38 @@ export function needsHeavyShard(scopedPackagesJson) {
 
   return packages.some((pkg) => pkg.name === HEAVY_PACKAGE);
 }
+
+/** Renders a classification as the single GitHub Actions output line the workflow consumes. */
+export function formatOutput(paths) {
+  return `code=${classify(paths).code}`;
+}
+
+// CLI, two subcommands, both reading stdin:
+//   classify  — changed paths, one per line   → `code=<bool>`
+//   heavy     — `pnpm ls --json` output       → `heavy=<bool>`
+// Kept to the smallest possible body: every decision worth testing lives in the exported functions
+// above. What is left is the stream split — stdout is appended verbatim to `$GITHUB_OUTPUT`, so it
+// carries the `code=`/`heavy=` line and nothing else, while the reason goes to stderr for whoever
+// reads the job log. No exported function can show that, so changed-scope.test.mjs spawns this file
+// with `spawnSync` and reads the two streams apart.
+//
+// Ignored for coverage because those tests run it in a CHILD process, and the v8 provider only
+// measures the module graph loaded into the test process — so this block reads as 0% however
+// thoroughly it is exercised. Ignored for being unmeasurable, not for being untested: delete the
+// `describe("the CLI")` suite and six assertions about this block's behaviour go with it.
+/* v8 ignore start */
+if (process.argv[1] && process.argv[1].endsWith("changed-scope.mjs")) {
+  const stdin = readFileSync(0, "utf8");
+
+  if (process.argv[2] === "heavy") {
+    const heavy = needsHeavyShard(stdin);
+    console.error(`changed-scope: heavy=${heavy}`);
+    console.log(`heavy=${heavy}`);
+  } else {
+    const paths = stdin.split("\n");
+    const { code, reason } = classify(paths);
+    console.error(`changed-scope: code=${code} (${reason})`);
+    console.log(formatOutput(paths));
+  }
+}
+/* v8 ignore stop */

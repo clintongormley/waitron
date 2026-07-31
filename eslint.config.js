@@ -244,14 +244,19 @@ export default tseslint.config(
     // `packages/provisioning/scripts/copy-migrations.mjs` is its near-copy, shipping the same
     // migration folders beside `waitron-provision`'s own bundle. Both need the same one global.
     // `.github/scripts/changed-scope.mjs` is the third, and the first that is not a build step:
-    // it classifies a diff so CI can skip work a change cannot affect.
+    // it classifies a diff so CI can skip work a change cannot affect. It is also the first to need
+    // a SECOND global. The other two only ever announce progress on stdout and reach for
+    // `process.stdout.write` to do it (grepped: four calls across the two files, no `console`
+    // anywhere); this one has to keep two streams apart, because its stdout is appended straight to
+    // `$GITHUB_OUTPUT` and must carry the `code=`/`heavy=` line and nothing else, while the reason
+    // for that verdict goes to stderr for a human reading the job log.
     files: [
       "apps/server/scripts/**/*.mjs",
       "packages/provisioning/scripts/**/*.mjs",
       ".github/scripts/**/*.mjs",
     ],
     languageOptions: {
-      globals: { process: "readonly" },
+      globals: { console: "readonly", process: "readonly" },
     },
   },
 

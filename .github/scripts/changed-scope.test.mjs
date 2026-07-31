@@ -1,5 +1,7 @@
+import { spawnSync } from "node:child_process";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { classify, isInertPath, needsHeavyShard } from "./changed-scope.mjs";
+import { classify, formatOutput, isInertPath, needsHeavyShard } from "./changed-scope.mjs";
 
 describe("isInertPath", () => {
   it.each(["docs/backlog.md", "docs/superpowers/specs/some-design.md", "docs/compliance/x.md"])(
@@ -87,5 +89,67 @@ describe("needsHeavyShard", () => {
   // costs 189s, while skipping one we did need ships an untested packages/db.
   it("is true when the output cannot be parsed", () => {
     expect(needsHeavyShard("No projects matched the filters")).toBe(true);
+  });
+});
+
+describe("formatOutput", () => {
+  it("emits a GitHub Actions output line for a code change", () => {
+    expect(formatOutput(["packages/db/src/index.ts"])).toBe("code=true");
+  });
+
+  it("emits a GitHub Actions output line for a docs change", () => {
+    expect(formatOutput(["docs/backlog.md"])).toBe("code=false");
+  });
+});
+
+// The CLI is only reachable by running the file, so these spawn it. What they add over the unit
+// tests above is the part no exported function can show: WHICH STREAM each line goes to. The
+// workflow appends this process's stdout straight to $GITHUB_OUTPUT, so a stray line there becomes
+// a bogus job output — and the human-readable reason has to land on stderr for that to hold.
+describe("the CLI", () => {
+  const script = join(import.meta.dirname, "changed-scope.mjs");
+
+  /** Runs the script with `input` on stdin, keeping its two streams apart. */
+  const run = (input, ...args) => {
+    const result = spawnSync(process.execPath, [script, ...args], { input, encoding: "utf8" });
+    expect(result.status).toBe(0);
+    return result;
+  };
+
+  it("writes only the output line to stdout, for a docs-only diff", () => {
+    expect(run("docs/backlog.md\nCLAUDE.md\n").stdout).toBe("code=false\n");
+  });
+
+  it("writes only the output line to stdout, for a diff touching a package", () => {
+    expect(run("docs/backlog.md\npackages/db/src/index.ts\n").stdout).toBe("code=true\n");
+  });
+
+  // The all-zero `github.event.before` path: the workflow pipes an empty `paths` in, and the run
+  // must fail closed to a full one rather than skipping everything.
+  it("fails closed on empty stdin", () => {
+    expect(run("").stdout).toBe("code=true\n");
+    expect(run("\n").stdout).toBe("code=true\n");
+  });
+
+  it("answers the heavy subcommand from pnpm ls output", () => {
+    const ls = JSON.stringify([{ name: "@waitron/db" }, { name: "@waitron/shared" }]);
+    expect(run(ls, "heavy").stdout).toBe("heavy=true\n");
+    expect(run(JSON.stringify([{ name: "@waitron/shared" }]), "heavy").stdout).toBe(
+      "heavy=false\n",
+    );
+  });
+
+  // An empty match is what `pnpm ls --json` really emits when the filter selects nothing: zero
+  // bytes on stdout, zero on stderr, exit 0 — not `[]`, and no message. Measured on pnpm 9.15.0
+  // against `--filter "@waitron/nonexistent"`, `--filter "...[main]"` and
+  // `--filter "...[origin/main]"`, in both a worktree and a fresh clone.
+  it("reads an empty pnpm ls result as no work for the heavy shard", () => {
+    expect(run("", "heavy").stdout).toBe("heavy=false\n");
+  });
+
+  it("puts the reason on stderr, where it cannot reach $GITHUB_OUTPUT", () => {
+    const { stdout, stderr } = run("docs/backlog.md\n");
+    expect(stderr).toContain("are documentation");
+    expect(stdout).not.toContain("documentation");
   });
 });
