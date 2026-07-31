@@ -98,13 +98,15 @@ describe("planInstance against a blank cluster", () => {
 });
 
 describe("planInstance against a provisioned deployment", () => {
-  it("plans only the idempotent grants — no create, no migrate, no stamp", () => {
-    // Spec §4: running any command twice is safe. The grants remain, deliberately: they are
-    // re-issued rather than diffed (see REQUIREMENTS' comment in instance-plan.ts), because
-    // information_schema.role_table_grants cannot see database- or schema-level CREATE at all.
-    // What must NOT survive a second run is anything that writes something new.
+  it("plans the idempotent grants and a migrate — no create, no stamp", () => {
+    // Spec §4: running any command twice is safe. What must NOT survive a second run is anything
+    // that writes something NEW — a role, a stamp. `migrate` is not in that category: it is
+    // re-issued on every run for the same reason the two grants are, because the migrator is
+    // journal-tracked and re-running it cannot be wrong, while a check on whether it needs running
+    // can be. See instance-plan.ts's comment on the `migrate` push.
     const actions = planInstance(provisioned(), REQUEST, () => "pw");
     expect(actions).toEqual([
+      { kind: "migrate" },
       { kind: "grant-database-create", role: "waitron_migrator", database: "waitron" },
       { kind: "grant-schema-create", role: "waitron_migrator", withGrantOption: true },
     ]);
@@ -119,42 +121,42 @@ describe("planInstance against a provisioned deployment", () => {
   it("still plans a missing membership on an existing role", () => {
     const state = provisioned();
     state.roles.waitron_provisioner = { ...HEALTHY, memberOf: ["app_user"] };
-    // Corrected from the brief: the brief's expectation of a bare membership grant omits the two
-    // migrator grants (grant-database-create, grant-schema-create) that the implementation always
-    // re-issues regardless of what else changed in the plan — see the "re-issued, not diffed"
-    // comment on REQUIREMENTS in instance-plan.ts. Order confirmed empirically by running this
-    // suite: `grant-membership` for waitron_provisioner is emitted FIRST — it comes from the
-    // create-role/grant-membership loop over INSTANCE_ROLES — and the migrator's two grants come
-    // SECOND, from the separate, unconditional grants loop that runs after it. (This fixture's
-    // `state.inside` is already fully migrated and stamped, so neither `migrate` nor `stamp`
-    // appears here at all — the loop that would emit them never fires.)
+    // Corrected beyond the brief: `migrate` is now unconditional (this task's own change — see
+    // instance-plan.ts's comment on the `migrate` push), so it leads every plan including this one,
+    // not only the ones with a gap in `state.inside.migratedSets`. The brief's expectation of a bare
+    // membership grant also omits the two migrator grants (grant-database-create,
+    // grant-schema-create) that the implementation always re-issues regardless of what else changed
+    // in the plan — see the "re-issued, not diffed" comment on REQUIREMENTS in instance-plan.ts.
+    // Order confirmed empirically by running this suite: `migrate` comes first; then
+    // `grant-membership` for waitron_provisioner, from the create-role/grant-membership loop over
+    // INSTANCE_ROLES; then the migrator's two grants, from the separate, unconditional grants loop
+    // that runs after it. (This fixture's `state.inside` is already stamped for REQUEST's
+    // environment, so `stamp` does not appear here — the check that would emit it never fires.)
     expect(planInstance(state, REQUEST, () => "pw")).toEqual([
+      { kind: "migrate" },
       { kind: "grant-membership", role: "waitron_provisioner", memberOf: "tenant_provisioner" },
       { kind: "grant-database-create", role: "waitron_migrator", database: "waitron" },
       { kind: "grant-schema-create", role: "waitron_migrator", withGrantOption: true },
     ]);
   });
 
-  it("plans a migrate when any set's journal is missing", () => {
-    const state = provisioned();
-    state.inside = { migratedSets: ["core"], stamp: "preproduction" };
-    // Corrected from the brief: same omission as above — the two migrator grants are always
-    // re-issued, so a plan against a provisioned-but-partially-migrated deployment is never just
-    // `[{ kind: "migrate" }]`.
+  it("plans the same migrate whatever the journals say", () => {
+    // The property this replaces a gate with. `migratedSets` is journal-TABLE existence, not "the
+    // set finished": Drizzle creates the journal table at
+    // `drizzle-orm@0.45.2/pg-core/dialect.js:54-55` and only opens the transaction its migrations
+    // run in at `:60`, so a run interrupted inside a set leaves the journal behind and the set
+    // empty. Gating on journal presence read that leftover as "done" and planned no `migrate` —
+    // so the one command that could repair it granted, stamped and exited 0 against a deployment
+    // whose last set never ran.
     //
-    // Order corrected a second time, from this task's own first version (task-5-report.md), which
-    // had the grants loop run before the migrate/stamp tail and asserted that order here. Task 6's
-    // end-to-end suite (instance-apply.rls.test.ts) ran this plan against a real, blank container
-    // and hit a real Postgres error: `create role "waitron_migrator" ... in role "app_user"` failed
-    // with `role "app_user" does not exist` (SQLSTATE 42704) — `app_user` is created by the "core"
-    // migration set, not by this tool, so on a blank cluster it does not exist until migrate has
-    // run. `planInstance` now emits migrate immediately after `create-database`, before any LOGIN
-    // role, which is why it leads here too.
-    expect(planInstance(state, REQUEST, () => "pw")).toEqual([
-      { kind: "migrate" },
-      { kind: "grant-database-create", role: "waitron_migrator", database: "waitron" },
-      { kind: "grant-schema-create", role: "waitron_migrator", withGrantOption: true },
-    ]);
+    // Asserting the two plans are IDENTICAL is the point, rather than asserting `migrate` appears
+    // in each: it rules out a partial fix that emits migrate for one journal shape and not another.
+    const everySet = planInstance(provisioned(), REQUEST, () => "pw");
+    const partial = provisioned();
+    partial.inside = { migratedSets: ["core"], stamp: "preproduction" };
+
+    expect(everySet).toContainEqual({ kind: "migrate" });
+    expect(planInstance(partial, REQUEST, () => "pw")).toEqual(everySet);
   });
 });
 

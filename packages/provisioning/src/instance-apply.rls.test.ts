@@ -2,11 +2,13 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import { createPostgresDb, type Database } from "@waitron/db";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { quoteIdent } from "./identifiers.js";
 import { applyInstance, withDatabase, type ApplyDeps } from "./instance-apply.js";
 import type { InstanceAction } from "./instance-plan.js";
 import { planInstance } from "./instance-plan.js";
 import { readInstanceState } from "./instance-state.js";
+import { sqlStateOf } from "./sql-state.js";
 import { roleUrl, startBarePostgres, type RealPostgres } from "./testing/postgres.js";
 
 const DATABASE = "waitron_instance_suite";
@@ -39,17 +41,28 @@ describe("applyInstance against a blank container", () => {
    * the whole point of three of those tests is running the SAME action as a DIFFERENT, under-
    * privileged admin (`grant_probe_admin`, `delegate_admin`, `probe_admin`) and watching it be
    * refused; everything else about the deps is identical.
+   *
+   * **`uri` must name the same role as `as`, and that is why it is a parameter at all.**
+   * `ApplyDeps` carries the admin identity through TWO channels — the `Database` handle, and the
+   * connection STRING that `migrate` reconnects from (`applyMigrations(withDatabase(deps.adminUri,
+   * …))`, instance-apply.ts) — and nothing in the type stops them disagreeing. While this helper
+   * hard-coded the outer `adminUri`, every `deps(someProbeRole)` silently ran the `migrate` action
+   * as the fully-privileged `prov_admin`. That was invisible for as long as the under-privileged
+   * tests passed a single hand-picked action and never `migrate`; the first test to hand one a full
+   * plan (`a partially-privileged admin reads state but fails the migrate`) hit it, and its first
+   * draft reported a spurious success for a reason unrelated to the role it believed it was
+   * measuring. Passing `uri` is what keeps both channels one role.
    */
-  function deps(as: Database): ApplyDeps {
+  function deps(as: Database, database: string = DATABASE, uri: string = adminUri): ApplyDeps {
     return {
       admin: as,
-      database: DATABASE,
-      adminUri,
+      database,
+      adminUri: uri,
       migrationsRoot: null,
       // This suite OWNS every target connection it hands over, so `release` closes it — the
       // opposite end of the contract from `cli.ts`, which lends one `withState` closes.
       openTarget: async () => {
-        const db = await createPostgresDb(withDatabase(adminUri, DATABASE));
+        const db = await createPostgresDb(withDatabase(uri, database));
         return { db, release: () => db.close() };
       },
     };
@@ -84,7 +97,7 @@ describe("applyInstance against a blank container", () => {
     expect(rows.rows[0]?.rolbypassrls).toBe(false);
   });
 
-  it("takes a blank cluster to a migrated, stamped, granted database — and then plans nothing", async () => {
+  it("takes a blank cluster to a migrated, stamped, granted database — and then plans only the idempotent grants and a migrate", async () => {
     const applyDeps = deps(admin);
     const request = { database: DATABASE, environment: "preproduction" } as const;
 
@@ -150,14 +163,17 @@ describe("applyInstance against a blank container", () => {
       expect(migratorAcl).toMatch(/=C\*/);
 
       // The idempotency claim, made against reality rather than against the planner's own model:
-      // a second plan from the state the first one produced carries no create and no migrate.
+      // a second plan from the state the first one produced carries no create and no stamp.
+      // `migrate` is not part of that claim — instance-plan.ts now pushes it unconditionally, for
+      // the same reason as the two grants below, so it is expected here too rather than absent.
       const second = planInstance(after, request);
       expect(second).not.toContainEqual(expect.objectContaining({ kind: "create-role" }));
       expect(second).not.toContainEqual(expect.objectContaining({ kind: "create-database" }));
-      expect(second).not.toContainEqual({ kind: "migrate" });
+      expect(second).toContainEqual({ kind: "migrate" });
       expect(second).not.toContainEqual(expect.objectContaining({ kind: "stamp" }));
-      // Applying it again must also not throw — the grants are the only thing left, and they are
-      // idempotent by construction.
+      // Applying it again must also not throw. The grants are idempotent by construction, and
+      // re-running `migrate` is too: `dialect.js:62` applies a migration only when the journal's
+      // watermark is behind it, which it never is here.
       await applyInstance(second, applyDeps);
     } finally {
       await release();
@@ -422,6 +438,209 @@ describe("applyInstance against a blank container", () => {
       // In a `finally` so the suite is order-independent rather than order-reliant: the tests
       // after this one read `pg_roles`, and a leftover `probe_admin` is a role they did not create.
       await admin.execute(sql.raw(`drop role if exists probe_admin`));
+    }
+  });
+
+  it("repairs a set whose journal survived a rolled-back migration", async () => {
+    // The defect the migrate gate left open, end to end. `migratedSets` is journal-TABLE existence,
+    // and Drizzle creates that table at `drizzle-orm@0.45.2/pg-core/dialect.js:54-55` — OUTSIDE the
+    // transaction it opens at `:60` for the set's migrations. So an `instance` killed inside a set
+    // rolls the migrations back and leaves the journal behind: every journal present, one set
+    // empty. The old planner read that as "done", planned no `migrate`, and let this command grant,
+    // stamp and exit 0 against a deployment whose last set had never run.
+    //
+    // Built FORWARDS rather than by damaging a migrated database. Damaging one would need each
+    // set's table list and would have to respect the foreign keys `packages/migrations/src/apply.ts`
+    // records (core carries `tenants`, which every other set references), and none of that is under
+    // test. The simpler-looking variant — pre-create all five journals against an empty database —
+    // does NOT reproduce this defect: `deployment` is itself created by a migration, and
+    // `stampDeployment` INSERTs into it after `readDeploymentEnvironment` returns null for an absent
+    // table (`packages/db/src/deployment.ts:39-41`), so the old tool would have FAILED on the stamp
+    // rather than exiting 0. A test built that way would pass while demonstrating the wrong thing.
+    const database = "waitron_interrupted_suite";
+    const sets = manifestSets();
+    const last = sets[sets.length - 1];
+    if (last === undefined) throw new Error("the manifest is empty");
+    // The journal table below is derived from the manifest; the SCHEMA probe further down is not,
+    // and cannot be — `MigrationSet` carries `name`, `table` and `from` (manifest.ts:9-14) and no
+    // list of what each set creates, so there is nothing to derive `tenant_credentials` from. This
+    // assertion is what keeps the hardcoded half honest: `tenant_credentials` is created by
+    // `packages/credentials/drizzle/0000_credentials.sql`, which is the `credentials` set. Append a
+    // sixth set to the manifest and this fails here, loudly, instead of silently probing a table
+    // that belongs to a set which was never the one left empty.
+    expect(last.name).toBe("credentials");
+
+    await admin.execute(sql.raw(`create database ${quoteIdent(database)}`));
+    try {
+      // Every set but the last, applied for real by the real migrator.
+      await applyMigrations(
+        withDatabase(adminUri, database),
+        migrationOptionsFor(sets.slice(0, -1), null),
+      );
+
+      const target = await createPostgresDb(withDatabase(adminUri, database));
+      try {
+        // The last set's journal, by hand, in Drizzle's own shape (`dialect.js:48-51`) and with no
+        // rows — which is exactly what the rolled-back transaction leaves behind.
+        //
+        // Schema-QUALIFIED, because both of the things this fixture has to line up with name
+        // `public` explicitly and neither consults `search_path`: Drizzle creates the journal at
+        // `<migrationsSchema>.<table>` with `migrationsSchema: "public"` fixed at
+        // `packages/db/src/migrate.ts:42`, and `readInside` probes
+        // `to_regclass('public.<table>')` (`instance-state.ts:131`). Unqualified, this statement
+        // instead resolves through the session's `search_path` — `"$user", public` by default, so
+        // it lands in `public` here only because no schema is named after the connecting role.
+        // That is a default this fixture would otherwise be silently depending on.
+        await target.execute(
+          sql.raw(
+            `create table public.${quoteIdent(last.table)} (
+               id serial primary key, hash text not null, created_at bigint
+             )`,
+          ),
+        );
+
+        const state = await readInstanceState(admin, database, target);
+        // The precondition, asserted rather than assumed: every journal reads as present, so the
+        // OLD planner would have seen nothing to do here.
+        expect(state.inside?.migratedSets).toEqual(sets.map((set) => set.name));
+        // And the set really is empty — no table of its own yet.
+        const before = await target.execute<{ present: boolean }>(
+          sql`select to_regclass('public.tenant_credentials') is not null as present`,
+        );
+        expect(before.rows[0]?.present).toBe(false);
+
+        const request = { database, environment: "preproduction" } as const;
+        const actions = planInstance(state, request);
+        expect(actions).toContainEqual({ kind: "migrate" });
+
+        await applyInstance(actions, deps(admin, database));
+
+        // Assert against the SCHEMA, not the journal: journal presence is the very signal being
+        // shown to be insufficient, so re-reading it would prove nothing.
+        const after = await target.execute<{ present: boolean }>(
+          sql`select to_regclass('public.tenant_credentials') is not null as present`,
+        );
+        expect(after.rows[0]?.present).toBe(true);
+      } finally {
+        await target.close();
+      }
+    } finally {
+      // In a `finally` so the suite stays order-independent. `admin` is connected to another
+      // database in the same cluster, so it can drop this one.
+      await admin.execute(sql.raw(`drop database if exists ${quoteIdent(database)} with (force)`));
+    }
+  });
+
+  it("a partially-privileged admin reads state but fails the migrate", async () => {
+    // The spec's open consequence (2026-07-30-provisioning-migrate-gate-design.md §4), reproduced
+    // rather than reasoned about. `partial_admin` can reach the target database and read
+    // `deployment`, but holds no CREATE on its `public` schema and does not own it — enough
+    // privilege to get past `withState`'s state read, which is the shape the design doc could not
+    // settle by reading alone.
+    await admin.execute(sql.raw(`drop role if exists partial_admin`));
+    await admin.execute(
+      sql.raw(`create role partial_admin login createdb createrole password 'p'`),
+    );
+    await admin.execute(
+      sql.raw(`grant connect on database ${quoteIdent(DATABASE)} to partial_admin`),
+    );
+
+    const owner = await createPostgresDb(withDatabase(adminUri, DATABASE));
+    try {
+      await owner.execute(sql.raw(`grant select on deployment to partial_admin`));
+      // Deliberately NO `grant create on schema public to partial_admin`.
+    } finally {
+      await owner.close();
+    }
+
+    const probeUri = roleUrl(withDatabase(pg.uri, DATABASE), "partial_admin", "p");
+    // ONE handle, passed as both of `readInstanceState`'s connections. Its `admin` argument reads
+    // the cluster-global catalogs (`pg_database`, `pg_roles`) and its `target` argument reads
+    // inside the database; a connection to `DATABASE` answers both, and both must be
+    // `partial_admin` for the measurement to mean anything. Two handles from the identical URI —
+    // same role, same database — would have been a second connect and auth handshake for nothing.
+    // Elsewhere in this file the two genuinely differ, because `admin` is dialled at the cluster's
+    // default database and `target` at a named one.
+    const probe = await createPostgresDb(probeUri);
+    try {
+      const state = await readInstanceState(probe, DATABASE, probe);
+      // The precondition this test is about: a FULLY-journalled re-run, the exact state that used
+      // to make the old, gated planner emit no `migrate` and exit 0 (task 1-3's own tests already
+      // pin that the new planner does not do that; this asserts the state this admin actually
+      // reads is the state the spec's open question is about, not merely assumed to be).
+      expect(state.databaseExists).toBe(true);
+      expect(state.inside?.migratedSets).toEqual(manifestSets().map((set) => set.name));
+      expect(state.inside?.stamp).toBe("preproduction");
+
+      const request = { database: DATABASE, environment: "preproduction" } as const;
+      const actions = planInstance(state, request);
+      expect(actions).toContainEqual({ kind: "migrate" });
+
+      // The THIRD argument is the point: `deps` defaults `adminUri` to the outer `prov_admin`
+      // string, and `migrate` reconnects from it (`applyMigrations(withDatabase(deps.adminUri,
+      // …))`, instance-apply.ts). Passing `probeUri` is what makes every action — including that
+      // reconnect — run as `partial_admin` rather than as the fully privileged admin. Omitting it
+      // is not a slow test but a wrong one, proven by mutation rather than asserted: replace this
+      // with `deps(probe, DATABASE)` and the run fails at the `sqlStateOf` line below with
+      // `expected null to be '42501'` — the migrate ran as `prov_admin` and nothing was thrown,
+      // which is exactly what this test's first draft reported as a pass.
+      let thrown: unknown;
+      try {
+        await applyInstance(actions, deps(probe, DATABASE, probeUri));
+      } catch (error) {
+        thrown = error;
+      }
+
+      // NOT wrapped as a `provisioning.*` `AppError`: `instance-apply.ts` wraps only `create-role`
+      // and `grant-membership` in a `try`/`catch` — `create-database`, `grant-database-create`,
+      // `grant-schema-create`, `migrate` and `stamp` are all uncaught — so the raw driver failure
+      // and its SQLSTATE are what actually reaches a caller. Pre-existing and shared, not opened by
+      // the branch that added this test: `instance-apply.ts` is byte-identical to `main`.
+      // `bin.ts` prints
+      // `unexpected failure (${error.name})`, and `error.name` — NOT `error.constructor.name` —
+      // is `"Error"` for a `DrizzleQueryError`: `drizzle-orm@0.45.2/errors.js`'s
+      // `DrizzleQueryError` extends `Error` directly and never sets `this.name` (only the
+      // sibling `DrizzleError` class does, in its own constructor), so it inherits the
+      // prototype's `"Error"`. Run through the built bundle against this exact scenario
+      // (`pnpm --filter @waitron/provisioning build`, then `node dist/bin.js instance` with
+      // `WAITRON_ADMIN_DATABASE_URL` pointed at `partial_admin`): exit code 1, stderr exactly
+      // `unexpected failure (Error)` — not `(DrizzleQueryError)`, which an earlier version of
+      // this comment claimed while labelling itself "traced rather than run" in the same breath.
+      // Recorded as measured, not fixed: reclassifying it into a `provisioning.*` code is
+      // outside this task's scope.
+      expect(isAppError(thrown)).toBe(false);
+      // Reached via Drizzle's own migrator issuing `CREATE SCHEMA IF NOT EXISTS "public"`
+      // unconditionally at the start of `migrate` (`drizzle-orm@0.45.2/pg-core/dialect.js:54`),
+      // before any journal table is read — the statement itself needs CREATE on the DATABASE,
+      // which `partial_admin` was deliberately never granted. Cited as `dialect.js`, not
+      // `dialect.ts`: the stack trace says `dialect.ts:85` via the package's shipped source map,
+      // but the installed package has no `dialect.ts`, and `dialect.js:85` is an unrelated method.
+      //
+      // BOTH assertions, because either alone is too weak for the sentence above. `sqlStateOf` is
+      // the same "walk `.cause`" helper `instance-apply.ts` uses to classify a driver failure, but
+      // 42501 on its own would still pass if the refusal moved to a later statement or a later
+      // action — which is precisely the narrower shape §4 of the design doc says it does not
+      // speak to. The message pins WHICH statement.
+      expect(sqlStateOf(thrown)).toBe("42501");
+      expect((thrown as Error).message).toContain('CREATE SCHEMA IF NOT EXISTS "public"');
+    } finally {
+      await probe.close();
+      // Both grants below were made BY `admin` (`prov_admin`, the database's real owner) — the
+      // first over `admin`'s own connection (database-level, needs no particular database selected),
+      // the second over a fresh connection to `DATABASE` itself, since a table-level REVOKE has to
+      // run against the database the table lives in. Without both, `drop role` below fails 2BP01
+      // ("role ... cannot be dropped because some objects depend on it") — reproduced once, before
+      // this cleanup existed.
+      await admin.execute(
+        sql.raw(`revoke connect on database ${quoteIdent(DATABASE)} from partial_admin`),
+      );
+      const cleanupOwner = await createPostgresDb(withDatabase(adminUri, DATABASE));
+      try {
+        await cleanupOwner.execute(sql.raw(`revoke select on deployment from partial_admin`));
+      } finally {
+        await cleanupOwner.close();
+      }
+      await admin.execute(sql.raw(`drop role if exists partial_admin`));
     }
   });
 });

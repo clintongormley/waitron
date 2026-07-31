@@ -82,13 +82,21 @@ describe("formatStatus", () => {
     // `drizzle-orm@0.45.2/pg-core/dialect.js:54-60`, with `migrationsSchema: "public"` set at
     // `packages/db/src/migrate.ts:42`, which is the schema this probe looks in. So an `instance`
     // interrupted inside the LAST set leaves all five journals present and zero of that set's
-    // migrations applied; `planInstance` then plans no `migrate`, so re-running `instance` does not
-    // repair it — only the host does, because `boot.ts` calls `applyMigrations`. A line reading
-    // "applied" would have claimed a certainty the read cannot support.
+    // migrations applied. That much has not changed, and a line reading "applied" would still claim
+    // a certainty the read cannot support.
+    //
+    // What HAS changed is the remedy. `planInstance` no longer gates `migrate` on journal presence,
+    // so re-running `instance` repairs exactly this state. The report used to send the operator to
+    // the host's next boot instead, because it was the only thing that would fix it.
     const text = formatStatus(PROVISIONED).join("\n");
     expect(text).toContain("migration set core: journal present");
     expect(text).toContain("migration set scheduler: journal absent");
     expect(text).toContain("was started, not that it finished");
+    // The remedy, and the retired claim. Asserting the OLD sentence is gone matters as much as
+    // asserting the new one is present: this text is printed to an operator, and a stale
+    // "instance plans a migrate only when a journal is MISSING" would send them somewhere else.
+    expect(text).toContain("waitron-provision instance");
+    expect(text).not.toMatch(/only when a journal is MISSING/i);
   });
 
   it("says the database is absent and stops there", () => {

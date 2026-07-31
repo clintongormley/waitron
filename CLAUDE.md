@@ -83,6 +83,31 @@ with no sale, classified without ever consulting the processor's report — the 
 what was meant (that is `unmatched`). Borrowing the codebase's vocabulary in a sentence is asserting
 a convention.
 
+### A behaviour change retires every receipt about the old behaviour — editing a file is not auditing it
+
+`fix/provisioning-migrate-gate` made `instance` plan `migrate` on every run, corrected the comment
+sitting on top of the gate, and left three stale claims standing in two READMEs. Only one was in a
+file the branch never opened (`apps/server/README.md`). The other two were in
+`packages/provisioning/README.md`, which the branch **had already edited**: `4c9409d`'s only hunk
+there opens at line 109, and the `**Idempotency.**` paragraph still asserting the retired behaviour
+sat at line 88 — **21 lines above that hunk**. So "grep the files your diff never opened" is the
+wrong rule; it misses two of the three. A diff carries three lines of context, so a file you edited
+is a file you have not read.
+
+The expensive receipt was a documented **procedure**, not descriptive prose: that README told an
+operator three `GRANT`s let a second admin run `instance` to completion, with an end-to-end receipt
+saying it had been tested. Run in both directions on `postgres:18-alpine`, that procedure now dies at
+`42501 permission denied for database` on `CREATE SCHEMA IF NOT EXISTS "public"`, while the
+pre-change build (`deea09f^`) completes it — a recovery path an operator executes, turned into a
+broken one. So read the **runbooks and the test-assertion summaries** first, not only the prose
+describing the thing you changed. A README paraphrase of a test assertion is a receipt too, and goes
+stale the moment the assertion is inverted: `apps/server/README.md` said a second plan "carries no
+create and no migrate" while the branch was inverting that very assertion.
+
+Four per-task reviews and a re-review of the fix round missed all three, each scoped to its own diff.
+The whole-branch review — the first pass whose range was base-to-tip — found all three. This class is
+invisible to per-task review by construction, so budget one base-to-tip pass before the PR.
+
 ### Claims about the outside world need receipts too — and the source's own words
 
 Everything above is illustrated with repo-internal examples, and that framing is why the deli

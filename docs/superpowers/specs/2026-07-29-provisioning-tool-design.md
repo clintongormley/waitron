@@ -86,6 +86,13 @@ Every step establishes what already exists before acting. Running any command tw
 | Migrations | the migrator's existing advisory lock and journal — already idempotent |
 | Deployment stamp | the stamp row; refuse if present and disagreeing with `WAITRON_ENV` |
 
+> **Implementation note, 2026-07-30.** The Migrations row above delegates idempotency to "the
+> migrator's existing advisory lock and journal", and the code shipped in #11 did not: `planInstance`
+> added a second gate in front of it, on journal-TABLE existence, which is weaker than "the set
+> finished" and let an interrupted provision be reported as complete. The gate was removed on
+> `fix/provisioning-migrate-gate`; `migrate` is now emitted on every run, as this row always
+> described. See [`2026-07-30-provisioning-migrate-gate-design.md`](2026-07-30-provisioning-migrate-gate-design.md).
+
 `tenant`:
 
 > **Superseded detail, 2026-07-30.** The `Tenant` row below gives the idempotency check as

@@ -1,6 +1,5 @@
 import { AppError } from "@waitron/shared";
 import { type DeploymentEnvironment } from "@waitron/db";
-import { manifestSets } from "@waitron/migrations";
 import { generatePassword } from "./identifiers.js";
 import {
   INSTANCE_ROLES,
@@ -82,10 +81,11 @@ const REQUIREMENTS: Record<
  * Pure, and deliberately so: every refusal and every idempotency rule in spec §4 is here, where a
  * unit test can reach it without a container.
  *
- * **The result is never empty.** `waitron_migrator`'s two grants are pushed unconditionally at the
- * bottom of this function — see "Grants are re-issued on every run rather than diffed" there — so a
- * deployment that already has everything still yields exactly those two, which
- * `instance-plan.test.ts`'s "plans only the idempotent grants" pins with an exhaustive `toEqual`.
+ * **The result is never empty.** `migrate` and `waitron_migrator`'s two grants are all pushed
+ * unconditionally — see the `migrate` push below, and "Grants are re-issued on every run rather
+ * than diffed" at the bottom — so a deployment that already has everything still yields exactly
+ * those three, which `instance-plan.test.ts`'s "plans the idempotent grants and a migrate" pins
+ * with an exhaustive `toEqual`.
  * An earlier version of this paragraph said an empty result was "what lets the CLI report a no-op".
  * That contradicted `cli.ts`'s own plan-summary comment, and `cli.ts` was the one that was right:
  * a "nothing to do" branch there would be unreachable code claiming to handle a state that cannot
@@ -129,8 +129,29 @@ export function planInstance(
   // ordering reversed: `create role "waitron_migrator" ... in role "app_user"` raised
   // `error: role "app_user" does not exist` (SQLSTATE 42704, acl.c:get_rolespec_tuple) — the tool
   // failed on its very first end-to-end run against a blank database.
-  const applied = new Set(state.inside?.migratedSets ?? []);
-  if (manifestSets().some((set) => !applied.has(set.name))) actions.push({ kind: "migrate" });
+  //
+  // UNCONDITIONAL, for the reason the two grants at the bottom of this function already are. This
+  // was gated on `state.inside.migratedSets`, which is journal-TABLE existence and NOT "the set
+  // finished": `drizzle-orm@0.45.2/pg-core/dialect.js:54-55` creates the journal table, and `:60`
+  // only then opens the transaction the set's migrations run in — so a run interrupted inside a set
+  // rolls the migrations back and leaves the journal behind. The gate read that leftover as "done",
+  // planned no `migrate`, and let `instance` grant, stamp and exit 0 against a deployment whose last
+  // set never ran: the same "reported success having done nothing" shape `verifyGrants`
+  // (instance-apply.ts) exists to catch, one file over.
+  //
+  // Re-running the migrator is idempotent in EFFECT — `dialect.js:62` applies a migration only when
+  // the journal's watermark is behind it — but it is neither free nor privilege-free, and the
+  // second half is the one that bites. Per manifest set (`applyMigrations`, packages/migrations/
+  // src/apply.ts:45) Drizzle first issues `CREATE SCHEMA IF NOT EXISTS "public"` (`dialect.js:54`)
+  // and `CREATE TABLE IF NOT EXISTS <journal>` (`:55`), BEFORE the journal read at `:56`. Postgres
+  // checks the privilege for those two before it evaluates whether the object already exists —
+  // `apps/server/README.md`'s "Two connection strings, one purpose split" is the receipt — so the
+  // first needs database-level CREATE and the second needs CREATE on `public`. An admin holding
+  // neither now fails on a run that used to be a silent no-op: measured on postgres:18-alpine as
+  // `42501 permission denied for database` on that first statement (this change's spec §4, and
+  // `instance-apply.rls.test.ts`'s "a partially-privileged admin reads state but fails the
+  // migrate"). Over and above that, one advisory lock and one journal read per set.
+  actions.push({ kind: "migrate" });
 
   for (const role of INSTANCE_ROLES) {
     const need = REQUIREMENTS[role];
@@ -243,7 +264,12 @@ export function describeAction(action: InstanceAction): string {
         action.withGrantOption ? " with grant option" : ""
       }`;
     case "migrate":
-      return "apply every migration set";
+      // Not "apply every migration set". Every set IS handed to the migrator, but Drizzle applies
+      // only what its journal's watermark is behind (`dialect.js:62`), and this line is now printed
+      // on EVERY run — including a fully-migrated no-op, since the planner stopped gating on
+      // journal presence. A line that reads as "re-run all migrations" on a plan an operator is
+      // confirming against a live production cluster claims more than the code does.
+      return "apply any pending migrations, in every set";
     case "stamp":
       return `stamp the database as ${action.environment}`;
   }

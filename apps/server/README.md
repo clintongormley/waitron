@@ -141,7 +141,24 @@ recorded, the three roles present with the right `rolcreaterole` and memberships
 `has_database_privilege(... 'CREATE')` and `has_schema_privilege('public', 'CREATE')` true for
 `waitron_migrator`, `pg_namespace.nspacl` carrying `waitron_migrator=C*` (the `*` is the WITH GRANT
 OPTION below), and the stamp written. A second plan from the state the first produced carries no
-create and no migrate.
+create and no stamp — it **does** carry `migrate`, which `instance` now emits on every run rather
+than only when a journal table is missing. This sentence said "no create and no migrate" until the
+gate was removed.
+
+Two receipts sit behind that, and they are **not** the same one. What
+`packages/provisioning/src/instance-apply.rls.test.ts` pins is the PLAN: it asserts
+`toContainEqual({ kind: "migrate" })` on exactly that second plan, then applies it again — and the
+test body ends there (`:177`), with no assertion after the `applyInstance` call. So that suite
+establishes only that the re-run **does not throw**; nothing in it observes what the migrator did.
+The "applied nothing new" half is pinned one package over, by
+`packages/migrations/src/apply.concurrency.test.ts:74-79`: it counts the rows in
+`__drizzle_migrations_db` (the `core` set's journal table, per `migrations.manifest.json`), runs a
+third `applyMigrations` over the same options, and asserts the count is unchanged. That covers one
+set rather than all five, and what it pins is what gets **recorded as applied** — the migrator still
+issues `CREATE SCHEMA IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS <journal>` and a journal read per
+set on every re-run — which is why `packages/provisioning/README.md`'s "Idempotency" paragraph calls
+a no-op re-run idempotent but **not privilege-free**, and sends the reader to its wall 4 for what
+that costs.
 
 That last assertion reads `nspacl` **directly** rather than asking
 `has_schema_privilege(…, 'CREATE WITH GRANT OPTION')`, and the reason is the recursive closure, not
