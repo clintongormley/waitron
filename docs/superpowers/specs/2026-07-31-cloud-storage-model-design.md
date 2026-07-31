@@ -84,11 +84,11 @@ and cannot commission a new till until the link returns. It keeps trading on the
 
 | Shape | Contents | Mutability |
 | --- | --- | --- |
-| **Fiscal archive** | `registros_facturacion`, tagged with the installation number that produced them (§5) | **Append-only.** The source is immutable by trigger — `REVOKE ALL`, an append-only trigger and a TRUNCATE-blocking trigger (`packages/fiscal-verifactu/drizzle/0001_registros_inmutables.sql`) — so a mutable copy could silently disagree with the venue's own. |
+| **Fiscal archive** | `registros_facturacion`, keyed to the SIF lifetime that produced them (§5) | **Append-only.** The source is immutable by trigger — `REVOKE ALL`, an append-only trigger and a TRUNCATE-blocking trigger (`packages/fiscal-verifactu/drizzle/0001_registros_inmutables.sql`) — so a mutable copy could silently disagree with the venue's own. |
 | **Submission state** | `envios` | **Mutable, deliberately.** `packages/fiscal-verifactu/src/schema/envios.ts` describes it as "the delivery state that mutates constantly… submission state cannot live on an immutable table", and `app_user` holds `UPDATE` on it. An append-only copy would freeze every archived record at `pendiente` and report a fully-filed venue as unsubmitted. |
 | **History** | Sales, invoices, payments, incidents | Append-only; immutable once closed at the source. |
-| **Configuration** | Tenant identity (`tenant_id`), catalogue, locations, till registry **including each `tills.id`**, staff, sealed credentials, hardware settings | **Versioned snapshots**, not current-state. |
-| **Counters** | `invoice_series.next_number`, `contadores_instalacion.proximo_numero` | **Monotonic high-water marks.** Synced continuously, never versioned, never rolled back. See below. |
+| **Configuration** | Tenant identity (`tenant_id`), catalogue, locations, till registry **including each `tills.id`**, the `invoice_series` definitions (`code`, `purpose`, `till_id` — but NOT `next_number`, see Counters), staff, sealed credentials, hardware settings | **Versioned snapshots**, not current-state. |
+| **Counters** | `invoice_series.next_number` (venue is authoritative; the cloud holds a high-water mark), `contadores_instalacion.proximo_numero` (the **cloud** is authoritative for subscribers — §6a) | **Monotonic.** Synced continuously, never versioned, never rolled back. The two flow in opposite directions and that is deliberate: see below. |
 
 **Counters are not configuration, and putting them there was a category error.** An earlier draft of
 this spec filed `next_number` inside the configuration snapshot. That is wrong twice over. First, the
@@ -99,7 +99,13 @@ snapshot per invoice rather than the kilobytes the design claims.
 
 They are therefore their own shape, with one rule: **a counter may only ever move forward.** Sync
 carries the high-water mark; restore resumes past it (§5); nothing may set either counter to a value
-at or below one already observed. A gap in a series is visible and legal — this codebase already
+at or below one already observed.
+
+**They do not flow the same way, and the authoritative side is named per counter rather than left to
+be inferred.** `next_number` is allocated by the venue as it sells — the cloud only observes it, and
+observes it late. `contadores_instalacion` is the opposite: §6a makes the cloud the single allocator
+for subscribers, precisely because the venue cannot be. Under-specifying which side owns a counter is
+what produced the multi-venue collision §6a exists to fix, so it is stated rather than implied. A gap in a series is visible and legal — this codebase already
 tolerates one when a pre-production database burns numbers — whereas a repeat is neither.
 
 Configuration is the one that had to change shape. A current-state, last-write-wins snapshot
@@ -138,17 +144,26 @@ Given a replacement box and the key ring the operator was told to keep:
 2. Configuration is pulled from the cloud: catalogue, locations, staff, series, sealed credentials,
    **and every `tills.id` unchanged**. Till identity is not cosmetic: `invoice_series.till_id` is a
    foreign key and `packages/core/src/record-sale.ts` refuses a series whose till does not match the
-   selling till, so regenerated till IDs orphan every series and the operator's replacements start
-   at 1.
+   selling till, so a regenerated till ID does not orphan the series quietly — `onDelete: "restrict"` means the
+   restore fails outright — and an operator who works around it by creating fresh series starts at
+   1.
 3. The operator supplies the key ring; credentials unseal. **`tenant_id` must be restored, never
    regenerated** — see §6.
 4. Each till is re-registered, minting a **new installation number** from the counter in §6a — which
    is the existing invariant for reimaged hardware, and is also what keeps the second lifetime's
-   records from colliding with the first (see point 6).
-5. **Series numbering resumes STRICTLY ABOVE the remembered `next_number`**, by a margin covering
-   plausible unsynced trading. The chain restarts, the numbering skips forward, and no invoice number
-   is reused. The skipped range is a visible gap, which is the acceptable outcome; a reused number is
-   not.
+   records from colliding with the first — see "Why the archive keys on the SIF lifetime" below.
+5. **Series numbering resumes STRICTLY ABOVE the remembered `next_number`.** The chain restarts and
+   the numbering skips forward; the skipped range is a visible gap, which is the acceptable outcome.
+
+   **What this does and does not guarantee.** It makes it impossible to reuse a number the cloud has
+   SEEN. It cannot by itself rule out reusing one issued after the last successful sync, because §3
+   permits the cloud to be arbitrarily far behind and those numbers are unknown to it by
+   construction. A fixed "safety margin" is a guess at an unknowable quantity and is not claimed
+   here. The residual is real: a collision would be caught at the archive by
+   `registros_identidad_uq` — after the record was filed with AEAT, which is too late to be a
+   control. Closing it needs a source of truth that survived the disaster, and the tills are the
+   obvious candidate, since sales flow UP and each till holds what it sent. That belongs to the
+   restore-flow spec (§10), which must not treat this rule as sufficient on its own.
 6. The fiscal archive and history are **not** replayed into the new local database.
 
 Point 6 is a decision, not an omission. Replaying historical records into tables whose purpose is
@@ -156,13 +171,18 @@ append-only immutability, under a hash chain the replacement till is not part of
 most likely to produce something unverifiable — and unverifiable is the one outcome Veri*Factu exists
 to make detectable. The venue keeps access to its history through §7 instead.
 
-**Why the archive tags records with their installation number.** `cadenas.secuencia` is documented
+**Why the archive keys on the SIF lifetime.** `cadenas.secuencia` is documented
 "monotonic across SIF identities and never reset", but a blank database restarts it at 1 — while the
 cloud archive still holds 1…N for that till from its previous life. Keyed on `(tenant, till,
 secuencia)` alone, the restored venue's very first record would collide with an archived one and
-every subsequent ingest would fail, with no repair path behind an append-only ingest role. Tagging by
-installation number removes the collision without inventing anything: point 4 mints a new one per
-lifetime, and it is already the identifier AEAT uses to distinguish one system from another.
+every subsequent ingest would fail, with no repair path behind an append-only ingest role.
+
+The fix needs no new column. `registros_facturacion` already carries `sif_id`, a foreign key to the
+`registro_sif` row that produced it, and point 4 mints a fresh `registro_sif` per lifetime — so
+`sif_id` is already distinct per lifetime and per venue. Keying the archive on it removes the
+collision. (An earlier draft said "tagged with the installation number… without inventing anything";
+the number itself lives on `registro_sif.numero_instalacion`, not on the archived row, so `sif_id` is
+what the archive actually has to hand.)
 
 ## 6. Credentials survive a disaster without the cloud ever holding a secret
 
@@ -187,7 +207,7 @@ Two consequences the implementation must respect:
 uniqueness over rows a policy hides from it"* — the counter is sound only where one thing allocates
 for a given taxpayer.
 
-**§2 removes that single writer.** A taxpayer is one NIF (`tenants.nif` is globally unique) and may
+**§2 removes that single writer.** A taxpayer is one NIF (`tenants_nif_key` makes it unique **within a database** — and under §2 each venue has its own, so the same NIF legitimately exists in several, which is the whole reason a per-venue allocator cannot work) and may
 run several venues; under this design each venue has its own server and therefore its own counter,
 and two branches would both mint installation number 1. AEAT is explicit that they must not:
 `docs/compliance/verifactu-findings.md` quotes the FAQ — *"cada una de esas facturaciones distintas
@@ -270,10 +290,10 @@ courtesy.
 
 This remains a sourced reading rather than legal advice. The narrow question worth an advisor's time
 is unchanged and now sharper: **does the RRSIF reach a backup archive that is not itself a SIF, and
-if so under what terms?**
-
-This is a sourced reading, not legal advice, and remains open to the fiscal advisor's confirmation on
-the narrow question of whether the archive is in scope at all.
+if so under what terms?** If the answer is that it does, the strongest text against a shared store is
+the conjunct restored above — *"y se cumplan los requisitos exigidos en este Reglamento por separado
+para cada uno de los obligados tributarios"* — and this design engages it only by arguing the archive
+is probably out of scope. That branch is unanswered, and §10 records it as such.
 
 ## 9. Isolation
 
@@ -286,10 +306,26 @@ trigger; the cloud archive carries the same, and the ingest role holds `INSERT` 
 it. A cloud that can `UPDATE` a fiscal record it received is a cloud that can silently disagree with
 the venue's own copy, and the archive's entire value is that it agrees.
 
-`envios` is the deliberate exception and must not be swept into the same rule: it is submission
-*state*, it mutates as AEAT responds, and `app_user` holds `UPDATE` on it locally for that reason. An
-INSERT-only ingest would pin every archived record at `pendiente` and report a fully-filed venue as
-unsubmitted. The ingest role therefore holds `UPDATE` on `envios` and on nothing else.
+**Which tables are append-only is decided by reading each one's local grants, never by category.**
+`registros_facturacion` is immutable and the ingest role holds `INSERT` on it alone. Three others in
+§4 are not, and each would break in the same way if swept into the immutable rule:
+
+- **`envios`** — submission state, mutating as AEAT responds; `app_user` holds `UPDATE`
+  (`packages/fiscal-verifactu/drizzle/0001_registros_inmutables.sql`). Frozen, it reports a
+  fully-filed venue as `pendiente` forever.
+- **`payments`** — `attempting` → `captured`/`failed`, and the `accepted_offline` path settles later
+  (`packages/payments/src/store.ts`); `app_user` holds `UPDATE`
+  (`packages/payments/drizzle/0001_payments_rls.sql`). Frozen, every archived card payment reads as
+  still in flight — and §3's own account of card-present capture describes exactly this mutation.
+- **`incidents`** — `app_user` holds `UPDATE` on `acknowledged_at`/`acknowledged_by`
+  (`packages/db/drizzle/0008_incidents_privileges.sql`). Frozen, an acknowledged incident stays open
+  in the archive forever.
+
+An earlier draft of this section said the ingest role holds `UPDATE` "on `envios` and on nothing
+else". That was wrong in the sentence immediately after correctly diagnosing the identical problem
+for `envios` — this repository's "grep the siblings" rule, missed on the very fix written to satisfy
+it. **The implementation derives the ingest grants from each table's local grants rather than from a
+list in this document**, so the next mutable table added cannot silently acquire the same bug.
 
 **One shared cloud database means one environment.** `2026-07-29-deployment-environment-design.md`
 fixes "one database per environment, and a pre-production database is never promoted", and the reason

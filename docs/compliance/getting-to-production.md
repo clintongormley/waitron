@@ -448,6 +448,16 @@ it, which makes this an uncomfortable arrangement. Under a hosted Model A the cl
 a **sello de entidad** — owned by the company, designed for machine custody. The seal stops being
 an optional nicety and becomes the correct instrument.
 
+> **Premise superseded, 2026-07-31.** "When we host" no longer describes any supported deployment.
+> `docs/superpowers/specs/2026-07-31-cloud-storage-model-design.md` makes the cloud a sync root that
+> never holds the key ring: the certificate stays on the client's own local server, sealed under a key
+> ring only they hold, and the local server always submits. **The client's key does not live on our
+> infrastructure under any topology.** The sello-de-entidad recommendation is unaffected and arguably
+> strengthened — it is still the right instrument for a key a machine uses unattended — but the custody
+> problem this paragraph exists to mitigate does not arise. See also the warning at the head of
+> [asesor-questions.md](asesor-questions.md): questions built on the hosted premise should not be
+> paid for as written.
+
 > **Challenged 2026-07-27 — decision unchanged, but the crossover point is now an open
 > question.** Asked about exactly this, mdiago replied that a SaaS provider *"debe formalizar un
 > convenio con la AEAT (código 017) y manejar únicamente su propio certificado"* — i.e. Model B
