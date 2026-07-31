@@ -289,12 +289,60 @@ taxpayer's registros in isolation in legible electronic format — which art. 8.
 independently of this design, and which is why §7 treats export as a requirement rather than a
 courtesy.
 
-This remains a sourced reading rather than legal advice. The narrow question worth an advisor's time
-is unchanged and now sharper: **does the RRSIF reach a backup archive that is not itself a SIF, and
-if so under what terms?** If the answer is that it does, the strongest text against a shared store is
-the conjunct restored above — *"y se cumplan los requisitos exigidos en este Reglamento por separado
-para cada uno de los obligados tributarios"* — and this design engages it only by arguing the archive
-is probably out of scope. That branch is unanswered, and §10 records it as such.
+This remains a sourced reading rather than legal advice. One branch is left open: if the archive
+*were* in scope, the strongest text against a shared store is the conjunct restored above — *"y se
+cumplan los requisitos exigidos en este Reglamento por separado para cada uno de los obligados
+tributarios"* — and this design engages it only by arguing the archive is probably out of scope.
+
+### 8a. The RRSIF is the wrong regulation for the archive. The ROF is the right one.
+
+An earlier version of this section closed by asking an advisor *"does the RRSIF reach a backup archive
+that is not itself a SIF?"* — a question this same section had already answered two paragraphs
+earlier, and which pointed at the regulation **least** likely to govern an archive. The RRSIF governs
+systems that *support invoicing processes*. An archive issues nothing.
+
+What governs records once they exist is the **ROF** — the Reglamento de obligaciones de facturación,
+RD 1619/2012 — and it addresses a third party holding them directly. Three articles bear on this
+design:
+
+| Source | Verbatim |
+| --- | --- |
+| ROF art. 19.3 | *"Las obligaciones a las que se refiere el apartado anterior se podrán cumplir materialmente por un tercero, que actuará en todo caso en nombre y por cuenta del empresario o profesional o sujeto pasivo, el cual será, en cualquier caso, responsable del cumplimiento de todas las obligaciones que se establecen en este capítulo."* |
+| ROF art. 22.1 | *"…podrá determinar el lugar de cumplimiento de dicha obligación, a condición de que ponga a disposición del órgano de la Administración tributaria que esté desarrollando una actuación dirigida a la comprobación de su situación tributaria, ante cualquier solicitud de dicho órgano y sin demora injustificada, toda la documentación o información así conservadas."* |
+| ROF art. 22.2 | *"Cuando la conservación se efectúe **fuera de España**, tal obligación únicamente se considerará válidamente cumplida si se realiza mediante el uso de medios electrónicos que garanticen el acceso en línea así como la carga remota y utilización por parte de la Administración tributaria… deberán comunicar **con carácter previo** esta circunstancia a la Agencia Estatal de Administración Tributaria."* |
+| ROF art. 23 | *"…se deberá garantizar a cualquier órgano de la Administración tributaria que esté realizando una actuación de comprobación… el acceso en línea a los documentos conservados, así como su carga remota y utilización."* |
+
+Source: [BOE RD 1619/2012](https://www.boe.es/buscar/act.php?id=BOE-A-2012-14696). Arts. 19.3 and
+22.2 were read twice, on separate fetches, because the hosting constraint below rests on them.
+**Art. 19.4 is reported at one remove and is NOT quoted here**: it restricts third-party fulfilment
+outside the EU unless the third party sits in Canarias, Ceuta, Melilla or a state with mutual-
+assistance instruments comparable to the EU's, with prior notification. It is the most
+decision-shaping of the four and the least verified — read it directly before relying on it.
+
+**This may constrain where the cloud is allowed to run**, which is why it is in the spec rather than
+in a follow-up. The layers, weakest to strongest:
+
+1. **Hosted in Spain** — art. 22.1 only: available to AEAT without unjustified delay.
+2. **Hosted elsewhere in the EU** — art. 22.2 adds online access, remote download and use by AEAT,
+   **and a prior notification to AEAT**. Note whose duty that is: art. 19.3 keeps every obligation on
+   the client, so the notification is *theirs*, and a product that silently puts their records outside
+   Spain has created a filing duty they do not know they have.
+3. **Hosted outside the EU** — art. 19.4's restriction, above.
+
+Art. 23 is not conditional on location: any electronic conservation must be able to give an
+inspecting body online access, remote download and use. That is a **stronger requirement than §7's
+"exportable on demand"**, and this design does not currently meet it — export produces a file, where
+art. 23 describes access. §10 records the gap.
+
+**The questions actually worth an advisor's time**, replacing the retired one:
+
+1. Is Waitron a *tercero* under art. 19.3 while the client's own local server remains the system of
+   record and holds its own copy — or only in the disaster case, when our archive is briefly the only
+   copy left? §5 is built around exactly that case.
+2. If we are, does art. 22.2's prior-notification duty fall on every client whose records we hold
+   outside Spain, and is that a duty we must prompt them to discharge?
+3. Does art. 23's online-access requirement reach us as the holder, or only the client as the
+   obligado?
 
 ## 9. Isolation
 
@@ -355,6 +403,18 @@ Each of these depends on this spec's answers and gets its own:
 this design rejects); fleet migration tooling (the cloud is one deployment at one version); a webhook
 endpoint as a correctness mechanism (§3 demotes it to an optimisation).
 
-**Open, and owned by nobody yet:** whether the fiscal advisor's answer on §8's narrow question changes
-anything; and whether version telemetry is worth adding for its own sake, now that it is no longer
-load-bearing for schema evolution.
+**Open, and owned by nobody yet:**
+
+- **Where the cloud is allowed to run** (§8a). Hosting outside Spain triggers art. 22.2's online-
+  access conditions and a prior-notification duty that falls on the *client*; hosting outside the EU
+  meets art. 19.4's restriction. This is a decision to take **before** anything is built, because it
+  is a hosting choice with a customer-facing filing obligation attached, and unwinding it later means
+  moving other people's fiscal records.
+- **Art. 23 access versus §7 export.** §7 promises records are *exportable* on demand. Art. 23
+  describes *"acceso en línea… carga remota y utilización"* by an inspecting body — access, not a
+  file. Whether that binds us or only the client is §8a's third question, but if it binds us the
+  export mechanism is not sufficient and the remote-admin spec inherits the requirement.
+- The three advisor questions in §8a, and the one residual branch in §8 (what follows if the archive
+  *is* in RRSIF scope after all).
+- Whether version telemetry is worth adding for its own sake, now that it is no longer load-bearing
+  for schema evolution.
