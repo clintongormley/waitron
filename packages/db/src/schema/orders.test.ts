@@ -85,7 +85,7 @@ describeEachTarget("working_orders", (target) => {
   // describe-level teardown, and it surfaces as an unhandled FATAL 57P01
   // rejection rather than a test failure.
   afterEach(async () => {
-    await db.close();
+    if (db !== undefined) await db.close();
   });
 
   it("opens an order in the open state with no settled_at", async () => {
@@ -263,7 +263,7 @@ describeEachTarget("working_order_lines", (target) => {
   });
 
   afterEach(async () => {
-    await db.close();
+    if (db !== undefined) await db.close();
   });
 
   it("adds a line to an open order", async () => {

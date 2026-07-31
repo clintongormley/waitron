@@ -1,9 +1,9 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
-import type { Database } from "@waitron/db";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import { VerifactuBackend } from "./backend.js";
-import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
@@ -15,20 +15,10 @@ import { staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 const PROBE_ROLE = "reconcile_rls_probe";
 const PROBE_PASSWORD = "probe";
 
-let pg: RealPostgres;
-let admin: Database;
-
-beforeAll(async () => {
-  pg = await startRealPostgres();
-  admin = await pg.connect();
-  await admin.execute(
-    sql.raw(`create role ${PROBE_ROLE} login password '${PROBE_PASSWORD}' in role app_user`),
-  );
-});
-
-afterAll(async () => {
-  await admin.close();
-  await pg.stop();
+const suite = useRealPostgres({
+  start: startRealPostgres,
+  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
+  timeoutMs: CONTAINER_SETUP_TIMEOUT_MS,
 });
 
 /**
@@ -54,8 +44,8 @@ describe("reconcile under real row-level security", () => {
   it("reads the period's accepted record and writes its noTrace incident as an RLS-subject role", async () => {
     // Seed one accepted record for a fresh tenant, all as the superuser (which bypasses RLS). Its
     // fecha_expedicion_factura is 2026-07-20 (drain-fixtures' PAST_FECHA), so it falls in 2026-07.
-    const seeded = await seedPendingEnvios(admin, { count: 1 });
-    await admin.execute(
+    const seeded = await seedPendingEnvios(suite.admin, { count: 1 });
+    await suite.admin.execute(
       sql`update envios set estado = 'aceptado', reconciled_resubmit_at = now()
           where tenant_id = ${seeded.tenantId}`,
     );
@@ -65,7 +55,7 @@ describe("reconcile under real row-level security", () => {
     // escalate rather than reset again — raising the error incident under RLS.
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
 
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const backend = new VerifactuBackend({
         deploymentEnvironment: "production",
@@ -86,7 +76,7 @@ describe("reconcile under real row-level security", () => {
     }
 
     // The incident was genuinely committed under RLS — read it back as the superuser.
-    const inc = await admin.execute<{ code: string; severity: string }>(
+    const inc = await suite.admin.execute<{ code: string; severity: string }>(
       sql`select code, severity from incidents where tenant_id = ${seeded.tenantId}`,
     );
     expect(inc.rows).toHaveLength(1);
@@ -106,14 +96,14 @@ describe("reconcile under real row-level security", () => {
    * catch a regression of it.
    */
   it("first-detection noTrace remediates (reset + ack delete) as an RLS-subject role", async () => {
-    const seeded = await seedPendingEnvios(admin, { count: 1 });
+    const seeded = await seedPendingEnvios(suite.admin, { count: 1 });
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     // Seed via the real drain path (superuser, bypasses RLS) so the record carries a genuine
     // `accepted` ack — the row `deleteAck` must remove.
     const seedBackend = new VerifactuBackend({
       deploymentEnvironment: "production",
       clock: steadyClock,
-      db: admin,
+      db: suite.admin,
       resolveClient: staticResolver(aeat.client()),
     });
     // Fixed instant past `seedPendingEnvios`'s stamped `proximo_intento_en` (it seeds July dates —
@@ -123,12 +113,12 @@ describe("reconcile under real row-level security", () => {
     await seedBackend.drain(new Date("2026-07-21T00:01:00Z"));
     aeat.forget(seeded.facturaKeys[0]!); // AEAT now has no trace of it — a first noTrace detection
 
-    const before = await admin.execute<{ n: string }>(
+    const before = await suite.admin.execute<{ n: string }>(
       sql`select count(*)::text as n from acks where tenant_id = ${seeded.tenantId}`,
     );
     expect(before.rows[0]?.n).toBe("1");
 
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const backend = new VerifactuBackend({
         deploymentEnvironment: "production",
@@ -148,18 +138,21 @@ describe("reconcile under real row-level security", () => {
 
     // Committed under RLS as the non-superuser probe role: reset to pendiente, marker stamped, no
     // incident, and — the grant this test exists to guard — the stale ack genuinely deleted.
-    const env = await admin.execute<{ estado: string; reconciled_resubmit_at: string | null }>(
+    const env = await suite.admin.execute<{
+      estado: string;
+      reconciled_resubmit_at: string | null;
+    }>(
       sql`select estado, reconciled_resubmit_at from envios where registro_id = ${seeded.registroIds[0]}`,
     );
     expect(env.rows[0]?.estado).toBe("pendiente");
     expect(env.rows[0]?.reconciled_resubmit_at).not.toBeNull();
 
-    const acks = await admin.execute<{ n: string }>(
+    const acks = await suite.admin.execute<{ n: string }>(
       sql`select count(*)::text as n from acks where tenant_id = ${seeded.tenantId}`,
     );
     expect(acks.rows[0]?.n).toBe("0");
 
-    const inc = await admin.execute<{ n: string }>(
+    const inc = await suite.admin.execute<{ n: string }>(
       sql`select count(*)::text as n from incidents where tenant_id = ${seeded.tenantId}`,
     );
     expect(inc.rows[0]?.n).toBe("0");

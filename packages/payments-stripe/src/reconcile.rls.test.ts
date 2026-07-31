@@ -1,13 +1,13 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import { decimal, tenantId as brandTenantId } from "@waitron/shared";
 import { insertCapturedPayment } from "@waitron/payments";
 import { seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { StripeReconciler } from "./reconciler.js";
 import { FakeStripeReport } from "./testing/fake-stripe-report.js";
 import { FakeStripe } from "./testing/fake-stripe.js";
-import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { startRealPostgres } from "./testing/postgres.js";
 
 // A non-superuser LOGIN role that inherits app_user's grants — the same shape as
 // stripe.rls.test.ts/device.rls.test.ts/hosted.rls.test.ts's own probe roles. Named uniquely to this
@@ -19,23 +19,12 @@ import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
 const PROBE_ROLE = "rls_probe_reconcile";
 const PROBE_PASSWORD = "probe";
 
-let pg: RealPostgres;
-let admin: Database;
-
-beforeAll(async () => {
-  pg = await startRealPostgres();
-  admin = await pg.connect();
-  // `execute(string)` runs the statement verbatim (drizzle wraps a plain string in `sql.raw`
-  // internally), so this needs no `drizzle-orm` import — payments-stripe does not depend on it in
-  // its own test files. Mirrors hosted.rls.test.ts/stripe.rls.test.ts/device.rls.test.ts verbatim.
-  await admin.execute(
-    `create role ${PROBE_ROLE} login password '${PROBE_PASSWORD}' in role app_user`,
-  );
-}, 180_000);
-
-afterAll(async () => {
-  await admin.close();
-  await pg.stop();
+// `timeoutMs` carries over this suite's own 180s hook timeout, which the helper's 60s default
+// would otherwise narrow — a container start includes pulling the image on a cold runner.
+const suite = useRealPostgres({
+  start: startRealPostgres,
+  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
+  timeoutMs: 180_000,
 });
 
 const OLD = new Date("2026-07-01T12:00:00Z");
@@ -56,15 +45,15 @@ const PERIOD = { from: new Date("2026-07-01T00:00:00Z"), to: new Date("2026-07-0
  */
 describe("reconcile sweep through StripeReconciler under real row-level security", () => {
   it("finds a captured orphan on an abandoned working order, raises its incident, stamps the remediation marker, and auto-reverses it", async () => {
-    const seeded = await seedWorkingOrder(admin, "B51111111");
+    const seeded = await seedWorkingOrder(suite.admin, "B51111111");
     const paymentRef = "ref-rls-orphan";
     const externalRef = "pi_rls_orphan";
 
     // Seeded as admin (superuser, RLS bypassed) — setup, not the thing under test, exactly as the
-    // sibling RLS suites seed via seedWorkingOrder(admin, ...): a captured stripe payment with no
+    // sibling RLS suites seed via seedWorkingOrder(suite.admin, ...): a captured stripe payment with no
     // sale on a working order that then abandons — the auto-reversible orphan shape (reconciler.test.ts's
     // `abandonedOrphan` helper, inlined here since this file has no PGlite fixture to share it with).
-    await withTenant(admin, seeded.tenantId, (tx) =>
+    await withTenant(suite.admin, seeded.tenantId, (tx) =>
       insertCapturedPayment(tx, {
         tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
@@ -75,11 +64,11 @@ describe("reconcile sweep through StripeReconciler under real row-level security
         settledAt: OLD,
       }),
     );
-    await admin.execute(
+    await suite.admin.execute(
       `update working_orders set status = 'abandoned' where id = '${seeded.workingOrderId}'`,
     );
 
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       // externalRef has no `cs_` prefix, so the reversal's session resolver passes it straight
       // through unresolved — no `sessions` needed, mirroring reconciler.test.ts's terminal-orphan case.

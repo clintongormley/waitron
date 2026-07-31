@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import { decimal } from "@waitron/shared";
 import {
   getPaymentByRef,
@@ -9,7 +9,7 @@ import {
   insertInitiated,
   resolvePaymentTenant,
 } from "./store.js";
-import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { startRealPostgres } from "./testing/postgres.js";
 import { seedWorkingOrder } from "../test/seed.js";
 
 // A non-superuser LOGIN role that inherits app_user's grants. Being non-superuser is what makes
@@ -21,20 +21,11 @@ import { seedWorkingOrder } from "../test/seed.js";
 const PROBE_ROLE = "rls_probe";
 const PROBE_PASSWORD = "probe";
 
-let pg: RealPostgres;
-let admin: Database;
-
-beforeAll(async () => {
-  pg = await startRealPostgres();
-  admin = await pg.connect();
-  await admin.execute(
-    sql.raw(`create role ${PROBE_ROLE} login password '${PROBE_PASSWORD}' in role app_user`),
-  );
-});
-
-afterAll(async () => {
-  await admin.close();
-  await pg.stop();
+// vitest.config.ts's hookTimeout, which this container start had before the helper's 60s default.
+const postgres = useRealPostgres({
+  start: startRealPostgres,
+  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
+  timeoutMs: 180_000,
 });
 
 const SETTLED = new Date("2026-07-22T10:00:00Z");
@@ -43,10 +34,10 @@ describe("payments under real row-level security", () => {
   it("an app_user-role connection inserts and reads its own tenant's payment, and only its own", async () => {
     // Seeded as the superuser (admin) — RLS is bypassed for this setup, which is fine: the
     // working_order chain being seeded isn't the thing under test, the payment insert below is.
-    const tenantA = await seedWorkingOrder(admin, "B11111111");
-    const tenantB = await seedWorkingOrder(admin, "B22222222");
+    const tenantA = await seedWorkingOrder(postgres.admin, "B11111111");
+    const tenantB = await seedWorkingOrder(postgres.admin, "B22222222");
 
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const probe = await postgres.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const key = { tenantId: tenantA.tenantId, provider: "fake", paymentRef: "r1" };
 
@@ -87,11 +78,11 @@ describe("payments under real row-level security", () => {
 
 describe("the untenanted webhook resolver under real row-level security", () => {
   it("resolves (provider, external_ref) -> tenant_id across tenants, but leaks no wider row", async () => {
-    const tenantA = await seedWorkingOrder(admin, "B33333333");
-    const tenantB = await seedWorkingOrder(admin, "B44444444");
+    const tenantA = await seedWorkingOrder(postgres.admin, "B33333333");
+    const tenantB = await seedWorkingOrder(postgres.admin, "B44444444");
 
     // Seed one `initiated` hosted payment for each tenant, as the superuser (RLS bypassed for setup).
-    await withTenant(admin, tenantA.tenantId, (tx) =>
+    await withTenant(postgres.admin, tenantA.tenantId, (tx) =>
       insertInitiated(tx, {
         tenantId: tenantA.tenantId,
         workingOrderId: tenantA.workingOrderId,
@@ -101,7 +92,7 @@ describe("the untenanted webhook resolver under real row-level security", () => 
         amount: decimal("10.00"),
       }),
     );
-    await withTenant(admin, tenantB.tenantId, (tx) =>
+    await withTenant(postgres.admin, tenantB.tenantId, (tx) =>
       insertInitiated(tx, {
         tenantId: tenantB.tenantId,
         workingOrderId: tenantB.workingOrderId,
@@ -112,7 +103,7 @@ describe("the untenanted webhook resolver under real row-level security", () => 
       }),
     );
 
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const probe = await postgres.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       // The resolver runs with NO tenant GUC set — the genuine webhook case. It must still return
       // tenant A's id for hosted-A, proving the SECURITY DEFINER function crosses tenants for this

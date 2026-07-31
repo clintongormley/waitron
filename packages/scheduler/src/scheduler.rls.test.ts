@@ -1,10 +1,11 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { captureError, pgErrorMessage, withTenant, type Database } from "@waitron/db";
+import { describe, expect, it } from "vitest";
+import { captureError, pgErrorMessage, withTenant } from "@waitron/db";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import { DEFAULTS } from "./derive.js";
 import { runDue } from "./run.js";
 import { FakeDuty } from "./testing/fake-duty.js";
-import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { startRealPostgres } from "./testing/postgres.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
 // A non-superuser LOGIN role inheriting app_user's grants. Being non-superuser is what makes RLS
@@ -17,28 +18,15 @@ const PROBE_PASSWORD = "probe";
 
 const NOW = new Date("2026-07-25T04:00:00Z");
 
-let pg: RealPostgres;
-let admin: Database;
-
-beforeAll(async () => {
-  pg = await startRealPostgres();
-  admin = await pg.connect();
-  await admin.execute(
-    sql.raw(`create role ${PROBE_ROLE} login password '${PROBE_PASSWORD}' in role app_user`),
-  );
-});
-
-// Guarded: a beforeAll failure must not be masked by a teardown that throws first, and the
-// container must not leak.
-afterAll(async () => {
-  if (admin !== undefined) await admin.close();
-  if (pg !== undefined) await pg.stop();
+const suite = useRealPostgres({
+  start: startRealPostgres,
+  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
 });
 
 describe("the scheduler under real row-level security", () => {
   it("claims, runs and completes as a non-superuser app_user member", async () => {
-    const tenantId = await seedTenant(admin);
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const tenantId = await seedTenant(suite.admin);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const duty = new FakeDuty("rls.duty", () =>
         Promise.resolve({ summary: { ok: true }, resweepAfter: new Date("2026-07-26T04:00:00Z") }),
@@ -53,9 +41,9 @@ describe("the scheduler under real row-level security", () => {
   });
 
   it("hides another tenant's runs", async () => {
-    const mine = await seedTenant(admin);
-    const theirs = await seedTenant(admin);
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const mine = await seedTenant(suite.admin);
+    const theirs = await seedTenant(suite.admin);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       await runDue({ db: probe, duties: [new FakeDuty("rls.duty")], ...DEFAULTS }, [theirs], NOW);
 
@@ -63,7 +51,7 @@ describe("the scheduler under real row-level security", () => {
       // claimed nothing for `theirs` (an unrelated bug, nothing to do with isolation) would leave
       // the table empty and the scoped read below would report "0" for the wrong reason — hiding
       // nothing is not the same as hiding something. This is the assertion that tells them apart.
-      const actual = await admin.execute<{ count: string }>(
+      const actual = await suite.admin.execute<{ count: string }>(
         sql`select count(*) as count from scheduled_runs where tenant_id = ${theirs}`,
       );
       expect(actual.rows[0]!.count).toBe("1");
@@ -78,9 +66,9 @@ describe("the scheduler under real row-level security", () => {
   });
 
   it("refuses to write a row for a tenant other than the scoped one", async () => {
-    const mine = await seedTenant(admin);
-    const theirs = await seedTenant(admin);
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const mine = await seedTenant(suite.admin);
+    const theirs = await seedTenant(suite.admin);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       // Not `.rejects.toThrow(/row-level security/i)`: drizzle-orm wraps every failed query in a
       // `DrizzleQueryError` whose own `.message` is `Failed query: ...` — the actual Postgres text

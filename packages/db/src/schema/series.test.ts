@@ -74,7 +74,7 @@ describeEachTarget("invoice_series schema", (target) => {
   // describe-level teardown, and it surfaces as an unhandled FATAL 57P01
   // rejection rather than a test failure.
   afterEach(async () => {
-    await db.close();
+    if (db !== undefined) await db.close();
   });
 
   it("holds several series on one till", async () => {

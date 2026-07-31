@@ -1,30 +1,22 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import { decimal } from "@waitron/shared";
 import { claimAcceptedOffline, insertAcceptedOffline } from "./store.js";
-import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { startRealPostgres } from "./testing/postgres.js";
 import { freshNif, seedWorkingOrder } from "../test/seed.js";
 
-let pg: RealPostgres;
-let admin: import("@waitron/db").Database;
-
-beforeAll(async () => {
-  pg = await startRealPostgres();
-  admin = await pg.connect();
-});
-afterAll(async () => {
-  await admin.close();
-  await pg.stop();
-});
+// vitest.config.ts's hookTimeout, which this container start had before the helper's 60s default.
+const postgres = useRealPostgres({ start: startRealPostgres, timeoutMs: 180_000 });
 
 const SETTLED = new Date("2026-07-23T10:00:00Z");
 
 describe("claimAcceptedOffline SKIP LOCKED partitions the queue across concurrent forwards", () => {
   it("a concurrent claim skips the row the holder locked and returns exactly the other", async () => {
-    const seeded = await seedWorkingOrder(admin, freshNif());
+    const seeded = await seedWorkingOrder(postgres.admin, freshNif());
     for (const ref of ["q1", "q2"]) {
-      await admin.transaction((tx) =>
+      await postgres.admin.transaction((tx) =>
         insertAcceptedOffline(tx, {
           tenantId: seeded.tenantId,
           workingOrderId: seeded.workingOrderId,
@@ -36,8 +28,8 @@ describe("claimAcceptedOffline SKIP LOCKED partitions the queue across concurren
       );
     }
 
-    const holder = await pg.connect();
-    const waiter = await pg.connect();
+    const holder = await postgres.pg.connect();
+    const waiter = await postgres.pg.connect();
     let release: () => void = () => {};
     let holding: Promise<unknown> | undefined;
     try {

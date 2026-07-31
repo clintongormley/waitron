@@ -7,7 +7,8 @@ import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Agent } from "undici";
-import { captureError, stampDeployment, withTenant, type Database } from "@waitron/db";
+import { captureError, stampDeployment, withTenant } from "@waitron/db";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import { isAppError } from "@waitron/shared";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 // The exact test-only entry point `packages/fiscal-verifactu`'s OWN tests use to seed a due
@@ -19,7 +20,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { DEFAULT_MIGRATIONS_ROOT, startServer, type StartedServer } from "./boot.js";
 import { DUTY_BUDGET_MS } from "./health.js";
 import { DRAIN_DUTY } from "./pass.js";
-import { roleUrl, startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { roleUrl, startRealPostgres } from "./testing/postgres.js";
 import { mintMtlsMaterial } from "./testing/tls.js";
 
 /**
@@ -97,41 +98,41 @@ const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 };
 
-let pg: RealPostgres;
-let admin: Database;
+const suite = useRealPostgres({
+  start: startRealPostgres,
+  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
+  timeoutMs: 180_000,
+});
+
 let migrationsRoot: string;
 let databaseUrl: string;
 let runtimeDatabaseUrl: string;
 
 beforeAll(async () => {
-  pg = await startRealPostgres();
-  admin = await pg.connect();
-
-  const dbName = new URL(pg.uri).pathname.replace(/^\//, "");
-  await admin.execute(
-    sql.raw(`create role ${PROBE_ROLE} login password '${PROBE_PASSWORD}' in role app_user`),
-  );
+  const dbName = new URL(suite.pg.uri).pathname.replace(/^\//, "");
   // `CREATE` on the database and on `public`: Drizzle's migrator issues `CREATE SCHEMA IF NOT
   // EXISTS "public"` (database-level `CREATE`) then `CREATE TABLE IF NOT EXISTS` per migration set
   // (schema-level `CREATE`) before it ever checks whether either already exists.
-  await admin.execute(sql.raw(`grant create on database ${dbName} to ${PROBE_ROLE}`));
-  await admin.execute(sql.raw(`grant create on schema public to ${PROBE_ROLE}`));
+  await suite.admin.execute(sql.raw(`grant create on database ${dbName} to ${PROBE_ROLE}`));
+  await suite.admin.execute(sql.raw(`grant create on schema public to ${PROBE_ROLE}`));
   // `SELECT` on every table in `public`, not just the five journal tables by name: `startRealPostgres`
   // already applied every migration as the container's superuser, so the deployment role does not
   // OWN the journal tables it must read back from to decide nothing new needs applying.
-  await admin.execute(sql.raw(`grant select on all tables in schema public to ${PROBE_ROLE}`));
+  await suite.admin.execute(
+    sql.raw(`grant select on all tables in schema public to ${PROBE_ROLE}`),
+  );
 
-  databaseUrl = roleUrl(pg.uri, PROBE_ROLE, PROBE_PASSWORD);
+  databaseUrl = roleUrl(suite.pg.uri, PROBE_ROLE, PROBE_PASSWORD);
 
   // No `CREATE`, no `SELECT` on the journal tables — `app_user` membership and nothing else, the
   // role spec §10 actually means by "the non-superuser deployment role". It can do the duty work
   // (drain/reconcile read and write through `app_user`'s own table grants, applied by the migrations
   // themselves) but cannot run a migration against an already-migrated database, for the identical
   // permission-denied-before-`IF NOT EXISTS` reason `PROBE_ROLE`'s own comment above explains.
-  await admin.execute(
+  await suite.admin.execute(
     sql.raw(`create role ${RUNTIME_ROLE} login password '${RUNTIME_PASSWORD}' in role app_user`),
   );
-  runtimeDatabaseUrl = roleUrl(pg.uri, RUNTIME_ROLE, RUNTIME_PASSWORD);
+  runtimeDatabaseUrl = roleUrl(suite.pg.uri, RUNTIME_ROLE, RUNTIME_PASSWORD);
 
   // `boot.ts`'s own default migrations root is `<dirname of boot.ts>/drizzle` — under source (this
   // test, not the bundle) that resolves to `apps/server/src/drizzle`, which does not exist; only
@@ -148,12 +149,11 @@ beforeAll(async () => {
   }
 }, 180_000);
 
-// Guarded, matching pass.rls.test.ts: a beforeAll failure must not be masked by a teardown that
-// throws first, and the container must not leak.
+// The temporary migrations root is this suite's own; the container and `suite.admin` are
+// `useRealPostgres`'s. Guarded the same way: a `beforeAll` that threw before `mkdtemp` returned
+// must not be followed by an `rm(undefined)` reported as a second failure beside the real one.
 afterAll(async () => {
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
-  if (admin !== undefined) await admin.close();
-  if (pg !== undefined) await pg.stop();
 });
 
 /** An OS-assigned port, released before use. `WAITRON_HTTP_PORT` rejects `"0"` as not a positive
@@ -528,9 +528,9 @@ describe("startServer, against a real container as the deployment role", () => {
     // `seedPendingEnvios`'s own fixed `proximo_intento_en` ('2026-07-21T00:00:00Z') is always in
     // the past relative to `startServer`'s real wall clock (`boot.ts` hardcodes `new Date()`,
     // deliberately not injectable — see its own doc comment), so this tenant is due the instant the
-    // first pass runs. Seeded against `admin` (the container's own superuser default), matching
+    // first pass runs. Seeded against `suite.admin` (the container's own superuser default), matching
     // `pass.rls.test.ts`'s identical convention for setup that must bypass RLS.
-    const seeded = await seedPendingEnvios(admin, { count: 1 });
+    const seeded = await seedPendingEnvios(suite.admin, { count: 1 });
 
     try {
       const [server, sleeping, skipped] = await withCapturedStdout(async (lines) => {
@@ -587,7 +587,7 @@ describe("startServer, against a real container as the deployment role", () => {
       // (`registros_facturacion`/`sales`/`invoice_series` all reference `tenants` with
       // `onDelete: "restrict"`). Runs regardless of how the block above finishes, so a failed
       // assertion still leaves the container clean for whatever test runs next.
-      await admin.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
+      await suite.admin.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
     }
   }, 60_000);
 
@@ -605,12 +605,12 @@ describe("startServer, against a real container as the deployment role", () => {
   // process has no business dialling the real one) while `Agent` itself stays real.
   it("closes the mTLS transport it built for a tenant with due fiscal work and a usable fiscal.aeat credential", async () => {
     const port = await freePort();
-    const seeded = await seedPendingEnvios(admin, { count: 1 });
+    const seeded = await seedPendingEnvios(suite.admin, { count: 1 });
     const material = mintMtlsMaterial();
     // Same shape as `aeat-transport.test.ts`'s own `provision(certKind)` helper, against the
     // TENANT `seedPendingEnvios` just seeded rather than a fresh one of its own — this test needs
     // ONE tenant carrying both due work and a usable credential, not two separate tenants.
-    await withTenant(admin, seeded.tenantId, (tx) =>
+    await withTenant(suite.admin, seeded.tenantId, (tx) =>
       putCredential(tx, loadKeyRing(KEY_ENV), {
         tenantId: seeded.tenantId,
         purpose: "fiscal.aeat",
@@ -665,8 +665,8 @@ describe("startServer, against a real container as the deployment role", () => {
       // backs the batch off rather than raising an incident — but this cleanup is kept anyway,
       // rather than assumed absent, so a future change to that failure path does not silently
       // leave a row behind for a LATER test in this shared-container suite to trip over.
-      await admin.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
-      await admin.execute(sql`delete from incidents where tenant_id = ${seeded.tenantId}`);
+      await suite.admin.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
+      await suite.admin.execute(sql`delete from incidents where tenant_id = ${seeded.tenantId}`);
     }
   }, 60_000);
 
@@ -695,7 +695,7 @@ describe("startServer, against a real container as the deployment role", () => {
   // own `SELECT` to `app_user`, and `RUNTIME_ROLE` is an `app_user` member (this file's own
   // `beforeAll`).
   it("refuses to start, and runs no migration, against another environment's database", async () => {
-    await stampDeployment(admin, "preproduction");
+    await stampDeployment(suite.admin, "preproduction");
 
     try {
       const error = await captureError(() =>
@@ -707,7 +707,7 @@ describe("startServer, against a real container as the deployment role", () => {
       );
       expect(error).toMatchObject({ code: "deployment.environment_mismatch" });
     } finally {
-      await admin.execute(sql`delete from deployment where id = 1`);
+      await suite.admin.execute(sql`delete from deployment where id = 1`);
     }
   });
 });

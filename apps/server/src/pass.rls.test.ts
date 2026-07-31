@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { withTenant, type Database } from "@waitron/db";
+import { describe, expect, it } from "vitest";
+import { withTenant } from "@waitron/db";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import { credentialTenants, loadKeyRing, putCredential } from "@waitron/credentials";
-import type { KeyRing } from "@waitron/credentials";
 import { DEFAULTS, runDue } from "@waitron/scheduler";
 import { StripeReconciler } from "@waitron/payments-stripe";
 import { drain } from "@waitron/fiscal-verifactu";
@@ -11,7 +11,7 @@ import { createLogger } from "./logger.js";
 import { reconcilerAsDuty } from "./reconcile-duty.js";
 import { runPass, RECONCILE_DUTY } from "./pass.js";
 import { stripeAccountResolver } from "./stripe-account.js";
-import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { startRealPostgres } from "./testing/postgres.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
 // A non-superuser LOGIN role inheriting app_user's grants — being non-superuser is what makes RLS
@@ -24,25 +24,12 @@ const KEY_ENV = {
 };
 const NOW = new Date("2026-07-26T09:00:00Z");
 
-let pg: RealPostgres;
-let admin: Database;
-let ring: KeyRing;
-
-beforeAll(async () => {
-  pg = await startRealPostgres();
-  admin = await pg.connect();
-  await admin.execute(
-    sql.raw(`create role ${PROBE_ROLE} login password '${PROBE_PASSWORD}' in role app_user`),
-  );
-  ring = loadKeyRing(KEY_ENV);
-}, 180_000);
-
-// Guarded: a beforeAll failure must not be masked by a teardown that throws first, and the
-// container must not leak.
-afterAll(async () => {
-  if (admin !== undefined) await admin.close();
-  if (pg !== undefined) await pg.stop();
+const suite = useRealPostgres({
+  start: startRealPostgres,
+  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
+  timeoutMs: 180_000,
 });
+const ring = loadKeyRing(KEY_ENV);
 
 /** A settlement report that finds nothing — the audit's clean case. The point of this suite is the
  * database path under RLS, not the audit's classification, which has its own suites. */
@@ -59,8 +46,8 @@ const emptyStripe = {
 
 describe("one pass as the non-superuser deployment role", () => {
   it("reads credentials, sweeps reconcile and writes the ledger", async () => {
-    const tenantId = await seedTenant(admin);
-    await withTenant(admin, tenantId, (tx) =>
+    const tenantId = await seedTenant(suite.admin);
+    await withTenant(suite.admin, tenantId, (tx) =>
       putCredential(tx, ring, {
         tenantId,
         purpose: "payments.stripe",
@@ -73,7 +60,7 @@ describe("one pass as the non-superuser deployment role", () => {
       }),
     );
 
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       // The enrolment list, read cross-tenant through `credential_tenants` as the deployment role.
       // Under PGlite this would pass while proving nothing: a superuser sees the rows regardless of
@@ -134,7 +121,7 @@ describe("one pass as the non-superuser deployment role", () => {
       // The ledger is the proof: SELECT, INSERT and UPDATE on `scheduled_runs` all had to succeed
       // under the tenant-isolation policy, and a missing grant on any one of them is invisible
       // under PGlite.
-      const rows = await admin.execute<{ count: string }>(
+      const rows = await suite.admin.execute<{ count: string }>(
         sql`select count(*) as count from scheduled_runs
             where tenant_id = ${tenantId} and duty = ${RECONCILE_DUTY} and state = 'succeeded'`,
       );
@@ -152,19 +139,19 @@ describe("one pass as the non-superuser deployment role", () => {
   });
 
   it("does not enumerate a tenant provisioned for a different purpose", async () => {
-    const otherPurposeTenant = await seedTenant(admin);
+    const otherPurposeTenant = await seedTenant(suite.admin);
     // Provisioned for `fiscal.aeat`, NOT `payments.stripe` — a tenant with no credential at ALL
     // would pass this assertion even if `credential_tenants`'s `WHERE purpose = p_purpose` clause
     // were deleted outright. Giving it a DIFFERENT purpose's credential is what makes the filter,
     // not merely the row's absence, the thing this test depends on.
-    await withTenant(admin, otherPurposeTenant, (tx) =>
+    await withTenant(suite.admin, otherPurposeTenant, (tx) =>
       putCredential(tx, ring, {
         tenantId: otherPurposeTenant,
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" },
       }),
     );
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       // The vault IS the enrolment list: a tenant provisioned for a different purpose is not
       // half-served under the wrong one.

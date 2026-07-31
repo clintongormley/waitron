@@ -1,10 +1,10 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { captureError, pgErrorCode } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import { appendToChain } from "./chain.js";
 import { registerSif } from "./registro-sif.js";
-import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 import {
   altaFor,
   seedSale,
@@ -16,8 +16,6 @@ import {
 
 const WRITERS = 20;
 
-let pg: RealPostgres;
-let admin: Database;
 let till: SeededTill;
 let other: SeededTill;
 
@@ -30,15 +28,7 @@ let other: SeededTill;
  * unavailable in this environment, EVERY test below fails loudly with that thrown error, which is
  * the intended, load-bearing behaviour — not a defect in this file.
  */
-beforeAll(async () => {
-  pg = await startRealPostgres();
-  admin = await pg.connect();
-});
-
-afterAll(async () => {
-  await admin.close();
-  await pg.stop();
-});
+const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: CONTAINER_SETUP_TIMEOUT_MS });
 
 // No truncate-and-reseed here: registros_facturacion's append-only trigger
 // (registros_facturacion_block_truncate) fires on a CASCADEd TRUNCATE from `tenants` too, and
@@ -47,8 +37,8 @@ afterAll(async () => {
 // nif) on every call instead, so each test's rows are simply new and independent of whatever a
 // previous test already committed; nothing here ever needs the previous run's rows gone.
 beforeEach(async () => {
-  till = await seedTill(admin, "A");
-  other = await seedTill(admin, "B");
+  till = await seedTill(suite.admin, "A");
+  other = await seedTill(suite.admin, "B");
 });
 
 describe("appendToChain under real contention", () => {
@@ -56,7 +46,7 @@ describe("appendToChain under real contention", () => {
     // THE LOAD-BEARING ASSERTION. PGlite serialises every query onto one backend, so this returns
     // the same pid twice there and the rest of this suite would be theatre. If this ever fails,
     // nothing below it means anything, whatever colour it reports.
-    const dbs = await Promise.all(Array.from({ length: WRITERS }, () => pg.connect()));
+    const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
     try {
       const pids = await Promise.all(
         dbs.map(async (db) => {
@@ -71,9 +61,9 @@ describe("appendToChain under real contention", () => {
   });
 
   it("commits all 20 concurrent appends to one chain", async () => {
-    const dbs = await Promise.all(Array.from({ length: WRITERS }, () => pg.connect()));
+    const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
     try {
-      const sales = await Promise.all(dbs.map((_, i) => seedSale(admin, till, i + 1)));
+      const sales = await Promise.all(dbs.map((_, i) => seedSale(suite.admin, till, i + 1)));
       const results = await Promise.all(
         dbs.map((db, i) =>
           db.transaction((tx) =>
@@ -85,7 +75,7 @@ describe("appendToChain under real contention", () => {
       // Naive read-then-write committed 3 of 20 here (measured, see chain.ts's own doc comment).
       // Anything below 20 is that failure, not a flake.
       expect(results).toHaveLength(WRITERS);
-      const { rows } = await admin.execute<{ count: number }>(sql`
+      const { rows } = await suite.admin.execute<{ count: number }>(sql`
         select count(*)::int as count from registros_facturacion where till_id = ${till.tillId}
       `);
       expect(rows[0]?.count).toBe(WRITERS);
@@ -95,9 +85,9 @@ describe("appendToChain under real contention", () => {
   });
 
   it("assigns every concurrent append a distinct position with no gaps", async () => {
-    const dbs = await Promise.all(Array.from({ length: WRITERS }, () => pg.connect()));
+    const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
     try {
-      const sales = await Promise.all(dbs.map((_, i) => seedSale(admin, till, i + 1)));
+      const sales = await Promise.all(dbs.map((_, i) => seedSale(suite.admin, till, i + 1)));
       await Promise.all(
         dbs.map((db, i) =>
           db.transaction((tx) =>
@@ -105,7 +95,7 @@ describe("appendToChain under real contention", () => {
           ),
         ),
       );
-      const { rows } = await admin.execute<{ secuencia: number }>(sql`
+      const { rows } = await suite.admin.execute<{ secuencia: number }>(sql`
         select secuencia from registros_facturacion where till_id = ${till.tillId} order by secuencia
       `);
       expect(rows.map((r) => r.secuencia)).toEqual(
@@ -117,9 +107,9 @@ describe("appendToChain under real contention", () => {
   });
 
   it("leaves every record correctly chained to its predecessor", async () => {
-    const dbs = await Promise.all(Array.from({ length: WRITERS }, () => pg.connect()));
+    const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
     try {
-      const sales = await Promise.all(dbs.map((_, i) => seedSale(admin, till, i + 1)));
+      const sales = await Promise.all(dbs.map((_, i) => seedSale(suite.admin, till, i + 1)));
       await Promise.all(
         dbs.map((db, i) =>
           db.transaction((tx) =>
@@ -127,7 +117,7 @@ describe("appendToChain under real contention", () => {
           ),
         ),
       );
-      const { rows } = await admin.execute<{
+      const { rows } = await suite.admin.execute<{
         secuencia: number;
         huella: string;
         anterior_huella: string | null;
@@ -150,13 +140,13 @@ describe("appendToChain under real contention", () => {
   it("blocks a second appender on the same chain", async () => {
     // Deterministic rather than timing-based: hold the head-row lock open, then prove a second
     // writer on that chain waits until lock_timeout.
-    const holder = await pg.connect();
-    const waiter = await pg.connect();
+    const holder = await suite.pg.connect();
+    const waiter = await suite.pg.connect();
     let release: () => void = () => {};
     let holding: Promise<unknown> | undefined;
     try {
-      const saleId = await seedSale(admin, till, 1);
-      await admin.transaction((tx) =>
+      const saleId = await seedSale(suite.admin, till, 1);
+      await suite.admin.transaction((tx) =>
         appendToChain(tx, till.tenantId, till.tillId, altaFor(saleId, 1, 1)),
       );
 
@@ -175,7 +165,7 @@ describe("appendToChain under real contention", () => {
       });
       await acquired;
 
-      const second = await seedSale(admin, till, 2);
+      const second = await seedSale(suite.admin, till, 2);
       const error = await captureError(() =>
         waiter.transaction(async (tx) => {
           await tx.execute(sql`set local lock_timeout = '250ms'`);
@@ -198,13 +188,13 @@ describe("appendToChain under real contention", () => {
   it("does not block an appender on a different till", async () => {
     // Per-tenant and per-till parallelism is the reason the lock is on a row rather than an
     // advisory key: a busy till must never stall a quiet one.
-    const holder = await pg.connect();
-    const writer = await pg.connect();
+    const holder = await suite.pg.connect();
+    const writer = await suite.pg.connect();
     let release: () => void = () => {};
     let holding: Promise<unknown> | undefined;
     try {
-      const first = await seedSale(admin, till, 1);
-      await admin.transaction((tx) =>
+      const first = await seedSale(suite.admin, till, 1);
+      await suite.admin.transaction((tx) =>
         appendToChain(tx, till.tenantId, till.tillId, altaFor(first, 1, 1)),
       );
 
@@ -221,7 +211,7 @@ describe("appendToChain under real contention", () => {
       });
       await acquired;
 
-      const elsewhere = await seedSale(admin, other, 1);
+      const elsewhere = await seedSale(suite.admin, other, 1);
       const result = await writer.transaction(async (tx) => {
         await tx.execute(sql`set local lock_timeout = '250ms'`);
         return appendToChain(tx, other.tenantId, other.tillId, altaFor(elsewhere, 1, 1));
@@ -252,8 +242,8 @@ describe("registerSif's installation-number counter under real contention", () =
   // counter's own contention handling, exercised across many tills the way a chain's rollout to a
   // multi-till restaurant actually would.
   it("mints 20 distinct, strictly increasing installation numbers across many tills of one obligado", async () => {
-    const fixture = await seedTillsForSifContention(admin, WRITERS);
-    const dbs = await Promise.all(Array.from({ length: WRITERS }, () => pg.connect()));
+    const fixture = await seedTillsForSifContention(suite.admin, WRITERS);
+    const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
     try {
       const results = await Promise.all(
         dbs.map((db, i) =>

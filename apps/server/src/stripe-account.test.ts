@@ -1,15 +1,8 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type Stripe from "stripe";
-import {
-  CORE_MIGRATIONS,
-  captureError,
-  createPgliteDb,
-  runMigrations,
-  withTenant,
-} from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, withTenant } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
-import type { KeyRing } from "@waitron/credentials";
 import { isAppError } from "@waitron/shared";
 import { defaultMakeStripe, stripeAccountResolver, stripeSecretKeyFrom } from "./stripe-account.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -19,24 +12,16 @@ const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 };
 
-let db: Database;
-let ring: KeyRing;
-
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, CREDENTIALS_MIGRATIONS);
-  ring = loadKeyRing(KEY_ENV);
-}, 60_000);
-
-afterAll(async () => {
-  if (db !== undefined) await db.close();
+const suite = usePgliteDb({
+  migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
+  timeoutMs: 60_000,
 });
+const ring = loadKeyRing(KEY_ENV);
 
 describe("stripeAccountResolver", () => {
   it("builds the account from the tenant's own secret key", async () => {
-    const tenantId = await seedTenant(db);
-    await withTenant(db, tenantId, (tx) =>
+    const tenantId = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, (tx) =>
       putCredential(tx, ring, {
         tenantId,
         purpose: "payments.stripe",
@@ -51,7 +36,7 @@ describe("stripeAccountResolver", () => {
 
     const keys: string[] = [];
     const resolve = stripeAccountResolver({
-      db,
+      db: suite.db,
       ring,
       environment: "preproduction",
       makeStripe: (secretKey) => {
@@ -70,9 +55,9 @@ describe("stripeAccountResolver", () => {
   });
 
   it("surfaces the vault's own code when the tenant has no Stripe credential", async () => {
-    const tenantId = await seedTenant(db);
+    const tenantId = await seedTenant(suite.db);
     const resolve = stripeAccountResolver({
-      db,
+      db: suite.db,
       ring,
       environment: "preproduction",
       makeStripe: () => ({}) as Stripe,

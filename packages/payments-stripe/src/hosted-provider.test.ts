@@ -1,8 +1,8 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { CORE_MIGRATIONS } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
   tenantId as brandTenantId,
@@ -14,30 +14,20 @@ import type { Seeded } from "@waitron/payments/test/seed.js";
 import { FakeStripeHosted } from "./testing/fake-stripe-hosted.js";
 import { StripeHostedProvider } from "./hosted-provider.js";
 
-let db: Database;
-
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, PAYMENTS_MIGRATIONS);
-}, 60_000);
-
-afterAll(async () => {
-  await db.close();
-});
+const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 beforeEach(async () => {
-  await db.execute(sql`truncate payment_refunds, payments cascade`);
+  await pg.db.execute(sql`truncate payment_refunds, payments cascade`);
 });
 
 async function seed(): Promise<Seeded> {
-  return seedWorkingOrder(db, freshNif());
+  return seedWorkingOrder(pg.db, freshNif());
 }
 
 describe("StripeHostedProvider.initiate", () => {
   it("mints a session and writes an initiated row with external_ref = session id", async () => {
     const s = await seed();
-    const provider = new StripeHostedProvider({ client: new FakeStripeHosted(), db });
+    const provider = new StripeHostedProvider({ client: new FakeStripeHosted(), db: pg.db });
     const paymentRef = randomUUID();
 
     const res = await provider.initiate({
@@ -51,7 +41,7 @@ describe("StripeHostedProvider.initiate", () => {
     expect(res.externalRef).toMatch(/^cs_/);
     expect(res.url).toContain(res.externalRef);
 
-    const row = await db.transaction((tx) =>
+    const row = await pg.db.transaction((tx) =>
       getPaymentByRef(tx, { tenantId: s.tenantId, provider: "stripe", paymentRef }),
     );
     expect(row?.state).toBe("initiated");
@@ -67,8 +57,8 @@ describe("StripeHostedProvider.initiate", () => {
     // on-device (2b) can, and stamps the same keys; only the audit's read side for those is still
     // deferred (see `hosted-client.ts`'s `metadata` doc).
     const client = new FakeStripeHosted();
-    const provider = new StripeHostedProvider({ client, db });
-    const seeded = await seedWorkingOrder(db, freshNif());
+    const provider = new StripeHostedProvider({ client, db: pg.db });
+    const seeded = await seedWorkingOrder(pg.db, freshNif());
     await provider.initiate({
       tenantId: brandTenantId(seeded.tenantId),
       workingOrderId: brandWorkingOrderId(seeded.workingOrderId),
@@ -83,7 +73,7 @@ describe("StripeHostedProvider.initiate", () => {
 });
 
 describe("StripeHostedProvider.verifyAndParse", () => {
-  const provider = () => new StripeHostedProvider({ client: new FakeStripeHosted(), db });
+  const provider = () => new StripeHostedProvider({ client: new FakeStripeHosted(), db: pg.db });
 
   it("maps checkout.session.completed to a settled InboundSettlement", () => {
     const payload = FakeStripeHosted.event({
@@ -117,7 +107,7 @@ describe("StripeHostedProvider.verifyAndParse", () => {
   it("throws on a bad signature (does not swallow it)", () => {
     const client = new FakeStripeHosted();
     client.failSignatureNext();
-    const p = new StripeHostedProvider({ client, db });
+    const p = new StripeHostedProvider({ client, db: pg.db });
     const payload = FakeStripeHosted.event({
       sessionId: "cs_9",
       type: "checkout.session.completed",

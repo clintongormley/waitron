@@ -1,21 +1,13 @@
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { CORE_MIGRATIONS } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
 
-let db: Database;
-
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, FISCAL_MIGRATIONS);
-  await seedTenantTillSif(db);
-});
-
-afterAll(async () => {
-  await db.close();
+const pg = usePgliteDb({
+  migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS],
+  setup: seedTenantTillSif,
 });
 
 /**
@@ -41,7 +33,7 @@ describe("cuota_total / importe_total round-trip the huella's literal hash input
     const importeTotal = "999999999999.99";
     const cuotaTotal = "173913043.47";
 
-    const result = await db.execute<{ cuota_total: string; importe_total: string }>(sql`
+    const result = await pg.db.execute<{ cuota_total: string; importe_total: string }>(sql`
       insert into registros_facturacion (
         tenant_id, till_id, sif_id, sale_id, secuencia, tipo_registro,
         id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,

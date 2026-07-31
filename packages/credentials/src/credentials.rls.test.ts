@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { withTenant, type Database } from "@waitron/db";
+import { describe, expect, it } from "vitest";
+import { withTenant } from "@waitron/db";
 import { runCli } from "./cli.js";
 import { loadKeyRing } from "./keyring.js";
 import {
@@ -11,8 +11,9 @@ import {
   putCredential,
   rotateCredentials,
 } from "./store.js";
-import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { startRealPostgres } from "./testing/postgres.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 
 // A non-superuser LOGIN role inheriting app_user's grants. Being non-superuser is what makes RLS
 // apply at all — a superuser bypasses FORCE ROW LEVEL SECURITY, which is why PGlite cannot prove
@@ -33,34 +34,15 @@ const STRIPE = {
   cancelUrl: "https://example.test/no",
 };
 
-let pg: RealPostgres;
-let admin: Database;
-
-beforeAll(async () => {
-  pg = await startRealPostgres();
-  admin = await pg.connect();
-  await admin.execute(
-    sql.raw(`create role ${PROBE_ROLE} login password '${PROBE_PASSWORD}' in role app_user`),
-  );
-});
-
-// Guarded: a beforeAll failure must not be masked by a teardown that throws first, and the
-// container must not leak. Deliberately NOT the unconditional afterAll shared by TEN
-// unguarded *.rls.test.ts files across THREE packages — verified by counting, not inherited from a
-// prior handoff (the second such miscount on this branch; see this branch's SDD ledger): packages/
-// payments (3: payment-policy, payments, reconcile), packages/payments-stripe (4: device, hosted,
-// reconcile, stripe), packages/fiscal-verifactu (3: acks, pending-count, reconcile). Only this file
-// and packages/scheduler's two suites (scheduler.rls.test.ts, store.concurrency.test.ts) guard
-// their teardown.
-afterAll(async () => {
-  if (admin !== undefined) await admin.close();
-  if (pg !== undefined) await pg.stop();
+const suite = useRealPostgres({
+  start: startRealPostgres,
+  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
 });
 
 describe("the vault under real row-level security", () => {
   it("writes and reads its own tenant's credential as a non-superuser app_user member", async () => {
-    const tenantId = await seedTenant(admin);
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const tenantId = await seedTenant(suite.admin);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       await withTenant(probe, tenantId, (tx) =>
         putCredential(tx, RING, { tenantId, purpose: "payments.stripe", value: STRIPE }),
@@ -81,8 +63,8 @@ describe("the vault under real row-level security", () => {
     // deleteCredential at all; removing DELETE from drizzle/0001_credentials_rls.sql's GRANT left
     // 123/123 green without it. As the probe role, a missing grant fails with
     // "permission denied for table tenant_credentials" (42501).
-    const tenantId = await seedTenant(admin);
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const tenantId = await seedTenant(suite.admin);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       await withTenant(probe, tenantId, (tx) =>
         putCredential(tx, RING, { tenantId, purpose: "payments.stripe", value: STRIPE }),
@@ -93,7 +75,7 @@ describe("the vault under real row-level security", () => {
       expect(deleted).toBe(true);
 
       // Confirmed gone from the superuser's own view too, not just invisible to this tenant.
-      const remaining = await admin.execute<{ count: string }>(
+      const remaining = await suite.admin.execute<{ count: string }>(
         sql`select count(*) as count from tenant_credentials where tenant_id = ${tenantId}`,
       );
       expect(remaining.rows[0]!.count).toBe("0");
@@ -103,9 +85,9 @@ describe("the vault under real row-level security", () => {
   });
 
   it("hides another tenant's credential", async () => {
-    const mine = await seedTenant(admin);
-    const theirs = await seedTenant(admin);
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const mine = await seedTenant(suite.admin);
+    const theirs = await seedTenant(suite.admin);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       await withTenant(probe, theirs, (tx) =>
         putCredential(tx, RING, { tenantId: theirs, purpose: "payments.stripe", value: STRIPE }),
@@ -114,7 +96,7 @@ describe("the vault under real row-level security", () => {
       // Read back as the superuser, which bypasses RLS: without this, a put that silently wrote
       // nothing would leave the table empty and the scoped read below would report 0 for the wrong
       // reason — hiding nothing is not the same as hiding something.
-      const actual = await admin.execute<{ count: string }>(
+      const actual = await suite.admin.execute<{ count: string }>(
         sql`select count(*) as count from tenant_credentials where tenant_id = ${theirs}`,
       );
       expect(actual.rows[0]!.count).toBe("1");
@@ -132,8 +114,8 @@ describe("the vault under real row-level security", () => {
     // something to hide) and then reading through a connection with no GUC set at all — a plain
     // empty table would pass this assertion vacuously, for the wrong reason. This is the property
     // the SECURITY DEFINER seam exists to work around, so it must be proven true first.
-    const tenantId = await seedTenant(admin);
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const tenantId = await seedTenant(suite.admin);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       await withTenant(probe, tenantId, (tx) =>
         putCredential(tx, RING, { tenantId, purpose: "payments.stripe", value: STRIPE }),
@@ -163,8 +145,8 @@ describe("waitron-credentials list, no --tenant, under real RLS", () => {
     // 10 lines instead of 2 or 4, one full-table read per DISTINCT enumerated tenant). Only a real,
     // non-superuser probe role makes `withTenant`'s scoping genuine, so a duplicate visit to the
     // same tenant genuinely — and only — prints that one tenant's own two rows twice.
-    const tenantId = await seedTenant(admin);
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const tenantId = await seedTenant(suite.admin);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       await withTenant(probe, tenantId, (tx) =>
         putCredential(tx, RING, { tenantId, purpose: "payments.stripe", value: STRIPE }),
@@ -199,9 +181,9 @@ describe("waitron-credentials list, no --tenant, under real RLS", () => {
 
 describe("credentialTenants", () => {
   it("crosses tenants under the non-superuser role", async () => {
-    const a = await seedTenant(admin);
-    const b = await seedTenant(admin);
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const a = await seedTenant(suite.admin);
+    const b = await seedTenant(suite.admin);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       for (const tenantId of [a, b]) {
         await withTenant(probe, tenantId, (tx) =>
@@ -220,14 +202,14 @@ describe("credentialTenants", () => {
   });
 
   it("enumerates only tenants holding THAT purpose", async () => {
-    const withStripe = await seedTenant(admin);
+    const withStripe = await seedTenant(suite.admin);
     // `without` must hold a credential too — just for a DIFFERENT purpose. A tenant with no row at
     // all would pass this test even against a WHERE clause that ignored `purpose` entirely (there
     // is nothing to leak), so it would prove nothing about purpose-exclusivity specifically. Giving
     // it an unrelated purpose is what makes "only THAT purpose" a claim this test can actually
     // falsify.
-    const without = await seedTenant(admin);
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const without = await seedTenant(suite.admin);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       await withTenant(probe, withStripe, (tx) =>
         putCredential(tx, RING, {
@@ -257,7 +239,7 @@ describe("credentialTenants", () => {
     // match, not a text-or-uuid pattern: `uuid` is the settled return type for this column (Task 1
     // made tenant_credentials.tenant_id a uuid), so a silent revert to `text` must fail this test,
     // not pass it.
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const described = await probe.execute<{ result_type: string }>(sql`
         select pg_get_function_result(oid) as result_type
@@ -274,7 +256,7 @@ describe("credentialTenants", () => {
     // string no other test in this file ever writes (this suite's container is shared across the
     // whole file, not reset between tests), so the assertion holds regardless of execution order —
     // unlike reusing "payments.stripe" or "fiscal.aeat", both of which sibling tests provision.
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const found = await credentialTenants(probe, "credentials-vault-test.never-provisioned");
       expect(found).toEqual([]);
@@ -292,8 +274,8 @@ describe("credentialTenants", () => {
     // test's payments.stripe/fiscal.aeat writes can leak into the result and break the exact-list
     // assertion. Inserted in DESCENDING tenant-id order deliberately, so an unordered or
     // insertion-order result would not accidentally come back looking sorted.
-    const a = await seedTenant(admin);
-    const b = await seedTenant(admin);
+    const a = await seedTenant(suite.admin);
+    const b = await seedTenant(suite.admin);
     const [first, second] = [a, b].sort();
     const purpose = "credentials-vault-test.ordering-probe";
     const row = {
@@ -302,11 +284,11 @@ describe("credentialTenants", () => {
       authTag: Buffer.alloc(16, 2),
     };
     for (const tenantId of [second, first]) {
-      await admin.execute(sql`
+      await suite.admin.execute(sql`
         insert into tenant_credentials (tenant_id, purpose, ciphertext, iv, auth_tag, key_version)
         values (${tenantId}, ${purpose}, ${row.ciphertext}, ${row.iv}, ${row.authTag}, 1)`);
     }
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const found = await credentialTenants(probe, purpose);
       expect(found).toEqual([first, second]);
@@ -331,8 +313,8 @@ describe("credentialTenants", () => {
  */
 describe("rotateCredentials under real RLS", () => {
   it("advances each tenant's own rows without touching another's — no cross-tenant mis-attribution", async () => {
-    const a = await seedTenant(admin);
-    const b = await seedTenant(admin);
+    const a = await seedTenant(suite.admin);
+    const b = await seedTenant(suite.admin);
     // `ROTATED` carries the SAME current key as every earlier test in this file used (`RING`, byte
     // 5, version 1) as its PREVIOUS member, so this one rotate call can re-seal every row any prior
     // block in this container ever wrote, not just this test's own two.
@@ -342,7 +324,7 @@ describe("rotateCredentials under real RLS", () => {
       WAITRON_CREDENTIALS_KEY_PREVIOUS: Buffer.alloc(32, 5).toString("base64"),
       WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "1",
     });
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       await withTenant(probe, a, (tx) =>
         putCredential(tx, RING, { tenantId: a, purpose: "payments.stripe", value: STRIPE }),
@@ -374,7 +356,7 @@ describe("rotateCredentials under real RLS", () => {
       );
       expect(actualB).toEqual({ pfxBase64: "AAAA", passphrase: "p", certKind: "sello" });
 
-      const versions = await admin.execute<{ tenant_id: string; key_version: number }>(sql`
+      const versions = await suite.admin.execute<{ tenant_id: string; key_version: number }>(sql`
         select tenant_id, key_version from tenant_credentials where tenant_id in (${a}, ${b})`);
       expect(versions.rows).toHaveLength(2);
       for (const row of versions.rows) expect(row.key_version).toBe(2);

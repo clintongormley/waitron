@@ -1,7 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations, withTenant } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
   seriesId as brandSeriesId,
@@ -31,17 +31,9 @@ import type { SeededForSale } from "../test/seed.js";
 // wiring.test.ts. `recordSale` runs INSIDE the same transaction as settle + associate, so the sale
 // chains atomically with the tender settlement.
 
-let db: Database;
-
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, PAYMENTS_MIGRATIONS);
-  await FakeFiscalBackend.install(db);
-}, 60_000);
-
-afterAll(async () => {
-  await db.close();
+const pg = usePgliteDb({
+  migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
+  setup: (db) => FakeFiscalBackend.install(db),
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -97,9 +89,9 @@ async function orchestrate(
 ): Promise<string | null> {
   const event = provider.verifyAndParse(payload, "signature");
   if (event === null) return null;
-  const tenantId = await resolvePaymentTenant(db, event.provider, event.externalRef);
+  const tenantId = await resolvePaymentTenant(pg.db, event.provider, event.externalRef);
   if (tenantId === null) return null;
-  return withTenant(db, tenantId, async (tx) => {
+  return withTenant(pg.db, tenantId, async (tx) => {
     if (event.outcome === "expired") {
       await expireInitiated(tx, { provider: event.provider, externalRef: event.externalRef });
       return null;
@@ -123,9 +115,9 @@ async function orchestrate(
 
 describe("initiate -> webhook -> settle -> recordSale -> associate (Mode 3, end to end)", () => {
   it("settles the hosted tender, chains the sale, and associates the payment atomically", async () => {
-    const backend = new FakeFiscalBackend(db);
-    const s = await seedForSale(db, backend, freshNif());
-    const provider = new FakeAsyncProvider(db);
+    const backend = new FakeFiscalBackend(pg.db);
+    const s = await seedForSale(pg.db, backend, freshNif());
+    const provider = new FakeAsyncProvider(pg.db);
 
     const minted = await provider.initiate({
       tenantId: brandTenantId(s.tenantId),
@@ -143,7 +135,7 @@ describe("initiate -> webhook -> settle -> recordSale -> associate (Mode 3, end 
     const saleId = await orchestrate(provider, backend, s, payload);
     expect(saleId).not.toBeNull();
 
-    const row = await db.transaction((tx) =>
+    const row = await pg.db.transaction((tx) =>
       getPaymentByRef(tx, { tenantId: s.tenantId, provider: "fake", paymentRef: "pay-1" }),
     );
     expect(row?.state).toBe("captured");
@@ -151,9 +143,9 @@ describe("initiate -> webhook -> settle -> recordSale -> associate (Mode 3, end 
   });
 
   it("is idempotent under a redelivered webhook: the second delivery chains no second sale", async () => {
-    const backend = new FakeFiscalBackend(db);
-    const s = await seedForSale(db, backend, freshNif());
-    const provider = new FakeAsyncProvider(db);
+    const backend = new FakeFiscalBackend(pg.db);
+    const s = await seedForSale(pg.db, backend, freshNif());
+    const provider = new FakeAsyncProvider(pg.db);
     const minted = await provider.initiate({
       tenantId: brandTenantId(s.tenantId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
@@ -173,16 +165,16 @@ describe("initiate -> webhook -> settle -> recordSale -> associate (Mode 3, end 
     expect(second).toBeNull();
 
     // Exactly one sale exists for this tenant's till/series (invoice_number 1, never a second).
-    const sales = await db.execute<{ count: string }>(
+    const sales = await pg.db.execute<{ count: string }>(
       sql`select count(*)::text as count from sales where tenant_id = ${s.tenantId}`,
     );
     expect(sales.rows[0].count).toBe("1");
   });
 
   it("an expired hosted payment advances to failed, chains no sale, and leaves the working order open", async () => {
-    const backend = new FakeFiscalBackend(db);
-    const s = await seedForSale(db, backend, freshNif());
-    const provider = new FakeAsyncProvider(db);
+    const backend = new FakeFiscalBackend(pg.db);
+    const s = await seedForSale(pg.db, backend, freshNif());
+    const provider = new FakeAsyncProvider(pg.db);
     const minted = await provider.initiate({
       tenantId: brandTenantId(s.tenantId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
@@ -199,12 +191,12 @@ describe("initiate -> webhook -> settle -> recordSale -> associate (Mode 3, end 
     const saleId = await orchestrate(provider, backend, s, payload);
     expect(saleId).toBeNull();
 
-    const row = await db.transaction((tx) =>
+    const row = await pg.db.transaction((tx) =>
       getPaymentByRef(tx, { tenantId: s.tenantId, provider: "fake", paymentRef: "pay-1" }),
     );
     expect(row?.state).toBe("failed");
     expect(row?.saleId).toBeNull();
-    const sales = await db.execute<{ count: string }>(
+    const sales = await pg.db.execute<{ count: string }>(
       sql`select count(*)::text as count from sales where tenant_id = ${s.tenantId}`,
     );
     expect(sales.rows[0].count).toBe("0");

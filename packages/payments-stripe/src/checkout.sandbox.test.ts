@@ -1,7 +1,7 @@
 import Stripe from "stripe";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
   tenantId as brandTenantId,
@@ -22,27 +22,22 @@ const KEY = process.env.STRIPE_SECRET_KEY;
 const d = KEY ? describe : describe.skip;
 
 d("Stripe test-mode sandbox: hosted Checkout Session", () => {
-  let db: Database;
-
-  beforeAll(async () => {
-    db = await createPgliteDb();
-    await runMigrations(db, CORE_MIGRATIONS);
-    await runMigrations(db, PAYMENTS_MIGRATIONS);
-  }, 120_000);
-
-  afterAll(async () => {
-    await db.close();
+  // `timeoutMs` carries over this suite's own 120s hook timeout rather than taking the helper's 60s
+  // default — the nightly config's long timeouts are for the real Stripe round trip this suite makes.
+  const pg = usePgliteDb({
+    migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
+    timeoutMs: 120_000,
   });
 
   it("creates a real test-mode Checkout Session and writes an initiated row", async () => {
-    const s = await seedWorkingOrder(db, freshNif());
+    const s = await seedWorkingOrder(pg.db, freshNif());
     const provider = new StripeHostedProvider({
       client: stripeHostedClient(new Stripe(KEY!), {
         successUrl: "https://example.test/ok",
         cancelUrl: "https://example.test/cancel",
         webhookSecret: "whsec_unused_here",
       }),
-      db,
+      db: pg.db,
     });
     const paymentRef = randomUUID();
 
@@ -56,7 +51,7 @@ d("Stripe test-mode sandbox: hosted Checkout Session", () => {
     expect(res.externalRef).toMatch(/^cs_/);
     expect(res.url).toMatch(/^https:\/\/checkout\.stripe\.com\//);
 
-    const row = await db.transaction((tx) =>
+    const row = await pg.db.transaction((tx) =>
       getPaymentByRef(tx, { tenantId: s.tenantId, provider: "stripe", paymentRef }),
     );
     expect(row?.state).toBe("initiated");

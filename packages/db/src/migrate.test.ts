@@ -110,7 +110,7 @@ describe.runIf(POSTGRES_COVERED)("runMigrations against real PostgreSQL", () => 
   });
 
   afterAll(async () => {
-    await container.stop();
+    if (container !== undefined) await container.stop();
   });
 
   it("applies a migration folder via the node-postgres driver", async () => {

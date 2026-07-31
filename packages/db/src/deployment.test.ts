@@ -35,7 +35,7 @@ describeEachTarget("the deployment stamp", (target) => {
   // describe-level teardown, and it surfaces as an unhandled FATAL 57P01
   // rejection rather than a test failure.
   afterEach(async () => {
-    await db.close();
+    if (db !== undefined) await db.close();
   });
 
   it("reads as unstamped on a freshly migrated database", async () => {

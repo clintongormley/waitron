@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
   seriesId as brandSeriesId,
@@ -36,19 +36,11 @@ import type {
 // the row must carry `provider='stripe'`, `state='captured'`, the committed `sale_id`, and a `pi_`
 // `external_ref` (the PaymentIntent id).
 
-let db: Database;
-
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, PAYMENTS_MIGRATIONS);
-  // Creates the fake backend's own `fake_till_registrations`/`fake_fiscal_records` tables, exactly
-  // as `record-sale.test.ts` and the neutral wiring test do.
-  await FakeFiscalBackend.install(db);
-}, 60_000);
-
-afterAll(async () => {
-  await db.close();
+// The setup step creates the fake backend's own `fake_till_registrations`/`fake_fiscal_records`
+// tables, exactly as `record-sale.test.ts` and the neutral wiring test do.
+const pg = usePgliteDb({
+  migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
+  setup: (db) => FakeFiscalBackend.install(db),
 });
 
 // Each test seeds a FRESH tenant (its own till, series and working order) with a distinct NIF, so
@@ -108,11 +100,11 @@ function buildInput(
 
 describe("stripe collect -> recordSale -> associate (the adapter seam, end to end)", () => {
   it("settles a Stripe tender, chains the sale, and associates the payment atomically", async () => {
-    const backend = new FakeFiscalBackend(db);
-    const s = await seedForSale(db, backend, freshNif());
+    const backend = new FakeFiscalBackend(pg.db);
+    const s = await seedForSale(pg.db, backend, freshNif());
     const provider = new StripeTerminalProvider({
       client: new FakeStripe(),
-      db,
+      db: pg.db,
       tenantId: brandTenantId(s.tenantId),
       resolveReader: () => Promise.resolve("reader_1"),
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
@@ -132,7 +124,7 @@ describe("stripe collect -> recordSale -> associate (the adapter seam, end to en
     // 2. The sale and the associate-back happen in ONE transaction, so the linkage is atomic with
     //    the sale it points at (the composite FK `payments_sale_fk` is satisfied within the tx
     //    because the sale row already exists there).
-    const saleId = await db.transaction(async (tx) => {
+    const saleId = await pg.db.transaction(async (tx) => {
       const recorded = await recordSale(tx, backend, buildInput(s, paid));
       await associatePaymentWithSale(tx, {
         tenantId: s.tenantId,
@@ -145,7 +137,7 @@ describe("stripe collect -> recordSale -> associate (the adapter seam, end to en
 
     // 3. After commit, the payment row carries the committed sale's id, the stripe provider, the
     //    captured state, and the PaymentIntent id in `external_ref`.
-    const row = await db.transaction((tx) =>
+    const row = await pg.db.transaction((tx) =>
       getPaymentByRef(tx, {
         tenantId: s.tenantId,
         provider: "stripe",

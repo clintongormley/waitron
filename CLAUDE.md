@@ -190,6 +190,32 @@ are exempt from the guard; `apps/*` is out of scope by a recorded decision.
 `./testing/seed.js`. A wildcard would publish the harness and give `asAppUser` a second import path.
 A consequence worth knowing: `apps/server` cannot deep-import `packages/db`'s `errors.ts`.
 
+**Never build SQL by string concatenation — and know the one case where you must.** Drizzle
+parameterises every interpolated value in a `sql` template automatically, so `` sql`… ${value}` ``
+emits `$1` and binds it. Verified against a real server on 2026-07-31: `` sql`select ${x}::text` ``
+with `x = "o'brien; drop table x --"` returns that string intact.
+
+The exception is **utility statements, which PostgreSQL will not bind at all**. Same experiment,
+same server:
+
+```
+create role $1 login                    → syntax error at or near "$1"
+create role probe_b login password $1   → syntax error at or near "$1"
+```
+
+`CREATE ROLE`, `CREATE DATABASE`, `GRANT` and friends take no placeholders, so the value has to
+reach the statement as text and there is no parameterised form to reach for. When that happens the
+defence is explicit, never implicit:
+
+- **escape** — `quoteIdent`/`quoteLiteral` (`packages/provisioning/src/identifiers.ts`), for values
+  that may legitimately be arbitrary, such as a generated password;
+- **validate and throw** — `probeRoleStatement` (`packages/db/src/testing/lifecycle.ts`), for values
+  that should only ever be fixtures, where anything needing an escape is a bug worth failing on.
+
+Either is acceptable; **neither being present is not**, and "the callers only pass safe values" is a
+property of the callers rather than of the code — precisely the §1 defect class, since these
+parameters are typed plain `string`.
+
 **Never widen a grant to make a test pass.** `app_user` holds `SELECT` on `tenants` and not `INSERT`
 deliberately — the running POS cannot create tenants.
 
@@ -283,9 +309,20 @@ scratchpad path failed `EINVAL` before it could even reach `ECONNREFUSED`. Two w
 (`apk add --no-cache nodejs npm && npm i pg@<version>`), where node and the server share a
 namespace; everything that is only PARSING — `new URL` versus `pg`'s own parse — is fine on the host.
 
-**Guard every teardown**: `if (db !== undefined) await db.close()`. An unguarded `afterAll` turns a
-`beforeAll` failure into `Cannot read properties of undefined (reading 'close')` and masks the real
-error. Suites sharing a database must clean up in a `finally` so they are order-independent, not
+**Don't own a database in a suite — let a helper own it.** `usePgliteDb` and `useRealPostgres`
+(`@waitron/db/testing/lifecycle.js`) register their own `beforeAll`/`afterAll` and hand back an
+accessor that **throws** rather than returning `undefined` if read before setup. A suite using them
+cannot write a broken teardown, because it writes no teardown. Reach for a raw
+`beforeAll`/`afterAll` pair only when the suite legitimately builds its own resource — a unit test
+_of_ the constructor, or a race needing several distinct connections.
+
+**Where you must, guard it**: `if (db !== undefined) await db.close()`. **Enforced** by
+`packages/db/src/guarded-teardowns.test.ts`, which also records what an unguarded teardown costs,
+why an ESLint rule was rejected, and the two things the guard cannot see. Read it before changing
+it — a convention this file had already stated was violated in 94 places, which is the general
+lesson: **a written rule with standing violations needs a guard, not another paragraph.**
+
+Suites sharing a database must clean up in a `finally` so they are order-independent, not
 order-reliant — several tests have been fixed for exactly this.
 
 **Prove a guard by deletion.** Remove the check, confirm the test fails, restore it. A test that

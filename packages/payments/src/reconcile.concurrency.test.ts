@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { Database } from "@waitron/db";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import { decimal, tenantId as brandTenantId } from "@waitron/shared";
 import { recordIncidentOnce } from "@waitron/core";
 import { withTenant } from "@waitron/db";
@@ -8,21 +9,11 @@ import { reconcilePayments, DEFAULT_SETTLEMENT_LAG_MS } from "./reconcile.js";
 import type { ReconcileDeps } from "./reconcile.js";
 import { insertCapturedPayment } from "./store.js";
 import { FakeSettlementReport } from "./testing/fake-settlement-report.js";
-import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { startRealPostgres } from "./testing/postgres.js";
 import { seedWorkingOrder } from "../test/seed.js";
 
-let pg: RealPostgres;
-let admin: Database;
-
-beforeAll(async () => {
-  pg = await startRealPostgres();
-  admin = await pg.connect();
-});
-
-afterAll(async () => {
-  await admin.close();
-  await pg.stop();
-});
+// vitest.config.ts's hookTimeout, which this container start had before the helper's 60s default.
+const postgres = useRealPostgres({ start: startRealPostgres, timeoutMs: 180_000 });
 
 const NOW = new Date("2026-07-25T12:00:00Z");
 /** Older than NOW - DEFAULT_SETTLEMENT_LAG_MS, so the in-flight tolerance has expired — the same
@@ -46,8 +37,8 @@ const PERIOD = { from: new Date("2026-07-01T00:00:00Z"), to: new Date("2026-07-0
  * call: a real customer's card refunded twice, with two open incidents nobody would think to
  * cross-reference. This suite is what stands between that class of bug and a merge.
  *
- * The race has to be genuine, not simulated: two separate `pg.connect()` handles are two separate
- * backend processes, so Postgres itself — not this test's code — serialises the conflicting
+ * The race has to be genuine, not simulated: two separate `postgres.pg.connect()` handles are two
+ * separate backend processes, so Postgres itself — not this test's code — serialises the conflicting
  * UPDATE/INSERT statements the two concurrent sweeps issue against the same row. `Promise.all`
  * starts both full sweeps together and lets Postgres decide who wins; every assertion below checks
  * only that exactly one of them did, never which.
@@ -63,8 +54,8 @@ const PERIOD = { from: new Date("2026-07-01T00:00:00Z"), to: new Date("2026-07-0
  */
 describe("concurrent reconcile sweeps", () => {
   it("reverse an orphan exactly once and raise one incident, however they interleave", async () => {
-    const seeded = await seedWorkingOrder(admin, "B66666666");
-    await withTenant(admin, seeded.tenantId, (tx) =>
+    const seeded = await seedWorkingOrder(postgres.admin, "B66666666");
+    await withTenant(postgres.admin, seeded.tenantId, (tx) =>
       insertCapturedPayment(tx, {
         tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
@@ -76,11 +67,11 @@ describe("concurrent reconcile sweeps", () => {
       }),
     );
     // Abandoned + no sale_id is the orphan shape: the sweep both reports it AND self-heals it.
-    await admin.execute(sql`
+    await postgres.admin.execute(sql`
       update working_orders set status = 'abandoned' where id = ${seeded.workingOrderId}`);
 
-    const one = await pg.connect();
-    const two = await pg.connect();
+    const one = await postgres.pg.connect();
+    const two = await postgres.pg.connect();
     const reversed: string[] = [];
     const make = (db: Database): ReconcileDeps => ({
       db,
@@ -123,7 +114,7 @@ describe("concurrent reconcile sweeps", () => {
       // winner. If a future change added a pre-filter (or an advisory lock) that serialised the two
       // sweeps instead, every assertion here would stay green while the thing this suite exists to
       // prove — the DB-level `isNull` guard under real concurrent contention — went untested.
-      const { rows } = await admin.execute<{
+      const { rows } = await postgres.admin.execute<{
         n: string;
         params: { payments: { remediation: string }[] };
       }>(sql`

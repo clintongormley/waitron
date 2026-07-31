@@ -1,15 +1,12 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
 import { VerifactuBackend } from "./backend.js";
-import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
-
-let pg: RealPostgres;
-let admin: Database;
 
 // A non-superuser LOGIN role that inherits app_user's grants (including EXECUTE on
 // envios_tenants_with_work). Being non-superuser is what subjects EVERY query a drain issues on
@@ -32,19 +29,10 @@ const DRAIN_PROBE_PASSWORD = "probe";
  * (`chain.pglite-cannot-test-contention.test.ts`), which would make this suite pass vacuously
  * whether or not the locking clause is even present.
  */
-beforeAll(async () => {
-  pg = await startRealPostgres();
-  admin = await pg.connect();
-  await admin.execute(
-    sql.raw(
-      `create role ${DRAIN_PROBE_ROLE} login password '${DRAIN_PROBE_PASSWORD}' in role app_user`,
-    ),
-  );
-});
-
-afterAll(async () => {
-  await admin.close();
-  await pg.stop();
+const suite = useRealPostgres({
+  start: startRealPostgres,
+  probeRole: { name: DRAIN_PROBE_ROLE, password: DRAIN_PROBE_PASSWORD, inRole: "app_user" },
+  timeoutMs: CONTAINER_SETUP_TIMEOUT_MS,
 });
 
 // More than one row, but well within one envío (MAX_REGISTROS_POR_ENVIO = 1000) — this suite is
@@ -54,7 +42,7 @@ const PENDING_COUNT = 12;
 
 describe("drain — claim concurrency (real Postgres)", () => {
   it("two concurrent drains over the same tenant never submit a record twice (SKIP LOCKED)", async () => {
-    const seeded = await seedPendingEnvios(admin, { count: PENDING_COUNT });
+    const seeded = await seedPendingEnvios(suite.admin, { count: PENDING_COUNT });
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
 
     // Separate connections, not one shared `db` — `testing/postgres.ts`'s own doc comment on
@@ -63,8 +51,8 @@ describe("drain — claim concurrency (real Postgres)", () => {
     // convention. `createPostgresDb`'s pool (default size 10) could in principle multiplex two
     // callers onto two of its own connections even if shared, but a dedicated connection per
     // drainer removes any doubt and matches this package's one other concurrency suite.
-    const dbA = await pg.connect();
-    const dbB = await pg.connect();
+    const dbA = await suite.pg.connect();
+    const dbB = await suite.pg.connect();
     try {
       const a = new VerifactuBackend({
         deploymentEnvironment: "production",
@@ -103,7 +91,7 @@ describe("drain — claim concurrency (real Postgres)", () => {
       // Independent, DB-side proof: every row was attempted exactly once. If a row had been
       // claimed by BOTH transactions, its `intentos` (incremented by claimBatch's own UPDATE)
       // would read 2, not 1 — this is untouched by anything AEAT's fake does or does not dedupe.
-      const rows = await withTenant(admin, seeded.tenantId, (tx) =>
+      const rows = await withTenant(suite.admin, seeded.tenantId, (tx) =>
         tx.execute<{ estado: string; intentos: number; csv: string | null }>(sql`
           select estado, intentos, csv from envios where tenant_id = ${seeded.tenantId}
         `),
@@ -131,18 +119,18 @@ describe("drain — claim concurrency (real Postgres)", () => {
    * itself is the Testcontainers superuser login — the same pattern this package's other suites
    * use on PGlite (`asAppUser`'s own doc comment), now proven on real Postgres too.
    */
-  it("pendingCount reflects drained rows under the app_user role (RLS), not just the admin connection", async () => {
-    const seeded = await seedPendingEnvios(admin, { count: 3 });
+  it("pendingCount reflects drained rows under the app_user role (RLS), not just the suite.admin connection", async () => {
+    const seeded = await seedPendingEnvios(suite.admin, { count: 3 });
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const backend = new VerifactuBackend({
       deploymentEnvironment: "production",
       clock: seeded.clock,
-      db: admin,
+      db: suite.admin,
       resolveClient: staticResolver(aeat.client()),
     });
 
     const pendingUnderRls = () =>
-      withTenant(admin, seeded.tenantId, async (tx) => {
+      withTenant(suite.admin, seeded.tenantId, async (tx) => {
         await asAppUser(tx);
         const rows = await tx.execute<{ count: string }>(sql`
           select count(*)::text as count
@@ -176,7 +164,7 @@ describe("drain — claim concurrency (real Postgres)", () => {
  */
 describe("drain — cross-tenant enumeration seam under RLS (real Postgres, as app_user)", () => {
   const pendingUnderRls = (tenantId: string) =>
-    withTenant(admin, tenantId, async (tx) => {
+    withTenant(suite.admin, tenantId, async (tx) => {
       await asAppUser(tx);
       const rows = await tx.execute<{ count: string }>(sql`
         select count(*)::text as count from envios where tenant_id = ${tenantId} and estado = 'pendiente'
@@ -188,8 +176,8 @@ describe("drain — cross-tenant enumeration seam under RLS (real Postgres, as a
     // Two DISTINCT tenants (distinct NIFs via seedTenantWithSif), each with due pending work — so
     // the enumeration is a genuine cross-tenant sweep, not a single-tenant read a tenant-scoped
     // policy would also satisfy.
-    const t1 = await seedPendingEnvios(admin, { count: 2 });
-    const t2 = await seedPendingEnvios(admin, { count: 3 });
+    const t1 = await seedPendingEnvios(suite.admin, { count: 2 });
+    const t2 = await seedPendingEnvios(suite.admin, { count: 3 });
     const total = 5;
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const now = new Date("2026-07-21T00:01:00Z");
@@ -200,7 +188,7 @@ describe("drain — cross-tenant enumeration seam under RLS (real Postgres, as a
     // The WHOLE drain runs on a genuinely RLS-subject connection: drain_probe is a non-superuser
     // member of app_user, so FORCE ROW LEVEL SECURITY applies to every query drain issues —
     // including tenantsWithWork's top-level enumeration, which runs outside any withTenant tx.
-    const appUserDb = await pg.connectAs(DRAIN_PROBE_ROLE, DRAIN_PROBE_PASSWORD);
+    const appUserDb = await suite.pg.connectAs(DRAIN_PROBE_ROLE, DRAIN_PROBE_PASSWORD);
     try {
       const backend = new VerifactuBackend({
         deploymentEnvironment: "production",
@@ -226,9 +214,9 @@ describe("drain — cross-tenant enumeration seam under RLS (real Postgres, as a
   }, 30_000);
 
   it("hands app_user only the due-tenant id list, never cross-tenant envío rows", async () => {
-    const t1 = await seedPendingEnvios(admin, { count: 1 });
+    const t1 = await seedPendingEnvios(suite.admin, { count: 1 });
     const now = new Date("2026-07-21T00:01:00Z");
-    const appUserDb = await pg.connectAs(DRAIN_PROBE_ROLE, DRAIN_PROBE_PASSWORD);
+    const appUserDb = await suite.pg.connectAs(DRAIN_PROBE_ROLE, DRAIN_PROBE_PASSWORD);
     try {
       // The permissive USING(true) policy is scoped to envios_drainer, which only the function's
       // SECURITY DEFINER context ever runs as — so a DIRECT read of envios on this same app_user

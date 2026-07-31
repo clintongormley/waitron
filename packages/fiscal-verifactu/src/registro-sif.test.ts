@@ -8,7 +8,7 @@ import {
 } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { currentSif, esPrimerRegistro, registerSif } from "./registro-sif.js";
 import { TENANT_A, TENANT_B, seedSoldRegistro, seedTenants } from "../test/fixtures.js";
@@ -23,11 +23,19 @@ const SIF_PARAMS = {
 beforeEach(async () => {
   // A fresh database per test. The counter under test is monotonic and never resets, so a shared
   // database would make every assertion about "strictly greater" depend on test execution order —
-  // and the first reordering would produce a failure that looks like a real defect.
+  // and the first reordering would produce a failure that looks like a real defect. That
+  // requirement is why this suite cannot use `usePgliteDb`, which owns ONE database for the suite.
   db = await createPgliteDb();
   await runMigrations(db, CORE_MIGRATIONS);
   await runMigrations(db, FISCAL_MIGRATIONS);
   await seedTenants(db);
+});
+
+// Paired with that `beforeEach`, not an `afterAll`: one database per test needs one close per test.
+// Until 2026-07-31 this suite had no teardown at all, so every WASM PostgreSQL it started stayed
+// open for the rest of the run.
+afterEach(async () => {
+  if (db !== undefined) await db.close();
 });
 
 describe("registerSif", () => {

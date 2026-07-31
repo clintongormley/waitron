@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import type { SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
 // See record-sale.test.ts's identical deviation note: there is no `@waitron/fiscal/testing`
@@ -10,41 +10,34 @@ import {
   CORE_MIGRATIONS,
   asAppUser,
   captureError,
-  createPgliteDb,
   incidents,
   pgErrorMessage,
-  runMigrations,
   sales,
   withTenant,
 } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { openIncidents, recordIncident, recordIncidentOnce } from "./incidents.js";
 import type { RecordIncidentInput } from "./incidents.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { seedTenant } from "../test/fixtures.js";
 
-let db: Database;
 let tenantId: TenantId;
 let tillId: TillId;
 let seriesId: SeriesId;
 let workingOrderId: WorkingOrderId;
 
 // PGlite boots a WASM PostgreSQL and then runs @waitron/db's own migrations, well past Vitest's
-// 5s default hook timeout — mirrors record-sale.test.ts's identical beforeAll for the identical
+// 5s default hook timeout — mirrors record-sale.test.ts's identical setup for the identical
 // reason.
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await FakeFiscalBackend.install(db);
-}, 60_000);
-
-afterAll(async () => {
-  await db.close();
+const suite = usePgliteDb({
+  migrations: [CORE_MIGRATIONS],
+  setup: (db) => FakeFiscalBackend.install(db),
+  timeoutMs: 60_000,
 });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenant(db));
+  ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenant(suite.db));
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -138,7 +131,7 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
  * "no fiscal condition blocks a sale"/"no fiscal condition blocks a void" tests already made.
  */
 function failingChain(): FakeFiscalBackend {
-  const backend = new FakeFiscalBackend(db);
+  const backend = new FakeFiscalBackend(suite.db);
   backend.breakIntegrity(tillId, {
     code: "predecessor-hash-mismatch",
     params: { sequence: 7, expected: "ABC" },
@@ -153,7 +146,7 @@ function failingChain(): FakeFiscalBackend {
  * with no prior `registerTill`, exactly like a real backend).
  */
 async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
-  return withTenant(db, tenantId, async (tx) => {
+  return withTenant(suite.db, tenantId, async (tx) => {
     await asAppUser(tx);
     await backend.registerTill(tx, tillId, { tenantId });
     return recordSale(tx, backend, input(overrides));
@@ -168,7 +161,7 @@ async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> 
  * test.ts's own `countRows` helper documents for `sales`/`sale_lines`/`tenders`.
  */
 async function incidentsForTill(till: TillId) {
-  return db.select().from(incidents).where(eq(incidents.tillId, till));
+  return suite.db.select().from(incidents).where(eq(incidents.tillId, till));
 }
 
 /**
@@ -178,7 +171,7 @@ async function incidentsForTill(till: TillId) {
  * tests care about.
  */
 async function seedTillForIncidents(): Promise<{ tenantId: TenantId; tillId: TillId }> {
-  const seeded = await seedTenant(db);
+  const seeded = await seedTenant(suite.db);
   return { tenantId: seeded.tenantId, tillId: seeded.tillId };
 }
 
@@ -195,7 +188,7 @@ describe("incidents — chain verification failure", () => {
     // The sale completed and the record was chained ANYWAY. Both halves matter: a suite
     // asserting only the incident row would pass against an implementation that recorded the
     // incident and then aborted.
-    expect(await db.select().from(sales).where(eq(sales.id, saleId))).toHaveLength(1);
+    expect(await suite.db.select().from(sales).where(eq(sales.id, saleId))).toHaveLength(1);
     expect(await backend.recordsFor(tillId)).toHaveLength(1);
   });
 
@@ -233,7 +226,7 @@ describe("incidents — chain verification failure", () => {
     // — would silently drop the second under `ON CONFLICT DO NOTHING`. record-sale AGGREGATES all
     // issues into ONE incident whose `params.issues` carries BOTH: this is the proof the
     // aggregation preserves detail under the index.
-    const backend = new FakeFiscalBackend(db);
+    const backend = new FakeFiscalBackend(suite.db);
     backend.breakIntegrity(tillId, {
       code: "predecessor-hash-mismatch",
       recordId: "rec-1",
@@ -275,7 +268,7 @@ describe("incidents — chain verification failure", () => {
     // neither survives.
     const backend = failingChain();
     await expect(
-      withTenant(db, tenantId, async (tx) => {
+      withTenant(suite.db, tenantId, async (tx) => {
         await asAppUser(tx);
         await backend.registerTill(tx, tillId, { tenantId });
         await recordSale(tx, backend, input());
@@ -284,7 +277,7 @@ describe("incidents — chain verification failure", () => {
     ).rejects.toThrow("simulated crash");
 
     expect(await incidentsForTill(tillId)).toHaveLength(0);
-    expect(await db.select().from(sales).where(eq(sales.tillId, tillId))).toHaveLength(0);
+    expect(await suite.db.select().from(sales).where(eq(sales.tillId, tillId))).toHaveLength(0);
   });
 });
 
@@ -292,11 +285,11 @@ describe("incidents — clock degradation", () => {
   it("records a warning, not an error", async () => {
     // Spec §4: clock confidence degraded is WARN ONLY. Recording it at error severity would put
     // it in the same visual channel as a chain failure and train staff to ignore both.
-    await sell(new FakeFiscalBackend(db), { clock: degradedClock });
+    await sell(new FakeFiscalBackend(suite.db), { clock: degradedClock });
     const [row] = await incidentsForTill(tillId);
     expect(row?.code).toBe("clock.degraded");
     expect(row?.severity).toBe("warning");
-    expect(await db.select().from(sales).where(eq(sales.tillId, tillId))).toHaveLength(1);
+    expect(await suite.db.select().from(sales).where(eq(sales.tillId, tillId))).toHaveLength(1);
   });
 
   it("records both incidents when the chain fails and the clock is degraded", async () => {
@@ -308,7 +301,7 @@ describe("incidents — clock degradation", () => {
   it("records nothing when verification passes and the clock is confident", async () => {
     // The negative case. Without it, an implementation that records an incident unconditionally
     // passes every test above.
-    await sell(new FakeFiscalBackend(db));
+    await sell(new FakeFiscalBackend(suite.db));
     expect(await incidentsForTill(tillId)).toHaveLength(0);
   });
 });
@@ -320,7 +313,7 @@ describe("recordIncident — no sale attached", () => {
     // ./incidents.ts's own doc comment on `saleId`. Nothing in Task 18's own write path omits it
     // (`recordSale`/`recordVoid` always have one), so this is the one place that path is
     // exercised at all before plan 3 exists to call it for real.
-    await withTenant(db, tenantId, async (tx) => {
+    await withTenant(suite.db, tenantId, async (tx) => {
       await asAppUser(tx);
       await recordIncident(tx, {
         tenantId,
@@ -348,7 +341,7 @@ describe("openIncidents", () => {
     }));
     await sell(failingChain());
     await sell(failingChain(), { clock: later });
-    const rows = await withTenant(db, tenantId, async (tx) => {
+    const rows = await withTenant(suite.db, tenantId, async (tx) => {
       await asAppUser(tx);
       return openIncidents(tx, tillId);
     });
@@ -358,7 +351,7 @@ describe("openIncidents", () => {
 
   it("excludes acknowledged incidents", async () => {
     await sell(failingChain());
-    await withTenant(db, tenantId, async (tx) => {
+    await withTenant(suite.db, tenantId, async (tx) => {
       await asAppUser(tx);
       // The one permitted mutation, and it must be permitted for app_user — a column-level GRANT
       // that omitted acknowledged_at would fail here. No WHERE clause: RLS already scopes this
@@ -366,7 +359,7 @@ describe("openIncidents", () => {
       // wrote.
       await tx.update(incidents).set({ acknowledgedAt: new Date().toISOString() });
     });
-    const rows = await withTenant(db, tenantId, async (tx) => {
+    const rows = await withTenant(suite.db, tenantId, async (tx) => {
       await asAppUser(tx);
       return openIncidents(tx, tillId);
     });
@@ -374,9 +367,9 @@ describe("openIncidents", () => {
   });
 
   it("scopes incidents to one till", async () => {
-    const other = await seedTenant(db, { tenantId });
+    const other = await seedTenant(suite.db, { tenantId });
     await sell(failingChain());
-    const rows = await withTenant(db, tenantId, async (tx) => {
+    const rows = await withTenant(suite.db, tenantId, async (tx) => {
       await asAppUser(tx);
       return openIncidents(tx, other.tillId);
     });
@@ -393,7 +386,7 @@ describe("openIncidents", () => {
     // `captureError`/`pgErrorMessage` (this task's own governing conventions) read that instead.
     await sell(failingChain());
     const error = await captureError(() =>
-      withTenant(db, tenantId, async (tx) => {
+      withTenant(suite.db, tenantId, async (tx) => {
         await asAppUser(tx);
         await tx.update(incidents).set({ code: "nothing.happened" });
       }),
@@ -437,7 +430,7 @@ describe("recordIncidentOnce", () => {
   }
 
   it("inserts the first time and returns true", async () => {
-    await withTenant(db, tenantId, async (tx) => {
+    await withTenant(suite.db, tenantId, async (tx) => {
       await asAppUser(tx);
       const inserted = await recordIncidentOnce(tx, {
         tenantId,
@@ -453,7 +446,7 @@ describe("recordIncidentOnce", () => {
   });
 
   it("de-dups a second raise for the same open (till, code, sale) and returns false", async () => {
-    await withTenant(db, tenantId, async (tx) => {
+    await withTenant(suite.db, tenantId, async (tx) => {
       await asAppUser(tx);
       const input: RecordIncidentInput = {
         tenantId,
@@ -475,7 +468,7 @@ describe("recordIncidentOnce", () => {
   });
 
   it("raises a fresh one after the prior incident is acknowledged", async () => {
-    await withTenant(db, tenantId, async (tx) => {
+    await withTenant(suite.db, tenantId, async (tx) => {
       await asAppUser(tx);
       const input: RecordIncidentInput = {
         tenantId,
@@ -498,7 +491,7 @@ describe("recordIncidentOnce", () => {
   });
 
   it("does not de-dup a different code for the same till", async () => {
-    await withTenant(db, tenantId, async (tx) => {
+    await withTenant(suite.db, tenantId, async (tx) => {
       await asAppUser(tx);
       const base = {
         tenantId,
@@ -522,11 +515,11 @@ describe("recordIncidentOnce", () => {
     // Two REAL sales (the FK on incidents.sale_id requires it), each raising the same
     // `clock.degraded` code — proving `sale_id is not distinct from` scopes the key per sale
     // rather than deduping across the whole till.
-    const backend = new FakeFiscalBackend(db);
+    const backend = new FakeFiscalBackend(suite.db);
     const { saleId: saleA } = await sell(backend);
     const { saleId: saleB } = await sell(backend);
 
-    await withTenant(db, tenantId, async (tx) => {
+    await withTenant(suite.db, tenantId, async (tx) => {
       await asAppUser(tx);
       const error = new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 });
       const forSaleA = await recordIncidentOnce(tx, {
@@ -587,11 +580,11 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
       severity: "error",
       detectedAt: new Date("2026-07-24T10:00:00Z"),
     };
-    await withTenant(db, tenantId, async (tx) => {
+    await withTenant(suite.db, tenantId, async (tx) => {
       await asAppUser(tx);
       await recordIncident(tx, input);
     });
-    await withTenant(db, tenantId, async (tx) => {
+    await withTenant(suite.db, tenantId, async (tx) => {
       await asAppUser(tx);
       await recordIncident(tx, input);
     });
@@ -602,7 +595,7 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
   it("de-dups two orphan (sale_id NULL) raises via NULLS NOT DISTINCT", async () => {
     const { tenantId, tillId } = await seedTillForIncidents();
     const raise = () =>
-      withTenant(db, tenantId, async (tx) => {
+      withTenant(suite.db, tenantId, async (tx) => {
         await asAppUser(tx);
         return recordIncidentOnce(tx, {
           tenantId,
@@ -631,12 +624,14 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
       detectedAt: new Date("2026-07-24T10:00:00Z"),
     };
     const raise = () =>
-      withTenant(db, tenantId, async (tx) => {
+      withTenant(suite.db, tenantId, async (tx) => {
         await asAppUser(tx);
         return recordIncidentOnce(tx, input);
       });
     expect(await raise()).toBe(true);
-    await db.execute(sql`update incidents set acknowledged_at = now() where till_id = ${tillId}`);
+    await suite.db.execute(
+      sql`update incidents set acknowledged_at = now() where till_id = ${tillId}`,
+    );
     expect(await raise()).toBe(true);
   });
 });

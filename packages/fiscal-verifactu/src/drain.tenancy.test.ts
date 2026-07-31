@@ -1,16 +1,11 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
 import type { VerifactuClient } from "@waitron/verifactu";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
-import {
-  CORE_MIGRATIONS,
-  createPgliteDb,
-  runMigrations,
-  withTenant,
-  type Database,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, createPgliteDb, runMigrations, withTenant } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
@@ -49,17 +44,7 @@ function recordingResolver(): {
   };
 }
 
-let db: Database;
-
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, FISCAL_MIGRATIONS);
-}, 60_000);
-
-afterAll(async () => {
-  if (db !== undefined) await db.close();
-});
+const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
 
 describe("drain resolves one client per tenant", () => {
   it("never asks the resolver for a tenant with no due work", async () => {
@@ -67,9 +52,12 @@ describe("drain resolves one client per tenant", () => {
     // one per known tenant rather than per tenant-with-work would put every tenant's private key in
     // memory on every pass, for nothing. Asserted against a specific idle tenant rather than an
     // empty list, so the test does not depend on running before the seeding one.
-    const { tenantId: idle } = await seedTenantWithSif(db);
+    const { tenantId: idle } = await seedTenantWithSif(pg.db);
     const { resolveClient, asked } = recordingResolver();
-    await drain({ db, resolveClient, skipRetryMs: SKIP_RETRY_MS, environment: "production" }, NOW);
+    await drain(
+      { db: pg.db, resolveClient, skipRetryMs: SKIP_RETRY_MS, environment: "production" },
+      NOW,
+    );
     expect(asked).not.toContain(idle);
   });
 
@@ -80,15 +68,15 @@ describe("drain resolves one client per tenant", () => {
     //
     // `seedPendingEnvios` seeds its OWN tenant (through `seedTenantWithSif`), so two calls give two
     // tenants each with due work — no new fixture, and no second copy of a NOT NULL column list.
-    const failingSeed = await seedPendingEnvios(db, { count: 1 });
+    const failingSeed = await seedPendingEnvios(pg.db, { count: 1 });
     const failing = failingSeed.tenantId;
-    const working = (await seedPendingEnvios(db, { count: 1 })).tenantId;
+    const working = (await seedPendingEnvios(pg.db, { count: 1 })).tenantId;
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
 
     const calls: TenantId[] = [];
     const result = await drain(
       {
-        db,
+        db: pg.db,
         resolveClient: (tenantId) => {
           calls.push(tenantId);
           if (tenantId === failing) {
@@ -126,7 +114,7 @@ describe("drain resolves one client per tenant", () => {
     // `drainTenant` ever runs for it — before trusting what the number proves. Querying the
     // WORKING tenant's own envío row directly instead proves, with no such detour, that THIS
     // tenant's due work reached AEAT and was accepted — the whole point of the containment.
-    const workingRows = await withTenant(db, working, (tx) =>
+    const workingRows = await withTenant(pg.db, working, (tx) =>
       tx.execute<{ estado: string }>(sql`select estado from envios where tenant_id = ${working}`),
     );
     expect(workingRows.rows.map((r) => r.estado)).toEqual(["aceptado"]);
@@ -145,12 +133,12 @@ describe("drain resolves one client per tenant", () => {
     // suite shares one PGlite database across tests, so other tests' tenants may also be due. The
     // two facts this test owns — the failing tenant appearing among `skipped`, and `nextDueAt`
     // landing on the interval — hold regardless of what else got swept.
-    const failingSeed = await seedPendingEnvios(db, { count: 1 });
+    const failingSeed = await seedPendingEnvios(pg.db, { count: 1 });
     const failing = failingSeed.tenantId;
 
     const result = await drain(
       {
-        db,
+        db: pg.db,
         resolveClient: (tenantId) =>
           Promise.reject(
             new AppError("sif.not_registered", { tenantId, tillId: failingSeed.tillId }),
@@ -171,7 +159,7 @@ describe("drain resolves one client per tenant", () => {
   //
   // The genuinely-successful-tenant version of this test moved to `drain.fold.test.ts`: wiring a
   // tenant that actually submits through the fake AEAT into THIS suite, alongside a skip, needs
-  // fixture work beyond this task (the shared `db` here already carries permanently-pending
+  // fixture work beyond this task (the suite's own `pg.db` already carries permanently-pending
   // tenants from the tests above, and `recordingResolver`'s client rejects every submit — it
   // cannot produce a successful side at all). `drain.fold.test.ts` instead uses a tenant whose own
   // `envio_flujo` gate is hand-seeded 30s out — no network round trip needed to prove the fold.
@@ -179,14 +167,14 @@ describe("drain resolves one client per tenant", () => {
     // Pins that the value is READ from deps, not baked in — the assertion that would fail if the
     // fold quietly used DEFAULT_SKIP_RETRY_MS instead of what the caller passed. Every tenant
     // enumerated this pass (this test's own `failing`, plus any left permanently `pendiente` by
-    // earlier tests in this shared `db`) is skipped by this unconditionally-rejecting resolver, so
+    // earlier tests in this shared database) is skipped by this unconditionally-rejecting resolver, so
     // `nextDueAt` folds from `null`, landing exactly on `now + 90_000` regardless of how many.
-    const failingSeed = await seedPendingEnvios(db, { count: 1 });
+    const failingSeed = await seedPendingEnvios(pg.db, { count: 1 });
     const failing = failingSeed.tenantId;
 
     const result = await drain(
       {
-        db,
+        db: pg.db,
         resolveClient: (tenantId) =>
           Promise.reject(
             new AppError("sif.not_registered", { tenantId, tillId: failingSeed.tillId }),
@@ -215,7 +203,7 @@ describe("drain resolves one client per tenant", () => {
     // own enumeration has already completed and captured this tenant — makes that first statement
     // throw for real, with nothing inside `drainTenant` positioned to catch it.
     //
-    // A dedicated, single-tenant PGlite instance, not this file's shared `db`: this test closes
+    // A dedicated, single-tenant PGlite instance, not the suite's own `pg.db`: this test closes
     // its database, which the rest of this suite cannot survive sharing.
     const soloDb = await createPgliteDb();
     await runMigrations(soloDb, CORE_MIGRATIONS);

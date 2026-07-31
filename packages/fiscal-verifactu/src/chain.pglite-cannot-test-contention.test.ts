@@ -1,25 +1,22 @@
 import { sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { beforeEach, describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { appendToChain } from "./chain.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { altaFor, seedSale, seedTill, type SeededTill } from "./testing/seed.js";
 
 const WRITERS = 20;
 
-let db: Database;
+// One instance for both tests, reseeded per test — chain.test.ts's convention. Sharing it does not
+// weaken the pid assertion below: one PGlite instance is exactly the single backend this file
+// exists to demonstrate.
+const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
+
 let till: SeededTill;
 
 beforeEach(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, FISCAL_MIGRATIONS);
-  till = await seedTill(db);
-});
-
-afterEach(async () => {
-  await db.close();
+  till = await seedTill(pg.db);
 });
 
 /**
@@ -43,16 +40,16 @@ afterEach(async () => {
 describe("PGlite cannot test lock contention", () => {
   it("reports a green 20-writer contention run — while proving nothing", async () => {
     const sales = await Promise.all(
-      Array.from({ length: WRITERS }, (_, i) => seedSale(db, till, i + 1)),
+      Array.from({ length: WRITERS }, (_, i) => seedSale(pg.db, till, i + 1)),
     );
     await Promise.all(
       sales.map((saleId, i) =>
-        db.transaction((tx) =>
+        pg.db.transaction((tx) =>
           appendToChain(tx, till.tenantId, till.tillId, altaFor(saleId, i + 1, i)),
         ),
       ),
     );
-    const { rows } = await db.execute<{ secuencia: number }>(sql`
+    const { rows } = await pg.db.execute<{ secuencia: number }>(sql`
       select secuencia from registros_facturacion where till_id = ${till.tillId} order by secuencia
     `);
     // Green. Identical assertions to the real-Postgres suite's "commits all 20 concurrent appends
@@ -69,7 +66,7 @@ describe("PGlite cannot test lock contention", () => {
     // evidence, not by assumption.
     const pids = await Promise.all(
       Array.from({ length: WRITERS }, async () => {
-        const { rows } = await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
+        const { rows } = await pg.db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
         return rows[0]?.pid;
       }),
     );

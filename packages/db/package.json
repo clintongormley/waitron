@@ -6,6 +6,7 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./testing/lifecycle.js": "./src/testing/lifecycle.ts",
     "./testing/postgres.js": "./src/testing/postgres.ts",
     "./testing/seed.js": "./src/testing/seed.ts"
   },

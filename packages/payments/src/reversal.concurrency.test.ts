@@ -1,29 +1,21 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import { decimal } from "@waitron/shared";
 import { insertCapturedPayment, recordRefund } from "./store.js";
-import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { startRealPostgres } from "./testing/postgres.js";
 import { freshNif, seedWorkingOrder } from "../test/seed.js";
 
-let pg: RealPostgres;
-let admin: import("@waitron/db").Database;
-
-beforeAll(async () => {
-  pg = await startRealPostgres();
-  admin = await pg.connect();
-});
-afterAll(async () => {
-  await admin.close();
-  await pg.stop();
-});
+// vitest.config.ts's hookTimeout, which this container start had before the helper's 60s default.
+const postgres = useRealPostgres({ start: startRealPostgres, timeoutMs: 180_000 });
 
 const SETTLED = new Date("2026-07-23T10:00:00Z");
 
 describe("concurrent reversals serialise on the payment row's FOR UPDATE lock", () => {
   it("a second recordRefund blocks until the first transaction commits, then sees the updated total", async () => {
-    const seeded = await seedWorkingOrder(admin, freshNif());
+    const seeded = await seedWorkingOrder(postgres.admin, freshNif());
     const key = { tenantId: seeded.tenantId, provider: "fake", paymentRef: "c1" };
-    await admin.transaction((tx) =>
+    await postgres.admin.transaction((tx) =>
       insertCapturedPayment(tx, {
         ...key,
         workingOrderId: seeded.workingOrderId,
@@ -32,8 +24,8 @@ describe("concurrent reversals serialise on the payment row's FOR UPDATE lock", 
       }),
     );
 
-    const holder = await pg.connect();
-    const waiter = await pg.connect();
+    const holder = await postgres.pg.connect();
+    const waiter = await postgres.pg.connect();
     let release: () => void = () => {};
     let holding: Promise<unknown> | undefined;
     try {

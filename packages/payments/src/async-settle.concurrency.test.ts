@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
   seriesId as brandSeriesId,
@@ -20,7 +21,7 @@ import {
   settleInitiated,
 } from "./store.js";
 import { FakeAsyncProvider } from "./testing/fake-async-provider.js";
-import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { startRealPostgres } from "./testing/postgres.js";
 import { freshNif, seedForSale } from "../test/seed.js";
 import type { SeededForSale } from "../test/seed.js";
 
@@ -31,22 +32,18 @@ import type { SeededForSale } from "../test/seed.js";
 // event via the acquired-signal pattern reversal.concurrency.test.ts / incident-dedup.concurrency
 // .test.ts use — reused here, not reinvented.
 
-let pg: RealPostgres;
-let admin: Database;
+const postgres = useRealPostgres({ start: startRealPostgres });
+
+// Both doubles wrap the admin connection, so they cannot be built until the container is up —
+// hence a second hook rather than a module-level construction. `install` creates the fake backend's
+// own `fake_till_registrations`/`fake_fiscal_records` tables, which `recordSale` writes through it.
 let backend: FakeFiscalBackend;
 let provider: FakeAsyncProvider;
 
 beforeAll(async () => {
-  pg = await startRealPostgres();
-  admin = await pg.connect();
-  await FakeFiscalBackend.install(admin);
-  backend = new FakeFiscalBackend(admin);
-  provider = new FakeAsyncProvider(admin);
-}, 60_000);
-
-afterAll(async () => {
-  await admin.close();
-  await pg.stop();
+  await FakeFiscalBackend.install(postgres.admin);
+  backend = new FakeFiscalBackend(postgres.admin);
+  provider = new FakeAsyncProvider(postgres.admin);
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -130,7 +127,7 @@ async function orchestrate(
 
 describe("two simultaneous deliveries of the same settlement race on settleInitiated's row lock", () => {
   it("chains exactly one sale — the second delivery's UPDATE matches nothing once the first has committed", async () => {
-    const s = await seedForSale(admin, backend, freshNif());
+    const s = await seedForSale(postgres.admin, backend, freshNif());
     const minted = await provider.initiate({
       tenantId: brandTenantId(s.tenantId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
@@ -144,8 +141,8 @@ describe("two simultaneous deliveries of the same settlement race on settleIniti
       settledAt: BASE,
     });
 
-    const holder = await pg.connect();
-    const waiter = await pg.connect();
+    const holder = await postgres.pg.connect();
+    const waiter = await postgres.pg.connect();
     let release: () => void = () => {};
     let holderResult: Promise<string | null> | undefined;
     let waiterResult: Promise<string | null> | undefined;
@@ -180,12 +177,12 @@ describe("two simultaneous deliveries of the same settlement race on settleIniti
       expect(holderSaleId).not.toBeNull();
       expect(waiterSaleId).toBeNull();
 
-      const sales = await admin.execute<{ count: string }>(
+      const sales = await postgres.admin.execute<{ count: string }>(
         sql`select count(*)::text as count from sales where tenant_id = ${s.tenantId}`,
       );
       expect(sales.rows[0].count).toBe("1"); // never two invoice numbers for one settlement
 
-      const row = await admin.transaction((tx) =>
+      const row = await postgres.admin.transaction((tx) =>
         getPaymentByRef(tx, { tenantId: s.tenantId, provider: "fake", paymentRef: "pay-1" }),
       );
       expect(row?.state).toBe("captured");

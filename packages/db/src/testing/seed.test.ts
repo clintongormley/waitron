@@ -30,7 +30,7 @@ describeEachTarget("seedTenant", (target) => {
   });
 
   afterEach(async () => {
-    await db.close();
+    if (db !== undefined) await db.close();
   });
 
   it("inserts one tenant and returns its id", async () => {

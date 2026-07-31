@@ -1,15 +1,8 @@
 import { eq, sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
-import {
-  CORE_MIGRATIONS,
-  asAppUser,
-  createPgliteDb,
-  runMigrations,
-  sales,
-  withTenant,
-} from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, sales, withTenant } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import type { SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
 import { decimal, saleId as brandSaleId, tillId as brandTillId } from "@waitron/shared";
@@ -30,35 +23,26 @@ import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/writ
  * unexercised claim.
  */
 
-let db: Database;
 let backend: VerifactuBackend;
 let tenantId: TenantId;
 let tillId: TillId;
 let seriesId: SeriesId;
 let workingOrderId: WorkingOrderId;
 
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, FISCAL_MIGRATIONS);
-}, 60_000);
-
-afterAll(async () => {
-  await db.close();
-});
+const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenantWithSif(db));
+  ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenantWithSif(pg.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
-    db,
+    db: pg.db,
     resolveClient: staticResolver(fakeClient),
   });
 });
 
 async function sell() {
-  return withTenant(db, tenantId, async (tx) => {
+  return withTenant(pg.db, tenantId, async (tx) => {
     await asAppUser(tx);
     return recordSale(tx, backend, saleInput({ tenantId, tillId, seriesId, workingOrderId }));
   });
@@ -66,7 +50,7 @@ async function sell() {
 
 describe("registerTill", () => {
   it("reports the till's live SIF registration", async () => {
-    const registration = await withTenant(db, tenantId, (tx) =>
+    const registration = await withTenant(pg.db, tenantId, (tx) =>
       backend.registerTill(tx, tillId, { tenantId }),
     );
     expect(registration.backend).toBe("verifactu");
@@ -80,7 +64,7 @@ describe("registerTill", () => {
     // does not exist or once had a SIF that was later revoked.
     const neverProvisioned = brandTillId("00000000-0000-4000-8000-000000000000");
     await expect(
-      withTenant(db, tenantId, (tx) => backend.registerTill(tx, neverProvisioned, { tenantId })),
+      withTenant(pg.db, tenantId, (tx) => backend.registerTill(tx, neverProvisioned, { tenantId })),
     ).rejects.toMatchObject({ code: "sif.not_registered" });
   });
 });
@@ -88,7 +72,7 @@ describe("registerTill", () => {
 describe("recordVoid", () => {
   it("throws fiscal.sale_not_recorded for a sale with no prior alta", async () => {
     await expect(
-      withTenant(db, tenantId, (tx) =>
+      withTenant(pg.db, tenantId, (tx) =>
         backend.recordVoid(tx, "00000000-0000-4000-8000-000000000000" as never, "staff error"),
       ),
     ).rejects.toMatchObject({ code: "fiscal.sale_not_recorded" });
@@ -96,13 +80,13 @@ describe("recordVoid", () => {
 
   it("appends an anulación referencing the original alta's own identity", async () => {
     const { saleId } = await sell();
-    const ref = await withTenant(db, tenantId, (tx) =>
+    const ref = await withTenant(pg.db, tenantId, (tx) =>
       backend.recordVoid(tx, saleId, "staff error"),
     );
     expect(ref.backend).toBe("verifactu");
     expect(ref.state).toBe("pending");
 
-    const rows = await db
+    const rows = await pg.db
       .select()
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.tenantId, tenantId));
@@ -119,7 +103,7 @@ describe("recordVoid", () => {
     expect(anulacion?.cuotaTotal).toBeNull();
     expect(anulacion?.importeTotal).toBeNull();
 
-    const [sidecar] = await db.select().from(envios).where(eq(envios.registroId, anulacion!.id));
+    const [sidecar] = await pg.db.select().from(envios).where(eq(envios.registroId, anulacion!.id));
     expect(sidecar?.estado).toBe("pendiente");
   });
 });
@@ -133,7 +117,7 @@ describe("recordVoid", () => {
  * both offsets below are chosen so that noon ± the offset crosses midnight — the exact case the
  * OLD anchor could not survive — which a moderate offset like +120 would not exercise at all
  * (noon + 2h is still the same UTC day, and the old code already handled that case). Constructs its
- * OWN `VerifactuBackend`, sharing `db` with the suite's own `backend`, so the SALE can be recorded
+ * OWN `VerifactuBackend`, sharing `pg.db` with the suite's own `backend`, so the SALE can be recorded
  * under the fixture's ordinary +01:00 (`steadyClock`) while only the VOID step reads an extreme
  * offset — reproducing "the alta and its anulación are generated under different offsets", which is
  * the ordinary case (a sale voided hours or days later) rather than a contrived one.
@@ -160,12 +144,12 @@ describe("recordVoid — date reconstruction", () => {
     const voidBackend = new VerifactuBackend({
       deploymentEnvironment: "production",
       clock: clockAt(780),
-      db,
+      db: pg.db,
       resolveClient: staticResolver(fakeClient),
     });
-    await withTenant(db, tenantId, (tx) => voidBackend.recordVoid(tx, saleId, "staff error"));
+    await withTenant(pg.db, tenantId, (tx) => voidBackend.recordVoid(tx, saleId, "staff error"));
 
-    const rows = await db
+    const rows = await pg.db
       .select()
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.saleId, saleId));
@@ -179,12 +163,12 @@ describe("recordVoid — date reconstruction", () => {
     const voidBackend = new VerifactuBackend({
       deploymentEnvironment: "production",
       clock: clockAt(-780),
-      db,
+      db: pg.db,
       resolveClient: staticResolver(fakeClient),
     });
-    await withTenant(db, tenantId, (tx) => voidBackend.recordVoid(tx, saleId, "staff error"));
+    await withTenant(pg.db, tenantId, (tx) => voidBackend.recordVoid(tx, saleId, "staff error"));
 
-    const rows = await db
+    const rows = await pg.db
       .select()
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.saleId, saleId));
@@ -201,7 +185,7 @@ describe("recordSale — invoice type selection", () => {
     // calls `VerifactuBackend.recordSale` directly, bypassing core entirely, to prove the
     // branch itself rather than leave it an untested assumption about code nothing exercises.
     const freshSaleId = brandSaleId("22222222-2222-4222-8222-222222222222");
-    await withTenant(db, tenantId, async (tx) => {
+    await withTenant(pg.db, tenantId, async (tx) => {
       await asAppUser(tx);
       // total/tip_amount/amount_charged are all "0.00" and no tender is inserted, purely to
       // satisfy `sales`'s own deferred tender-coverage trigger with the simplest possible row —
@@ -241,7 +225,7 @@ describe("recordSale — invoice type selection", () => {
         counterparty: { taxId: "B12345678", legalName: "Cliente SL", countryCode: "ES" },
       });
     });
-    const [row] = await db
+    const [row] = await pg.db
       .select()
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.numSerieFactura, "A/999"));
@@ -251,7 +235,7 @@ describe("recordSale — invoice type selection", () => {
 
 describe("checkIntegrity", () => {
   it("reports nothing checked on a till that has never sold", async () => {
-    const report = await withTenant(db, tenantId, (tx) =>
+    const report = await withTenant(pg.db, tenantId, (tx) =>
       backend.checkIntegrity(tx, tenantId, tillId),
     );
     expect(report).toEqual({ ok: true, checked: 0, issues: [] });
@@ -259,7 +243,7 @@ describe("checkIntegrity", () => {
 
   it("verifies against the chain the same till actually has after a sale", async () => {
     await sell();
-    const report = await withTenant(db, tenantId, (tx) =>
+    const report = await withTenant(pg.db, tenantId, (tx) =>
       backend.checkIntegrity(tx, tenantId, tillId),
     );
     expect(report.ok).toBe(true);
@@ -274,13 +258,13 @@ describe("pendingCount", () => {
 
   it("does not count another till's pending records", async () => {
     await sell();
-    const other = await seedTenantWithSif(db);
+    const other = await seedTenantWithSif(pg.db);
     expect(await backend.pendingCount(other.tenantId, other.tillId)).toBe(0);
   });
 
   it("drops once the sidecar row is no longer pendiente", async () => {
     await sell();
-    await db.execute(sql`update envios set estado = 'aceptado' where tenant_id = ${tenantId}`);
+    await pg.db.execute(sql`update envios set estado = 'aceptado' where tenant_id = ${tenantId}`);
     expect(await backend.pendingCount(tenantId, tillId)).toBe(0);
   });
 });

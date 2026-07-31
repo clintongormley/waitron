@@ -1,41 +1,32 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  captureError,
-  createPgliteDb,
-  pgErrorCode,
-  pgErrorMessage,
-  runMigrations,
-  type Database,
-} from "@waitron/db";
+import { describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS, captureError, pgErrorCode, pgErrorMessage } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { SCHEDULER_MIGRATIONS } from "./migrations.js";
 
-let db: Database;
 /** A single real tenant row, seeded once — the unique-index tests below need the FK to actually
  * hold (unlike the CHECK-violation tests, which fail before the FK is ever consulted and so can
  * get away with a `gen_random_uuid()` tenant that names nothing). */
 let tenantId: string;
 
-beforeAll(async () => {
-  db = await createPgliteDb();
+const suite = usePgliteDb({
   // Core first — the tenants foreign key. Ordering across packages is the runtime's job and
   // nothing enforces it, so it is explicit here.
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, SCHEDULER_MIGRATIONS);
-  const seeded = await db.execute<{ id: string }>(sql`
-    insert into tenants (nif, legal_name) values ('B00000001', 'Scheduler Test Tenant')
-    returning id`);
-  tenantId = seeded.rows[0].id;
-});
-
-afterAll(async () => {
-  await db.close();
+  migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS],
+  setup: async (db) => {
+    const seeded = await db.execute<{ id: string }>(sql`
+      insert into tenants (nif, legal_name) values ('B00000001', 'Scheduler Test Tenant')
+      returning id`);
+    tenantId = seeded.rows[0].id;
+  },
 });
 
 describe("the scheduler migration set", () => {
   it("creates scheduled_runs with row-level security forced", async () => {
-    const result = await db.execute<{ relrowsecurity: boolean; relforcerowsecurity: boolean }>(sql`
+    const result = await suite.db.execute<{
+      relrowsecurity: boolean;
+      relforcerowsecurity: boolean;
+    }>(sql`
       select relrowsecurity, relforcerowsecurity
         from pg_class where relname = 'scheduled_runs'`);
     expect(result.rows[0]).toEqual({ relrowsecurity: true, relforcerowsecurity: true });
@@ -48,7 +39,7 @@ describe("the scheduler migration set", () => {
   // packages/db/src/immutability.test.ts already use for the same reason.
   it("rejects a period whose end does not follow its start", async () => {
     const error = await captureError(() =>
-      db.execute(sql`
+      suite.db.execute(sql`
         insert into scheduled_runs (tenant_id, duty, period_from, period_to, state)
         values (gen_random_uuid(), 'x', '2026-07-02T00:00:00Z', '2026-07-01T00:00:00Z', 'pending')`),
     );
@@ -58,7 +49,7 @@ describe("the scheduler migration set", () => {
 
   it("rejects an unknown state", async () => {
     const error = await captureError(() =>
-      db.execute(sql`
+      suite.db.execute(sql`
         insert into scheduled_runs (tenant_id, duty, period_from, period_to, state)
         values (gen_random_uuid(), 'x', '2026-07-01T00:00:00Z', '2026-07-02T00:00:00Z', 'wat')`),
     );
@@ -68,7 +59,7 @@ describe("the scheduler migration set", () => {
 
   it("rejects a negative generation", async () => {
     const error = await captureError(() =>
-      db.execute(sql`
+      suite.db.execute(sql`
         insert into scheduled_runs (tenant_id, duty, period_from, period_to, generation, state)
         values (gen_random_uuid(), 'x', '2026-07-01T00:00:00Z', '2026-07-02T00:00:00Z', -1, 'pending')`),
     );
@@ -78,7 +69,7 @@ describe("the scheduler migration set", () => {
 
   it("rejects a negative attempts count", async () => {
     const error = await captureError(() =>
-      db.execute(sql`
+      suite.db.execute(sql`
         insert into scheduled_runs (tenant_id, duty, period_from, period_to, attempts, state)
         values (gen_random_uuid(), 'x', '2026-07-01T00:00:00Z', '2026-07-02T00:00:00Z', -1, 'pending')`),
     );
@@ -92,12 +83,12 @@ describe("the scheduler migration set", () => {
   // that dropped `generation` from the index would pass every other test in this file.
   describe("the scheduled_runs_key unique index", () => {
     it("rejects a duplicate (tenant_id, duty, period_from, generation)", async () => {
-      await db.execute(sql`
+      await suite.db.execute(sql`
         insert into scheduled_runs (tenant_id, duty, period_from, period_to, generation, state)
         values (${tenantId}, 'dup-duty', '2026-07-01T00:00:00Z', '2026-07-02T00:00:00Z', 0, 'pending')`);
 
       const error = await captureError(() =>
-        db.execute(sql`
+        suite.db.execute(sql`
           insert into scheduled_runs (tenant_id, duty, period_from, period_to, generation, state)
           values (${tenantId}, 'dup-duty', '2026-07-01T00:00:00Z', '2026-07-02T00:00:00Z', 0, 'pending')`),
       );
@@ -106,18 +97,18 @@ describe("the scheduler migration set", () => {
     });
 
     it("accepts a re-sweep of the same period that differs only in generation", async () => {
-      await db.execute(sql`
+      await suite.db.execute(sql`
         insert into scheduled_runs (tenant_id, duty, period_from, period_to, generation, state)
         values (${tenantId}, 'resweep-duty', '2026-07-01T00:00:00Z', '2026-07-02T00:00:00Z', 0, 'pending')`);
 
       // Same key in every column EXCEPT generation — this is the re-sweep case the column exists
       // for. If `generation` were ever dropped from the index (or the wrong column substituted in
       // it), this second insert would collide on the first row's key and throw, failing this test.
-      await db.execute(sql`
+      await suite.db.execute(sql`
         insert into scheduled_runs (tenant_id, duty, period_from, period_to, generation, state)
         values (${tenantId}, 'resweep-duty', '2026-07-01T00:00:00Z', '2026-07-02T00:00:00Z', 1, 'pending')`);
 
-      const rows = await db.execute<{ n: number }>(sql`
+      const rows = await suite.db.execute<{ n: number }>(sql`
         select count(*)::int as n from scheduled_runs
         where tenant_id = ${tenantId} and duty = 'resweep-duty'`);
       expect(rows.rows[0].n).toBe(2);

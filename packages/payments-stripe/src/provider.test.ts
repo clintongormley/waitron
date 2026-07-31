@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations, withTenant } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { describe, expect, it, vi } from "vitest";
+import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   AppError,
   decimal,
@@ -23,15 +23,7 @@ import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 // through the neutral store's `getPaymentByRef` (which returns `state`/`externalRef`/`settledAt`),
 // keeping this adapter package free of a direct `drizzle-orm` dependency.
 
-let db: Database;
-beforeAll(async () => {
-  db = await createPgliteDb();
-  await runMigrations(db, CORE_MIGRATIONS);
-  await runMigrations(db, PAYMENTS_MIGRATIONS);
-}, 60_000);
-afterAll(async () => {
-  await db.close();
-});
+const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 const noSleep = (): Promise<void> => Promise.resolve();
 /** A terminal provider is a per-tenant object, so the tenant has to exist before the provider does
@@ -39,14 +31,14 @@ const noSleep = (): Promise<void> => Promise.resolve();
 function providerFor(client: StripeClient, tenantId: TenantId): StripeTerminalProvider {
   return new StripeTerminalProvider({
     client,
-    db,
+    db: pg.db,
     tenantId,
     resolveReader: () => Promise.resolve("reader_1"),
     poll: { maxAttempts: 3, intervalMs: 0, sleep: noSleep },
   });
 }
 async function collectParams(nif = freshNif()) {
-  const s = await seedWorkingOrder(db, nif);
+  const s = await seedWorkingOrder(pg.db, nif);
   return {
     tenantId: brandTenantId(s.tenantId),
     tillId: brandTillId(s.tillId),
@@ -56,7 +48,9 @@ async function collectParams(nif = freshNif()) {
   };
 }
 function rowFor(tenantId: string, paymentRef: string): Promise<PaymentRow | undefined> {
-  return db.transaction((tx) => getPaymentByRef(tx, { tenantId, provider: "stripe", paymentRef }));
+  return pg.db.transaction((tx) =>
+    getPaymentByRef(tx, { tenantId, provider: "stripe", paymentRef }),
+  );
 }
 /** A `captured` stripe payment on a fresh tenant whose `external_ref` is EXACTLY the supplied
  * string. Written directly rather than through `collect`, which mints its own `pi_` id: the
@@ -65,9 +59,9 @@ function rowFor(tenantId: string, paymentRef: string): Promise<PaymentRow | unde
 async function capturedPayment(
   externalRef: string,
 ): Promise<{ paymentRef: string; tenantId: TenantId }> {
-  const seeded = await seedWorkingOrder(db, freshNif());
+  const seeded = await seedWorkingOrder(pg.db, freshNif());
   const paymentRef = `ref-${externalRef}`;
-  await withTenant(db, seeded.tenantId, (tx) =>
+  await withTenant(pg.db, seeded.tenantId, (tx) =>
     insertCapturedPayment(tx, {
       tenantId: seeded.tenantId,
       workingOrderId: seeded.workingOrderId,
@@ -164,7 +158,7 @@ describe("StripeTerminalProvider.collect", () => {
     const p = await collectParams();
     const provider = new StripeTerminalProvider({
       client,
-      db,
+      db: pg.db,
       tenantId: p.tenantId,
       resolveReader: () => Promise.resolve("reader_1"),
       poll: { maxAttempts: 3, intervalMs: 0 }, // no sleep override -> default setTimeout(0)
@@ -279,14 +273,14 @@ describe("reverseViaStripe's processor-ref resolution", () => {
     // supplies a resolver, so the stored `external_ref` must reach `stripe.refunds` untouched.
     const client = new FakeStripe();
     const { paymentRef, tenantId } = await capturedPayment("pi_plain");
-    await reverseViaStripe(db, client, "stripe", paymentRef, "refund", undefined, { tenantId });
+    await reverseViaStripe(pg.db, client, "stripe", paymentRef, "refund", undefined, { tenantId });
     expect(client.lastRefund?.paymentIntentId).toBe("pi_plain");
   });
 
   it("resolves the external ref through the supplied resolver before refunding", async () => {
     const client = new FakeStripe();
     const { paymentRef, tenantId } = await capturedPayment("cs_hosted");
-    await reverseViaStripe(db, client, "stripe", paymentRef, "refund", undefined, {
+    await reverseViaStripe(pg.db, client, "stripe", paymentRef, "refund", undefined, {
       tenantId,
       resolveProcessorRef: (ref) => Promise.resolve(ref === "cs_hosted" ? "pi_resolved" : ref),
     });
@@ -306,14 +300,14 @@ describe("reverseViaStripe's processor-ref resolution", () => {
       resolved += 1;
       return Promise.resolve(ref);
     };
-    await reverseViaStripe(db, client, "stripe", paymentRef, "void", undefined, {
+    await reverseViaStripe(pg.db, client, "stripe", paymentRef, "void", undefined, {
       tenantId,
       resolveProcessorRef: resolve,
     });
     expect(resolved).toBe(1);
     // Second void: `assertReversible` throws on the now-`voided` row before any resolution happens.
     await expect(
-      reverseViaStripe(db, client, "stripe", paymentRef, "void", undefined, {
+      reverseViaStripe(pg.db, client, "stripe", paymentRef, "void", undefined, {
         tenantId,
         resolveProcessorRef: resolve,
       }),
@@ -333,10 +327,10 @@ describe("reverseViaStripe's tenant scoping", () => {
     // SECURITY: the lookup genuinely returns the other tenant's row, so what rejects it is the
     // explicit predicate and nothing else. That is exactly the condition the predicate defends —
     // an RLS-unenforced connection, or one whose tenant GUC was never set.
-    const owner = await seedWorkingOrder(db, freshNif());
-    const stranger = await seedWorkingOrder(db, freshNif());
+    const owner = await seedWorkingOrder(pg.db, freshNif());
+    const stranger = await seedWorkingOrder(pg.db, freshNif());
     const paymentRef = "ref-cross-tenant";
-    await withTenant(db, owner.tenantId, (tx) =>
+    await withTenant(pg.db, owner.tenantId, (tx) =>
       insertCapturedPayment(tx, {
         tenantId: owner.tenantId,
         workingOrderId: owner.workingOrderId,
@@ -349,7 +343,7 @@ describe("reverseViaStripe's tenant scoping", () => {
     );
     const client = new FakeStripe();
 
-    const error = await reverseViaStripe(db, client, "stripe", paymentRef, "refund", undefined, {
+    const error = await reverseViaStripe(pg.db, client, "stripe", paymentRef, "refund", undefined, {
       tenantId: brandTenantId(stranger.tenantId),
     }).catch((e: unknown) => e);
 
@@ -358,7 +352,7 @@ describe("reverseViaStripe's tenant scoping", () => {
     expect(client.lastRefund).toBeUndefined(); // nothing reached Stripe
 
     // The predicate SCOPES rather than blocks: the owning tenant's reversal goes through untouched.
-    const ok = await reverseViaStripe(db, client, "stripe", paymentRef, "refund", undefined, {
+    const ok = await reverseViaStripe(pg.db, client, "stripe", paymentRef, "refund", undefined, {
       tenantId: brandTenantId(owner.tenantId),
     });
     expect(ok.state).toBe("refunded");
@@ -371,7 +365,7 @@ describe("StripeTerminalProvider.forward", () => {
     // Any tenant: this forward returns a hardcoded all-zeros result without touching the database.
     const provider = new StripeTerminalProvider({
       client: new FakeStripe(),
-      db,
+      db: pg.db,
       tenantId: brandTenantId(randomUUID()),
       resolveReader: () => Promise.resolve("reader_1"),
     });

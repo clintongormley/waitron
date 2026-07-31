@@ -1,7 +1,7 @@
 import Stripe from "stripe";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, createPgliteDb, runMigrations } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { CORE_MIGRATIONS } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
   tenantId as brandTenantId,
@@ -24,15 +24,20 @@ const KEY = process.env.STRIPE_SECRET_KEY;
 const d = KEY ? describe : describe.skip; // nightly only — deliberate skip when unconfigured
 
 d("Stripe test-mode sandbox: collect against a simulated reader", () => {
-  let db: Database;
+  // `timeoutMs` carries over this suite's own 120s hook timeout rather than taking the helper's 60s
+  // default — the nightly config's long timeouts are for the real Stripe round trips this suite makes.
+  const pg = usePgliteDb({
+    migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
+    timeoutMs: 120_000,
+  });
+
   let stripe: Stripe;
   let readerId: string;
   let locationId: string;
 
+  // The Stripe-side fixture only. Registered after the database hook, which vitest runs first — and
+  // which, if it throws, stops this one from running at all (verified on vitest 3.2.7).
   beforeAll(async () => {
-    db = await createPgliteDb();
-    await runMigrations(db, CORE_MIGRATIONS);
-    await runMigrations(db, PAYMENTS_MIGRATIONS);
     stripe = new Stripe(KEY!);
     const location = await stripe.terminal.locations.create({
       display_name: "Waitron CI",
@@ -70,14 +75,13 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
     if (locationId) {
       await stripe.terminal.locations.del(locationId).catch(() => {});
     }
-    await db.close();
   });
 
   it("drives a real test-mode PaymentIntent to captured", async () => {
-    const s = await seedWorkingOrder(db, freshNif());
+    const s = await seedWorkingOrder(pg.db, freshNif());
     const provider = new StripeTerminalProvider({
       client: stripeClient(stripe),
-      db,
+      db: pg.db,
       tenantId: brandTenantId(s.tenantId),
       resolveReader: () => Promise.resolve(readerId),
       poll: { maxAttempts: 40, intervalMs: 500 },

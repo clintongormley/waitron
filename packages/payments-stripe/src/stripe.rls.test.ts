@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
   tenantId as brandTenantId,
@@ -8,7 +8,7 @@ import {
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import { captureAttempting, getPaymentByRef, insertAttempting } from "@waitron/payments";
-import { startRealPostgres, type RealPostgres } from "./testing/postgres.js";
+import { startRealPostgres } from "./testing/postgres.js";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { FakeStripe } from "./testing/fake-stripe.js";
 import { StripeTerminalProvider } from "./provider.js";
@@ -23,23 +23,12 @@ import { StripeTerminalProvider } from "./provider.js";
 const PROBE_ROLE = "rls_probe";
 const PROBE_PASSWORD = "probe";
 
-let pg: RealPostgres;
-let admin: Database;
-
-beforeAll(async () => {
-  pg = await startRealPostgres();
-  admin = await pg.connect();
-  // `execute(string)` runs the statement verbatim (drizzle wraps a plain string in `sql.raw`
-  // internally), so this needs no `drizzle-orm` import — which payments-stripe does not depend on,
-  // unlike payments where the mirrored suite lives. Mirrors that suite's role creation otherwise.
-  await admin.execute(
-    `create role ${PROBE_ROLE} login password '${PROBE_PASSWORD}' in role app_user`,
-  );
-});
-
-afterAll(async () => {
-  await admin.close();
-  await pg.stop();
+// `timeoutMs` restates this package's own vitest `hookTimeout` (180s), which the helper's 60s
+// default would otherwise narrow — a container start includes pulling the image on a cold runner.
+const suite = useRealPostgres({
+  start: startRealPostgres,
+  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
+  timeoutMs: 180_000,
 });
 
 const SETTLED = new Date("2026-07-22T10:00:00Z");
@@ -55,10 +44,10 @@ describe("stripe attempting/capture lifecycle under real row-level security", ()
   it("captures an attempting payment under a real RLS role, tenant-isolated", async () => {
     // Seeded as the superuser (admin) — RLS is bypassed, which is fine: the working_order chains
     // being seeded aren't the thing under test, the attempting-insert + capture below is.
-    const tenantA = await seedWorkingOrder(admin, "B11111111");
-    const tenantB = await seedWorkingOrder(admin, "B22222222");
+    const tenantA = await seedWorkingOrder(suite.admin, "B11111111");
+    const tenantB = await seedWorkingOrder(suite.admin, "B22222222");
 
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       // The single lookup key. Fixed to tenant A and reused for BOTH reads below, so the only thing
       // that changes between the visible read and the hidden read is the withTenant GUC scope — not
@@ -116,8 +105,8 @@ describe("stripe attempting/capture lifecycle under real row-level security", ()
   // withTenant instead. That proves the POLICY holds; it infers the ADAPTER is therefore fine.
   // This test makes the adapter itself the subject, which is the step that inference skipped.
   it("collect() writes its attempting row when handed the only Database handle the API can build", async () => {
-    const t = await seedWorkingOrder(admin, freshNif());
-    const probe = await pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const t = await seedWorkingOrder(suite.admin, freshNif());
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const provider = new StripeTerminalProvider({
         client: new FakeStripe(),
