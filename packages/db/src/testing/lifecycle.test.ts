@@ -57,4 +57,14 @@ describe("probeRoleStatement", () => {
       "create role probe login password 'pw'",
     );
   });
+
+  // The fields are plain `string` on an exported interface, so safety cannot rest on callers being
+  // careful. A quote in the password would otherwise close the literal and change the statement.
+  it.each([
+    ["name", { name: "probe; drop role app_user --", password: "pw" }],
+    ["password", { name: "probe", password: "pw'; drop role app_user --" }],
+    ["inRole", { name: "probe", password: "pw", inRole: 'app_user"' }],
+  ])("refuses an unsafe %s", (field, probe) => {
+    expect(() => probeRoleStatement(probe)).toThrowError(new RegExp(`unsafe ${field}`));
+  });
 });

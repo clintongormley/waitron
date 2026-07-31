@@ -89,11 +89,33 @@ export interface ProbeRole {
   inRole?: string;
 }
 
+/** Conservative, and deliberately narrower than SQL allows: what a test fixture actually uses. */
+const SAFE_TOKEN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 /**
  * The `create role` a probing suite needs. Extracted so both branches are testable without a
  * container — the alternative is a Docker-gated test for one string.
+ *
+ * **Validates rather than escapes**, unlike `packages/provisioning/src/identifiers.ts`, which quotes
+ * because it handles generated passwords and operator-supplied names. Here every value is a literal
+ * in a test fixture, so a token that needs escaping is a mistake worth failing on rather than
+ * accommodating. That package's `quoteIdent`/`quoteLiteral` are not reused because `@waitron/db`
+ * cannot depend on `@waitron/provisioning` — the dependency runs the other way — and copying them
+ * would make a fourth divergent copy of a helper this repo has already had trouble keeping in sync.
+ *
+ * The point is the same one that file makes: these fields are typed plain `string` on an exported
+ * interface, so "callers only pass safe values" was a property of the callers, not of the code.
  */
 export function probeRoleStatement(probe: ProbeRole): string {
+  for (const [field, value] of [
+    ["name", probe.name],
+    ["password", probe.password],
+    ["inRole", probe.inRole],
+  ] as const) {
+    if (value !== undefined && !SAFE_TOKEN.test(value)) {
+      throw new Error(`probeRoleStatement: unsafe ${field} ${JSON.stringify(value)}`);
+    }
+  }
   const inRole = probe.inRole === undefined ? "" : ` in role ${probe.inRole}`;
   return `create role ${probe.name} login password '${probe.password}'${inRole}`;
 }
