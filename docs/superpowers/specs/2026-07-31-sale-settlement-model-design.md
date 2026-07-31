@@ -71,10 +71,11 @@ either mode (§9.2), so the printed document is identical. What breaks is the *r
 ### `sales` — drops to one number
 
 ```sql
-DROP COLUMN tip_amount
-DROP COLUMN amount_charged
-DROP CONSTRAINT sales_amount_charged_ck
-DROP CONSTRAINT sales_tip_amount_ck
+alter table sales
+  drop constraint sales_amount_charged_ck,
+  drop constraint sales_tip_amount_ck,
+  drop column tip_amount,
+  drop column amount_charged;
 ```
 
 `total` stays. The table comment's *"Three distinct numbers, held together by CHECK"* becomes one
@@ -92,12 +93,13 @@ was never the useful shape.
 ### `tenders` — gains the tip
 
 ```sql
-ADD COLUMN tip_amount numeric(12,2) NOT NULL DEFAULT '0.00'
-CHECK (tip_amount >= 0)
-CHECK (tip_amount <= amount)              -- a tender cannot be more tip than it is money
-
--- and, in the same migration:
-tenders_amount_ck: amount <> 0  →  amount > 0
+alter table tenders
+  add column tip_amount numeric(12, 2) not null default '0.00',
+  -- a tender cannot be more tip than it is money
+  add constraint tenders_tip_amount_ck check (tip_amount >= 0 and tip_amount <= amount),
+  -- was `amount <> 0`; see below
+  drop constraint tenders_amount_ck,
+  add constraint tenders_amount_ck check (amount > 0);
 ```
 
 `settled_at` stays `NOT NULL`: a row exists only once the money landed.
@@ -118,8 +120,16 @@ rather than assumed:
   write path (plan 2) (#12)"*, 2026-07-21), whose message explains at length why `total`,
   `tip_amount` and `amount_charged` are three columns and why the deferred trigger exists — and says
   nothing about sign. The sales-spine design does not mention it either.
-- **Neither boundary is tested.** `tenders_amount_ck` appears in exactly one place in the
-  repository: its own definition. Every tender amount in `sales.test.ts` is positive.
+- **Neither boundary is tested.** `tenders_amount_ck` is referenced by **no test at all** — the
+  constraint exists in the schema, its migration and seven drizzle snapshots, and nothing asserts
+  against either edge. Every tender amount in `sales.test.ts` is positive.
+
+  > **Corrected after review.** This bullet first read "appears in exactly one place in the
+  > repository: its own definition", which is false — the grep behind it was
+  > `--include="*.ts"`, so it could not have seen `packages/db/drizzle/0005_sales.sql`, the
+  > snapshots, or `docs/superpowers/plans/2026-07-20-sales-spine-data-model.md`. A narrow experiment
+  > written up as a broad conclusion, which is §1 of `CLAUDE.md` exactly. The claim that survives is
+  > the one that mattered: no test.
 
 The reading that fits all three is that the check was written to reject a **zero** tender and `<> 0`
 was simply how it got spelled. Meanwhile the shape is reachable — `recordSale` takes the tender list
@@ -137,9 +147,15 @@ needs, and it turns the tip from a residual into a recorded affirmation — see 
 ### `sale_settlements` — new, append-only, one row per sale
 
 ```sql
-(id, tenant_id, sale_id, settled_at)
-UNIQUE (tenant_id, sale_id)
-FOREIGN KEY (tenant_id, sale_id) REFERENCES sales (tenant_id, id)
+create table sale_settlements (
+  id         uuid primary key default gen_random_uuid(),
+  tenant_id  uuid not null,
+  sale_id    uuid not null,
+  settled_at timestamptz not null,
+  constraint sale_settlements_sale_key unique (tenant_id, sale_id),
+  constraint sale_settlements_sale_fk
+    foreign key (tenant_id, sale_id) references sales (tenant_id, id) on delete restrict
+);
 ```
 
 - append-only and TRUNCATE-blocking triggers, `REVOKE UPDATE, DELETE`, following
@@ -237,7 +253,7 @@ function takes `sale_id` as a parameter and never reads that table.
 
 The function body compares against the new shape:
 
-```sql
+```text
 sum(tenders.amount) = sales.total + sum(tenders.tip_amount)
 ```
 
@@ -530,5 +546,5 @@ server-driven WiFi ESC/POS printer is, and stays consistent with D3 of the deli 
 | No production reader of `amount_charged` | `rg 'amountCharged\|amount_charged' packages apps`, 2026-07-31 |
 | No writer of working orders | `rg -l 'workingOrderLines\|workingOrders' packages/*/src apps/*/src`, 2026-07-31 |
 | Only one site inserts tenders; refunds do not | `rg 'insert\(tenders\)' packages/core/src packages/payments/src packages/payments-stripe/src`, 2026-07-31 |
-| `tenders_amount_ck` has no rationale and no test | `git log -S tenders_amount_ck` → `10b16fd` (2026-07-21), whose message never mentions sign; `rg tenders_amount_ck` returns only its own definition |
+| `tenders_amount_ck` has no rationale and no test | `git log -S tenders_amount_ck` → `10b16fd` (2026-07-21), whose message never mentions sign; `rg tenders_amount_ck --include='*.test.ts'` returns nothing. **Not** "one place in the repository" — an earlier draft said so on the strength of a `*.ts`-only grep. See §3 |
 | Fail-open behaviour of an invoker-rights coverage function | [`packages/db/drizzle/0005_sales.sql`](../../../packages/db/drizzle/0005_sales.sql), verified live at the time it was written |

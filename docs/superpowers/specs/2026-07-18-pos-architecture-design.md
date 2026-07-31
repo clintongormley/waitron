@@ -96,15 +96,23 @@ deferred** until there is sales history to learn from — build the deterministi
 Received supplier invoices (IVA soportado) feed the accounting export (#17), not the Verifactu SIF
 (issued invoices only).
 
-**#7 carries an unbuilt legal obligation (added 2026-07-31).** The Counter POS UI owns working-order
-mutation — nothing writes `working_orders` today — and it must ship an **append-only amendment log**
-alongside it. Printing a pre-bill is an *expedición* under art. 29.2.j) LGT, after which changes to
-the order must be *"anotad[as] en el sistema"*; the order itself may stay mutable
-([verifactu-findings.md §8](../../compliance/verifactu-findings.md)). Agreed shape: a snapshot at
-each pre-bill print, a diff per amendment thereafter, and nothing logged before the first print. It
-was deliberately **not** built with
-[the settlement model](2026-07-31-sale-settlement-model-design.md) because a log with no producer
-cannot be shown to work. Whether a *precuenta* is a *prefactura* at all is Q14 for the asesor.
+**#7 carries a probable legal obligation, unbuilt (added 2026-07-31).** The Counter POS UI owns
+working-order mutation — nothing writes `working_orders` today — and it will most likely need an
+**append-only amendment log** alongside it.
+
+**The premise is not settled.** AEAT's developer FAQ attaches a preservation duty to *albaranes,
+proformas, prefacturas* once *«se expidan»*, and never uses the word *precuenta*; reading a
+restaurant pre-bill into that family is **our interpretation, recorded as unverified** in
+[verifactu-findings.md §8](../../compliance/verifactu-findings.md) and asked as Q14. If the asesor
+says a pre-bill is not a *prefactura*, this obligation disappears. Plan for it, do not treat it as
+decided.
+
+If it holds, the agreed shape is a snapshot at each pre-bill print, a diff per amendment thereafter,
+and nothing logged before the first print — AEAT is explicit that pre-issuance changes are
+*«perfectamente lícita»*, and the order itself may stay mutable provided amendments are annotated.
+It was deliberately **not** built with
+[the settlement model](2026-07-31-sale-settlement-model-design.md), because a log with no producer
+cannot be shown to work.
 
 ### Sequencing notes
 
