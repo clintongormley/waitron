@@ -216,6 +216,23 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   The spec carries a dated note; the mechanism still needs replacing
 - **Stripe is unprovisioned for the deli.** The payments code is complete and verified against a live
   sandbox, but no real account exists for the venue that has to be trading by January
+- **Four SumUp questions are unverified, and one of them can invalidate a design already on `main`.**
+  They are listed in
+  [the SumUp provider design](superpowers/specs/2026-07-30-sumup-card-present-provider-design.md) §7
+  under *"do not build on these without checking"*, so nothing is lost — but nothing points at them
+  from here either, and they want answering **before** the SumUp provider is built rather than during.
+  The load-bearing one is whether the card reader still works standalone and offline once it has been
+  paired to SumUp's cloud service. If it does not, the outage path in
+  [the deli hardware design](superpowers/specs/2026-07-30-deli-hardware-design.md) §5 has to be
+  rewritten — that document assumes a card can still be taken when the internet is down, which is the
+  whole reason the hardware was chosen. The other three: whether we may *supply* the idempotency key
+  rather than only read it back, whether reader webhooks are signed the same way online ones are, and
+  whether `void` maps onto the refund endpoint. Both specs carry provenance tables; **this entry
+  deliberately restates no external fact of its own** — including the comparison with Square's API and
+  the card rates, which are sourced in the hardware design (§7 and its provenance table) and are the
+  kind of vendor claim that goes stale silently if copied into a second place. Read them there. The
+  rates in particular are already flagged there as needing confirmation against an actual contract,
+  not a pricing page
 
 ---
 
