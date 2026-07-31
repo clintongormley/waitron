@@ -497,6 +497,13 @@ on a counter. Records chain locally, flow up, and **the nearest node holding the
 submits** — the cloud for cloud tenants, the local server otherwise. A local server keeps
 submitting even while a till is offline.
 
+> **Superseded clause, 2026-07-31.** "the cloud for cloud tenants" no longer applies.
+> `2026-07-31-cloud-storage-model-design.md` §3 and §6 make cloud-side submission impossible by
+> construction: the cloud is a sync root that never holds the key ring, and the fiscal certificate is
+> sealed under a key ring only the operator holds. **The local server always submits.** The rest of
+> this paragraph — that the till never submits, and that a local server keeps submitting while a till
+> is offline — is unaffected and still holds.
+
 This is a security win and an availability win at once.
 
 Submission respects AEAT's `TiempoEsperaEnvio` throttling and delivers **in chain order per

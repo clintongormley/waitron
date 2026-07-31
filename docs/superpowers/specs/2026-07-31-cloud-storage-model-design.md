@@ -24,7 +24,7 @@ tenancy model a blocker for an unrelated piece of work, which is why it is being
 
 **Scope.** This spec decides the storage and tenancy model only. The sync protocol, the analytics
 projection, the remote-admin surface and the local restore flow each depend on its answers and each
-get their own spec (§9).
+get their own spec (§10).
 
 ## 2. The cloud is a sync root and never a primary store
 
@@ -58,25 +58,49 @@ becomes the ordinary case rather than a special one.
 Stated as invariants, because each is a thing the design must not quietly acquire later:
 
 - **Never in the sale path.** Nothing about taking a sale consults it.
-- **Never in the payment path.** Card-present outcomes return through the till's own call
-  (`packages/payments-stripe/src/device-provider.ts`); card-not-present is backstopped by the
-  reconciler, which is built around "the processor's settlement report for a window"
-  (`packages/payments/src/reconcile.ts`) — a pull, not a callback. Webhooks are therefore a **latency
-  optimisation, not a correctness requirement**, and a provider callback must never need to reach
-  Waitron's cloud for a payment to be eventually correct.
+- **Never in the payment path.** No provider callback need ever reach Waitron's cloud for a payment
+  to become correct. Card-present outcomes resolve on the local server — synchronously through the
+  till's own call where the terminal answers in time, and otherwise by a local sweep: the SumUp
+  design (`2026-07-30-sumup-card-present-provider-design.md`) leaves a timed-out poll `attempting`
+  and settles it later via `resolvePending`, and `packages/payments/src/store.ts` carries the
+  analogous `accepted_offline` path. Card-not-present is backstopped by the reconciler, built around
+  "the processor's settlement report for a window" (`packages/payments/src/reconcile.ts:49`) — a
+  pull, not a callback. Webhooks are therefore a **latency optimisation, not a correctness
+  requirement**, as that spec already states independently.
 - **Never holds the key ring.** See §6.
-- **May be down indefinitely.** No venue notices except that sync lags.
+- **May be down indefinitely** without a venue losing the ability to trade.
+
+**One concession, made explicitly rather than discovered later: the cloud IS required to commission a
+till, for subscribers.** See §6a — a taxpayer's installation-number counter must have exactly one
+writer, and "every venue runs its own server" removes the single writer that a multi-site taxpayer
+previously had. Commissioning is rare, administrative, and never happens mid-service; selling is
+neither. The invariant is therefore *never needed to sell*, not *never needed at all*, and the
+difference is stated here so nothing quietly widens it.
 
 A venue with no internet loses asynchronous card confirmation — the provider cannot reach anyone —
-and nothing else. That degradation is the provider's connectivity, not Waitron's availability.
+and cannot commission a new till until the link returns. It keeps trading on the tills it has.
 
-## 4. What the cloud stores: three shapes, all append-only
+## 4. What the cloud stores: four shapes
 
-| Shape | Contents | Why append-only |
+| Shape | Contents | Mutability |
 | --- | --- | --- |
-| **Fiscal archive** | `registros_facturacion`, submission/`envios` state | The source is append-only by trigger and by law; a mutable copy could silently diverge from the venue's own. |
-| **History** | Sales, invoices, payments, incidents | Immutable once closed at the source. |
-| **Configuration** | Tenant identity (incl. `tenant_id`), catalogue, locations, till registry, `invoice_series` including `next_number`, staff, sealed credentials, hardware settings | **Versioned snapshots**, not current-state. |
+| **Fiscal archive** | `registros_facturacion`, tagged with the installation number that produced them (§5) | **Append-only.** The source is immutable by trigger — `REVOKE ALL`, an append-only trigger and a TRUNCATE-blocking trigger (`packages/fiscal-verifactu/drizzle/0001_registros_inmutables.sql`) — so a mutable copy could silently disagree with the venue's own. |
+| **Submission state** | `envios` | **Mutable, deliberately.** `packages/fiscal-verifactu/src/schema/envios.ts` describes it as "the delivery state that mutates constantly… submission state cannot live on an immutable table", and `app_user` holds `UPDATE` on it. An append-only copy would freeze every archived record at `pendiente` and report a fully-filed venue as unsubmitted. |
+| **History** | Sales, invoices, payments, incidents | Append-only; immutable once closed at the source. |
+| **Configuration** | Tenant identity (`tenant_id`), catalogue, locations, till registry **including each `tills.id`**, staff, sealed credentials, hardware settings | **Versioned snapshots**, not current-state. |
+| **Counters** | `invoice_series.next_number`, `contadores_instalacion.proximo_numero` | **Monotonic high-water marks.** Synced continuously, never versioned, never rolled back. See below. |
+
+**Counters are not configuration, and putting them there was a category error.** An earlier draft of
+this spec filed `next_number` inside the configuration snapshot. That is wrong twice over. First, the
+snapshot exists so an operator can say "restore my configuration as of last Tuesday" — which would
+drag the invoice counter backwards with the menu and reissue numbers already used. Second, a busy
+till advances `next_number` on every sale, so a counter inside a whole-config snapshot produces a new
+snapshot per invoice rather than the kilobytes the design claims.
+
+They are therefore their own shape, with one rule: **a counter may only ever move forward.** Sync
+carries the high-water mark; restore resumes past it (§5); nothing may set either counter to a value
+at or below one already observed. A gap in a series is visible and legal — this codebase already
+tolerates one when a pre-production database burns numbers — whereas a repeat is neither.
 
 Configuration is the one that had to change shape. A current-state, last-write-wins snapshot
 faithfully replicates mistakes: someone deletes half the menu, it syncs up, and the backup has
@@ -101,17 +125,30 @@ lives on the invoice and is never derived from configuration history.
 **What a venue is owed after losing its server: its records, its history, and its configuration.
 Not its in-flight trading state.**
 
+**The governing rule is that every counter jumps FORWARD, never back.** The cloud knows a counter
+only as of the last successful sync, and §3 permits it to be offline indefinitely — so a venue that
+traded past its last sync and then lost its server has a cloud value that is *behind reality*.
+Resuming exactly at the remembered value would reissue numbers already used. Resuming past it cannot.
+An earlier draft of this spec said numbering "resumes from the restored `next_number`", which was
+wrong for precisely this reason and is the shape of error this rule exists to prevent.
+
 Given a replacement box and the key ring the operator was told to keep:
 
 1. `waitron-provision instance` — a blank local database.
-2. Configuration is pulled from the cloud: catalogue, locations, staff, series, sealed credentials.
+2. Configuration is pulled from the cloud: catalogue, locations, staff, series, sealed credentials,
+   **and every `tills.id` unchanged**. Till identity is not cosmetic: `invoice_series.till_id` is a
+   foreign key and `packages/core/src/record-sale.ts` refuses a series whose till does not match the
+   selling till, so regenerated till IDs orphan every series and the operator's replacements start
+   at 1.
 3. The operator supplies the key ring; credentials unseal. **`tenant_id` must be restored, never
    regenerated** — see §6.
-4. Each till is re-registered. Each mints a fresh installation number and starts a new chain, which
-   is the existing invariant for reimaged hardware, applied deliberately rather than worked around.
-5. **Series numbering resumes from the restored `next_number`.** This is what reconciles "trading
-   restarts fresh" with "invoice numbers are never reused": the chain restarts, the numbering
-   continues, and the never-reuse invariant survives because the cloud remembered the counter.
+4. Each till is re-registered, minting a **new installation number** from the counter in §6a — which
+   is the existing invariant for reimaged hardware, and is also what keeps the second lifetime's
+   records from colliding with the first (see point 6).
+5. **Series numbering resumes STRICTLY ABOVE the remembered `next_number`**, by a margin covering
+   plausible unsynced trading. The chain restarts, the numbering skips forward, and no invoice number
+   is reused. The skipped range is a visible gap, which is the acceptable outcome; a reused number is
+   not.
 6. The fiscal archive and history are **not** replayed into the new local database.
 
 Point 6 is a decision, not an omission. Replaying historical records into tables whose purpose is
@@ -119,10 +156,19 @@ append-only immutability, under a hash chain the replacement till is not part of
 most likely to produce something unverifiable — and unverifiable is the one outcome Veri*Factu exists
 to make detectable. The venue keeps access to its history through §7 instead.
 
+**Why the archive tags records with their installation number.** `cadenas.secuencia` is documented
+"monotonic across SIF identities and never reset", but a blank database restarts it at 1 — while the
+cloud archive still holds 1…N for that till from its previous life. Keyed on `(tenant, till,
+secuencia)` alone, the restored venue's very first record would collide with an archived one and
+every subsequent ingest would fail, with no repair path behind an append-only ingest role. Tagging by
+installation number removes the collision without inventing anything: point 4 mints a new one per
+lifetime, and it is already the identifier AEAT uses to distinguish one system from another.
+
 ## 6. Credentials survive a disaster without the cloud ever holding a secret
 
 `tenant_credentials` stores AES-GCM sealed blobs — `ciphertext`, `iv`, `auth_tag`, `key_version` —
-with the AAD bound to `(tenant_id, purpose)` (`packages/credentials/src/cipher.ts`). The rows are
+with the AAD bound to `(tenant_id, purpose)` (`packages/credentials/src/cipher.ts:23-25`; the
+`key_version` column itself is declared in `packages/credentials/src/schema/tenant-credentials.ts`). The rows are
 useless without the key ring, and **the cloud never holds the key ring**. So the sealed blobs can be
 synced and restored, which is what makes "get installed again after a disaster" reach the fiscal
 certificate and the payment credentials rather than stopping short of them.
@@ -134,13 +180,43 @@ Two consequences the implementation must respect:
 - **The key ring remains the operator's to keep.** This design does not weaken that, and must not
   drift into "the cloud can recover it for you" — it cannot, by construction, and that is the point.
 
+## 6a. The installation-number counter has exactly one writer
+
+`contadores_instalacion` is keyed `(nif, id_sistema_informatico)` and carries deliberately no
+`tenant_id` and no RLS. Its own comment states the reason: *"a single writer cannot guarantee
+uniqueness over rows a policy hides from it"* — the counter is sound only where one thing allocates
+for a given taxpayer.
+
+**§2 removes that single writer.** A taxpayer is one NIF (`tenants.nif` is globally unique) and may
+run several venues; under this design each venue has its own server and therefore its own counter,
+and two branches would both mint installation number 1. AEAT is explicit that they must not:
+`docs/compliance/verifactu-findings.md` quotes the FAQ — *"cada una de esas facturaciones distintas
+(sean de distintos OEF o del mismo OEF pero de distintos centros de facturación independientes, como
+tiendas) debe tener un nº de instalación propio y distinto al resto"*. The topology §2 supersedes was
+the only one in which a single allocator served all of a taxpayer's tills; removing it without
+replacing the allocator was a defect in this spec's first draft.
+
+**The installation number therefore becomes an input the tool accepts, not only a value it
+generates**, with two sources:
+
+- **Subscribers: the cloud allocates.** One writer per NIF, across every venue that taxpayer runs.
+  This is the §3 concession — required to commission a till, never to sell.
+- **Self-hosted: the operator sets it during setup**, documented, with the constraint stated plainly:
+  each billing point of the same taxpayer needs its own number, and no number is ever reused. A
+  multi-branch self-hosted operator assigns them.
+
+Both paths obey §4's forward-only rule. An operator restoring without a cloud record and without
+their own note has one safe move: **choose a number above any they have used.** Numbers that were
+skipped cost nothing; a number reused cannot be repaired, because chains cannot be merged.
+
 ## 7. Reporting: one projection, two hosts
 
 Reports run **from the cloud for subscribers** and **locally for self-hosted deployments**. The same
-projection — one schema, one transform — deployed in either place, following §5's "one sync
-implementation, tested once" rather than inventing a cloud-only concept.
+projection — one schema, one transform — deployed in either place, following
+`2026-07-18-pos-architecture-design.md` §5's "one sync implementation, tested once" rather than
+inventing a cloud-only concept.
 
-This turns §5's point 6 from a limitation into the product: a subscriber's reports live where their
+This turns **this document's** §5 point 6 from a limitation into the product: a subscriber's reports live where their
 data lives, and a venue that never subscribes runs the identical reporting locally over its own data.
 
 **Export on demand is a requirement, not a courtesy.** A customer ending their subscription takes
@@ -150,31 +226,51 @@ their data with them. This is also regulatory — see §8.
 
 Per `CLAUDE.md` §1, external claims carry their source's own words rather than a paraphrase.
 
-| Claim | Source | Verbatim |
-| --- | --- | --- |
-| One system may serve several taxpayers | RRSIF (RD 1007/2023) art. 7.a) | *"Podrá utilizarse un mismo sistema informático … por parte de diversos obligados tributarios … siempre que los registros de facturación de cada obligado tributario se encuentren diferenciados y se cumplan los requisitos exigidos en este Reglamento por separado para cada uno de los obligados tributarios"* |
-| "Diferenciados" means independent chaining | AEAT FAQ, SIF for multiple obligados | *"debe gestionar separadamente los registros de facturación … con encadenamiento independiente para dichos registros de cada OEF"* |
-| Export to external storage is required | RRSIF art. 8.2.c) | *"El sistema informático deberá contar con un procedimiento de descarga, volcado y archivo seguro de los registros de facturación generados por él, que deberán poder ser exportados a un almacenamiento externo en formato electrónico legible."* |
+Quoted in full rather than trimmed to the convenient clause. An earlier draft of this section elided
+both of the emphasised passages below, and each elision mattered — which is `CLAUDE.md` §1's own
+warning ("qualifiers carry the meaning and are exactly what compression removes") landing on the
+section that cites it.
+
+| Source | Verbatim |
+| --- | --- |
+| RRSIF (RD 1007/2023) art. 7.a) | *"Podrá utilizarse un mismo sistema informático **para el cumplimiento del presente Reglamento** por parte de diversos obligados tributarios en el ejercicio de su actividad económica siempre que los registros de facturación de cada obligado tributario se encuentren diferenciados **y se cumplan los requisitos exigidos en este Reglamento por separado para cada uno de los obligados tributarios**"* |
+| AEAT FAQ, SIF for multiple obligados | *"debe gestionar separadamente los registros de facturación y, en su caso, de evento de cada OEF incluido en el SIF, **cumpliendo con los requisitos exigidos en los artículos 7.a) y 8 del RRSIF**, con encadenamiento independiente para dichos registros de cada OEF"* |
+| RRSIF art. 8.2.c) | *"El sistema informático deberá contar con un procedimiento de descarga, volcado y archivo seguro de los registros de facturación generados por él, que deberán poder ser exportados a un almacenamiento externo en formato electrónico legible."* |
 
 Sources: [BOE RD 1007/2023](https://www.boe.es/buscar/act.php?id=BOE-A-2023-24840) ·
 [AEAT FAQ](https://sede.agenciatributaria.gob.es/Sede/iva/sistemas-informaticos-facturacion-verifactu/preguntas-frecuentes/caracteristicas-requisitos-sistemas-informaticos-facturacion-multiple.html)
 
-**What the sources establish:** the operative requirement for a multi-taxpayer system is
-*differentiation with independent chaining*. Neither the article nor AEAT's gloss mentions physical
-separation, separate databases or separate instances. Waitron already satisfies the named requirement
-structurally: a SIF is identified by NIF + IdSIF + NºInstalación
-(`packages/fiscal-verifactu/src/registro-sif.test.ts:62`), so chaining is independent per taxpayer by
-construction rather than by policy.
+**What the sources establish.** A multi-taxpayer system is permitted, on two conjoined conditions:
+records *diferenciados*, **and** the Regulation's requirements met *por separado* for each taxpayer.
+Independent chaining is what AEAT names when glossing the first — it is one requirement among those
+of arts. 7.a) and 8, not the whole test. Neither source mentions physical separation, separate
+databases or separate instances.
 
-**What they do not establish, stated plainly:** the cloud archive is not itself a SIF — it issues no
-invoices — and no provision was found that expressly addresses a third party conserving registros on
-a taxpayer's behalf. Absence of text is weak evidence, and "diferenciados" is a qualifier whose
-sufficiency threshold is an advisor's judgement.
+Waitron already satisfies the chaining condition structurally rather than by policy: a SIF is
+identified by NIF + IdSIF + NºInstalación, enforced by `registro_sif_instalacion_uq`
+(`packages/fiscal-verifactu/src/schema/sif.ts`), with the 23505 pinned by tests in
+`registro-sif.test.ts`. §6a is what keeps that true once every venue runs its own server.
 
-**Ruling taken 2026-07-31 (user's, on the evidence above):** records need not be stored separately per
-taxpayer; they must be **exportable** separately. The export path must therefore be able to produce
-one taxpayer's registros in isolation in legible electronic format — which art. 8.2.c) requires
-independently of this design.
+**What they do not establish, and the tension is real rather than rhetorical.** Art. 7.a) is scoped
+by its own words to a system used *"para el cumplimiento del presente Reglamento"* — a SIF. The cloud
+archive is **not** a SIF: it issues no invoices and generates no registros. So the article most
+directly on point governs something other than the thing being ruled on, and no provision was found
+that expressly addresses a third party conserving registros on a taxpayer's behalf. Absence of text
+is weak evidence in both directions.
+
+What art. 7.a) does supply is evidence about what Spanish fiscal law *cares about* when one system
+holds several taxpayers' records: differentiation and separate compliance, not storage topology. That
+is an inference from the regulator's evident concern, not an application of the article.
+
+**Ruling taken 2026-07-31, by the user, on that basis:** records need not be stored separately per
+taxpayer; they must be **exportable** separately. The export path must therefore produce one
+taxpayer's registros in isolation in legible electronic format — which art. 8.2.c) requires
+independently of this design, and which is why §7 treats export as a requirement rather than a
+courtesy.
+
+This remains a sourced reading rather than legal advice. The narrow question worth an advisor's time
+is unchanged and now sharper: **does the RRSIF reach a backup archive that is not itself a SIF, and
+if so under what terms?**
 
 This is a sourced reading, not legal advice, and remains open to the fiscal advisor's confirmation on
 the narrow question of whether the archive is in scope at all.
@@ -184,11 +280,23 @@ the narrow question of whether the archive is in scope at all.
 **One shared cloud database**, tenant-scoped by RLS — the model already built and exercised for
 exactly this shape. Two additions beyond reusing it:
 
-**Reproduce the local immutability guarantees at the grant level.** Locally, `registros_facturacion`
-carries `REVOKE ALL`, an append-only trigger and a TRUNCATE-blocking trigger. The cloud archive
-carries the same, and the sync-ingest role holds `INSERT` and nothing else on it. A cloud that can
-`UPDATE` a fiscal record it received is a cloud that can silently disagree with the venue's own copy,
-and the archive's entire value is that it agrees.
+**Reproduce the local immutability guarantees at the grant level, table by table — not blanket.**
+Locally, `registros_facturacion` carries `REVOKE ALL`, an append-only trigger and a TRUNCATE-blocking
+trigger; the cloud archive carries the same, and the ingest role holds `INSERT` and nothing else on
+it. A cloud that can `UPDATE` a fiscal record it received is a cloud that can silently disagree with
+the venue's own copy, and the archive's entire value is that it agrees.
+
+`envios` is the deliberate exception and must not be swept into the same rule: it is submission
+*state*, it mutates as AEAT responds, and `app_user` holds `UPDATE` on it locally for that reason. An
+INSERT-only ingest would pin every archived record at `pendiente` and report a fully-filed venue as
+unsubmitted. The ingest role therefore holds `UPDATE` on `envios` and on nothing else.
+
+**One shared cloud database means one environment.** `2026-07-29-deployment-environment-design.md`
+fixes "one database per environment, and a pre-production database is never promoted", and the reason
+is exactly the counters §4 governs: a pre-production venue's `next_number` handed back to a production
+one leaves a permanent hole in a live series. Pre-production venues therefore sync to a **separate
+pre-production cloud store**, stamped as such, and the ingest path refuses a venue whose stamp
+disagrees with the store's. "One shared cloud database" in this section means one per environment.
 
 **Separate roles by job**, following the least-privilege pattern the provisioning tool establishes: an
 ingest role, a read role for remote admin, an analytics role. None a superuser, none holding
