@@ -128,7 +128,16 @@ each set's `drizzle/*.sql`: db 42, fiscal-verifactu 30, payments 12, scheduler 3
 it is the ordinary content of a migration here rather than a corner case. And the lock is not held
 for one statement: Drizzle runs a whole set's migrations inside a single transaction
 (`drizzle-orm@0.45.2/pg-core/dialect.js:60`), so every lock it takes is held until that set commits.
-`CLAUDE.md` §5: **nothing may block a sale.**
+So this is a **maintenance window**, and wants planning like one.
+
+An earlier version of this paragraph closed by citing `CLAUDE.md` §5, "nothing may block a sale", as
+though it settled the matter. It does not, and the citation was quoting the rule's headline while
+dropping the clause that scopes it: §5 reads _"Nothing may block a sale **on anything but the sale
+itself**… Fiscal submission is an outbox, never inline."_ That is an architectural rule about what
+the sale PATH may depend on — it is what makes AEAT submission asynchronous — not a claim that no
+operation may ever take a lock. Every deployment has downtime. Migrating under a live POS is an
+ordinary operational risk to be scheduled, and it needs no appeal to a fiscal invariant to be worth
+scheduling.
 
 **The advisory lock does not cover this, and must not be read as if it did.** `applyMigrations` takes
 `pg_advisory_lock` on a fixed key over a dedicated `pg.Client` opened from the same connection string
