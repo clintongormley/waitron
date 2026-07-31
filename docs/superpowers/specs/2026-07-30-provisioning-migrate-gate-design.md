@@ -159,11 +159,21 @@ granted.
 
 **The failure is not one of this package's `AppError`s.** `instance-apply.ts`'s `migrate` case
 carries no `try`/`catch`, unlike `create-role` and `grant-membership`, so the raw driver failure
-reaches the caller unclassified. Traced rather than run: `cli.ts`'s `reportFailure` rethrows anything
-that is not an `AppError`, and `bin.ts`'s top-level catch prints `unexpected failure
-(DrizzleQueryError)` — the class name, never the message, for the same reason that file gives for a
-`CREATE ROLE` failure. Reclassifying this into a `provisioning.*` code is a real gap this measurement
-surfaces; it is recorded here, not fixed here — out of scope for a docs-and-reproduction task.
+reaches the caller unclassified. `cli.ts`'s `reportFailure` rethrows anything that is not an
+`AppError`, and `bin.ts`'s top-level catch prints `unexpected failure (${error.name})`. Run through
+the built bundle, not traced: `pnpm --filter @waitron/provisioning build`, then a real
+`postgres:18-alpine` container migrated and stamped by a full admin exactly as above, then
+`WAITRON_ADMIN_DATABASE_URL=postgres://partial_admin:p@<host>/postgres node dist/bin.js instance
+--database waitron_probe --environment preproduction --yes` — exit code `1`, stderr **exactly**
+`unexpected failure (Error)`, not `(DrizzleQueryError)`. The reason is `error.name`, not
+`error.constructor.name`: `drizzle-orm@0.45.2`'s `DrizzleQueryError` (`errors.js`) extends `Error`
+directly and never sets `this.name`, so it inherits the prototype's `"Error"` — only the sibling
+`DrizzleError` class sets `this.name = "DrizzleError"` in its constructor, and a failed query is a
+`DrizzleQueryError`, not that. An earlier version of this paragraph asserted `(DrizzleQueryError)`
+while labelling itself "traced rather than run" in the same sentence — the hedge was correct and the
+assertion past it was not; this is what actually running it prints. Reclassifying this into a
+`provisioning.*` code is a real gap this measurement surfaces; it is recorded here, not fixed here —
+out of scope for a docs-and-reproduction task.
 
 **A narrower shape was not tested, and nothing is claimed about it.** This role held no `CREATE` on
 the database at all, which is what let schema creation fail first, before a single journal table was

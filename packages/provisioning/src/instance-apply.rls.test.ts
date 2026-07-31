@@ -573,9 +573,18 @@ describe("applyInstance against a blank container", () => {
 
         // NOT wrapped as a `provisioning.*` `AppError`: `instance-apply.ts`'s `migrate` case carries
         // no `try`/`catch`, unlike `create-role` and `grant-membership`, so the raw driver failure
-        // and its SQLSTATE are what actually reaches a caller — `bin.ts` prints
-        // `unexpected failure (DrizzleQueryError)` for exactly this shape. Recorded as measured,
-        // not fixed: reclassifying it is outside this task's scope.
+        // and its SQLSTATE are what actually reaches a caller. `bin.ts` prints
+        // `unexpected failure (${error.name})`, and `error.name` — NOT `error.constructor.name` —
+        // is `"Error"` for a `DrizzleQueryError`: `drizzle-orm@0.45.2/errors.js`'s
+        // `DrizzleQueryError` extends `Error` directly and never sets `this.name` (only the
+        // sibling `DrizzleError` class does, in its own constructor), so it inherits the
+        // prototype's `"Error"`. Run through the built bundle against this exact scenario
+        // (`pnpm --filter @waitron/provisioning build`, then `node dist/bin.js instance` with
+        // `WAITRON_ADMIN_DATABASE_URL` pointed at `partial_admin`): exit code 1, stderr exactly
+        // `unexpected failure (Error)` — not `(DrizzleQueryError)`, which an earlier version of
+        // this comment claimed while labelling itself "traced rather than run" in the same breath.
+        // Recorded as measured, not fixed: reclassifying it into a `provisioning.*` code is
+        // outside this task's scope.
         expect(isAppError(thrown)).toBe(false);
         // Reached via Drizzle's own migrator issuing `CREATE SCHEMA IF NOT EXISTS "public"`
         // unconditionally at the start of `migrate` (`drizzle-orm@0.45.2/pg-core/dialect.ts:85`),
