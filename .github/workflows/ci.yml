@@ -62,10 +62,19 @@ jobs:
         with:
           version: 9.15.0
 
+      # Deliberately NO `cache: pnpm`, unlike every other job here. setup-node's cache-save runs as
+      # a post-job step, and with `cache: pnpm` it looks for the pnpm store — which this job never
+      # creates, because it never installs. The store is absent, so the post-step fails with
+      # `Path Validation Error: Path(s) specified in the action for caching do(es) not exist`, and
+      # that fails the whole job AFTER its outputs are already set. Observed on the first real run
+      # of this workflow (run 30649750798): `code`, `scope` and `heavy` were all computed and set
+      # correctly, `changes` still reported failure, and every downstream job skipped.
+      #
+      # There is nothing to cache here anyway: the job runs `pnpm ls` and one node script, both of
+      # which read the workspace manifests only.
       - uses: actions/setup-node@v5
         with:
           node-version-file: ".nvmrc"
-          cache: pnpm
 
       - id: classify
         env:
