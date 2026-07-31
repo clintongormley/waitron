@@ -248,8 +248,10 @@ export default tseslint.config(
     // a SECOND global. The other two only ever announce progress on stdout and reach for
     // `process.stdout.write` to do it (grepped: four calls across the two files, no `console`
     // anywhere); this one has to keep two streams apart, because its stdout is appended straight to
-    // `$GITHUB_OUTPUT` and must carry the `code=`/`heavy=` line and nothing else, while the reason
-    // for that verdict goes to stderr for a human reading the job log.
+    // `$GITHUB_OUTPUT`, so it must carry `<name>=<value>` lines and nothing else — one for
+    // `classify`, three for `gates` — while the reason for each verdict goes to stderr for a human
+    // reading the job log. The line COUNT is part of the contract, not just the content: a stray
+    // line becomes an extra job output.
     files: [
       "apps/server/scripts/**/*.mjs",
       "packages/provisioning/scripts/**/*.mjs",

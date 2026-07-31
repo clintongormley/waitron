@@ -84,11 +84,15 @@ export const SCOPE_GATES = [
  * result. Getting it wrong reads a failure as "no packages in scope" and SKIPS every gated job,
  * which is the silent direction.
  *
- * Honest about what the check earns: it is expressive, not load-bearing. Removed, the tests still
- * pass, because `.map` throws on a non-array inside this same `try` and lands on the same `null`.
- * Proven by deletion rather than assumed — the incidental version was run against the suite and all
- * 42 tests passed. It stays because the fail-closed path should be stated rather than inherited
- * from where a `try` happens to end; the TEST is what holds the behaviour.
+ * Proven by deletion, on the code as it stands: remove the `Array.isArray` line and
+ * `pnpm vitest run` reports `2 failed | 42 passed (44)` — the two tests naming this input. The
+ * `try` wraps `JSON.parse` ONLY, so `parsed.map` on the error object throws outside it and
+ * propagates as a TypeError instead of reaching `null`.
+ *
+ * An earlier version of this comment claimed the opposite — "expressive, not load-bearing" — from
+ * an experiment that deleted the line AND moved `.map` back inside the `try`. That shape does land
+ * on `null`, and did pass 42/42. Two different mutations, one of them written up as a result about
+ * the other, which is the §1 shape this repository keeps paying for. State the experiment.
  */
 export function packagesInScope(scopedPackagesJson) {
   const raw = scopedPackagesJson.trim();

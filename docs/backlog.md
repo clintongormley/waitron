@@ -189,8 +189,18 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   the two-way test shard, and scoping for both mutation jobs. **First measurement, on a code change
   that skipped `test-heavy`:** run `30650089655` (head `4926cf5`) spanned **4m8s** against the 7m20s
   baseline. That run still carried `mutation-verifactu` ungated at 3m26s of the 4m8s, and every
-  other job finished 1m39s in; scoping the two mutation jobs landed after it, so **the figure for
-  the branch as it now stands is not yet measured** — a projection is not a measurement
+  other job finished 1m39s in; scoping the two mutation jobs landed after that run. **Measured on
+  the branch as it now stands:** run `30653487133` (head `b440b0f`) spanned **1m26s**, and the
+  docs-only path spanned **44s** (run `30652341473`, a throwaway PR based on the branch so its whole
+  diff was documentation)
+- **`test-light` is the one shard with no membership gate**, so on a change touching no package it
+  still provisions a runner, runs `pnpm install` and `playwright install --with-deps chromium`
+  before finding nothing to do — the longest job of run `30653487133` at ~48s, for zero test
+  execution (`None of the selected packages has a "test:coverage" script`, exit 0). A `light`
+  boolean out of the `changes` job's existing single `pnpm ls` would remove it at no extra cost.
+  Second, smaller half: a `test-light` that matched nothing and one that ran the whole workspace
+  both report `success`, and only the step log tells them apart — worth making the job say which.
+  Found by the base-to-tip review of PR 2, not by any per-task pass
 - **`packages/db`'s test suite is 189s**, mostly one Testcontainers Postgres per suite. It is now its
   own CI shard (`test-heavy`), which stops it blocking the other packages but does not make it any
   shorter. Sharing a container across suites beats every CI-config change combined, but it means

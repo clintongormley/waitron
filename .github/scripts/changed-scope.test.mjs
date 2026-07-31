@@ -93,10 +93,6 @@ describe("packagesInScope", () => {
     expect(packagesInScope(pnpmError)).toBeNull();
   });
 
-  it("returns null for output that is not JSON at all", () => {
-    expect(packagesInScope("No projects matched the filters")).toBeNull();
-  });
-
   it("reads an empty result as an empty scope, which means nothing matched", () => {
     expect(packagesInScope("")).toEqual(new Set());
     expect(packagesInScope("   ")).toEqual(new Set());

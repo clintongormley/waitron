@@ -387,8 +387,10 @@ behaviour `multi-root.test.ts` asserts. Check both before committing.
 
 A Husky `pre-push` hook (`.husky/pre-push`) runs before any push leaves your machine: `pnpm lint`,
 `pnpm format:check`, `pnpm typecheck`, then `pnpm test` — the whole workspace, not just this package.
-(It was `pnpm --filter @waitron/ui …` for the first two steps when this document was written; #9
-widened it to the repo, and this paragraph had said otherwise ever since.) It runs from the repo root
+(It was `pnpm --filter @waitron/ui …` for the **last two** steps — `typecheck` and `tests` — when
+this document was written; `lint` and `format check` were already repo-wide. #9 widened the other
+two, and this paragraph had said otherwise ever since. Read back from
+`git show b20c267:.husky/pre-push` and `git show c31dae8:.husky/pre-push`.) It runs from the repo root
 regardless of which subdirectory you're in, stops at the first failing step, and prints both which
 step failed and the exact command to reproduce it locally.
 

@@ -149,8 +149,10 @@ Traps that each cost a round trip (deliberately uncounted — the last version o
   (everything else, `--no-sort`).
 - **CI does not run every check on every push.** `ci.yml`'s `changes` job skips the expensive jobs
   outright when every changed path is documentation, and on a pull request narrows the two test
-  shards and both mutation jobs to the changed packages and their dependents. `main` always runs the
-  full unfiltered suite, and that run is what verifies the narrowing was right. So a green pull
+  shards and both mutation jobs to the changed packages and their dependents. A merge to `main` runs
+  the full unfiltered suite **whenever anything but documentation changed**, and that run is what
+  verifies the narrowing was right — a documentation-only merge skips there too, which is the whole
+  point of the two decisions being separate. So a green pull
   request is evidence about the packages that RAN — read the `changes` job's log for its `code` and
   `scope` outputs and its per-job `heavy` / `verifactu` / `shared` gates before treating it as
   evidence about the workspace. Design:
@@ -168,8 +170,10 @@ Traps that each cost a round trip (deliberately uncounted — the last version o
   happens in one**, so it is the first thing anyone testing that filter will hit. Measured on pnpm
   9.15.0 in `waitron-feat-ci-scoped-testing`: `pnpm --filter "...[main]" ls --depth -1` printed
   `No projects matched the filters` while `git diff --name-only main...HEAD` in the same directory
-  listed seven changed files. It reads as "the filter is broken" rather than "you are in the wrong
+  listed every changed file. It reads as "the filter is broken" rather than "you are in the wrong
   kind of checkout". Verify anything touching the filter in a clone or on a real pull request.
+  (Deliberately not a file count: the first version of this entry said "seven", which stopped being
+  true on the branch's next commit. A number that moves is a receipt that goes stale.)
 - **`pnpm --filter ""` is a hard error, not a no-op.** Measured on pnpm 9.15.0 in this workspace:
   `pnpm --filter "" --filter "!@waitron/db" --no-sort exec node -e "0"` exits **1** with
   `ERROR  Unsupported package selector: {"exclude":false,…}` before selecting anything, while the same
@@ -182,10 +186,15 @@ Traps that each cost a round trip (deliberately uncounted — the last version o
 - **The workspace root is outside `pnpm -r`, so root config is linted and never typechecked.**
   `pnpm typecheck` is `pnpm -r typecheck`, and `pnpm -r exec node -e "console.log(process.cwd())"`
   visits the fifteen workspace members and never the root; there is no root `tsconfig.json` either,
-  only `tsconfig.base.json` for packages to extend. Proven by mutation: with
-  `const brokenProbe: number = "not a number";` appended to the root `vitest.config.ts`,
-  `pnpm typecheck` exits 0 without naming the file, while `pnpm lint` (`eslint .`) exits 1 and does.
-  A type error in root config reaches `main`.
+  only `tsconfig.base.json` for packages to extend. Proven by mutation, twice, because the first
+  probe flattered the situation. Appending `const brokenProbe: number = "not a number";` to the root
+  `vitest.config.ts` gives `pnpm typecheck` exit 0 and `pnpm lint` exit **1** — which looks like
+  lint covering the gap, and does not: the rule that fired is
+  `@typescript-eslint/no-unused-vars`, on the unused binding. `eslint.config.js` uses
+  `tseslint.configs.recommended`, which is **not** type-aware, so it never saw the type error at
+  all. Make the binding used — `export const brokenProbe: number = "not a number";` — and
+  `pnpm typecheck`, `pnpm lint` AND `pnpm vitest run` all exit **0**. Nothing in this repository
+  typechecks root config, so a type error there reaches `main` unremarked.
 - **The pre-push hook does not run `--frozen-lockfile`.** Moving a dependency between
   `dependencies` and `devDependencies` passes locally and fails CI at the install step. Run
   `pnpm install` and commit the lockfile.
