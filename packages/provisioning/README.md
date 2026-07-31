@@ -320,7 +320,7 @@ with two admins `adm_a` (which provisioned) and `adm_b` (which did not):
    row of the error table above.
 
 **The remedy, and all five statements are needed.** Run as the admin that **did** provision the
-database (or a superuser). The first three clear walls 1 and 2:
+database (or a superuser). First:
 
 ```sql
 -- inside <db>:
@@ -330,13 +330,28 @@ grant app_user to <new_admin> with admin option;
 grant tenant_provisioner to <new_admin> with admin option;
 ```
 
-and these two clear walls 3 and 4:
+then:
 
 ```sql
 grant create on database <db> to <new_admin> with grant option;
 -- inside <db>:
 grant create on schema public to <new_admin> with grant option;
 ```
+
+**Which block clears which wall was not measured**, and this section used to assert a mapping —
+"the first three clear walls 1 and 2 … these two clear walls 3 and 4" — that the experiment cannot
+support. The two blocks were applied together, first block first, so what the runs below separate is
+"the first three alone" from "all five", and nothing finer. That is a statement about the evidence,
+not a hint that the second block is unnecessary: without it the run dies, measured below.
+
+Wall 4 in particular has a claim on **both** blocks, which is what makes the old mapping wrong rather
+than merely unproven. Against an already-migrated database the migrator's third statement per set is
+the journal read — `drizzle-orm@0.45.2/pg-core/dialect.js:56-58`,
+`select id, hash, created_at from public.__drizzle_migrations_* order by created_at desc limit 1` —
+and an admin that did not create those tables neither owns them nor can read them back without the
+**first** block's `grant select on all tables in schema public`. `apps/server/README.md`'s
+empty-database recipe states exactly this, for exactly this reason, about the analogous migrator
+role.
 
 **The second block used to be documented here as conditional** — "if you do need a different admin
 to issue them" — and it is not. Measured on `postgres:18-alpine` (PostgreSQL 18.4) through the built
