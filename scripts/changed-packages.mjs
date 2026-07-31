@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { relative, resolve, sep } from "node:path";
 import { classify, isInertPath } from "../.github/scripts/changed-scope.mjs";
 
 // Answers, in ONE call, the only question `.husky/pre-push` asks about a push's changed paths: is
@@ -70,7 +70,17 @@ export function workspacePackages(pnpmLsJson, repoRoot) {
   for (const entry of parsed) {
     if (typeof entry?.name !== "string" || typeof entry?.path !== "string") return null;
 
-    const dir = relative(root, resolve(entry.path));
+    // `relative` returns platform-native separators, and every comparison downstream is against a
+    // path from `git diff --name-only`, which is always `/`-delimited on every platform. On a
+    // separator where `sep` is not `/` the two could never match, so `owningPackage` would attribute
+    // nothing and every push would fall back to a global run — scoping silently switched off rather
+    // than broken, which is the quiet direction.
+    //
+    // Not a bug reachable today: CI is `ubuntu-latest`, the hook is POSIX `sh` run by husky, and
+    // `sep` is `/` on both. Verified only on darwin, where `relative()` already returns `/` and this
+    // join is a no-op — so this normalises the comparison rather than adding Windows support, which
+    // nothing here tests. Raised by Copilot on PR #31.
+    const dir = relative(root, resolve(entry.path)).split(sep).join("/");
 
     // The workspace root: `pnpm ls -r` lists it alongside the members, and it "contains" every path
     // in the repository, so leaving it in would attribute the whole diff to it and never report a

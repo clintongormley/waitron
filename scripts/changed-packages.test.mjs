@@ -34,6 +34,17 @@ describe("workspacePackages", () => {
     ]);
   });
 
+  // Every path this is compared against comes from `git diff --name-only`, which is `/`-delimited on
+  // every platform, so `dir` must be too — `path.relative` returns the platform's own separator.
+  // This passes trivially on darwin and in CI (`sep` is `/` there); it exists so that a separator
+  // where it is not cannot silently turn scoping off by attributing nothing and going global.
+  it("reports directories with forward slashes, whatever the platform separator is", () => {
+    const nested = workspacePackages(ls(member("@waitron/bench", "bench/pglite-throughput")), ROOT);
+
+    expect(nested).toEqual([{ name: "@waitron/bench", dir: "bench/pglite-throughput" }]);
+    expect(nested[0].dir).not.toContain("\\");
+  });
+
   it("reports each member's directory relative to the repository root", () => {
     expect(WORKSPACE).toEqual([
       { name: "@waitron/db", dir: "packages/db" },
