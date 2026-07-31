@@ -261,11 +261,21 @@ this package would quote a `CREATE ROLE … PASSWORD '<generated>'` statement ba
 | `provisioning.role_creation_failed`    | `CREATE ROLE` failed. `sqlState` says why                                                                                                                                                                                                               | `42710`: the role already exists. `42704`: a membership target does not. `42501`: this admin may not — see below.                                                                                                                                                                            |
 | `provisioning.grant_ineffective`       | Every statement ran, and a privilege in `missing` is still absent afterwards                                                                                                                                                                            | Almost always the admin lacks grant option on the database or on `public` — see "When the admin did not create the database" below. If the same run also CREATED a role, read "A failed `instance` can orphan a role" before re-running.                                                     |
 | `provisioning.membership_grant_failed` | `GRANT <memberOf> TO <role>` failed. `sqlState` says why                                                                                                                                                                                                | `42501`: this admin holds no ADMIN OPTION on the role it is granting — see below.                                                                                                                                                                                                            |
-| `unexpected failure (Error)` — no code | Not a refusal at all. `instance-apply.ts`'s `migrate` case carries no `try`/`catch`, unlike `create-role` and `grant-membership`, so a driver failure there reaches `bin.ts`'s top-level catch unclassified: no database named, no SQLSTATE, no remedy. | The shape measured on this branch is `permission denied for database <db>` (42501) on Drizzle's opening `CREATE SCHEMA IF NOT EXISTS "public"` — the tool does not print it, the server log does. Fix it with the SECOND SQL block under "When the admin did not create the database" below. |
+| `unexpected failure (Error)` — no code | Not a refusal at all. `instance-apply.ts` wraps only `create-role` and `grant-membership` in a `try`/`catch`; `create-database`, `grant-database-create`, `grant-schema-create`, `migrate` and `stamp` are all uncaught, so a driver failure in **any of those five** reaches `bin.ts`'s top-level catch unclassified: no database named, no SQLSTATE, no remedy. | The shape measured on this branch is `permission denied for database <db>` (42501) on Drizzle's opening `CREATE SCHEMA IF NOT EXISTS "public"` — the tool does not print it, the server log does. Fix that one with the statements under "When the admin did not create the database" below; which of the five clears it was not isolated, so apply all of them. |
 
 Every other row is a structured code; that last one is a gap, recorded rather than dressed up.
 Reclassifying it into a `provisioning.*` code is a separate change, because a code is permanent once
 shipped.
+
+**The gap is pre-existing and shared, not something making `migrate` unconditional created.**
+`src/instance-apply.ts` is byte-identical to its state on `main` — `git diff main...HEAD --
+packages/provisioning/src/instance-apply.ts` is empty — and the same five cases were uncaught before
+this branch. Two ways to reach the row without `migrate` at all: a first provision by an admin
+lacking `CREATEDB` fails on `create-database`, and the hard 42501 form of an object-privilege
+`GRANT` — wall 3 below documents that PostgreSQL raises it rather than warning when the grantor
+holds nothing on the object — fails on `grant-database-create` or `grant-schema-create`. What this
+branch did was put a reachable instance of the gap in front of an operator, which is why it is
+written down here now.
 
 The underlying driver error is deliberately not attached, not even as `cause`: Node's default
 console formatting recurses into `.cause`, which would put a generated password one level down from
@@ -309,15 +319,17 @@ with two admins `adm_a` (which provisioned) and `adm_b` (which did not):
    `'CREATE WITH GRANT OPTION'` privilege spelling — an earlier version of this paragraph said they
    could not. The closure is the reason; the option is not.)
 
-4. **It cannot run the migrator, and that failure is the unreported one.** `instance` plans
+4. **It cannot run the migrator, and that failure carries no code.** `instance` plans
    `migrate` on **every** run — it stopped gating on journal presence, see "Idempotency" above — and
    Drizzle's migrator opens each set with `CREATE SCHEMA IF NOT EXISTS "public"`
    (`drizzle-orm@0.45.2/pg-core/dialect.js:54`). That statement needs **database-level `CREATE`**
    whether or not the schema already exists, because PostgreSQL checks the privilege before it
    evaluates existence — the receipt is in `apps/server/README.md`'s "Two connection strings, one
    purpose split". An admin without it stops here, and `instance-apply.ts`'s `migrate` case has no
-   `try`/`catch`, so what the operator sees is `unexpected failure (Error)` and exit 1 — the last
-   row of the error table above.
+   `try`/`catch` — like every action except `create-role` and `grant-membership`, so this is the
+   shared gap the error table records rather than one peculiar to `migrate` — so what the operator
+   sees is `unexpected failure (Error)` and exit 1, the last row of that table. Wall 3's own hard
+   42501 lands in the same place, uncoded, for the same reason.
 
 **The remedy, and all five statements are needed.** Run as the admin that **did** provision the
 database (or a superuser). First:

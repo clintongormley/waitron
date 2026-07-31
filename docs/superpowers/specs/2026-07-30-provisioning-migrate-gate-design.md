@@ -180,9 +180,14 @@ It fails there before any journal table is read. Drizzle's migrator issues
 or not the schema already exists, and schema creation is a database-level `CREATE` privilege in
 PostgreSQL — exactly the one this admin was deliberately never granted.
 
-**The failure is not one of this package's `AppError`s.** `instance-apply.ts`'s `migrate` case
-carries no `try`/`catch`, unlike `create-role` and `grant-membership`, so the raw driver failure
-reaches the caller unclassified. `cli.ts`'s `reportFailure` rethrows anything that is not an
+**The failure is not one of this package's `AppError`s.** `instance-apply.ts` wraps only
+`create-role` and `grant-membership` in a `try`/`catch`; `create-database`, `grant-database-create`,
+`grant-schema-create`, `migrate` and `stamp` are all uncaught, so the raw driver failure
+reaches the caller unclassified. That gap is **pre-existing and shared** rather than opened by this
+change — `git diff main...HEAD -- packages/provisioning/src/instance-apply.ts` is empty, and an
+admin without `CREATEDB` on a first provision, or the hard-42501 form of an object `GRANT`, reached
+it before. What this change did was make an instance of it easy for an operator to hit.
+`cli.ts`'s `reportFailure` rethrows anything that is not an
 `AppError`, and `bin.ts`'s top-level catch prints `unexpected failure (${error.name})`. Run through
 the built bundle, not traced: `pnpm --filter @waitron/provisioning build`, then a real
 `postgres:18-alpine` container migrated and stamped by a full admin exactly as above, then

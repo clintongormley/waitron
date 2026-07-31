@@ -582,9 +582,12 @@ describe("applyInstance against a blank container", () => {
         thrown = error;
       }
 
-      // NOT wrapped as a `provisioning.*` `AppError`: `instance-apply.ts`'s `migrate` case carries
-      // no `try`/`catch`, unlike `create-role` and `grant-membership`, so the raw driver failure
-      // and its SQLSTATE are what actually reaches a caller. `bin.ts` prints
+      // NOT wrapped as a `provisioning.*` `AppError`: `instance-apply.ts` wraps only `create-role`
+      // and `grant-membership` in a `try`/`catch` — `create-database`, `grant-database-create`,
+      // `grant-schema-create`, `migrate` and `stamp` are all uncaught — so the raw driver failure
+      // and its SQLSTATE are what actually reaches a caller. Pre-existing and shared, not opened by
+      // the branch that added this test: `instance-apply.ts` is byte-identical to `main`.
+      // `bin.ts` prints
       // `unexpected failure (${error.name})`, and `error.name` — NOT `error.constructor.name` —
       // is `"Error"` for a `DrizzleQueryError`: `drizzle-orm@0.45.2/errors.js`'s
       // `DrizzleQueryError` extends `Error` directly and never sets `this.name` (only the
