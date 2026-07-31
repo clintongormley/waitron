@@ -36,6 +36,7 @@ option viable is recorded in §9; this document is about the model change it req
 | D6 | **One implementation for both modes.** `kind:"immediate"` runs `settleSale`'s code in the same transaction, so the paths cannot drift |
 | D7 | **The `sales_coverage_checker` machinery is kept verbatim** — role, SECURITY DEFINER, bypass policies. Only the function body changes |
 | D8 | **The deferral goes.** Two deferred constraint triggers become one ordinary trigger, plus one new guard against post-settlement tenders |
+| D9 | **`tenders_amount_ck` tightens from `amount <> 0` to `amount > 0`.** The permission was an artefact of spelling, not a decision — established, not assumed (§3) |
 
 D5 is the load-bearing one. Splitting `recordSale` into two free functions would have made "chained
 an invoice and forgot to settle it" a silent state indistinguishable from a legitimate deferred
@@ -93,20 +94,40 @@ was never the useful shape.
 ```sql
 ADD COLUMN tip_amount numeric(12,2) NOT NULL DEFAULT '0.00'
 CHECK (tip_amount >= 0)
-CHECK (tip_amount = 0 OR tip_amount <= amount)
+CHECK (tip_amount <= amount)              -- a tender cannot be more tip than it is money
+
+-- and, in the same migration:
+tenders_amount_ck: amount <> 0  →  amount > 0
 ```
 
 `settled_at` stays `NOT NULL`: a row exists only once the money landed.
 
-**Why the second check is written the long way.** `tenders_amount_ck` is `amount <> 0`, **not**
-`amount > 0` ([`sales.ts:173`](../../../packages/db/src/schema/sales.ts)) — negative tender amounts
-are permitted today, and no comment anywhere says what they are for, which in this codebase is
-itself notable. The obvious `CHECK (tip_amount <= amount)` would therefore reject **every** negative
-tender, tip or no tip, since `0 <= -10` is false. The disjunctive form leaves negative tenders
-exactly as legal as they are now and forbids only the meaningless case: a tip attached to one.
+**Why the sign check is tightened here, and why it has to be.** `tenders_amount_ck` was
+`amount <> 0`, **not** `amount > 0` ([`sales.ts:173`](../../../packages/db/src/schema/sales.ts)), so
+negative tender amounts were legal. `CHECK (tip_amount <= amount)` would reject every one of them,
+tip or no tip, since `0 <= -10` is false — the two constraints cannot coexist.
 
-Whatever negative tenders exist for should be established and documented while this change is open —
-not assumed. If they turn out to be unreachable, removing them is a separate change, not this one.
+The permission turns out to be an artefact rather than a decision, and this was checked three ways
+rather than assumed:
+
+- **It is not for refunds.** `rg 'insert\(tenders\)'` across `core`, `payments` and
+  `payments-stripe` returns exactly one site, [`record-sale.ts:284`](../../../packages/core/src/record-sale.ts).
+  The payments package owns its own lifecycle tables and a void appends to `sale_voids`; nothing on
+  a refund path writes a tender.
+- **No rationale was recorded.** The check arrived in `10b16fd` (*"feat: sales spine — data model +
+  write path (plan 2) (#12)"*, 2026-07-21), whose message explains at length why `total`,
+  `tip_amount` and `amount_charged` are three columns and why the deferred trigger exists — and says
+  nothing about sign. The sales-spine design does not mention it either.
+- **Neither boundary is tested.** `tenders_amount_ck` appears in exactly one place in the
+  repository: its own definition. Every tender amount in `sales.test.ts` is positive.
+
+The reading that fits all three is that the check was written to reject a **zero** tender and `<> 0`
+was simply how it got spelled. Meanwhile the shape is reachable — `recordSale` takes the tender list
+from its caller and validates only the sum, so `[80.00, -10.00]` against a €70 sale passes today and
+means nothing. Tightening closes that and restores the simple tip check.
+
+The migration validates existing rows, so a stray negative tender in a developer's database fails
+the migration loudly rather than being silently dropped. There is no production data.
 
 Putting the tip here rather than on the sale is not only expedient. It attributes the tip to the
 payer who left it, which is exactly what sub-project 13 (*Tips — attribution + payroll export*)
@@ -243,7 +264,7 @@ A point-in-time check invites a later transaction to add another tender and chan
 
 Ordered, in one migration:
 
-1. `tenders.tip_amount` + its two checks
+1. `tenders.tip_amount` + its two checks, and `tenders_amount_ck` retightened to `amount > 0`
 2. `CREATE TABLE sale_settlements` + immutability and TRUNCATE triggers + RLS + policy + grants
 3. **Backfill** (below)
 4. Replace `sales_assert_tenders_cover`'s body
@@ -251,15 +272,15 @@ Ordered, in one migration:
    `tenders` post-settlement guard
 6. Drop `sales.tip_amount`, `sales.amount_charged` and their two checks
 
-**The backfill** assigns each existing sale's tip to its earliest positive tender —
-`ORDER BY settled_at, id LIMIT 1` over `amount > 0`, deterministic and independent of uuid ordering
-— and writes a `sale_settlements` row for every existing sale. The settlement row is correct by
-construction: under the old model a `sales` row could not exist unless its tenders already covered
-`amount_charged`. The tip assignment is a **guess with no information behind it** — the old schema
-recorded one tip per sale and never which payer left it — so it is only defensible because the
-alternative is losing the figure. Where a sale carries a non-zero tip and no positive tender, the
-old CHECK made that reachable only at `total + tip_amount = 0`; the backfill **asserts** rather than
-guessing there.
+**The backfill** assigns each existing sale's tip to its earliest tender —
+`ORDER BY settled_at, id LIMIT 1`, deterministic and independent of uuid ordering — and writes a
+`sale_settlements` row for every existing sale. It runs after step 1, so every surviving tender is
+positive by then. The settlement row is correct by construction: under the old model a `sales` row
+could not exist unless its tenders already covered `amount_charged`. The tip assignment is a **guess
+with no information behind it** — the old schema recorded one tip per sale and never which payer
+left it — so it is only defensible because the alternative is losing the figure. Where a sale
+carries a non-zero tip and no tender at all, the old CHECK made that reachable only at
+`total + tip_amount = 0`; the backfill **asserts** rather than guessing there.
 
 Nothing is deployed, so there is no production data — but dev and CI databases run this path, so it
 still has to be right.
@@ -296,6 +317,11 @@ the claimed reason:
 | `tenders` post-settlement guard | a tender inserted after settlement |
 | `sale_settlements` immutability + TRUNCATE triggers | UPDATE / DELETE / TRUNCATE |
 | `tenders_tip_amount_ck` (`<= amount`) | a tender that is more tip than money |
+| `tenders_amount_ck` (`> 0`) | a zero tender **and** a negative one |
+
+That last row closes a gap this design found rather than created: the constraint had **no test at
+all** before, in either direction. Both boundaries get one, so the tightening is a visible behaviour
+change rather than an untested edit.
 
 ### Concurrency on the real target only
 
@@ -447,4 +473,6 @@ server-driven WiFi ESC/POS printer is, and stays consistent with D3 of the deli 
 | Tips outside the VAT base, not invoiced | **Secondary** — asesor commentary citing DGT consulta vinculante 2174-03. Not read at source. See §9.2 |
 | No production reader of `amount_charged` | `rg 'amountCharged\|amount_charged' packages apps`, 2026-07-31 |
 | No writer of working orders | `rg -l 'workingOrderLines\|workingOrders' packages/*/src apps/*/src`, 2026-07-31 |
+| Only one site inserts tenders; refunds do not | `rg 'insert\(tenders\)' packages/core/src packages/payments/src packages/payments-stripe/src`, 2026-07-31 |
+| `tenders_amount_ck` has no rationale and no test | `git log -S tenders_amount_ck` → `10b16fd` (2026-07-21), whose message never mentions sign; `rg tenders_amount_ck` returns only its own definition |
 | Fail-open behaviour of an invoker-rights coverage function | [`packages/db/drizzle/0005_sales.sql`](../../../packages/db/drizzle/0005_sales.sql), verified live at the time it was written |
