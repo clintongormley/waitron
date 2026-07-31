@@ -1,10 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
-import { isInertPath } from "../.github/scripts/changed-scope.mjs";
+import { classify, isInertPath } from "../.github/scripts/changed-scope.mjs";
 
-// Maps a push's changed paths onto workspace packages, so `.husky/pre-push` can typecheck and test
-// only what the push can reach. CI answers the same question with pnpm's own changed-since filter
+// Answers, in ONE call, the only question `.husky/pre-push` asks about a push's changed paths: is
+// this documentation, is it something that could reach anything, or is it a specific set of
+// packages? CI answers the package half with pnpm's own changed-since filter
 // (`--filter "...[origin/main]"`, ci.yml's `changes` job); this file exists because that filter
 // CANNOT be used here.
 //
@@ -41,7 +42,7 @@ import { isInertPath } from "../.github/scripts/changed-scope.mjs";
  *
  * `null` and the empty array are deliberately different answers, the same distinction
  * `packagesInScope` keeps in .github/scripts/changed-scope.mjs: `null` is "we do not know", which
- * `packagesForPaths` turns into a global run, while an empty array would be the definite answer
+ * `scopeForPaths` turns into a global run, while an empty array would be the definite answer
  * "this workspace has no members".
  *
  * The `Array.isArray` and per-entry type checks are what separate a real result from pnpm reporting
@@ -114,59 +115,76 @@ function owningPackage(path, packages) {
 }
 
 /**
- * Maps a push's changed paths onto the packages that must be typechecked and tested.
+ * The whole verdict on a push's changed paths, from ONE call: `{ kind, packages, reason }`, where
+ * `kind` is one of THREE outcomes and the hook does something different for each.
  *
- * Returns `{ packages, global, reason }`. When `global` is true the package list is EMPTY rather
- * than partial — a caller that reads the list without checking the flag then narrows to nothing
- * visible instead of to a plausible-looking subset.
+ *   "documentation"  every changed path is prose. format:check still reads it (`.prettierignore`
+ *                    excludes `docs/` but NOT a root-level `CLAUDE.md` or `README.md` — run here on
+ *                    2026-08-01: `prettier --file-info docs/backlog.md` is `"ignored": true`,
+ *                    `--file-info CLAUDE.md` is `"ignored": false, "inferredParser": "markdown"`,
+ *                    and appending a mis-formatted heading to CLAUDE.md makes `prettier --check`
+ *                    exit 1). Nothing else can read it.
+ *   "global"         run everything: a path outside every package, an unreadable workspace, or a
+ *                    push whose contents could not be determined at all.
+ *   "packages"       `packages` names the members to narrow to. Non-empty exactly here.
  *
- * Fails closed in three ways, all of them onto a global run:
+ * The predecessor returned ONE object for the first two — `{packages: [], global: true, reason: "no
+ * changed code path could be determined — running everything"}` — so a documentation-only push read
+ * as "run everything" from this module, and was narrowed only because the hook consulted a SECOND
+ * classifier first and exited before asking. That ordering contract lived in the shell rather than
+ * here, so any other caller got it wrong by default; and the reason string was false in the docs
+ * case, because the paths WERE determined, they were prose.
  *
- *   - the workspace could not be read (`packages` is `null`);
- *   - no changed path could be determined — the hook could work out no push range, so it does not
- *     know what is being pushed. Same principle as `classify` in changed-scope.mjs and as the
- *     deletion guard in the hook itself;
- *   - a path lands outside every package: `.github/`, `.husky/`, `scripts/`, `pnpm-workspace.yaml`,
- *     `tsconfig.base.json`, the root manifest and lockfile. Those can affect anything.
+ * `loadPackages` is a THUNK, not a value, and the documentation and undetermined outcomes return
+ * without calling it. The hook's thunk shells out to `pnpm ls -r --depth -1 --json`: timed here on
+ * 2026-08-01 by wrapping ten `subprocess.run` calls in `time.time()`, that command took 191-200ms
+ * every time, which a docs-only push has no use for. `scripts/changed-packages.test.mjs` asserts
+ * the thunk is untouched on both outcomes, so that is a tested property rather than a reading of
+ * the control flow.
  *
- * DOCUMENTATION is dropped before attribution rather than making the run global, and that is a
- * deliberate exception with a cost if it is got wrong. `isInertPath` is imported from
- * .github/scripts/changed-scope.mjs rather than reimplemented, so "what counts as documentation"
- * has exactly one definition and the hook cannot classify a push as having code work and then find
- * no code path to attribute. Without the exception a global run would be the common case, not the
- * rare one: CLAUDE.md §7 and docs/backlog.md's own closing section both tell every branch to update
- * those files in the change that makes them stale, so nearly every push in this repository carries
- * a `docs/` or root-Markdown path.
+ * DOCUMENTATION is decided by `classify` from .github/scripts/changed-scope.mjs — the same function
+ * CI's docs gate calls — and the per-path filter below by that module's `isInertPath`, so "what
+ * counts as documentation" has exactly one definition and this cannot report code work and then
+ * find no code path to attribute. Without the exception a global run would be the common case, not
+ * the rare one: CLAUDE.md §7 and docs/backlog.md's own closing section both tell every branch to
+ * update those files in the change that makes them stale, so nearly every push in this repository
+ * carries a `docs/` or root-Markdown path.
+ *
+ * When `kind` is not "packages" the list is EMPTY rather than partial, so a caller that reads it
+ * without checking `kind` narrows to nothing visible instead of to a plausible-looking subset.
  */
-export function packagesForPaths(changedPaths, packages) {
+export function scopeForPaths(changedPaths, loadPackages) {
+  const meaningful = changedPaths.map((path) => path.trim()).filter((path) => path.length > 0);
+  const { code, reason } = classify(meaningful);
+
+  // Prose only. `classify`'s own reason already says so — "all N changed path(s) are documentation".
+  if (!code) return { kind: "documentation", packages: [], reason };
+
+  // Fails CLOSED, the same principle as `classify` itself and as the hook's deletion guard: an empty
+  // list means we could not work out what is being pushed, not that nothing is. `classify` says
+  // "no changed paths could be determined — running everything", which is what this does.
+  if (meaningful.length === 0) return { kind: "global", packages: [], reason };
+
+  const packages = loadPackages();
   if (packages === null) {
     return {
+      kind: "global",
       packages: [],
-      global: true,
       reason: "the workspace layout could not be read — running everything",
     };
   }
 
-  const meaningful = changedPaths
-    .map((path) => path.trim())
-    .filter((path) => path.length > 0 && !isInertPath(path));
-
-  if (meaningful.length === 0) {
-    return {
-      packages: [],
-      global: true,
-      reason: "no changed code path could be determined — running everything",
-    };
-  }
-
+  const codePaths = meaningful.filter((path) => !isInertPath(path));
   const attributed = new Set();
 
-  for (const path of meaningful) {
+  for (const path of codePaths) {
     const owner = owningPackage(path, packages);
+    // `.github/`, `.husky/`, `scripts/`, `pnpm-workspace.yaml`, `tsconfig.base.json`, the root
+    // manifest and the lockfile all land here. Those can affect anything.
     if (owner === undefined) {
       return {
+        kind: "global",
         packages: [],
-        global: true,
         reason: `${path} belongs to no package — running everything`,
       };
     }
@@ -175,22 +193,24 @@ export function packagesForPaths(changedPaths, packages) {
 
   const names = [...attributed].sort();
   return {
+    kind: "packages",
     packages: names,
-    global: false,
-    reason: `${meaningful.length} changed code path(s) map to ${names.join(", ")}`,
+    reason: `${codePaths.length} changed code path(s) map to ${names.join(", ")}`,
   };
 }
 
 /**
  * Renders a scope as the two lines the hook reads.
  *
- * A single space separates the package names, because the hook splits the line on whitespace to
- * build one `--filter "...<pkg>"` argument per name. Workspace package names carry no whitespace
- * and no shell glob characters (`pnpm ls -r --depth -1 --json` in this worktree on 2026-07-31: all
- * fifteen members are `@waitron/<lowercase-and-hyphens>`), which is what makes that split safe.
+ * A single space separates the package names, and that separator is the contract between this file
+ * and the hook, asserted as such below. The hook still WORD-SPLITS this line — `for pkg in
+ * $scope_packages` — so a name containing whitespace would still come apart into two filters. What
+ * changed is what happens after the split: each word is appended with `set -- "$@" --filter
+ * "...$pkg"` rather than concatenated into a string for `eval`, so there is no second shell pass to
+ * reinterpret a quote, a `$`, a backtick or a glob in a name.
  */
-export function formatScope({ packages, global }) {
-  return `global=${global}\npackages=${packages.join(" ")}`;
+export function formatScope({ kind, packages }) {
+  return `scope=${kind}\npackages=${packages.join(" ")}`;
 }
 
 // CLI: changed paths on stdin, one per line → two `<name>=<value>` lines on stdout.
@@ -198,24 +218,29 @@ export function formatScope({ packages, global }) {
 // The workspace layout is resolved HERE rather than passed in, because the two inputs cannot share
 // stdin and threading a JSON document through argv or a temporary file buys nothing. A `pnpm ls`
 // that fails for any reason — not installed, not a workspace, killed — leaves `stdout` null or
-// empty, which `workspacePackages` reads as `null` and `packagesForPaths` turns into a global run.
+// empty, which `workspacePackages` reads as `null` and `scopeForPaths` turns into a global run.
 //
-// stdout carries the two lines and NOTHING else: the hook reads it with `grep`/`cut`, so a stray
-// line there becomes a bogus scope. The human-readable reason goes to stderr, where the hook prints
-// it for whoever is watching the push.
+// It runs `pnpm ls` from inside the thunk, so a documentation-only push never pays for it. That it
+// runs at all without `pnpm install` having happened first — the hook now classifies BEFORE
+// installing — was measured rather than assumed: in a `git clone --no-hardlinks` of the main
+// checkout, with no `node_modules` directory anywhere in it, `pnpm ls -r --depth -1 --json` exited 0
+// with 3917 bytes on stdout, nothing on stderr, and all 16 entries (2026-08-01, pnpm 9.15.0).
+//
+// stdout carries the two lines and NOTHING else: the hook reads it with `sed`, so a stray line
+// there becomes a bogus scope. The human-readable reason goes to stderr, where the hook prints it
+// for whoever is watching the push.
 //
 // Ignored for coverage because the tests run it in a CHILD process, and the v8 provider only
 // measures the module graph loaded into the test process — so this block reads as 0% however
 // thoroughly it is exercised. Ignored for being unmeasurable, not for being untested: delete the
-// `describe("the CLI")` suite and five assertions about this block go with it, including the only
+// `describe("the CLI")` suite and six assertions about this block go with it, including the only
 // two that run the real `pnpm ls` against the real workspace.
 /* v8 ignore start */
 if (process.argv[1] && process.argv[1].endsWith("changed-packages.mjs")) {
-  const ls = spawnSync("pnpm", ["ls", "-r", "--depth", "-1", "--json"], { encoding: "utf8" });
-  const scope = packagesForPaths(
-    readFileSync(0, "utf8").split("\n"),
-    workspacePackages(ls.stdout ?? "", process.cwd()),
-  );
+  const scope = scopeForPaths(readFileSync(0, "utf8").split("\n"), () => {
+    const ls = spawnSync("pnpm", ["ls", "-r", "--depth", "-1", "--json"], { encoding: "utf8" });
+    return workspacePackages(ls.stdout ?? "", process.cwd());
+  });
 
   console.error(`changed-packages: ${scope.reason}`);
   console.log(formatScope(scope));

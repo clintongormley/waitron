@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { classify } from "../.github/scripts/changed-scope.mjs";
-import { formatScope, packagesForPaths, workspacePackages } from "./changed-packages.mjs";
+import { formatScope, scopeForPaths, workspacePackages } from "./changed-packages.mjs";
 
 const ROOT = "/repo";
 
@@ -86,41 +86,54 @@ describe("workspacePackages", () => {
   });
 });
 
-describe("packagesForPaths", () => {
+/** `scopeForPaths`'s workspace argument, as a thunk that records whether it was called. */
+const loader = (packages) => {
+  const load = () => {
+    load.called = true;
+    return packages;
+  };
+  load.called = false;
+  return load;
+};
+
+/** The common case: a workspace that is there when asked for. */
+const workspace = (packages = WORKSPACE) => loader(packages);
+
+describe("scopeForPaths", () => {
   it("attributes a source file to the package that owns it", () => {
-    expect(packagesForPaths(["packages/db/src/index.ts"], WORKSPACE)).toMatchObject({
+    expect(scopeForPaths(["packages/db/src/index.ts"], workspace())).toMatchObject({
+      kind: "packages",
       packages: ["@waitron/db"],
-      global: false,
     });
   });
 
   it("attributes a file at a package's own root, not only under src/", () => {
-    expect(packagesForPaths(["packages/db/package.json"], WORKSPACE).packages).toEqual([
+    expect(scopeForPaths(["packages/db/package.json"], workspace()).packages).toEqual([
       "@waitron/db",
     ]);
   });
 
   it("deduplicates and sorts the packages it attributes", () => {
     expect(
-      packagesForPaths(
+      scopeForPaths(
         [
           "packages/payments/src/reconcile.ts",
           "packages/db/src/index.ts",
           "packages/db/src/schema.ts",
         ],
-        WORKSPACE,
+        workspace(),
       ).packages,
     ).toEqual(["@waitron/db", "@waitron/payments"]);
   });
 
   it("ignores blank lines, which a git diff pipe can produce", () => {
-    expect(packagesForPaths(["packages/db/src/index.ts", "", "  "], WORKSPACE)).toMatchObject({
+    expect(scopeForPaths(["packages/db/src/index.ts", "", "  "], workspace())).toMatchObject({
+      kind: "packages",
       packages: ["@waitron/db"],
-      global: false,
     });
   });
 
-  // The whole point of the `global` flag: these paths can affect anything, so nothing may be
+  // The whole point of the `global` outcome: these paths can affect anything, so nothing may be
   // narrowed away on account of them.
   it.each([
     ".github/workflows/ci.yml",
@@ -134,20 +147,18 @@ describe("packagesForPaths", () => {
     "package.json",
     "scripts/changed-packages.mjs",
   ])("reports a global run for %s, which belongs to no package", (path) => {
-    expect(packagesForPaths([path], WORKSPACE).global).toBe(true);
+    expect(scopeForPaths([path], workspace()).kind).toBe("global");
   });
 
-  // `global` and a package list are not two answers to be combined by the caller — the list is
-  // empty precisely so a caller that reads it without checking `global` narrows to nothing rather
+  // `kind` and the package list are not two answers to be combined by the caller — the list is
+  // empty precisely so a caller that reads it without checking `kind` narrows to nothing rather
   // than to a plausible-looking subset.
   it("empties the package list when the run is global", () => {
-    expect(packagesForPaths(["packages/db/src/index.ts", "tsconfig.base.json"], WORKSPACE)).toEqual(
-      {
-        packages: [],
-        global: true,
-        reason: expect.stringContaining("tsconfig.base.json"),
-      },
-    );
+    expect(scopeForPaths(["packages/db/src/index.ts", "tsconfig.base.json"], workspace())).toEqual({
+      kind: "global",
+      packages: [],
+      reason: expect.stringContaining("tsconfig.base.json"),
+    });
   });
 
   // Documentation must NOT force a global run. CLAUDE.md §7 tells every branch to update CLAUDE.md
@@ -155,8 +166,53 @@ describe("packagesForPaths", () => {
   // docs/ path would widen on nearly every branch in this repository.
   it("does not let a documentation path widen the run", () => {
     expect(
-      packagesForPaths(["docs/backlog.md", "CLAUDE.md", "packages/db/src/index.ts"], WORKSPACE),
-    ).toMatchObject({ packages: ["@waitron/db"], global: false });
+      scopeForPaths(["docs/backlog.md", "CLAUDE.md", "packages/db/src/index.ts"], workspace()),
+    ).toMatchObject({ kind: "packages", packages: ["@waitron/db"] });
+  });
+
+  // THE distinction this function exists for. Its predecessor, packagesForPaths, returned the same
+  // object for both — `{packages: [], global: true, reason: "no changed code path could be
+  // determined — running everything"}` — so a documentation-only push read as "run everything", and
+  // was only narrowed because the hook happened to consult a SECOND classifier first and exit. That
+  // ordering contract lived in the shell, not here, so any other caller got it wrong by default.
+  // The reason string was false in the docs case too: the paths WERE determined, they were prose.
+  it("gives a documentation-only push its own outcome, distinct from an undetermined one", () => {
+    const docs = scopeForPaths(["docs/backlog.md", "CLAUDE.md"], workspace());
+    const undetermined = scopeForPaths([], workspace());
+
+    expect(docs.kind).toBe("documentation");
+    expect(undetermined.kind).toBe("global");
+    expect(docs).not.toEqual(undetermined);
+  });
+
+  it("says the paths were documentation, not that they could not be determined", () => {
+    expect(scopeForPaths(["docs/backlog.md", "CLAUDE.md"], workspace()).reason).toBe(
+      "all 2 changed path(s) are documentation",
+    );
+    expect(scopeForPaths([], workspace()).reason).toBe(
+      "no changed paths could be determined — running everything",
+    );
+  });
+
+  // The measured reason for computing the documentation verdict FIRST: resolving the workspace
+  // means `pnpm ls -r --depth -1 --json`, which cost 195ms of a 5.5s docs-path budget. A thunk, not
+  // a value, is what lets this be asserted rather than reasoned about.
+  it("does not read the workspace at all for a documentation-only push", () => {
+    const load = workspace();
+    expect(scopeForPaths(["docs/backlog.md", "CLAUDE.md"], load).kind).toBe("documentation");
+    expect(load.called).toBe(false);
+  });
+
+  it("does not read the workspace when no changed path could be determined either", () => {
+    const load = workspace();
+    expect(scopeForPaths([""], load).kind).toBe("global");
+    expect(load.called).toBe(false);
+  });
+
+  it("reads the workspace when there is a code path to attribute", () => {
+    const load = workspace();
+    scopeForPaths(["packages/db/src/index.ts"], load);
+    expect(load.called).toBe(true);
   });
 
   // Same predicate as the docs gate, so the hook cannot classify a push as "has code work" and then
@@ -165,28 +221,28 @@ describe("packagesForPaths", () => {
   it("treats exactly the paths classify() calls documentation as documentation", () => {
     const docsOnly = ["docs/superpowers/specs/x.md", "README.md"];
     expect(classify(docsOnly).code).toBe(false);
-    expect(packagesForPaths(docsOnly, WORKSPACE).global).toBe(true);
+    expect(scopeForPaths(docsOnly, workspace()).kind).toBe("documentation");
 
     const code = [...docsOnly, "packages/verifactu/schemas/README.md"];
     expect(classify(code).code).toBe(true);
-    expect(packagesForPaths(code, WORKSPACE).global).toBe(true);
+    expect(scopeForPaths(code, workspace()).kind).toBe("global");
   });
 
   // Fails CLOSED, the same principle as classify() and as the hook's own deletion guard: an empty
   // list means we could not work out what is being pushed, not that nothing is.
   it("fails closed when no changed path could be determined", () => {
-    expect(packagesForPaths([], WORKSPACE)).toMatchObject({ packages: [], global: true });
-    expect(packagesForPaths([""], WORKSPACE)).toMatchObject({
+    expect(scopeForPaths([], workspace())).toMatchObject({ kind: "global", packages: [] });
+    expect(scopeForPaths([""], workspace())).toMatchObject({
+      kind: "global",
       packages: [],
-      global: true,
       reason: expect.stringMatching(/running everything/i),
     });
   });
 
   it("fails closed when the workspace could not be read", () => {
-    expect(packagesForPaths(["packages/db/src/index.ts"], null)).toMatchObject({
+    expect(scopeForPaths(["packages/db/src/index.ts"], workspace(null))).toMatchObject({
+      kind: "global",
       packages: [],
-      global: true,
     });
   });
 
@@ -199,18 +255,18 @@ describe("packagesForPaths", () => {
   // passes, and the run never widens.
   it("does not attribute a path whose directory merely shares a prefix with a package", () => {
     const dbOnly = workspacePackages(ls(member("@waitron/db", "packages/db")), ROOT);
-    expect(packagesForPaths(["packages/db-extra/src/a.ts"], dbOnly)).toMatchObject({
+    expect(scopeForPaths(["packages/db-extra/src/a.ts"], workspace(dbOnly))).toMatchObject({
+      kind: "global",
       packages: [],
-      global: true,
     });
   });
 
   it("attributes the sibling once it IS a workspace member", () => {
-    const workspace = workspacePackages(
+    const both = workspacePackages(
       ls(member("@waitron/db", "packages/db"), member("@waitron/db-extra", "packages/db-extra")),
       ROOT,
     );
-    expect(packagesForPaths(["packages/db-extra/src/a.ts"], workspace).packages).toEqual([
+    expect(scopeForPaths(["packages/db-extra/src/a.ts"], workspace(both)).packages).toEqual([
       "@waitron/db-extra",
     ]);
   });
@@ -218,37 +274,47 @@ describe("packagesForPaths", () => {
   // No workspace member contains another today, but pnpm-workspace.yaml is one line from making it
   // so, and the failure would be silent: the outer package's suite runs, the inner one's does not.
   it("attributes a nested package to the innermost directory that contains it", () => {
-    const workspace = workspacePackages(
+    const nested = workspacePackages(
       ls(member("@waitron/outer", "bench"), member("@waitron/inner", "bench/pglite-throughput")),
       ROOT,
     );
-    expect(packagesForPaths(["bench/pglite-throughput/src/x.ts"], workspace).packages).toEqual([
-      "@waitron/inner",
+    expect(scopeForPaths(["bench/pglite-throughput/src/x.ts"], workspace(nested)).packages).toEqual(
+      ["@waitron/inner"],
+    );
+    expect(scopeForPaths(["bench/other.ts"], workspace(nested)).packages).toEqual([
+      "@waitron/outer",
     ]);
-    expect(packagesForPaths(["bench/other.ts"], workspace).packages).toEqual(["@waitron/outer"]);
   });
 
   it("names the path that forced a global run", () => {
-    expect(packagesForPaths([".husky/pre-push"], WORKSPACE).reason).toContain(".husky/pre-push");
+    expect(scopeForPaths([".husky/pre-push"], workspace()).reason).toContain(".husky/pre-push");
   });
 
   it("names the packages it attributed", () => {
-    expect(packagesForPaths(["packages/db/src/index.ts"], WORKSPACE).reason).toContain(
+    expect(scopeForPaths(["packages/db/src/index.ts"], workspace()).reason).toContain(
       "@waitron/db",
     );
   });
 });
 
 describe("formatScope", () => {
-  it("emits the global flag and the package list, in that order", () => {
-    expect(formatScope(packagesForPaths(["packages/db/src/index.ts"], WORKSPACE))).toBe(
-      "global=false\npackages=@waitron/db",
+  it("emits the outcome and the package list, in that order", () => {
+    expect(formatScope(scopeForPaths(["packages/db/src/index.ts"], workspace()))).toBe(
+      "scope=packages\npackages=@waitron/db",
     );
   });
 
   it("emits an empty package list for a global run", () => {
-    expect(formatScope(packagesForPaths([".husky/pre-push"], WORKSPACE))).toBe(
-      "global=true\npackages=",
+    expect(formatScope(scopeForPaths([".husky/pre-push"], workspace()))).toBe(
+      "scope=global\npackages=",
+    );
+  });
+
+  // The third outcome, which the hook reads to skip lint, typecheck and the tests while still
+  // running format:check. It must not be spelled the same as a global run.
+  it("emits its own line for a documentation-only push", () => {
+    expect(formatScope(scopeForPaths(["docs/backlog.md"], workspace()))).toBe(
+      "scope=documentation\npackages=",
     );
   });
 
@@ -257,9 +323,9 @@ describe("formatScope", () => {
   it("separates several packages with a single space", () => {
     expect(
       formatScope(
-        packagesForPaths(["packages/db/src/a.ts", "packages/payments/src/b.ts"], WORKSPACE),
+        scopeForPaths(["packages/db/src/a.ts", "packages/payments/src/b.ts"], workspace()),
       ),
-    ).toBe("global=false\npackages=@waitron/db @waitron/payments");
+    ).toBe("scope=packages\npackages=@waitron/db @waitron/payments");
   });
 });
 
@@ -283,22 +349,26 @@ describe("the CLI", () => {
   };
 
   it("resolves this workspace and attributes a real package directory", () => {
-    expect(run("packages/db/src/index.ts\n").stdout).toBe("global=false\npackages=@waitron/db\n");
+    expect(run("packages/db/src/index.ts\n").stdout).toBe("scope=packages\npackages=@waitron/db\n");
   });
 
   it("attributes several real package directories", () => {
     expect(run("packages/db/src/index.ts\napps/server/src/boot.ts\n").stdout).toBe(
-      "global=false\npackages=@waitron/db @waitron/server\n",
+      "scope=packages\npackages=@waitron/db @waitron/server\n",
     );
   });
 
   it("reports a global run for root configuration", () => {
-    expect(run("tsconfig.base.json\n").stdout).toBe("global=true\npackages=\n");
+    expect(run("tsconfig.base.json\n").stdout).toBe("scope=global\npackages=\n");
+  });
+
+  it("reports a documentation-only push through the CLI too", () => {
+    expect(run("docs/backlog.md\nCLAUDE.md\n").stdout).toBe("scope=documentation\npackages=\n");
   });
 
   it("fails closed on empty stdin", () => {
-    expect(run("").stdout).toBe("global=true\npackages=\n");
-    expect(run("\n").stdout).toBe("global=true\npackages=\n");
+    expect(run("").stdout).toBe("scope=global\npackages=\n");
+    expect(run("\n").stdout).toBe("scope=global\npackages=\n");
   });
 
   it("puts the reason on stderr, where the hook's grep cannot reach it", () => {

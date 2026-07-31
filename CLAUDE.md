@@ -161,9 +161,12 @@ pnpm lint && pnpm typecheck && pnpm format:check && pnpm test
 Traps that each cost a round trip (deliberately uncounted — the last version of this line said
 "four" and went stale the moment one was added):
 
-- **CI's test shards run `test:coverage`, not `test`.** The pre-push hook runs plain `pnpm test`, so
-  a coverage-threshold regression passes locally and fails in CI. Before claiming a package is green,
-  run `pnpm --filter <pkg> test:coverage`. There is no `test` job to name any more:
+- **CI's test shards run `test:coverage`, not `test`.** The four-command gate above ends in plain
+  `pnpm test`, so a coverage-threshold regression passes there and fails in CI. Before claiming a
+  package is green, run `pnpm --filter <pkg> test:coverage`. The PRE-PUSH HOOK no longer has this
+  gap — `.husky/pre-push` has run `test:coverage` since `feat/scoped-pre-push-hook`, which is what
+  closed it — but the hook narrows to the changed packages and their dependents, so its green is
+  evidence about those and not about the workspace. There is no `test` job to name any more:
   `.github/workflows/ci.yml` splits it into `test-heavy` (`packages/db` alone) and `test-light`
   (everything else, `--no-sort`).
 - **CI does not run every check on every push.** `ci.yml`'s `changes` job skips the expensive jobs
@@ -214,9 +217,11 @@ Traps that each cost a round trip (deliberately uncounted — the last version o
   all. Make the binding used — `export const brokenProbe: number = "not a number";` — and
   `pnpm typecheck`, `pnpm lint` AND `pnpm vitest run` all exit **0**. Nothing in this repository
   typechecks root config, so a type error there reaches `main` unremarked.
-- **The pre-push hook does not run `--frozen-lockfile`.** Moving a dependency between
-  `dependencies` and `devDependencies` passes locally and fails CI at the install step. Run
-  `pnpm install` and commit the lockfile.
+- **`--frozen-lockfile` is not in the gate above either.** Moving a dependency between
+  `dependencies` and `devDependencies` passes a plain `pnpm install` and fails CI at the install
+  step. Run `pnpm install` and commit the lockfile. The pre-push hook DOES run
+  `pnpm install --frozen-lockfile`, added on `feat/scoped-pre-push-hook`, so what is left uncovered
+  is the four-command gate rather than the hook.
 - **A filtered test run does not load a package's guard suites.**
   `pnpm --filter @waitron/db test provisioner-role` was green while
   `pnpm --filter @waitron/db test:coverage` failed on the same tree: the filter never loaded

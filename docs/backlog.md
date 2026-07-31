@@ -41,7 +41,7 @@ reprioritisation rather than assumed.
 | **This backlog** | **Merged** (#21) |
 | **Pre-push hook skips deletions** | **Merged** (#23) |
 | **Scoped CI** — stop running every check on every push | **Done.** Both merged: #25 (the `ci` gate) and #27 (the scoping). Against the 7m20s baseline: a documentation-only pull request now takes **44s**, and a full unfiltered `push` on `main` **4m12s**. Two follow-ups remain under **Debt and odd jobs** |
-| **Scoped pre-push hook** — the same treatment for the local gate | **In flight** on `feat/scoped-pre-push-hook`. Scopes typecheck and tests to the changed packages, adds the sign-off check CI was catching for us, and runs `test:coverage` rather than `test`. What it still does not cover is under **Debt and odd jobs** |
+| **Scoped pre-push hook** — the same treatment for the local gate | **In flight** on `feat/scoped-pre-push-hook`. Scopes typecheck and tests to the changed packages, adds the sign-off check CI was catching for us, runs `test:coverage` rather than `test`, and skips `lint` on a documentation-only push. Measured on this machine against the same crafted pushes before and after the cleanup round: docs-only **5.1s → 3.2s**, an unsigned commit **1.0s → 0.1s**, one package 8.5s, whole workspace 115s. What it still does not cover is under **Debt and odd jobs** |
 | **Cloud storage model** — design | **Merged** (#19), corrected by **#22** |
 | **Sale settlement model** — implementation plan | Not written. **The next build step** |
 | **Close Q13 and Q15 on primary source** | Not started. Cheaper than hiring — see below |
@@ -169,9 +169,15 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
 
 - **The pre-push hook is scoped now, and its DECISIONS are tested — the shell itself still is not.**
   The hook maps the push's changed paths onto workspace packages and runs `typecheck` and
-  `test:coverage` against those packages and their dependents, skipping both entirely on a
-  documentation-only push. It also closes two things that reached CI this session: a commit with no
-  `Signed-off-by` (`git revert --no-edit` writes none), and coverage thresholds, which the hook
+  `test:coverage` against those packages and their dependents, skipping those two **and `lint`**
+  entirely on a documentation-only push. `lint` is skipped there on a measurement, not a hunch:
+  `pnpm exec eslint . --format json` reports 419 files — 412 `.ts`, 6 `.mjs`, 1 `.js` — with zero
+  Markdown and zero under `docs/`, so eslint cannot read anything such a push contains.
+  `format:check` is NOT skipped, because `.prettierignore` covers `docs/` but not a root-level
+  `CLAUDE.md` or `README.md` (`prettier --file-info` says `ignored: true` for the first and
+  `ignored: false` for the other two, and a mis-formatted heading appended to `CLAUDE.md` makes
+  `prettier --check` exit 1). It also closes two things that reached CI this session: a commit with
+  no `Signed-off-by` (`git revert --no-edit` writes none), and coverage thresholds, which the hook
   never ran because `pnpm test` is not `pnpm test:coverage`.
 
   The new classifier `scripts/changed-packages.mjs` is fully tested by the root Vitest project,
@@ -191,6 +197,46 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   anything, and it is the entry below that would make it cheap. And the hook still does not run
   mutation testing or the `bundle-smoke` builds, so a green hook does not imply a green CI. Both are
   stated in the hook's header rather than left for a reader to discover
+- **CI SKIPS `test-heavy` and both mutation runs on a root-config-only pull request — a known
+  defect, not a design choice.** `ci.yml`'s `changes` job resolves scope with
+  `pnpm --filter "...[origin/$BASE_REF]" ls --depth -1 --json`, and a change that belongs to no
+  workspace member resolves to the workspace ROOT. Run locally on 2026-08-01 against a
+  `git clone --no-hardlinks` of this repository (a clone, because the same filter matches nothing in
+  a worktree — `CLAUDE.md` §2), branching off `main` and committing one change to
+  `tsconfig.base.json`: that filter printed exactly **one** entry, `{"name": "waitron"}`, and piping
+  it into `node .github/scripts/changed-scope.mjs gates` gave
+  `heavy=false light=true verifactu=false shared=false`. So `test-heavy` — `packages/db`, the 189s
+  suite — and both mutation jobs are skipped by a change to the TypeScript configuration every
+  package extends. A `pnpm-lock.yaml`-only commit gave byte-identical output. The control ran too:
+  one commit touching `packages/db/src/index.ts` gave 11 entries and `heavy=true`.
+
+  `test-light` is gated `true` and does get a runner, but selects nothing to run. Its step is
+  `pnpm --filter "$SCOPE" --filter "!@waitron/db" --no-sort test:coverage`, which on that scope
+  resolves to the workspace root alone — and pnpm does not run a filtered script in the workspace
+  root without `--include-workspace-root`. Measured in this worktree:
+  `pnpm --filter "waitron" --no-sort typecheck` prints `No projects matched the filters`, while
+  adding `--include-workspace-root` runs it. So no package's suite executes on that pull request at
+  all. What still runs is the ungated `lint` job, which is `pnpm lint`, `pnpm format:check` and
+  `pnpm vitest run --coverage` — the repo-level project only.
+
+  Not fixed on `feat/scoped-pre-push-hook` deliberately: it changes what CI runs, so it wants its
+  own pull request and its own verification on a real run rather than a local reproduction of the
+  commands. The obvious fix is to make an unattributable path fail closed to every gate, which is
+  what the pre-push hook already does — `scripts/changed-packages.mjs` returns `scope=global` for
+  exactly these paths, and the hook then runs the whole workspace
+- **The sign-off (DCO) check is implemented twice, byte-identically.** `.husky/pre-push`'s
+  `check_signoff` and `licence.yml`'s `dco` job carry the same
+  `grep -qiE '^Signed-off-by: .+ <.+@.+>'` over the same per-commit loop. That duplication is
+  deliberate for now — the hook's copy was written to match CI's exactly, and the two agreeing is
+  the whole point — but the way to keep them agreeing is one script both call, not two copies and a
+  comment. Held back from `feat/scoped-pre-push-hook` because extracting it edits a workflow that
+  branch otherwise never touches
+- **`scripts/` and `.github/scripts/` are one directory's worth of code in two places.**
+  `scripts/changed-packages.mjs` imports `classify` and `isInertPath` from
+  `.github/scripts/changed-scope.mjs`; the root Vitest project's `include` and its coverage
+  `include`/`exclude` each name both directories; `vitest.config.ts` explains at length that
+  `**/[.]**` had to be filtered out of the coverage defaults to reach the dot-prefixed one. Merging
+  them removes the split and the paragraph. Small, and nothing depends on it
 - **`errors.reachability.test.ts` does not test reachability.** Proven by deletion. Eight packages
   carry a copy. Closing it needs a `tsc`-based downstream probe or a narrowed `include`. See
   `CLAUDE.md` §4 — do not cite these tests as evidence in the meantime
