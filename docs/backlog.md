@@ -286,3 +286,5 @@ particular:
 - When a piece lands, move it out of **Next** rather than leaving it to be discovered.
 - When a question is closed on primary source, say so and stop calling it blocked.
 - Delete finished items. This is not a history; the git log is.
+
+<!-- probe: docs-only change to prove the gate skips. Reverted in the next commit. -->
