@@ -243,7 +243,13 @@ export default tseslint.config(
     // `apps/server/scripts/copy-migrations.mjs` was the first `.mjs` in this repo;
     // `packages/provisioning/scripts/copy-migrations.mjs` is its near-copy, shipping the same
     // migration folders beside `waitron-provision`'s own bundle. Both need the same one global.
-    files: ["apps/server/scripts/**/*.mjs", "packages/provisioning/scripts/**/*.mjs"],
+    // `.github/scripts/changed-scope.mjs` is the third, and the first that is not a build step:
+    // it classifies a diff so CI can skip work a change cannot affect.
+    files: [
+      "apps/server/scripts/**/*.mjs",
+      "packages/provisioning/scripts/**/*.mjs",
+      ".github/scripts/**/*.mjs",
+    ],
     languageOptions: {
       globals: { process: "readonly" },
     },
