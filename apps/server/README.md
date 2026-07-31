@@ -156,8 +156,9 @@ The "applied nothing new" half is pinned one package over, by
 third `applyMigrations` over the same options, and asserts the count is unchanged. That covers one
 set rather than all five, and what it pins is what gets **recorded as applied** — the migrator still
 issues `CREATE SCHEMA IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS <journal>` and a journal read per
-set on every re-run, which is why `packages/provisioning/README.md`'s wall 4 calls a no-op re-run
-idempotent but not privilege-free.
+set on every re-run — which is why `packages/provisioning/README.md`'s "Idempotency" paragraph calls
+a no-op re-run idempotent but **not privilege-free**, and sends the reader to its wall 4 for what
+that costs.
 
 That last assertion reads `nspacl` **directly** rather than asking
 `has_schema_privilege(…, 'CREATE WITH GRANT OPTION')`, and the reason is the recursive closure, not

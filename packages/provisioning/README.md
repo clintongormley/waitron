@@ -115,15 +115,20 @@ applied — and `instance` will apply them. The scenario is not exotic: re-creat
 `waitron_app`, re-issuing grants after a manual `REVOKE`, or simply taking `status`'s own advice
 ("Re-running `waitron-provision instance` applies anything still pending") is enough to reach it.
 
-**What that costs a trading shop.** DDL takes an `ACCESS EXCLUSIVE` lock and every later query on
-that table queues behind it. Measured on `postgres:18-alpine` (PostgreSQL 18.4) rather than cited:
-with `begin; alter table sales add column c int;` held open in one session, `pg_locks` joined to
+**What that costs a trading shop.** An `ALTER TABLE` takes an `ACCESS EXCLUSIVE` lock on the table
+and every later query on it queues behind that lock. Measured on `postgres:18-alpine` (PostgreSQL
+18.4) rather than cited, for the one statement shape that was run: with
+`begin; alter table sales add column c int;` held open in one session, `pg_locks` joined to
 `pg_stat_activity` showed `AccessExclusiveLock` / `granted = t` on `sales`; a plain
 `select count(*) from sales` in a second session, with `set statement_timeout='3s'`, returned
-`ERROR: canceling statement due to statement timeout` instead of a row. The five manifest sets carry
-90 `ALTER TABLE` statements between them (`grep -rin "alter table"` over each set's `drizzle/*.sql`:
-db 42, fiscal-verifactu 30, payments 12, scheduler 3, credentials 3), so this is the ordinary content
-of a migration here, not a corner case. `CLAUDE.md` §5: **nothing may block a sale.**
+`ERROR: canceling statement due to statement timeout` instead of a row. Other statement shapes take
+weaker modes and were not measured; what makes the strong case the one to plan around here is that
+the five manifest sets carry 90 `ALTER TABLE` statements between them (`grep -rin "alter table"` over
+each set's `drizzle/*.sql`: db 42, fiscal-verifactu 30, payments 12, scheduler 3, credentials 3), so
+it is the ordinary content of a migration here rather than a corner case. And the lock is not held
+for one statement: Drizzle runs a whole set's migrations inside a single transaction
+(`drizzle-orm@0.45.2/pg-core/dialect.js:60`), so every lock it takes is held until that set commits.
+`CLAUDE.md` §5: **nothing may block a sale.**
 
 **The advisory lock does not cover this, and must not be read as if it did.** `applyMigrations` takes
 `pg_advisory_lock` on a fixed key over a dedicated `pg.Client` opened from the same connection string
