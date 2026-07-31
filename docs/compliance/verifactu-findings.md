@@ -493,6 +493,145 @@ incident either. No source resolved this.
 
 ---
 
+## 7. Corrections after issuance — there is no "update" (added 2026-07-31)
+
+Sourced from the developer FAQ's §*"RECTIFICACIONES, ANULACIONES, SUBSANACIONES"*. Four paths, and
+none of them amends an issued invoice:
+
+| When | Mechanism |
+| --- | --- |
+| Before issuing, in edit | *«se corrigen sin más antes de emitirla»* — free, no RF |
+| After, error covered by the ROF | **Factura rectificativa** — a new invoice, new number, new RF de alta |
+| After, internal RF fields only | **RF de alta de subsanación** — *«MUY POCO FRECUENTES»* |
+| After, invoice should never have existed | **RF de anulación** — *«MUY POCO FRECUENTES»* |
+
+Two constraints follow, both load-bearing for any invoice-before-payment design:
+
+- **Subsanación cannot change an amount.** It is scoped to fields *«que "no se ven" en la factura
+  impresa, es decir, son campos "internos", como ciertas codificaciones tributarias»*.
+- **Anulación is unavailable for the ordinary case.** *«todas las facturas emitidas, en la medida en
+  que respondan a operaciones realmente efectuadas (como es el caso habitual) no pueden anularse»*.
+  A customer who does not pay does not annul the invoice; the supply happened and the debt is a
+  receivable.
+
+AEAT reserves *«casos muy excepcionales»* for subsanación and anulación **only**. Rectificativa is
+the normal ROF procedure and carries no such warning.
+
+---
+
+## 8. Pre-facturas are lawful, and preserved once issued (added 2026-07-31)
+
+Same document, §11 and the duplicate-RF section. A pre-bill is *«una operación ordinaria en el
+contexto de la actividad mercantil»*, and AEAT locates the moment an invoice comes into being after
+it: *«tiene que existir un momento en el que, una vez completado internamente el contenido de una
+factura, este se valide a los efectos de elaborar un RF […] expedir la correspondiente factura con
+su numeración e, inmediatamente, remitir el RF»*.
+
+**Mutating the order before that moment is explicitly lawful** — *«cualquier alteración que se
+produzca en ese registro, previo al RF, sería perfectamente lícita»*.
+
+**Issuing the pre-bill attaches a preservation duty:**
+
+> «cuando los albaranes, proformas, prefacturas o facturas sin validez fiscal se expidan, sus
+> registros deberán conservarse de forma inalterable (salvo que la alteración se produzca por medio
+> de un registro posterior, que también deberá quedar anotado en el sistema)»
+
+reinforced by: *«la conservación de los registros resulta obligatoria, incluso en el caso de que se
+utilice una modalidad preparatoria como pre-facturas, proformas, borradores de pruebas, etc. que no
+lleguen a integrar una factura completa»*.
+
+This is **not RRSIF**. It is art. 29.2.j) LGT, which AEAT says *«despliega efectos directos desde su
+entrada en vigor en octubre de 2021 respecto de cualquier otro sistema informático»*. The
+parenthesis is the design: an append-only amendment log satisfies it and the working order may stay
+mutable.
+
+**Not verified:** AEAT's list says *albaranes, proformas, prefacturas* and never uses *precuenta*.
+Treating a restaurant pre-bill as a member of that family is our reading — see Q14.
+
+**Also here:** AEAT does not accept a live SIF producing fictitious invoices for testing or staff
+training. Their sanctioned route is real invoices on a distinguishable series (their example,
+`PRU 25 XXXX`), visibly described as tests, each followed by a mandatory RF de anulación. Relevant
+before anyone trains staff on a live till.
+
+---
+
+## 9. Issuing and delivering are separate obligations (added 2026-07-31)
+
+RD 1619/2012 (BOE-A-2012-14696):
+
+- **art. 11** — *«Las facturas deberán ser expedidas en el momento de realizarse la operación»*. The
+  16th-of-the-following-month deadline applies only where the recipient is a business.
+- **art. 2** — the obligation is to *«expedir factura y copia de esta»*.
+- **art. 18** — transmission immediately on issuance to a non-business recipient. Handing the
+  invoice over is not on request.
+- **art. 9** — *«La expedición, transmisión y recepción de la factura electrónica estará
+  condicionada a que su destinatario haya dado su consentimiento»*.
+
+The last one constrains delivery design: **electronic delivery cannot be the default**, so emailing
+or QR-only cannot replace paper without consent.
+
+---
+
+## 10. Rectificativas need their own series — and F3 canje is not a rectificativa (added 2026-07-31)
+
+### 10.1 A separate series for rectificativas is mandatory. Q5(b) is closed
+
+RD 1619/2012 art. 6.1.a), after permitting optional separate series *«cuando existan razones que lo
+justifiquen»*:
+
+> «No obstante, será obligatoria, en todo caso, la expedición en series específicas de las facturas
+> siguientes: […] **Las rectificativas.**»
+
+Read twice from the BOE, through the consolidated text (`buscar/act.php`) and the original
+(`buscar/doc.php`). **The two renderings list a different number of items** — five and three — which
+is consistent with later amendments adding to the list; the item that matters appears in both, and
+neither includes facturas simplificadas.
+
+Two consequences:
+
+- **Q5(b) — answered: yes, mandatory.** No longer a prerequisite for the rectificativa cycle.
+- **Q5(c) — partly answered.** Simplified invoices are absent from a list introduced by *«en todo
+  caso»*, so no separate series is *required* for them. AEAT's own worked examples nonetheless use
+  `S-0001` for simplified, `F-0001` for ordinary and `R0001`/`RS-0001` for rectificativas — practice,
+  not obligation.
+- **Q5(a) — still open.** The article's example is *«cuando el obligado a su expedición cuente con
+  varios establecimientos»* — several *establishments*, which is not the same as several tills inside
+  one. The per-till series conclusion still rests on AEAT's per-TPV SIF guidance.
+
+### 10.2 F3 — the "make me a proper invoice" case, which we do not model
+
+A customer who received a simplified invoice and then asks for a full one with their tax details
+does **not** trigger a rectificativa. The correct document is a **factura de canje, `TipoFactura`
+F3**, and AEAT is explicit that it is a different animal:
+
+> «No tiene la consideración de rectificativa (2º párrafo del artículo 15.6 del […] "ROF" […]), por
+> lo que no estamos ante un caso de rectificación (no procede rectificar las facturas simplificadas
+> canjeadas por el mero hecho de canjearlas con una factura tipo F3). […] Siempre debe llevar el
+> destinatario de la misma.»
+
+The rules that fall out of AEAT's worked examples:
+
+- **Do not annul the simplified invoices being exchanged.** The F3 key itself prevents double
+  counting — *«el importe total […] de una factura de canje F3 NO se volverá a tener en cuenta a
+  efectos tributarios porque ya se declaró a medida que se fueron expidiendo las facturas
+  simplificadas a las que canjea»*.
+- **One F3 may exchange many simplified invoices** across a period, *«permitido por el ROF […] de
+  acuerdo con la consulta vinculante V2543-06»*.
+- **The F3's registro must identify what it replaces**, in the `FacturasSustituidas` block.
+- AEAT warns separately not to collect the money twice — *«deberá tenerse cuidado de no cobrar dos
+  veces el importe, se haga con cargo a los tiques o a la factura de canje»*.
+
+Rectifying a *simplified* invoice, by contrast, is `TipoFactura` **R5** with `TipoRectificativa` `I`
+(por diferencias) and a negative `ImporteTotal`, followed by a fresh F3 if the customer had one.
+
+**Where we stand.** `packages/verifactu` already types `F3` and both `FacturasRectificadas` and
+`FacturasSustituidas`. Nothing above them uses either: `fiscal-verifactu/src/backend.ts:257` emits
+`sale.counterparty === null ? "F2" : "F1"` and no third case, and `sales` has no column referencing
+another invoice. A restaurant is asked for a proper invoice routinely, so this is ordinary trade, not
+an edge case.
+
+---
+
 ## Sources
 
 | Source | Type |
@@ -504,6 +643,8 @@ incident either. No source resolved this.
 | AEAT `Validaciones_Errores_Veri-Factu.pdf` v1.2.2 (changelog to 08/04/2026) | primary |
 | AEAT `Veri-Factu_Descripcion_SWeb.pdf` v1.0.3 | primary |
 | LGT art. 201 bis (introduced by Ley 11/2021) | primary |
+| LGT art. 29.2.j) (Ley 58/2003) — quoted in the developer FAQ, §8 above | primary |
+| BOE-A-2012-14696 — RD 1619/2012 (ROF), arts. 2, 9, 11, 18 | primary |
 
 AEAT sede FAQ pages stamped *"Actualizadas a 5 de diciembre de 2025"*. Several AEAT PDFs
 could not be read by normal fetching (FlateDecode/font encoding) and were extracted locally —
