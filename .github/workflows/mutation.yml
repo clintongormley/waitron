@@ -3,8 +3,8 @@ name: Mutation testing
 # Mutation testing runs the full real-Chromium suite once per surviving mutant
 # (tens to low hundreds of extra Vitest invocations even with perTest coverage
 # analysis narrowing which tests run per mutant). That's cheap today at ~10
-# source files, but it does not belong gating every push the way `pnpm
-# test:coverage` does in ci.yml: it doesn't tell you "did I break something,"
+# source files, but it does not belong gating merges the way ci.yml's
+# `test:coverage` shards do: it doesn't tell you "did I break something,"
 # it tells you "how good are my tests," which is a slower-moving signal worth
 # reviewing periodically rather than blocking merges on. Scheduled weekly, plus
 # on-demand via workflow_dispatch so it can be run against a specific branch

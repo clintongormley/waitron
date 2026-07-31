@@ -29,10 +29,13 @@ unpinned `npm install`.
 ## Why it can't join `pnpm -r test`
 
 It defines no `test` script (only `bench` and `typecheck`), and it contains no `*.test.ts` file.
-Both are deliberate and independent: root `pnpm test` is `pnpm -r test`, which skips workspace
+Both are deliberate and independent: root `pnpm test` ends in `pnpm -r test`, which skips workspace
 members without a `test` script rather than failing on them, and even if a `test` script were
 added by reflex later, Vitest's default include pattern would match nothing here. This keeps a
-20-second, Docker-dependent benchmark out of CI's `test` job and the pre-push hook permanently.
+20-second, Docker-dependent benchmark out of CI's test shards and the pre-push hook permanently.
+
+Root `pnpm test` also runs `vitest run` at the repository root first, but that project cannot reach
+here either: its `include` is `.github/scripts/**/*.test.mjs` (see the root `vitest.config.ts`).
 
 ## Single-file constraint
 

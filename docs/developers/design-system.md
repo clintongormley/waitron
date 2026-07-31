@@ -386,13 +386,17 @@ behaviour `multi-root.test.ts` asserts. Check both before committing.
 ## Local checks before pushing
 
 A Husky `pre-push` hook (`.husky/pre-push`) runs before any push leaves your machine: `pnpm lint`,
-`pnpm format:check`, `pnpm --filter @waitron/ui typecheck`, then `pnpm --filter @waitron/ui test`.
-It runs from the repo root regardless of which subdirectory you're in, stops at the first failing
-step, and prints both which step failed and the exact command to reproduce it locally.
+`pnpm format:check`, `pnpm typecheck`, then `pnpm test` — the whole workspace, not just this package.
+(It was `pnpm --filter @waitron/ui …` for the first two steps when this document was written; #9
+widened it to the repo, and this paragraph had said otherwise ever since.) It runs from the repo root
+regardless of which subdirectory you're in, stops at the first failing step, and prints both which
+step failed and the exact command to reproduce it locally.
 
 Coverage thresholds and mutation testing are deliberately **not** in the hook — they run in CI (the
-`test` job, and the weekly `mutation.yml` workflow respectively) because they're too slow to pay on
-every push. The hook is the fast subset; CI is the full gate.
+`test-heavy` and `test-light` shards, and the weekly `mutation.yml` workflow respectively) because
+they're too slow to pay on every push. The hook is the fast subset. CI is the deeper gate but not
+the wider one: on a pull request its shards narrow to the packages a change can reach, while the
+hook always runs everything.
 
 `pnpm install` wires the hook up automatically (via the root `prepare` script), including on a
 fresh clone — nothing else to set up.
