@@ -47,6 +47,25 @@ Run the thing.
 is how a third false claim happened — an experiment on one mutation, written up as a claim about a
 different mutation that was never run. If the sentence describes more than what you ran, narrow it.
 
+### A measurement taken where both answers look alike measures nothing
+
+`pnpm --filter "...[origin/main]" ls --depth -1 --json` printing **zero bytes** in a worktree was
+handed to `feat/scoped-pre-push-hook` as the receipt that pnpm's changed-since filter does not work
+there. The conclusion is right. The run was not: it was made on a branch whose HEAD **equalled**
+`origin/main`, and zero bytes is also the correct answer for a filter with nothing to match, so it
+separated the two hypotheses not at all. Re-running it in the same state reproduces the number and
+still proves nothing.
+
+The real receipt needs a state where a working filter and a broken one disagree — one commit
+touching `packages/db/README.md`, then the identical commands in a `git worktree` (0 bytes) and in a
+plain `git clone` (2760 bytes, 11 packages), with `git diff --name-only main...HEAD` naming the path
+in both. **Before running a probe, say what the FAILING case would print**; if that is what you
+already expect to see, you are not running a probe. A control in the other direction is the cheapest
+way to get one, and neither of these took a minute.
+
+Note where this one came from: the zero-byte reading arrived in the task brief as already verified.
+A receipt someone hands you is still a claim.
+
 ### "Pre-existing" and "not a regression" are claims too
 
 Both are load-bearing — they decide whether something gets fixed now or deferred — and both are

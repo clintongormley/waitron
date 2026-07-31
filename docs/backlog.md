@@ -41,6 +41,7 @@ reprioritisation rather than assumed.
 | **This backlog** | **Merged** (#21) |
 | **Pre-push hook skips deletions** | **Merged** (#23) |
 | **Scoped CI** — stop running every check on every push | **Done.** Both merged: #25 (the `ci` gate) and #27 (the scoping). Against the 7m20s baseline: a documentation-only pull request now takes **44s**, and a full unfiltered `push` on `main` **4m12s**. Two follow-ups remain under **Debt and odd jobs** |
+| **Scoped pre-push hook** — the same treatment for the local gate | **In flight** on `feat/scoped-pre-push-hook`. Scopes typecheck and tests to the changed packages, adds the sign-off check CI was catching for us, and runs `test:coverage` rather than `test`. What it still does not cover is under **Debt and odd jobs** |
 | **Cloud storage model** — design | **Merged** (#19), corrected by **#22** |
 | **Sale settlement model** — implementation plan | Not written. **The next build step** |
 | **Close Q13 and Q15 on primary source** | Not started. Cheaper than hiring — see below |
@@ -166,15 +167,30 @@ optional, and they are currently as unstarted as the restaurant-phase items they
 
 Carried from finished work. None of it blocks anything; all of it makes later work cheaper.
 
-- **The git hooks are still untested — but they now have somewhere to go.** The "nothing repo-level
-  can be tested" debt is closed: root `vitest.config.ts` exists, added by the scoped-CI work below,
-  and root `pnpm test` is now `vitest run && pnpm -r test`. Its `include` currently covers
-  `.github/scripts/` only. What has **not** happened is the hook test itself: the pre-push deletion
-  guard (#23) is still backed only by having run the real hook against four kinds of stdin and
-  recorded the results, not by a suite that would catch someone re-breaking it. Two things to know
-  before writing one — the root project's `include` has to be widened to reach `.husky/`, and root
-  config is linted but never typechecked (`pnpm typecheck` is `pnpm -r typecheck`, and `pnpm -r`
-  never visits the workspace root; see `CLAUDE.md` §2)
+- **The pre-push hook is scoped now, and its DECISIONS are tested — the shell itself still is not.**
+  The hook maps the push's changed paths onto workspace packages and runs `typecheck` and
+  `test:coverage` against those packages and their dependents, skipping both entirely on a
+  documentation-only push. It also closes two things that reached CI this session: a commit with no
+  `Signed-off-by` (`git revert --no-edit` writes none), and coverage thresholds, which the hook
+  never ran because `pnpm test` is not `pnpm test:coverage`.
+
+  The new classifier `scripts/changed-packages.mjs` is fully tested by the root Vitest project,
+  whose `include` now covers `scripts/` as well as `.github/scripts/`. **The shell is not.** The
+  deletion guard (#23), the range computation and the sign-off loop are all backed only by having
+  run the real hook against crafted stdin and recorded the results — the same evidence #23 had, no
+  better. Three things to know before writing a suite for the shell: the root project's `include`
+  has to be widened again to reach `.husky/`; root config is linted but never typechecked
+  (`pnpm typecheck` is `pnpm -r typecheck`, and `pnpm -r` never visits the workspace root, see
+  `CLAUDE.md` §2); and husky runs the hook under `sh -e`, where an unguarded `x=$(false)` or a
+  `grep` outside an `if` kills the script silently mid-gate — the hook's own header records that
+  measurement.
+
+  **Two known gaps, neither of them accidental.** A `global` push — root config, `.github/`,
+  `.husky/`, `scripts/`, the lockfile — runs `pnpm test:coverage` for the whole workspace, which
+  includes `packages/db`'s 189s suite; that is the honest answer for a change that can affect
+  anything, and it is the entry below that would make it cheap. And the hook still does not run
+  mutation testing or the `bundle-smoke` builds, so a green hook does not imply a green CI. Both are
+  stated in the hook's header rather than left for a reader to discover
 - **`errors.reachability.test.ts` does not test reachability.** Proven by deletion. Eight packages
   carry a copy. Closing it needs a `tsc`-based downstream probe or a narrowed `include`. See
   `CLAUDE.md` §4 — do not cite these tests as evidence in the meantime

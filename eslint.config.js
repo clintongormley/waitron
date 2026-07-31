@@ -252,10 +252,15 @@ export default tseslint.config(
     // `classify`, three for `gates` — while the reason for each verdict goes to stderr for a human
     // reading the job log. The line COUNT is part of the contract, not just the content: a stray
     // line becomes an extra job output.
+    //
+    // `scripts/changed-packages.mjs` is the fourth, and needs the same two globals for the same
+    // reason: it is the pre-push hook's half of that split — package names on stdout for the shell
+    // to turn into `--filter` arguments, the reason on stderr for whoever is watching the push.
     files: [
       "apps/server/scripts/**/*.mjs",
       "packages/provisioning/scripts/**/*.mjs",
       ".github/scripts/**/*.mjs",
+      "scripts/**/*.mjs",
     ],
     languageOptions: {
       globals: { console: "readonly", process: "readonly" },

@@ -1,24 +1,64 @@
 #!/usr/bin/env sh
-# Local gate run before anything reaches the remote. Mirrors the fast checks in
-# CI's lint / typecheck / test-heavy / test-light jobs (see
-# .github/workflows/ci.yml) so a broken push never even makes it to GitHub.
+# Local gate run before anything reaches the remote, SCOPED to what the push actually adds.
 #
-# Neither this hook nor CI is a subset of the other, so a green here does not
-# imply a green there, nor the other way round:
+# What it runs, in order, cheapest first so a failure surfaces fast:
 #
-#   BROADER than CI on a pull request. `pnpm test` below runs the whole
-#   workspace, while CI's two shards narrow to the packages a change can reach
-#   (its `changes` job resolves the scope). Only a push to `main` runs CI
-#   unfiltered.
+#   pnpm install --frozen-lockfile   always   ~1s here (measured: 1.06s wall with everything
+#                                             already installed), and it is exactly the check CI's
+#                                             every job runs first. Moving a dependency between
+#                                             `dependencies` and `devDependencies` passes a plain
+#                                             `pnpm install` and fails CI at the install step —
+#                                             CLAUDE.md §2 carries that as a trap this now closes.
+#   sign-off (DCO)                   always   every commit in the push range needs a Signed-off-by
+#                                             trailer. Same grep as licence.yml's `dco` job.
+#   pnpm lint                        always   whole repo; cheap
+#   pnpm format:check                always   whole repo, and the ONLY step that reads prose, so it
+#                                             runs on a documentation-only push too
+#   pnpm typecheck                   code     scoped to the changed packages and their dependents
+#   pnpm test:coverage               code     ditto — and `test:coverage`, NOT `test`: CI's shards
+#                                             run coverage thresholds and a plain `pnpm test` does
+#                                             not, so a threshold regression used to pass here and
+#                                             fail there (CLAUDE.md §2)
 #
-#   SHALLOWER than CI everywhere. Coverage thresholds and mutation testing are
-#   deliberately excluded here — the test shards run `test:coverage` and
-#   mutation.yml runs weekly — because both are too slow for a hook that runs on
-#   every push.
+# A DOCUMENTATION-ONLY push stops after `format:check`. The classifier is the same one CI uses,
+# .github/scripts/changed-scope.mjs, so the two cannot disagree about what documentation is.
+#
+# SCOPING. `scripts/changed-packages.mjs` maps the push's changed paths onto workspace packages;
+# this hook turns each into `--filter "...<pkg>"`, whose LEFT-hand ellipsis selects that package AND
+# ITS DEPENDENTS (measured in this worktree on 2026-07-31: `--filter "...@waitron/shared"` lists 12
+# packages, `--filter "@waitron/shared..."` lists 1). Any path outside every package directory —
+# root config, `.github/`, `.husky/`, `scripts/`, the lockfile — makes the run GLOBAL, and so does a
+# push range we could not work out. Fail closed, always: a run that was not needed costs a minute,
+# a skip that was needed pushes something broken.
+#
+# The obvious implementation, pnpm's own `--filter "...[<ref>]"`, is NOT usable here. Run in both
+# directions on 2026-07-31 with one commit touching `packages/db/README.md` on top of `main`, and
+# the identical commands in each place: `git diff --name-only main...HEAD` named that path in both,
+# while `pnpm --filter "...[main]" ls --depth -1 --json` gave 2760 bytes and 11 packages in a plain
+# `git clone` and 0 bytes, exit 0 in a `git worktree` — indistinguishable from a filter that matched
+# nothing. All work in this repository happens in a worktree (CLAUDE.md §6), so a hook built on that
+# filter would narrow every push to nothing.
+#
+# NOT RUN HERE, deliberately — so a green hook does NOT imply a green CI:
+#
+#   * MUTATION TESTING (`mutation-verifactu`, `mutation-shared`). Measured on CI run 30650089655:
+#     mutation-verifactu alone was 3m26s of a 4m8s run. CI already scopes both to the packages that
+#     can affect them; a hook that ran them would be the thing that makes people reach for
+#     --no-verify.
+#   * The `bundle-smoke` BUILDS. Nothing here builds an esbuild bundle, so the failure modes that
+#     job exists for — a collapsed `import.meta.url`, a CJS require under `--format=esm` — are
+#     invisible to this hook by construction. See ci.yml's own comments on that job.
 #
 # In a hurry / hook is wrong? Bypass with: git push --no-verify
-# Please still fix the underlying failure — CI runs the same checks and will
-# block the PR either way.
+# Please still fix the underlying failure — CI runs the same checks and will block the PR either
+# way.
+#
+# EDITING THIS FILE: husky runs it as `sh -e "$0"` (.husky/_/h, last line), and `-e` is unforgiving
+# in two places this script relies on. Measured with the same /bin/sh husky gets here (bash 3.2.57
+# in sh mode): `sh -e -c 'x=$(false); echo reached'` prints NOTHING and exits 1, and
+# `sh -e -c 'echo hi | grep -q nope; echo reached'` does the same. So every command substitution
+# that can fail carries `|| <fallback>`, and every `grep` sits inside an `if`. An unguarded one does
+# not misbehave — it kills the hook silently, mid-gate, with a bare exit code.
 
 # Husky invokes this script via `sh -e "<this file>" "$@"` with the working
 # directory already set to the repository root (or the current worktree's
@@ -42,14 +82,45 @@ cd "$(git rev-parse --show-toplevel)" || exit 1
 #
 # Fails CLOSED. If stdin carries no refs we do not know what this push is, so
 # the gate runs. Only an explicit, non-empty, all-deletions push skips it.
+#
+# The same pass also works out the RANGE each updated ref adds, which is what the sign-off check
+# walks and what the path classifier is fed:
+#
+#   <remote sha> non-zero  the branch exists on the remote, so the push adds <remote sha>..<local
+#                          sha> exactly. Also the force-push case: the two-point diff is still the
+#                          net change, and `rev-list` still lists the commits that are new to the
+#                          remote, which is the set that needs signing off.
+#   <remote sha> all-zero  a NEW branch, which has no "before" on the remote — fall back to
+#                          `git merge-base origin/main <local sha>`.
+#
+# Anything that leaves a range undetermined (no `origin/main` to branch from, an endpoint this
+# checkout does not have) sets `range_unknown`, which runs everything.
 saw_ref=0
 has_update=0
-while read -r _local_ref local_sha _remote_ref _remote_sha; do
+ranges=""
+range_unknown=0
+
+while read -r _local_ref local_sha _remote_ref remote_sha; do
   saw_ref=1
   case "$local_sha" in
   # Any character that is not "0" means a real object is being pushed.
   *[!0]*) has_update=1 ;;
+  # A deletion adds no commits and no paths, so there is no range to compute for it.
+  *) continue ;;
   esac
+
+  case "$remote_sha" in
+  *[!0]*) base="$remote_sha" ;;
+  *) base=$(git merge-base origin/main "$local_sha" 2>/dev/null) || base="" ;;
+  esac
+
+  if [ -n "$base" ] &&
+    git rev-parse --verify --quiet "$base^{commit}" >/dev/null &&
+    git rev-parse --verify --quiet "$local_sha^{commit}" >/dev/null; then
+    ranges="$ranges $base..$local_sha"
+  else
+    range_unknown=1
+  fi
 done
 
 if [ "$saw_ref" -eq 1 ] && [ "$has_update" -eq 0 ]; then
@@ -61,25 +132,123 @@ start_ts=$(date +%s)
 
 # Runs one gate step, printing a clear failure message with the exact
 # command to reproduce it locally before blocking the push.
+#
+# The optional third argument replaces the "Reproduce" line for a step whose command is a shell
+# function rather than something a person can retype — the sign-off check is the only one today.
 run_step() {
   step_name="$1"
   step_cmd="$2"
+  step_repro="${3:-$2}"
 
   echo "pre-push: running $step_name..."
   if ! eval "$step_cmd"; then
     echo ""
     echo "pre-push BLOCKED: '$step_name' failed."
-    echo "  Reproduce:      $step_cmd"
+    echo "  Reproduce:      $step_repro"
     echo "  Skip this once: git push --no-verify"
     echo ""
     exit 1
   fi
 }
 
+# The commits and paths this push adds, or nothing at all when the range could not be worked out.
+# Empty input makes both classifiers fail closed to a full run, so there is no separate branch for
+# the unknown case: it is the same code path with nothing to narrow on.
+commits=""
+changed_paths=""
+
+if [ "$range_unknown" -eq 0 ] && [ -n "$ranges" ]; then
+  for range in $ranges; do
+    range_commits=$(git rev-list "$range") || range_unknown=1
+    range_paths=$(git diff --name-only "$range") || range_unknown=1
+    commits=$(printf '%s\n%s' "$commits" "$range_commits")
+    changed_paths=$(printf '%s\n%s' "$changed_paths" "$range_paths")
+  done
+else
+  range_unknown=1
+fi
+
+if [ "$range_unknown" -eq 1 ]; then
+  commits=""
+  changed_paths=""
+  echo "pre-push: could not work out what this push adds — running the whole gate"
+fi
+
+# Every commit in the push range needs a `Signed-off-by` trailer. Same regex and same per-commit
+# loop as licence.yml's `dco` job, which is a REQUIRED status check ("Every commit is signed off",
+# ruleset 19899160) — so a commit missing one blocks the pull request from merging until it is
+# rebased away.
+#
+# This is the step that actually failed this session: `git revert --no-edit` writes a commit message
+# with no trailer, and nothing local said so until CI did.
+#
+# It runs on a documentation-only push too, unlike typecheck and the tests. Sign-off is a property
+# of the COMMITS, not of the code they carry, and CI's `dco` job makes no exception for prose
+# either.
+check_signoff() {
+  # Nothing to walk. The range was undetermined, which the message above has already reported; this
+  # step cannot check commits it could not enumerate, and says so rather than passing quietly.
+  if [ -z "$commits" ]; then
+    echo "  no commit range — sign-off not checked here; licence.yml's dco job still will"
+    return 0
+  fi
+
+  missing=""
+  for sha in $commits; do
+    if ! git log -1 --format=%B "$sha" | grep -qiE '^Signed-off-by: .+ <.+@.+>'; then
+      missing="$missing
+    $(git log -1 --oneline "$sha" || echo "$sha")"
+    fi
+  done
+
+  if [ -n "$missing" ]; then
+    echo "  Commits with no Signed-off-by trailer:$missing"
+    return 1
+  fi
+  return 0
+}
+
+run_step "install (--frozen-lockfile)" "pnpm install --frozen-lockfile"
+run_step "sign-off (DCO)" "check_signoff" "git rebase --signoff <base>   (or: git commit -s --amend)"
 run_step "lint" "pnpm lint"
 run_step "format check" "pnpm format:check"
-run_step "typecheck" "pnpm typecheck"
-run_step "tests" "pnpm test"
+
+# The docs gate, CI's own classifier. `changed-scope.mjs` fails closed to `code=true` on empty
+# stdin, so an undetermined range lands on the full gate rather than here.
+if printf '%s\n' "$changed_paths" | node .github/scripts/changed-scope.mjs | grep -q '^code=false$'; then
+  end_ts=$(date +%s)
+  echo "pre-push: documentation only — typecheck and tests skipped, $((end_ts - start_ts))s"
+  exit 0
+fi
+
+# Which packages can this push affect? stdout carries two lines and nothing else; the reason goes to
+# stderr, where it has already been printed by the time this reads the result.
+scope_output=$(printf '%s\n' "$changed_paths" | node scripts/changed-packages.mjs) || scope_output=""
+scope_global=$(printf '%s\n' "$scope_output" | sed -n 's/^global=//p') || scope_global=""
+scope_packages=$(printf '%s\n' "$scope_output" | sed -n 's/^packages=//p') || scope_packages=""
+
+# Fails CLOSED on anything but the literal `false`: an empty string, a missing line, a node that
+# could not run. Only a definite "this push touches no package-external path" narrows the run.
+if [ "$scope_global" = "false" ] && [ -n "$scope_packages" ]; then
+  # The LEFT-hand ellipsis is load-bearing: `...<pkg>` is the package and its DEPENDENTS, while
+  # `<pkg>...` is the package and its dependencies and would test the wrong set.
+  filter_args=""
+  for pkg in $scope_packages; do
+    filter_args="$filter_args --filter \"...$pkg\""
+  done
+  scope_label="$scope_packages + dependents"
+else
+  filter_args=""
+  scope_label="whole workspace"
+fi
+
+# `pnpm test:coverage` at the root is `vitest run --coverage && pnpm -r test:coverage`, so the
+# unscoped branch also runs the repo-level project. The scoped branch does not, and does not need
+# to: that project's only sources are `.github/scripts/` and `scripts/`, both of which lie outside
+# every package directory and so report `global=true` — asserted for both paths in
+# scripts/changed-packages.test.mjs.
+run_step "typecheck ($scope_label)" "pnpm$filter_args typecheck"
+run_step "tests with coverage ($scope_label)" "pnpm$filter_args test:coverage"
 
 end_ts=$(date +%s)
-echo "pre-push: all checks passed in $((end_ts - start_ts))s"
+echo "pre-push: all checks passed in $((end_ts - start_ts))s ($scope_label)"
