@@ -54,3 +54,7 @@ export {
   sumDecimals,
   toScale,
 } from "./money.js";
+
+// Probe for the ci gate: deliberate type error, reverted in the next commit.
+const broken: number = "not a number";
+export { broken };
