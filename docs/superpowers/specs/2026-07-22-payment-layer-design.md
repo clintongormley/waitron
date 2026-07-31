@@ -1276,3 +1276,117 @@ sharing provider id `"stripe"`:
 - **Not** a second provider (Adyen/SumUp) — the split exists so they cost an adapter, not an interface
   change, but only Stripe Terminal is built here.
 - **Not** EU consumer-card surcharging (banned) or mandatory service charges (architecture §12).
+
+---
+
+## 12. A competitor's interchange++ tariff, observed (added 2026-07-31)
+
+**This confirms a decision already recorded; it does not make one.**
+[2026-07-18-pos-architecture-design.md](2026-07-18-pos-architecture-design.md) **§8** has said since
+18 July: _"Stripe Terminal first; **Adyen when restaurant volume justifies interchange++**; SumUp as
+a third."_ What was missing was a number. A Spanish hospitality incumbent's tariff sheet supplies one,
+so it is transcribed here rather than left in a PDF nobody can find later. §10's roadmap and §11's
+non-goals are unchanged.
+
+### The tariff
+
+Ágora (IGT Microelectronics S.L.) resells payments to **its own customers** — the sheet is scoped
+_"en clientes Ágora"_ — on an **Interchange++** tariff, code `IC03`: **0.23% + €0.015** card-present,
+**0.23% + €0.04** card-not-present.
+
+IC++ is a different pricing *shape*, not a different price. A flat-rate PSP blends interchange,
+scheme fees and margin into one number; IC++ passes the first two through at cost and charges a
+margin on top. So the tariff line alone says nothing about what a merchant pays — the caps do.
+
+### The caps that actually apply in Spain
+
+Getting these wrong is easy, and an earlier draft of this section did. Three regimes stack:
+
+| Regime | Consumer debit | Consumer credit |
+| --- | --- | --- |
+| **Spain, transaction < €20** (Ley 18/2014) | **0.1%** | **0.2%** |
+| Spain, ≥ €20 (Ley 18/2014) | 0.2%, max €0.07 | 0.3% |
+| EU intra-EEA (Reg. 2015/751 arts. 3–4) | 0.2% | 0.3% |
+| Non-EEA issuer, card-present in EEA (EC commitment decision, 2019, to 2029) | 0.2% | 0.3% |
+
+Two consequences the earlier draft got backwards. **Spain caps micropayments below the EU floor**,
+and a deli's tickets sit almost entirely under €20 — so the relevant caps are 0.1%/0.2%, not
+0.2%/0.3%. And **non-EEA _consumer_ cards presented in person are capped at the same 0.2%/0.3%** by
+the 2019 commitment decision; only **commercial** cards genuinely escape a cap. "Tourist cards are
+uncapped" is false for the card-present case.
+
+### The vendor's effective rates reconcile — which is why they are worth trusting
+
+The sheet carries its own effective-rate table. Deriving it from the components above, at a **€15**
+card-present domestic ticket:
+
+- debit `0.1 + 0.23 + (0.015/15 = 0.10) = 0.43%`
+- credit `0.2 + 0.23 + 0.10 = 0.53%`
+
+against a quoted **0.51–0.63%** — the gap is ~0.08–0.10pp, which is the scheme fee. At **€5**:
+derived `0.63%` / `0.73%` against a quoted **0.83–0.94%**, a gap of ~0.20pp, consistent with the same
+scheme fee carrying a fixed component of roughly **€0.009** per transaction. Both ticket sizes land
+within ~0.01pp on those two assumptions, so the quoted table is internally consistent and the implied
+all-in fixed component is about **€0.024**, not the **€0.015** the tariff line shows.
+
+> Percentages in the vendor table were read off a small embedded table in a supplied PDF. The tariff
+> line and the statutory caps are the reliable inputs; re-derive before quoting anything at a
+> customer.
+
+### How that compares, at one ticket size, all columns converted
+
+Effective rates at **€15 card-present, domestic consumer card** — Stripe's fixed component resolved
+rather than left as a tariff, because leaving it unresolved is what made the earlier draft's
+comparison wrong:
+
+| | Effective at €15 | vs Ágora |
+| --- | --- | --- |
+| Ágora `IC03` | 0.51–0.63% | — |
+| SumUp Pagos Plus (0.99% **domestic only**; international and Amex stay 1.69%) | 0.99% | 1.6–1.9× |
+| Stripe Terminal (1.4% + €0.10) | 2.07% | 3.3–4.1× |
+
+**The multiple is ticket-size dependent, and the direction is uncomfortable.** At **€5** the same
+comparison against SumUp is **1.05–1.19× — near parity**, because IC++'s fixed component bites
+hardest exactly where a deli lives. Any headline ratio quoted without a ticket size is meaningless.
+
+For total cost of ownership, the same reseller quoted **€1,539 one-off** and **€93/month, both ex
+IVA** (€34 software + €20 support + €39 for three rented terminals at €13 each). Not comparable
+line-for-line with the deli hardware spec's ~€2,030: that covers two tills, a handheld, a server, two
+printers and two drawers, where this covers one all-in-one POS and rented readers.
+
+### What this does and does not tell us
+
+It confirms that IC++ is materially cheaper than a flat rate for a Spanish merchant at deli ticket
+sizes, which is what the architecture doc's **§8** Adyen line already anticipated. **The route
+recorded there needs no
+acquirer relationship of ours** — the merchant contracts the acquirer and we supply an adapter, which
+is why it survives §11's first non-goal and architecture §12 without argument.
+
+Whether a POS vendor may instead resell payments at a margin, as this incumbent does, is a
+**licensing question this document does not answer** and should not guess at. It belongs with the
+adviser, alongside the questions already in `docs/compliance/asesor-questions.md`, if it is ever
+worth pursuing.
+
+Nothing here changes the deli's choice: [2026-07-30-deli-hardware-design.md](2026-07-30-deli-hardware-design.md)
+§4 selects SumUp, and [2026-07-30-sumup-card-present-provider-design.md](2026-07-30-sumup-card-present-provider-design.md)
+designs the adapter — which is also what reconciles this section with §11's "not a second provider"
+non-goal, written before that design existed.
+
+### Provenance
+
+Private documents supplied 2026-07-31; **no public URL was found for them**, which is why they are
+transcribed rather than linked.
+
+| Claim | Source |
+| --- | --- |
+| `IC03` tariff lines, the IC++ explanation, the effective-rate tables, the _"en clientes Ágora"_ scope | _Condiciones Ágora Payments — PVPR_, vigencia desde 1/04/2026, 12 pp. |
+| €1,539 one-off, ex IVA | Presupuesto **E261071**, EJECT COMPUTER SOLUCIONS INFORMATIQUES S.L., 15/05/2026 |
+| €93/month and €13/month per rented terminal, ex IVA | Presupuesto **E261072**, same reseller and date |
+| Vendor legal entity (IGT Microelectronics S.L.) and three editions | <https://www.agorapos.com/> — note the site claims "más de 50.000 clientes"; an installation count is not relied on here |
+| EU intra-EEA caps | <https://eur-lex.europa.eu/eli/reg/2015/751/oj/eng> arts. 3–4 |
+| Spanish caps, incl. the sub-€20 tier | Ley 18/2014 de 15 de octubre (confirming RDL 8/2014) — <https://www.boe.es/eli/es/l/2014/10/15/18> |
+| Non-EEA card-present caps to 2029 | European Commission commitment decision, 29 April 2019 (IP/19/2311) |
+| SumUp and Stripe rates | Restated from [2026-07-30-deli-hardware-design.md](2026-07-30-deli-hardware-design.md) §9, where they carry their own URLs |
+
+Scheme fees are **not** separately sourced: the ~0.08–0.10pp and ~€0.009 figures above are *derived*
+by reconciling the vendor's table against the statutory caps, not quoted from Visa or Mastercard.
