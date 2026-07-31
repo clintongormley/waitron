@@ -1276,3 +1276,83 @@ sharing provider id `"stripe"`:
 - **Not** a second provider (Adyen/SumUp) — the split exists so they cost an adapter, not an interface
   change, but only Stripe Terminal is built here.
 - **Not** EU consumer-card surcharging (banned) or mandatory service charges (architecture §12).
+
+---
+
+## 12. Payment economics — the number we are measured against (added 2026-07-31)
+
+**This section changes no decision in this document.** It records a benchmark discovered while pricing
+the deli's hardware, because it is the kind of finding that gets forgotten and then rediscovered
+expensively. The adapter roadmap in §10 is unaffected, and SumUp remains the deli's choice on the
+analysis in
+[2026-07-30-deli-hardware-design.md](2026-07-30-deli-hardware-design.md) §4.
+
+### What an incumbent quotes
+
+A Spanish hospitality POS incumbent (Ágora, by IGT Microelectronics S.L. — three editions, ~37,000
+installations) resells payments to its own customers on an **Interchange++** tariff, code `IC03`:
+
+| Gateway | Tariff |
+| --- | --- |
+| Presencial (card-present) | Interchange ++ **0.23% + €0.015** |
+| Digital (card-not-present) | Interchange ++ **0.23% + €0.04** |
+
+IC++ is structurally different from what we sell today. A flat-rate PSP blends three costs into one
+number and keeps the spread; IC++ passes two of them through **at cost** and charges a thin margin on
+top:
+
+1. **Interchange**, to the issuer — capped by [Regulation (EU) 2015/751](https://eur-lex.europa.eu/eli/reg/2015/751/oj/eng)
+   at **0.2% consumer debit / 0.3% consumer credit** for intra-EEA consumer cards. Commercial and
+   non-EEA cards are **not** capped.
+2. **Scheme fees**, to Visa/Mastercard — unregulated, small.
+3. **Acquirer margin** — the `0.23% + €0.015` above.
+
+### What that works out at, and how we compare
+
+From the vendor's own effective-rate table at a **€15** ticket, card-present:
+
+| | Ágora `IC03` | SumUp Pagos Plus | Stripe Terminal |
+| --- | --- | --- | --- |
+| Spain domestic | ~0.51–0.63% | 0.99% (+ €19/mo) | 1.4% + €0.10 |
+| EU | ~0.63–0.79% | 0.99% | 1.4% + €0.10 |
+| Non-EEA | ~1.3–2.8% | 1.69% flat | 2.9% + €0.10 |
+
+> **Read off a small embedded table in a supplied PDF, not from a machine-readable source.** Treat the
+> effective percentages as indicative and re-derive them from the tariff before quoting them to anyone.
+> The tariff line itself (`0.23% + €0.015`) is stated plainly and is the reliable figure.
+
+**Domestically we are roughly 2× the incumbent.** Two structural notes: the fixed component punishes
+small tickets (the same table shows ~0.83–0.94% domestic at a **€5** ticket), and IC++ *loses* to a
+flat rate on non-EEA cards, because uncapped interchange is passed straight through — which is why a
+tourist-heavy venue narrows the gap.
+
+For total cost of ownership, the same incumbent's quotes for a two-position deli were **€1,539
+one-off** (install, training, one all-in-one POS) and **€93/month** (€34 software + €20 support + €39
+for three rented terminals at €13 each).
+
+### Why this matters to us, and what it does not mean
+
+Every Spanish restaurant we sell to will have been quoted the IC++ number by an incumbent. Offering
+only flat-rate PSPs is a standing commercial disadvantage, on the line item a hospitality operator
+watches most closely.
+
+**Closing it does not require becoming a processor**, so it does not conflict with §11's first
+non-goal or architecture §12. The incumbent does not acquire either: it partners with an acquirer,
+resells rented terminals at €13/month, and takes a margin. That is a commercial relationship, not a
+licence — and the `PaymentProvider` seam already makes the adapter side cheap.
+
+Recorded as a **target, not a plan**. No acquirer relationship is proposed here, and nothing in §10
+moves.
+
+### Provenance
+
+Private documents supplied 2026-07-31; no public URL exists, which is precisely why they are
+transcribed rather than linked.
+
+| Claim | Source |
+| --- | --- |
+| `IC03` tariff lines, the IC++ explanation, and the effective-rate tables | *Condiciones Ágora Payments — PVPR*, vigencia desde 1/04/2026, 12 pp. Pricing scoped *"en clientes Ágora"* |
+| €1,539 one-off | Presupuesto **E261071**, EJECT COMPUTER SOLUCIONS INFORMATIQUES S.L., 15/05/2026 |
+| €93/month, and €13/month per rented terminal | Presupuesto **E261072**, same reseller and date |
+| Interchange caps | <https://eur-lex.europa.eu/eli/reg/2015/751/oj/eng> |
+| SumUp and Stripe rates | Restated from [2026-07-30-deli-hardware-design.md](2026-07-30-deli-hardware-design.md) §9, where they carry their own URLs |
