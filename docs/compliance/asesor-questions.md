@@ -9,7 +9,7 @@ Each question has English context (for us) and a Spanish formulation (to hand ov
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
 priority. Q9 is referenced from other documents; do not renumber it.
 
-Last revised **2026-07-27**.
+Last revised **2026-07-31**.
 
 > **⚠ Read before sending, 2026-07-31.** Some questions here are premised on Waitron **hosting the
 > client's fiscal system**. Q11 puts it as *"Nosotros alojamos y operamos su sistema de facturación:
@@ -337,6 +337,57 @@ it is the case where a single till needs two series (and, per art. 7.c, still on
 >
 > **(c)** ¿Y las facturas simplificadas (tickets) frente a las facturas completas — requieren
 > series separadas o pueden compartir serie?
+
+---
+
+### Q13. Propinas — outside the VAT base, and off the invoice? (added 2026-07-31)
+
+**Why it matters.** The schema already asserts it. `sales.tip_amount` is documented as
+*"non-taxable, in no fiscal record at all"*, `record-sale.ts` excludes it from `total`, and a test
+pins that two records differing only in the tip hash identically. **None of that was ever put to an
+advisor.** The sources are asesor commentary citing **DGT consulta vinculante 2174-03** — the DGT
+text itself was not read. If the position is wrong, every invoice we have ever modelled understates
+its base imponible, and the tip would have to enter `computeHuella`'s inputs.
+
+The card-present case is the one commentary does not obviously cover: the tip is not a separate
+gesture but part of a single card capture that exceeds the invoice total.
+
+> **(a)** ¿Confirma que las propinas voluntarias entregadas por el cliente en un establecimiento de
+> hostelería no forman parte de la base imponible del IVA y, por tanto, no deben figurar en la
+> factura simplificada?
+>
+> **(b)** ¿Cambia esa conclusión cuando la propina se cobra junto con el importe de la factura en
+> una única operación con tarjeta, de modo que el importe cargado al cliente excede el total
+> facturado?
+>
+> **(c)** ¿Existe alguna obligación de documentar la propina frente al cliente, o basta con el
+> justificante de pago de la entidad adquirente? Si la incluimos como bloque informativo separado
+> al pie del ticket, ¿hay algún requisito de forma?
+
+---
+
+### Q14. Is a restaurant *precuenta* a *prefactura* for art. 29.2.j LGT? (added 2026-07-31)
+
+**Why it matters.** It decides whether printing a bill obliges us to keep an append-only record of
+every subsequent change to the order — see [verifactu-findings.md §8](verifactu-findings.md). AEAT's
+developer FAQ says preparatory documents *«se expidan»* carry a preservation duty, with alteration
+permitted only *«por medio de un registro posterior, que también deberá quedar anotado en el
+sistema»*. **Their list reads *albaranes, proformas, prefacturas* and never says *precuenta*** —
+treating the restaurant pre-bill as one of that family is our reading, not their word.
+
+Part (b) is the design question: we intend to keep the working order mutable and log amendments,
+rather than freezing it.
+
+> **(a)** A efectos del artículo 29.2.j) de la LGT, ¿debe considerarse la "precuenta" que se entrega
+> al cliente en un restaurante antes del pago como una prefactura o documento sin validez fiscal,
+> con la consiguiente obligación de conservar su registro de forma inalterable?
+>
+> **(b)** En caso afirmativo, ¿basta con conservar un registro de las modificaciones posteriores,
+> anotadas en el propio sistema, manteniendo el pedido modificable — o debe congelarse el estado
+> del documento entregado?
+>
+> **(c)** ¿Debe la precuenta llevar mención expresa de que no tiene validez de factura, y existe
+> algún requisito formal sobre su contenido o numeración que evite que se confunda con una factura?
 
 ---
 
