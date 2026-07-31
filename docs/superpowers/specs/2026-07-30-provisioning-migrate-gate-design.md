@@ -5,9 +5,13 @@
 §4's second half is a post-implementation measurement, added once the code existed to run.
 **Package:** `packages/provisioning`
 
-Closes the first of the five follow-ups deferred from PR #11
-([handoff](../../handoffs/2026-07-30-provisioning-instance-landed.md) §5), the one recorded there as
-a product decision rather than a cleanup.
+Closes the first of the five follow-ups deferred from PR #11 (`waitron-provision`: instance, status
+and the CLI), the one recorded as a product decision rather than a cleanup: `instance` gated
+`migrate` on a journal TABLE existing rather than on a migration set having finished. §1 restates the
+defect in full and §6 names the other four, so nothing here depends on that list being fetched from
+elsewhere — which is deliberate, because the session handoff that carried it is **not in the
+committed tree** (`git ls-files docs/handoffs/` stops at `2026-07-29`). An earlier version of this
+line linked it.
 
 ---
 
@@ -80,9 +84,10 @@ change exists to repair, and it means an empty journal table replays the whole s
   dependency today (`ApplyDeps.migrationsRoot`), and `status` would grow a filesystem read it does
   not currently have. It buys precision in a plan summary at the cost of a second thing that can be
   wrong about which migrations exist.
-- **Keep the gate, sharpen the wording.** Cheapest, and rejected because it leaves the hole open. The
-  handoff records this defect's shape as the one `verifyGrants` already had to close; closing it in
-  one place and documenting it in the other is not a position worth holding.
+- **Keep the gate, sharpen the wording.** Cheapest, and rejected because it leaves the hole open.
+  This defect's shape is the one `verifyGrants` (`instance-apply.ts`, "Every statement above
+  'succeeded'. That is not the same as every privilege being present") already had to close, one file
+  over; closing it in one place and documenting it in the other is not a position worth holding.
 
 ## 3. What changes
 
@@ -285,7 +290,8 @@ does not load a package's cross-cutting guard suites — then
 
 ## 6. Out of scope
 
-The four remaining follow-ups from the handoff's §5 — structural password redaction, extracting
+The four remaining follow-ups deferred from PR #11, written out here rather than cited, since the
+handoff that enumerated them is not in the committed tree — structural password redaction, extracting
 `createTerminalIo` out of `bin.ts`, collapsing `ApplyDeps.database` against the action list, and the
 duplicated order-tracking IO fixture. None is a dependency of this change.
 
