@@ -41,6 +41,35 @@ describe("usePgliteDb", () => {
 });
 
 /**
+ * The handle must be assigned the moment the resource exists, not at the end of the hook. If a later
+ * step throws — a bad migration, a throwing `setup` — a handle assigned last is still `undefined`,
+ * so `afterAll` closes nothing and the resource leaks silently. That is worse than the noisy
+ * `TypeError` this helper exists to prevent, because nothing reports it.
+ *
+ * Proven from inside `setup`, which is the last thing that can throw during startup: if `db` is
+ * readable there, it was assigned before anything that could fail, and `afterAll` can always close
+ * it. `useRealPostgres` has the identical shape and would need a container to assert it directly.
+ */
+describe("usePgliteDb assigns its handle before setup can throw", () => {
+  let readableInsideSetup = false;
+  const pg = usePgliteDb({
+    migrations: [CORE_MIGRATIONS],
+    setup: async () => {
+      try {
+        void pg.db;
+        readableInsideSetup = true;
+      } catch {
+        readableInsideSetup = false;
+      }
+    },
+  });
+
+  it("so a failure after startup still leaves the database closable", () => {
+    expect(readableInsideSetup).toBe(true);
+  });
+});
+
+/**
  * `useRealPostgres` itself needs a container, so its happy path is exercised by the RLS suites that
  * use it rather than here. Its one branching decision is extracted so both arms are provable without
  * Docker — a container is a heavy price for asserting a string.

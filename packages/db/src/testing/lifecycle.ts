@@ -40,11 +40,15 @@ export interface PgliteSuite {
 export function usePgliteDb(options: PgliteSuiteOptions): PgliteSuite {
   let db: Database | undefined;
 
+  // Assigned the instant it exists, BEFORE migrations or setup can throw. Assigning at the end of
+  // the hook instead leaves `db` undefined when a later step fails, so `afterAll` closes nothing and
+  // the WASM cluster leaks — a silent leak in place of the noisy TypeError this whole helper exists
+  // to prevent, which is strictly worse. `runMigrations` failing is not hypothetical: it is what a
+  // bad migration in a feature branch does.
   beforeAll(async () => {
-    const started = await createPgliteDb();
-    for (const migrations of options.migrations) await runMigrations(started, migrations);
-    if (options.setup !== undefined) await options.setup(started);
-    db = started;
+    db = await createPgliteDb();
+    for (const migrations of options.migrations) await runMigrations(db, migrations);
+    if (options.setup !== undefined) await options.setup(db);
   }, options.timeoutMs ?? DEFAULT_SETUP_TIMEOUT_MS);
 
   afterAll(async () => {
@@ -132,15 +136,17 @@ export function useRealPostgres(options: RealPostgresSuiteOptions): RealPostgres
   let pg: RealPostgres | undefined;
   let admin: Database | undefined;
 
+  // Each handle is assigned the instant it exists, so a later failure still leaves it closable. A
+  // container that outlives a failed `connect()` or a throwing `setup` is a leaked Docker container,
+  // and with `TESTCONTAINERS_RYUK_DISABLED=true` — required locally, see CLAUDE.md §4 — nothing
+  // reaps it. Assigning both at the end of the hook, as this first did, made that the default.
   beforeAll(async () => {
-    const started = await options.start();
-    const connection = await started.connect();
+    pg = await options.start();
+    admin = await pg.connect();
     if (options.probeRole !== undefined) {
-      await connection.execute(sql.raw(probeRoleStatement(options.probeRole)));
+      await admin.execute(sql.raw(probeRoleStatement(options.probeRole)));
     }
-    if (options.setup !== undefined) await options.setup({ admin: connection, pg: started });
-    pg = started;
-    admin = connection;
+    if (options.setup !== undefined) await options.setup({ admin, pg });
   }, options.timeoutMs);
 
   // Ordered: the connection is closed before the container it lives in is stopped. Each is guarded
