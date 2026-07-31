@@ -190,6 +190,32 @@ are exempt from the guard; `apps/*` is out of scope by a recorded decision.
 `./testing/seed.js`. A wildcard would publish the harness and give `asAppUser` a second import path.
 A consequence worth knowing: `apps/server` cannot deep-import `packages/db`'s `errors.ts`.
 
+**Never build SQL by string concatenation — and know the one case where you must.** Drizzle
+parameterises every interpolated value in a `sql` template automatically, so `` sql`… ${value}` ``
+emits `$1` and binds it. Verified against a real server on 2026-07-31: `` sql`select ${x}::text` ``
+with `x = "o'brien; drop table x --"` returns that string intact.
+
+The exception is **utility statements, which PostgreSQL will not bind at all**. Same experiment,
+same server:
+
+```
+create role $1 login                    → syntax error at or near "$1"
+create role probe_b login password $1   → syntax error at or near "$1"
+```
+
+`CREATE ROLE`, `CREATE DATABASE`, `GRANT` and friends take no placeholders, so the value has to
+reach the statement as text and there is no parameterised form to reach for. When that happens the
+defence is explicit, never implicit:
+
+- **escape** — `quoteIdent`/`quoteLiteral` (`packages/provisioning/src/identifiers.ts`), for values
+  that may legitimately be arbitrary, such as a generated password;
+- **validate and throw** — `probeRoleStatement` (`packages/db/src/testing/lifecycle.ts`), for values
+  that should only ever be fixtures, where anything needing an escape is a bug worth failing on.
+
+Either is acceptable; **neither being present is not**, and "the callers only pass safe values" is a
+property of the callers rather than of the code — precisely the §1 defect class, since these
+parameters are typed plain `string`.
+
 **Never widen a grant to make a test pass.** `app_user` holds `SELECT` on `tenants` and not `INSERT`
 deliberately — the running POS cannot create tenants.
 
