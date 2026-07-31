@@ -482,9 +482,18 @@ describe("applyInstance against a blank container", () => {
       try {
         // The last set's journal, by hand, in Drizzle's own shape (`dialect.js:48-51`) and with no
         // rows — which is exactly what the rolled-back transaction leaves behind.
+        //
+        // Schema-QUALIFIED, because both of the things this fixture has to line up with name
+        // `public` explicitly and neither consults `search_path`: Drizzle creates the journal at
+        // `<migrationsSchema>.<table>` with `migrationsSchema: "public"` fixed at
+        // `packages/db/src/migrate.ts:42`, and `readInside` probes
+        // `to_regclass('public.<table>')` (`instance-state.ts:131`). Unqualified, this statement
+        // instead resolves through the session's `search_path` — `"$user", public` by default, so
+        // it lands in `public` here only because no schema is named after the connecting role.
+        // That is a default this fixture would otherwise be silently depending on.
         await target.execute(
           sql.raw(
-            `create table ${quoteIdent(last.table)} (
+            `create table public.${quoteIdent(last.table)} (
                id serial primary key, hash text not null, created_at bigint
              )`,
           ),
