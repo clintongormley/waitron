@@ -126,10 +126,10 @@ sharded or skipped without ever touching branch protection again.
 changes ─┬─> lint                  ALWAYS runs, never gated
          ├─> bundle-smoke          if code
          ├─> typecheck             if code
-         ├─> test-heavy            if code · packages/db alone
-         ├─> test-light            if code · everything else, --no-sort
-         ├─> mutation-verifactu    if verifactu or a dependency changed
-         └─> mutation-shared       if shared or a dependency changed
+         ├─> test-heavy            if code AND db is in scope · packages/db alone
+         ├─> test-light            if code · the scoped set minus db, --no-sort
+         ├─> mutation-verifactu    if code
+         └─> mutation-shared       if code
                     ↓
                    ci              always; the only required check
 ```
@@ -243,7 +243,6 @@ will hit. Measured on pnpm 9.15.0, same commit, both ref spellings:
 | normal clone            | the changed files                  | 11 packages                 |
 | `git worktree` checkout | the changed files                  | **`No projects matched`**   |
 
-
 `main` and `origin/main` behave identically, so it is not a ref-spelling problem. The likely
 mechanism is that a worktree's `.git` is a *file* rather than a directory (confirmed with `file
 .git`) and pnpm's change detection does not follow it — but the mechanism is inferred, whereas the
@@ -261,6 +260,28 @@ blind spot, and it is the reason §3.2 keeps it.
 - `test-light` — every other package, `--no-sort` so nothing waits on a dependency it does not
   consume. Carries the Playwright/Chromium install, because `@waitron/ui` lives here and nothing
   else needs a browser.
+
+`test-light` composes cleanly: `--filter "<scope>" --filter "!@waitron/db"` is the scoped set minus
+`db`, because exclusions subtract (measured above).
+
+**`test-heavy` does not, and both obvious formulations are wrong.** Whether it needs to run is
+decided in the `changes` job by resolving the scope and testing for membership, then passed down as
+a boolean. Measured with one commit in each scenario:
+
+| Formulation                                    | `db` changed | `payments` changed  | `shared` changed (a dependency of `db`) |
+| ---------------------------------------------- | ------------ | ------------------- | --------------------------------------- |
+| `--filter "...[main]" --filter "@waitron/db"`   | runs `db` ✓  | **runs `db`** ✗     | **runs `db`** ✗ (right answer, luck)    |
+| `--filter "@waitron/db[main]"`                  | runs `db` ✓  | nothing ✓           | **nothing** ✗                            |
+| membership of `--filter "...[main]"`            | runs `db` ✓  | nothing ✓           | runs `db` ✓                              |
+
+The first fails because **two inclusion filters are OR-ed, not intersected** — so `db`'s 189s would
+run on every code change, losing most of the benefit. The second fails in the dangerous direction:
+it intersects with the *changed* set rather than the *changed-plus-dependents* set, so a change to
+`packages/shared` selects nothing and `packages/db` ships untested. Only membership of the resolved
+scope is right in all three columns.
+
+The membership query needs no `pnpm install` — `pnpm ls --filter … --json` resolves from the
+workspace manifests alone (verified in a clone with no `node_modules`).
 
 Coverage thresholds are per-package, so no cross-shard aggregation is needed. A scoped pull request
 only enforces the thresholds of packages that ran; the unfiltered `main` run enforces all of them.
