@@ -37,13 +37,12 @@ reprioritisation rather than assumed.
 
 | What | State |
 | --- | --- |
-| **Sale settlement model** — design | **PR #20, open and unmerged.** Docs only. CI green, Copilot's three findings fixed and answered |
-| **This backlog** | **PR #21, open and unmerged.** Docs only |
-| **Sale settlement model** — implementation plan | Not written. The next build step, once #20 lands |
+| **Sale settlement model** — design | **Merged** (#20) |
+| **This backlog** | **Merged** (#21) |
+| **Pre-push hook skips deletions** | **PR #23, open.** Also carries this update |
+| **Sale settlement model** — implementation plan | Not written. **The next build step** |
 | **Close Q13 and Q15 on primary source** | Not started. Cheaper than hiring — see below |
 | **Consolidate the session-memory notes** | Not started. They predate this file and now overlap it — see below |
-
-Both PRs are waiting on a merge decision, not on work.
 
 ---
 
@@ -151,6 +150,12 @@ optional, and they are currently as unstarted as the restaurant-phase items they
 
 Carried from finished work. None of it blocks anything; all of it makes later work cheaper.
 
+- **Nothing repo-level can be tested.** `pnpm test` is `pnpm -r test`, so anything that is not inside
+  a package — the git hooks, root config, the workspace wiring — has no home for a test. The
+  pre-push deletion guard (#23) was therefore verified by running the real hook against four kinds of
+  stdin and recording the results, rather than by a suite that would catch someone re-breaking it. A
+  root-level vitest project would fix it and would be the first of its kind here, so it wants a
+  decision rather than a quiet invention
 - **`errors.reachability.test.ts` does not test reachability.** Proven by deletion. Eight packages
   carry a copy. Closing it needs a `tsc`-based downstream probe or a narrowed `include`. See
   `CLAUDE.md` §4 — do not cite these tests as evidence in the meantime

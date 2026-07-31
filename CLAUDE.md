@@ -459,8 +459,24 @@ tests alongside the code.
 - Historical docs record what was true when written. Add a dated pointer rather than rewriting their
   history to pretend they always said the current thing.
 
-**After pulling a branch that added a workspace dependency, run `pnpm install`** in the main
-checkout, or typecheck fails on a module that exists.
+**The main checkout goes stale in a way the worktrees do not**, because `worktree.py new` installs
+dependencies for each new worktree and nothing installs here. Observed symptom: `tsc: command not
+found` in `packages/migrations` with `WARN Local package.json exists, but node_modules missing` — on
+a `git push --delete` that carried no TypeScript whatsoever, because the hook checks the working
+tree rather than the push. The failure surfaces nowhere near its cause.
+
+`/land-branch` now runs `pnpm install` immediately after `git pull --ff-only` (2026-07-31), on the
+principle that the merge is what makes the checkout stale, so the merge is where the refresh
+belongs. **Run it yourself after any other pull** — a `git pull` outside that flow still leaves the
+checkout stale, and a branch that added a workspace dependency will fail typecheck on a module that
+demonstrably exists.
+
+**The pre-push hook skips a push that only deletes refs** (2026-07-31). Git feeds it
+`<local ref> <local sha> <remote ref> <remote sha>` per ref; a deletion carries the all-zero local
+sha, uploads no objects, and changes no code, so gating it tested the working tree instead. It
+**fails closed**: no refs on stdin means the gate runs. Deleting a merged branch is the common case
+and it was blocked by the stale-checkout failure above — a push that could not have broken anything,
+refused for a reason it did not cause.
 
 ---
 
