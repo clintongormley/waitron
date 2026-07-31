@@ -475,26 +475,27 @@ jobs:
 
       - run: pnpm --filter @waitron/shared mutation
 
-  # INTENDED to become the single required status check. It is not one yet: as of this commit
-  # ruleset 19899160 still requires the five upstream job ids by name, and swapping it to require
-  # only `ci` is a separate repo-admin action taken after this merges. Anyone debugging required
-  # checks before then should read the ruleset, not this comment.
+  # The aggregate gate. This file's header covers what branch protection requires and why the job
+  # ids above are free to change; what follows is only how this job itself works.
   #
-  # Once that swap happens, every id above this point becomes free to add, rename, shard or
-  # conditionally skip without touching branch protection — which is what makes the scoping in
-  # docs/superpowers/specs/2026-07-31-scoped-ci-design.md possible at all. Today each id is required
-  # by name, so any rename silently breaks the ruleset and any skipped job leaves a pull request
-  # waiting for a status that will never report.
+  # `if: always()` is here to make this job REPORT AT ALL, not to make it report failures. A job
+  # whose `needs` were skipped is skipped itself by default, and a skipped check never satisfies
+  # branch protection — so on a documentation-only change, where most of this workflow skips, `ci`
+  # would never report and the pull request would wait for a status that is not coming. That is the
+  # same deadlock the five-required-ids arrangement had, and `always()` is what stops the fix for it
+  # reintroducing it one layer up.
   #
-  # `if: always()` is what makes it report at all when something upstream is skipped: without it,
-  # GitHub skips a job whose `needs` were skipped, and a skipped required check never satisfies
-  # branch protection.
+  # Because the job therefore always runs, its own `if` cannot be what decides pass or fail. The
+  # step below is: it reads `needs.*.result` and exits non-zero itself.
   ci:
     if: always()
     needs:
-      - static-analysis
+      - changes
+      - lint
+      - bundle-smoke
       - typecheck
-      - test
+      - test-heavy
+      - test-light
       - mutation-verifactu
       - mutation-shared
     runs-on: ubuntu-latest
@@ -502,9 +503,17 @@ jobs:
       # `skipped` must PASS: scoping works by skipping, and a skipped job means "this change could
       # not affect that check", not "that check did not run". `cancelled` must FAIL: ci.yml sets
       # cancel-in-progress, and a superseded run reporting green would let a stale result satisfy
-      # branch protection. Getting that pair backwards turns this job into a rubber stamp, which is
-      # why Task 3 verifies both directions against the real workflow rather than reasoning about
-      # them.
+      # branch protection. Getting that pair backwards turns this job into a rubber stamp.
+      #
+      # These expressions only evaluate on GitHub, so there is no local way to check them. Both
+      # directions were therefore run against the real workflow, on PR #25:
+      #
+      #   run 30642999746 — typecheck FAILED, the other four succeeded, and `ci` FAILED.
+      #   run 30643556188 — mutation-shared SKIPPED, everything else succeeded, and `ci` PASSED.
+      #
+      # `cancelled` is the untested half of the pair: it is the second `contains(...)` in the same
+      # `if` below and has never been observed firing, because provoking it means racing a
+      # superseding push.
       - name: Fail if any needed job did not succeed
         if: >-
           contains(needs.*.result, 'failure') ||
