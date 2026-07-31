@@ -22,10 +22,23 @@ Last revised **2026-07-31**.
 >
 > Affected at least: Q11 (its "Why it matters" block and Spanish text), Q12, and
 > `getting-to-production.md`'s "One consequence of Model A when we host".
-> **Re-read every question against the new architecture before paying for answers**, and note the
-> replacement question that design raises instead: *does the RRSIF reach a backup archive that is not
-> itself a SIF, and if so under what terms?* (that spec's §8). Individual questions are left as
-> written rather than rewritten in place, per `CLAUDE.md` §6.
+> **Re-read every question against the new architecture before paying for answers.** That design
+> raises replacement questions, and they are about the **ROF** (RD 1619/2012 — conservation of
+> records) rather than the RRSIF. The reasoning, which is a reasoned reading and not a settled point:
+> the RRSIF governs invoicing *systems*, and an archive issues nothing, so it is **probably** out of
+> RRSIF scope — the spec's §8 leaves open what follows if it is not. Either way the ROF is what
+> governs records once they exist. The questions are written out in that spec's **§8a**:
+>
+> 1. Is Waitron a *tercero* under ROF art. 19.3 while the client's own server remains the system of
+>    record — or only in the disaster case, when our archive is briefly the only copy?
+> 2. If so, does art. 22.2's prior-notification duty fall on every client whose records we hold
+>    outside Spain, and must we prompt them to discharge it?
+> 3. Does art. 23's online-access requirement reach us as holder, or only the client as obligado?
+>
+> An earlier version of this note pointed at *"does the RRSIF reach a backup archive that is not
+> itself a SIF?"* — a question the spec had already answered itself, aimed at the wrong regulation.
+> Do not ask it. Individual questions below are left as written rather than rewritten in place, per
+> `CLAUDE.md` §6.
 
 ---
 
