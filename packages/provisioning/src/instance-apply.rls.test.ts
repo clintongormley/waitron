@@ -450,6 +450,14 @@ describe("applyInstance against a blank container", () => {
     const sets = manifestSets();
     const last = sets[sets.length - 1];
     if (last === undefined) throw new Error("the manifest is empty");
+    // The journal table below is derived from the manifest; the SCHEMA probe further down is not,
+    // and cannot be — `MigrationSet` carries `name`, `table` and `from` (manifest.ts:9-14) and no
+    // list of what each set creates, so there is nothing to derive `tenant_credentials` from. This
+    // assertion is what keeps the hardcoded half honest: `tenant_credentials` is created by
+    // `packages/credentials/drizzle/0000_credentials.sql`, which is the `credentials` set. Append a
+    // sixth set to the manifest and this fails here, loudly, instead of silently probing a table
+    // that belongs to a set which was never the one left empty.
+    expect(last.name).toBe("credentials");
 
     await admin.execute(sql.raw(`create database ${quoteIdent(database)}`));
     try {
@@ -587,11 +595,19 @@ describe("applyInstance against a blank container", () => {
         // outside this task's scope.
         expect(isAppError(thrown)).toBe(false);
         // Reached via Drizzle's own migrator issuing `CREATE SCHEMA IF NOT EXISTS "public"`
-        // unconditionally at the start of `migrate` (`drizzle-orm@0.45.2/pg-core/dialect.ts:85`),
+        // unconditionally at the start of `migrate` (`drizzle-orm@0.45.2/pg-core/dialect.js:54`),
         // before any journal table is read — the statement itself needs CREATE on the DATABASE,
-        // which `partial_admin` was deliberately never granted. `sqlStateOf` is the same "walk
-        // `.cause`" helper `instance-apply.ts` itself uses to classify a driver failure.
+        // which `partial_admin` was deliberately never granted. Cited as `dialect.js`, not
+        // `dialect.ts`: the stack trace says `dialect.ts:85` via the package's shipped source map,
+        // but the installed package has no `dialect.ts`, and `dialect.js:85` is an unrelated method.
+        //
+        // BOTH assertions, because either alone is too weak for the sentence above. `sqlStateOf` is
+        // the same "walk `.cause`" helper `instance-apply.ts` uses to classify a driver failure, but
+        // 42501 on its own would still pass if the refusal moved to a later statement or a later
+        // action — which is precisely the narrower shape §4 of the design doc says it does not
+        // speak to. The message pins WHICH statement.
         expect(sqlStateOf(thrown)).toBe("42501");
+        expect((thrown as Error).message).toContain('CREATE SCHEMA IF NOT EXISTS "public"');
       } finally {
         await probeTarget.close();
       }
