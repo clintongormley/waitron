@@ -1,10 +1,27 @@
 name: CI
 
-# Three independent jobs so a failure is legible at a glance and each can be
-# required separately in branch protection. Job ids below (static-analysis,
-# typecheck, test) are what GitHub reports as each job's check name — once a
-# ruleset requires them by name, renaming a job here silently breaks that
-# ruleset. Treat these ids as a stable public interface.
+# `ci` is the only job in this file that branch protection requires. Ruleset 19899160 requires
+# exactly three contexts — read back on 2026-07-31 with:
+#
+#   gh api repos/:owner/:repo/rulesets/19899160 \
+#     --jq '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context'
+#
+#   LICENSE is unmodified Elastic License 2.0
+#   Every commit is signed off
+#   ci
+#
+# The other two are produced by licence.yml, whose `licence-integrity` and `dco` jobs set those
+# strings as their `name:` (licence.yml:13 and :23), so `ci` is this file's entire interface to
+# branch protection.
+#
+# The job ids below are therefore NOT a stable public interface, and removing that property is the
+# whole point of the `ci` job. Until the ruleset was changed, five ids here were required by name:
+# renaming one silently broke the ruleset, and skipping one left a pull request waiting for a status
+# that would never report. Both of those are now free moves, which is what makes the scoping in
+# docs/superpowers/specs/2026-07-31-scoped-ci-design.md possible at all.
+#
+# The one rule that replaces it: every other job in this file must appear in `ci`'s `needs`. A job
+# that does not is reporting to nothing — it could fail while the pull request stays green.
 
 on:
   push:
@@ -16,8 +33,137 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Lint + format check. Cheapest job, no Playwright/Chromium involved.
-  static-analysis:
+  # Works out what the rest of the workflow needs to do. Everything below gates on its outputs.
+  #
+  # Two independent decisions, deliberately not merged into one (design §3.2):
+  #   `code`  — is there anything here that is not prose? If not, only `lint` runs, on pull requests
+  #             AND on main, so a documentation merge costs nothing in either place.
+  #   `scope` — on a pull request, narrow the test shards to the packages that changed and the
+  #             packages that depend on them. On main, run everything, because that unfiltered run
+  #             is what verifies the narrowing was right.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+      scope: ${{ steps.classify.outputs.scope }}
+      heavy: ${{ steps.gates.outputs.heavy }}
+      light: ${{ steps.gates.outputs.light }}
+      verifactu: ${{ steps.gates.outputs.verifactu }}
+      shared: ${{ steps.gates.outputs.shared }}
+    steps:
+      # fetch-depth: 0 is load-bearing. The default is 1, which leaves no merge base to diff
+      # against and no history for pnpm's own change detection — both would then silently report
+      # "nothing changed" and skip the entire suite.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # Needed for the `pnpm ls` membership query below. No `pnpm install` is required — `pnpm ls
+      # --filter` resolves from the workspace manifests alone (verified in a clone with no
+      # node_modules present).
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      # `package-manager-cache: false` is REQUIRED here, and dropping `cache: pnpm` is not enough —
+      # that input defaults to true in actions/setup-node@v5, which then auto-detects pnpm and
+      # caches anyway. This is the only job in the file that never runs `pnpm install`, so the pnpm
+      # store never exists, and setup-node's post-job cache-SAVE fails on the missing path:
+      #
+      #   ##[error]Path Validation Error: Path(s) specified in the action for caching
+      #   do(es) not exist, hence no cache is being saved.
+      #
+      # That fails the job AFTER its outputs are already set, so `changes` reports failure while
+      # having computed every gate correctly, and every downstream job skips.
+      #
+      # It is worth knowing WHY this took two attempts, because the first fix looked like it worked.
+      # Whether the post-step saves at all depends on the RESTORE outcome, so the bug only fires on
+      # a cold cache:
+      #
+      #   run 30651421691  `Cache hit …` → post-step `not saving cache` → job PASSED
+      #   run 30652021468  `pnpm cache is not found` → post-step saves → Path Validation → job FAILED
+      #
+      # Both ran a `changes` job with no `cache:` input. The first passed only because another job
+      # had already warmed that key; the second was a pull request whose base was not `main`, so it
+      # had a different cache scope and started cold. A job that passes or fails on whether a cache
+      # happens to be warm is a false green, so the cache is turned off outright rather than left to
+      # chance. Nothing here is worth caching: the job runs `pnpm ls` and one node script, both of
+      # which read the workspace manifests only.
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          package-manager-cache: false
+
+      - id: classify
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags origin "$BASE_REF"
+            paths=$(git diff --name-only "origin/$BASE_REF...HEAD")
+            # Changed packages AND THEIR DEPENDENTS. The ellipsis goes on the LEFT — `[ref]...`
+            # is the other direction (a package and its dependencies) and would test the wrong set.
+            scope="...[origin/$BASE_REF]"
+          else
+            case "$BEFORE" in
+              # An all-zero `before` means a new branch or a force-push: no usable base, so no diff.
+              # Emit nothing and let the classifier fail closed to a full run.
+              *[!0]*) paths=$(git diff --name-only "$BEFORE" "$SHA") ;;
+              *) echo "no usable base ref ($BEFORE) — running everything" >&2; paths="" ;;
+            esac
+            # main always runs the full suite: it is what verifies the pull request's narrowing.
+            scope=""
+          fi
+
+          printf '%s\n' "$paths" | node .github/scripts/changed-scope.mjs >> "$GITHUB_OUTPUT"
+          echo "scope=$scope" >> "$GITHUB_OUTPUT"
+
+      # Which gated jobs have anything to do? Four today — both test shards and the two mutation
+      # runs — and none of them CAN be expressed as a filter on the job itself; see gateOutputs' own
+      # comment for the two wrong formulations and why each fails.
+      #
+      # Three of the four ask whether one named package is in the resolved scope. `light` does not:
+      # test-light's own filter SUBTRACTS @waitron/db, so it has work when the scope holds anything
+      # other than db — which is why a gate is a predicate over the scope rather than a package
+      # name. See SCOPE_GATES in .github/scripts/changed-scope.mjs.
+      #
+      # ONE `pnpm ls` for all four. Not mainly for the time — measured locally, the query is 0.20s
+      # against the node script's 0.04s, so four of them would cost well under a second — but
+      # because all four gates are answers about the SAME resolved scope. Resolving it once makes
+      # them consistent by construction, and keeps this step from growing a stanza per gated job.
+      #
+      # `--unscoped` is main, where there is no scope to resolve and everything must run: the script
+      # emits every gate as true from its own SCOPE_GATES list, so a gate added there does not also
+      # need adding here. Getting that wrong would leave a new job never running on main, which is
+      # the direction nothing else would notice.
+      - id: gates
+        env:
+          SCOPE: ${{ steps.classify.outputs.scope }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SCOPE" ]; then
+            node .github/scripts/changed-scope.mjs gates --unscoped >> "$GITHUB_OUTPUT"
+          else
+            # stderr is deliberately NOT discarded: only stdout is piped, so anything pnpm says goes
+            # to the job log where it can be read, and cannot reach the classifier. An earlier
+            # version sent it to /dev/null and bought nothing but a harder debugging session.
+            pnpm --filter "$SCOPE" ls --depth -1 --json \
+              | node .github/scripts/changed-scope.mjs gates >> "$GITHUB_OUTPUT"
+          fi
+
+  # Always runs, on every path, including a documentation-only change — Prettier is the only tool
+  # here that reads prose, and the repo-level suite is what proves the `changes` job's own
+  # classifier still works. Both are cheap enough that gating them would save nothing.
+  #
+  # Worth knowing precisely what `format:check` covers: .prettierignore lists `docs/`, so
+  # root-level Markdown (CLAUDE.md, README.md, CONTRIBUTING.md) IS checked and nothing under docs/
+  # is. Established by malforming a file in each location — `prettier --check` reports an ignored
+  # path and a clean path identically, so the obvious probe proves nothing.
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -36,6 +182,32 @@ jobs:
       - run: pnpm lint
 
       - run: pnpm format:check
+
+      # The repo-level project only (`vitest run` at the root, NOT `pnpm test`, which would also run
+      # every package). Covers .github/scripts/changed-scope.mjs — if the classifier is wrong, every
+      # gating decision below is wrong, so it must run even on the paths it would otherwise skip.
+      - run: pnpm vitest run --coverage
+
+  # The bundles operators actually run. Nothing else in this workflow builds them: dist/ is
+  # gitignored, both bin.ts files are excluded from coverage, and typecheck and test run against
+  # TypeScript source. Gated on `code` because a Markdown edit cannot change an esbuild bundle.
+  bundle-smoke:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
 
       # Nothing else in this workflow builds packages/credentials's bundle: dist/ is gitignored,
       # bin.ts is excluded from coverage, and the SDD ledger records this exact artifact shipping
@@ -155,6 +327,8 @@ jobs:
 
   # TypeScript project-wide type check. No Playwright/Chromium involved.
   typecheck:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -172,19 +346,67 @@ jobs:
 
       - run: pnpm typecheck
 
-  # Real-Chromium browser tests plus V8 coverage thresholds. The only job
-  # that needs Playwright's browser download, so it's the only one that pays
-  # for it.
-  test:
+  # packages/db alone. It is 189s of the old 387s `pnpm test:coverage` step AND a topological
+  # barrier: `pnpm -r` orders by dependency, so seven packages could not start until it finished.
+  # On its own runner it stops blocking anything.
+  test-heavy:
+    needs: changes
+    # Gated on `heavy`, not on the scope filter. Two inclusion filters are OR-ed rather than
+    # intersected, so `--filter "$SCOPE" --filter "@waitron/db"` would run this 189s suite on every
+    # code change; and `@waitron/db[<base>]` misses db when one of db's own dependencies changed.
+    # The `changes` job resolves membership properly and answers here with a boolean.
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true'
     runs-on: ubuntu-latest
     env:
-      # packages/db's harness skips its real-Postgres target when Docker is
-      # absent. That is right on a laptop and wrong here: the skipped target is
-      # the only one that can observe lock contention and non-superuser RLS, so
-      # a runner without Docker would report green having checked neither.
+      # packages/db's harness skips its real-Postgres target when Docker is absent. That is right on
+      # a laptop and wrong here: the skipped target is the only one that can observe lock contention
+      # and non-superuser RLS, so a runner without Docker would report green having checked neither.
       REQUIRE_DOCKER: "1"
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # No scope filter here: the `changes` job already decided this shard has work to do, so the
+      # only question left is which package, and that is always packages/db.
+      - name: Run the db shard
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+        run: pnpm --filter "@waitron/db" test:coverage
+
+  # Everything except packages/db. --no-sort removes the dependency ordering, which earns nothing
+  # for tests: all 15 workspace members resolve to ./src/*.ts and no test imports a sibling's dist/,
+  # so nothing here consumes a build artefact. (`build` DOES need the ordering — this flag is on the
+  # test invocation only.)
+  test-light:
+    needs: changes
+    # `light` is not a membership gate like the other three: the step below subtracts @waitron/db
+    # from the scope, so this job has work when the resolved scope holds ANY package other than db.
+    #
+    # It gated on `code` alone until this was added, which meant a code change touching no package
+    # at all still got a runner. Read off run 30653487133 (`gh run view 30653487133 --json jobs`):
+    # this job was that run's longest at 48s (18:01:36 → 18:02:24) and its "Run the light shard"
+    # step printed `None of the selected packages has a "test:coverage" script` — a `pnpm install`
+    # and a `playwright install --with-deps chromium` for zero test execution, reported as success.
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.light == 'true'
+    runs-on: ubuntu-latest
+    env:
+      REQUIRE_DOCKER: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v6
         with:
@@ -207,6 +429,9 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
+      # Only this shard needs a browser — @waitron/ui is the sole Chromium consumer, and test-heavy
+      # pays nothing for it.
+      #
       # `pnpm exec` at the repo root does not resolve a bin scoped to a
       # workspace member (only `pnpm -w exec` walks up for root-level bins),
       # so plain `pnpm exec playwright ...` fails here with "Command
@@ -222,11 +447,27 @@ jobs:
       # is never part of what actions/cache restored above.
       - run: pnpm --filter @waitron/ui exec playwright install --with-deps chromium
 
-      # Runs the full suite under V8 coverage and enforces the thresholds in
-      # packages/ui/vitest.config.ts — a coverage-threshold miss fails the job
-      # the same way a failing test would. Subsumes plain `pnpm test`, so this
-      # is the only test invocation in the pipeline.
-      - run: pnpm test:coverage
+      # Exclusions SUBTRACT from the scoped set rather than being OR-ed with it — measured: with one
+      # commit touching packages/db, `--filter "...[main]"` gives 11 packages and adding
+      # `--filter "!@waitron/db"` gives the same 11 minus db. That is what makes this shard "the
+      # scoped set, minus what test-heavy already ran".
+      #
+      # The `-n "$SCOPE"` guard is load-bearing, not defensive decoration: on main SCOPE is the
+      # empty string, and `pnpm --filter ""` is neither "no filter" nor "match nothing". Measured on
+      # pnpm 9.15.0 with this workspace: it exits 1 with
+      # `ERROR  Unsupported package selector: {"exclude":false,…}` before selecting anything, so
+      # without the guard every main run would fail this shard outright.
+      - name: Run the light shard
+        env:
+          SCOPE: ${{ needs.changes.outputs.scope }}
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+        run: |
+          set -euo pipefail
+          if [ -n "$SCOPE" ]; then
+            pnpm --filter "$SCOPE" --filter "!@waitron/db" --no-sort test:coverage
+          else
+            pnpm --filter "!@waitron/db" --no-sort test:coverage
+          fi
 
   # Mutation testing for packages/verifactu only. Unlike packages/ui — whose
   # mutation run is weekly in mutation.yml because each mutant reruns the full
@@ -235,7 +476,21 @@ jobs:
   # test means an unverifiable hash chain rather than a misaligned button,
   # which is why it carries a hard threshold (break: 90) while packages/ui
   # publishes a score without failing on it.
+  #
+  # "Cheap enough to gate every PR" was true of the job in isolation and false of the workflow.
+  # Read off this branch's first scoped run with
+  # `gh run view 30650089655 --json createdAt,updatedAt,jobs` (head 4926cf5): the run spanned 4m8s,
+  # THIS JOB ran 17:10:35→17:14:01 of it (3m26s), and every other job was finished by 17:11:40 —
+  # 1m39s in, with test-heavy skipped outright. Gated on `code` alone it ran on any code change at
+  # all, so it set the floor for every pull request in the repository, including the ones nowhere
+  # near packages/verifactu.
+  #
+  # So it now gates on membership of the resolved scope, exactly as test-heavy does, and for the
+  # same reason a filter on the job cannot express it (see gateOutputs in
+  # .github/scripts/changed-scope.mjs). On main the scope is empty and this always runs.
   mutation-verifactu:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.verifactu == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -263,9 +518,19 @@ jobs:
 
   # packages/shared is pure functions over strings and BigInt: no browser, no database, no
   # async. That makes it the cheapest mutation target in the repo — cheaper than
-  # packages/verifactu — so it gates every PR at break: 90. Contrast packages/db, where every
-  # test boots PGlite and the cost profile resembles packages/ui's weekly ungated run.
+  # packages/verifactu — so it runs at break: 90 rather than publishing a score the way packages/ui
+  # does. Contrast packages/db, where every test boots PGlite and the cost profile resembles
+  # packages/ui's weekly ungated run.
+  #
+  # It gated every pull request until this gate was added; it now gates the ones whose resolved
+  # scope contains packages/shared, by the same membership mechanism as mutation-verifactu above.
+  # Cheapness is not on its own a reason to run: this job took 55s on run 30650089655 (17:10:36 →
+  # 17:11:31) and was nowhere near that run's critical path — but a job the diff could not have
+  # affected has nothing to say about it, whatever it costs, and scoping only the expensive one of a
+  # matched pair would leave the mechanism reading as a special case rather than as the rule.
   mutation-shared:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.shared == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -283,26 +548,27 @@ jobs:
 
       - run: pnpm --filter @waitron/shared mutation
 
-  # INTENDED to become the single required status check. It is not one yet: as of this commit
-  # ruleset 19899160 still requires the five upstream job ids by name, and swapping it to require
-  # only `ci` is a separate repo-admin action taken after this merges. Anyone debugging required
-  # checks before then should read the ruleset, not this comment.
+  # The aggregate gate. This file's header covers what branch protection requires and why the job
+  # ids above are free to change; what follows is only how this job itself works.
   #
-  # Once that swap happens, every id above this point becomes free to add, rename, shard or
-  # conditionally skip without touching branch protection — which is what makes the scoping in
-  # docs/superpowers/specs/2026-07-31-scoped-ci-design.md possible at all. Today each id is required
-  # by name, so any rename silently breaks the ruleset and any skipped job leaves a pull request
-  # waiting for a status that will never report.
+  # `if: always()` is here to make this job REPORT AT ALL, not to make it report failures. A job
+  # whose `needs` were skipped is skipped itself by default, and a skipped check never satisfies
+  # branch protection — so on a documentation-only change, where most of this workflow skips, `ci`
+  # would never report and the pull request would wait for a status that is not coming. That is the
+  # same deadlock the five-required-ids arrangement had, and `always()` is what stops the fix for it
+  # reintroducing it one layer up.
   #
-  # `if: always()` is what makes it report at all when something upstream is skipped: without it,
-  # GitHub skips a job whose `needs` were skipped, and a skipped required check never satisfies
-  # branch protection.
+  # Because the job therefore always runs, its own `if` cannot be what decides pass or fail. The
+  # step below is: it reads `needs.*.result` and exits non-zero itself.
   ci:
     if: always()
     needs:
-      - static-analysis
+      - changes
+      - lint
+      - bundle-smoke
       - typecheck
-      - test
+      - test-heavy
+      - test-light
       - mutation-verifactu
       - mutation-shared
     runs-on: ubuntu-latest
@@ -310,9 +576,17 @@ jobs:
       # `skipped` must PASS: scoping works by skipping, and a skipped job means "this change could
       # not affect that check", not "that check did not run". `cancelled` must FAIL: ci.yml sets
       # cancel-in-progress, and a superseded run reporting green would let a stale result satisfy
-      # branch protection. Getting that pair backwards turns this job into a rubber stamp, which is
-      # why Task 3 verifies both directions against the real workflow rather than reasoning about
-      # them.
+      # branch protection. Getting that pair backwards turns this job into a rubber stamp.
+      #
+      # These expressions only evaluate on GitHub, so there is no local way to check them. Both
+      # directions were therefore run against the real workflow, on PR #25:
+      #
+      #   run 30642999746 — typecheck FAILED, the other four succeeded, and `ci` FAILED.
+      #   run 30643556188 — mutation-shared SKIPPED, everything else succeeded, and `ci` PASSED.
+      #
+      # `cancelled` is the untested half of the pair: it is the second `contains(...)` in the same
+      # `if` below and has never been observed firing, because provoking it means racing a
+      # superseding push.
       - name: Fail if any needed job did not succeed
         if: >-
           contains(needs.*.result, 'failure') ||

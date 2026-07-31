@@ -1,11 +1,20 @@
 #!/usr/bin/env sh
 # Local gate run before anything reaches the remote. Mirrors the fast checks in
-# CI's static-analysis/typecheck/test jobs (see .github/workflows/ci.yml) so a
-# broken push never even makes it to GitHub.
+# CI's lint / typecheck / test-heavy / test-light jobs (see
+# .github/workflows/ci.yml) so a broken push never even makes it to GitHub.
 #
-# Deliberately excluded: coverage thresholds and mutation testing. Both are
-# enforced in CI (the `test` job runs coverage; mutation.yml runs weekly) but
-# are too slow for a hook that runs on every push.
+# Neither this hook nor CI is a subset of the other, so a green here does not
+# imply a green there, nor the other way round:
+#
+#   BROADER than CI on a pull request. `pnpm test` below runs the whole
+#   workspace, while CI's two shards narrow to the packages a change can reach
+#   (its `changes` job resolves the scope). Only a push to `main` runs CI
+#   unfiltered.
+#
+#   SHALLOWER than CI everywhere. Coverage thresholds and mutation testing are
+#   deliberately excluded here — the test shards run `test:coverage` and
+#   mutation.yml runs weekly — because both are too slow for a hook that runs on
+#   every push.
 #
 # In a hurry / hook is wrong? Bypass with: git push --no-verify
 # Please still fix the underlying failure — CI runs the same checks and will

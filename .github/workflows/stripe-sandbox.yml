@@ -1,7 +1,8 @@
 name: stripe-sandbox
 
-# The nightly-only counterpart to ci.yml's `test` job: drives real Stripe test-mode against a
-# simulated Terminal reader (packages/payments-stripe/src/collect.sandbox.test.ts), never as part of
+# The nightly-only counterpart to ci.yml's test-heavy/test-light shards: drives real Stripe
+# test-mode against a simulated Terminal reader
+# (packages/payments-stripe/src/collect.sandbox.test.ts), never as part of
 # per-PR CI — network + secret dependent, so it runs on a cadence instead of gating merges. No
 # Playwright/Chromium step: this suite is pure Node + the `stripe` SDK, no browser involved.
 

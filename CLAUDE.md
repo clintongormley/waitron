@@ -139,11 +139,62 @@ vendor docs, pricing pages and browser-support tables. It applies identically, a
 pnpm lint && pnpm typecheck && pnpm format:check && pnpm test
 ```
 
-Four traps that each cost a round trip:
+Traps that each cost a round trip (deliberately uncounted — the last version of this line said
+"four" and went stale the moment one was added):
 
-- **CI's `test` job runs `pnpm test:coverage`, not `pnpm test`.** The pre-push hook runs plain
-  `pnpm test`, so a coverage-threshold regression passes locally and fails in CI. Before claiming a
-  package is green, run `pnpm --filter <pkg> test:coverage`.
+- **CI's test shards run `test:coverage`, not `test`.** The pre-push hook runs plain `pnpm test`, so
+  a coverage-threshold regression passes locally and fails in CI. Before claiming a package is green,
+  run `pnpm --filter <pkg> test:coverage`. There is no `test` job to name any more:
+  `.github/workflows/ci.yml` splits it into `test-heavy` (`packages/db` alone) and `test-light`
+  (everything else, `--no-sort`).
+- **CI does not run every check on every push.** `ci.yml`'s `changes` job skips the expensive jobs
+  outright when every changed path is documentation, and on a pull request narrows the two test
+  shards and both mutation jobs to the changed packages and their dependents. A merge to `main` runs
+  the full unfiltered suite **whenever anything but documentation changed**, and that run is what
+  verifies the narrowing was right — a documentation-only merge skips there too, which is the whole
+  point of the two decisions being separate. So a green pull
+  request is evidence about the packages that RAN — read the `changes` job's log for its `code` and
+  `scope` outputs and its per-job `heavy` / `verifactu` / `shared` gates before treating it as
+  evidence about the workspace. Design:
+  `docs/superpowers/specs/2026-07-31-scoped-ci-design.md`.
+- **A cheap job can still be the critical path, and only the whole-run measurement shows it.**
+  `mutation-verifactu` was gated on `code` alone because a mutation run over a pure-Node package is
+  cheap _per mutant_. Read off the first scoped run
+  (`gh run view 30650089655 --json createdAt,updatedAt,jobs`, head `4926cf5`): 4m8s wall clock, of
+  which that one job was 3m26s, with every other job finished 1m39s in. It was therefore the floor
+  for every pull request in the repository, including the ones nowhere near `packages/verifactu` —
+  and the per-job reasoning that put it there could not have shown that, because the number it
+  turned on is a property of the run, not of the job. Before calling a job cheap enough to leave
+  ungated, sort that run's jobs by duration.
+- **The scoping filter silently matches nothing in a `git worktree`, and all feature work here
+  happens in one**, so it is the first thing anyone testing that filter will hit. Measured on pnpm
+  9.15.0 in `waitron-feat-ci-scoped-testing`: `pnpm --filter "...[main]" ls --depth -1` printed
+  `No projects matched the filters` while `git diff --name-only main...HEAD` in the same directory
+  listed every changed file. It reads as "the filter is broken" rather than "you are in the wrong
+  kind of checkout". Verify anything touching the filter in a clone or on a real pull request.
+  (Deliberately not a file count: the first version of this entry said "seven", which stopped being
+  true on the branch's next commit. A number that moves is a receipt that goes stale.)
+- **`pnpm --filter ""` is a hard error, not a no-op.** Measured on pnpm 9.15.0 in this workspace:
+  `pnpm --filter "" --filter "!@waitron/db" --no-sort exec node -e "0"` exits **1** with
+  `ERROR  Unsupported package selector: {"exclude":false,…}` before selecting anything, while the same
+  command with the empty filter dropped exits 0. That is exactly the shape of `test-light`'s `SCOPE`
+  — empty on `main`, non-empty on a pull request — so its `[ -n "$SCOPE" ]` guard is load-bearing,
+  not decoration: without it every `main` run would fail that shard outright. The plan for this
+  change asserted the opposite, that an empty filter "matches nothing rather than everything". It
+  fails loudly, which is the better of the two directions, but a possibly-empty interpolated filter
+  still needs the guard.
+- **The workspace root is outside `pnpm -r`, so root config is linted and never typechecked.**
+  `pnpm typecheck` is `pnpm -r typecheck`, and `pnpm -r exec node -e "console.log(process.cwd())"`
+  visits the fifteen workspace members and never the root; there is no root `tsconfig.json` either,
+  only `tsconfig.base.json` for packages to extend. Proven by mutation, twice, because the first
+  probe flattered the situation. Appending `const brokenProbe: number = "not a number";` to the root
+  `vitest.config.ts` gives `pnpm typecheck` exit 0 and `pnpm lint` exit **1** — which looks like
+  lint covering the gap, and does not: the rule that fired is
+  `@typescript-eslint/no-unused-vars`, on the unused binding. `eslint.config.js` uses
+  `tseslint.configs.recommended`, which is **not** type-aware, so it never saw the type error at
+  all. Make the binding used — `export const brokenProbe: number = "not a number";` — and
+  `pnpm typecheck`, `pnpm lint` AND `pnpm vitest run` all exit **0**. Nothing in this repository
+  typechecks root config, so a type error there reaches `main` unremarked.
 - **The pre-push hook does not run `--frozen-lockfile`.** Moving a dependency between
   `dependencies` and `devDependencies` passes locally and fails CI at the install step. Run
   `pnpm install` and commit the lockfile.
@@ -154,7 +205,9 @@ Four traps that each cost a round trip:
   `SPANISH_WORDS`). Cross-cutting suites that police the WHOLE package — the vocabulary guard, the
   error-code reachability tests, schema-ownership — are invisible to a name-filtered run, so a
   filtered green says nothing about them. Run the package unfiltered before believing a pass. Same
-  false-green shape as the two traps above, in a third place.
+  false-green shape as the `test:coverage` and `--frozen-lockfile` traps above, in a third place.
+  (Named rather than counted: an earlier version said "the two traps above" and stopped being true
+  the moment a bullet was inserted between them.)
 
 - **The pre-push log file can be days stale — reproduce, do not read it.** A rejected push pointed
   at `/tmp/waitron-root-test-run.log`; that file was two days old and named
@@ -163,7 +216,9 @@ Four traps that each cost a round trip:
   before believing the log names your failure.
 
 On bypassing the hook, see §6 — the hook's own header sanctions `--no-verify` in an emergency, and
-the underlying failure still has to be fixed because CI runs the same checks.
+the underlying failure still has to be fixed because CI runs the same checks. On a pull request it
+runs them over a narrower set of packages, so a hook failure the pull request does not reproduce is
+not a hook that is wrong; it is a check CI has deferred to the unfiltered `main` run.
 
 **Coverage thresholds** are `statements 98 / lines 98 / functions 98 / branches 95` in every package
 except `packages/ui`, which is `95/95/90/88` with a documented reason in its own config.
@@ -343,6 +398,18 @@ order-reliant — several tests have been fixed for exactly this.
 still passes with the guard removed is not testing the guard. Do the same for a negative control:
 confirm it fails for the reason you think it does.
 
+**Vitest's default coverage excludes swallow the whole of `.github/`.** Coverage `include` and
+`exclude` replace rather than merge, so the house style spreads `coverageConfigDefaults.exclude`
+back in — and one of its seventeen entries, `**/[.]**`, matches any dot-prefixed path segment. The
+root `vitest.config.ts`'s first version spread them verbatim and measured
+**nothing**: `vitest run --coverage` printed `All files | 0 | 0 | 0 | 0`, wrote a
+`coverage-summary.json` whose every `pct` was the string `"Unknown"`, and **exited 0** — the
+98/98/98/95 thresholds passed without a line of source being read. Both configs were re-run here
+against `vitest@3.2.7`: the verbatim spread exits 0 at zero coverage, the committed one (which
+filters that one pattern out) reports `changed-scope.mjs` at 100/100/100/100. A coverage gate cannot
+fail on a file it never opened, so whenever `include` points anywhere dot-prefixed, read the per-file
+table rather than the exit code.
+
 **`errors.reachability.test.ts` does not test reachability.** The rule it exists to enforce is real —
 an `errors.ts` unreachable from its package's own barrel is invisible to external consumers — but the
 test does not enforce it. Proven by deletion in `packages/migrations`: remove `import "./errors.js"`
@@ -426,7 +493,9 @@ landed after the fix, so nothing ever hit that.)
   version. Diff before deleting — the scratch copy was 113 lines behind what had actually landed.
 
 **Before a PR**, run the gate in §2 yourself rather than relying on the pre-push hook. The hook
-mirrors CI's fast checks but is **not** identical to it — see §2 for the two places they diverge.
+mirrors CI's fast checks but is **not** identical to it — see §2 for where they diverge, in both
+directions: the hook is broader (it runs the whole workspace, while CI's shards narrow to what a
+pull request can reach) and shallower (no coverage thresholds, no `--frozen-lockfile`, no mutation).
 Bypassing the hook with `--no-verify` is for emergencies only, and the underlying failure still
 needs fixing because CI runs the same checks.
 
@@ -501,9 +570,11 @@ plainly, or the narrative of what a session did. The last of those belongs in `d
 file carries only what changes how the _next_ piece of work is done.
 
 **The receipt rule in §1 applies to this file too.** An entry states the rule and what it cost —
-"CI's `test` job runs `test:coverage`, not `test`" is followed by the consequence that made it worth
+"CI's test shards run `test:coverage`, not `test`" is followed by the consequence that made it worth
 writing. A rule with no evidence behind it reads as opinion and gets ignored by the session that
-most needs it.
+most needs it. Quoting another entry here makes this paragraph go stale when that entry is
+rewritten, which is what happened to its predecessor: it quoted "CI's `test` job", and `test` is not
+a job any more.
 
 **Prune as well as append.** A rule that has been superseded, or whose underlying trap was fixed in
 the code, is worse than no rule: it teaches a session to work around something that no longer

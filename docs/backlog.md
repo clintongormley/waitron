@@ -40,6 +40,7 @@ reprioritisation rather than assumed.
 | **Sale settlement model** — design | **Merged** (#20) |
 | **This backlog** | **Merged** (#21) |
 | **Pre-push hook skips deletions** | **Merged** (#23) |
+| **Scoped CI** — stop running every check on every push | PR 1 **merged** (#25); PR 2 in flight on `feat/ci-scoped-testing`. Detail under **Debt and odd jobs** |
 | **Cloud storage model** — design | **Merged** (#19), corrected by **#22** |
 | **Sale settlement model** — implementation plan | Not written. **The next build step** |
 | **Close Q13 and Q15 on primary source** | Not started. Cheaper than hiring — see below |
@@ -165,26 +166,55 @@ optional, and they are currently as unstarted as the restaurant-phase items they
 
 Carried from finished work. None of it blocks anything; all of it makes later work cheaper.
 
-- **Nothing repo-level can be tested.** `pnpm test` is `pnpm -r test`, so anything that is not inside
-  a package — the git hooks, root config, the workspace wiring — has no home for a test. The
-  pre-push deletion guard (#23) was therefore verified by running the real hook against four kinds of
-  stdin and recording the results, rather than by a suite that would catch someone re-breaking it. A
-  root-level vitest project would fix it and would be the first of its kind here, so it wants a
-  decision rather than a quiet invention
+- **The git hooks are still untested — but they now have somewhere to go.** The "nothing repo-level
+  can be tested" debt is closed: root `vitest.config.ts` exists, added by the scoped-CI work below,
+  and root `pnpm test` is now `vitest run && pnpm -r test`. Its `include` currently covers
+  `.github/scripts/` only. What has **not** happened is the hook test itself: the pre-push deletion
+  guard (#23) is still backed only by having run the real hook against four kinds of stdin and
+  recorded the results, not by a suite that would catch someone re-breaking it. Two things to know
+  before writing one — the root project's `include` has to be widened to reach `.husky/`, and root
+  config is linted but never typechecked (`pnpm typecheck` is `pnpm -r typecheck`, and `pnpm -r`
+  never visits the workspace root; see `CLAUDE.md` §2)
 - **`errors.reachability.test.ts` does not test reachability.** Proven by deletion. Eight packages
   carry a copy. Closing it needs a `tsc`-based downstream probe or a narrowed `include`. See
   `CLAUDE.md` §4 — do not cite these tests as evidence in the meantime
-- **CI runs every check on every push.** A Markdown-only change costs the same 7m20s as a migration.
-  Designed in [2026-07-31-scoped-ci-design.md](superpowers/specs/2026-07-31-scoped-ci-design.md):
-  an aggregate `ci` gate so job ids stop being a branch-protection interface, then a docs gate,
-  package scoping on pull requests with the full suite still on `main`, and a two-way test shard.
-  **Two PRs, deliberately** — renaming `test` in the same PR that introduces the gate would block on
-  a required check that can no longer report
-- **`packages/db`'s test suite is 189s and half the `test` job**, mostly one Testcontainers Postgres
-  per suite. Sharing a container beats every CI-config change combined, but it means changing
-  `useRealPostgres` / `describeEachTarget` — the harness that guarantees RLS and lock contention are
-  observed under a non-superuser role, which PGlite cannot show. A test-correctness change wearing a
-  performance change's clothes; its own branch, its own review
+- **CI ran every check on every push — the fix is in flight.** A Markdown-only change cost the same
+  7m20s as a migration. Designed in
+  [2026-07-31-scoped-ci-design.md](superpowers/specs/2026-07-31-scoped-ci-design.md), built to
+  [2026-07-31-scoped-ci.md](superpowers/plans/2026-07-31-scoped-ci.md). **Two PRs, deliberately** —
+  renaming `test` in the same PR that introduces the gate would block on a required check that can no
+  longer report. PR 1 ([#25](https://github.com/clintongormley/waitron/pull/25)) **merged**: the
+  aggregate `ci` job, and ruleset 19899160 now requires `ci` alone rather than five job ids. PR 2
+  (branch `feat/ci-scoped-testing`) is **open**: the `changes` gate, the `static-analysis` split,
+  the two-way test shard, and scoping for both mutation jobs and both test shards. **First
+  measurement, on a code change
+  that skipped `test-heavy`:** run `30650089655` (head `4926cf5`) spanned **4m8s** against the 7m20s
+  baseline. That run still carried `mutation-verifactu` ungated at 3m26s of the 4m8s, and every
+  other job finished 1m39s in; scoping the two mutation jobs landed after that run. **Measured on
+  the branch as it now stands:** run `30653487133` (head `b440b0f`) spanned **1m26s**, and the
+  docs-only path spanned **44s** (run `30652341473`, a throwaway PR based on the branch so its whole
+  diff was documentation)
+- **`test-light` reports `success` without saying what it ran.** The larger half of this entry is
+  **done**: the shard now gates on a `light` boolean emitted from the `changes` job's existing
+  single `pnpm ls`, so a resolved scope that is empty, or that holds nothing but `@waitron/db`,
+  skips it instead of provisioning a runner, running `pnpm install` and
+  `playwright install --with-deps chromium` before finding nothing to do — 48s of run
+  `30653487133` (18:01:36 → 18:02:24, its longest job) for zero test execution. What is **still
+  open** is the reporting half: a `test-light` that ran two packages and one that ran the whole
+  workspace both report `success`, and only the step log tells them apart. One scope the new gate
+  does not help with, for the same reason — it answers "is a package other than `@waitron/db` in
+  scope?", not "does any selected package have a `test:coverage` script?". `@waitron/bench-pglite`
+  has no such script, so a change touching only it gives `light=true` and the step still prints
+  `None of the selected packages has a "test:coverage" script`, exit 0 (run in this workspace:
+  `pnpm --filter "@waitron/bench-pglite" --filter "!@waitron/db" --no-sort test:coverage`). Both
+  remaining halves are the same fix — make the job name the packages it selected. Found by the
+  base-to-tip review of PR 2, not by any per-task pass
+- **`packages/db`'s test suite is 189s**, mostly one Testcontainers Postgres per suite. It is now its
+  own CI shard (`test-heavy`), which stops it blocking the other packages but does not make it any
+  shorter. Sharing a container across suites beats every CI-config change combined, but it means
+  changing `useRealPostgres` / `describeEachTarget` — the harness that guarantees RLS and lock
+  contention are observed under a non-superuser role, which PGlite cannot show. A test-correctness
+  change wearing a performance change's clothes; its own branch, its own review
 - **Payments follow-ups** — the webhook HTTP endpoint (its own cycle: per-tenant signature
   verification needs the tenant, which is only knowable from the unverified payload), `forward`
   retry backoff, the reconcile remediation UI
