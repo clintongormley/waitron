@@ -359,6 +359,13 @@ the cloud uses **the same protocol** a till uses to sync to it.
 
 One sync implementation, tested once.
 
+> **Superseded row, 2026-07-31.** "Cloud SaaS, no local hardware | till → cloud" is no longer a
+> supported deployment. `2026-07-31-cloud-storage-model-design.md` establishes the cloud as a **sync
+> root only, never a primary store**: every venue runs a local server as its system of record. That
+> topology would have made the cloud a live transactional store for those tenants and put one schema
+> under several software versions at once — with no version telemetry anywhere in the tree to reason
+> about it. The other three rows stand, and the table is left as written.
+
 ### Directional asymmetry
 
 **Sales flow up and never conflict.** Each till owns its own invoice series and is the
