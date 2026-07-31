@@ -302,7 +302,7 @@ earlier, and which pointed at the regulation **least** likely to govern an archi
 systems that *support invoicing processes*. An archive issues nothing.
 
 What governs records once they exist is the **ROF** — the Reglamento de obligaciones de facturación,
-RD 1619/2012 — and it addresses a third party holding them directly. Three articles bear on this
+RD 1619/2012 — and it addresses a third party holding them directly. The articles that bear on this
 design:
 
 | Source | Verbatim |
