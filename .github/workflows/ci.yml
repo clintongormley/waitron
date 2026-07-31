@@ -283,12 +283,16 @@ jobs:
 
       - run: pnpm --filter @waitron/shared mutation
 
-  # The single required status check. Everything above is wired into it, so job ids above this
-  # point are free to be added, renamed, sharded or conditionally skipped without touching branch
-  # protection — which is what makes the scoping in
-  # docs/superpowers/specs/2026-07-31-scoped-ci-design.md possible at all. Before this job, each id
-  # was required by name (ruleset 19899160), so any rename silently broke the ruleset and any
-  # skipped job left a pull request waiting for a status that would never report.
+  # INTENDED to become the single required status check. It is not one yet: as of this commit
+  # ruleset 19899160 still requires the five upstream job ids by name, and swapping it to require
+  # only `ci` is a separate repo-admin action taken after this merges. Anyone debugging required
+  # checks before then should read the ruleset, not this comment.
+  #
+  # Once that swap happens, every id above this point becomes free to add, rename, shard or
+  # conditionally skip without touching branch protection — which is what makes the scoping in
+  # docs/superpowers/specs/2026-07-31-scoped-ci-design.md possible at all. Today each id is required
+  # by name, so any rename silently breaks the ruleset and any skipped job leaves a pull request
+  # waiting for a status that will never report.
   #
   # `if: always()` is what makes it report at all when something upstream is skipped: without it,
   # GitHub skips a job whose `needs` were skipped, and a skipped required check never satisfies
