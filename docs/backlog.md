@@ -50,7 +50,10 @@ Both PRs are waiting on a merge decision, not on work.
 ## Next — the fiscal sequence
 
 Four pieces, in this order. They are sequenced rather than parallelised because each adds a
-migration to `packages/db`, and `drizzle/meta/_journal.json` conflicts on every concurrent branch.
+migration to `packages/db`, and `packages/db/drizzle/meta/_journal.json` conflicts on every
+concurrent branch. The collision is **per package**, not repo-wide — five packages carry their own
+`drizzle/` directory and journal (`credentials`, `db`, `fiscal-verifactu`, `payments`, `scheduler`),
+so work touching a different package's migrations can still run alongside these.
 
 | # | Piece | Why here |
 | --- | --- | --- |
