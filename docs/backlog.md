@@ -174,8 +174,17 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
 - **`errors.reachability.test.ts` does not test reachability.** Proven by deletion. Eight packages
   carry a copy. Closing it needs a `tsc`-based downstream probe or a narrowed `include`. See
   `CLAUDE.md` §4 — do not cite these tests as evidence in the meantime
-- **CI's `test` job is the ~6 minute critical path.** A two-job split is roughly a 2 minute win; job
-  ids are a branch-protection interface, so it wants its own PR
+- **CI runs every check on every push.** A Markdown-only change costs the same 7m20s as a migration.
+  Designed in [2026-07-31-scoped-ci-design.md](superpowers/specs/2026-07-31-scoped-ci-design.md):
+  an aggregate `ci` gate so job ids stop being a branch-protection interface, then a docs gate,
+  package scoping on pull requests with the full suite still on `main`, and a two-way test shard.
+  **Two PRs, deliberately** — renaming `test` in the same PR that introduces the gate would block on
+  a required check that can no longer report
+- **`packages/db`'s test suite is 189s and half the `test` job**, mostly one Testcontainers Postgres
+  per suite. Sharing a container beats every CI-config change combined, but it means changing
+  `useRealPostgres` / `describeEachTarget` — the harness that guarantees RLS and lock contention are
+  observed under a non-superuser role, which PGlite cannot show. A test-correctness change wearing a
+  performance change's clothes; its own branch, its own review
 - **Payments follow-ups** — the webhook HTTP endpoint (its own cycle: per-tenant signature
   verification needs the tenant, which is only knowable from the unverified payload), `forward`
   retry backoff, the reconcile remediation UI
