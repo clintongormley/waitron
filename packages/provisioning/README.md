@@ -94,6 +94,55 @@ Re-running the migrator applies nothing when nothing is pending, but it is **not
 see wall 4 under "When the admin did not create the database" for what it costs an admin that lacks
 `CREATE` on the database.
 
+#### `instance` is a schema-changing command against a LIVE deployment
+
+This is new, and it is the operational consequence of the paragraph above. Read it before pointing
+`instance` at a database a shop is trading on.
+
+**What changed.** The `migrate` action used to be gated on journal-**table** existence per manifest
+set — `deea09f^:src/instance-plan.ts:132-133`, `if (manifestSets().some((set) =>
+!applied.has(set.name)))` — so a migration added to a set whose journal already existed, which is the
+ordinary shape of a new migration in an existing package, produced **no** `migrate` against an
+already-provisioned deployment. `src/instance-plan.ts` now pushes `{ kind: "migrate" }`
+unconditionally and `src/instance-apply.ts` hands the whole manifest to `applyMigrations`.
+
+**The SQL it applies is the BUNDLE's own, not the deployed host's.** `scripts/copy-migrations.mjs`
+copies every package's `drizzle/` folder into `dist/drizzle` when **this** package is built, and
+`src/bin.ts` picks that folder as `migrationsRoot` (`BUNDLED_MIGRATIONS`, selected by `existsSync`),
+which `migrationOptionsFor` resolves per set as `<root>/<set name>`. So a `waitron-provision` build
+newer than the `apps/server` build actually running carries migrations the running host has never
+applied — and `instance` will apply them. The scenario is not exotic: re-creating a dropped
+`waitron_app`, re-issuing grants after a manual `REVOKE`, or simply taking `status`'s own advice
+("Re-running `waitron-provision instance` applies anything still pending") is enough to reach it.
+
+**What that costs a trading shop.** DDL takes an `ACCESS EXCLUSIVE` lock and every later query on
+that table queues behind it. Measured on `postgres:18-alpine` (PostgreSQL 18.4) rather than cited:
+with `begin; alter table sales add column c int;` held open in one session, `pg_locks` joined to
+`pg_stat_activity` showed `AccessExclusiveLock` / `granted = t` on `sales`; a plain
+`select count(*) from sales` in a second session, with `set statement_timeout='3s'`, returned
+`ERROR: canceling statement due to statement timeout` instead of a row. The five manifest sets carry
+90 `ALTER TABLE` statements between them (`grep -rin "alter table"` over each set's `drizzle/*.sql`:
+db 42, fiscal-verifactu 30, payments 12, scheduler 3, credentials 3), so this is the ordinary content
+of a migration here, not a corner case. `CLAUDE.md` §5: **nothing may block a sale.**
+
+**The advisory lock does not cover this, and must not be read as if it did.** `applyMigrations` takes
+`pg_advisory_lock` on a fixed key over a dedicated `pg.Client` opened from the same connection string
+(`packages/migrations/src/apply.ts:32-55`), `instance` and `apps/server` migrate against the same
+database, and `packages/migrations/src/apply.concurrency.test.ts` is a real receipt for two racing
+migrators. What it serialises is **two MIGRATORS**. `MIGRATION_LOCK_KEY` occurs nowhere but
+`apply.ts` (`grep -rn advisory` across `packages` and `apps`), so the host's long-lived duty pool —
+`createPostgresDb(config.databaseUrl)`, `apps/server/src/boot.ts:120` — never takes it, and the duty
+pool is exactly what a DDL lock queue blocks. Two migrators not colliding says nothing about the POS.
+
+**The operator's control is the confirmation prompt, and `--yes` removes it.** The plan summary
+prints `apply any pending migrations, in every set` above `Apply this plan? [y/N]`
+(`src/cli.ts:189-195`); with `--yes` that prompt is not shown at all, which is the documented
+non-interactive shape under "Secrets" above. There is **no** flag for "provision but do not migrate",
+and no refusal keyed on the deployment being live: adding either is a product decision and is
+deliberately not made here. Until one exists, the rule is operational rather than enforced — run
+`instance` against a production database from the same build as the `apps/server` being deployed, or
+in a window where no till is selling.
+
 **No superuser is needed.** An admin holding exactly `login createdb createrole` provisions a blank
 cluster end to end. Verified through the built bundle, not inferred: against a `postgres:18-alpine`
 container, a role created with `create role probe_admin login createdb createrole password 'probe'`
