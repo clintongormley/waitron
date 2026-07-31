@@ -282,3 +282,42 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm --filter @waitron/shared mutation
+
+  # INTENDED to become the single required status check. It is not one yet: as of this commit
+  # ruleset 19899160 still requires the five upstream job ids by name, and swapping it to require
+  # only `ci` is a separate repo-admin action taken after this merges. Anyone debugging required
+  # checks before then should read the ruleset, not this comment.
+  #
+  # Once that swap happens, every id above this point becomes free to add, rename, shard or
+  # conditionally skip without touching branch protection — which is what makes the scoping in
+  # docs/superpowers/specs/2026-07-31-scoped-ci-design.md possible at all. Today each id is required
+  # by name, so any rename silently breaks the ruleset and any skipped job leaves a pull request
+  # waiting for a status that will never report.
+  #
+  # `if: always()` is what makes it report at all when something upstream is skipped: without it,
+  # GitHub skips a job whose `needs` were skipped, and a skipped required check never satisfies
+  # branch protection.
+  ci:
+    if: always()
+    needs:
+      - static-analysis
+      - typecheck
+      - test
+      - mutation-verifactu
+      - mutation-shared
+    runs-on: ubuntu-latest
+    steps:
+      # `skipped` must PASS: scoping works by skipping, and a skipped job means "this change could
+      # not affect that check", not "that check did not run". `cancelled` must FAIL: ci.yml sets
+      # cancel-in-progress, and a superseded run reporting green would let a stale result satisfy
+      # branch protection. Getting that pair backwards turns this job into a rubber stamp, which is
+      # why Task 3 verifies both directions against the real workflow rather than reasoning about
+      # them.
+      - name: Fail if any needed job did not succeed
+        if: >-
+          contains(needs.*.result, 'failure') ||
+          contains(needs.*.result, 'cancelled')
+        run: |
+          echo "A required job did not succeed:"
+          echo '${{ toJSON(needs) }}'
+          exit 1
