@@ -1,7 +1,8 @@
 # `instance` plans a migrate on every run
 
 **Date:** 2026-07-30
-**Status:** approved, not yet implemented
+**Status:** implemented on `fix/provisioning-migrate-gate`. §1-§3 and §5 are the design as approved;
+§4's second half is a post-implementation measurement, added once the code existed to run.
 **Package:** `packages/provisioning`
 
 Closes the first of the five follow-ups deferred from PR #11
@@ -124,10 +125,21 @@ and the `dialect.js:54-60` receipt stay exactly as they are.
 
 ## 4. Cost, and the consequence that was measured
 
-**Cost per no-op run**, read off `apply.ts:32-55` rather than measured: one dedicated `pg.Client`
-connect for the lock, a `pg_advisory_lock`/`pg_advisory_unlock` pair, one `createPostgresDb`, and one
-journal read per manifest set. No timing is claimed here, and none is needed — the alternative is a
-gate that silently skips required work.
+**Cost per no-op run**, read off `apply.ts:32-55` and `dialect.js:54-58` rather than measured: one
+dedicated `pg.Client` connect for the lock, a `pg_advisory_lock`/`pg_advisory_unlock` pair, one
+`createPostgresDb`, and then **per manifest set** a `CREATE SCHEMA IF NOT EXISTS "public"`
+(`dialect.js:54`), a `CREATE TABLE IF NOT EXISTS <journal>` (`:55`) and a journal read (`:56-58`).
+No timing is claimed here, and none is needed — the alternative is a gate that silently skips
+required work.
+
+The first two of those three are **not privilege-free**, which is what the paragraph below turned
+out to be about: PostgreSQL checks the privilege for an `IF NOT EXISTS` statement before it
+evaluates whether the object exists (`apps/server/README.md`, "Two connection strings, one purpose
+split"), so `CREATE SCHEMA` needs database-level `CREATE` and `CREATE TABLE` needs `CREATE` on
+`public`, on every run, whether or not either object is already there. An earlier version of this
+section listed only the lock and the journal reads, and the comment it was drafted alongside
+(`instance-plan.ts`) went further and said re-running the migrator "cannot be wrong" — falsified by
+this section's own measurement, one paragraph down.
 
 **The consequence, now measured rather than reasoned about.** An admin that can read inside the
 target database but cannot create objects in it: before this change a fully-journalled re-run
@@ -149,13 +161,24 @@ cause: error: permission denied for database waitron_instance_suite
   code: '42501', file: 'aclchk.c', routine: 'aclcheck_error'
 ```
 
-raised inside `drizzle-orm@0.45.2/pg-core/dialect.ts:85` (`PgDialect.migrate`), reached via
-`packages/db/src/migrate.ts:48` → `packages/migrations/src/apply.ts:45` →
-`packages/provisioning/src/instance-apply.ts:183` (the `migrate` case) — before any journal table is
-even read. Drizzle's own migrator issues `CREATE SCHEMA IF NOT EXISTS "public"` unconditionally at
-the start of every `migrate` call, whether or not the schema already exists, and schema creation is a
-database-level `CREATE` privilege in PostgreSQL — exactly the one this admin was deliberately never
-granted.
+raised by the statement at `drizzle-orm@0.45.2/pg-core/dialect.js:54`, inside `PgDialect.migrate` —
+the same line §1 cites. **Cite the `.js`.** The stack trace names this frame
+`pg-core/dialect.ts:85`, and that file does not exist: the installed package ships `dialect.js`,
+`dialect.cjs`, `dialect.d.ts`, `dialect.d.cts` and two maps, and nothing else. `.ts:85` is the
+shipped source map talking — `dialect.js.map`'s `sources` is `["../../src/pg-core/dialect.ts"]`,
+with `sourcesContent` — so it resolves in a debugger and not in an editor. A reader who takes it
+literally and opens `dialect.js:85` lands inside `buildWithCTE`, an unrelated method (checked in
+the installed copy: `escapeString` is `:79-81`, `buildWithCTE` opens at `:82`).
+
+The call chain, caller first — which is the reverse of the order the stack trace prints it, and of
+how an earlier version of this line wrote it: `packages/provisioning/src/instance-apply.ts:183`
+(the `migrate` case) → `packages/migrations/src/apply.ts:45` → `packages/db/src/migrate.ts:48` →
+Drizzle's own migrator.
+
+It fails there before any journal table is read. Drizzle's migrator issues
+`CREATE SCHEMA IF NOT EXISTS "public"` unconditionally at the start of every `migrate` call, whether
+or not the schema already exists, and schema creation is a database-level `CREATE` privilege in
+PostgreSQL — exactly the one this admin was deliberately never granted.
 
 **The failure is not one of this package's `AppError`s.** `instance-apply.ts`'s `migrate` case
 carries no `try`/`catch`, unlike `create-role` and `grant-membership`, so the raw driver failure

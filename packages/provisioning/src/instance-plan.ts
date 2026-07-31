@@ -137,9 +137,20 @@ export function planInstance(
   // rolls the migrations back and leaves the journal behind. The gate read that leftover as "done",
   // planned no `migrate`, and let `instance` grant, stamp and exit 0 against a deployment whose last
   // set never ran: the same "reported success having done nothing" shape `verifyGrants`
-  // (instance-apply.ts) exists to catch, one file over. Re-running the migrator instead costs one
-  // advisory lock and one journal read per set (packages/migrations/src/apply.ts), and cannot be
-  // wrong — `dialect.js:62` applies a migration only when the journal's watermark is behind it.
+  // (instance-apply.ts) exists to catch, one file over.
+  //
+  // Re-running the migrator is idempotent in EFFECT — `dialect.js:62` applies a migration only when
+  // the journal's watermark is behind it — but it is neither free nor privilege-free, and the
+  // second half is the one that bites. Per manifest set (`applyMigrations`, packages/migrations/
+  // src/apply.ts:45) Drizzle first issues `CREATE SCHEMA IF NOT EXISTS "public"` (`dialect.js:54`)
+  // and `CREATE TABLE IF NOT EXISTS <journal>` (`:55`), BEFORE the journal read at `:56`. Postgres
+  // checks the privilege for those two before it evaluates whether the object already exists —
+  // `apps/server/README.md`'s "Two connection strings, one purpose split" is the receipt — so the
+  // first needs database-level CREATE and the second needs CREATE on `public`. An admin holding
+  // neither now fails on a run that used to be a silent no-op: measured on postgres:18-alpine as
+  // `42501 permission denied for database` on that first statement (this change's spec §4, and
+  // `instance-apply.rls.test.ts`'s "a partially-privileged admin reads state but fails the
+  // migrate"). Over and above that, one advisory lock and one journal read per set.
   actions.push({ kind: "migrate" });
 
   for (const role of INSTANCE_ROLES) {
