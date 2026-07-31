@@ -142,7 +142,10 @@ jobs:
           if [ -z "$SCOPE" ]; then
             node .github/scripts/changed-scope.mjs gates --unscoped >> "$GITHUB_OUTPUT"
           else
-            pnpm --filter "$SCOPE" ls --depth -1 --json 2>/dev/null \
+            # stderr is deliberately NOT discarded: only stdout is piped, so anything pnpm says goes
+            # to the job log where it can be read, and cannot reach the classifier. An earlier
+            # version sent it to /dev/null and bought nothing but a harder debugging session.
+            pnpm --filter "$SCOPE" ls --depth -1 --json \
               | node .github/scripts/changed-scope.mjs gates >> "$GITHUB_OUTPUT"
           fi
 

@@ -84,6 +84,19 @@ describe("packagesInScope", () => {
     );
   });
 
+  // `pnpm ls --json` reports its OWN failures as valid JSON on stdout — this is the literal shape
+  // of `pnpm --filter "" ls --json` on pnpm 9.15.0. It parses, so only the array-shape check tells
+  // it apart from a real result, and `null` (not the empty set) is what makes gateOutputs run
+  // everything rather than skip everything.
+  it("returns null for pnpm's own error object, which is valid JSON", () => {
+    const pnpmError = '{"error":{"code":"pnpm","message":"Unsupported package selector: …"}}';
+    expect(packagesInScope(pnpmError)).toBeNull();
+  });
+
+  it("returns null for output that is not JSON at all", () => {
+    expect(packagesInScope("No projects matched the filters")).toBeNull();
+  });
+
   it("reads an empty result as an empty scope, which means nothing matched", () => {
     expect(packagesInScope("")).toEqual(new Set());
     expect(packagesInScope("   ")).toEqual(new Set());
@@ -240,6 +253,25 @@ describe("the CLI", () => {
     expect(run("No projects matched the filters", "gates").stdout).toBe(
       "heavy=true\nverifactu=true\nshared=true\n",
     );
+  });
+
+  // `pnpm ls --json` reports its own failures as valid JSON on STDOUT, not as a diagnostic on
+  // stderr — this is the literal shape of `pnpm --filter "" ls --json` on pnpm 9.15.0. It parses
+  // cleanly, so only the array-shape check distinguishes it from a real result. Getting this wrong
+  // means a pnpm failure reads as "no packages in scope" and every gated job skips, which is the
+  // silent direction: `packages/db` and both mutation runs would be reported green having run
+  // nothing. Raised by Copilot on PR #27 as a stderr-discarding concern; the mechanism turned out
+  // to be different, but the untested path was real.
+  it("fails closed when pnpm reports its own error as JSON on stdout", () => {
+    const pnpmError = '{"error":{"code":"pnpm","message":"Unsupported package selector: …"}}';
+    expect(run(pnpmError, "gates").stdout).toBe("heavy=true\nverifactu=true\nshared=true\n");
+  });
+
+  it("treats a genuinely empty scope as empty, not as an error", () => {
+    // `pnpm ls` emits zero bytes and exits 0 when its filter matches nothing, so this is the
+    // ordinary "this change touches no package" case and must SKIP rather than run everything.
+    expect(run("[]", "gates").stdout).toBe("heavy=false\nverifactu=false\nshared=false\n");
+    expect(run("", "gates").stdout).toBe("heavy=false\nverifactu=false\nshared=false\n");
   });
 
   it("puts the reason on stderr, where it cannot reach $GITHUB_OUTPUT", () => {

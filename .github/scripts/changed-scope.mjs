@@ -70,18 +70,40 @@ export const SCOPE_GATES = [
  * `pnpm --filter "<scope>" ls --depth -1 --json`, or `null` when that output cannot be parsed.
  *
  * `null` and the empty set are deliberately different answers. Empty is definite — `pnpm ls` emits
- * zero bytes when its filter matches nothing — while `null` is "we do not know", which `gateOutputs`
- * turns into running everything.
+ * zero bytes on BOTH streams, and exits 0, when its filter matches nothing (measured on pnpm 9.15.0:
+ * `pnpm --filter "@waitron/nope" ls --depth -1 --json` gives exit 0, 0 stdout bytes, 0 stderr bytes)
+ * — while `null` is "we do not know", which `gateOutputs` turns into running everything.
+ *
+ * The input that makes the `Array.isArray` check worth writing: `pnpm ls --json` reports its OWN
+ * ERRORS as valid JSON on STDOUT, not as a diagnostic on stderr. Measured on pnpm 9.15.0:
+ *
+ *   $ pnpm --filter "" ls --json 2>/dev/null
+ *   {"error":{"code":"pnpm","message":"Unsupported package selector: …"}}
+ *
+ * That parses cleanly, so the shape — not the parse — is what separates a pnpm failure from a real
+ * result. Getting it wrong reads a failure as "no packages in scope" and SKIPS every gated job,
+ * which is the silent direction.
+ *
+ * Honest about what the check earns: it is expressive, not load-bearing. Removed, the tests still
+ * pass, because `.map` throws on a non-array inside this same `try` and lands on the same `null`.
+ * Proven by deletion rather than assumed — the incidental version was run against the suite and all
+ * 42 tests passed. It stays because the fail-closed path should be stated rather than inherited
+ * from where a `try` happens to end; the TEST is what holds the behaviour.
  */
 export function packagesInScope(scopedPackagesJson) {
   const raw = scopedPackagesJson.trim();
   if (raw === "") return new Set();
 
+  let parsed;
   try {
-    return new Set(JSON.parse(raw).map((pkg) => pkg.name));
+    parsed = JSON.parse(raw);
   } catch {
     return null;
   }
+
+  if (!Array.isArray(parsed)) return null;
+
+  return new Set(parsed.map((pkg) => pkg.name));
 }
 
 /**
