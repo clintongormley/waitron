@@ -317,6 +317,13 @@ describe("check-signoff.sh", () => {
       try {
         for (const dir of [bystander, fixtures]) {
           git(dir, "init", "-q", "-b", "main");
+          // Set explicitly, as the main fixture repo above does. `isolatedGitEnv` points
+          // GIT_CONFIG_GLOBAL at /dev/null, so git has no configured identity and falls back to
+          // deriving one from the OS user — which works on a developer's machine and FAILS on a
+          // GitHub runner: `fatal: empty ident name (for <runner@...>) not allowed`, exit 128.
+          // Omitting these passed locally and failed CI, which is the shape CLAUDE.md §2 is about.
+          git(dir, "config", "user.name", "Fixture Author");
+          git(dir, "config", "user.email", "fixture@example.com");
           git(dir, "commit", "--allow-empty", "-q", "-m", "base");
         }
         const before = git(bystander, "rev-parse", "HEAD");
