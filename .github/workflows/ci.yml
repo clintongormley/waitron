@@ -11,8 +11,10 @@ name: CI
 #   ci
 #
 # The other two are produced by licence.yml, whose `licence-integrity` and `dco` jobs set those
-# strings as their `name:` (licence.yml:13 and :23), so `ci` is this file's entire interface to
-# branch protection.
+# strings as their `name:` — licence.yml:13 and :35, re-read on 2026-08-01 with
+# `grep -n 'name:' .github/workflows/licence.yml`. (`:35` was `:23` until this branch put a comment
+# block above the `dco:` job, which is how a line citation goes stale in a file the same change
+# edits.) So `ci` is this file's entire interface to branch protection.
 #
 # The job ids below are therefore NOT a stable public interface, and removing that property is the
 # whole point of the `ci` job. Until the ruleset was changed, five ids here were required by name:

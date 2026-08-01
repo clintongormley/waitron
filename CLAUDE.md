@@ -519,9 +519,12 @@ the exit code.
 
 That workaround is **gone from the tree** as of 2026-08-01: both classifiers moved to `scripts/`,
 nothing measured is dot-prefixed any more, and the root config now carries no `exclude` at all —
-measured there rather than reasoned about, in three spellings that all printed the identical two-row
-table at 100/100/100/100: no `exclude` key, `exclude: []`, and `exclude: ["**/*.test.mjs"]`. So an
-explicit one would be dead config _here_, where `include` already narrows to two files. Three
+measured there rather than reasoned about, in three spellings that all printed the identical
+three-row table at 100/100/100/100: no `exclude` key, `exclude: []`, and
+`exclude: ["**/*.test.mjs"]`. So an explicit one would be dead config _here_, where `include` already
+narrows to three files — `packages/db/src/english-only.ts` and the two classifiers. (This sentence
+said "two" from `6d30ed2`, which is where it landed, until the very next commit put
+`english-only.ts` into that `include` and left it standing. Re-run on 2026-08-01.) Three
 spellings is not "both directions", which an earlier version of this sentence called it: every one of
 those runs pointed the same way, and a control would need a config where the `exclude` does change
 the table. The trap is a property of Vitest's defaults, not of that config, so it is waiting for the

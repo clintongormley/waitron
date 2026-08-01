@@ -2190,6 +2190,15 @@ export function sourceFilesIn(packageName: string): string[] {
 
 > An earlier draft of the naming contract gave this column as `locations.description_operacion` — Spanish inside an English package, which the Global Constraint forbids for generic packages in "identifiers *and* table/column names". The word came from AEAT's `DescripcionOperacion`, but the column is generic-layer, so **the column was renamed to `operation_description` and the naming contract now carries that name**. The guard therefore needs no exception list, and must not grow one: the moment an exception is a word rather than an identifier, the guard stops distinguishing a contract decision from a slip. If some future generic column looks like it needs forgiving, rename the column instead.
 
+> **Dated note, 2026-08-01.** Every `vitest run src/english-only.test.ts` in Steps 6-8 below is now
+> a broken command: the suite moved to `scripts/english-only.test.ts`, the repo-level Vitest
+> project. Run on 2026-08-01 from `packages/db`, it prints `No test files found, exiting with code
+> 1`. Substitute `pnpm vitest run scripts/english-only.test.ts` from the repository root, keeping
+> each step's own `-t` filter or pipeline. The module the steps are really about,
+> `packages/db/src/english-only.ts`, did not move — and its `SELF` list is no longer the pair quoted
+> above. Test counts below are as of 2026-07-20 and were never meant to survive; run the command and
+> read what it prints.
+
 - [ ] **Step 6: Verify green**
 
 ```bash

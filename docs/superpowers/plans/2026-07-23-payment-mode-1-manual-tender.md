@@ -680,6 +680,14 @@ Expected: both PASS.
 
 - [ ] **Step 3: Run the cross-package English-only guard**
 
+> **Dated note, 2026-08-01.** The command below no longer finds the suite: it moved to
+> `scripts/english-only.test.ts`, the repo-level Vitest project. Run on 2026-08-01,
+> `pnpm --filter @waitron/db exec vitest run src/english-only.test.ts` exits 1 with
+> `No test files found`. Today's equivalent is `pnpm vitest run scripts/english-only.test.ts` from
+> the repository root — and it now runs unconditionally on every push that is not
+> documentation-only, so Step 3 is covered whether or not anyone types it. The module under test,
+> `packages/db/src/english-only.ts`, did not move.
+
 Run: `pnpm --filter @waitron/db exec vitest run src/english-only.test.ts`
 Expected: PASS — proves no Spanish identifier or string literal landed in `manual.ts`/`store.ts`/`payments.ts` (Spanish in comments is fine; the guard strips them). If it fails, a Spanish word from `SPANISH_WORDS` reached an identifier or string — rename it to English.
 

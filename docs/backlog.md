@@ -253,10 +253,17 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
      gates `test-heavy` the same way — so on those pull requests their first run was the unfiltered
      `main` merge. Both are now `scripts/*.test.ts`, run by `pnpm vitest run --coverage`: ci.yml's
      ungated `lint` job, and a new pre-push step on every push that is not documentation-only.
-     Demonstrated rather than asserted, by feeding the real hook a crafted `packages/ui` push before
-     and after — 21 test files, all in `packages/ui`, becoming those 21 plus
-     `scripts/guarded-teardowns.test.ts` and `scripts/english-only.test.ts`, hook exit 0 both times,
-     10s → 12s.
+     Demonstrated rather than asserted, by feeding the real hook a crafted `packages/ui` push — one
+     comment appended to `packages/ui/src/a11y-helpers.ts`, `sh -e .husky/pre-push` fed
+     `refs/heads/probe <new> refs/heads/probe <old>` — at `6d30ed2` and again here, both re-run on
+     2026-08-01. Both classified it `1 changed code path(s) map to @waitron/ui` and both exited 0,
+     10s → 12s. What changed is not the size of one set: BEFORE there was a single test step,
+     `tests with coverage (@waitron/ui + dependents)`, 21 files all in `packages/ui`. AFTER, that
+     step is unchanged and a new `repo-level suite` step runs AHEAD of it, over **five** files —
+     `guarded-teardowns.test.ts` (12 tests), `english-only.test.ts` (180),
+     `check-signoff.test.mjs` (16), `changed-scope.test.mjs` (48) and `changed-packages.test.mjs`
+     (66), 322 in total. A separate step rather than more files in the scoped one, because this one
+     must never be narrowed and that one always is.
 
      **Three things it left behind.** The suites are TypeScript and nothing typechecks them now
      (`pnpm typecheck` is `pnpm -r typecheck`, which never visits the workspace root, and there is
@@ -268,8 +275,19 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
      files reach for it there — so `packages/db`'s coverage config excludes it and the root
      project's `coverage.include` names it, which is the one arrangement that measures it exactly
      once. And `packages/db`'s weekly, ungated `mutation-db` job still mutates it
-     (`stryker.config.json` mutates `src/**/*.ts`), with only `schema/series.test.ts` left in that
-     package to kill the mutants, so expect its score to fall there
+     (`stryker.config.json` mutates `src/**/*.ts`), while the suite that exercises it no longer runs
+     under that job at all: Stryker's vitest runner is pointed at `packages/db/vitest.config.ts`,
+     whose `include` is Vitest's default, so it loads `packages/db`'s own suites and nothing else.
+     The only one of those that still imports the module is `src/schema/series.test.ts`, and it
+     imports `findSpanish` alone. So this is not "expect the score to fall", which is what this
+     entry said first — **the module effectively loses mutation testing**. The receipt is the
+     coverage run with the exclusion lifted: `english-only.ts` measures 92.25 statements and
+     **66.66 functions** there (2026-08-01), so two of its six functions are never executed in that
+     package, and a mutant in code no test executes cannot be killed. Nothing picks it up elsewhere
+     either — there is no Stryker config at the repository root and no root `mutation` script
+     (`find . -iname '*stryker*' ! -path '*/node_modules/*'` lists five configs, all under
+     `packages/`), so `scripts/english-only.test.ts` is not a mutation target anywhere. **Unclaimed**;
+     closing it means either a root Stryker project or narrowing `mutate` to drop the file
   4. **CLOSED, 2026-08-01 — a scope of only script-less packages no longer makes the test step a
      silent no-op.** It was one: `pnpm --filter "...@waitron/bench-pglite" test:coverage` prints
      `None of the selected packages has a "test:coverage" script` and exits **0**, so the hook

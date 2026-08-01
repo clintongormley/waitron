@@ -394,16 +394,16 @@ is one implementation underneath.
 
 `packages/db` and `packages/core` run **unfiltered** `test:coverage`. A name-filtered run never
 loads `english-only.test.ts`, `schema-ownership.test.ts` or `errors.reachability.test.ts`, and this
-change touches schema, error codes and a guard fixture, so all three are in play.
+change touches schema, error codes and a guard fixture, so all three are in play. Thresholds stay
+`98/98/98/95`. New suites carry guarded teardowns — PR #15 is mid-flight fixing 94 unguarded ones,
+and this must not add a 95th.
 
 > **Dated note, 2026-08-01.** `english-only.test.ts` has moved to `scripts/english-only.test.ts`,
 > the repo-level Vitest project, so an unfiltered `packages/db` run no longer loads it and
 > `rg 'amountCharged|amount_charged' packages apps` above no longer returns its string literal.
 > `pnpm vitest run --coverage` at the repository root is what runs it now — as does `.husky/pre-push`
 > on any push that is not documentation-only, and ci.yml's ungated `lint` job. The other two suites
-> named here are still in `packages/db`, and the sentence above still holds for them. Thresholds stay
-`98/98/98/95`. New suites carry guarded teardowns — PR #15 is mid-flight fixing 94 unguarded ones,
-and this must not add a 95th.
+> named above are still in `packages/db`, and the paragraph above still holds for them.
 
 ---
 

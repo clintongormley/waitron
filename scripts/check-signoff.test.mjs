@@ -105,9 +105,12 @@ describe("check-signoff.sh", () => {
     expect(result.stdout).toContain("unsigned");
   });
 
-  // The three near-misses. Each is a message that CONTAINS the words and is still not a sign-off,
-  // and each is exactly one property of the regex: `^`, the `<...@...>`, and `^` again from the
-  // other side. A guard that passed any of them would accept a commit GitHub's own DCO app rejects.
+  // The near-misses — count them off the list rather than from this sentence, which is why it does
+  // not carry a number (CLAUDE.md §2 records the same trap on its own list). Each is a message that
+  // CONTAINS the words and is still not a sign-off, and each pins one property of the regex: `^`
+  // against leading whitespace, `<.+@.+>` against a missing address and again against empty angle
+  // brackets, and `^` from the other side against the words mid-line. A guard that passed any of
+  // them would accept a commit GitHub's own DCO app rejects.
   it.each([
     ["an indented trailer", "indented"],
     ["a trailer with no email", "no-email"],
@@ -135,6 +138,19 @@ describe("check-signoff.sh", () => {
     expect(checkSignoff(repo, "").status).toBe(0);
     expect(checkSignoff(repo, "\n").status).toBe(0);
     expect(checkSignoff(repo, "\n\n\n").stdout).toBe("");
+  });
+
+  // The one branch in the script that no other assertion here reaches: `read` returns non-zero at
+  // EOF but has ALREADY assigned what it read, so a final line with no trailing newline is only
+  // processed because of the loop's `|| [ -n "$sha" ]`. Proven by deletion on 2026-08-01 — with
+  // that guard removed and this exact input, the script printed nothing and exited **0**, a silent
+  // pass on an unsigned commit; with it, the two assertions below. Every other fixture in this file
+  // ends in `\n`, and both callers build their list with `printf '%s\n'`, so nothing else here
+  // would fail if the guard were dropped.
+  it("processes a final sha with no trailing newline", () => {
+    const result = checkSignoff(repo, `${sha.signed}\n${sha.unsigned}`);
+    expect(result.status).toBe(1);
+    expect(result.stdout.trim()).toBe(git(repo, "log", "-1", "--oneline", sha.unsigned));
   });
 
   it("skips blank lines between shas rather than reporting them", () => {
