@@ -34,12 +34,19 @@
 #   pnpm format:check               always     1912-2066ms (3 runs). The ONLY step that reads prose,
 #                                              so it runs on a documentation-only push.
 #   pnpm lint                       code       1681-1860ms (3 runs)
+#   pnpm vitest run --coverage      code       2.20-2.22s (3 runs, 2026-08-01). The REPO-LEVEL
+#                                              Vitest project, which is never narrowed: the two
+#                                              classifiers below and the two guards that read
+#                                              `packages/` and `apps/` whole. Unscoped by
+#                                              construction — see the step's own comment for why it
+#                                              is not on the documentation path and why it is a step
+#                                              of its own rather than part of the run below.
 #   pnpm typecheck                  code       scoped to the changed packages and their dependents
 #   scope is runnable               scoped     199-202ms (5 runs, `...@waitron/ui` scope) — one
 #                                              `pnpm <the same filters> ls` piped into node. Only on
 #                                              a scoped push. Refuses a scope that would run no test
 #                                              at all — see the step's own comment.
-#   pnpm test:coverage              code       ditto — and `test:coverage`, NOT `test`: CI's shards
+#   pnpm -r test:coverage           code       ditto — and `test:coverage`, NOT `test`: CI's shards
 #                                              run coverage thresholds and a plain `pnpm test` does
 #                                              not, so a threshold regression used to pass here and
 #                                              fail there (CLAUDE.md §2)
@@ -103,26 +110,6 @@
 #   * The `bundle-smoke` BUILDS. Nothing here builds an esbuild bundle, so the failure modes that
 #     job exists for — a collapsed `import.meta.url`, a CJS require under `--format=esm` — are
 #     invisible to this hook by construction. See ci.yml's own comments on that job.
-#   * THE CROSS-PACKAGE GUARD SUITES IN `packages/db`, on any scoped push that does not reach
-#     `packages/db`. This is a regression the scoping introduces locally: before it, the hook ran
-#     `pnpm test` unscoped, so they ran on every push. Two of them scan other packages' trees from
-#     `packages/db/src`:
-#
-#       guarded-teardowns.test.ts   the guard CLAUDE.md §4 names; scans `packages/` and `apps/` from
-#                                   the repository root. Grepped on 2026-08-01: it is the ONLY file
-#                                   under `packages/` or `apps/` that resolves the repo root
-#                                   (`join(import.meta.dirname, "..", "..", "..")`).
-#       english-only.test.ts        scans the seven generic packages (db, core, fiscal, shared,
-#                                   payments, scheduler, credentials) from `PACKAGES_ROOT`.
-#
-#     Measured on 2026-08-01: `pnpm --filter "...@waitron/ui" ls -r --depth -1 --json` lists
-#     @waitron/ui alone, and `--filter "...@waitron/payments"` lists six packages, none of them
-#     @waitron/db. So a push touching only `packages/ui` or only `packages/payments` runs neither
-#     guard, and CI does not make it up on the pull request either — ci.yml gates `test-heavy` on
-#     @waitron/db being in scope. Their first run is the unfiltered `main` merge. This is
-#     CLAUDE.md §2's "a filtered test run does not load a package's guard suites", one level up:
-#     the filter is now over PACKAGES rather than over test names. Recorded as a follow-up in
-#     docs/backlog.md; not fixed here.
 #   * ANY TEST AT ALL, when the scope holds only packages that declare no `test:coverage` script.
 #     Measured on 2026-08-01: `pnpm --filter "...@waitron/bench-pglite" test:coverage` prints `None
 #     of the selected packages has a "test:coverage" script` and exits 0. That is still true and
@@ -451,11 +438,27 @@ fi
 
 run_step "lint" "pnpm lint" pnpm lint
 
-# `pnpm test:coverage` at the root is `vitest run --coverage && pnpm -r test:coverage`, so the
-# unscoped branch also runs the repo-level project. The scoped branch does not, and does not need
-# to: that project's only sources are the two classifiers under `scripts/`, which lie outside every
-# package directory and so report `scope=global` — asserted for both paths in
-# scripts/changed-packages.test.mjs.
+# The REPO-LEVEL Vitest project, and the only step here that no scope can narrow. It holds the two
+# classifiers under `scripts/` — if either is wrong every gating decision above it is wrong — and,
+# since 2026-08-01, the two guards that read `packages/` and `apps/` whole: guarded-teardowns
+# scans every `*.test.ts` under both, english-only scans the seven generic packages' `src/`. They
+# lived in `packages/db` until then, where they only loaded when `packages/db` was in scope; the
+# receipts for what that skipped are in the repo-root vitest.config.ts.
+#
+# Its own step rather than part of the `test:coverage` run below, because that run is scoped and
+# this must not be. Until this step existed the root `test:coverage` SCRIPT was what ran the
+# project — `vitest run --coverage && pnpm -r test:coverage`, so only on a global push, and never
+# on the scoped pushes that need it most. The step below now runs `pnpm -r`, so the project runs
+# exactly once on either path rather than twice on one of them.
+#
+# NOT on the documentation path, which is a claim about what those two suites read rather than a
+# judgement about cost. They read `packages/**/*.test.ts`, `apps/**/*.test.ts`,
+# `packages/<generic>/src/**/*.ts` and `scripts/**`; `isInertPath` (scripts/changed-scope.mjs)
+# calls a path documentation only when it is under `docs/` or is a root-level `*.md`. The two sets
+# do not intersect, so on such a push this can only fail for something already on `main`. CI runs
+# it there anyway — ci.yml's `lint` job is ungated — so that half is covered.
+run_step "repo-level suite" "pnpm vitest run --coverage" pnpm vitest run --coverage
+
 run_step "typecheck ($scope_label)" "pnpm$repro_filters typecheck" pnpm "$@" typecheck
 
 # Refuses a SCOPED run that would execute no test at all. pnpm reports both of its "nothing to do"
@@ -469,11 +472,10 @@ run_step "typecheck ($scope_label)" "pnpm$repro_filters typecheck" pnpm "$@" typ
 # through `pnpm ls` and fails on a selection that would run nothing, unless every package in it is
 # declared test-less in PACKAGES_WITHOUT_TESTS.
 #
-# Only on a scoped push. With no filters `pnpm test:coverage` runs the ROOT script — `vitest run
-# --coverage && pnpm -r test:coverage` — so the repo-level project runs whatever else does, and the
-# guard's question does not arise. Running it there would also FAIL every global push: measured on
-# 2026-08-01, `pnpm ls --depth -1 --json` with no filter prints one entry, the workspace root
-# itself, which the guard drops by path and then reads as an empty selection.
+# Only on a scoped push. With no filters there is no selection to judge — `pnpm -r test:coverage`
+# runs every member — and running it there would FAIL every global push: measured on 2026-08-01,
+# `pnpm ls --depth -1 --json` with no filter prints one entry, the workspace root itself, which the
+# guard drops by path and then reads as an empty selection.
 if [ "$#" -gt 0 ]; then
   check_scope_runnable() {
     pnpm "$@" ls --depth -1 --json | node scripts/changed-packages.mjs runnable test:coverage
@@ -484,8 +486,11 @@ if [ "$#" -gt 0 ]; then
     check_scope_runnable "$@"
 fi
 
-run_step "tests with coverage ($scope_label)" "pnpm$repro_filters test:coverage" \
-  pnpm "$@" test:coverage
+# `-r` rather than the root `test:coverage` script: that script is `vitest run --coverage && pnpm
+# -r test:coverage`, and its first half is the step above. `-r` runs every SELECTED member and
+# never the workspace root — which is also why the root script cannot recurse into itself.
+run_step "tests with coverage ($scope_label)" "pnpm -r$repro_filters test:coverage" \
+  pnpm -r "$@" test:coverage
 
 end_ts=$(date +%s)
 echo "pre-push: all checks passed in $((end_ts - start_ts))s ($scope_label)"

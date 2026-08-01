@@ -52,11 +52,15 @@ export const EXEMPT_PACKAGES = ["verifactu", "fiscal-verifactu"] as const;
 
 /**
  * Files that exist to enumerate forbidden vocabulary in plain text, excluded by exact name from
- * the scan that vocabulary feeds — this guard's own two files, plus `packages/fiscal`'s narrower
- * one.
+ * the scan that vocabulary feeds — this file, plus `packages/fiscal`'s narrower one.
  *
- * `english-only.ts`/`english-only.test.ts` contain the entire Spanish wordlist in plain text, so
- * scanning them would fail on the vocabulary they exist to define.
+ * `english-only.ts` contains the entire Spanish wordlist in plain text, so scanning it would fail
+ * on the vocabulary it exists to define. Its suite carries the same wordlist in its fixtures and
+ * was listed here for the same reason until 2026-08-01, when it moved to
+ * `scripts/english-only.test.ts` — the repo-level Vitest project, so that a push touching neither
+ * `packages/db` nor a package that depends on it still runs it. `sourceFilesIn` only ever walks
+ * `packages/<name>/src`, so the suite is now out of scope by location and naming it here would be
+ * an exemption matching nothing.
  * `no-regime-vocabulary.test.ts` (Task 11) has the identical structural problem one level down:
  * it is a SEPARATE guard, one this file's own `SPANISH_WORDS` cannot substitute for, because it
  * exists to catch regime vocabulary written in ENGLISH — `chain`, `hash`, `sif` — which is not
@@ -70,11 +74,7 @@ export const EXEMPT_PACKAGES = ["verifactu", "fiscal-verifactu"] as const;
  * files stay in scope, and a Spanish fixture name in packages/db is exactly as wrong as a Spanish
  * column.
  */
-export const SELF = [
-  "english-only.ts",
-  "english-only.test.ts",
-  "no-regime-vocabulary.test.ts",
-] as const;
+export const SELF = ["english-only.ts", "no-regime-vocabulary.test.ts"] as const;
 
 /**
  * There is deliberately no exception list.

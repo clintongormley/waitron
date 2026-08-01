@@ -287,9 +287,11 @@ scripts/changed-packages.mjs runnable test:coverage` exits **0** with
   `pnpm --filter @waitron/db test provisioner-role` was green while
   `pnpm --filter @waitron/db test:coverage` failed on the same tree: the filter never loaded
   `english-only.test.ts`, which rejected `'Venta en establecimiento'` in a new fixture (`venta` is in
-  `SPANISH_WORDS`). Cross-cutting suites that police the WHOLE package — the vocabulary guard, the
-  error-code reachability tests, schema-ownership — are invisible to a name-filtered run, so a
-  filtered green says nothing about them. Run the package unfiltered before believing a pass. Same
+  `SPANISH_WORDS`). Cross-cutting suites that police the WHOLE package — the error-code reachability
+  tests, schema-ownership — are invisible to a name-filtered run, so a filtered green says nothing
+  about them. Run the package unfiltered before believing a pass. (The vocabulary guard was the
+  example this entry was written about and is no longer one: it polices the whole TREE rather than
+  one package, and moved to the root Vitest project on 2026-08-01 — §4.) Same
   false-green shape as the `test:coverage` and `--frozen-lockfile` traps above, in a third place.
   (Named rather than counted: an earlier version said "the two traps above" and stopped being true
   the moment a bullet was inserted between them.)
@@ -321,9 +323,10 @@ tenant, not about the process.
 
 Every file that throws a code imports its registry (`import "./errors.js"`) directly.
 
-**Spanish domain terms are deliberate**, guarded by `packages/db/src/english-only.ts`. Fiscal tables
-and columns use the Veri*Factu vocabulary (`envios`, `estado`, `huella`, `secuencia`, `entorno`). Add
-new Spanish schema tokens to `SPANISH_WORDS`. `packages/verifactu` and `packages/fiscal-verifactu`
+**Spanish domain terms are deliberate**, guarded by `packages/db/src/english-only.ts` — whose suite
+is `scripts/english-only.test.ts`, in the root Vitest project rather than beside it (§4). Fiscal
+tables and columns use the Veri*Factu vocabulary (`envios`, `estado`, `huella`, `secuencia`,
+`entorno`). Add new Spanish schema tokens to `SPANISH_WORDS`. `packages/verifactu` and `packages/fiscal-verifactu`
 are exempt from the guard; `apps/*` is out of scope by a recorded decision.
 
 **`@waitron/db`'s `exports` map is enumerated, not a wildcard** — `.`, `./testing/postgres.js`,
@@ -471,10 +474,27 @@ cannot write a broken teardown, because it writes no teardown. Reach for a raw
 _of_ the constructor, or a race needing several distinct connections.
 
 **Where you must, guard it**: `if (db !== undefined) await db.close()`. **Enforced** by
-`packages/db/src/guarded-teardowns.test.ts`, which also records what an unguarded teardown costs,
-why an ESLint rule was rejected, and the two things the guard cannot see. Read it before changing
-it — a convention this file had already stated was violated in 94 places, which is the general
-lesson: **a written rule with standing violations needs a guard, not another paragraph.**
+`scripts/guarded-teardowns.test.ts`, which also records what an unguarded teardown costs, why an
+ESLint rule was rejected, and the two things the guard cannot see. Read it before changing it — a
+convention this file had already stated was violated in 94 places, which is the general lesson:
+**a written rule with standing violations needs a guard, not another paragraph.**
+
+**A guard that reads the whole tree belongs in the ROOT Vitest project, not in a package.** Both of
+this repo's tree-wide guards lived in `packages/db` — the teardown guard above, which scans every
+`*.test.ts` under `packages/` and `apps/`, and `english-only`, which scans the seven generic
+packages' `src/`. A suite only loads when its package is in scope, and once both gates started
+scoping by package, most pushes stopped reaching `packages/db`: measured on 2026-08-01,
+`pnpm --filter "...@waitron/ui" ls -r --depth -1 --json` lists one package and
+`--filter "...@waitron/payments"` lists six, none of them `@waitron/db`, while CI gates its
+`test-heavy` shard on `@waitron/db` being in scope. So a `packages/payments` pull request ran
+neither guard in either place and their first run was the unfiltered `main` merge — the §2 trap
+below, one level up, with the filter over PACKAGES rather than over test names. They now live in
+`scripts/`, which `pnpm vitest run --coverage` runs from ci.yml's ungated `lint` job and from
+`.husky/pre-push` on every push that is not documentation-only. Two consequences worth knowing
+before adding a third: **the root project does not typecheck** (`pnpm typecheck` is `pnpm -r
+typecheck` and never visits the workspace root, §2), and a module tested only from there has to be
+named in the root `vitest.config.ts`'s `coverage.include` and excluded from its own package's, or
+it is measured twice or not at all.
 
 Suites sharing a database must clean up in a `finally` so they are order-independent, not
 order-reliant — several tests have been fixed for exactly this.

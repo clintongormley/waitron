@@ -36,7 +36,36 @@ export default defineConfig({
       // runtime — the same role as the vite/vitest/etc. configs
       // coverageConfigDefaults already excludes, just for a tool whose name
       // isn't on that default list.
-      exclude: [...coverageConfigDefaults.exclude, "drizzle/**", "drizzle.config.ts"],
+      //
+      // src/english-only.ts is measured by the ROOT Vitest project instead
+      // (see the repo-root vitest.config.ts), because that is where its suite
+      // now lives: scripts/english-only.test.ts, moved out of this package on
+      // 2026-08-01 so that a push touching only packages/ui or only
+      // packages/payments still runs it. What is left here loading the module
+      // is src/schema/series.test.ts, which imports `findSpanish` alone.
+      //
+      // Excluded rather than left to be measured on that one import, and the
+      // difference was run rather than reasoned about. Three runs of
+      // `pnpm --filter @waitron/db test:coverage`, statements / branches /
+      // functions / lines:
+      //
+      //   suite still here            99.75 / 96.02 / 100 / 99.75, exit 0
+      //   suite moved, no exclusion   exit 1, `Coverage for functions (96.36%)
+      //                               does not meet global threshold (98%)`,
+      //                               with english-only.ts at
+      //                               92.45 / 85.71 / 66.66 / 92.45
+      //   suite moved, this line      99.69 / 96.32 / 100 / 99.69, exit 0
+      //
+      // So the exclusion is what keeps this package green, and it moves the
+      // aggregate in both directions at once: english-only.ts was above the
+      // package's statement average and below its branch average, so dropping
+      // it costs 0.06 on statements and buys 0.30 on branches.
+      exclude: [
+        ...coverageConfigDefaults.exclude,
+        "drizzle/**",
+        "drizzle.config.ts",
+        "src/english-only.ts",
+      ],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },
   },

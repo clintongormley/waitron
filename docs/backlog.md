@@ -219,13 +219,11 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   `grep` outside an `if` kills the script silently mid-gate — the hook's own header records that
   measurement.
 
-  **Four entries below. Two are the honest answer (1 and 2), one is a follow-up (3), and the fourth
-  is closed** — gap 4 was closed on 2026-08-01 and is kept here because what replaced it is a rule
-  someone has to know about. (An earlier version of this line counted three honest answers and a
-  follow-up, which is four live gaps — while the fourth entry it was counting says in its own first
-  words that it is closed.) The hook's header states the last three in its "NOT RUN HERE" list
-  rather than leaving them for a reader to discover; the first is a cost rather than a gap in what
-  runs, and the header's SCOPING paragraph covers it.
+  **Four entries below, and only the first two are live gaps** — both of them the honest answer to
+  what a local gate can be, rather than anything left undone. Entries 3 and 4 are closed, kept
+  because what replaced each is a rule someone has to know about. The hook's header states the live
+  ones in its "NOT RUN HERE" list rather than leaving them for a reader to discover; the first is a
+  cost rather than a gap in what runs, and the header's SCOPING paragraph covers it.
 
   1. A `global` push — root config, `.github/`, `.husky/`, `scripts/`, the lockfile — runs
      `pnpm test:coverage` for the whole workspace, which is the 116s in the row above. The heaviest
@@ -240,24 +238,31 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
      that would make it cheap.
   2. The hook still does not run mutation testing or the `bundle-smoke` builds, so a green hook does
      not imply a green CI.
-  3. **The scoping retires `packages/db`'s two cross-package guard suites on most pushes — a
-     regression this branch introduces locally, not a design choice.**
-     `packages/db/src/guarded-teardowns.test.ts` scans `packages/` and `apps/` from the repository
-     root (it is the only file under either tree that resolves the repo root, grepped on
-     2026-08-01), and `english-only.test.ts` scans the seven generic packages. Both live in
-     `packages/db`, so both run only when `packages/db` is in scope. Measured on 2026-08-01:
-     `pnpm --filter "...@waitron/ui" ls -r --depth -1 --json` lists `@waitron/ui` alone, and
-     `--filter "...@waitron/payments"` lists six packages, none of them `@waitron/db`. Before this
-     branch the hook ran `pnpm test` unscoped (`git show 558c62b:.husky/pre-push`, line 82), so both
-     ran on every push. CI does not make it up on the pull request either — `test-heavy` is gated on
-     `@waitron/db` being in scope — so their first run is the unfiltered `main` merge. This is
-     `CLAUDE.md` §2's "a filtered test run does not load a package's guard suites" one level up: the
-     filter is over PACKAGES now rather than over test names. Widening the scope back out is the
-     wrong fix, because it gives up the whole change to buy two suites: a guard that polices
-     `packages/` and `apps/` reads as belonging in the root Vitest project — whose `include` already
-     has to be widened to cover `.husky/` (see above) — rather than in a package most changes do not
-     reach. Moving them there takes both suites out of `packages/db`'s coverage accounting, which is
-     enough of a change to want its own branch
+  3. **CLOSED, 2026-08-01 — the two tree-wide guard suites are in the root Vitest project, so no
+     scope can skip them.** They were `packages/db/src/guarded-teardowns.test.ts` (scans `packages/`
+     and `apps/` from the repository root) and `english-only.test.ts` (scans the seven generic
+     packages), and living in `packages/db` meant they only loaded when `packages/db` was in scope:
+     `pnpm --filter "...@waitron/ui" ls -r --depth -1 --json` lists `@waitron/ui` alone and
+     `--filter "...@waitron/payments"` lists six packages, none of them `@waitron/db`, while CI
+     gates `test-heavy` the same way — so on those pull requests their first run was the unfiltered
+     `main` merge. Both are now `scripts/*.test.ts`, run by `pnpm vitest run --coverage`: ci.yml's
+     ungated `lint` job, and a new pre-push step on every push that is not documentation-only.
+     Demonstrated rather than asserted, by feeding the real hook a crafted `packages/ui` push before
+     and after — 21 test files, all in `packages/ui`, becoming those 21 plus
+     `scripts/guarded-teardowns.test.ts` and `scripts/english-only.test.ts`, hook exit 0 both times,
+     10s → 12s.
+
+     **Three things it left behind.** The suites are TypeScript and nothing typechecks them now
+     (`pnpm typecheck` is `pnpm -r typecheck`, which never visits the workspace root, and there is
+     no root `tsconfig.json`) — measured in both directions, and deliberately not fixed here because
+     the hook's typecheck step is scoped too, so a root `tsconfig.json` would not cover the
+     `packages/ui` push this change exists for; the root `vitest.config.ts` carries that receipt and
+     what a fix would cost. `packages/db/src/english-only.ts` stays in `packages/db` — two other
+     files reach for it there — so `packages/db`'s coverage config excludes it and the root
+     project's `coverage.include` names it, which is the one arrangement that measures it exactly
+     once. And `packages/db`'s weekly, ungated `mutation-db` job still mutates it
+     (`stryker.config.json` mutates `src/**/*.ts`), with only `schema/series.test.ts` left in that
+     package to kill the mutants, so expect its score to fall there
   4. **CLOSED, 2026-08-01 — a scope of only script-less packages no longer makes the test step a
      silent no-op.** It was one: `pnpm --filter "...@waitron/bench-pglite" test:coverage` prints
      `None of the selected packages has a "test:coverage" script` and exits **0**, so the hook

@@ -86,9 +86,11 @@ describe("the English-only vocabulary guard is scoped out of this package", () =
  * of `packages/fiscal/src` and into a sibling package, regardless of what that sibling contains.
  *
  * Proving this without importing that file's (unexported) internals means reading its own source
- * text — the same cross-package-read-for-verification shape packages/db/src/english-only.test.ts
- * already uses in its "the wordlist is not decorative" block, which reads real Spanish source out
- * of packages/verifactu from within packages/db's own suite.
+ * text — the same cross-package-read-for-verification shape scripts/english-only.test.ts already
+ * uses in its "the wordlist is not decorative" block, which reads real Spanish source out of
+ * packages/verifactu. (That suite sat in packages/db/src until 2026-08-01, when it moved to the
+ * repo-level Vitest project; the module it tests did not move, which is why the path read at the
+ * top of this file is unchanged.)
  */
 describe("Task 11's no-regime-vocabulary guard is scoped to packages/fiscal, not here", () => {
   const noRegimeVocabularySource = readFileSync(
