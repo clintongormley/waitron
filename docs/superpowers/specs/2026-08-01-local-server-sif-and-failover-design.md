@@ -443,6 +443,11 @@ actions**. Even though the complete-copy replication gives *either* server enoug
 there must be exactly one writer of reconcile state per account — the same "one external account, one
 owner" rule as the AEAT submitter. So reconcile is a **primary** role.
 
+**A matching subtlety to bank:** a card charge includes the **tip**, but the invoice does not — the
+tip is on the sale and the payment, off the factura and off the *huella* (Q13). So reconcile matches
+the processor charge against **factura + tip**, not the factura alone, or every tipped card sale
+reads as drift.
+
 It does **not** block hot failover, because it is a **pausable background integrity sweep, off the
 sale path, with no deadline**: card-present resolves via `resolvePending`, card-not-present is
 *backstopped* by reconcile, not gated on it (cloud-storage §3). If the primary dies, reconcile pauses
@@ -452,21 +457,24 @@ until promotion, then the new primary re-pulls the missed windows.
 processor, making reconcile active-active — is **rejected**: two payout streams and two onboardings
 per venue is real weight bought to hot-failover a job that does not need it.)*
 
-### Confirmation, completion, and the two invoice modes
+### Confirmation, completion, and the two factura-timing modes
 
 Whether payment confirmation precedes the fiscal record depends on the till's mode — and **both are
-supported**:
+supported**. A note on words first, because they overload: the default receipt every sale produces
+**is** the fiscal *factura simplificada* (it carries the QR and generates the chained record). A
+**pre-bill** ("la cuenta") is a separate, *non-fiscal* slip a table-service customer may get before
+paying. This spec avoids "ticket", which in Spanish means the simplified factura and so *is* fiscal.
 
-- **Ticket-first** (default): the record chains only when **all tenders settle** (architecture design
-  §6: "a card declined mid-tender leaves the order open, with nothing chained"). Confirmation
-  genuinely precedes completion — no chained invoice for a payment that did not land. The customer
-  holds a non-fiscal ticket until then.
-- **Invoice-first**: the fiscal invoice is **chained and filed *before* payment** — the customer gets
-  a real *factura* and then pays it. Lawful: the invoice documents the *operation* (delivery /
-  service), and payment is a separate financial event (FAQ §20; §24 for criterio de caja). The cost
-  is failure-handling — an unpaid, short-paid or disputed invoice is already filed, so it is corrected
-  with a **rectificativa**, not by leaving an order open. This is why the backlog sequences
-  invoice-first *after* rectificativas.
+- **Factura-at-settlement** (default): the record chains only when **all tenders settle**
+  (architecture design §6: "a card declined mid-tender leaves the order open, with nothing chained").
+  Confirmation genuinely precedes completion — no chained invoice for a payment that did not land. The
+  customer may hold a non-fiscal **pre-bill** until then.
+- **Factura-before-payment** (the backlog's "invoice-first mode"): the fiscal invoice is **chained and
+  filed *before* payment** — the customer gets a real *factura* and then pays it. Lawful: the invoice
+  documents the *operation* (delivery / service), and payment is a separate financial event (FAQ §20;
+  §24 for criterio de caja). The cost is failure-handling — an unpaid, short-paid or disputed invoice
+  is already filed, so it is corrected with a **rectificativa**, not by leaving an order open. This is
+  why the backlog sequences it *after* rectificativas.
 
 Neither mode changes the topology: **chaining is active-active on the selling server in both**, and
 both are hot-failover-safe (the record chains without the primary; payment resolves per-server). The
@@ -474,11 +482,11 @@ load-bearing point is unchanged — **who confirms a card payment is the process
 directly by the selling server**, never the primary or AEAT:
 
 - **Terminal answers in time (normal case):** result in seconds through the till's own call → tender
-  settles → (ticket-first) the record chains → sale completes at the counter.
+  settles → (factura-at-settlement) the record chains → sale completes at the counter.
 - **Terminal times out (`attempting`):** the tender is not settled; `resolvePending` confirms it
-  later, per-server — inherent to card payments on any topology. In ticket-first the *fiscal* receipt
-  is deferred until the capture resolves; in invoice-first the invoice already exists and only the
-  payment settles late.
+  later, per-server — inherent to card payments on any topology. Under factura-at-settlement the
+  *fiscal* receipt is deferred until the capture resolves; under factura-before-payment the invoice
+  already exists and only the payment settles late.
 
 ### A payment lost to a server death — prevention and remediation
 
@@ -503,10 +511,10 @@ server. **Prevention is the primary defence, detection the backstop.**
   step yet — the gate holds customer funds pending an operator who currently has nowhere to action it.
   Named here so it is not mistaken for solved.
 
-Fiscally this is clean: in ticket-first the dead server chained nothing (it never reached
+Fiscally this is clean: under factura-at-settlement the dead server chained nothing (it never reached
 settlement), so there is one invoice (the survivor's) and one duplicate *payment* to refund — no
-rectificativa; in invoice-first the invoice is already fixed, so a duplicate is likewise a pure
-payment refund.
+rectificativa; under factura-before-payment the invoice is already fixed, so a duplicate is likewise
+a pure payment refund.
 
 **Implementation note.** Verify the ownership wiring against the actual `packages/payments` code
 (`reconcile.ts`, `store.ts`'s `resolvePending`) rather than this prose — the memory records those
