@@ -463,6 +463,12 @@ número de instalación.
 
 #### Fallback if Q1 resolves against us: the local server is the SIF
 
+> **Promoted to the primary model, 2026-08-01 (#33).** This fallback is now *the* design, not a hedge
+> — see
+> [`2026-08-01-local-server-sif-and-failover-design.md`](2026-08-01-local-server-sif-and-failover-design.md),
+> which works out active-active operation, failover, and the division of labour between servers. The
+> section below is left as written, per `CLAUDE.md` §6.
+
 This is shape-changing, not project-ending, and the fallback is worth recording now because it
 influences deployment guidance today.
 
