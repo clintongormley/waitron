@@ -29,26 +29,63 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 const script = join(import.meta.dirname, "check-signoff.sh");
 
 /**
- * Runs `git` in `cwd`, isolated from whoever is running the suite: `GIT_CONFIG_GLOBAL` and
- * `GIT_CONFIG_SYSTEM` are pointed at /dev/null so a developer's `commit.gpgsign = true` (or their
- * name, or a `format.signoff = true` that would make every fixture pass) cannot reach these
- * fixtures. Throws on failure rather than returning a status nobody reads.
+ * Git's own environment overrides. Every one of these outranks the `cwd` a child process is spawned
+ * in, so any that survive into a fixture's `git commit` send it to whatever repository the variable
+ * names — not the temporary one this suite built.
+ *
+ * `GIT_DIR` is the one that bites, and it bites in exactly one situation: **git sets it for every
+ * hook it runs**, and `.husky/pre-push` runs this suite on every push. Measured on this branch, same
+ * command, the only difference being the variable:
+ *
+ *   $ pnpm vitest run scripts/check-signoff.test.mjs                  # HEAD unchanged
+ *   $ GIT_DIR=$(git rev-parse --absolute-git-dir) pnpm vitest run …   # HEAD moved by 7 commits,
+ *                                                                     # named signed, unsigned,
+ *                                                                     # lowercase, indented, …
+ *
+ * That is not hypothetical: it put those seven fixtures on this branch and pushed them three times
+ * before the mechanism was found, and five of them fail the DCO check the script exists to enforce —
+ * so a suite testing the sign-off gate was breaking it. The failure is invisible when the suite is
+ * run by hand, which is the only way it had been run.
+ */
+const GIT_LOCATION_OVERRIDES = [
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_INDEX_FILE",
+  "GIT_COMMON_DIR",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_NAMESPACE",
+];
+
+/** The environment a fixture's `git` runs in: the caller's, minus anything that relocates the repo. */
+function isolatedGitEnv() {
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null" };
+  for (const name of GIT_LOCATION_OVERRIDES) delete env[name];
+  return env;
+}
+
+/**
+ * Runs `git` in `cwd`, isolated from whoever is running the suite. `GIT_CONFIG_GLOBAL` and
+ * `GIT_CONFIG_SYSTEM` point at /dev/null so a developer's `commit.gpgsign = true` (or their name, or
+ * a `format.signoff = true` that would make every fixture pass) cannot reach these fixtures, and the
+ * location overrides above are dropped so `cwd` is what decides which repository is written.
+ * Throws on failure rather than returning a status nobody reads.
  */
 function git(cwd, ...args) {
-  const result = spawnSync("git", args, {
-    cwd,
-    encoding: "utf8",
-    env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null" },
-  });
+  const result = spawnSync("git", args, { cwd, encoding: "utf8", env: isolatedGitEnv() });
   if (result.status !== 0) {
     throw new Error(`git ${args.join(" ")} failed (${result.status}): ${result.stderr}`);
   }
   return result.stdout.trim();
 }
 
-/** Runs the script under test with `input` on stdin, from `cwd`. */
+/**
+ * Runs the script under test with `input` on stdin, from `cwd`. Same environment isolation as
+ * `git()`: the script shells out to `git log`, so an inherited `GIT_DIR` would point it at the
+ * caller's repository and it would report on commits the fixtures never made.
+ */
 function checkSignoff(cwd, input) {
-  return spawnSync(script, [], { cwd, encoding: "utf8", input });
+  return spawnSync(script, [], { cwd, encoding: "utf8", input, env: isolatedGitEnv() });
 }
 
 describe("check-signoff.sh", () => {
@@ -228,16 +265,15 @@ describe("check-signoff.sh", () => {
     const runStep = (base, head) => {
       const file = join(repo, "dco-step.sh");
       writeFileSync(file, step);
+      // `isolatedGitEnv()` rather than `process.env` for the same reason as `git()` — this step
+      // shells out to `git rev-list`, so an inherited `GIT_DIR` sends it to the caller's repository,
+      // where the fixture shas do not exist and it reports "Could not enumerate" instead of what it
+      // was asked about. Measured: with `GIT_DIR` set and this spread left as `process.env`, both
+      // tests in this block fail that way while the rest of the suite passes.
       return spawnSync("bash", ["-e", file], {
         cwd: repo,
         encoding: "utf8",
-        env: {
-          ...process.env,
-          BASE_SHA: base,
-          HEAD_SHA: head,
-          GIT_CONFIG_GLOBAL: "/dev/null",
-          GIT_CONFIG_SYSTEM: "/dev/null",
-        },
+        env: { ...isolatedGitEnv(), BASE_SHA: base, HEAD_SHA: head },
       });
     };
 
@@ -263,6 +299,42 @@ describe("check-signoff.sh", () => {
       const result = runStep("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", sha.signed);
       expect(result.stdout).toContain("::error::Could not enumerate the pull request's commits");
       expect(result.status).toBe(1);
+    });
+  });
+
+  // The regression this suite caused. `.husky/pre-push` runs it on every push, and git sets `GIT_DIR`
+  // for every hook it runs; `GIT_DIR` outranks a child's `cwd`, so before `isolatedGitEnv` the
+  // fixtures below were committed to the REAL repository — seven of them, pushed three times, five
+  // failing the very check this script enforces.
+  //
+  // Asserted against a second throwaway repository rather than the developer's own, so a failure
+  // reports rather than damages: the bug writes to whatever `GIT_DIR` names, so pointing it at a
+  // sacrificial repo reproduces the mechanism exactly without risking the checkout the suite runs in.
+  describe("isolation from the caller's repository", () => {
+    it("writes to cwd even when GIT_DIR names another repository", () => {
+      const bystander = mkdtempSync(join(tmpdir(), "waitron-signoff-bystander-"));
+      const fixtures = mkdtempSync(join(tmpdir(), "waitron-signoff-fixtures-"));
+      try {
+        for (const dir of [bystander, fixtures]) {
+          git(dir, "init", "-q", "-b", "main");
+          git(dir, "commit", "--allow-empty", "-q", "-m", "base");
+        }
+        const before = git(bystander, "rev-parse", "HEAD");
+
+        // Exactly what git does when it invokes a hook.
+        process.env.GIT_DIR = join(bystander, ".git");
+        try {
+          git(fixtures, "commit", "--allow-empty", "-q", "-m", "written by a fixture");
+        } finally {
+          delete process.env.GIT_DIR;
+        }
+
+        expect(git(bystander, "rev-parse", "HEAD")).toBe(before);
+        expect(git(fixtures, "log", "-1", "--format=%s")).toBe("written by a fixture");
+      } finally {
+        if (bystander !== undefined) rmSync(bystander, { recursive: true, force: true });
+        if (fixtures !== undefined) rmSync(fixtures, { recursive: true, force: true });
+      }
     });
   });
 });
