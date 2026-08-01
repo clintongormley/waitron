@@ -41,7 +41,7 @@ reprioritisation rather than assumed.
 | **This backlog** | **Merged** (#21) |
 | **Pre-push hook skips deletions** | **Merged** (#23) |
 | **Scoped CI** — stop running every check on every push | **Done.** Both merged: #25 (the `ci` gate) and #27 (the scoping). Against the 7m20s baseline: a documentation-only pull request now takes **44s**, and a full unfiltered `push` on `main` **4m12s**. The scope resolution it shipped skipped every package's tests on a root-config pull request; that is fixed under **Debt and odd jobs**, where one follow-up (what `test-light` reports) remains |
-| **Scoped pre-push hook** — the same treatment for the local gate | **Merged** (#31). Scopes `typecheck` and `test:coverage` to the changed packages and their dependents, adds the sign-off (DCO) check CI was catching for us, runs `test:coverage` rather than `test`, adds `pnpm install --frozen-lockfile`, and skips `lint` on a documentation-only push. Measured on this machine on 2026-08-01, one crafted push per shape, `TESTCONTAINERS_RYUK_DISABLED=true`, wall clock bracketed in `time.time()` — `main`'s hook (`558c62b`, one run each) → #31's: deletions-only 9ms → 7-9ms (unchanged, #23 already did that); an **unsigned commit 104s and exit 0 → 27-36ms and exit 1**, because `main`'s hook has no sign-off check at all and so charged a full run and then let it through; documentation-only 105s → **3.1-3.5s**; a push to `packages/ui`, which no other package depends on, 105s → **8.2-8.8s**. **It is not faster everywhere.** A `packages/db` push is 112s and a root-config or lockfile push 116s — both SLOWER than `main`'s 105s, because this hook also runs `test:coverage` rather than `test` and installs first. Scoping pays on the leaves, not on the trunk; **Debt and odd jobs** carries the expansion sizes and what the hook still does not cover |
+| **Scoped pre-push hook** — the same treatment for the local gate | **Merged** (#31). Scopes `typecheck` and `test:coverage` to the changed packages and their dependents, adds the sign-off (DCO) check CI was catching for us, runs `test:coverage` rather than `test`, adds `pnpm install --frozen-lockfile`, and skips `lint` on a documentation-only push. Measured on this machine on 2026-08-01, one crafted push per shape, `TESTCONTAINERS_RYUK_DISABLED=true`, wall clock bracketed in `time.time()` — `main`'s hook (`558c62b`, one run each) → #31's: deletions-only 9ms → 7-9ms (unchanged, #23 already did that); an **unsigned commit 104s and exit 0 → 27-36ms and exit 1**, because `main`'s hook has no sign-off check at all and so charged a full run and then let it through; documentation-only 105s → **3.1-3.5s**; a push to `packages/ui`, which no other package depends on, 105s → **8.2-8.8s**. **It is not faster everywhere.** A `packages/db` push is 112s and a root-config or lockfile push 116s — both SLOWER than `main`'s 105s, because this hook also runs `test:coverage` rather than `test` and installs first. Scoping pays on the leaves, not on the trunk; **Debt and odd jobs** carries the expansion sizes and what the hook still does not cover. **Re-measured the same way on 2026-08-01**, after the tree-wide guards moved into the repo-level project and the hook grew a step for it (two runs per shape): documentation-only **3.17-3.59s** and an unsigned commit **30ms, exit 1**, both unchanged — neither path reaches that step; `packages/ui` **10.75-11.20s**, the whole of the ~2.4s being the step; `packages/db` **113.22-116.81s** and root config **116.48-117.98s**, where it costs nothing at all, because the root `test:coverage` script was already running that project on the global path |
 | **Cloud storage model** — design | **Merged** (#19), corrected by **#22** |
 | **Sale settlement model** — implementation plan | Not written. **The next build step** |
 | **Close Q13 and Q15 on primary source** | Not started. Cheaper than hiring — see below |
@@ -167,10 +167,11 @@ optional, and they are currently as unstarted as the restaurant-phase items they
 
 Carried from finished work. None of it blocks anything; all of it makes later work cheaper.
 
-- **The pre-push hook is scoped now, and its DECISIONS are tested — the shell itself still is not.**
+- **The pre-push hook is scoped now, and its DECISIONS are tested — most of the shell still is not.**
   The hook maps the push's changed paths onto workspace packages and runs `typecheck` and
-  `test:coverage` against those packages and their dependents, skipping those two **and `lint`**
-  entirely on a documentation-only push. `lint` is skipped there on a measurement, not a hunch:
+  `test:coverage` against those packages and their dependents, skipping those two, **`lint`** and
+  the repo-level suite entirely on a documentation-only push. `lint` is skipped there on a
+  measurement, not a hunch:
   `pnpm exec eslint . --format json` lints zero Markdown files and zero files under `docs/`, so of
   what is in the tree today eslint reads nothing such a push contains. (Only the zeros are recorded
   here — a file count moves on the next commit, and `CLAUDE.md` §2 already carries what a receipt
@@ -229,9 +230,11 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   cost rather than a gap in what runs, and the header's SCOPING paragraph covers it.
 
   1. A `global` push — root config, `.github/`, `.husky/`, `scripts/`, the lockfile — runs
-     `pnpm test:coverage` for the whole workspace, which is the 116s in the row above. The heaviest
-     single package in it is `packages/db`: `pnpm --filter @waitron/db test:coverage` on its own
-     measured **38s** on 2026-08-01 (two runs, 37.8s and 38.2s,
+     `pnpm -r test:coverage` over the whole workspace, which is the 116s in the row above (`-r`
+     since 2026-08-01: the repo-level project it used to reach through the root `test:coverage`
+     script is a step of its own now, so it runs on scoped pushes too rather than only here). The
+     heaviest single package in it is `packages/db`: `pnpm --filter @waitron/db test:coverage` on
+     its own measured **38s** on 2026-08-01 (two runs, 37.8s and 38.2s,
      `TESTCONTAINERS_RYUK_DISABLED=true`). It is not 38s OF the 116s — `pnpm -r` runs the members
      concurrently — and it is emphatically not the **189s** in
      `scripts/changed-scope.mjs`, which is a CI-runner figure ("189s of the old 387s test
@@ -260,7 +263,8 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
      no root `tsconfig.json`) — measured in both directions, and deliberately not fixed here because
      the hook's typecheck step is scoped too, so a root `tsconfig.json` would not cover the
      `packages/ui` push this change exists for; the root `vitest.config.ts` carries that receipt and
-     what a fix would cost. `packages/db/src/english-only.ts` stays in `packages/db` — two other
+     what a fix would cost. **Unclaimed**, and worth doing with whatever un-scopes that step rather
+     than on its own. `packages/db/src/english-only.ts` stays in `packages/db` — two other
      files reach for it there — so `packages/db`'s coverage config excludes it and the root
      project's `coverage.include` names it, which is the one arrangement that measures it exactly
      once. And `packages/db`'s weekly, ungated `mutation-db` job still mutates it
@@ -278,9 +282,9 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
      directions, and the `light` gate discounts it too, so a bench-only pull request now skips
      `test-light` rather than provisioning a runner to select nothing
 - **CI SKIPPED `test-heavy` and both mutation runs on a root-config-only pull request — fixed on
-  2026-08-01, in the change that rewrote this entry.** Worth keeping because the SHAPE recurs: two
-  mechanisms answering the same question, and the one nobody exercised drifting in the quiet
-  direction.
+  2026-08-01 by [#32](https://github.com/clintongormley/waitron/pull/32), which rewrote this entry
+  in the same change.** Worth keeping because the SHAPE recurs: two mechanisms answering the same
+  question, and the one nobody exercised drifting in the quiet direction.
 
   **What it was.** `ci.yml`'s `changes` job resolved scope with
   `pnpm --filter "...[origin/$BASE_REF]" ls --depth -1 --json`, and a change belonging to no
@@ -325,13 +329,16 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   `test-light` step exit **1** naming it, and deleting each of the four new checks in turn failed
   the tests written for it.
 
-  **Verified on real GitHub Actions**, run `30692329110` on this pull request — which touches only
-  root-level paths, so it is exactly the shape that used to run nothing. `changes` printed
-  `scope=global`, and `test-heavy` (3m30s), `mutation-verifactu` (3m28s) and `mutation-shared` (56s)
-  all **ran**. Under the mechanism this replaces, all three would have been skipped
+  **Verified on real GitHub Actions**, run `30692329110` on
+  [#32](https://github.com/clintongormley/waitron/pull/32) (`fix/ci-scope-fail-open`, merged as
+  `6d30ed2`) — which touches only root-level paths, so it is exactly the shape that used to run
+  nothing. `changes` printed `scope=global`, and `test-heavy` (3m30s), `mutation-verifactu` (3m28s)
+  and `mutation-shared` (56s) all **ran**. Under the mechanism this replaces, all three would have
+  been skipped
 - **`packages/ui` hung the whole-workspace `test-light` shard once, on 2026-08-01, and it has not
-  recurred.** Recorded rather than ruled a flake, because this change makes the shard it hung in run
-  far more often. Attempt 1 of run `30692329110`: twelve of the thirteen packages finished — the last
+  recurred.** Recorded rather than ruled a flake, because
+  [#32](https://github.com/clintongormley/waitron/pull/32) makes the shard it hung in run far more
+  often. Attempt 1 of run `30692329110`: twelve of the thirteen packages finished — the last
   was `packages/payments` at 08:47:36 — and then nothing at all was printed for **25 minutes**, until
   the run was cancelled at 09:13:20. The one package that never reported was `packages/ui`, the only
   Chromium/Playwright suite; its `playwright install --with-deps chromium` step had already
@@ -376,7 +383,7 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
 
   | Change | Wall clock | Run |
   | --- | --- | --- |
-  | documentation only | **44s** | `30664369447` — this pull request, on `docs/backlog-scoped-ci-landed` |
+  | documentation only | **44s** | `30664369447` — [#30](https://github.com/clintongormley/waitron/pull/30), on `docs/backlog-scoped-ci-landed` |
   | one package, or CI/root config | **1m26s** | `30655777867` — on `feat/ci-scoped-testing` |
   | a dependency of `packages/db` | 4m17s | `30652426111` — on the throwaway `probe/dependency` |
   | **any code, merged to `main`** — full suite, nothing skipped | **4m12s** | `30663706544` — the `push` run for #27 |
