@@ -393,6 +393,10 @@ never verified the underlying series permission in RD 1619/2012 art. 6.1.a. Low 
 is the foundation of the numbering scheme. The rectificativa question is the practical one:
 it is the case where a single till needs two series (and, per art. 7.c, still one chain).
 
+> **(a) is superseded — see the 2026-08-01 banner above; do not hand this (a) to an advisor as
+> written.** Under server-as-SIF the question is a series per SIF-servidor, with disjoint series
+> across the two concurrent SIFs — not "una serie por TPV". Kept verbatim per CLAUDE.md §6.
+>
 > **(a)** ¿Permite el artículo 6.1.a del RD 1619/2012 que un mismo obligado tributario utilice
 > una serie de facturación distinta por cada TPV? ¿Qué exige exactamente "cuando existan
 > razones que lo justifiquen" — basta una justificación operativa, debe documentarse, y puede
@@ -427,8 +431,8 @@ it is the case where a single till needs two series (and, per art. 7.c, still on
 > and cross-checked; confirm the exact wording on PETETE if an asesor engages.
 
 **Why it matters.** The schema already asserts it. `sales.tip_amount` is documented as
-*"non-taxable, in no fiscal record at all"*, `record-sale.ts` excludes it from `total`, and a test
-pins that two records differing only in the tip hash identically. **None of that was ever put to an
+*"non-taxable, in no fiscal record at all"*, and `record-sale.ts` hands the fiscal backend only
+`total`, never the tip, so the tip never reaches `computeHuella`'s inputs. **None of that was ever put to an
 advisor.** The sources are asesor commentary citing **DGT consulta vinculante 2174-03** — the DGT
 text itself was not read. If the position is wrong, every invoice we have ever modelled understates
 its base imponible, and the tip would have to enter `computeHuella`'s inputs.

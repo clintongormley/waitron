@@ -636,8 +636,9 @@ an edge case.
 
 Confirms what the schema already encodes: `sales.tip_amount` is documented *"non-taxable, in no fiscal
 record at all"* (`packages/db/src/schema/sales.ts:52`), `record-sale.ts` keeps it out of `total` and
-the taxable base, and a test pins that it never enters `computeHuella`. **That assumption holds** on
-the DGT's own doctrine.
+the taxable base, and `record-sale.ts` hands the fiscal backend only `total` (never the tip), so the
+tip is never among the inputs the fiscal record and its huella are built from — a structural absence,
+not something a dedicated test asserts. **That assumption holds** on the DGT's own doctrine.
 
 **Provenance — read this before citing.** PETETE (the DGT consulta database,
 `petete.tributos.hacienda.gob.es`) could **not** be reached: every fetch failed TLS chain validation
