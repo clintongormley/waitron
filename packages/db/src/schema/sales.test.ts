@@ -71,8 +71,6 @@ function saleValues(overrides: Record<string, unknown> = {}) {
     issuedAt: AT,
     issuedOffsetMinutes: 120,
     total: "1.00",
-    tipAmount: "0.50",
-    amountCharged: "1.50",
     locale: "es",
     invoiceLocales: ["es", "ca"],
     fiscalBackend: "verifactu",
@@ -82,14 +80,24 @@ function saleValues(overrides: Record<string, unknown> = {}) {
 }
 
 /**
- * Writes a complete sale — header, lines and covering tenders — in one
- * transaction, because the deferred constraint trigger only permits that
- * shape. Every test that needs a sale on disk goes through here.
+ * Writes a sale — header, lines and tenders — in one transaction. Every test
+ * that needs a sale on disk goes through here.
+ *
+ * Since migration 0012 the tender-coverage check no longer fires at sale COMMIT
+ * (both deferred constraint triggers were dropped); it runs when settlement is
+ * DECLARED, on the `sale_settlements` INSERT, tested in sale-settlements.test.ts.
+ * So a sale written here can stand legitimately uncovered — an unsettled sale is
+ * a valid steady state under invoice-first (design §3). The default tender is
+ * coherent anyway (amount = total, no tip) so callers can settle it if they
+ * need to; each tender carries its own `tip_amount` (design §9.2), defaulted to
+ * "0.00".
  */
 async function recordCompleteSale(
   db: Database,
   overrides: Record<string, unknown> = {},
-  tenderRows: { method: "cash" | "card"; amount: string }[] = [{ method: "card", amount: "1.50" }],
+  tenderRows: { method: "cash" | "card"; amount: string; tipAmount?: string }[] = [
+    { method: "card", amount: "1.00" },
+  ],
 ): Promise<string> {
   return db.transaction(async (tx) => {
     const [sale] = await tx.insert(sales).values(saleValues(overrides)).returning({ id: sales.id });
@@ -109,6 +117,7 @@ async function recordCompleteSale(
         saleId: sale.id,
         method: t.method,
         amount: t.amount,
+        tipAmount: t.tipAmount ?? "0.00",
         settledAt: AT,
       })),
     );
@@ -138,34 +147,20 @@ describeEachTarget("sales — the commercial record", (target) => {
     if (db !== undefined) await db.close();
   });
 
-  it("keeps total, tip_amount and amount_charged as three distinct values", async () => {
-    const id = await recordCompleteSale(db);
+  it("keeps total as the sale's only money, with the tip on the tender", async () => {
+    // Since 0012 the sale drops to one number: `total`. The tip moved to
+    // `tenders.tip_amount` (attributed to the payer who left it) and
+    // amount_charged is derived, never stored (design §3). Here a €1.00 sale is
+    // paid with a €1.50 tender carrying a €0.50 tip — three still-distinct
+    // figures, but only `total` lives on the sale.
+    const id = await recordCompleteSale(db, {}, [
+      { method: "card", amount: "1.50", tipAmount: "0.50" },
+    ]);
     const [row] = await db.select().from(sales).where(eq(sales.id, id));
     expect(row.total).toBe("1.00");
-    expect(row.tipAmount).toBe("0.50");
-    expect(row.amountCharged).toBe("1.50");
-  });
-
-  it("rejects an amount_charged that is not total plus tip", async () => {
-    // Folding the tip into total would declare turnover the venue did not
-    // have and owe VAT on a gratuity; folding amount_charged into total
-    // breaks card reconciliation every time anyone tips.
-    //
-    // Not `.rejects.toThrow(/pattern/)`: drizzle-orm@0.45.2 wraps every failed
-    // query (including a failed COMMIT) in a DrizzleQueryError whose own
-    // `.message` is `Failed query: <sql>` — the real Postgres text lives on
-    // `.cause`, which only pgErrorMessage unwraps (see testing/errors.ts).
-    const error = await captureError(() => recordCompleteSale(db, { amountCharged: "1.00" }));
-    expect(pgErrorMessage(error)).toMatch(/sales_amount_charged_ck/);
-  });
-
-  it("rejects a negative tip", async () => {
-    const error = await captureError(() =>
-      recordCompleteSale(db, { tipAmount: "-0.50", amountCharged: "0.50" }, [
-        { method: "card", amount: "0.50" },
-      ]),
-    );
-    expect(pgErrorMessage(error)).toMatch(/sales_tip_amount_ck/);
+    const [tender] = await db.select().from(tenders).where(eq(tenders.saleId, id));
+    expect(tender.amount).toBe("1.50");
+    expect(tender.tipAmount).toBe("0.50");
   });
 
   it("rejects a duplicate invoice number within a series", async () => {
@@ -197,12 +192,11 @@ describeEachTarget("sales — the commercial record", (target) => {
       db,
       sql`select table_name, column_name, data_type, numeric_precision, numeric_scale
             from information_schema.columns
-           where (table_name = 'sales'
-                    and column_name in ('total', 'tip_amount', 'amount_charged'))
+           where (table_name = 'sales' and column_name = 'total')
               or (table_name = 'sale_lines' and column_name in ('unit_price', 'line_total'))
-              or (table_name = 'tenders' and column_name = 'amount')`,
+              or (table_name = 'tenders' and column_name in ('amount', 'tip_amount'))`,
     );
-    expect(cols).toHaveLength(6);
+    expect(cols).toHaveLength(5);
     for (const col of cols) {
       expect(col.data_type).toBe("numeric");
       expect(col.numeric_precision).toBe(12);
@@ -225,7 +219,7 @@ describeEachTarget("sales — the commercial record", (target) => {
     const id = await db.transaction(async (tx) => {
       const [sale] = await tx
         .insert(sales)
-        .values(saleValues({ total: "1.00", tipAmount: "0.00", amountCharged: "1.00" }))
+        .values(saleValues({ total: "1.00" }))
         .returning({ id: sales.id });
       await tx.insert(saleLines).values(
         ["0.10", "0.20", "0.70"].map((amount, i) => ({
@@ -264,10 +258,17 @@ describeEachTarget("sales — the commercial record", (target) => {
     // node-postgres renders numeric as a string precisely so no value passes
     // through binary64. A registered type parser that "helpfully" converts to
     // Number would reintroduce the drift with nothing else changing.
-    const id = await recordCompleteSale(db);
+    const id = await recordCompleteSale(db, {}, [
+      { method: "card", amount: "1.50", tipAmount: "0.50" },
+    ]);
     const [row] = await db.select().from(sales).where(eq(sales.id, id));
     expect(typeof row.total).toBe("string");
-    expect(typeof row.amountCharged).toBe("string");
+    // The tender's amount and tip_amount are numeric(12, 2) too — the same
+    // parser path, checked here so a registered Number-coercing parser on any
+    // of the three surfaces is caught.
+    const [tender] = await db.select().from(tenders).where(eq(tenders.saleId, id));
+    expect(typeof tender.amount).toBe("string");
+    expect(typeof tender.tipAmount).toBe("string");
   });
 
   it("stores issued_at with its offset alongside", async () => {
@@ -344,7 +345,11 @@ describeEachTarget("sales — tender coverage", (target) => {
     if (db !== undefined) await db.close();
   });
 
-  it("accepts a split tender covering the amount across two rows", async () => {
+  it("accepts a split tender across two rows", async () => {
+    // Since 0012 there is no coverage check at tender INSERT — a sale may sit
+    // legitimately part-tendered until settlement is declared (design §3), so
+    // this only asserts both rows land. Whether they SUM correctly is the
+    // sale_settlements coverage trigger's job, proved in sale-settlements.test.ts.
     const id = await recordCompleteSale(db, {}, [
       { method: "cash", amount: "1.00" },
       { method: "card", amount: "0.50" },
@@ -353,35 +358,106 @@ describeEachTarget("sales — tender coverage", (target) => {
     expect(found).toHaveLength(2);
   });
 
-  it("refuses to commit a sale whose tenders fall short", async () => {
-    // The declined-card shape. The sale cannot exist half-tendered, so a
-    // failure mid-tender leaves the working order open and retryable with
-    // nothing written and nothing chained — spec §4.
+  // tenders_amount_ck (design §7 deletion matrix). This constraint had NO test
+  // at all before 0012 tightened it from `amount <> 0` to `amount > 0`, in
+  // either direction — so both boundaries get one, making the tightening a
+  // visible behaviour change rather than an untested edit. The sale these hang
+  // off is unsettled, so the post-settlement tender guard (WT002) never fires;
+  // the CHECK is what rejects, asserted on SQLSTATE 23514.
+  it("rejects a zero-amount tender", async () => {
+    const id = await recordCompleteSale(db);
+    // amount 0 with the default tip 0 passes tenders_tip_amount_ck (0 <= 0), so
+    // tenders_amount_ck is the only constraint that can fire here — deleting it
+    // is what lets a zero tender through (proved by deletion locally).
     const error = await captureError(() =>
-      recordCompleteSale(db, {}, [{ method: "card", amount: "1.00" }]),
+      db
+        .insert(tenders)
+        .values({ tenantId: TENANT_A, saleId: id, method: "cash", amount: "0.00", settledAt: AT }),
     );
-    expect(pgErrorMessage(error)).toMatch(
-      /tenders for sale .* total 1.00 but amount_charged is 1.50/,
-    );
+    expect(pgErrorCode(error)).toBe("23514");
+    expect(pgErrorMessage(error)).toMatch(/tenders_amount_ck/);
   });
 
-  it("refuses to commit a sale with no tenders at all", async () => {
+  it("rejects a negative-amount tender", async () => {
+    const id = await recordCompleteSale(db);
+    // Only SQLSTATE is pinned, deliberately, NOT the constraint name: a negative
+    // amount violates BOTH checks at once — tenders_amount_ck (`> 0`) and
+    // tenders_tip_amount_ck (`tip <= amount`, which no tip >= 0 can satisfy when
+    // amount < 0) — and which name Postgres reports is not guaranteed. So this
+    // proves "a negative tender is refused", jointly enforced; the zero case
+    // above is the one that isolates tenders_amount_ck under deletion.
     const error = await captureError(() =>
-      db.transaction(async (tx) => {
-        await tx.insert(sales).values(saleValues());
+      db.insert(tenders).values({
+        tenantId: TENANT_A,
+        saleId: id,
+        method: "cash",
+        amount: "-10.00",
+        settledAt: AT,
       }),
     );
-    expect(pgErrorMessage(error)).toMatch(/but amount_charged is 1.50/);
+    expect(pgErrorCode(error)).toBe("23514");
   });
 
-  it("refuses to commit tenders exceeding the amount charged", async () => {
+  it("accepts a positive-amount tender", async () => {
+    const id = await recordCompleteSale(db);
+    const [inserted] = await db
+      .insert(tenders)
+      .values({ tenantId: TENANT_A, saleId: id, method: "cash", amount: "10.00", settledAt: AT })
+      .returning();
+    expect(inserted.amount).toBe("10.00");
+  });
+
+  // tenders_tip_amount_ck (design §7 deletion matrix): the tip is PART of the
+  // amount, never on top (`0 <= tip_amount <= amount`), because the terminal is
+  // sent one final figure (design §4). New in 0012.
+  it("rejects a tender whose tip exceeds its amount", async () => {
+    const id = await recordCompleteSale(db);
+    // amount 10 > 0 passes tenders_amount_ck, so tenders_tip_amount_ck is the
+    // only constraint that can fire — the name is safe to pin here.
     const error = await captureError(() =>
-      recordCompleteSale(db, {}, [
-        { method: "cash", amount: "1.00" },
-        { method: "card", amount: "1.00" },
-      ]),
+      db.insert(tenders).values({
+        tenantId: TENANT_A,
+        saleId: id,
+        method: "card",
+        amount: "10.00",
+        tipAmount: "15.00",
+        settledAt: AT,
+      }),
     );
-    expect(pgErrorMessage(error)).toMatch(/total 2.00 but amount_charged is 1.50/);
+    expect(pgErrorCode(error)).toBe("23514");
+    expect(pgErrorMessage(error)).toMatch(/tenders_tip_amount_ck/);
+  });
+
+  it("accepts a tender whose tip equals its amount", async () => {
+    const id = await recordCompleteSale(db);
+    const [inserted] = await db
+      .insert(tenders)
+      .values({
+        tenantId: TENANT_A,
+        saleId: id,
+        method: "card",
+        amount: "10.00",
+        tipAmount: "10.00",
+        settledAt: AT,
+      })
+      .returning();
+    expect(inserted.tipAmount).toBe("10.00");
+  });
+
+  it("rejects a negative tip", async () => {
+    const id = await recordCompleteSale(db);
+    const error = await captureError(() =>
+      db.insert(tenders).values({
+        tenantId: TENANT_A,
+        saleId: id,
+        method: "card",
+        amount: "10.00",
+        tipAmount: "-1.00",
+        settledAt: AT,
+      }),
+    );
+    expect(pgErrorCode(error)).toBe("23514");
+    expect(pgErrorMessage(error)).toMatch(/tenders_tip_amount_ck/);
   });
 
   it("owns the tender-coverage check with a role that cannot itself be filtered by tenant isolation", async () => {
@@ -389,9 +465,14 @@ describeEachTarget("sales — tender coverage", (target) => {
     // stop it going fail-OPEN: FORCE ROW LEVEL SECURITY (0005_sales.sql)
     // subjects the function's OWNER to the tenant-isolation policy too, so an
     // ordinary non-superuser owner would find the sale row invisible the
-    // moment app.tenant_id is cleared, read `charged` as NULL, and let an
-    // uncovered sale commit — verified live against a genuine non-superuser,
-    // non-BYPASSRLS owner while fixing this.
+    // moment app.tenant_id is cleared, read `sale_total` as NULL, take the
+    // early RETURN, and let a mis-summed settlement be declared complete —
+    // verified live against a genuine non-superuser, non-BYPASSRLS owner while
+    // fixing this. Since 0012 the function fires on the sale_settlements INSERT,
+    // not at sale COMMIT; the FUNCTIONAL fail-open reproduction now lives in
+    // sale-settlements.test.ts ("still refuses a mis-summed settlement when
+    // app.tenant_id is cleared"). This test pins the STRUCTURE that makes that
+    // one trustworthy.
     //
     // The actual guarantee is this introspection: the function's owner,
     // sales_coverage_checker, is itself neither a superuser nor BYPASSRLS —
@@ -417,21 +498,16 @@ describeEachTarget("sales — tender coverage", (target) => {
     // table, scoped to the right role and command, still renders nothing
     // visible if its predicate is wrong — asserting only that the two
     // policies exist (as this test did before) would pass identically
-    // whether their USING clause is `true` or `false`. That gap is not
-    // theoretical: this file's "sales — tender coverage" describe block
-    // never sets app.tenant_id, so sales_tenant_isolation never helps
-    // sales_coverage_checker see the sale row either — these two bypass
-    // policies are the only thing that does. Under that incidental
-    // condition, flipping `USING (true)` to `USING (false)` in
-    // 0005_sales.sql today fails 7 other tests in this block, but nothing
-    // enforces that property: a future change wrapping these tests in
-    // withTenant would remove that incidental coverage silently, and an
-    // existence-only introspection here would keep passing regardless. So
-    // read `qual` (the USING expression, as Postgres renders it) directly,
-    // alongside `cmd` and `roles`, and pin all three by value rather than by
-    // filtering for them in the WHERE clause — a filter can only ever prove
-    // "some row happens to satisfy this", not "this is the row's actual
-    // shape".
+    // whether their USING clause is `true` or `false`. The functional proof
+    // that the predicate does its job — flipping `USING (true)` to
+    // `USING (false)` in 0005_sales.sql makes a cleared-tenant settlement
+    // sail through — lives in sale-settlements.test.ts, where the coverage
+    // function actually fires. This test pins the STRUCTURE so that a future
+    // change cannot silently weaken the predicate: read `qual` (the USING
+    // expression, as Postgres renders it) directly, alongside `cmd` and
+    // `roles`, and pin all three by value rather than by filtering for them in
+    // the WHERE clause — a filter can only ever prove "some row happens to
+    // satisfy this", not "this is the row's actual shape".
     const policies = await rows<{ tablename: string; cmd: string; roles: string[]; qual: string }>(
       db,
       // roles::text[] is deliberate: pg_policies.roles is name[] (oid 1003),
@@ -448,51 +524,6 @@ describeEachTarget("sales — tender coverage", (target) => {
       { tablename: "tenders", cmd: "SELECT", roles: ["sales_coverage_checker"], qual: "true" },
     ]);
   });
-
-  it.runIf(target.name === "postgres")(
-    "still rejects a sale whose tenders fall short even when app.tenant_id is cleared before commit",
-    async () => {
-      // Direct reproduction of the review finding: the deferred coverage
-      // check fires at COMMIT, by which point a caller may have cleared its
-      // tenant context (a pooled connection reset, a bug elsewhere, or —
-      // before this fix — simply the fail-open path itself). Only the
-      // postgres target can show this: PGlite's one connection is always
-      // superuser, and a superuser is exempt from RLS regardless of FORCE, so
-      // clearing app.tenant_id there would prove nothing about the check's
-      // own privilege design (see testing/harness.ts's note on this).
-      const error = await captureError(() =>
-        db.transaction(async (tx) => {
-          await tx.execute(sql`select set_config('app.tenant_id', ${TENANT_A}, true)`);
-          const [sale] = await tx.insert(sales).values(saleValues()).returning({ id: sales.id });
-          await tx.insert(saleLines).values({
-            tenantId: TENANT_A,
-            saleId: sale.id,
-            lineNo: 1,
-            descriptions: { es: "Café solo", ca: "Cafè sol" },
-            quantity: "1.000",
-            unitPrice: "1.00",
-            vatRate: "10.00",
-            lineTotal: "1.00",
-          });
-          // Falls short of amount_charged (1.50) — an uncovered sale.
-          await tx.insert(tenders).values({
-            tenantId: TENANT_A,
-            saleId: sale.id,
-            method: "card",
-            amount: "1.00",
-            settledAt: AT,
-          });
-          // The caller's tenant context evaporates before COMMIT; the
-          // deferred constraint trigger only fires after this, at COMMIT
-          // itself.
-          await tx.execute(sql`select set_config('app.tenant_id', '', true)`);
-        }),
-      );
-      expect(pgErrorMessage(error)).toMatch(
-        /tenders for sale .* total 1.00 but amount_charged is 1.50/,
-      );
-    },
-  );
 });
 
 describeEachTarget("sales — immutability as the app role", (target) => {
