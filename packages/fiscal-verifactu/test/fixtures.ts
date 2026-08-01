@@ -62,10 +62,10 @@ export const TENANT_B = {
  * `WITH CHECK`. Were this fixture ever pointed at a real, non-superuser owner connection, every
  * insert below would need to run inside `withTenant(db, TENANT_A.id, ...)` first.
  *
- * The seeded sale has `total = tip_amount = amount_charged = 0.00` and gets NO tender row. That
- * satisfies `sales`'s deferred `sales_assert_tenders_cover` constraint trigger (0=0) without
- * needing a tender at all — `tenders.amount` carries its own `<> 0` check, so the simplest fixture
- * that clears the coverage check is one with nothing to cover.
+ * The seeded sale has `total = 0.00` and gets NO tender or `sale_settlements` row. Migration 0012
+ * dropped `tip_amount`/`amount_charged` from `sales` and retired the old commit-time
+ * `sales_assert_tenders_cover` trigger, so a bare, unsettled sale is a legitimate steady state
+ * (design §3) and nothing checks coverage against it.
  */
 export async function seedTenantTillSif(db: Database): Promise<void> {
   await db.execute(sql`
@@ -88,12 +88,12 @@ export async function seedTenantTillSif(db: Database): Promise<void> {
     insert into sales (
       id, tenant_id, till_id, series_id, invoice_number,
       issued_at, issued_offset_minutes,
-      total, tip_amount, amount_charged,
+      total,
       locale, invoice_locales, fiscal_backend, fiscal_state
     ) values (
       ${TENANT_A.saleId}, ${TENANT_A.id}, ${TENANT_A.tillId}, ${TENANT_A.seriesId}, 1,
       '2026-07-20T19:20:30+01:00', 60,
-      '0.00', '0.00', '0.00',
+      '0.00',
       'es', array['es'], 'verifactu', 'recorded'
     )
   `);
@@ -176,12 +176,12 @@ export async function seedSoldRegistro(
     insert into sales (
       tenant_id, till_id, series_id, invoice_number,
       issued_at, issued_offset_minutes,
-      total, tip_amount, amount_charged,
+      total,
       locale, invoice_locales, fiscal_backend, fiscal_state
     ) values (
       ${params.tenantId}, ${params.tillId}, ${seriesId}, ${params.secuencia},
       '2026-07-20T19:20:30+01:00', 60,
-      '0.00', '0.00', '0.00',
+      '0.00',
       'es', array['es'], 'verifactu', 'recorded'
     )
     returning id

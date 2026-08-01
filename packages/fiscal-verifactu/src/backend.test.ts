@@ -187,13 +187,13 @@ describe("recordSale — invoice type selection", () => {
     const freshSaleId = brandSaleId("22222222-2222-4222-8222-222222222222");
     await withTenant(pg.db, tenantId, async (tx) => {
       await asAppUser(tx);
-      // total/tip_amount/amount_charged are all "0.00" and no tender is inserted, purely to
-      // satisfy `sales`'s own deferred tender-coverage trigger with the simplest possible row —
-      // the same convention `test/fixtures.ts`'s `seedTenantTillSif` and
-      // `src/testing/seed.ts`'s `seedSale` already use. Nothing ties this column to
-      // `registros_facturacion.importe_total` at the database level (Task 12's own design:
-      // the two are allowed to disagree in representation, since only one is hashed), so this
-      // sale's own totals are irrelevant to the assertion below.
+      // total is "0.00" with no tender and no settlement — the simplest possible sale row now that
+      // migration 0012 dropped `tip_amount`/`amount_charged` and retired the commit-time
+      // coverage trigger (a bare, unsettled sale is a legitimate steady state, design §3) — the same
+      // convention `test/fixtures.ts`'s `seedTenantTillSif` and `src/testing/seed.ts`'s `seedSale`
+      // already use. Nothing ties this column to `registros_facturacion.importe_total` at the
+      // database level (Task 12's own design: the two are allowed to disagree in representation,
+      // since only one is hashed), so this sale's own total is irrelevant to the assertion below.
       await tx.insert(sales).values({
         id: freshSaleId,
         tenantId,
@@ -203,8 +203,6 @@ describe("recordSale — invoice type selection", () => {
         issuedAt: "2026-03-01T12:05:00.000Z",
         issuedOffsetMinutes: 60,
         total: "0.00",
-        tipAmount: "0.00",
-        amountCharged: "0.00",
         locale: "es-ES",
         invoiceLocales: ["es-ES"],
         fiscalBackend: "verifactu",
