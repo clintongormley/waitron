@@ -498,6 +498,13 @@ with invoices.
 > [`sales.ts:52`](../../../packages/db/src/schema/sales.ts) and
 > [`record-sale.ts:59`](../../../packages/core/src/record-sale.ts) has never been put to the
 > advisor. Added to the asesor list by this change.
+>
+> **Update 2026-08-01 (#37).** Now verified on primary DGT doctrine and closed — see
+> [verifactu-findings.md §11](../../compliance/verifactu-findings.md): the "non-taxable" claim holds.
+> Two corrections to the note above: (1) **2174-03 is a *general* consulta, not *vinculante*** — the
+> binding restatements are V3095-17 and V1808-22; (2) the substance was read via faithful
+> legal-database reproductions, not PETETE itself (which failed TLS), so confirm the exact wording on
+> PETETE if an advisor engages. `asesor-questions.md` now carries a propina entry (Q13), marked closed.
 
 ### 9.3 Printing a pre-bill triggers a preservation duty (piece 1)
 
