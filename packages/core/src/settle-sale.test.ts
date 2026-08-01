@@ -12,11 +12,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
-import {
-  AppError,
-  saleId as brandSaleId,
-  tenantId as brandTenantId,
-} from "@waitron/shared";
+import { AppError, saleId as brandSaleId, tenantId as brandTenantId } from "@waitron/shared";
 import type { SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { seedTenant } from "../test/fixtures.js";
 import { settleSale } from "./settle-sale.js";
