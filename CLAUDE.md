@@ -47,6 +47,25 @@ Run the thing.
 is how a third false claim happened — an experiment on one mutation, written up as a claim about a
 different mutation that was never run. If the sentence describes more than what you ran, narrow it.
 
+### A measurement taken where both answers look alike measures nothing
+
+`pnpm --filter "...[origin/main]" ls --depth -1 --json` printing **zero bytes** in a worktree was
+handed to `feat/scoped-pre-push-hook` as the receipt that pnpm's changed-since filter does not work
+there. The conclusion is right. The run was not: it was made on a branch whose HEAD **equalled**
+`origin/main`, and zero bytes is also the correct answer for a filter with nothing to match, so it
+separated the two hypotheses not at all. Re-running it in the same state reproduces the number and
+still proves nothing.
+
+The real receipt needs a state where a working filter and a broken one disagree — one commit
+touching `packages/db/README.md`, then the identical commands in a `git worktree` (0 bytes) and in a
+plain `git clone` (2760 bytes, 11 packages), with `git diff --name-only main...HEAD` naming the path
+in both. **Before running a probe, say what the FAILING case would print**; if that is what you
+already expect to see, you are not running a probe. A control in the other direction is the cheapest
+way to get one, and neither of these took a minute.
+
+Note where this one came from: the zero-byte reading arrived in the task brief as already verified.
+A receipt someone hands you is still a claim.
+
 ### "Pre-existing" and "not a regression" are claims too
 
 Both are load-bearing — they decide whether something gets fixed now or deferred — and both are
@@ -142,9 +161,12 @@ pnpm lint && pnpm typecheck && pnpm format:check && pnpm test
 Traps that each cost a round trip (deliberately uncounted — the last version of this line said
 "four" and went stale the moment one was added):
 
-- **CI's test shards run `test:coverage`, not `test`.** The pre-push hook runs plain `pnpm test`, so
-  a coverage-threshold regression passes locally and fails in CI. Before claiming a package is green,
-  run `pnpm --filter <pkg> test:coverage`. There is no `test` job to name any more:
+- **CI's test shards run `test:coverage`, not `test`.** The four-command gate above ends in plain
+  `pnpm test`, so a coverage-threshold regression passes there and fails in CI. Before claiming a
+  package is green, run `pnpm --filter <pkg> test:coverage`. The PRE-PUSH HOOK no longer has this
+  gap — `.husky/pre-push` has run `test:coverage` since `feat/scoped-pre-push-hook`, which is what
+  closed it — but the hook narrows to the changed packages and their dependents, so its green is
+  evidence about those and not about the workspace. There is no `test` job to name any more:
   `.github/workflows/ci.yml` splits it into `test-heavy` (`packages/db` alone) and `test-light`
   (everything else, `--no-sort`).
 - **CI does not run every check on every push.** `ci.yml`'s `changes` job skips the expensive jobs
@@ -195,9 +217,11 @@ Traps that each cost a round trip (deliberately uncounted — the last version o
   all. Make the binding used — `export const brokenProbe: number = "not a number";` — and
   `pnpm typecheck`, `pnpm lint` AND `pnpm vitest run` all exit **0**. Nothing in this repository
   typechecks root config, so a type error there reaches `main` unremarked.
-- **The pre-push hook does not run `--frozen-lockfile`.** Moving a dependency between
-  `dependencies` and `devDependencies` passes locally and fails CI at the install step. Run
-  `pnpm install` and commit the lockfile.
+- **`--frozen-lockfile` is not in the gate above either.** Moving a dependency between
+  `dependencies` and `devDependencies` passes a plain `pnpm install` and fails CI at the install
+  step. Run `pnpm install` and commit the lockfile. The pre-push hook DOES run
+  `pnpm install --frozen-lockfile`, added on `feat/scoped-pre-push-hook`, so what is left uncovered
+  is the four-command gate rather than the hook.
 - **A filtered test run does not load a package's guard suites.**
   `pnpm --filter @waitron/db test provisioner-role` was green while
   `pnpm --filter @waitron/db test:coverage` failed on the same tree: the filter never loaded
@@ -493,11 +517,20 @@ landed after the fix, so nothing ever hit that.)
   version. Diff before deleting — the scratch copy was 113 lines behind what had actually landed.
 
 **Before a PR**, run the gate in §2 yourself rather than relying on the pre-push hook. The hook
-mirrors CI's fast checks but is **not** identical to it — see §2 for where they diverge, in both
-directions: the hook is broader (it runs the whole workspace, while CI's shards narrow to what a
-pull request can reach) and shallower (no coverage thresholds, no `--frozen-lockfile`, no mutation).
-Bypassing the hook with `--no-verify` is for emergencies only, and the underlying failure still
-needs fixing because CI runs the same checks.
+mirrors CI's fast checks but is **not** identical to it — see §2 for where they diverge. Since
+`feat/scoped-pre-push-hook` the differences are narrower than this paragraph used to claim, and in
+the opposite direction: the hook **narrows** too (`typecheck` and `test:coverage` run over the
+changed packages and their dependents, the same shape as CI's shards), it **does** run coverage
+thresholds (`test:coverage`, not `test`) and it **does** run `pnpm install --frozen-lockfile`. What
+is still CI-only is **mutation testing** and the **`bundle-smoke` builds**, so a green hook does not
+imply a green CI. Both narrow, so a green from either is evidence about the packages that ran; the
+unfiltered `main` merge is the only run that covers the rest. Bypassing the hook with `--no-verify`
+is for emergencies only, and the underlying failure still needs fixing because CI runs the same
+checks.
+
+The four-command gate at the top of §2 is now the **shallower** of the two — it ends in plain
+`pnpm test`, with no coverage thresholds and no `--frozen-lockfile`. Run it for the whole-workspace
+breadth the hook no longer gives you, not for depth.
 
 **Before a release** (when there is a release process — there is none yet), update the docs and
 tests alongside the code.

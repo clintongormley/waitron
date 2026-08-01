@@ -41,6 +41,7 @@ reprioritisation rather than assumed.
 | **This backlog** | **Merged** (#21) |
 | **Pre-push hook skips deletions** | **Merged** (#23) |
 | **Scoped CI** — stop running every check on every push | **Done.** Both merged: #25 (the `ci` gate) and #27 (the scoping). Against the 7m20s baseline: a documentation-only pull request now takes **44s**, and a full unfiltered `push` on `main` **4m12s**. Two follow-ups remain under **Debt and odd jobs** |
+| **Scoped pre-push hook** — the same treatment for the local gate | **In flight** on `feat/scoped-pre-push-hook`. Scopes `typecheck` and `test:coverage` to the changed packages and their dependents, adds the sign-off (DCO) check CI was catching for us, runs `test:coverage` rather than `test`, adds `pnpm install --frozen-lockfile`, and skips `lint` on a documentation-only push. Measured on this machine on 2026-08-01, one crafted push per shape, `TESTCONTAINERS_RYUK_DISABLED=true`, wall clock bracketed in `time.time()` — `main`'s hook (`558c62b`, one run each) → this branch's: deletions-only 9ms → 7-9ms (unchanged, #23 already did that); an **unsigned commit 104s and exit 0 → 27-36ms and exit 1**, because `main`'s hook has no sign-off check at all and so charged a full run and then let it through; documentation-only 105s → **3.1-3.5s**; a push to `packages/ui`, which no other package depends on, 105s → **8.2-8.8s**. **It is not faster everywhere.** A `packages/db` push is 112s and a root-config or lockfile push 116s — both SLOWER than `main`'s 105s, because this hook also runs `test:coverage` rather than `test` and installs first. Scoping pays on the leaves, not on the trunk; **Debt and odd jobs** carries the expansion sizes and what the hook still does not cover |
 | **Cloud storage model** — design | **Merged** (#19), corrected by **#22** |
 | **Sale settlement model** — implementation plan | Not written. **The next build step** |
 | **Close Q13 and Q15 on primary source** | Not started. Cheaper than hiring — see below |
@@ -166,15 +167,161 @@ optional, and they are currently as unstarted as the restaurant-phase items they
 
 Carried from finished work. None of it blocks anything; all of it makes later work cheaper.
 
-- **The git hooks are still untested — but they now have somewhere to go.** The "nothing repo-level
-  can be tested" debt is closed: root `vitest.config.ts` exists, added by the scoped-CI work below,
-  and root `pnpm test` is now `vitest run && pnpm -r test`. Its `include` currently covers
-  `.github/scripts/` only. What has **not** happened is the hook test itself: the pre-push deletion
-  guard (#23) is still backed only by having run the real hook against four kinds of stdin and
-  recorded the results, not by a suite that would catch someone re-breaking it. Two things to know
-  before writing one — the root project's `include` has to be widened to reach `.husky/`, and root
-  config is linted but never typechecked (`pnpm typecheck` is `pnpm -r typecheck`, and `pnpm -r`
-  never visits the workspace root; see `CLAUDE.md` §2)
+- **The pre-push hook is scoped now, and its DECISIONS are tested — the shell itself still is not.**
+  The hook maps the push's changed paths onto workspace packages and runs `typecheck` and
+  `test:coverage` against those packages and their dependents, skipping those two **and `lint`**
+  entirely on a documentation-only push. `lint` is skipped there on a measurement, not a hunch:
+  `pnpm exec eslint . --format json` lints zero Markdown files and zero files under `docs/`, so of
+  what is in the tree today eslint reads nothing such a push contains. (Only the zeros are recorded
+  here — a file count moves on the next commit, and `CLAUDE.md` §2 already carries what a receipt
+  that goes stale costs.) The two configurations do not actually agree, and the hook's header
+  records the gap: `eslint.config.js` does not ignore `docs/`, so a `docs/**/*.ts` file would be
+  linted by `pnpm lint` and skipped by this path.
+  `format:check` is NOT skipped, because `.prettierignore` covers `docs/` but not a root-level
+  `CLAUDE.md` or `README.md` (`prettier --file-info` says `ignored: true` for the first and
+  `ignored: false` for the other two, and a mis-formatted heading appended to `CLAUDE.md` makes
+  `prettier --check` exit 1). It also closes two things that reached CI this session: a commit with
+  no `Signed-off-by` (`git revert --no-edit` writes none), and coverage thresholds, which the hook
+  never ran because `pnpm test` is not `pnpm test:coverage`.
+
+  **How much a scoped push actually saves depends entirely on which package it touched**, and the
+  spread is the whole width of the workspace. Expansion sizes, every member measured on 2026-08-01
+  with `pnpm --filter "...<pkg>" ls -r --depth -1 --json` (15 members in total):
+
+  | `...<pkg>` selects | packages |
+  | --- | --- |
+  | `shared` | 12 |
+  | `db` | 11 |
+  | `fiscal` | 9 |
+  | `core` | 8 |
+  | `payments` | 6 |
+  | `verifactu` | 5 |
+  | `credentials`, `fiscal-verifactu`, `scheduler` | 4 |
+  | `migrations` | 3 |
+  | `payments-stripe` | 2 |
+  | `server`, `provisioning`, `ui`, `bench-pglite` | 1 |
+
+  So a `packages/ui` push narrows to one package and finishes in 8.2-8.8s, while a `packages/db` push
+  narrows to eleven and takes 112s against the whole workspace's 116s — a 4s saving on a change to a
+  package the history touches often (ten commits reach `packages/db` as of `558c62b`; only
+  `fiscal-verifactu` at fourteen and `payments` at twelve reach further). Scoping is close to free on
+  the leaves and close to worthless on the trunk, and the trunk is not the rare case.
+
+  The new classifier `scripts/changed-packages.mjs` is fully tested by the root Vitest project,
+  whose `include` now covers `scripts/` as well as `.github/scripts/`. **The shell is not.** The
+  deletion guard (#23), the range computation and the sign-off loop are all backed only by having
+  run the real hook against crafted stdin and recorded the results — the same evidence #23 had, no
+  better. Three things to know before writing a suite for the shell: the root project's `include`
+  has to be widened again to reach `.husky/`; root config is linted but never typechecked
+  (`pnpm typecheck` is `pnpm -r typecheck`, and `pnpm -r` never visits the workspace root, see
+  `CLAUDE.md` §2); and husky runs the hook under `sh -e`, where an unguarded `x=$(false)` or a
+  `grep` outside an `if` kills the script silently mid-gate — the hook's own header records that
+  measurement.
+
+  **Four known gaps. Two are the honest answer, two are follow-ups.** The hook's header states the
+  last three in its "NOT RUN HERE" list rather than leaving them for a reader to discover; the first
+  is a cost rather than a gap in what runs, and the header's SCOPING paragraph covers it.
+
+  1. A `global` push — root config, `.github/`, `.husky/`, `scripts/`, the lockfile — runs
+     `pnpm test:coverage` for the whole workspace, which is the 116s in the row above. The heaviest
+     single package in it is `packages/db`: `pnpm --filter @waitron/db test:coverage` on its own
+     measured **38s** on 2026-08-01 (two runs, 37.8s and 38.2s,
+     `TESTCONTAINERS_RYUK_DISABLED=true`). It is not 38s OF the 116s — `pnpm -r` runs the members
+     concurrently — and it is emphatically not the **189s** in
+     `.github/scripts/changed-scope.mjs`, which is a CI-runner figure ("189s of the old 387s test
+     step, on its own runner"). An earlier version of this entry quoted that CI number as the local
+     one, where it could not fit inside the whole-workspace figure beside it. The whole-workspace
+     run is the honest answer for a change that can affect anything, and it is the CI entry below
+     that would make it cheap.
+  2. The hook still does not run mutation testing or the `bundle-smoke` builds, so a green hook does
+     not imply a green CI.
+  3. **The scoping retires `packages/db`'s two cross-package guard suites on most pushes — a
+     regression this branch introduces locally, not a design choice.**
+     `packages/db/src/guarded-teardowns.test.ts` scans `packages/` and `apps/` from the repository
+     root (it is the only file under either tree that resolves the repo root, grepped on
+     2026-08-01), and `english-only.test.ts` scans the seven generic packages. Both live in
+     `packages/db`, so both run only when `packages/db` is in scope. Measured on 2026-08-01:
+     `pnpm --filter "...@waitron/ui" ls -r --depth -1 --json` lists `@waitron/ui` alone, and
+     `--filter "...@waitron/payments"` lists six packages, none of them `@waitron/db`. Before this
+     branch the hook ran `pnpm test` unscoped (`git show 558c62b:.husky/pre-push`, line 82), so both
+     ran on every push. CI does not make it up on the pull request either — `test-heavy` is gated on
+     `@waitron/db` being in scope — so their first run is the unfiltered `main` merge. This is
+     `CLAUDE.md` §2's "a filtered test run does not load a package's guard suites" one level up: the
+     filter is over PACKAGES now rather than over test names. Widening the scope back out is the
+     wrong fix, because it gives up the whole change to buy two suites: a guard that polices
+     `packages/` and `apps/` reads as belonging in the root Vitest project — whose `include` already
+     has to be widened to cover `.husky/` (see above) — rather than in a package most changes do not
+     reach. Moving them there takes both suites out of `packages/db`'s coverage accounting, which is
+     enough of a change to want its own branch
+  4. **A scope of only script-less packages makes the test step a silent no-op.** Measured on
+     2026-08-01: `pnpm --filter "...@waitron/bench-pglite" test:coverage` prints
+     `None of the selected packages has a "test:coverage" script` and exits **0**, so the hook
+     reports the step as passed. Honest today — that package deliberately defines no `test` script
+     and holds no `*.test.ts` (see `bench/pglite-throughput/README.md`) — but nothing enforces a
+     future member declaring one, and it is the same shape the repository already records for
+     `test-light`: `.github/scripts/changed-scope.mjs`'s own comment quotes that identical message
+     from that shard's "Run the light shard" step on run 30653487133.
+     The guard would be a check that the scoped run selected at least one package with the script;
+     deliberately not added here, because it wants its own test and this branch has no way to test
+     the shell at all (see above)
+- **CI SKIPS `test-heavy` and both mutation runs on a root-config-only pull request — a known
+  defect, not a design choice. Promote this out of "odd jobs" as soon as
+  `feat/scoped-pre-push-hook` lands**: the wide review of that branch drew out the consequence, and
+  it is worse than the entry originally read. Put the three receipts below together — `test-heavy`
+  and both mutation jobs skipped, `test-light` gated true but selecting nothing, the ungated `lint`
+  job running only the repo-level Vitest project — and **no package's test suite runs in CI at all**
+  on a root-config-only or lockfile-only pull request. The pre-push hook is what covers it, and
+  `feat/scoped-pre-push-hook` keeps it covering it: it fail-CLOSES to a whole-workspace run on
+  exactly those paths — confirmed on 2026-08-01, `pnpm-lock.yaml` and `tsconfig.base.json` each give
+  `scope=global` from `scripts/changed-packages.mjs`, and a crafted `tsconfig.base.json` push ran the
+  whole workspace end to end (the row above has the timing). That is the branch NOT making this
+  worse; it is not a fix, because the
+  hook is **the only gate anywhere that runs a package's tests on such a change**, and one
+  `--no-verify` is all that stands between such a change and `main`. A local hook a developer can
+  skip is not an acceptable last line for a pull-request gate, which is what moves this out of
+  "things that make later work cheaper" and into work with a consequence.
+
+  `ci.yml`'s `changes` job resolves scope with
+  `pnpm --filter "...[origin/$BASE_REF]" ls --depth -1 --json`, and a change that belongs to no
+  workspace member resolves to the workspace ROOT. Run locally on 2026-08-01 against a
+  `git clone --no-hardlinks` of this repository (a clone, because the same filter matches nothing in
+  a worktree — `CLAUDE.md` §2), branching off `main` and committing one change to
+  `tsconfig.base.json`: that filter printed exactly **one** entry, `{"name": "waitron"}`, and piping
+  it into `node .github/scripts/changed-scope.mjs gates` gave
+  `heavy=false light=true verifactu=false shared=false`. So `test-heavy` — `packages/db`, 189s on
+  its own CI runner — and both mutation jobs are skipped by a change to the TypeScript configuration
+  every package extends. A `pnpm-lock.yaml`-only commit gave byte-identical output. The control ran
+  too: one commit touching `packages/db/src/index.ts` gave 11 entries and `heavy=true`.
+
+  `test-light` is gated `true` and does get a runner, but selects nothing to run. Its step is
+  `pnpm --filter "$SCOPE" --filter "!@waitron/db" --no-sort test:coverage`, which on that scope
+  resolves to the workspace root alone — and pnpm does not run a filtered script in the workspace
+  root without `--include-workspace-root`. Measured in this worktree:
+  `pnpm --filter "waitron" --no-sort typecheck` prints `No projects matched the filters`, while
+  adding `--include-workspace-root` runs it. So no package's suite executes on that pull request at
+  all. What still runs is the ungated `lint` job, which is `pnpm lint`, `pnpm format:check` and
+  `pnpm vitest run --coverage` — the repo-level project only.
+
+  Not fixed on `feat/scoped-pre-push-hook` deliberately: it changes what CI runs, so it wants its
+  own pull request and its own verification on a real run rather than a local reproduction of the
+  commands. The obvious fix is to make an unattributable path fail closed to every gate, which is
+  what the pre-push hook already does — `scripts/changed-packages.mjs` returns `scope=global` for
+  exactly these paths, and the hook then runs the whole workspace
+- **The sign-off (DCO) check is implemented twice.** `.husky/pre-push`'s `check_signoff` and
+  `licence.yml`'s `dco` job carry the same `grep -qiE '^Signed-off-by: .+ <.+@.+>'` over the same
+  per-commit loop. The PREDICATE is byte-identical; the reporting is not — CI emits `::error::`
+  annotations and carries its own `git rev-list` failure branch, while the hook accumulates a list
+  and hands it to `run_step`. That duplication is
+  deliberate for now — the hook's copy was written to match CI's exactly, and the two agreeing is
+  the whole point — but the way to keep them agreeing is one script both call, not two copies and a
+  comment. Held back from `feat/scoped-pre-push-hook` because extracting it edits a workflow that
+  branch otherwise never touches
+- **`scripts/` and `.github/scripts/` are one directory's worth of code in two places.**
+  `scripts/changed-packages.mjs` imports `classify` and `isInertPath` from
+  `.github/scripts/changed-scope.mjs`; the root Vitest project's `include` and its coverage
+  `include`/`exclude` each name both directories; `vitest.config.ts` explains at length that
+  `**/[.]**` had to be filtered out of the coverage defaults to reach the dot-prefixed one. Merging
+  them removes the split and the paragraph. Small, and nothing depends on it
 - **`errors.reachability.test.ts` does not test reachability.** Proven by deletion. Eight packages
   carry a copy. Closing it needs a `tsc`-based downstream probe or a narrowed `include`. See
   `CLAUDE.md` §4 — do not cite these tests as evidence in the meantime

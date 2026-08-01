@@ -385,20 +385,35 @@ behaviour `multi-root.test.ts` asserts. Check both before committing.
 
 ## Local checks before pushing
 
-A Husky `pre-push` hook (`.husky/pre-push`) runs before any push leaves your machine: `pnpm lint`,
-`pnpm format:check`, `pnpm typecheck`, then `pnpm test` — the whole workspace, not just this package.
-(It was `pnpm --filter @waitron/ui …` for the **last two** steps — `typecheck` and `tests` — when
-this document was written; `lint` and `format check` were already repo-wide. #9 widened the other
-two, and this paragraph had said otherwise ever since. Read back from
-`git show b20c267:.husky/pre-push` and `git show c31dae8:.husky/pre-push`.) It runs from the repo root
-regardless of which subdirectory you're in, stops at the first failing step, and prints both which
-step failed and the exact command to reproduce it locally.
+A Husky `pre-push` hook (`.husky/pre-push`) runs before any push leaves your machine, and **what it
+runs depends on what the push contains.** On a push carrying code, in order: the sign-off (DCO)
+check, `pnpm install --frozen-lockfile`, `pnpm format:check`, `pnpm lint`, then `typecheck` and
+`test:coverage` **scoped to the changed packages and their dependents**. A documentation-only push
+stops after `format:check`; a push that only deletes refs skips the gate entirely; and anything the
+hook cannot attribute to a package — root config, `.github/`, `.husky/`, `scripts/`, the lockfile —
+widens the run back to the whole workspace. It runs from the repo root regardless of which
+subdirectory you're in, stops at the first failing step, and prints both which step failed and the
+exact command to reproduce it locally.
 
-Coverage thresholds and mutation testing are deliberately **not** in the hook — they run in CI (the
-`test-heavy` and `test-light` shards, and the weekly `mutation.yml` workflow respectively) because
-they're too slow to pay on every push. The hook is the fast subset. CI is the deeper gate but not
-the wider one: on a pull request its shards narrow to the packages a change can reach, while the
-hook always runs everything.
+(This paragraph has twice described a hook that no longer existed. It said
+`pnpm --filter @waitron/ui …` for `typecheck` and `test` after #9 had widened both, and then said
+the hook "always runs everything" and had no coverage thresholds after `feat/scoped-pre-push-hook`
+had given it both scoping and `test:coverage`. `git log -p -- .husky/pre-push` is the authority;
+this file is a paraphrase of it.)
+
+Coverage thresholds ARE in the hook now — `test:coverage` is the same script CI's shards run, and
+closing that gap is most of why the hook was rewritten. **Mutation testing and the `bundle-smoke`
+builds are still deliberately out**, so a green hook does not imply a green CI. The hook's own
+header names both, with a measurement behind the first and only a reason behind the second:
+mutation testing because `mutation-verifactu` alone was 3m26s of a 4m8s CI run, and `bundle-smoke`
+because nothing the hook runs builds an esbuild bundle, so that job's failure modes are invisible to
+it by construction. Two further gaps are listed beside them, and both are consequences of the
+scoping rather than choices: `packages/db`'s two cross-package guard suites do not run on a scoped
+push that does not reach `packages/db`, and a scope holding only packages with no `test:coverage`
+script runs no tests at all while still reporting success. Read that list before treating a green
+hook as evidence. Both the hook and CI narrow on a change, so a green from either is evidence
+about the packages that ran. A merge to `main` is the only run that is unfiltered, and that is what
+verifies the narrowing was right.
 
 `pnpm install` wires the hook up automatically (via the root `prepare` script), including on a
 fresh clone — nothing else to set up.
