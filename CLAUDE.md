@@ -471,6 +471,30 @@ scratchpad path failed `EINVAL` before it could even reach `ECONNREFUSED`. Two w
 (`apk add --no-cache nodejs npm && npm i pg@<version>`), where node and the server share a
 namespace; everything that is only PARSING — `new URL` versus `pg`'s own parse — is fine on the host.
 
+**A test that shells out to `git` must clear `GIT_DIR`, or it writes to the repository running it.**
+`GIT_DIR` outranks a child process's `cwd`, and **git exports it for every hook it runs** — so a
+fixture that builds a throwaway repo with `mkdtemp` and commits into it with `cwd` set is isolated
+when you run it by hand and destructive when `.husky/pre-push` runs it. Measured on
+`scripts/check-signoff.test.mjs`, same command, the variable the only difference:
+
+```text
+$ pnpm vitest run scripts/check-signoff.test.mjs                  → HEAD unchanged
+$ GIT_DIR=$(git rev-parse --absolute-git-dir) pnpm vitest run …   → HEAD +7 commits
+```
+
+Cost: seven fixture commits landed on `fix/repo-wide-guards-and-signoff` and were **pushed three
+times** before the cause was found — five of them failing the DCO check that same script exists to
+enforce, so the suite testing the sign-off gate was breaking it. It also wrote `user.name` and
+`user.email` into the shared `.git/config`, which every worktree inherits, and one commit went out
+authored by `Fixture Author`. The tell is a branch that gains commits **during `git push`**: the hook
+mutates the ref and git pushes the moved value, so the push reports a SHA that is no longer the tip.
+
+`GIT_DIR` is the one that bites, but clear the whole family — `GIT_WORK_TREE`, `GIT_INDEX_FILE`,
+`GIT_COMMON_DIR`, `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_NAMESPACE` —
+since each relocates a write just as effectively. Pointing `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` at
+`/dev/null`, which that suite already did, does nothing about any of them. And run such a suite once
+under `GIT_DIR` before trusting it: by hand is the one way the bug cannot appear.
+
 **Don't own a database in a suite — let a helper own it.** `usePgliteDb` and `useRealPostgres`
 (`@waitron/db/testing/lifecycle.js`) register their own `beforeAll`/`afterAll` and hand back an
 accessor that **throws** rather than returning `undefined` if read before setup. A suite using them
