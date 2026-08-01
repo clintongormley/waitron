@@ -269,36 +269,69 @@ Everything on the sale path is active-active.
 
 ## 8. Failover: throwing the switch
 
-**The authority for "who is primary" cannot live on the primary** — it is dead, so it cannot
-reconfigure tills, push config, or demote itself. The decision must live where it is reachable during
-the outage:
+**The authority for "who is primary" cannot live on the primary** — a dead primary cannot
+reconfigure tills, push config, or demote itself. And the decision is **location-independent**: a
+server resolves its role the same way whether it runs locally or in the cloud (§9). Two facts carry
+it through an outage:
 
-- **On the standby** — a *promoted / not-promoted* flag it holds about its own status.
-- **On each till** — a static, ordered **failover list**: `[local primary → local standby → cloud
-  mirror]`, baked in ahead of time. Client-side, so it works with no internet and with the primary
-  dead.
+- **Each server holds a `role` it can answer for** — *primary* (holds the singleton roles) or
+  *secondary* (sell-only) — readable by anyone who can reach that server.
+- **Each till holds a static, ordered failover list** — e.g. `[primary → secondary → cloud]`, baked
+  in ahead of time. Client-side, so it works with the primary dead and the internet down. The
+  ordering is topology configuration, not fixed (§9).
 
-### The switch is two deliberate human acts
+### The role being resolved is "primary", and it never blocks selling
 
-1. **Fence the old primary** — power it off / disconnect it.
-2. **Promote the standby** — an authenticated operator action performed *on the standby*, flipping
-   its flag to "I am primary, accepting sales."
+The only thing a booting server is unsure of is the **singleton roles** (config-writer, AEAT filer,
+reconciler — §7). **Selling is active-active and needs no role**: a server sells on its own reserved
+SIF identity and series (below) the moment it boots. So role-resolution runs in the background and
+**never blocks trade** — even a server waiting for a human to confirm it as primary can already ring
+up sales; only *config changes* and *filing* wait, and neither is on the sale path (filing has no
+deadline; the catalogue is a replicated read-only copy every server holds). A venue that powered on
+cold can trade all day with **no primary at all**, its outbox growing, and file everything the moment
+a human designates one.
 
-Everything else follows automatically:
+### Boot-time role resolution
 
-- **Tills auto-follow.** A till that loses its primary walks its failover list and knocks on the
-  standby. An **un-promoted standby refuses sales**, so a till cannot start trading against it just
-  because the primary blipped — it latches on only *after* a human promotes it. The promoted-flag
-  doubles as the accidental-failover guard. No per-device reconfiguration.
-- **The recovered old primary self-demotes.** On boot it checks the coordination record (asks the
-  standby / reads the cloud pointer) **before accepting any sale**, sees a newer primary, and comes
-  up demoted. Self-demotion beats trusting an operator to have scrubbed it from every till.
+On boot a server sells immediately (on its reserved identity) and resolves the *primary* role by
+reaching its configured peers:
 
-**Fencing is best-effort**, because new-chain-per-SIF (§3) makes a missed fence recoverable (two
-valid concurrent SIFs, given series isolation) rather than catastrophic. A cloud "who's primary"
-pointer may help redirect tills when the internet is up, but it **cannot be the primary coordinator**
-— the local-failover case is often *why* the internet is down — so the standby-held flag plus the
-till-side list are the mechanism, with the cloud pointer only an aid.
+- **A peer is reachable and claims primary** → become **secondary**, automatically. This is the
+  self-demotion that makes a recovered old primary defer to the standby that replaced it — no human,
+  no fencing step required.
+- **A peer is reachable but is not primary** (it is secondary, or also just-booted and undetermined),
+  **or** no peer is reachable → **keep selling, but wait for a human to confirm this server as
+  primary.** Never claim the singleton roles unattended while another primary-capable peer might be
+  contesting them. This is what covers the cold power-cycle, where both boot at once and neither may
+  auto-assume primary.
+
+### The invariant, and why a human arbitrates
+
+**At most one primary — one holder of the singleton roles — at any time.** Two servers *selling*
+concurrently is always fine (new chain, disjoint series, §3); only the singleton work must be
+mutually exclusive.
+
+Role resolution is **continuous, not one-shot at boot.** Every server keeps watching for "is there
+another primary?", because a healed **network partition** can reveal two: if a human promoted the
+standby believing the old primary dead when it was only partitioned, on reconnect the two must
+**detect the conflict and one yields** by a fixed tie-break (e.g. lowest server-id keeps the
+singletons; the loser stops filing and config-writing and drops to secondary, still selling). A
+one-shot boot check cannot catch a primary that appears later.
+
+A human arbitrates the ambiguous case **by necessity, not laziness**: two nodes cannot safely
+auto-elect a leader under a partition — neither holds a majority when they cannot see each other, so
+any fully-automatic rule can pick two. Safe *automatic* failover needs a third **witness** to break
+ties; the cloud can serve as one when the internet is up, but not in the outage the local pair exists
+for, and a dedicated local witness is hardware a deli does not want. Human-as-arbiter is the
+deliberate, correct choice, consistent with the manual-switch-as-safety finding. Fencing the old box
+becomes optional hygiene rather than a required safety step, because self-demotion plus continuous
+conflict-detection already handle a returning primary.
+
+**A botched dual-designation is recoverable, not fatal.** The fiscal side is protected by new-chain +
+series isolation + AEAT's `3000` dedup (§3). The one genuinely conflicting shared state is **config**
+(two managers editing the menu on two boxes during the window) — versioned, non-fiscal,
+merge-resolvable, never the unrecoverable chain. So the worst outcome of the whole scheme is a config
+divergence fixed by hand.
 
 ### Pre-allocate the standby's identity
 
@@ -316,53 +349,73 @@ mid-resolution is handled by `resolvePending` on the surviving server (§10).
 
 ---
 
-## 9. The cloud mirror
+## 9. The cloud mirror: a server that can hold any role
 
-**Decision.** A venue may also run a **dedicated, single-tenant cloud mirror** — a live replica of
-its local server, *in the cloud*, owned by that one client. It is **active-passive**: promoted only
-when *both* local servers are gone (a genuine disaster), and it sits last on the till failover list.
+**Decision.** A venue may run a **dedicated, single-tenant cloud server** — a live replica owned by
+one client, exactly like a local server but hosted in the cloud. **Role and location are separate:**
+it runs the same boot-time role-resolution as any server (§8), so it can be the tertiary spare, an
+active-active secondary, the primary, or — with no local hardware — the venue's **only** server. It
+is not fixed as a passive last resort.
 
-This is a **different node type** from the shared cloud service in
-[`2026-07-31-cloud-storage-model-design.md`](2026-07-31-cloud-storage-model-design.md):
+Location changes exactly two things:
 
-- That spec's core objection to per-tenant cloud databases (§2) is **version skew in a shared
-  schema** — many tenants on many software versions with no telemetry. A **single-tenant** mirror has
-  no such skew: one client's software, code and schema deployed together, exactly like their local
-  box. So §2's reasoning does **not** apply to this node.
-- It does diverge from cloud-storage §9/§10 (one shared RLS database; per-tenant cloud databases
-  rejected) — but those decided the **passive sync-root** role; an **active failover SIF** is a node
-  type that spec never contemplated. This is new scope, not a reversal. A subscriber can have both:
-  the shared sync-root for archive/reporting *and* a dedicated mirror for failover.
+- **Reachability.** A local server survives an internet outage; a cloud server is reachable only when
+  the internet is up. So a topology's resilience depends on *where* its servers sit — at least one
+  **local** server keeps the venue selling through an internet outage; a cloud-only venue cannot sell
+  when its link is down.
+- **Where the fiscal certificate lives.** The certificate sits on whichever server holds the
+  **primary** role (it is the submitter — §6). Put the primary in the cloud and the key ring lives in
+  the cloud (below).
 
-### The key ring, and why the cloud mirror is active-passive
+### Sensible topologies
 
-Cloud-storage §3/§6 make "the cloud never holds the key ring" a hard invariant — a cloud compromise
-must never expose an *unsealed* fiscal certificate. A cloud SIF that **files** must unseal that
-certificate, so the key ring would reach the cloud. There is no clean way around it: the cloud-SIF's
-own records must be filed by *something* holding the key ring, and the alternative (an on-prem node
-files the cloud-SIF's records) reopens the very delegated-submission question server-as-SIF closed.
+| Topology | Key ring | Survives internet outage? | Notes |
+| --- | --- | --- | --- |
+| **Two local + cloud tertiary** | on-prem; cloud only in disaster | yes | **Recommended default.** Best resilience; cloud holds copies, files only if both local boxes die |
+| **One local primary + cloud secondary** | on-prem (local primary) | yes (local) | Cloud adds internet-up selling redundancy; it chains its own sales but holds no cert — the local primary files everything (§6) |
+| **Cloud primary + local secondary** | in the cloud (standing) | selling yes, filing no | Deliberate posture choice — see below |
+| **Cloud standalone** (no local box) | in the cloud (standing) | no — needs internet to sell | For a venue that wants no local hardware and has reliable connectivity |
 
-So the mirror is **active-passive** to keep the invariant true in normal operation:
+### The key ring follows the primary
 
-- In steady state, both local servers are alive and the cloud mirror **chains nothing** (it is a
-  passive replica) — so it needs no secret.
-- Only on promotion — when both local boxes are dead — does the operator inject the key ring so the
-  mirror can file. **Rotate the fiscal certificate after failback**, treating a certificate that
-  spent time in the cloud as burned. This bounds exposure to a genuine disaster window, one tenant,
-  rather than "always". (Scrubbing the key ring after failback shrinks the *window*; it does not undo
-  a compromise *during* it — hence rotation.)
+For a **dedicated** cloud server the "cloud never holds the key ring" rule is not absolute — it is a
+**posture the operator chooses by where they put the primary**:
 
-For the **local** pair there is no such tension: both boxes hold the key ring on-premises anyway, so
-the single submitter (§6) and cross-SIF draining run with the on-prem key ring.
+- A cloud node that only **chains** (secondary/tertiary) needs **no secret** — the *huella* is a
+  plain hash (§6), so it sells on its own chain holding nothing, and the on-prem primary files its
+  records (delegated submission, permitted — §6/§12).
+- A cloud node that is **primary** or **standalone** is the submitter, so the fiscal certificate
+  lives in the cloud **as a standing condition**, not just a disaster window. That is a real
+  security-posture change — bounded by the box being **single-tenant** (blast radius one tenant) and
+  by **certificate-rotation hygiene**, but it is the operator's informed choice, not a default.
 
-### Open regulatory edge
+The **recommended default** keeps the cert on-prem: two local servers active-active with a cloud
+**tertiary** that is active-passive — promoted only if *both* local boxes die, key ring injected at
+promotion, certificate rotated after failback (scrubbing shrinks the exposure *window*; a compromise
+*during* it is not undone by scrubbing — hence rotation).
 
-Cloud-storage §8a already flags that Spanish law constrains *where* the cloud may run (records
-conserved outside Spain trigger a prior-notification duty on the client; outside the EU is more
-restricted). That analysis leaned on "the archive is *not* a SIF." A cloud mirror that becomes a SIF
-**issuing invoices** from a cloud location is a stronger version of that question — operating the
-invoicing system abroad, not merely conserving records. This is an **asesor question**, in the same
-bucket as §8a's open items. See §13.
+### This scopes cloud-storage §2 — deliberately
+
+[`2026-07-31-cloud-storage-model-design.md`](2026-07-31-cloud-storage-model-design.md) §2 states "the
+cloud is a sync root and never a primary store; every venue runs a local server as its system of
+record," and removed the "till → cloud, no local hardware" topology. A cloud primary/standalone
+crosses that. **But §2's reasoning was version skew in a *shared* multi-tenant store** — many tenants
+on one schema at many versions — and that objection does **not** exist for a *dedicated single-tenant*
+server, which runs one client's version, code and schema deployed together, exactly like a local box.
+So this is not a blind reversal: it **scopes §2 to what its reasoning covers** — the *shared* store
+stays sync-root-only; a *dedicated single-tenant* server may originate transactions wherever it runs.
+Add the dated pointer to the cloud-storage spec at land time (per `CLAUDE.md` §6's "don't rewrite
+history" rule). Cloud-primary/standalone stays a deliberate choice with the posture cost above, not
+the recommended shape.
+
+### Open regulatory edge — now central, not disaster-only
+
+Cloud-storage §8a constrains *where* the cloud may run: records conserved outside Spain trigger a
+prior-notification duty on the client; outside the EU is more restricted (RD 1619/2012 arts. 22.2 /
+19.4). That analysis leaned on "the archive is *not* a SIF." A cloud server that **is** the SIF —
+*issuing* invoices, not merely conserving records — is a stronger case, and under a cloud-primary or
+standalone topology it is the **normal operating state**, not a disaster edge. This is the live
+**asesor question** in §13.
 
 ---
 
@@ -399,25 +452,61 @@ until promotion, then the new primary re-pulls the missed windows.
 processor, making reconcile active-active — is **rejected**: two payout streams and two onboardings
 per venue is real weight bought to hot-failover a job that does not need it.)*
 
-### Confirmation before completion — the settlement gate
+### Confirmation, completion, and the two invoice modes
 
-The fiscal record chains only when **all tenders settle** (architecture design §6: "a card declined
-mid-tender leaves the order open, with nothing chained"). So confirmation genuinely precedes
-completion — there is no chained invoice for a payment that did not land. The load-bearing point is
-**who confirms**: the **card processor / terminal**, reached **directly by the selling server** — not
-the primary, not AEAT.
+Whether payment confirmation precedes the fiscal record depends on the till's mode — and **both are
+supported**:
 
-- **Terminal answers in time (normal case):** result returns in seconds through the till's own call
-  → tender settles → record chains → sale completes at the counter. Entirely on the selling server.
-- **Terminal times out (`attempting`):** the tender is *not* settled, so nothing chains yet; the sale
-  waits for `resolvePending` to confirm. This is inherent to card payments on **any** topology, not a
-  failover artifact, and `resolvePending` runs per-server. The counter move is the ordinary one —
-  retry the card, switch tender, or take cash; the *fiscal* receipt for that sale is deferred until
-  the capture resolves.
+- **Ticket-first** (default): the record chains only when **all tenders settle** (architecture design
+  §6: "a card declined mid-tender leaves the order open, with nothing chained"). Confirmation
+  genuinely precedes completion — no chained invoice for a payment that did not land. The customer
+  holds a non-fiscal ticket until then.
+- **Invoice-first**: the fiscal invoice is **chained and filed *before* payment** — the customer gets
+  a real *factura* and then pays it. Lawful: the invoice documents the *operation* (delivery /
+  service), and payment is a separate financial event (FAQ §20; §24 for criterio de caja). The cost
+  is failure-handling — an unpaid, short-paid or disputed invoice is already filed, so it is corrected
+  with a **rectificativa**, not by leaving an order open. This is why the backlog sequences
+  invoice-first *after* rectificativas.
 
-Active-active does not skip confirmation — the settlement gate stands. It ensures both confirmation
-paths (synchronous terminal answer, async `resolvePending`) run independently on each server, so
-neither depends on the other.
+Neither mode changes the topology: **chaining is active-active on the selling server in both**, and
+both are hot-failover-safe (the record chains without the primary; payment resolves per-server). The
+load-bearing point is unchanged — **who confirms a card payment is the processor / terminal, reached
+directly by the selling server**, never the primary or AEAT:
+
+- **Terminal answers in time (normal case):** result in seconds through the till's own call → tender
+  settles → (ticket-first) the record chains → sale completes at the counter.
+- **Terminal times out (`attempting`):** the tender is not settled; `resolvePending` confirms it
+  later, per-server — inherent to card payments on any topology. In ticket-first the *fiscal* receipt
+  is deferred until the capture resolves; in invoice-first the invoice already exists and only the
+  payment settles late.
+
+### A payment lost to a server death — prevention and remediation
+
+The failure the topology must answer: a server takes a card payment, then dies **before** the capture
+is recorded in our system; staff, seeing an unpaid sale, take payment **again** on the surviving
+server. **Prevention is the primary defence, detection the backstop.**
+
+- **Prevent — reuse the idempotency key.** The `attempting` row is written (with the processor
+  idempotency key) *before* the charge, so it replicates. A re-tender reusing that key is
+  **de-duplicated by the processor** — no second charge.
+- **Prevent — resolve before re-tendering.** Because the `attempting` state replicated, the surviving
+  server *knows* an in-flight charge exists for the order and **resolves it first** — captured →
+  already paid, do not re-charge; failed → safe to re-charge.
+- **Detect — the backstop for the irreducible case.** If the server died in the seconds-wide window
+  *before* the `attempt` replicated, the survivor never knew, and the double-charge happens. It is
+  caught either when the survivor **adopts and resolves the dead server's pending payments** (if they
+  later replicated) or by **`reconcile`** as an *unmatched* charge in the account-wide settlement
+  report.
+- **Remediate — reported, never auto-refunded.** `reconcile` **reports** the orphan / unmatched charge
+  and holds it **pending a human**; it does **not** auto-reverse (orphan-drift gate, #31 — the "send
+  our amount back" auto-fix is disqualified). **Open gap:** there is no remediation UI for that human
+  step yet — the gate holds customer funds pending an operator who currently has nowhere to action it.
+  Named here so it is not mistaken for solved.
+
+Fiscally this is clean: in ticket-first the dead server chained nothing (it never reached
+settlement), so there is one invoice (the survivor's) and one duplicate *payment* to refund — no
+rectificativa; in invoice-first the invoice is already fixed, so a duplicate is likewise a pure
+payment refund.
 
 **Implementation note.** Verify the ownership wiring against the actual `packages/payments` code
 (`reconcile.ts`, `store.ts`'s `resolvePending`) rather than this prose — the memory records those
@@ -434,10 +523,14 @@ checked against the code.
 - **Rewrites** `CLAUDE.md` §5's "nothing may block a sale" invariant to the true statement — nothing
   *external* blocks a sale; the on-site, replicated SIF must be reachable — in the change that
   implements this (§2).
-- **Adds a node type** to
-  [`2026-07-31-cloud-storage-model-design.md`](2026-07-31-cloud-storage-model-design.md): the
-  dedicated single-tenant failover mirror (§9), distinct from that spec's shared sync-root. It does
-  not reinstate the "till → cloud" topology that spec removed.
+- **Scopes** [`2026-07-31-cloud-storage-model-design.md`](2026-07-31-cloud-storage-model-design.md)
+  §2 (§9). A **dedicated single-tenant** cloud server may hold any role — including primary or
+  standalone — because §2's version-skew reasoning covers only the *shared* store, not a single-tenant
+  box deploying one client's code and schema together. This does re-enable a "till → cloud" shape §2
+  removed, but on a dedicated server rather than the shared store §2 was reasoning about;
+  cloud-primary/standalone puts the key ring in the cloud as a standing posture, not a default. It
+  also still **adds** the failover-mirror node type distinct from that spec's shared sync-root. Add the
+  dated pointer to that spec at land time.
 - **Depends on** cloud-storage §6a's installation-number allocator (§8's pre-allocation) and its
   restore promise (§5's disaster path is the both-local-dead case §9 covers with the mirror).
 - **Changes the standing list in** [`docs/compliance/asesor-questions.md`](../../compliance/asesor-questions.md).
@@ -475,9 +568,11 @@ normal fetching and were extracted locally with `pdftotext -layout`.
 ## 13. Open questions
 
 - **Where may an *active* cloud SIF run?** (§9.) Cloud-storage §8a constrains hosting location for
-  *conserving* records; a cloud mirror that **issues** invoices from abroad is a stronger case
-  (operating the SIF outside Spain/EU, arts. 22.2 / 19.4 of RD 1619/2012). Asesor question, before
-  the mirror is built. Everything else on the AEAT side is closed on primary source (§12).
+  *conserving* records; a cloud server that **issues** invoices from abroad is a stronger case
+  (operating the SIF outside Spain/EU, arts. 22.2 / 19.4 of RD 1619/2012). Under the tertiary default
+  it is a disaster-only edge; under a **cloud-primary or standalone** topology it is the *normal*
+  operating state, so it must be answered before those topologies are offered. Asesor question.
+  Everything else on the AEAT side is closed on primary source (§12).
 - **Warm-standby vs true active-active per venue** (§4). The deli may not need bidirectional
   replication; a warm complete-copy standby with instant promotion is a valid simpler point. Decide
   per deployment; the failover mechanics (§8) work either way.
@@ -487,6 +582,10 @@ normal fetching and were extracted locally with `pdftotext -layout`.
   the mode flag are coupled; note it before that mode is built.
 - **Counter UX for the timed-out card case** (§10) — retry / alternative tender / wait — belongs to
   the till UI spec, not this one.
+- **Payment double-charge remediation has no UI** (§10). `reconcile` reports an orphan / unmatched
+  charge and holds it pending a human, but there is no built flow for that human to action the refund
+  (a pre-existing open product question, not introduced here). The prevention path (idempotency-key
+  reuse + resolve-before-re-tender) reduces how often it is reached; it does not close the gap.
 
 ---
 
