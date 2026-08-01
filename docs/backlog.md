@@ -41,7 +41,7 @@ reprioritisation rather than assumed.
 | **This backlog** | **Merged** (#21) |
 | **Pre-push hook skips deletions** | **Merged** (#23) |
 | **Scoped CI** — stop running every check on every push | **Done.** Both merged: #25 (the `ci` gate) and #27 (the scoping). Against the 7m20s baseline: a documentation-only pull request now takes **44s**, and a full unfiltered `push` on `main` **4m12s**. The scope resolution it shipped skipped every package's tests on a root-config pull request; that is fixed under **Debt and odd jobs**, where one follow-up (what `test-light` reports) remains |
-| **Scoped pre-push hook** — the same treatment for the local gate | **Merged** (#31). Scopes `typecheck` and `test:coverage` to the changed packages and their dependents, adds the sign-off (DCO) check CI was catching for us, runs `test:coverage` rather than `test`, adds `pnpm install --frozen-lockfile`, and skips `lint` on a documentation-only push. Measured on this machine on 2026-08-01, one crafted push per shape, `TESTCONTAINERS_RYUK_DISABLED=true`, wall clock bracketed in `time.time()` — `main`'s hook (`558c62b`, one run each) → #31's: deletions-only 9ms → 7-9ms (unchanged, #23 already did that); an **unsigned commit 104s and exit 0 → 27-36ms and exit 1**, because `main`'s hook has no sign-off check at all and so charged a full run and then let it through; documentation-only 105s → **3.1-3.5s**; a push to `packages/ui`, which no other package depends on, 105s → **8.2-8.8s**. **It is not faster everywhere.** A `packages/db` push is 112s and a root-config or lockfile push 116s — both SLOWER than `main`'s 105s, because this hook also runs `test:coverage` rather than `test` and installs first. Scoping pays on the leaves, not on the trunk; **Debt and odd jobs** carries the expansion sizes and what the hook still does not cover |
+| **Scoped pre-push hook** — the same treatment for the local gate | **Merged** (#31). Scopes `typecheck` and `test:coverage` to the changed packages and their dependents, adds the sign-off (DCO) check CI was catching for us, runs `test:coverage` rather than `test`, adds `pnpm install --frozen-lockfile`, and skips `lint` on a documentation-only push. Measured on this machine on 2026-08-01, one crafted push per shape, `TESTCONTAINERS_RYUK_DISABLED=true`, wall clock bracketed in `time.time()` — `main`'s hook (`558c62b`, one run each) → #31's: deletions-only 9ms → 7-9ms (unchanged, #23 already did that); an **unsigned commit 104s and exit 0 → 27-36ms and exit 1**, because `main`'s hook has no sign-off check at all and so charged a full run and then let it through; documentation-only 105s → **3.1-3.5s**; a push to `packages/ui`, which no other package depends on, 105s → **8.2-8.8s**. **It is not faster everywhere.** A `packages/db` push is 112s and a root-config or lockfile push 116s — both SLOWER than `main`'s 105s, because this hook also runs `test:coverage` rather than `test` and installs first. Scoping pays on the leaves, not on the trunk; **Debt and odd jobs** carries the expansion sizes and what the hook still does not cover. **Re-measured the same way on 2026-08-01**, after the tree-wide guards moved into the repo-level project and the hook grew a step for it (two runs per shape): documentation-only **3.17-3.59s** and an unsigned commit **30ms, exit 1**, both unchanged — neither path reaches that step; `packages/ui` **10.75-11.20s**, the whole of the ~2.4s being the step; `packages/db` **113.22-116.81s** and root config **116.48-117.98s**, where it costs nothing at all, because the root `test:coverage` script was already running that project on the global path |
 | **Cloud storage model** — design | **Merged** (#19), corrected by **#22** |
 | **Sale settlement model** — implementation plan | Not written. **The next build step** |
 | **Close Q13 and Q15 on primary source** | Not started. Cheaper than hiring — see below |
@@ -167,10 +167,11 @@ optional, and they are currently as unstarted as the restaurant-phase items they
 
 Carried from finished work. None of it blocks anything; all of it makes later work cheaper.
 
-- **The pre-push hook is scoped now, and its DECISIONS are tested — the shell itself still is not.**
+- **The pre-push hook is scoped now, and its DECISIONS are tested — most of the shell still is not.**
   The hook maps the push's changed paths onto workspace packages and runs `typecheck` and
-  `test:coverage` against those packages and their dependents, skipping those two **and `lint`**
-  entirely on a documentation-only push. `lint` is skipped there on a measurement, not a hunch:
+  `test:coverage` against those packages and their dependents, skipping those two, **`lint`** and
+  the repo-level suite entirely on a documentation-only push. `lint` is skipped there on a
+  measurement, not a hunch:
   `pnpm exec eslint . --format json` lints zero Markdown files and zero files under `docs/`, so of
   what is in the tree today eslint reads nothing such a push contains. (Only the zeros are recorded
   here — a file count moves on the next commit, and `CLAUDE.md` §2 already carries what a receipt
@@ -209,28 +210,31 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
 
   The classifier `scripts/changed-packages.mjs` is fully tested by the root Vitest project, whose
   `include` covers `scripts/` — one directory since 2026-08-01, when `.github/scripts/` was merged
-  into it. **The shell is not.** The
-  deletion guard (#23), the range computation and the sign-off loop are all backed only by having
-  run the real hook against crafted stdin and recorded the results — the same evidence #23 had, no
-  better. Three things to know before writing a suite for the shell: the root project's `include`
-  has to be widened again to reach `.husky/`; root config is linted but never typechecked
-  (`pnpm typecheck` is `pnpm -r typecheck`, and `pnpm -r` never visits the workspace root, see
-  `CLAUDE.md` §2); and husky runs the hook under `sh -e`, where an unguarded `x=$(false)` or a
-  `grep` outside an `if` kills the script silently mid-gate — the hook's own header records that
-  measurement.
+  into it. **Most of the shell still is not.** The sign-off walk left the hook that day and is
+  tested where it landed (`scripts/check-signoff.sh`, twelve assertions in
+  `scripts/check-signoff.test.mjs`, spawned the way both callers spawn it); the deletion guard
+  (#23) and the range computation are still backed only by having run the real hook against crafted
+  stdin and recorded the results — the same evidence #23 had, no better. Three things to know
+  before writing a suite for what is left: the root project's `include` has to be widened again to
+  reach `.husky/`; root config is linted but never typechecked (`pnpm typecheck` is
+  `pnpm -r typecheck`, and `pnpm -r` never visits the workspace root, see `CLAUDE.md` §2); and
+  husky runs the hook under `sh -e`, where an unguarded `x=$(false)` or a `grep` outside an `if`
+  kills the script silently mid-gate — the hook's own header records that measurement. The shape
+  that worked for the sign-off check is worth copying: what is testable is the PREDICATE, once it
+  is a file of its own, and the extraction is what made it testable rather than any new harness.
 
-  **Four entries below. Two are the honest answer (1 and 2), one is a follow-up (3), and the fourth
-  is closed** — gap 4 was closed on 2026-08-01 and is kept here because what replaced it is a rule
-  someone has to know about. (An earlier version of this line counted three honest answers and a
-  follow-up, which is four live gaps — while the fourth entry it was counting says in its own first
-  words that it is closed.) The hook's header states the last three in its "NOT RUN HERE" list
-  rather than leaving them for a reader to discover; the first is a cost rather than a gap in what
-  runs, and the header's SCOPING paragraph covers it.
+  **Four entries below, and only the first two are live gaps** — both of them the honest answer to
+  what a local gate can be, rather than anything left undone. Entries 3 and 4 are closed, kept
+  because what replaced each is a rule someone has to know about. The hook's header states the live
+  ones in its "NOT RUN HERE" list rather than leaving them for a reader to discover; the first is a
+  cost rather than a gap in what runs, and the header's SCOPING paragraph covers it.
 
   1. A `global` push — root config, `.github/`, `.husky/`, `scripts/`, the lockfile — runs
-     `pnpm test:coverage` for the whole workspace, which is the 116s in the row above. The heaviest
-     single package in it is `packages/db`: `pnpm --filter @waitron/db test:coverage` on its own
-     measured **38s** on 2026-08-01 (two runs, 37.8s and 38.2s,
+     `pnpm -r test:coverage` over the whole workspace, which is the 116s in the row above (`-r`
+     since 2026-08-01: the repo-level project it used to reach through the root `test:coverage`
+     script is a step of its own now, so it runs on scoped pushes too rather than only here). The
+     heaviest single package in it is `packages/db`: `pnpm --filter @waitron/db test:coverage` on
+     its own measured **38s** on 2026-08-01 (two runs, 37.8s and 38.2s,
      `TESTCONTAINERS_RYUK_DISABLED=true`). It is not 38s OF the 116s — `pnpm -r` runs the members
      concurrently — and it is emphatically not the **189s** in
      `scripts/changed-scope.mjs`, which is a CI-runner figure ("189s of the old 387s test
@@ -240,24 +244,50 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
      that would make it cheap.
   2. The hook still does not run mutation testing or the `bundle-smoke` builds, so a green hook does
      not imply a green CI.
-  3. **The scoping retires `packages/db`'s two cross-package guard suites on most pushes — a
-     regression this branch introduces locally, not a design choice.**
-     `packages/db/src/guarded-teardowns.test.ts` scans `packages/` and `apps/` from the repository
-     root (it is the only file under either tree that resolves the repo root, grepped on
-     2026-08-01), and `english-only.test.ts` scans the seven generic packages. Both live in
-     `packages/db`, so both run only when `packages/db` is in scope. Measured on 2026-08-01:
-     `pnpm --filter "...@waitron/ui" ls -r --depth -1 --json` lists `@waitron/ui` alone, and
-     `--filter "...@waitron/payments"` lists six packages, none of them `@waitron/db`. Before this
-     branch the hook ran `pnpm test` unscoped (`git show 558c62b:.husky/pre-push`, line 82), so both
-     ran on every push. CI does not make it up on the pull request either — `test-heavy` is gated on
-     `@waitron/db` being in scope — so their first run is the unfiltered `main` merge. This is
-     `CLAUDE.md` §2's "a filtered test run does not load a package's guard suites" one level up: the
-     filter is over PACKAGES now rather than over test names. Widening the scope back out is the
-     wrong fix, because it gives up the whole change to buy two suites: a guard that polices
-     `packages/` and `apps/` reads as belonging in the root Vitest project — whose `include` already
-     has to be widened to cover `.husky/` (see above) — rather than in a package most changes do not
-     reach. Moving them there takes both suites out of `packages/db`'s coverage accounting, which is
-     enough of a change to want its own branch
+  3. **CLOSED, 2026-08-01 — the two tree-wide guard suites are in the root Vitest project, so no
+     scope can skip them.** They were `packages/db/src/guarded-teardowns.test.ts` (scans `packages/`
+     and `apps/` from the repository root) and `english-only.test.ts` (scans the seven generic
+     packages), and living in `packages/db` meant they only loaded when `packages/db` was in scope:
+     `pnpm --filter "...@waitron/ui" ls -r --depth -1 --json` lists `@waitron/ui` alone and
+     `--filter "...@waitron/payments"` lists six packages, none of them `@waitron/db`, while CI
+     gates `test-heavy` the same way — so on those pull requests their first run was the unfiltered
+     `main` merge. Both are now `scripts/*.test.ts`, run by `pnpm vitest run --coverage`: ci.yml's
+     ungated `lint` job, and a new pre-push step on every push that is not documentation-only.
+     Demonstrated rather than asserted, by feeding the real hook a crafted `packages/ui` push — one
+     comment appended to `packages/ui/src/a11y-helpers.ts`, `sh -e .husky/pre-push` fed
+     `refs/heads/probe <new> refs/heads/probe <old>` — at `6d30ed2` and again here, both re-run on
+     2026-08-01. Both classified it `1 changed code path(s) map to @waitron/ui` and both exited 0,
+     10s → 12s. What changed is not the size of one set: BEFORE there was a single test step,
+     `tests with coverage (@waitron/ui + dependents)`, 21 files all in `packages/ui`. AFTER, that
+     step is unchanged and a new `repo-level suite` step runs AHEAD of it, over **five** files —
+     `guarded-teardowns.test.ts` (12 tests), `english-only.test.ts` (180),
+     `check-signoff.test.mjs` (16), `changed-scope.test.mjs` (48) and `changed-packages.test.mjs`
+     (66), 322 in total. A separate step rather than more files in the scoped one, because this one
+     must never be narrowed and that one always is.
+
+     **Three things it left behind.** The suites are TypeScript and nothing typechecks them now
+     (`pnpm typecheck` is `pnpm -r typecheck`, which never visits the workspace root, and there is
+     no root `tsconfig.json`) — measured in both directions, and deliberately not fixed here because
+     the hook's typecheck step is scoped too, so a root `tsconfig.json` would not cover the
+     `packages/ui` push this change exists for; the root `vitest.config.ts` carries that receipt and
+     what a fix would cost. **Unclaimed**, and worth doing with whatever un-scopes that step rather
+     than on its own. `packages/db/src/english-only.ts` stays in `packages/db` — two other
+     files reach for it there — so `packages/db`'s coverage config excludes it and the root
+     project's `coverage.include` names it, which is the one arrangement that measures it exactly
+     once. And `packages/db`'s weekly, ungated `mutation-db` job still mutates it
+     (`stryker.config.json` mutates `src/**/*.ts`), while the suite that exercises it no longer runs
+     under that job at all: Stryker's vitest runner is pointed at `packages/db/vitest.config.ts`,
+     whose `include` is Vitest's default, so it loads `packages/db`'s own suites and nothing else.
+     The only one of those that still imports the module is `src/schema/series.test.ts`, and it
+     imports `findSpanish` alone. So this is not "expect the score to fall", which is what this
+     entry said first — **the module effectively loses mutation testing**. The receipt is the
+     coverage run with the exclusion lifted: `english-only.ts` measures 92.25 statements and
+     **66.66 functions** there (2026-08-01), so two of its six functions are never executed in that
+     package, and a mutant in code no test executes cannot be killed. Nothing picks it up elsewhere
+     either — there is no Stryker config at the repository root and no root `mutation` script
+     (`find . -iname '*stryker*' ! -path '*/node_modules/*'` lists five configs, all under
+     `packages/`), so `scripts/english-only.test.ts` is not a mutation target anywhere. **Unclaimed**;
+     closing it means either a root Stryker project or narrowing `mutate` to drop the file
   4. **CLOSED, 2026-08-01 — a scope of only script-less packages no longer makes the test step a
      silent no-op.** It was one: `pnpm --filter "...@waitron/bench-pglite" test:coverage` prints
      `None of the selected packages has a "test:coverage" script` and exits **0**, so the hook
@@ -270,9 +300,9 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
      directions, and the `light` gate discounts it too, so a bench-only pull request now skips
      `test-light` rather than provisioning a runner to select nothing
 - **CI SKIPPED `test-heavy` and both mutation runs on a root-config-only pull request — fixed on
-  2026-08-01, in the change that rewrote this entry.** Worth keeping because the SHAPE recurs: two
-  mechanisms answering the same question, and the one nobody exercised drifting in the quiet
-  direction.
+  2026-08-01 by [#32](https://github.com/clintongormley/waitron/pull/32), which rewrote this entry
+  in the same change.** Worth keeping because the SHAPE recurs: two mechanisms answering the same
+  question, and the one nobody exercised drifting in the quiet direction.
 
   **What it was.** `ci.yml`'s `changes` job resolved scope with
   `pnpm --filter "...[origin/$BASE_REF]" ls --depth -1 --json`, and a change belonging to no
@@ -317,33 +347,81 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   `test-light` step exit **1** naming it, and deleting each of the four new checks in turn failed
   the tests written for it.
 
-  **Verified on real GitHub Actions**, run `30692329110` on this pull request — which touches only
-  root-level paths, so it is exactly the shape that used to run nothing. `changes` printed
-  `scope=global`, and `test-heavy` (3m30s), `mutation-verifactu` (3m28s) and `mutation-shared` (56s)
-  all **ran**. Under the mechanism this replaces, all three would have been skipped
-- **`packages/ui` hung the whole-workspace `test-light` shard once, on 2026-08-01, and it has not
-  recurred.** Recorded rather than ruled a flake, because this change makes the shard it hung in run
-  far more often. Attempt 1 of run `30692329110`: twelve of the thirteen packages finished — the last
-  was `packages/payments` at 08:47:36 — and then nothing at all was printed for **25 minutes**, until
-  the run was cancelled at 09:13:20. The one package that never reported was `packages/ui`, the only
-  Chromium/Playwright suite; its `playwright install --with-deps chromium` step had already
-  succeeded. Attempt 2, same commit, same command: **3m58s, green**.
-  `pnpm --filter "!@waitron/db" --no-sort test:coverage` starts all thirteen at once, several of them
-  spinning up their own Testcontainers Postgres, so a browser suite is the plausible loser under
-  contention — plausible, not measured, and one occurrence is not a shape (`CLAUDE.md` §7). What
-  makes it worth a line: before this fix a root-config pull request ran none of that shard, so the
-  fix increases exposure to whatever this is. If it recurs, the shape to reach for is giving
-  `packages/ui` its own shard rather than dropping `--no-sort`, since the sort order is what §1.1 of
-  the design measured as pure cost
-- **The sign-off (DCO) check is implemented twice.** `.husky/pre-push`'s `check_signoff` and
-  `licence.yml`'s `dco` job carry the same `grep -qiE '^Signed-off-by: .+ <.+@.+>'` over the same
-  per-commit loop. The PREDICATE is byte-identical; the reporting is not — CI emits `::error::`
-  annotations and carries its own `git rev-list` failure branch, while the hook accumulates a list
-  and hands it to `run_step`. That duplication is
-  deliberate for now — the hook's copy was written to match CI's exactly, and the two agreeing is
-  the whole point — but the way to keep them agreeing is one script both call, not two copies and a
-  comment. Held back from `feat/scoped-pre-push-hook` because extracting it edits a workflow that
-  branch otherwise never touches
+  **Dated pointer, 2026-08-01:** the table above measured the TWO-shard arrangement and its numbers
+  no longer hold — `packages/ui` was split into a `test-ui` shard later the same day (see the
+  `packages/ui` hang entry below). Left as written rather than restated, because it is the record of
+  what that verification run actually produced. Under three shards the `test-light selects` column
+  drops by one everywhere it says 13, and the `packages/ui/src/index.ts` row changes shape rather
+  than degree: `test-ui` RUNS and `test-light` is **skipped** outright, because `light` now means
+  "the scope holds a package with no shard of its own" and a ui-only scope holds none.
+
+  **Verified on real GitHub Actions**, run `30692329110` on
+  [#32](https://github.com/clintongormley/waitron/pull/32) (`fix/ci-scope-fail-open`, merged as
+  `6d30ed2`) — which touches only root-level paths, so it is exactly the shape that used to run
+  nothing. `changes` printed `scope=global`, and `test-heavy` (3m30s), `mutation-verifactu` (3m28s)
+  and `mutation-shared` (56s) all **ran**. Under the mechanism this replaces, all three would have
+  been skipped
+- **`packages/ui` hung the whole-workspace `test-light` shard TWICE, on 2026-08-01. Mitigated the
+  same day by giving it its own `test-ui` shard — but the mitigation is unproven and can only be
+  judged from future runs.** The previous version of this entry recorded one occurrence, declined to
+  call it a shape, and named the fix to reach for if it recurred. It recurred, and that is the fix.
+
+  **Both runs, read back with `gh api repos/clintongormley/waitron/actions/runs/<id>/…` rather than
+  `gh run view --json`, which reports only the LATEST attempt and shows the first of these as a
+  success:**
+
+  | Run | Pull request | `test-light` | Outcome |
+  | --- | --- | --- | --- |
+  | `30692329110` attempt 1 | [#32](https://github.com/clintongormley/waitron/pull/32), head `e695a44` | 08:44:09 → 09:13:22 | cancelled after ~29m |
+  | `30697414129` | [#35](https://github.com/clintongormley/waitron/pull/35), head `add4097` | 11:18:11 → 11:38:08 | cancelled after ~20m |
+
+  **What the two job logs agree on, and it is more than the first entry had.** In both,
+  `playwright install --with-deps chromium` had already finished — its step group closed and the
+  next step opened, 08:44:29→08:44:41 and 11:18:31→11:18:43 — so it is not the install. In both,
+  exactly **twelve** packages printed `test:coverage: Done` and `packages/ui` was the only selected
+  package that never did. In both, `packages/ui` got *part* way: it printed individual passing test
+  files and then stopped, last output 08:47:04 and 11:21:23. And in both, the runner's shutdown
+  named **`chrome-headless-shell`** among the orphan processes it had to terminate — so the browser
+  was still alive, and still attached, when the job was killed. Attempt 2 of the first run, same
+  commit, went green in 3m58s.
+
+  **What is still NOT measured: the cause.** `pnpm --filter "!@waitron/db" --no-sort test:coverage`
+  started thirteen packages at once, several spinning up their own Testcontainers Postgres, so
+  contention starving a browser suite remains the plausible story — plausible, not demonstrated.
+  Nothing establishes that isolating `packages/ui` removes it, and a shard of its own would not help
+  at all if the cause is internal to that suite. **Treat this as open until several `test-ui` runs
+  have passed**; if it hangs there too, the cause is in the suite and the next thing to reach for is
+  a per-test timeout and a Playwright trace, not more isolation.
+
+  **What the split does buy with certainty**, whatever the cause: a wedged browser can no longer
+  take twelve other packages' results down with it, and `test-light` no longer resolves, caches or
+  installs Chromium at all — about 12s of cache-warm install per run, plus the two steps before it,
+  read off the two job logs above. Giving it its own shard rather than dropping `--no-sort`, because
+  §1.1 of the design measured the sort order as pure cost.
+
+  **The guard that came with it**, because splitting a shard is where a package silently stops being
+  tested: `scripts/ci-workflow.test.mjs` extracts every shard's real `--filter` arguments from
+  `ci.yml`, hands them to the real `pnpm ls`, and asserts the three shards cover every member
+  declaring `test:coverage` **exactly once** — none twice, none falling through. It also asserts
+  every job appears in `ci`'s `needs`, and that every `SCOPE_GATES` entry is both declared as a
+  `changes` output and read by some job's `if:`. Proven by deletion in five directions; deleting the
+  `test-ui` job alone fails it with `expected [ '@waitron/ui' ] to deeply equal []`
+- **CLOSED, 2026-08-01 — the sign-off (DCO) check is one script both gates call.** It was two
+  byte-identical copies of `grep -qiE '^Signed-off-by: .+ <.+@.+>'` and of the loop around it, in
+  `.husky/pre-push`'s `check_signoff` and `licence.yml`'s `dco` job. Now `scripts/check-signoff.sh`:
+  shas on stdin, the failing commits on stdout as `git log --oneline` renders them, exit 1 if any.
+  Each caller keeps what was never shared — CI builds the range from the pull request and wraps the
+  lines in `::error::` annotations, the hook accumulates a range per pushed ref and indents them.
+
+  **Three things to know before touching it.** It is `sh`, not `.mjs`, and that is about the
+  callers: the `dco` job installs nothing (no pnpm, no setup-node), and the hook runs this step
+  first, before `pnpm install`, with no node needed — re-run on 2026-08-01 under
+  `env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin`, where it still named the offending commit and still
+  exited 1. The job's `name:` — `Every commit is signed off` — IS the required-status-check context
+  in ruleset 19899160, so renaming the job silently unhooks branch protection. And
+  `scripts/check-signoff.test.mjs` tests both halves: twelve assertions spawning the script against
+  throwaway git repositories, and three that run the `dco` step's shell EXTRACTED from `licence.yml`
+  rather than transcribed, which is the only part of CI that can be exercised without pushing
 - **`errors.reachability.test.ts` does not test reachability.** Proven by deletion. Eight packages
   carry a copy. Closing it needs a `tsc`-based downstream probe or a narrowed `include`. See
   `CLAUDE.md` §4 — do not cite these tests as evidence in the meantime
@@ -361,7 +439,7 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
 
   | Change | Wall clock | Run |
   | --- | --- | --- |
-  | documentation only | **44s** | `30664369447` — this pull request, on `docs/backlog-scoped-ci-landed` |
+  | documentation only | **44s** | `30664369447` — [#30](https://github.com/clintongormley/waitron/pull/30), on `docs/backlog-scoped-ci-landed` |
   | one package, or CI/root config | **1m26s** | `30655777867` — on `feat/ci-scoped-testing` |
   | a dependency of `packages/db` | 4m17s | `30652426111` — on the throwaway `probe/dependency` |
   | **any code, merged to `main`** — full suite, nothing skipped | **4m12s** | `30663706544` — the `push` run for #27 |
@@ -373,10 +451,12 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   why the docs gate and the scoping are two separate decisions
 - **`test-light` reports `success` without saying what it ran.** The larger half of this entry is
   **done**: the shard now gates on a `light` boolean emitted from the `changes` job's existing
-  single `pnpm ls`, so a resolved scope that is empty, or that holds nothing but `@waitron/db`,
-  skips it instead of provisioning a runner, running `pnpm install` and
-  `playwright install --with-deps chromium` before finding nothing to do — 48s of run
-  `30653487133` (18:01:36 → 18:02:24, its longest job) for zero test execution. What is **still
+  single `pnpm ls`, so a resolved scope that is empty, or that holds nothing but packages with a
+  shard of their own (`OWN_SHARD_PACKAGES` — `@waitron/db` and, since the split below,
+  `@waitron/ui`), skips it instead of provisioning a runner and running `pnpm install` before
+  finding nothing to do — 48s of run `30653487133` (18:01:36 → 18:02:24, its longest job) for zero
+  test execution. That run's 48s included a `playwright install --with-deps chromium`, which
+  `test-light` no longer does at all; the browser steps moved to `test-ui`. What is **still
   open** is the reporting half: a `test-light` that ran two packages and one that ran the whole
   workspace both report `success`, and only the step log tells them apart. **The `@waitron/bench-pglite`
   half of this entry is closed** (2026-08-01): the `light` gate now discounts every member listed in

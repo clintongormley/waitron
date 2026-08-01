@@ -1,3 +1,21 @@
+/**
+ * The English-only vocabulary guard's suite. It scans the seven generic packages' `src/`, so it
+ * polices the tree rather than any one package, and it lives in the repo-level Vitest project for
+ * that reason — see the repo-root `vitest.config.ts` for what that project is and which two gates
+ * run it.
+ *
+ * It sat in `packages/db/src` until 2026-08-01, next to the module it imports. What moved is the
+ * SUITE alone: `english-only.ts` stays where two other files reach for it —
+ * `packages/db/src/schema/series.test.ts` imports `findSpanish`, and
+ * `packages/fiscal-verifactu/src/vocabulary-scope.test.ts` reads its source text by relative path
+ * — and `packages/db`'s own coverage config excludes it in the same change, because the root
+ * project measures it now.
+ *
+ * What the move bought, measured on 2026-08-01 rather than reasoned about:
+ * `pnpm --filter "...@waitron/payments" ls -r --depth -1 --json` lists six packages, none of them
+ * `@waitron/db`, and `--filter "...@waitron/ui"` lists one. Neither gate loaded this file on
+ * either shape of push while it lived in `packages/db`.
+ */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -9,7 +27,7 @@ import {
   findSpanish,
   readSource,
   sourceFilesIn,
-} from "./english-only.js";
+} from "../packages/db/src/english-only.js";
 
 const discovered = GENERIC_PACKAGES.flatMap((name) =>
   sourceFilesIn(name).map((file) => [`${name}: ${file.replace(PACKAGES_ROOT, "")}`, file] as const),
@@ -39,11 +57,30 @@ describe("configuration", () => {
   it("excludes only the files that define a forbidden-vocabulary list, by exact name", () => {
     // A wildcard here (say, *.test.ts) would silently drop every test file in
     // packages/db out of scope, which is where fixture names live.
-    expect([...SELF]).toEqual([
-      "english-only.ts",
-      "english-only.test.ts",
-      "no-regime-vocabulary.test.ts",
-    ]);
+    //
+    // This file was the third entry until 2026-08-01. It carries the wordlist
+    // in its fixtures just as `english-only.ts` does, and needed exempting for
+    // exactly that reason while it lived in `packages/db/src`; from `scripts/`
+    // it is out of scope by location, since `sourceFilesIn` only ever walks
+    // `packages/<name>/src`.
+    expect([...SELF]).toEqual(["english-only.ts", "no-regime-vocabulary.test.ts"]);
+  });
+
+  it("no longer needs to exempt this suite, because the scan cannot reach it", () => {
+    // The assertion above only says the name is gone from the list. This says
+    // the exemption is not needed — the reason it was dropped rather than the
+    // fact that it was.
+    const scanned = GENERIC_PACKAGES.flatMap((name) => sourceFilesIn(name));
+    expect(scanned.some((file) => file.endsWith("english-only.test.ts"))).toBe(false);
+    expect(scanned.length).toBeGreaterThan(0);
+  });
+
+  it("returns nothing for a package that does not exist on disk", () => {
+    // Documented behaviour of `sourceFilesIn` with no test until 2026-08-01:
+    // the guard has to be in place BEFORE a generic package is created, so a
+    // name in GENERIC_PACKAGES with no directory yet is silence, not a crash.
+    // Deleting the `existsSync` line it turns on makes this throw ENOENT.
+    expect(sourceFilesIn("no-such-package")).toEqual([]);
   });
 
   it("discovers source files in every generic package that exists on disk", () => {

@@ -94,7 +94,7 @@ question to raise, not a lint config nit to wave through.
 `packages/db`, `packages/core`, `packages/fiscal` and `@waitron/shared` are English throughout —
 identifiers and table/column names alike; `packages/verifactu` and `packages/fiscal-verifactu`
 are Spanish, mirroring AEAT's own specification, XML and conformance vectors 1:1. Both directions
-are mechanically enforced (`packages/db/src/english-only.test.ts` for the English packages,
+are mechanically enforced (`scripts/english-only.test.ts` for the English packages,
 `packages/fiscal/src/no-regime-vocabulary.test.ts` for regime words such as "chain"/"hash" written
 in English), not left to review discipline. A PR introducing a Spanish identifier into a generic
 package, an English regime term into `packages/fiscal`, or one that widens either guard's

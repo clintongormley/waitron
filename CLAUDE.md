@@ -233,9 +233,13 @@ Traps that each cost a round trip (deliberately uncounted — the last version o
   nothing"): `--filter "...pack*"` selects that member and prints it, while
   `--filter "...package.json" --filter "...packages"` prints zero bytes on both streams at exit 0.
   In CI that zero-byte reading is the SILENT direction — `packagesInScope` reads it as the definite
-  empty set, not as the `null` that fails closed, so all four scope gates go false and both test
+  empty set, not as the `null` that fails closed, so every scope gate goes false and all three test
   shards and both mutation jobs skip while `bundle-smoke` and `typecheck` still run (they gate on
-  `code` alone), and `ci` counts a skip as a pass. The hook can catch it, but only when the
+  `code` alone), and `ci` counts a skip as a pass. (Re-measured on 2026-08-01 after `test-ui` was
+  split out of `test-light`: `printf '' | node scripts/changed-scope.mjs` prints
+  `heavy=false ui=false light=false verifactu=false shared=false`, exit 0. The count in this
+  paragraph was `four` and `both`, written when there were two shards — a receipt that a behaviour
+  change retires, §1.) The hook can catch it, but only when the
   corrupted name was the WHOLE scope: then the selection is empty and its "scope is runnable" step
   exits 1; with a surviving name beside it the run proceeds having quietly dropped one package.
 
@@ -287,9 +291,11 @@ scripts/changed-packages.mjs runnable test:coverage` exits **0** with
   `pnpm --filter @waitron/db test provisioner-role` was green while
   `pnpm --filter @waitron/db test:coverage` failed on the same tree: the filter never loaded
   `english-only.test.ts`, which rejected `'Venta en establecimiento'` in a new fixture (`venta` is in
-  `SPANISH_WORDS`). Cross-cutting suites that police the WHOLE package — the vocabulary guard, the
-  error-code reachability tests, schema-ownership — are invisible to a name-filtered run, so a
-  filtered green says nothing about them. Run the package unfiltered before believing a pass. Same
+  `SPANISH_WORDS`). Cross-cutting suites that police the WHOLE package — the error-code reachability
+  tests, schema-ownership — are invisible to a name-filtered run, so a filtered green says nothing
+  about them. Run the package unfiltered before believing a pass. (The vocabulary guard was the
+  example this entry was written about and is no longer one: it polices the whole TREE rather than
+  one package, and moved to the root Vitest project on 2026-08-01 — §4.) Same
   false-green shape as the `test:coverage` and `--frozen-lockfile` traps above, in a third place.
   (Named rather than counted: an earlier version said "the two traps above" and stopped being true
   the moment a bullet was inserted between them.)
@@ -321,10 +327,12 @@ tenant, not about the process.
 
 Every file that throws a code imports its registry (`import "./errors.js"`) directly.
 
-**Spanish domain terms are deliberate**, guarded by `packages/db/src/english-only.ts`. Fiscal tables
-and columns use the Veri*Factu vocabulary (`envios`, `estado`, `huella`, `secuencia`, `entorno`). Add
-new Spanish schema tokens to `SPANISH_WORDS`. `packages/verifactu` and `packages/fiscal-verifactu`
-are exempt from the guard; `apps/*` is out of scope by a recorded decision.
+**Spanish domain terms are deliberate**, guarded by `packages/db/src/english-only.ts` — whose suite
+is `scripts/english-only.test.ts`, in the root Vitest project rather than beside it (§4). Fiscal
+tables and columns use the Veri*Factu vocabulary (`envios`, `estado`, `huella`, `secuencia`,
+`entorno`). Add new Spanish schema tokens to `SPANISH_WORDS`. `packages/verifactu` and
+`packages/fiscal-verifactu` are exempt from the guard; `apps/*` is out of scope by a recorded
+decision.
 
 **`@waitron/db`'s `exports` map is enumerated, not a wildcard** — `.`, `./testing/postgres.js`,
 `./testing/seed.js`. A wildcard would publish the harness and give `asAppUser` a second import path.
@@ -463,6 +471,30 @@ scratchpad path failed `EINVAL` before it could even reach `ECONNREFUSED`. Two w
 (`apk add --no-cache nodejs npm && npm i pg@<version>`), where node and the server share a
 namespace; everything that is only PARSING — `new URL` versus `pg`'s own parse — is fine on the host.
 
+**A test that shells out to `git` must clear `GIT_DIR`, or it writes to the repository running it.**
+`GIT_DIR` outranks a child process's `cwd`, and **git exports it for every hook it runs** — so a
+fixture that builds a throwaway repo with `mkdtemp` and commits into it with `cwd` set is isolated
+when you run it by hand and destructive when `.husky/pre-push` runs it. Measured on
+`scripts/check-signoff.test.mjs`, same command, the variable the only difference:
+
+```text
+$ pnpm vitest run scripts/check-signoff.test.mjs                  → HEAD unchanged
+$ GIT_DIR=$(git rev-parse --absolute-git-dir) pnpm vitest run …   → HEAD +7 commits
+```
+
+Cost: seven fixture commits landed on `fix/repo-wide-guards-and-signoff` and were **pushed three
+times** before the cause was found — five of them failing the DCO check that same script exists to
+enforce, so the suite testing the sign-off gate was breaking it. It also wrote `user.name` and
+`user.email` into the shared `.git/config`, which every worktree inherits, and one commit went out
+authored by `Fixture Author`. The tell is a branch that gains commits **during `git push`**: the hook
+mutates the ref and git pushes the moved value, so the push reports a SHA that is no longer the tip.
+
+`GIT_DIR` is the one that bites, but clear the whole family — `GIT_WORK_TREE`, `GIT_INDEX_FILE`,
+`GIT_COMMON_DIR`, `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_NAMESPACE` —
+since each relocates a write just as effectively. Pointing `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` at
+`/dev/null`, which that suite already did, does nothing about any of them. And run such a suite once
+under `GIT_DIR` before trusting it: by hand is the one way the bug cannot appear.
+
 **Don't own a database in a suite — let a helper own it.** `usePgliteDb` and `useRealPostgres`
 (`@waitron/db/testing/lifecycle.js`) register their own `beforeAll`/`afterAll` and hand back an
 accessor that **throws** rather than returning `undefined` if read before setup. A suite using them
@@ -471,10 +503,28 @@ cannot write a broken teardown, because it writes no teardown. Reach for a raw
 _of_ the constructor, or a race needing several distinct connections.
 
 **Where you must, guard it**: `if (db !== undefined) await db.close()`. **Enforced** by
-`packages/db/src/guarded-teardowns.test.ts`, which also records what an unguarded teardown costs,
-why an ESLint rule was rejected, and the two things the guard cannot see. Read it before changing
-it — a convention this file had already stated was violated in 94 places, which is the general
-lesson: **a written rule with standing violations needs a guard, not another paragraph.**
+`scripts/guarded-teardowns.test.ts`, which also records what an unguarded teardown costs, why an
+ESLint rule was rejected, and the two things the guard cannot see. Read it before changing it — a
+convention this file had already stated was violated in 94 places, which is the general lesson:
+**a written rule with standing violations needs a guard, not another paragraph.**
+
+**A guard that reads the whole tree belongs in the ROOT Vitest project, not in a package.** Both of
+this repo's tree-wide guards lived in `packages/db` — the teardown guard above, which scans every
+`*.test.ts` under `packages/` and `apps/`, and `english-only`, which scans the seven generic
+packages' `src/`. A suite only loads when its package is in scope, and once both gates started
+scoping by package, most pushes stopped reaching `packages/db`: measured on 2026-08-01,
+`pnpm --filter "...@waitron/ui" ls -r --depth -1 --json` lists one package and
+`--filter "...@waitron/payments"` lists six, none of them `@waitron/db`, while CI gates its
+`test-heavy` shard on `@waitron/db` being in scope. So a `packages/payments` pull request ran
+neither guard in either place and their first run was the unfiltered `main` merge — the §2 trap
+below, one level up, with the filter over PACKAGES rather than over test names. They now live in
+`scripts/`, which `pnpm vitest run --coverage` runs from ci.yml's ungated `lint` job and from
+`.husky/pre-push` on every push that is not documentation-only. Two things to know before putting a
+third guard there: **the root project does not typecheck** (`pnpm typecheck` is `pnpm -r typecheck`
+and never visits the workspace root, §2 — so a type error in one of those files is caught only when
+it is also a runtime error), and a module tested only from there has to be named in the root
+`vitest.config.ts`'s `coverage.include` and excluded from its own package's, or it is measured twice
+or not at all.
 
 Suites sharing a database must clean up in a `finally` so they are order-independent, not
 order-reliant — several tests have been fixed for exactly this.
@@ -497,9 +547,12 @@ the exit code.
 
 That workaround is **gone from the tree** as of 2026-08-01: both classifiers moved to `scripts/`,
 nothing measured is dot-prefixed any more, and the root config now carries no `exclude` at all —
-measured there rather than reasoned about, in three spellings that all printed the identical two-row
-table at 100/100/100/100: no `exclude` key, `exclude: []`, and `exclude: ["**/*.test.mjs"]`. So an
-explicit one would be dead config _here_, where `include` already narrows to two files. Three
+measured there rather than reasoned about, in three spellings that all printed the identical
+three-row table at 100/100/100/100: no `exclude` key, `exclude: []`, and
+`exclude: ["**/*.test.mjs"]`. So an explicit one would be dead config _here_, where `include` already
+narrows to three files — `packages/db/src/english-only.ts` and the two classifiers. (This sentence
+said "two" from `6d30ed2`, which is where it landed, until the very next commit put
+`english-only.ts` into that `include` and left it standing. Re-run on 2026-08-01.) Three
 spellings is not "both directions", which an earlier version of this sentence called it: every one of
 those runs pointed the same way, and a control would need a config where the `exclude` does change
 the table. The trap is a property of Vitest's defaults, not of that config, so it is waiting for the

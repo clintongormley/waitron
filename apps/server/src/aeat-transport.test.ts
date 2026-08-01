@@ -41,7 +41,7 @@ const material: MtlsMaterial = mintMtlsMaterial();
 // The local TLS listener is this suite's own; only the database is `usePgliteDb`'s. The teardown is
 // guarded because a `startMtlsServer` that threw would otherwise be reported twice — once really,
 // once as a spurious `Cannot read properties of undefined (reading 'close')`. See
-// `packages/db/src/guarded-teardowns.test.ts`'s header for the experiment that measured that.
+// `scripts/guarded-teardowns.test.ts`'s header for the experiment that measured that.
 let server: MtlsServer;
 
 beforeAll(async () => {

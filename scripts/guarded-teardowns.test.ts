@@ -1,13 +1,21 @@
 import { readFileSync, readdirSync } from "node:fs";
-import { basename, join, relative, sep } from "node:path";
+import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
  * Every `afterAll`/`afterEach` that closes a resource must guard it.
  *
- * CLAUDE.md §4 states the rule. It fired for real on 2026-07-31 in this very package: a
- * Testcontainers start timed out in `client.test.ts`'s `beforeAll`, and `afterAll` two lines below
- * then threw `TypeError: Cannot read properties of undefined (reading 'stop')`.
+ * CLAUDE.md §4 states the rule. It fired for real on 2026-07-31 in `packages/db`, where this file
+ * used to live: a Testcontainers start timed out in `client.test.ts`'s `beforeAll`, and `afterAll`
+ * two lines below then threw `TypeError: Cannot read properties of undefined (reading 'stop')`.
+ *
+ * **It lives in the repo-level Vitest project because it reads the whole tree** — every
+ * `*.test.ts` under `packages/` and `apps/`, from the repository root. In `packages/db` it only
+ * ever loaded when `packages/db` was in scope, and since the scoping landed neither gate put it
+ * there on most pushes: measured on 2026-08-01, `pnpm --filter "...@waitron/ui" ls -r --depth -1
+ * --json` lists `@waitron/ui` alone and `--filter "...@waitron/payments"` lists six packages, none
+ * of them `@waitron/db`. See the repo-root `vitest.config.ts` for what that project is and which
+ * two gates run it.
  *
  * **The experiment, run rather than assumed.** A scratch suite with a `beforeAll` that throws a
  * known error, run twice under vitest — once with `res!.stop()` in the teardown, once with
@@ -23,7 +31,7 @@ import { describe, expect, it } from "vitest";
  * constructor and the migrator, and `testing/postgres.test.ts` tests the very surface the helper is
  * built on.
  *
- * ## Two limits, stated because neither is obvious
+ * ## Three limits, stated because none is obvious
  *
  * 1. **It cannot see a suite with no teardown at all.** It inspects closers INSIDE
  *    `afterAll`/`afterEach`; a suite that creates a resource per test and never closes one is
@@ -32,6 +40,13 @@ import { describe, expect, it } from "vitest";
  *    whole time. It was found by reading, not by scanning.
  * 2. **`isGuarded` proves a check exists in the hook, not that it covers this call.** See its own
  *    doc comment.
+ * 3. **The suites in this directory are outside it, including one with a real teardown.** The scan
+ *    roots are `packages/` and `apps/`, and it matches `*.test.ts`; `scripts/check-signoff.test.mjs`
+ *    fails both tests and has an `afterAll` that removes a temp directory (guarded by hand). Adding
+ *    `scripts/` as a root is not the fix — measured on 2026-08-01, it makes this file report its own
+ *    template-literal fixtures as violations, which is what the assertion in "the scan itself"
+ *    pins. A root-level suite keeps the rule by hand until someone finds a scan that can tell a
+ *    fixture from a teardown.
  *
  * ## Why not an ESLint rule
  *
@@ -42,19 +57,23 @@ import { describe, expect, it } from "vitest";
  * the form CLAUDE.md documents. Lint would therefore mean a 172-site rewrite to a different
  * canonical form, not a fix. If the canonical form ever changes, revisit this.
  *
- * **Self-contained rather than split into a module plus a test**, unlike `english-only.ts` next
- * door: nothing imports it, and putting a file-scanner in `src/` non-test surface would buy coverage
- * obligations for a scanner whose only consumer is this file.
+ * **Self-contained rather than split into a module plus a test**, unlike the other guard in this
+ * directory: nothing imports it, and putting a file-scanner in a non-test file would buy coverage
+ * obligations for a scanner whose only consumer is this file. `english-only.test.ts` is split that
+ * way for a reason this file does not share — its module has consumers of its own, listed in that
+ * file's header — and the repo-root `vitest.config.ts` names the one file it therefore measures.
  */
 
-/** From `packages/db/src` up to the repo root — one level above `english-only.ts`'s
- * `PACKAGES_ROOT`, because this guard covers `apps/` too. */
-const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
+/** From `scripts/` up to the repo root. */
+const REPO_ROOT = join(import.meta.dirname, "..");
 
 /**
  * **`apps/` is IN scope, deliberately, unlike `english-only.ts`.** That guard excludes `apps/*`
  * because vocabulary is a domain concern owned by the packages. A masked teardown error is not a
  * domain concern — it wastes the same debugging hour wherever it happens.
+ *
+ * `scripts/` — this file's own directory — is NOT a scan root, and that is what keeps the fixtures
+ * below out of the scan; see the "the scan itself" block for the assertion that pins it.
  */
 const SCAN_ROOTS = ["packages", "apps"] as const;
 
@@ -67,11 +86,6 @@ const SKIP_DIRECTORIES = new Set(["node_modules", "dist", "coverage", ".turbo", 
  * `close` covers this repo's `Database`. A resource exposing `dispose`/`destroy` would escape — the
  * cost of a hand-maintained list, accepted because the tree has none. */
 const CLOSERS = ["close", "stop", "end"] as const;
-
-/** This file's own fixtures are teardown snippets in template literals, and `stripComments` is
- * deliberately naive about string literals, so scanning itself reports them. `english-only.ts`
- * exempts its own two files for the same reason. Costs nothing: it acquires no resource. */
-const SELF = "guarded-teardowns.test.ts";
 
 const CLOSER_PATTERN = new RegExp(
   `\\b([A-Za-z_][\\w$]*)\\s*\\.\\s*(${CLOSERS.join("|")})\\s*\\(\\s*\\)`,
@@ -94,7 +108,7 @@ function collectTestFiles(directory: string, found: string[]): void {
       // `withFileTypes` reports a symlinked directory as a symlink, not a directory, so this also
       // stops the combinatorial descent through pnpm's workspace links.
       if (!SKIP_DIRECTORIES.has(entry.name)) collectTestFiles(join(directory, entry.name), found);
-    } else if (entry.name.endsWith(".test.ts") && entry.name !== SELF) {
+    } else if (entry.name.endsWith(".test.ts")) {
       found.push(join(directory, entry.name));
     }
   }
@@ -197,13 +211,24 @@ describe("the scan itself", () => {
     }
   });
 
-  it("reaches packages/db's own suites", () => {
+  it("reaches a package's nested suites, not just its top level", () => {
     expect(files.some((file) => file.endsWith(join("db", "src", "client.test.ts")))).toBe(true);
   });
 
-  it("skips node_modules, and exempts only itself", () => {
+  it("skips node_modules", () => {
     expect(files.some((file) => file.split(sep).includes("node_modules"))).toBe(false);
-    expect(files.some((file) => basename(file) === SELF)).toBe(false);
+  });
+
+  it("does not reach this directory, which is what keeps its own fixtures out", () => {
+    // The fixtures below are teardown snippets in template literals, and `stripComments` is
+    // deliberately naive about string literals, so a scan that reached `scripts/` would report
+    // this file as violating the rule it exists to enforce. Until 2026-08-01 a `SELF` constant
+    // held that off by filename, because the file lived in `packages/db/src`; from here the scan
+    // roots do it, and this is the assertion that says so rather than a comment claiming it.
+    //
+    // Proven by mutation on 2026-08-01: adding "scripts" to SCAN_ROOTS fails this test AND "every
+    // teardown in the tree", the second one naming this file's own fixture lines.
+    expect(files.some((file) => file.startsWith(join(REPO_ROOT, "scripts") + sep))).toBe(false);
   });
 });
 

@@ -6,6 +6,7 @@ import {
   HEAVY_PACKAGE,
   PACKAGES_WITHOUT_TESTS,
   SCOPE_GATES,
+  UI_PACKAGE,
   classify,
   gateOutputs,
   isInertPath,
@@ -134,24 +135,45 @@ describe("gateOutputs", () => {
     expect(gates(packagesInScope("")).heavy).toBe("false");
   });
 
+  // The `ui` gate exists for the same reason as `heavy`: @waitron/ui has a shard of its own, so
+  // test-light subtracts it and something has to decide whether test-ui runs. Membership of the
+  // resolved scope, exactly as heavy is decided.
+  it("runs the ui shard when @waitron/ui is in the resolved scope, and not otherwise", () => {
+    expect(gates(packagesInScope(ls("@waitron/ui", "@waitron/payments"))).ui).toBe("true");
+    expect(gates(packagesInScope(ls("@waitron/db", "@waitron/payments"))).ui).toBe("false");
+    expect(gates(packagesInScope("")).ui).toBe("false");
+  });
+
   // `light` is the one gate that is NOT membership of a named package. test-light runs
-  // `--filter "$SCOPE" --filter "!@waitron/db"`, so what decides it is whether the resolved scope
-  // holds anything OTHER than the heavy package.
+  // `--filter "$SCOPE"` and then subtracts every package that has a shard of its own, so what
+  // decides it is whether the resolved scope holds anything besides those.
   //
   // What made it worth a gate, read off run 30653487133 with `gh run view 30653487133 --json jobs`:
   // gated on `code` alone, test-light was that run's longest job — 18:01:36 → 18:02:24, 48s — and
   // its "Run the light shard" step printed `None of the selected packages has a "test:coverage"
   // script`. A runner, a `pnpm install` and a `playwright install --with-deps chromium` for zero
   // test execution, reported as success.
-  it("runs the light shard when the resolved scope holds a package other than @waitron/db", () => {
+  it("runs the light shard when the resolved scope holds a package with no shard of its own", () => {
     expect(gates(packagesInScope(ls("@waitron/payments"))).light).toBe("true");
     expect(gates(packagesInScope(ls("@waitron/db", "@waitron/payments"))).light).toBe("true");
+    expect(gates(packagesInScope(ls("@waitron/ui", "@waitron/payments"))).light).toBe("true");
   });
 
-  // The row that separates `light` from a membership gate in the other direction: db IS in scope,
-  // and the light shard still has nothing to do, because its own filter subtracts db.
-  it("skips the light shard when @waitron/db is the whole scope", () => {
-    expect(gates(packagesInScope(ls("@waitron/db"))).light).toBe("false");
+  // The rows that separate `light` from a membership gate in the other direction: the package IS in
+  // scope, and the light shard still has nothing to do, because its own filter subtracts it.
+  //
+  // The third of these is the shape that made `light` need generalising rather than a second
+  // special case. It was written when @waitron/db was the only package with a shard of its own, as
+  // "the scope holds something other than HEAVY_PACKAGE" — so a scope of exactly {@waitron/ui}
+  // answered true, and test-light would have been given a runner to select nothing at all. That is
+  // the same shape the `runnable` guard was added for, and this gate is what stops it reaching that
+  // guard.
+  it.each([
+    ["@waitron/db", ["@waitron/db"]],
+    ["@waitron/ui", ["@waitron/ui"]],
+    ["both packages that have their own shard", ["@waitron/db", "@waitron/ui"]],
+  ])("skips the light shard when the whole scope is %s", (_label, names) => {
+    expect(gates(packagesInScope(ls(...names))).light).toBe("false");
   });
 
   it("skips the light shard for a scope that matched nothing", () => {
@@ -185,16 +207,23 @@ describe("gateOutputs", () => {
     expect(gates(packagesInScope("No projects matched the filters")).light).toBe("true");
   });
 
-  // The two shards are defined against the SAME constant, so they cannot drift into covering one
-  // package twice or neither: whatever `heavy` claims, `light` disclaims.
-  it("excludes from the light shard exactly the package the heavy shard covers", () => {
+  // The shards are defined against the SAME constant — OWN_SHARD_PACKAGES — so they cannot drift
+  // into covering one package twice or neither: whatever a dedicated gate claims, `light`
+  // disclaims. scripts/ci-workflow.test.mjs checks the other half of that, against ci.yml's real
+  // filters and the real workspace.
+  it.each([
+    ["heavy", HEAVY_PACKAGE],
+    ["ui", UI_PACKAGE],
+  ])("gives a package with its own shard to the %s gate alone, never to light", (gate, name) => {
     // toEqual, not toMatchObject: a key you do not list is never checked at all (CLAUDE.md §4), and
     // this assertion's whole point is that ONE gate fires on this scope.
-    expect(gates(packagesInScope(ls(HEAVY_PACKAGE)))).toEqual({
-      heavy: "true",
+    expect(gates(packagesInScope(ls(name)))).toEqual({
+      heavy: "false",
+      ui: "false",
       light: "false",
       verifactu: "false",
       shared: "false",
+      [gate]: "true",
     });
   });
 
@@ -218,6 +247,7 @@ describe("gateOutputs", () => {
     );
     expect(gates(scope)).toEqual({
       heavy: "false",
+      ui: "false",
       light: "true",
       verifactu: "true",
       shared: "false",
@@ -282,6 +312,7 @@ describe("SCOPE_GATES", () => {
   it("lists every gate, in the order the CLI emits them", () => {
     expect(SCOPE_GATES.map((gate) => gate.output)).toEqual([
       "heavy",
+      "ui",
       "light",
       "verifactu",
       "shared",
@@ -308,22 +339,29 @@ describe("the CLI", () => {
   };
 
   // One `pnpm ls` invocation answers every gate. The `changes` job appends this stdout verbatim to
-  // $GITHUB_OUTPUT, so the line ORDER does not matter to it but the line COUNT does — a fifth line
-  // here would become a fifth job output, and ci.yml declares exactly four.
+  // $GITHUB_OUTPUT, so the line ORDER does not matter to it but the line COUNT does — a sixth line
+  // here would become a sixth job output, and ci.yml declares exactly five.
   it("answers every gate from one pnpm ls result", () => {
     expect(run(ls("@waitron/db", "@waitron/shared")).stdout).toBe(
-      "heavy=true\nlight=true\nverifactu=false\nshared=true\n",
+      "heavy=true\nui=false\nlight=true\nverifactu=false\nshared=true\n",
     );
     expect(run(ls("@waitron/payments")).stdout).toBe(
-      "heavy=false\nlight=true\nverifactu=false\nshared=false\n",
+      "heavy=false\nui=false\nlight=true\nverifactu=false\nshared=false\n",
     );
   });
 
-  // The whole point of the `light` gate, through the CLI: a scope that is @waitron/db and nothing
-  // else leaves test-light with no package to run, because its own filter subtracts db.
+  // The whole point of the `light` gate, through the CLI: a scope that is one package with a shard
+  // of its own and nothing else leaves test-light with no package to run, because its own filter
+  // subtracts that package.
   it("reports no light work for a scope that is only @waitron/db", () => {
     expect(run(ls("@waitron/db")).stdout).toBe(
-      "heavy=true\nlight=false\nverifactu=false\nshared=false\n",
+      "heavy=true\nui=false\nlight=false\nverifactu=false\nshared=false\n",
+    );
+  });
+
+  it("reports no light work for a scope that is only @waitron/ui", () => {
+    expect(run(ls("@waitron/ui")).stdout).toBe(
+      "heavy=false\nui=true\nlight=false\nverifactu=false\nshared=false\n",
     );
   });
 
@@ -332,7 +370,9 @@ describe("the CLI", () => {
   // against `--filter "@waitron/nonexistent"`, `--filter "...[main]"` and
   // `--filter "...[origin/main]"`, in both a worktree and a fresh clone.
   it("reads an empty pnpm ls result as no work for any gated job", () => {
-    expect(run("").stdout).toBe("heavy=false\nlight=false\nverifactu=false\nshared=false\n");
+    expect(run("").stdout).toBe(
+      "heavy=false\nui=false\nlight=false\nverifactu=false\nshared=false\n",
+    );
   });
 
   // main has no scope to resolve, so there is no `pnpm ls` to run. The flag keeps the gate list in
@@ -343,16 +383,16 @@ describe("the CLI", () => {
   // its own rather than falling through to whatever happens to be on stdin.
   it("emits every gate for an unscoped run, ignoring stdin entirely", () => {
     expect(run(ls("@waitron/payments"), "--unscoped").stdout).toBe(
-      "heavy=true\nlight=true\nverifactu=true\nshared=true\n",
+      "heavy=true\nui=true\nlight=true\nverifactu=true\nshared=true\n",
     );
     expect(run("", "--unscoped").stdout).toBe(
-      "heavy=true\nlight=true\nverifactu=true\nshared=true\n",
+      "heavy=true\nui=true\nlight=true\nverifactu=true\nshared=true\n",
     );
   });
 
   it("fails closed to every gate when pnpm ls output cannot be parsed", () => {
     expect(run("No projects matched the filters").stdout).toBe(
-      "heavy=true\nlight=true\nverifactu=true\nshared=true\n",
+      "heavy=true\nui=true\nlight=true\nverifactu=true\nshared=true\n",
     );
   });
 
@@ -365,14 +405,20 @@ describe("the CLI", () => {
   // to be different, but the untested path was real.
   it("fails closed when pnpm reports its own error as JSON on stdout", () => {
     const pnpmError = '{"error":{"code":"pnpm","message":"Unsupported package selector: …"}}';
-    expect(run(pnpmError).stdout).toBe("heavy=true\nlight=true\nverifactu=true\nshared=true\n");
+    expect(run(pnpmError).stdout).toBe(
+      "heavy=true\nui=true\nlight=true\nverifactu=true\nshared=true\n",
+    );
   });
 
   it("treats a genuinely empty scope as empty, not as an error", () => {
     // `pnpm ls` emits zero bytes and exits 0 when its filter matches nothing, so this is the
     // ordinary "this change touches no package" case and must SKIP rather than run everything.
-    expect(run("[]").stdout).toBe("heavy=false\nlight=false\nverifactu=false\nshared=false\n");
-    expect(run("").stdout).toBe("heavy=false\nlight=false\nverifactu=false\nshared=false\n");
+    expect(run("[]").stdout).toBe(
+      "heavy=false\nui=false\nlight=false\nverifactu=false\nshared=false\n",
+    );
+    expect(run("").stdout).toBe(
+      "heavy=false\nui=false\nlight=false\nverifactu=false\nshared=false\n",
+    );
   });
 
   it("puts the reason on stderr, where it cannot reach $GITHUB_OUTPUT", () => {

@@ -15,7 +15,7 @@ import { describe, expect, it } from "vitest";
  * That was fixed in three adapters. This is what stops a FOURTH reintroducing it: a bare
  * `.transaction(` anywhere in this package's production sources now fails CI, rather than failing
  * in production under a role no hermetic suite can simulate. The repo's own idiom —
- * `payments/src/no-provider-vocabulary.test.ts`, `db/src/english-only.test.ts`,
+ * `payments/src/no-provider-vocabulary.test.ts`, `scripts/english-only.test.ts`,
  * `payments/src/monetary-columns.test.ts` — is a source scan exactly like this one.
  *
  * The local `ImportMeta.glob` declaration mirrors that file's, and for its reason: this package

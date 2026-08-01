@@ -1424,6 +1424,14 @@ git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-2a-stripe 
 
 **Files:** none.
 
+> **Dated note, 2026-08-01.** Step 3 below no longer finds its suite: `english-only.test.ts` moved
+> to `scripts/english-only.test.ts`, the repo-level Vitest project. Run on 2026-08-01,
+> `pnpm --filter @waitron/db exec vitest run src/english-only.test.ts` exits 1 with
+> `No test files found`. Today's equivalent is `pnpm vitest run scripts/english-only.test.ts` from
+> the repository root, which also runs on every push that is not documentation-only. Steps 4 and 5
+> are unaffected — `vocabulary-scope.test.ts` is still in `packages/fiscal-verifactu`, and the
+> module under test, `packages/db/src/english-only.ts`, did not move.
+
 - [ ] **Step 1:** `pnpm --filter @waitron/payments test:coverage` — Expected: PASS ≥98/95 (the neutral changes).
 - [ ] **Step 2:** `pnpm --filter @waitron/payments-stripe test:coverage` — Expected: PASS ≥98/95.
 - [ ] **Step 3:** `pnpm --filter @waitron/db exec vitest run src/english-only.test.ts` — Expected: PASS (proves no Spanish leaked into `@waitron/payments`, and that NOT adding `payments-stripe` to any list didn't break the pinned assertions).
