@@ -127,10 +127,17 @@ export const SCOPE_GATES = [
  * result. Getting it wrong reads a failure as "no packages in scope" and SKIPS every gated job,
  * which is the silent direction.
  *
- * Proven by deletion, on the code as it stands: remove the `Array.isArray` line and
- * `pnpm vitest run` reports `2 failed | 42 passed (44)` — the two tests naming this input. The
- * `try` wraps `JSON.parse` ONLY, so `parsed.map` on the error object throws outside it and
- * propagates as a TypeError instead of reaching `null`.
+ * Proven by deletion, on the code as it stands: remove the `Array.isArray` line and `pnpm vitest
+ * run` fails exactly TWO tests, both of them the ones naming this input — `packagesInScope >
+ * returns null for pnpm's own error object, which is valid JSON` (`TypeError: parsed.map is not a
+ * function`) and `the CLI > fails closed when pnpm reports its own error as JSON on stdout` (the
+ * child process exits 1 on that TypeError). The `try` wraps `JSON.parse` ONLY, so `parsed.map` on
+ * the error object throws outside it and propagates instead of reaching `null`.
+ *
+ * Re-run on 2026-08-01, where the suite is 114 tests. Deliberately not restated as a pass/fail
+ * total: this comment carried `2 failed | 42 passed (44)` from a tree with two thirds fewer tests,
+ * still reading as a fresh measurement. The load-bearing part is which two fail, not the total they
+ * fail out of.
  *
  * An earlier version of this comment claimed the opposite — "expressive, not load-bearing" — from
  * an experiment that deleted the line AND moved `.map` back inside the `try`. That shape does land

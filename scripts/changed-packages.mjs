@@ -44,7 +44,14 @@ import { PACKAGES_WITHOUT_TESTS, classify, isInertPath } from "./changed-scope.m
 
 /**
  * The workspace's members as `{name, dir}`, `dir` being relative to `repoRoot` — or `null` when the
- * input cannot be read, which every caller treats as a reason to run everything.
+ * input cannot be read.
+ *
+ * The two callers fail closed on that `null` in OPPOSITE directions, because "we could not read it"
+ * means different things to them. `scopeForPaths` runs everything. `scriptRunCheck` refuses:
+ * measured on 2026-08-01, `pnpm --filter "@waitron/nope" ls --depth -1 --json | node
+ * scripts/changed-packages.mjs runnable test:coverage` exits **1** with `the workspace layout could
+ * not be read` — the filter matched nothing, so pnpm printed zero bytes and this returned `null`.
+ * A guard that cannot tell whether a run happened must not report that one did.
  *
  * Input is the stdout of `pnpm ls -r --depth -1 --json`. Run in this worktree on 2026-07-31 that is
  * 16 entries: the fifteen workspace members plus the workspace ROOT, whose `name` is `waitron` and
@@ -112,10 +119,13 @@ export function workspacePackages(pnpmLsJson, repoRoot) {
 /**
  * The innermost workspace member containing `path`, or `undefined`.
  *
- * Innermost, not first: nothing in this workspace nests today (checked against
- * `pnpm ls -r --depth -1 --json` on 2026-07-31 — no member's directory is a prefix of another's),
- * but one line in pnpm-workspace.yaml would change that, and the failure would be silent in the
- * dangerous direction: the outer package's suite runs, the inner one's does not.
+ * Innermost, not first: no member's directory CONTAINS another's today — checked against
+ * `pnpm ls -r --depth -1 --json` on 2026-08-01, where no member's `dir + "/"` is a prefix of any
+ * other's. (Two dirs are bare string prefixes of a sibling — `packages/fiscal` of
+ * `packages/fiscal-verifactu`, `packages/payments` of `packages/payments-stripe` — which is exactly
+ * why the trailing slash below is not decoration.) One line in pnpm-workspace.yaml would make a
+ * real nesting, and the failure would be silent in the dangerous direction: the outer package's
+ * suite runs, the inner one's does not.
  *
  * The trailing slash is what makes this a directory test rather than a string-prefix test, and the
  * case it catches is narrower than it first looks. Established by deletion, twice. Against the
@@ -234,7 +244,13 @@ export function scopeForPaths(changedPaths, loadPackages) {
  * $scope_packages` — so a name containing whitespace would still come apart into two filters. What
  * they do after the split is append each word with `set -- "$@" --filter "...$pkg"` rather than
  * concatenating into a string for `eval`, so there is no second shell pass to reinterpret a quote,
- * a `$`, a backtick or a glob in a name.
+ * a `$` or a backtick in a name.
+ *
+ * A GLOB is not in that list, and an earlier version of this paragraph put it there. Dropping
+ * `eval` removes the second pass; it does not touch the first, and an unquoted expansion undergoes
+ * pathname expansion as well as field splitting. Both callers wrap their loop in `set -f` … `set
+ * +f` for that, which is the guard the sentence used to claim was unnecessary — receipts beside the
+ * loop in .husky/pre-push.
  */
 export function formatScope({ kind, packages }) {
   return `code=${kind !== "documentation"}\nscope=${kind}\npackages=${packages.join(" ")}`;
@@ -321,17 +337,22 @@ export function scriptRunCheck(members, script, readScripts) {
 //     that is 1 when that selection would run no `<script>` at all. The exit code is the only part
 //     of it a shell step can act on, which is why this is a subcommand rather than a fourth line.
 //
-// The workspace layout is resolved HERE rather than passed in, because the two inputs cannot share
-// stdin and threading a JSON document through argv or a temporary file buys nothing. A `pnpm ls`
-// that fails for any reason — not installed, not a workspace, killed — leaves `stdout` null or
-// empty, which `workspacePackages` reads as `null` and `scopeForPaths` turns into a global run.
+// In the DEFAULT shape the workspace layout is resolved HERE rather than passed in, because that
+// shape's own input is the changed paths and the two cannot share stdin; threading a JSON document
+// through argv or a temporary file buys nothing. (The `runnable` shape above is the other way round
+// — it IS handed a `pnpm <filters> ls` result on stdin, because the selection it must judge is one
+// pnpm already resolved.) A `pnpm ls` that fails for any reason — not installed, not a workspace,
+// killed — leaves `stdout` null or empty, which `workspacePackages` reads as `null` and
+// `scopeForPaths` turns into a global run.
 //
 // It runs `pnpm ls` from inside the thunk, so a documentation-only push never pays for it. That it
 // runs at all without `pnpm install` having happened first — the hook now classifies BEFORE
 // installing, and ci.yml's `changes` job never installs at all — was measured rather than assumed:
 // in a `git clone --no-hardlinks` of the main checkout, with no `node_modules` directory anywhere in
-// it, `pnpm ls -r --depth -1 --json` exited 0 with 3917 bytes on stdout, nothing on stderr, and all
-// 16 entries (2026-08-01, pnpm 9.15.0).
+// it, `pnpm ls -r --depth -1 --json` exited 0 with all 16 entries on stdout and nothing on stderr
+// (2026-08-01, pnpm 9.15.0). Deliberately not a byte count: that output is absolute paths, so it
+// moves with the checkout's location — the first version of this line said 3917 bytes and a
+// reviewer's clone gave 3885.
 //
 // stdout carries the three lines and NOTHING else: ci.yml appends it straight to `$GITHUB_OUTPUT`
 // and the hook reads it with `sed -n 's/^scope=//p'` and `sed -n 's/^packages=//p'`, so a stray line
@@ -341,8 +362,9 @@ export function scriptRunCheck(members, script, readScripts) {
 // Ignored for coverage because the tests run it in a CHILD process, and the v8 provider only
 // measures the module graph loaded into the test process — so this block reads as 0% however
 // thoroughly it is exercised. Ignored for being unmeasurable, not for being untested: delete the
-// two `describe("… CLI")` suites and thirteen assertions about this block go with it, including the
-// only ones that run the real `pnpm ls` against the real workspace.
+// two `describe("… CLI")` suites and twelve `it()`s about this block go with it — six each,
+// counted on 2026-08-01 with `pnpm vitest run --reporter=verbose` — including the only ones that
+// run the real `pnpm ls` against the real workspace.
 /* v8 ignore start */
 if (process.argv[1] && process.argv[1].endsWith("changed-packages.mjs")) {
   const stdin = () => readFileSync(0, "utf8");

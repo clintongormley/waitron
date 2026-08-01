@@ -18,11 +18,13 @@ export default defineConfig({
       // opened. Read the per-file table, not the exit code.
       //
       // There is deliberately no `exclude`. The obvious one — the two `*.test.mjs` suites — would
-      // be dead config: measured on 2026-08-01, with no `exclude` key at all and again with
-      // `exclude: []`, `pnpm vitest run --coverage` printed the same table both times, exactly
-      // `changed-packages.mjs` and `changed-scope.mjs` at 100/100/100/100 and no `*.test.mjs` row.
-      // (The first version of this comment asserted the opposite — that deleting the line would add
-      // two rows — and was written before it was run. CLAUDE.md §1.)
+      // be dead config: measured on 2026-08-01 in three spellings, no `exclude` key at all,
+      // `exclude: []`, and `exclude: ["**/*.test.mjs"]`, `pnpm vitest run --coverage` printed the
+      // identical table every time — exactly `changed-packages.mjs` and `changed-scope.mjs` at
+      // 100/100/100/100, and no `*.test.mjs` row. Three spellings all pointing one way, NOT a
+      // measurement in both directions; a control would need an `exclude` that does change the
+      // table. (The first version of this comment asserted the opposite — that deleting the line
+      // would add two rows — and was written before it was run. CLAUDE.md §1.)
       //
       // Until 2026-08-01 this config DID need an `exclude`: it spread `coverageConfigDefaults`
       // back in with `**/[.]**` filtered out, because the sources lived under `.github/scripts/`

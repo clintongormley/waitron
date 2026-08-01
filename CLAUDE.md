@@ -207,7 +207,46 @@ Traps that each cost a round trip (deliberately uncounted — the last version o
   better of the two directions, but never interpolate a possibly-empty value into a `--filter`:
   build the argument list so the filter is absent when there is nothing to narrow to. Both `ci.yml`
   and `.husky/pre-push` now accumulate `--filter "...<pkg>"` as positional parameters and simply
-  append none, which removes the question rather than guarding it.
+  append none, which removes THAT question — there is no empty filter left to pass. It does not
+  remove the next one.
+- **Dropping `eval` does not make an unquoted expansion safe — it still globs.** Both gates build
+  their filters with `for pkg in $PACKAGES; do set -- "$@" --filter "...$pkg"; done`, and three
+  comments plus the bullet above asserted that accumulating positional parameters rather than
+  `eval`-ing a string had removed the word-splitting question. It removes half of it. `eval` was the
+  SECOND shell pass, and losing it genuinely does make a quote, a `$` or a backtick in a name reach
+  pnpm literally — but the FIRST pass is still there, and an unquoted expansion undergoes PATHNAME
+  EXPANSION as well as field splitting. Measured on 2026-08-01 from a directory holding
+  `package.json` and `packages/`, in bash 3.2.57 in `sh` mode (the `/bin/sh` husky invokes here),
+  busybox `ash`, and bash 5.3.15 (`docker run --rm bash:5`) — all three line for line:
+
+  ```
+  PKGS="pack*"; set --; for pkg in $PKGS; do set -- "$@" --filter "...$pkg"; done; echo "$*"
+    → --filter ...package.json --filter ...packages
+  the same loop wrapped in set -f … set +f
+    → --filter ...pack*
+  ```
+
+  The guard is `set -f` before the loop and `set +f` after it — checked in the same run that
+  `echo pack*` expands again afterwards, so it does not leak into later commands. Run end to end as
+  well, in a throwaway pnpm workspace holding a member literally named `pack*`, where the two filter
+  lists visibly DISAGREE (§1's "a measurement taken where both answers look alike measures
+  nothing"): `--filter "...pack*"` selects that member and prints it, while
+  `--filter "...package.json" --filter "...packages"` prints zero bytes on both streams at exit 0.
+  In CI that zero-byte reading is the SILENT direction — `packagesInScope` reads it as the definite
+  empty set, not as the `null` that fails closed, so all four scope gates go false and both test
+  shards and both mutation jobs skip while `bundle-smoke` and `typecheck` still run (they gate on
+  `code` alone), and `ci` counts a skip as a pass. The hook can catch it, but only when the
+  corrupted name was the WHOLE scope: then the selection is empty and its "scope is runnable" step
+  exits 1; with a surviving name beside it the run proceeds having quietly dropped one package.
+
+  **What makes it unreachable today is a naming convention, not a rule.** Do not repeat the
+  reachability claim this entry first carried — that no npm-valid name holds `*`, `?` or `[`. npm's
+  registry rules never apply here: every member is `"private": true`, `pnpm ls -r --depth -1 --json`
+  listed the `pack*` member without complaint, and `npm pack --dry-run` did not validate the name
+  either (it wrote `pack*-1.0.0.tgz`). All that stands between this loop and a corrupted filter is
+  that the fifteen members happen to be named `@waitron/<lowercase-and-hyphens>` — a property of
+  today's manifests, which is the argument the `eval` version was defended with. Hence a guard.
+
 - **A scoped `pnpm` run that selects nothing REPORTS SUCCESS.** Two different ways, both on stdout,
   both exit **0**, both measured in this workspace on 2026-08-01 (pnpm 9.15.0):
   `pnpm --filter "@waitron/nope" test:coverage` prints `No projects matched the filters in "…"`, and
@@ -217,10 +256,16 @@ Traps that each cost a round trip (deliberately uncounted — the last version o
   cost a real defect — CI's whole `test-light` shard reporting green having executed nothing on a
   root-config pull request. Both gates now run
   `pnpm <the same filters> ls --depth -1 --json | node scripts/changed-packages.mjs runnable
-test:coverage` first, which refuses a selection that would run nothing; a member that deliberately
-  has no tests must be named in `PACKAGES_WITHOUT_TESTS` (`scripts/changed-scope.mjs`). The guard
-  reads the SELECTION, not pnpm's wording — a message that changes would switch a grep-based guard
-  off silently.
+test:coverage` first, which refuses a selection that would run nothing **unless every member of it
+  is declared test-less**, where it passes and says so instead. Measured on 2026-08-01:
+  `pnpm --filter "...@waitron/bench-pglite" --filter "!@waitron/db" ls --depth -1 --json | node
+scripts/changed-packages.mjs runnable test:coverage` exits **0** with
+  `nothing to run: no tests declared in @waitron/bench-pglite, by design`. So a member that
+  deliberately has no tests must be named in `PACKAGES_WITHOUT_TESTS` (`scripts/changed-scope.mjs`),
+  and a green from this guard still does not imply a test ran — only that nobody added a package
+  that quietly runs none. (`.husky/pre-push` states it with that qualifier; this entry dropped it,
+  which is how a guard gets cited for more than it does.) The guard reads the SELECTION, not pnpm's
+  wording — a message that changes would switch a grep-based guard off silently.
 - **The workspace root is outside `pnpm -r`, so root config is linted and never typechecked.**
   `pnpm typecheck` is `pnpm -r typecheck`, and `pnpm -r exec node -e "console.log(process.cwd())"`
   visits the fifteen workspace members and never the root; there is no root `tsconfig.json` either,
@@ -451,10 +496,14 @@ never opened, so whenever `include` points anywhere dot-prefixed, read the per-f
 the exit code.
 
 That workaround is **gone from the tree** as of 2026-08-01: both classifiers moved to `scripts/`,
-nothing measured is dot-prefixed any more, and the root config now carries no `exclude` at all
-(measured there, in both directions, that an explicit one would be dead config). The trap is a
-property of Vitest's defaults, not of that config, so it is waiting for the next `include` that
-points inside a dot-directory.
+nothing measured is dot-prefixed any more, and the root config now carries no `exclude` at all —
+measured there rather than reasoned about, in three spellings that all printed the identical two-row
+table at 100/100/100/100: no `exclude` key, `exclude: []`, and `exclude: ["**/*.test.mjs"]`. So an
+explicit one would be dead config _here_, where `include` already narrows to two files. Three
+spellings is not "both directions", which an earlier version of this sentence called it: every one of
+those runs pointed the same way, and a control would need a config where the `exclude` does change
+the table. The trap is a property of Vitest's defaults, not of that config, so it is waiting for the
+next `include` that points inside a dot-directory.
 
 **`errors.reachability.test.ts` does not test reachability.** The rule it exists to enforce is real —
 an `errors.ts` unreachable from its package's own barrel is invisible to external consumers — but the

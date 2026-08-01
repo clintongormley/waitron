@@ -219,11 +219,13 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   `grep` outside an `if` kills the script silently mid-gate — the hook's own header records that
   measurement.
 
-  **Four known gaps. Three are the honest answer, one is a follow-up** — gap 4 was closed on
-  2026-08-01 and is kept here because what replaced it is a rule someone has to know about. The
-  hook's header states the last three in its "NOT RUN HERE" list rather than leaving them for a
-  reader to discover; the first is a cost rather than a gap in what runs, and the header's SCOPING
-  paragraph covers it.
+  **Four entries below. Two are the honest answer (1 and 2), one is a follow-up (3), and the fourth
+  is closed** — gap 4 was closed on 2026-08-01 and is kept here because what replaced it is a rule
+  someone has to know about. (An earlier version of this line counted three honest answers and a
+  follow-up, which is four live gaps — while the fourth entry it was counting says in its own first
+  words that it is closed.) The hook's header states the last three in its "NOT RUN HERE" list
+  rather than leaving them for a reader to discover; the first is a cost rather than a gap in what
+  runs, and the header's SCOPING paragraph covers it.
 
   1. A `global` push — root config, `.github/`, `.husky/`, `scripts/`, the lockfile — runs
      `pnpm test:coverage` for the whole workspace, which is the 116s in the row above. The heaviest

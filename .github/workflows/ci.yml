@@ -151,9 +151,21 @@ jobs:
           # Its reason goes to stderr, so it lands in this job's log rather than in $GITHUB_OUTPUT.
           #
           # `set -e` is what makes a classifier that cannot run FAIL this step rather than quietly
-          # emit nothing. Both directions are safe — an empty `scope` is not the literal `packages`,
-          # so every branch below falls through to running everything — but a step that fails is a
-          # step somebody reads.
+          # emit nothing, and it is load-bearing for ONE of the three outputs rather than a nicety
+          # for all of them. An empty `scope` would be safe: it is not the literal `packages`, so
+          # every branch below falls through to running everything. An empty `code` would NOT be —
+          # all six gated jobs test `needs.changes.outputs.code == 'true'` (bundle-smoke, typecheck,
+          # both test shards, both mutation runs), so an empty value skips every one of them, and
+          # the `ci` aggregate counts a skip as a pass by design. That is a green pull request with
+          # nothing run.
+          #
+          # It cannot happen today, and here is the code that says so rather than an impression:
+          # `formatScope` (scripts/changed-packages.mjs) builds `code=` from
+          # `kind !== "documentation"`, a boolean that always renders, and `scopeForPaths` always
+          # returns a `kind` — so a node that exits 0 always emits the line. A node that exits
+          # NON-zero is caught by `set -o pipefail` plus `set -e` on the `out=$(…)` assignment
+          # below, which fails the step. Both halves have to hold; neither is a property of this
+          # shell script alone.
           out=$(printf '%s\n' "$paths" | node scripts/changed-packages.mjs)
           code=$(printf '%s\n' "$out" | sed -n 's/^code=//p')
           scope=$(printf '%s\n' "$out" | sed -n 's/^scope=//p')
@@ -208,11 +220,32 @@ jobs:
             node scripts/changed-scope.mjs --unscoped >> "$GITHUB_OUTPUT"
           else
             # The filters are accumulated as POSITIONAL PARAMETERS rather than concatenated into a
-            # string for `eval`, exactly as .husky/pre-push does: the `for` word-splits on the
-            # single space the classifier emits, but nothing re-parses the result, so a quote, a
-            # `$`, a backtick or a glob in a package name reaches pnpm literally.
+            # string for `eval`, exactly as .husky/pre-push does. That removes the SECOND shell
+            # pass, so a quote, a `$` or a backtick in a package name reaches pnpm literally — but
+            # it leaves the FIRST one: `$PACKAGES` is unquoted here on purpose (the classifier
+            # separates names with a single space), and an unquoted expansion undergoes PATHNAME
+            # EXPANSION as well as field splitting. `set -f` turns that off for the loop and
+            # `set +f` turns it back on; the receipt, run in three shells including bash 5.3.15, is
+            # in .husky/pre-push beside the same loop.
+            #
+            # It matters more here than in the hook, because here NOTHING catches it. Measured end
+            # to end on 2026-08-01 in a throwaway pnpm workspace holding a member named `pack*`:
+            # the rewritten filters `--filter "...package.json" --filter "...packages"` make
+            # `pnpm ls --depth -1 --json` print zero bytes on both streams at exit 0, and piping
+            # that into `node scripts/changed-scope.mjs` prints
+            # `heavy=false light=false verifactu=false shared=false` — because `packagesInScope("")`
+            # is the empty Set, the DEFINITE answer "nothing matched", not the `null` that fails
+            # closed. With all four scope gates false, both test shards and both mutation jobs skip
+            # — every job in this file that runs a test — while `bundle-smoke` and `typecheck` still
+            # run, because they gate on `code` alone. `ci` counts a skip as a pass by design, so
+            # that is a green pull request whose tests never ran.
+            #
+            # The hook's version of this loop is followed by a "scope is runnable" step, which
+            # exits 1 when the corrupted name was the whole scope. This job has no equivalent.
+            set -f
             set --
             for pkg in $PACKAGES; do set -- "$@" --filter "...$pkg"; done
+            set +f
 
             # stderr is deliberately NOT discarded: only stdout is piped, so anything pnpm says goes
             # to the job log where it can be read, and cannot reach the classifier. An earlier
@@ -550,10 +583,14 @@ jobs:
           TESTCONTAINERS_RYUK_DISABLED: "true"
         run: |
           set -euo pipefail
+          # `set -f` for the same reason as the `changes` job's gates step: `$PACKAGES` is unquoted
+          # so it field-splits, and an unquoted expansion globs too. Restored immediately after.
+          set -f
           set --
           if [ "$SCOPE" = "packages" ] && [ -n "$PACKAGES" ]; then
             for pkg in $PACKAGES; do set -- "$@" --filter "...$pkg"; done
           fi
+          set +f
           set -- "$@" --filter "!@waitron/db"
 
           pnpm "$@" ls --depth -1 --json \
