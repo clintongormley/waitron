@@ -78,6 +78,7 @@ jobs:
       scope: ${{ steps.classify.outputs.scope }}
       packages: ${{ steps.classify.outputs.packages }}
       heavy: ${{ steps.gates.outputs.heavy }}
+      ui: ${{ steps.gates.outputs.ui }}
       light: ${{ steps.gates.outputs.light }}
       verifactu: ${{ steps.gates.outputs.verifactu }}
       shared: ${{ steps.gates.outputs.shared }}
@@ -186,18 +187,18 @@ jobs:
             echo "packages=$packages"
           } >> "$GITHUB_OUTPUT"
 
-      # Which gated jobs have anything to do? Four today — both test shards and the two mutation
-      # runs — and none of them CAN be expressed as a filter on the job itself; see gateOutputs' own
-      # comment for the two wrong formulations and why each fails.
+      # Which gated jobs have anything to do? Five today — all three test shards and the two
+      # mutation runs — and none of them CAN be expressed as a filter on the job itself; see
+      # gateOutputs' own comment for the two wrong formulations and why each fails.
       #
-      # Three of the four ask whether one named package is in the resolved scope. `light` does not:
-      # test-light's own filter SUBTRACTS @waitron/db, so it has work when the scope holds a package
-      # that is neither db nor one of the members with no test script — which is why a gate is a
-      # predicate over the scope rather than a package name. See SCOPE_GATES in
-      # scripts/changed-scope.mjs.
+      # Four of the five ask whether one named package is in the resolved scope. `light` does not:
+      # test-light's own filters SUBTRACT every package that has a shard of its own, so it has work
+      # when the scope holds a package that is neither one of those nor one of the members with no
+      # test script — which is why a gate is a predicate over the scope rather than a package name.
+      # See SCOPE_GATES and OWN_SHARD_PACKAGES in scripts/changed-scope.mjs.
       #
-      # ONE `pnpm ls` for all four. Not mainly for the time — measured locally, the query is 0.20s
-      # against the node script's 0.04s, so four of them would cost well under a second — but
+      # ONE `pnpm ls` for all five. Not mainly for the time — measured locally, the query is 0.20s
+      # against the node script's 0.04s, so five of them would cost well under a second — but
       # because all four gates are answers about the SAME resolved scope. Resolving it once makes
       # them consistent by construction, and keeps this step from growing a stanza per gated job.
       #
@@ -235,12 +236,17 @@ jobs:
             # the rewritten filters `--filter "...package.json" --filter "...packages"` make
             # `pnpm ls --depth -1 --json` print zero bytes on both streams at exit 0, and piping
             # that into `node scripts/changed-scope.mjs` prints
-            # `heavy=false light=false verifactu=false shared=false` — because `packagesInScope("")`
-            # is the empty Set, the DEFINITE answer "nothing matched", not the `null` that fails
-            # closed. With all four scope gates false, both test shards and both mutation jobs skip
-            # — every job in this file that runs a test — while `bundle-smoke` and `typecheck` still
-            # run, because they gate on `code` alone. `ci` counts a skip as a pass by design, so
-            # that is a green pull request whose tests never ran.
+            # every gate false — because `packagesInScope("")` is the empty Set, the DEFINITE answer
+            # "nothing matched", not the `null` that fails closed. Re-run on 2026-08-01 against the
+            # tree as it now stands, `printf '' | node scripts/changed-scope.mjs` prints
+            # `heavy=false ui=false light=false verifactu=false shared=false` on stderr and the same
+            # five lines on stdout, exit 0. (The pnpm half of that end-to-end run is quoted above
+            # and is unaffected by adding a gate; only the line COUNT here moved, which is why this
+            # half was re-measured rather than re-worded.) With every scope gate false, all three
+            # test shards and both mutation jobs skip — every job in this file that runs a test —
+            # while `bundle-smoke` and `typecheck` still run, because they gate on `code` alone.
+            # `ci` counts a skip as a pass by design, so that is a green pull request whose tests
+            # never ran.
             #
             # The hook's version of this loop is followed by a "scope is runnable" step, which
             # exits 1 when the corrupted name was the whole scope. This job has no equivalent.
@@ -506,17 +512,93 @@ jobs:
             | node scripts/changed-packages.mjs runnable test:coverage
           pnpm --filter "@waitron/db" test:coverage
 
-  # Everything except packages/db. --no-sort removes the dependency ordering, which earns nothing
-  # for tests: all 15 workspace members resolve to ./src/*.ts and no test imports a sibling's dist/,
-  # so nothing here consumes a build artefact. (`build` DOES need the ordering — this flag is on the
-  # test invocation only.)
+  # packages/ui alone, and the only job in this file that needs a browser.
+  #
+  # It was part of test-light until 2026-08-01, when that shard HUNG on it twice — the receipts, and
+  # what they do and do not establish, are on UI_PACKAGE in scripts/changed-scope.mjs. In short:
+  # both times Chromium had installed, the other twelve packages finished, @waitron/ui printed
+  # passing test files and then stopped, and the runner named `chrome-headless-shell` among the
+  # orphan processes it killed at cancellation. Whether isolating it FIXES that can only be read off
+  # future runs; nothing here demonstrates it.
+  #
+  # What isolating it does buy with certainty is that a wedged browser can no longer take twelve
+  # other packages' results down with it — before this, the whole shard reported nothing.
+  #
+  # No REQUIRE_DOCKER and no TESTCONTAINERS_RYUK_DISABLED, unlike the other two shards: packages/ui
+  # drives Chromium through Playwright and touches no database. Checked rather than assumed —
+  # `grep -rn REQUIRE_DOCKER packages apps scripts` on 2026-08-01 answers only in packages/db (its
+  # harness, its suites and its README) and in the two workflows that set it, and `packages/ui`'s
+  # only runtime dependency is `lit`.
+  test-ui:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.ui == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Resolve installed Playwright version
+        id: playwright-version
+        run: echo "version=$(pnpm --filter @waitron/ui exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      # `pnpm exec` at the repo root does not resolve a bin scoped to a workspace member (only
+      # `pnpm -w exec` walks up for root-level bins), so plain `pnpm exec playwright ...` fails here
+      # with "Command \"playwright\" not found". Scoping the exec to the @waitron/ui workspace
+      # (where playwright is a devDependency) resolves it correctly without needing a
+      # working-directory override.
+      #
+      # Always run, cache hit or not: Playwright's own install logic detects a matching browser
+      # binary already present under the cached ~/.cache/ms-playwright and skips re-downloading it,
+      # but the `--with-deps` OS package install still needs to happen every run — GitHub-hosted
+      # runners start from a clean VM each time, so apt state is never part of what actions/cache
+      # restored above.
+      - run: pnpm --filter @waitron/ui exec playwright install --with-deps chromium
+
+      # The guard first, for the same reason as the other two shards: pnpm answers "nothing to do"
+      # with exit 0 and a line on stdout, so a shard whose filter selects nothing reports success
+      # having run no tests.
+      - name: Run the ui shard
+        run: |
+          set -euo pipefail
+          pnpm --filter "@waitron/ui" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:coverage
+          pnpm --filter "@waitron/ui" test:coverage
+
+  # Everything except the packages that have a shard of their own. --no-sort removes the dependency
+  # ordering, which earns nothing for tests: all 15 workspace members resolve to ./src/*.ts and no
+  # test imports a sibling's dist/, so nothing here consumes a build artefact. (`build` DOES need
+  # the ordering — this flag is on the test invocation only.)
+  #
+  # NO PLAYWRIGHT STEPS. @waitron/ui was the only Chromium consumer in this shard's selection and it
+  # now has test-ui; the three steps that resolved, cached and installed the browser moved there
+  # with it. What that saves, read off the two shard logs with
+  # `gh api repos/clintongormley/waitron/actions/jobs/<id>/logs` on 2026-08-01: the
+  # `playwright install --with-deps chromium` step spanned 08:44:29→08:44:41 in run 30692329110's
+  # test-light and 11:18:31→11:18:43 in run 30697414129's — about 12s each, plus the two steps
+  # before it. Both figures are cache-warm; a cold cache also downloads the browser.
   test-light:
     needs: changes
-    # `light` is not a membership gate like the other three: the step below subtracts @waitron/db
-    # from the scope, so this job has work when the resolved scope holds a package that is neither
-    # db nor one of the members that declare no `test:coverage` script (PACKAGES_WITHOUT_TESTS —
-    # today just @waitron/bench-pglite, which is why a bench-only pull request skips this job
-    # instead of provisioning a runner to select nothing).
+    # `light` is not a membership gate like the other four: the step below subtracts every package
+    # in OWN_SHARD_PACKAGES from the scope, so this job has work when the resolved scope holds a
+    # package that is neither one of those nor one of the members that declare no `test:coverage`
+    # script (PACKAGES_WITHOUT_TESTS — today just @waitron/bench-pglite, which is why a bench-only
+    # pull request skips this job instead of provisioning a runner to select nothing).
     #
     # It gated on `code` alone until this was added, which meant a code change touching no package
     # at all still got a runner. Read off run 30653487133 (`gh run view 30653487133 --json jobs`):
@@ -543,39 +625,19 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Resolve installed Playwright version
-        id: playwright-version
-        run: echo "version=$(pnpm --filter @waitron/ui exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-
-      # Only this shard needs a browser — @waitron/ui is the sole Chromium consumer, and test-heavy
-      # pays nothing for it.
-      #
-      # `pnpm exec` at the repo root does not resolve a bin scoped to a
-      # workspace member (only `pnpm -w exec` walks up for root-level bins),
-      # so plain `pnpm exec playwright ...` fails here with "Command
-      # \"playwright\" not found". Scoping the exec to the @waitron/ui
-      # workspace (where playwright is a devDependency) resolves it
-      # correctly without needing a working-directory override.
-      #
-      # Always run, cache hit or not: Playwright's own install logic detects
-      # a matching browser binary already present under the cached
-      # ~/.cache/ms-playwright and skips re-downloading it, but the
-      # `--with-deps` OS package install still needs to happen every run —
-      # GitHub-hosted runners start from a clean VM each time, so apt state
-      # is never part of what actions/cache restored above.
-      - run: pnpm --filter @waitron/ui exec playwright install --with-deps chromium
-
       # Exclusions SUBTRACT from the scoped set rather than being OR-ed with it — measured on
       # 2026-08-01 in this workspace: `--filter "...@waitron/db"` gives 11 packages and adding
       # `--filter "!@waitron/db"` gives the same 11 minus db, in either order (the two orderings
       # printed the identical ten names). That is what makes this shard "the scoped set, minus what
-      # test-heavy already ran".
+      # the dedicated shards already ran".
+      #
+      # One exclusion per package in OWN_SHARD_PACKAGES (scripts/changed-scope.mjs), and
+      # scripts/ci-workflow.test.mjs asserts these two lists are the same set — hand-editing one
+      # without the other either drops a package from every shard or runs it in two. On a GLOBAL
+      # scope these are the only filters, and what they select was read back from pnpm itself on
+      # 2026-08-01: `pnpm --filter "!@waitron/db" --filter "!@waitron/ui" prepare` reports
+      # `Scope: 13 of 16 workspace projects` — the 15 members minus those two, the 16th being the
+      # workspace root, which pnpm lists but never runs a script for.
       #
       # `scope=global` — main, an unattributable path, a diff we could not work out — leaves the
       # positional parameters empty and runs the whole workspace minus db, which is the
@@ -603,6 +665,7 @@ jobs:
           fi
           set +f
           set -- "$@" --filter "!@waitron/db"
+          set -- "$@" --filter "!@waitron/ui"
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
@@ -707,6 +770,7 @@ jobs:
       - bundle-smoke
       - typecheck
       - test-heavy
+      - test-ui
       - test-light
       - mutation-verifactu
       - mutation-shared

@@ -347,27 +347,65 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   `test-light` step exit **1** naming it, and deleting each of the four new checks in turn failed
   the tests written for it.
 
+  **Dated pointer, 2026-08-01:** the table above measured the TWO-shard arrangement and its numbers
+  no longer hold — `packages/ui` was split into a `test-ui` shard later the same day (see the
+  `packages/ui` hang entry below). Left as written rather than restated, because it is the record of
+  what that verification run actually produced. Under three shards the `test-light selects` column
+  drops by one everywhere it says 13, and the `packages/ui/src/index.ts` row changes shape rather
+  than degree: `test-ui` RUNS and `test-light` is **skipped** outright, because `light` now means
+  "the scope holds a package with no shard of its own" and a ui-only scope holds none.
+
   **Verified on real GitHub Actions**, run `30692329110` on
   [#32](https://github.com/clintongormley/waitron/pull/32) (`fix/ci-scope-fail-open`, merged as
   `6d30ed2`) — which touches only root-level paths, so it is exactly the shape that used to run
   nothing. `changes` printed `scope=global`, and `test-heavy` (3m30s), `mutation-verifactu` (3m28s)
   and `mutation-shared` (56s) all **ran**. Under the mechanism this replaces, all three would have
   been skipped
-- **`packages/ui` hung the whole-workspace `test-light` shard once, on 2026-08-01, and it has not
-  recurred.** Recorded rather than ruled a flake, because
-  [#32](https://github.com/clintongormley/waitron/pull/32) makes the shard it hung in run far more
-  often. Attempt 1 of run `30692329110`: twelve of the thirteen packages finished — the last
-  was `packages/payments` at 08:47:36 — and then nothing at all was printed for **25 minutes**, until
-  the run was cancelled at 09:13:20. The one package that never reported was `packages/ui`, the only
-  Chromium/Playwright suite; its `playwright install --with-deps chromium` step had already
-  succeeded. Attempt 2, same commit, same command: **3m58s, green**.
-  `pnpm --filter "!@waitron/db" --no-sort test:coverage` starts all thirteen at once, several of them
-  spinning up their own Testcontainers Postgres, so a browser suite is the plausible loser under
-  contention — plausible, not measured, and one occurrence is not a shape (`CLAUDE.md` §7). What
-  makes it worth a line: before this fix a root-config pull request ran none of that shard, so the
-  fix increases exposure to whatever this is. If it recurs, the shape to reach for is giving
-  `packages/ui` its own shard rather than dropping `--no-sort`, since the sort order is what §1.1 of
-  the design measured as pure cost
+- **`packages/ui` hung the whole-workspace `test-light` shard TWICE, on 2026-08-01. Mitigated the
+  same day by giving it its own `test-ui` shard — but the mitigation is unproven and can only be
+  judged from future runs.** The previous version of this entry recorded one occurrence, declined to
+  call it a shape, and named the fix to reach for if it recurred. It recurred, and that is the fix.
+
+  **Both runs, read back with `gh api repos/clintongormley/waitron/actions/runs/<id>/…` rather than
+  `gh run view --json`, which reports only the LATEST attempt and shows the first of these as a
+  success:**
+
+  | Run | Pull request | `test-light` | Outcome |
+  | --- | --- | --- | --- |
+  | `30692329110` attempt 1 | [#32](https://github.com/clintongormley/waitron/pull/32), head `e695a44` | 08:44:09 → 09:13:22 | cancelled after ~29m |
+  | `30697414129` | [#35](https://github.com/clintongormley/waitron/pull/35), head `add4097` | 11:18:11 → 11:38:08 | cancelled after ~20m |
+
+  **What the two job logs agree on, and it is more than the first entry had.** In both,
+  `playwright install --with-deps chromium` had already finished — its step group closed and the
+  next step opened, 08:44:29→08:44:41 and 11:18:31→11:18:43 — so it is not the install. In both,
+  exactly **twelve** packages printed `test:coverage: Done` and `packages/ui` was the only selected
+  package that never did. In both, `packages/ui` got *part* way: it printed individual passing test
+  files and then stopped, last output 08:47:04 and 11:21:23. And in both, the runner's shutdown
+  named **`chrome-headless-shell`** among the orphan processes it had to terminate — so the browser
+  was still alive, and still attached, when the job was killed. Attempt 2 of the first run, same
+  commit, went green in 3m58s.
+
+  **What is still NOT measured: the cause.** `pnpm --filter "!@waitron/db" --no-sort test:coverage`
+  started thirteen packages at once, several spinning up their own Testcontainers Postgres, so
+  contention starving a browser suite remains the plausible story — plausible, not demonstrated.
+  Nothing establishes that isolating `packages/ui` removes it, and a shard of its own would not help
+  at all if the cause is internal to that suite. **Treat this as open until several `test-ui` runs
+  have passed**; if it hangs there too, the cause is in the suite and the next thing to reach for is
+  a per-test timeout and a Playwright trace, not more isolation.
+
+  **What the split does buy with certainty**, whatever the cause: a wedged browser can no longer
+  take twelve other packages' results down with it, and `test-light` no longer resolves, caches or
+  installs Chromium at all — about 12s of cache-warm install per run, plus the two steps before it,
+  read off the two job logs above. Giving it its own shard rather than dropping `--no-sort`, because
+  §1.1 of the design measured the sort order as pure cost.
+
+  **The guard that came with it**, because splitting a shard is where a package silently stops being
+  tested: `scripts/ci-workflow.test.mjs` extracts every shard's real `--filter` arguments from
+  `ci.yml`, hands them to the real `pnpm ls`, and asserts the three shards cover every member
+  declaring `test:coverage` **exactly once** — none twice, none falling through. It also asserts
+  every job appears in `ci`'s `needs`, and that every `SCOPE_GATES` entry is both declared as a
+  `changes` output and read by some job's `if:`. Proven by deletion in five directions; deleting the
+  `test-ui` job alone fails it with `expected [ '@waitron/ui' ] to deeply equal []`
 - **CLOSED, 2026-08-01 — the sign-off (DCO) check is one script both gates call.** It was two
   byte-identical copies of `grep -qiE '^Signed-off-by: .+ <.+@.+>'` and of the loop around it, in
   `.husky/pre-push`'s `check_signoff` and `licence.yml`'s `dco` job. Now `scripts/check-signoff.sh`:
@@ -413,10 +451,12 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   why the docs gate and the scoping are two separate decisions
 - **`test-light` reports `success` without saying what it ran.** The larger half of this entry is
   **done**: the shard now gates on a `light` boolean emitted from the `changes` job's existing
-  single `pnpm ls`, so a resolved scope that is empty, or that holds nothing but `@waitron/db`,
-  skips it instead of provisioning a runner, running `pnpm install` and
-  `playwright install --with-deps chromium` before finding nothing to do — 48s of run
-  `30653487133` (18:01:36 → 18:02:24, its longest job) for zero test execution. What is **still
+  single `pnpm ls`, so a resolved scope that is empty, or that holds nothing but packages with a
+  shard of their own (`OWN_SHARD_PACKAGES` — `@waitron/db` and, since the split below,
+  `@waitron/ui`), skips it instead of provisioning a runner and running `pnpm install` before
+  finding nothing to do — 48s of run `30653487133` (18:01:36 → 18:02:24, its longest job) for zero
+  test execution. That run's 48s included a `playwright install --with-deps chromium`, which
+  `test-light` no longer does at all; the browser steps moved to `test-ui`. What is **still
   open** is the reporting half: a `test-light` that ran two packages and one that ran the whole
   workspace both report `success`, and only the step log tells them apart. **The `@waitron/bench-pglite`
   half of this entry is closed** (2026-08-01): the `light` gate now discounts every member listed in

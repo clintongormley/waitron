@@ -52,6 +52,46 @@ export function classify(paths) {
 export const HEAVY_PACKAGE = "@waitron/db";
 
 /**
+ * The package the `test-ui` shard exists for: the workspace's only Chromium consumer.
+ *
+ * It is split out because `test-light` HUNG on it, twice, reproducibly enough to name both runs.
+ * Read back on 2026-08-01 with `gh api repos/clintongormley/waitron/actions/runs/<id>/…`:
+ *
+ *   run 30692329110 attempt 1 (PR #32, head e695a44)   test-light 08:44:09 → cancelled 09:13:22
+ *   run 30697414129 (PR #35, head add4097)             test-light 11:18:11 → cancelled 11:38:08
+ *
+ * Both jobs' logs tell the same story: `playwright install --with-deps chromium` had already
+ * finished (the step's group closed and the next step opened, 08:44:29→08:44:41 and
+ * 11:18:31→11:18:43), TWELVE packages printed `test:coverage: Done`, and `@waitron/ui` printed
+ * individual passing test files and then stopped — last output 08:47:04 and 11:21:23, roughly 26
+ * and 17 minutes before the cancellation. In BOTH, the runner's shutdown named
+ * `chrome-headless-shell` among the orphan processes it had to terminate. Attempt 2 of the first
+ * run, same commit, went green in 3m58s, so it is intermittent rather than a hard break.
+ *
+ * What that does NOT establish is the CAUSE. Nothing here proves contention between the thirteen
+ * packages `test-light` starts at once is what wedged Chromium, and a shard of its own is therefore
+ * a mitigation whose effect can only be read off future runs — not something this file's presence
+ * demonstrates. docs/backlog.md carries it as such.
+ */
+export const UI_PACKAGE = "@waitron/ui";
+
+/**
+ * The packages that have a test shard to themselves — the set `test-light` subtracts.
+ *
+ * ONE list rather than a name per gate, because `light` is defined against it: a package added here
+ * without a shard of its own stops being tested altogether, and a shard added without an entry here
+ * runs its package twice. `scripts/ci-workflow.test.mjs` checks both directions against ci.yml's
+ * real `--filter` arguments and the real workspace, so neither drift can land silently.
+ *
+ * `light` used to read "the scope holds something other than HEAVY_PACKAGE", which was the same
+ * sentence as this list while the list had one entry. Generalising it rather than special-casing a
+ * second name is what stops a scope of exactly {@waitron/ui} answering `light=true` — a runner and
+ * a `pnpm install` for a selection that would then contain nothing to run, which is the shape the
+ * `runnable` guard in scripts/changed-packages.mjs was added to refuse.
+ */
+export const OWN_SHARD_PACKAGES = [HEAVY_PACKAGE, UI_PACKAGE];
+
+/**
  * Workspace members that deliberately declare no `test:coverage` script.
  *
  * A member listed here contributes nothing to a test shard, so the `light` gate below discounts it
@@ -67,11 +107,12 @@ export const HEAVY_PACKAGE = "@waitron/db";
  */
 export const PACKAGES_WITHOUT_TESTS = ["@waitron/bench-pglite"];
 
-/** A gate that fires when one named package is in the resolved scope — three of the four. */
+/** A gate that fires when one named package is in the resolved scope — four of the five. */
 const membership = (packageName) => (inScope) => inScope.has(packageName);
 
-/** True when this package would give a test shard something to actually run. */
-const runsTests = (name) => name !== HEAVY_PACKAGE && !PACKAGES_WITHOUT_TESTS.includes(name);
+/** True when this package would give the LIGHT shard something to actually run. */
+const runsTests = (name) =>
+  !OWN_SHARD_PACKAGES.includes(name) && !PACKAGES_WITHOUT_TESTS.includes(name);
 
 /**
  * Every gated job, as a predicate over the resolved scope, in the order the CLI emits them.
@@ -83,16 +124,20 @@ const runsTests = (name) => name !== HEAVY_PACKAGE && !PACKAGES_WITHOUT_TESTS.in
  * change at all, however far from `packages/verifactu` or `packages/shared`. That made mutation the
  * critical path for the common case, which is most of what the scoping was for.
  *
- * `light` joined them for the same kind of reason and is the one gate that is NOT membership of a
- * named package, which is why an entry holds a PREDICATE rather than a package name. test-light
- * runs one `--filter "...<pkg>"` per changed package plus `--filter "!@waitron/db"`, so it has work
- * exactly when the resolved scope holds a package that both survives that subtraction and has a
- * `test:coverage` script to run — false when db is the whole of it, and false when the whole of it
- * is in PACKAGES_WITHOUT_TESTS. Read off run 30653487133 (`gh run view 30653487133 --json
- * jobs`): gated on `code` alone, test-light was that run's LONGEST job — 18:01:36 → 18:02:24, 48s
- * — and its "Run the light shard" step printed `None of the selected packages has a
- * "test:coverage" script`. A runner, a `pnpm install` and a `playwright install --with-deps
- * chromium` for zero test execution, reported as success.
+ * `ui` joined them on a reproducible CI HANG rather than on cost — see UI_PACKAGE above for both
+ * runs and what their logs do and do not show.
+ *
+ * `light` joined them for the same kind of reason as the mutation pair, and is the one gate that is
+ * NOT membership of a named package, which is why an entry holds a PREDICATE rather than a package
+ * name. test-light runs one `--filter "...<pkg>"` per changed package plus one `--filter "!<pkg>"`
+ * per entry in OWN_SHARD_PACKAGES, so it has work exactly when the resolved scope holds a package
+ * that both survives that subtraction and has a `test:coverage` script to run — false when the
+ * whole of it has shards of its own, and false when the whole of it is in PACKAGES_WITHOUT_TESTS.
+ * Read off run 30653487133 (`gh run view 30653487133 --json jobs`): gated on `code` alone,
+ * test-light was that run's LONGEST job — 18:01:36 → 18:02:24, 48s — and its "Run the light shard"
+ * step printed `None of the selected packages has a "test:coverage" script`. A runner, a `pnpm
+ * install` and a `playwright install --with-deps chromium` for zero test execution, reported as
+ * success.
  *
  * The `inScope === null` fail-closed case is NOT a gate's business: `gateOutputs` applies it before
  * calling any predicate, so a predicate only ever sees a real Set and cannot forget the check.
@@ -103,6 +148,7 @@ const runsTests = (name) => name !== HEAVY_PACKAGE && !PACKAGES_WITHOUT_TESTS.in
  */
 export const SCOPE_GATES = [
   { output: "heavy", covers: membership(HEAVY_PACKAGE) },
+  { output: "ui", covers: membership(UI_PACKAGE) },
   { output: "light", covers: (inScope) => [...inScope].some(runsTests) },
   { output: "verifactu", covers: membership("@waitron/verifactu") },
   { output: "shared", covers: membership("@waitron/shared") },

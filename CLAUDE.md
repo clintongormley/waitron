@@ -233,9 +233,13 @@ Traps that each cost a round trip (deliberately uncounted — the last version o
   nothing"): `--filter "...pack*"` selects that member and prints it, while
   `--filter "...package.json" --filter "...packages"` prints zero bytes on both streams at exit 0.
   In CI that zero-byte reading is the SILENT direction — `packagesInScope` reads it as the definite
-  empty set, not as the `null` that fails closed, so all four scope gates go false and both test
+  empty set, not as the `null` that fails closed, so every scope gate goes false and all three test
   shards and both mutation jobs skip while `bundle-smoke` and `typecheck` still run (they gate on
-  `code` alone), and `ci` counts a skip as a pass. The hook can catch it, but only when the
+  `code` alone), and `ci` counts a skip as a pass. (Re-measured on 2026-08-01 after `test-ui` was
+  split out of `test-light`: `printf '' | node scripts/changed-scope.mjs` prints
+  `heavy=false ui=false light=false verifactu=false shared=false`, exit 0. The count in this
+  paragraph was `four` and `both`, written when there were two shards — a receipt that a behaviour
+  change retires, §1.) The hook can catch it, but only when the
   corrupted name was the WHOLE scope: then the selection is empty and its "scope is runnable" step
   exits 1; with a surviving name beside it the run proceeds having quietly dropped one package.
 
