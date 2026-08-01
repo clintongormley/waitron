@@ -1,42 +1,37 @@
-import { coverageConfigDefaults, defineConfig } from "vitest/config";
+import { defineConfig } from "vitest/config";
 
 // The repo-level test project. Everything else lives in a package with its own config; this one
-// exists for code that belongs to no package — the CI classifier under `.github/scripts/`, and the
-// pre-push hook's own path-to-package classifier under `scripts/`.
+// exists for the code that belongs to no package: `scripts/`, which holds the two classifiers that
+// decide what CI and the pre-push hook run.
 export default defineConfig({
   test: {
     globals: true,
     // Scoped deliberately. Vitest's default include is `**/*.{test,spec}.?(c|m)[jt]s?(x)`, which
     // from the repo root sweeps up every package's suite and would run the whole workspace twice —
     // once here and once through `pnpm -r`.
-    include: [".github/scripts/**/*.test.mjs", "scripts/**/*.test.mjs"],
+    include: ["scripts/**/*.test.mjs"],
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary"],
-      // `include` and `exclude` both replace rather than merge, so the defaults are spread back in.
+      // `include` REPLACES the default rather than merging with it, so a directory that is not
+      // named here is not measured at all — and a coverage gate cannot fail on a file it never
+      // opened. Read the per-file table, not the exit code.
       //
-      // All of them except `**/[.]**`, which matches any dot-prefixed path segment and so excludes
-      // the whole of `.github/` — half the files this project exists to measure. Spreading the
-      // defaults verbatim was run first and measured nothing at all: `vitest run --coverage` printed
-      // `All files | 0 | 0 | 0 | 0`, wrote a coverage-summary.json whose every `pct` was
-      // `"Unknown"`, and exited 0 — the thresholds below passed without a line of source being
-      // read. Filtering that one entry out, the same command reports changed-scope.mjs at
-      // 100/100/100/100; appending an uncovered four-line function to it then reports 95.71% lines
-      // and 75% functions and exits 1, so the gate is measured in both directions rather than
-      // assumed.
+      // There is deliberately no `exclude`. The obvious one — the two `*.test.mjs` suites — would
+      // be dead config: measured on 2026-08-01 in three spellings, no `exclude` key at all,
+      // `exclude: []`, and `exclude: ["**/*.test.mjs"]`, `pnpm vitest run --coverage` printed the
+      // identical table every time — exactly `changed-packages.mjs` and `changed-scope.mjs` at
+      // 100/100/100/100, and no `*.test.mjs` row. Three spellings all pointing one way, NOT a
+      // measurement in both directions; a control would need an `exclude` that does change the
+      // table. (The first version of this comment asserted the opposite — that deleting the line
+      // would add two rows — and was written before it was run. CLAUDE.md §1.)
       //
-      // `scripts/` is not dot-prefixed and so was never caught by that entry — it is listed here
-      // only because `include` REPLACES the default rather than merging with it, so a directory
-      // that is not named is not measured. Checked in this workspace on 2026-07-31: with
-      // `scripts/**/*.mjs` absent from `include`, `vitest run --coverage` reports only
-      // `.github/scripts/changed-scope.mjs` and passes the thresholds below without reading a line
-      // of `scripts/changed-packages.mjs`.
-      include: [".github/scripts/**/*.mjs", "scripts/**/*.mjs"],
-      exclude: [
-        ...coverageConfigDefaults.exclude.filter((pattern) => pattern !== "**/[.]**"),
-        ".github/scripts/**/*.test.mjs",
-        "scripts/**/*.test.mjs",
-      ],
+      // Until 2026-08-01 this config DID need an `exclude`: it spread `coverageConfigDefaults`
+      // back in with `**/[.]**` filtered out, because the sources lived under `.github/scripts/`
+      // and that one default pattern excludes every dot-prefixed path segment — silently, at zero
+      // coverage and exit 0. Moving both classifiers to `scripts/` is what retired it; the lesson
+      // it left is in CLAUDE.md §4.
+      include: ["scripts/**/*.mjs"],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },
   },

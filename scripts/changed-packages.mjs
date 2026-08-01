@@ -1,39 +1,57 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { relative, resolve, sep } from "node:path";
-import { classify, isInertPath } from "../.github/scripts/changed-scope.mjs";
+import { join, relative, resolve, sep } from "node:path";
+import { PACKAGES_WITHOUT_TESTS, classify, isInertPath } from "./changed-scope.mjs";
 
-// Answers, in ONE call, the only question `.husky/pre-push` asks about a push's changed paths: is
-// this documentation, is it something that could reach anything, or is it a specific set of
-// packages? CI answers the package half with pnpm's own changed-since filter
-// (`--filter "...[origin/main]"`, ci.yml's `changes` job); this file exists because that filter
-// CANNOT be used here.
+// Answers, in ONE call, the only question either gate asks about a diff: is this documentation, is
+// it something that could reach anything, or is it a specific set of packages? BOTH gates ask it
+// here — `.husky/pre-push` about a push's range, ci.yml's `changes` job about a pull request's —
+// which is the point. Two mechanisms answering the same question is two mechanisms that can drift,
+// and the one CI used to run drifted in the silent direction; docs/backlog.md's entry on it has the
+// receipts.
 //
-// Run in both directions on 2026-07-31, pnpm 9.15.0, one commit touching `packages/db/README.md`
-// on top of `main`, and the identical two commands in each place:
+// pnpm's own changed-since filter is what CI ran, and it CANNOT be the shared mechanism, for two
+// independent reasons — the second is the defect, the first is why the hook never used it:
 //
-//   git diff --name-only main...HEAD          → packages/db/README.md   (both)
-//   pnpm --filter "...[main]" ls --depth -1 --json
-//     in a `git worktree add`ed checkout      → 0 bytes, exit 0
-//     in a plain `git clone` of the same repo → 2760 bytes, 11 packages
+//   1. It reports nothing in a `git worktree`. Run in both directions on 2026-07-31, pnpm 9.15.0,
+//      one commit touching `packages/db/README.md` on top of `main`, the identical two commands in
+//      each place:
 //
-// Zero bytes and exit 0 is the same output pnpm gives for a filter that matched nothing, so in a
-// worktree it reads as "no package is affected" rather than as an error, while git in the SAME
-// directory reports the changed path perfectly well. (Why pnpm's own change detection behaves
-// differently there was not established — only that it does.) Every branch in this repository is
-// developed in a `git worktree` (CLAUDE.md §6), so a hook built on that filter would narrow every
-// push to nothing and run no tests at all. Mapping paths to package directories ourselves is not a
-// reimplementation of pnpm's filter for its own sake: it is the only half of it that works here.
-// The OTHER half — expanding a changed package to its dependents — is still pnpm's, via the
-// `--filter "...<pkg>"` arguments the hook builds from this file's output.
+//        git diff --name-only main...HEAD          → packages/db/README.md   (both)
+//        pnpm --filter "...[main]" ls --depth -1 --json
+//          in a `git worktree add`ed checkout      → 0 bytes, exit 0
+//          in a plain `git clone` of the same repo → 2760 bytes, 11 packages
 //
-// The unit this works in is the package DIRECTORY, not the package graph: a path is attributed to
-// the innermost workspace member that contains it, and anything that lands outside every member is
-// GLOBAL — it could affect anything, so nothing may be narrowed away on account of it.
+//      Zero bytes and exit 0 is the same output pnpm gives for a filter that matched nothing, so in
+//      a worktree it reads as "no package is affected" rather than as an error, while git in the
+//      SAME directory reports the changed path perfectly well. (Why pnpm's own change detection
+//      behaves differently there was not established — only that it does.) Every branch in this
+//      repository is developed in a `git worktree` (CLAUDE.md §6).
+//
+//   2. It attributes a path belonging to NO workspace member — `tsconfig.base.json`,
+//      `pnpm-lock.yaml`, `.github/**` — to the workspace ROOT, which is a package that runs no
+//      tests. Run on 2026-08-01 in a `git clone --no-hardlinks` of this repository, one commit
+//      touching `tsconfig.base.json` on top of `main`: `pnpm --filter "...[main]" ls --depth -1
+//      --json` printed exactly one entry, `{"name": "waitron"}`. That is the WRONG DIRECTION for a
+//      gate — the change every package inherits, resolved to the narrowest possible scope.
+//
+// So the attribution is ours and it fails CLOSED. The unit it works in is the package DIRECTORY,
+// not the package graph: a path is attributed to the innermost workspace member that contains it,
+// and anything that lands outside every member is GLOBAL — it could affect anything, so nothing may
+// be narrowed away on account of it. The OTHER half — expanding a changed package to its
+// dependents — is still pnpm's, via the `--filter "...<pkg>"` arguments both callers build from
+// this file's output.
 
 /**
  * The workspace's members as `{name, dir}`, `dir` being relative to `repoRoot` — or `null` when the
- * input cannot be read, which every caller treats as a reason to run everything.
+ * input cannot be read.
+ *
+ * The two callers fail closed on that `null` in OPPOSITE directions, because "we could not read it"
+ * means different things to them. `scopeForPaths` runs everything. `scriptRunCheck` refuses:
+ * measured on 2026-08-01, `pnpm --filter "@waitron/nope" ls --depth -1 --json | node
+ * scripts/changed-packages.mjs runnable test:coverage` exits **1** with `the workspace layout could
+ * not be read` — the filter matched nothing, so pnpm printed zero bytes and this returned `null`.
+ * A guard that cannot tell whether a run happened must not report that one did.
  *
  * Input is the stdout of `pnpm ls -r --depth -1 --json`. Run in this worktree on 2026-07-31 that is
  * 16 entries: the fifteen workspace members plus the workspace ROOT, whose `name` is `waitron` and
@@ -41,7 +59,7 @@ import { classify, isInertPath } from "../.github/scripts/changed-scope.mjs";
  * a member's name is a manifest field anyone can change while its path is a fact about the tree.
  *
  * `null` and the empty array are deliberately different answers, the same distinction
- * `packagesInScope` keeps in .github/scripts/changed-scope.mjs: `null` is "we do not know", which
+ * `packagesInScope` keeps in scripts/changed-scope.mjs: `null` is "we do not know", which
  * `scopeForPaths` turns into a global run, while an empty array would be the definite answer
  * "this workspace has no members".
  *
@@ -101,10 +119,13 @@ export function workspacePackages(pnpmLsJson, repoRoot) {
 /**
  * The innermost workspace member containing `path`, or `undefined`.
  *
- * Innermost, not first: nothing in this workspace nests today (checked against
- * `pnpm ls -r --depth -1 --json` on 2026-07-31 — no member's directory is a prefix of another's),
- * but one line in pnpm-workspace.yaml would change that, and the failure would be silent in the
- * dangerous direction: the outer package's suite runs, the inner one's does not.
+ * Innermost, not first: no member's directory CONTAINS another's today — checked against
+ * `pnpm ls -r --depth -1 --json` on 2026-08-01, where no member's `dir + "/"` is a prefix of any
+ * other's. (Two dirs are bare string prefixes of a sibling — `packages/fiscal` of
+ * `packages/fiscal-verifactu`, `packages/payments` of `packages/payments-stripe` — which is exactly
+ * why the trailing slash below is not decoration.) One line in pnpm-workspace.yaml would make a
+ * real nesting, and the failure would be silent in the dangerous direction: the outer package's
+ * suite runs, the inner one's does not.
  *
  * The trailing slash is what makes this a directory test rather than a string-prefix test, and the
  * case it catches is narrower than it first looks. Established by deletion, twice. Against the
@@ -152,7 +173,7 @@ function owningPackage(path, packages) {
  * the thunk is untouched on both outcomes, so that is a tested property rather than a reading of
  * the control flow.
  *
- * DOCUMENTATION is decided by `classify` from .github/scripts/changed-scope.mjs — the same function
+ * DOCUMENTATION is decided by `classify` from scripts/changed-scope.mjs — the same function
  * CI's docs gate calls — and the per-path filter below by that module's `isInertPath`, so "what
  * counts as documentation" has exactly one definition and this cannot report code work and then
  * find no code path to attribute. Without the exception a global run would be the common case, not
@@ -210,45 +231,168 @@ export function scopeForPaths(changedPaths, loadPackages) {
 }
 
 /**
- * Renders a scope as the two lines the hook reads.
+ * Renders a scope as the three lines its two callers read.
+ *
+ * `code` is ci.yml's documentation gate — `bundle-smoke`, `typecheck`, both test shards and both
+ * mutation jobs are gated on it — and it is the SAME verdict as `kind === "documentation"`, which
+ * is why it is emitted from here rather than recomputed by the workflow's shell. ci.yml appends all
+ * three lines straight to `$GITHUB_OUTPUT`; the hook reads two of them with `sed` and ignores this
+ * one, because a documentation-only push is `scope=documentation` to it.
  *
  * A single space separates the package names, and that separator is the contract between this file
- * and the hook, asserted as such below. The hook still WORD-SPLITS this line — `for pkg in
+ * and its callers, asserted as such below. Both still WORD-SPLIT that line — `for pkg in
  * $scope_packages` — so a name containing whitespace would still come apart into two filters. What
- * changed is what happens after the split: each word is appended with `set -- "$@" --filter
- * "...$pkg"` rather than concatenated into a string for `eval`, so there is no second shell pass to
- * reinterpret a quote, a `$`, a backtick or a glob in a name.
+ * they do after the split is append each word with `set -- "$@" --filter "...$pkg"` rather than
+ * concatenating into a string for `eval`, so there is no second shell pass to reinterpret a quote,
+ * a `$` or a backtick in a name.
+ *
+ * A GLOB is not in that list, and an earlier version of this paragraph put it there. Dropping
+ * `eval` removes the second pass; it does not touch the first, and an unquoted expansion undergoes
+ * pathname expansion as well as field splitting. Both callers wrap their loop in `set -f` … `set
+ * +f` for that, which is the guard the sentence used to claim was unnecessary — receipts beside the
+ * loop in .husky/pre-push.
  */
 export function formatScope({ kind, packages }) {
-  return `scope=${kind}\npackages=${packages.join(" ")}`;
+  return `code=${kind !== "documentation"}\nscope=${kind}\npackages=${packages.join(" ")}`;
 }
 
-// CLI: changed paths on stdin, one per line → two `<name>=<value>` lines on stdout.
+/**
+ * Whether `pnpm <filters> <script>` will actually run something, given the `pnpm <the same filters>
+ * ls --depth -1 --json` result already read by `workspacePackages` — `{ok, reason}`.
+ *
+ * This exists because pnpm answers "nothing to do" with SUCCESS, in two different ways, both
+ * measured in this workspace on 2026-08-01 (pnpm 9.15.0), both on STDOUT and both exit **0**:
+ *
+ *   pnpm --filter "@waitron/nope" test:coverage          → No projects matched the filters in "…"
+ *   pnpm --filter "...@waitron/bench-pglite" test:cov…   → None of the selected packages has a
+ *                                                          "test:coverage" script
+ *
+ * A shard that printed either and reported green is the failure this branch exists to close: with
+ * `pnpm --filter "...[origin/main]"` resolving a root-config change to the workspace ROOT, the
+ * light shard's `pnpm --filter "waitron" --no-sort test:coverage` was the first of those. The
+ * message is not what is checked here — a wording change would silently switch the guard off, which
+ * is the quiet direction — the SELECTION is.
+ *
+ * Fails closed, which for a guard means the opposite of what it means in `scopeForPaths`: not
+ * knowing there means run everything, and not knowing here means refuse to claim anything ran. So
+ * an unreadable workspace, an unreadable manifest and an empty selection are all failures.
+ *
+ * `readScripts(dir)` returns that member's `scripts` object (`{}` if it declares none) or `null`
+ * when the manifest could not be read at all.
+ */
+export function scriptRunCheck(members, script, readScripts) {
+  if (members === null) {
+    return {
+      ok: false,
+      reason: `the workspace layout could not be read — cannot tell whether ${script} would run anything`,
+    };
+  }
+
+  if (members.length === 0) {
+    return {
+      ok: false,
+      reason: `no workspace member was selected — "${script}" would run nothing`,
+    };
+  }
+
+  const running = [];
+  const skipped = [];
+
+  for (const member of members) {
+    const scripts = readScripts(member.dir);
+    if (scripts === null) {
+      return { ok: false, reason: `${member.name}: ${member.dir}/package.json could not be read` };
+    }
+
+    if (scripts[script] !== undefined) running.push(member.name);
+    else if (PACKAGES_WITHOUT_TESTS.includes(member.name)) skipped.push(member.name);
+    else {
+      return {
+        ok: false,
+        reason:
+          `${member.name} is selected but declares no "${script}" script. Add one, or — if it ` +
+          `deliberately has no tests — add it to PACKAGES_WITHOUT_TESTS in scripts/changed-scope.mjs`,
+      };
+    }
+  }
+
+  if (running.length === 0) {
+    return {
+      ok: true,
+      reason: `nothing to run: no tests declared in ${skipped.join(", ")}, by design`,
+    };
+  }
+
+  const note =
+    skipped.length === 0 ? "" : ` (no tests declared in ${skipped.join(", ")}, by design)`;
+  return { ok: true, reason: `${running.length} selected package(s) declare "${script}"${note}` };
+}
+
+// CLI, two shapes:
 //
-// The workspace layout is resolved HERE rather than passed in, because the two inputs cannot share
-// stdin and threading a JSON document through argv or a temporary file buys nothing. A `pnpm ls`
-// that fails for any reason — not installed, not a workspace, killed — leaves `stdout` null or
-// empty, which `workspacePackages` reads as `null` and `scopeForPaths` turns into a global run.
+//   node scripts/changed-packages.mjs
+//     changed paths on stdin, one per line → three `<name>=<value>` lines on stdout.
+//   node scripts/changed-packages.mjs runnable <script>
+//     a `pnpm <filters> ls --depth -1 --json` result on stdin → nothing on stdout, and an EXIT CODE
+//     that is 1 when that selection would run no `<script>` at all. The exit code is the only part
+//     of it a shell step can act on, which is why this is a subcommand rather than a fourth line.
+//
+// In the DEFAULT shape the workspace layout is resolved HERE rather than passed in, because that
+// shape's own input is the changed paths and the two cannot share stdin; threading a JSON document
+// through argv or a temporary file buys nothing. (The `runnable` shape above is the other way round
+// — it IS handed a `pnpm <filters> ls` result on stdin, because the selection it must judge is one
+// pnpm already resolved.) A `pnpm ls` that fails for any reason — not installed, not a workspace,
+// killed — leaves `stdout` null or empty, which `workspacePackages` reads as `null` and
+// `scopeForPaths` turns into a global run.
 //
 // It runs `pnpm ls` from inside the thunk, so a documentation-only push never pays for it. That it
 // runs at all without `pnpm install` having happened first — the hook now classifies BEFORE
-// installing — was measured rather than assumed: in a `git clone --no-hardlinks` of the main
-// checkout, with no `node_modules` directory anywhere in it, `pnpm ls -r --depth -1 --json` exited 0
-// with 3917 bytes on stdout, nothing on stderr, and all 16 entries (2026-08-01, pnpm 9.15.0).
+// installing, and ci.yml's `changes` job never installs at all — was measured rather than assumed:
+// in a `git clone --no-hardlinks` of the main checkout, with no `node_modules` directory anywhere in
+// it, `pnpm ls -r --depth -1 --json` exited 0 with all 16 entries on stdout and nothing on stderr
+// (2026-08-01, pnpm 9.15.0). Deliberately not a byte count: that output is absolute paths, so it
+// moves with the checkout's location — the first version of this line said 3917 bytes and a
+// reviewer's clone gave 3885.
 //
-// stdout carries the two lines and NOTHING else: the hook reads it with `sed -n 's/^scope=//p'` and
-// `sed -n 's/^packages=//p'`, so a stray line that happened to carry either prefix would become a
-// bogus scope. The human-readable reason goes to stderr, where the hook prints it for whoever is
-// watching the push.
+// stdout carries the three lines and NOTHING else: ci.yml appends it straight to `$GITHUB_OUTPUT`
+// and the hook reads it with `sed -n 's/^scope=//p'` and `sed -n 's/^packages=//p'`, so a stray line
+// that happened to carry a prefix would become a bogus job output or a bogus scope. The
+// human-readable reason goes to stderr, where both print it for whoever is watching.
 //
 // Ignored for coverage because the tests run it in a CHILD process, and the v8 provider only
 // measures the module graph loaded into the test process — so this block reads as 0% however
 // thoroughly it is exercised. Ignored for being unmeasurable, not for being untested: delete the
-// `describe("the CLI")` suite and six assertions about this block go with it, including the only
-// two that run the real `pnpm ls` against the real workspace.
+// two `describe("… CLI")` suites and twelve `it()`s about this block go with it — six each,
+// counted on 2026-08-01 with `pnpm vitest run --reporter=verbose` — including the only ones that
+// run the real `pnpm ls` against the real workspace.
 /* v8 ignore start */
 if (process.argv[1] && process.argv[1].endsWith("changed-packages.mjs")) {
-  const scope = scopeForPaths(readFileSync(0, "utf8").split("\n"), () => {
+  const stdin = () => readFileSync(0, "utf8");
+
+  if (process.argv[2] === "runnable") {
+    const script = process.argv[3];
+    const check = scriptRunCheck(
+      workspacePackages(stdin(), process.cwd()),
+      script,
+      // `null` on ANY read failure — a missing directory, a manifest that is not JSON — because
+      // "we could not look" and "it declares nothing" are different answers and only one of them
+      // is a reason to let the run proceed.
+      (dir) => {
+        try {
+          return (
+            JSON.parse(readFileSync(join(process.cwd(), dir, "package.json"), "utf8")).scripts ?? {}
+          );
+        } catch {
+          return null;
+        }
+      },
+    );
+
+    console.error(`changed-packages: ${check.reason}`);
+    process.exit(check.ok ? 0 : 1);
+  }
+
+  const scope = scopeForPaths(stdin().split("\n"), () => {
     const ls = spawnSync("pnpm", ["ls", "-r", "--depth", "-1", "--json"], { encoding: "utf8" });
     return workspacePackages(ls.stdout ?? "", process.cwd());
   });

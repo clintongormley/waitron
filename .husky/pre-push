@@ -35,6 +35,10 @@
 #                                              so it runs on a documentation-only push.
 #   pnpm lint                       code       1681-1860ms (3 runs)
 #   pnpm typecheck                  code       scoped to the changed packages and their dependents
+#   scope is runnable               scoped     199-202ms (5 runs, `...@waitron/ui` scope) — one
+#                                              `pnpm <the same filters> ls` piped into node. Only on
+#                                              a scoped push. Refuses a scope that would run no test
+#                                              at all — see the step's own comment.
 #   pnpm test:coverage              code       ditto — and `test:coverage`, NOT `test`: CI's shards
 #                                              run coverage thresholds and a plain `pnpm test` does
 #                                              not, so a threshold regression used to pass here and
@@ -66,10 +70,11 @@
 #     appending a mis-formatted heading to CLAUDE.md made `prettier --check CLAUDE.md` print
 #     `[warn] CLAUDE.md` and exit 1.
 #
-# The classifier is scripts/changed-packages.mjs, which imports `classify` and `isInertPath` from
-# .github/scripts/changed-scope.mjs — the same functions CI's docs gate calls — so the two cannot
-# disagree about what documentation is. ONE invocation answers both questions this hook asks: is
-# this prose, and if not, what does it reach.
+# The classifier is scripts/changed-packages.mjs. ONE invocation answers both questions this hook
+# asks: is this prose, and if not, what does it reach. Since 2026-08-01 it is also the ONLY
+# mechanism — ci.yml's `changes` job runs this same script on the pull request's diff, where it used
+# to run pnpm's changed-since filter instead and skip every package's tests on a root-config change.
+# One tested code path rather than two that can drift; docs/backlog.md carries what the drift cost.
 #
 # SCOPING. That script maps the push's changed paths onto workspace packages; this hook turns each
 # into `--filter "...<pkg>"`, whose LEFT-hand ellipsis selects that package AND ITS DEPENDENTS
@@ -85,7 +90,9 @@
 # while `pnpm --filter "...[main]" ls --depth -1 --json` gave 2760 bytes and 11 packages in a plain
 # `git clone` and 0 bytes, exit 0 in a `git worktree` — indistinguishable from a filter that matched
 # nothing. All work in this repository happens in a worktree (CLAUDE.md §6), so a hook built on that
-# filter would narrow every push to nothing.
+# filter would narrow every push to nothing. CI ran in a clone, where that filter does work, and it
+# is gone from there too as of 2026-08-01 — for a different reason: it answers a path belonging to
+# no package with the workspace ROOT, which is narrower than the truth rather than wider.
 #
 # NOT RUN HERE, deliberately — so a green hook does NOT imply a green CI:
 #
@@ -116,13 +123,15 @@
 #     CLAUDE.md §2's "a filtered test run does not load a package's guard suites", one level up:
 #     the filter is now over PACKAGES rather than over test names. Recorded as a follow-up in
 #     docs/backlog.md; not fixed here.
-#   * ANY TEST AT ALL, when the scope holds only packages with no `test:coverage` script. Measured
-#     on 2026-08-01: `pnpm --filter "...@waitron/bench-pglite" test:coverage` prints `None of the
-#     selected packages has a "test:coverage" script` and exits 0, and the end-to-end hook run on a
-#     crafted `bench/pglite-throughput` push reported `all checks passed in 7s`. Honest today —
-#     that package deliberately has no tests (bench/pglite-throughput/README.md) — but nothing
-#     enforces a future member declaring the script. Same shape ci.yml already records for
-#     `test-light`. Also a docs/backlog.md follow-up.
+#   * ANY TEST AT ALL, when the scope holds only packages that declare no `test:coverage` script.
+#     Measured on 2026-08-01: `pnpm --filter "...@waitron/bench-pglite" test:coverage` prints `None
+#     of the selected packages has a "test:coverage" script` and exits 0. That is still true and
+#     still honest — @waitron/bench-pglite deliberately has no tests
+#     (bench/pglite-throughput/README.md) — but it is now DECLARED rather than assumed: the package
+#     is named in PACKAGES_WITHOUT_TESTS in scripts/changed-scope.mjs, and the "scope is runnable"
+#     step below fails on any other package that turns up with no such script. So a green hook still
+#     does not imply tests ran on such a push; it does imply nobody added a package that quietly
+#     runs none.
 #
 # In a hurry / hook is wrong? Bypass with: git push --no-verify
 # Please still fix the underlying failure — CI runs the same checks and will block the PR either
@@ -366,13 +375,45 @@ scope_packages=$(printf '%s\n' "$scope_output" | sed -n 's/^packages=//p') || sc
 # run: all land on the whole workspace.
 #
 # The `--filter` arguments are accumulated as POSITIONAL PARAMETERS rather than concatenated into a
-# string for `eval`. The `for` below still word-splits `$scope_packages` — that is what the single
-# space in the classifier's output is for — but nothing re-parses the result, so a quote, a `$`, a
-# backtick or a glob in a package name reaches pnpm literally instead of being interpreted by a
-# second shell pass. The previous version ran the whole command line through `eval` and defended it
-# by observing that all fifteen members are named `@waitron/<lowercase-and-hyphens>` — a property of
-# today's manifests rather than of this code, and so precisely the class of claim CLAUDE.md §1 is
-# about. This removes the question instead of answering it.
+# string for `eval`. That removes the SECOND shell pass, so a quote, a `$` or a backtick in a package
+# name reaches pnpm literally. It does NOT remove the first pass: `$scope_packages` is unquoted in
+# the `for` below — deliberately, the single space in the classifier's output is what it splits on —
+# and an unquoted expansion undergoes PATHNAME EXPANSION as well as field splitting. A `*`, `?` or
+# `[` in a name is therefore still a glob, and `set -f` is what guards it; `set +f` restores globbing
+# straight afterwards, because nothing else in this script wants it off.
+#
+# Measured on 2026-08-01 from a directory holding `package.json` and `packages/`, in the /bin/sh
+# husky invokes here (bash 3.2.57 in sh mode) and again under busybox `ash` and bash 5.3.15
+# (`docker run --rm bash:5`) — all three agreed line for line:
+#
+#   PKGS="pack*"; set --; for pkg in $PKGS; do set -- "$@" --filter "...$pkg"; done; echo "$*"
+#     → --filter ...package.json --filter ...packages
+#   the same loop wrapped in `set -f` … `set +f`
+#     → --filter ...pack*
+#   and `echo pack*` after the `set +f` expands again, so the guard does not leak into later steps.
+#
+# Run end to end too, in a throwaway pnpm workspace holding a member literally named `pack*` beside a
+# normal one (2026-08-01, pnpm 9.15.0). The two filter lists above do NOT agree, which is what makes
+# this a probe rather than a reading: `pnpm --filter "...pack*" ls --depth -1 --json` selects that
+# member and prints it, while `pnpm --filter "...package.json" --filter "...packages" ls --depth -1
+# --json` prints ZERO bytes on both streams at exit 0.
+#
+# What is NOT true is that such a name is impossible. `pnpm ls -r --depth -1 --json` listed that
+# member without complaint, and npm's own name rules never apply here — every member in this
+# workspace is `"private": true` and none is published (`npm pack --dry-run` does not validate the
+# name either; it cheerfully wrote `pack*-1.0.0.tgz`). What makes this unreachable TODAY is only that
+# all fifteen members are named `@waitron/<lowercase-and-hyphens>` — a property of today's manifests
+# rather than of this code, which is the exact argument the `eval` version of this loop was defended
+# with and CLAUDE.md §1 rejected. Hence a guard, not a paragraph.
+#
+# One more thing the guard does NOT buy here: loudness in every case. When the corrupted name is the
+# WHOLE scope the selection ends up empty and the "scope is runnable" step below exits 1 on it
+# (measured on that same throwaway workspace). When the scope also held a name that survived, that
+# name's filter still matches, the guard passes, and the corrupted package is simply dropped from
+# the run — silently, exactly as in ci.yml, whose gates step has no such step at all.
+#
+# The claim this replaces said the positional-parameter form had removed the word-splitting question
+# outright. The change was real and the claim overran it — CLAUDE.md §1.
 #
 # `set --` with no operands clears the positional parameters (checked with the /bin/sh husky uses,
 # bash 3.2.57 in sh mode: `sh -c 'set -- a b c; set --; echo $#'` prints 0). What it clears is this
@@ -385,10 +426,16 @@ scope_label="whole workspace"
 if [ "$scope_kind" = "packages" ] && [ -n "$scope_packages" ]; then
   # The LEFT-hand ellipsis is load-bearing: `...<pkg>` is the package and its DEPENDENTS, while
   # `<pkg>...` is the package and its dependencies and would test the wrong set.
+  #
+  # `set -f` for the field-splitting-without-globbing reason above. It does not disturb the
+  # positional parameters (`sh -c 'set -- a b c; set -f; echo $#'` prints 3), which this loop is
+  # building.
+  set -f
   for pkg in $scope_packages; do
     set -- "$@" --filter "...$pkg"
     repro_filters="$repro_filters --filter \"...$pkg\""
   done
+  set +f
   scope_label="$scope_packages + dependents"
 fi
 
@@ -406,10 +453,37 @@ run_step "lint" "pnpm lint" pnpm lint
 
 # `pnpm test:coverage` at the root is `vitest run --coverage && pnpm -r test:coverage`, so the
 # unscoped branch also runs the repo-level project. The scoped branch does not, and does not need
-# to: that project's only sources are `.github/scripts/` and `scripts/`, both of which lie outside
-# every package directory and so report `scope=global` — asserted for both paths in
+# to: that project's only sources are the two classifiers under `scripts/`, which lie outside every
+# package directory and so report `scope=global` — asserted for both paths in
 # scripts/changed-packages.test.mjs.
 run_step "typecheck ($scope_label)" "pnpm$repro_filters typecheck" pnpm "$@" typecheck
+
+# Refuses a SCOPED run that would execute no test at all. pnpm reports both of its "nothing to do"
+# outcomes on stdout with exit 0 — measured on 2026-08-01, pnpm 9.15.0:
+#
+#   pnpm --filter "@waitron/nope" test:coverage        → No projects matched the filters in "…"
+#   pnpm --filter "...@waitron/bench-pglite" test:cov… → None of the selected packages has a
+#                                                        "test:coverage" script
+#
+# so the step below cannot tell "everything passed" from "nothing ran". This reads the SAME filters
+# through `pnpm ls` and fails on a selection that would run nothing, unless every package in it is
+# declared test-less in PACKAGES_WITHOUT_TESTS.
+#
+# Only on a scoped push. With no filters `pnpm test:coverage` runs the ROOT script — `vitest run
+# --coverage && pnpm -r test:coverage` — so the repo-level project runs whatever else does, and the
+# guard's question does not arise. Running it there would also FAIL every global push: measured on
+# 2026-08-01, `pnpm ls --depth -1 --json` with no filter prints one entry, the workspace root
+# itself, which the guard drops by path and then reads as an empty selection.
+if [ "$#" -gt 0 ]; then
+  check_scope_runnable() {
+    pnpm "$@" ls --depth -1 --json | node scripts/changed-packages.mjs runnable test:coverage
+  }
+
+  run_step "scope is runnable ($scope_label)" \
+    "pnpm$repro_filters ls --depth -1 --json | node scripts/changed-packages.mjs runnable test:coverage" \
+    check_scope_runnable "$@"
+fi
+
 run_step "tests with coverage ($scope_label)" "pnpm$repro_filters test:coverage" \
   pnpm "$@" test:coverage
 

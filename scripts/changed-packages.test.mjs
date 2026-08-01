@@ -1,8 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { classify } from "../.github/scripts/changed-scope.mjs";
-import { formatScope, scopeForPaths, workspacePackages } from "./changed-packages.mjs";
+import { PACKAGES_WITHOUT_TESTS, classify } from "./changed-scope.mjs";
+import {
+  formatScope,
+  scopeForPaths,
+  scriptRunCheck,
+  workspacePackages,
+} from "./changed-packages.mjs";
 
 const ROOT = "/repo";
 
@@ -57,7 +62,7 @@ describe("workspacePackages", () => {
   // Every caller treats null as "we could not read the workspace", which is a reason to run
   // everything. The empty ARRAY would be the definite answer "this workspace has no members", and
   // nothing produces it today — but the two must not be conflated, for the same reason
-  // packagesInScope keeps them apart in .github/scripts/changed-scope.mjs.
+  // packagesInScope keeps them apart in scripts/changed-scope.mjs.
   it("returns null when pnpm emitted nothing at all", () => {
     expect(workspacePackages("", ROOT)).toBeNull();
     expect(workspacePackages("   ", ROOT)).toBeNull();
@@ -68,7 +73,7 @@ describe("workspacePackages", () => {
   });
 
   // `pnpm ls --json` reports its OWN failures as valid JSON on stdout (measured on pnpm 9.15.0 and
-  // recorded in .github/scripts/changed-scope.mjs's packagesInScope). It parses, so only the shape
+  // recorded in scripts/changed-scope.mjs's packagesInScope). It parses, so only the shape
   // check tells it apart from a real result.
   it("returns null for pnpm's own error object, which is valid JSON", () => {
     expect(
@@ -148,7 +153,7 @@ describe("scopeForPaths", () => {
   // narrowed away on account of them.
   it.each([
     ".github/workflows/ci.yml",
-    ".github/scripts/changed-scope.mjs",
+    "scripts/changed-scope.mjs",
     ".husky/pre-push",
     "pnpm-workspace.yaml",
     "pnpm-lock.yaml",
@@ -227,7 +232,7 @@ describe("scopeForPaths", () => {
   });
 
   // Same predicate as the docs gate, so the hook cannot classify a push as "has code work" and then
-  // find no code path to attribute. isInertPath is imported from .github/scripts/changed-scope.mjs
+  // find no code path to attribute. isInertPath is imported from scripts/changed-scope.mjs
   // rather than reimplemented, which is what makes this hold by construction.
   it("treats exactly the paths classify() calls documentation as documentation", () => {
     const docsOnly = ["docs/superpowers/specs/x.md", "README.md"];
@@ -309,15 +314,15 @@ describe("scopeForPaths", () => {
 });
 
 describe("formatScope", () => {
-  it("emits the outcome and the package list, in that order", () => {
+  it("emits the docs verdict, the outcome and the package list, in that order", () => {
     expect(formatScope(scopeForPaths(["packages/db/src/index.ts"], workspace()))).toBe(
-      "scope=packages\npackages=@waitron/db",
+      "code=true\nscope=packages\npackages=@waitron/db",
     );
   });
 
   it("emits an empty package list for a global run", () => {
     expect(formatScope(scopeForPaths([".husky/pre-push"], workspace()))).toBe(
-      "scope=global\npackages=",
+      "code=true\nscope=global\npackages=",
     );
   });
 
@@ -325,8 +330,24 @@ describe("formatScope", () => {
   // running format:check. It must not be spelled the same as a global run.
   it("emits its own line for a documentation-only push", () => {
     expect(formatScope(scopeForPaths(["docs/backlog.md"], workspace()))).toBe(
-      "scope=documentation\npackages=",
+      "code=false\nscope=documentation\npackages=",
     );
+  });
+
+  // `code` is ci.yml's docs gate: `bundle-smoke`, `typecheck`, both test shards and both mutation
+  // jobs are gated on it. It is the SAME verdict as `scope=documentation`, emitted here rather than
+  // computed by the workflow's shell so the two cannot drift — that is the whole point of CI and the
+  // hook sharing one classifier. Asserted as an equivalence, in both directions, rather than as two
+  // separate expectations that could agree by accident.
+  it.each([
+    [["docs/backlog.md", "CLAUDE.md"], false],
+    [["packages/db/src/index.ts"], true],
+    [["tsconfig.base.json"], true],
+    [[], true],
+  ])("emits code=<classify's verdict> for %s", (paths, expected) => {
+    const scope = scopeForPaths(paths, workspace());
+    expect(formatScope(scope).split("\n")[0]).toBe(`code=${expected}`);
+    expect(classify(paths).code).toBe(expected);
   });
 
   // The hook splits this on whitespace to build one `--filter "...<pkg>"` argument per name, so the
@@ -336,7 +357,110 @@ describe("formatScope", () => {
       formatScope(
         scopeForPaths(["packages/db/src/a.ts", "packages/payments/src/b.ts"], workspace()),
       ),
-    ).toBe("scope=packages\npackages=@waitron/db @waitron/payments");
+    ).toBe("code=true\nscope=packages\npackages=@waitron/db @waitron/payments");
+  });
+});
+
+// A workspace member's `scripts` block, as the reader hands it back.
+const declaring = (...names) => Object.fromEntries(names.map((name) => [name, "vitest run"]));
+
+/** A reader that answers from a `{dir: scripts}` map, and `null` for anything else. */
+const scriptsFor = (byDir) => (dir) => byDir[dir] ?? null;
+
+describe("scriptRunCheck", () => {
+  const members = [
+    { name: "@waitron/db", dir: "packages/db" },
+    { name: "@waitron/payments", dir: "packages/payments" },
+  ];
+  const bothDeclare = scriptsFor({
+    "packages/db": declaring("test:coverage"),
+    "packages/payments": declaring("test:coverage"),
+  });
+
+  it("passes when every selected package declares the script", () => {
+    expect(scriptRunCheck(members, "test:coverage", bothDeclare)).toMatchObject({ ok: true });
+  });
+
+  it("names the script and the count in its reason", () => {
+    const { reason } = scriptRunCheck(members, "test:coverage", bothDeclare);
+    expect(reason).toContain("test:coverage");
+    expect(reason).toContain("2");
+  });
+
+  // THE case this exists for, and the shape of the defect it closes. ci.yml used to resolve its
+  // scope with `pnpm --filter "...[origin/$BASE_REF]"`, which answers a root-config change with the
+  // workspace ROOT — and `pnpm --filter "waitron" --no-sort test:coverage` then selects nothing and
+  // exits 0. workspacePackages drops the root by path, so the guard sees an empty selection.
+  it("fails when the filter selected no workspace member at all", () => {
+    expect(scriptRunCheck([], "test:coverage", bothDeclare)).toMatchObject({ ok: false });
+    expect(scriptRunCheck([], "test:coverage", bothDeclare).reason).toMatch(/no workspace member/i);
+  });
+
+  // Fails CLOSED, but in the opposite direction from scopeForPaths: there, not knowing means run
+  // everything; here, not knowing means we cannot claim anything ran, and a guard that cannot tell
+  // must not report success. Both are the same principle — never be quietly green.
+  it("fails when the workspace layout could not be read", () => {
+    expect(scriptRunCheck(null, "test:coverage", bothDeclare)).toMatchObject({ ok: false });
+  });
+
+  // The reader answers `null` for `packages/payments`, which is not the same answer as `{}`:
+  // "we could not look" is a reason to refuse, "it declares nothing" is a reason to look at the
+  // exemption list.
+  it("fails when a selected package's manifest could not be read", () => {
+    const check = scriptRunCheck(
+      members,
+      "test:coverage",
+      scriptsFor({ "packages/db": declaring("test:coverage") }),
+    );
+    expect(check.ok).toBe(false);
+    expect(check.reason).toContain("@waitron/payments");
+    expect(check.reason).toContain("could not be read");
+  });
+
+  // The enforcement docs/backlog.md asked for: a member that declares no test script is a decision
+  // someone has to make deliberately, not something that silently costs a shard its whole run.
+  it("fails when a selected package declares no such script and is not exempt", () => {
+    const check = scriptRunCheck(
+      members,
+      "test:coverage",
+      scriptsFor({
+        "packages/db": declaring("test:coverage"),
+        "packages/payments": declaring("typecheck"),
+      }),
+    );
+    expect(check.ok).toBe(false);
+    expect(check.reason).toContain("@waitron/payments");
+    expect(check.reason).toContain("PACKAGES_WITHOUT_TESTS");
+  });
+
+  // @waitron/bench-pglite defines no test script and holds no *.test.ts, deliberately and for
+  // documented reasons (bench/pglite-throughput/README.md). A push touching only it must not be
+  // blocked by a guard whose whole purpose is elsewhere.
+  it("passes when an exempt package declares no such script", () => {
+    const withBench = [...members, { name: PACKAGES_WITHOUT_TESTS[0], dir: "bench/x" }];
+    const check = scriptRunCheck(
+      withBench,
+      "test:coverage",
+      scriptsFor({
+        "packages/db": declaring("test:coverage"),
+        "packages/payments": declaring("test:coverage"),
+        "bench/x": declaring("bench"),
+      }),
+    );
+    expect(check).toMatchObject({ ok: true });
+  });
+
+  // Nothing runs, and that is the honest answer rather than a failure — but it has to be SAID, or
+  // the shard reports success with an empty log and no way to tell it apart from a real run.
+  it("passes and says so when every selected package is exempt", () => {
+    const check = scriptRunCheck(
+      [{ name: PACKAGES_WITHOUT_TESTS[0], dir: "bench/x" }],
+      "test:coverage",
+      scriptsFor({ "bench/x": declaring("bench") }),
+    );
+    expect(check.ok).toBe(true);
+    expect(check.reason).toMatch(/nothing to run/i);
+    expect(check.reason).toContain(PACKAGES_WITHOUT_TESTS[0]);
   });
 });
 
@@ -350,8 +474,8 @@ describe("the CLI", () => {
   const script = join(import.meta.dirname, "changed-packages.mjs");
 
   /** Runs the script with `input` on stdin, from the repository root, keeping its streams apart. */
-  const run = (input) => {
-    const result = spawnSync(process.execPath, [script], {
+  const run = (input, ...args) => {
+    const result = spawnSync(process.execPath, [script, ...args], {
       input,
       encoding: "utf8",
       cwd: repoRoot,
@@ -361,31 +485,105 @@ describe("the CLI", () => {
   };
 
   it("resolves this workspace and attributes a real package directory", () => {
-    expect(run("packages/db/src/index.ts\n").stdout).toBe("scope=packages\npackages=@waitron/db\n");
+    expect(run("packages/db/src/index.ts\n").stdout).toBe(
+      "code=true\nscope=packages\npackages=@waitron/db\n",
+    );
   });
 
   it("attributes several real package directories", () => {
     expect(run("packages/db/src/index.ts\napps/server/src/boot.ts\n").stdout).toBe(
-      "scope=packages\npackages=@waitron/db @waitron/server\n",
+      "code=true\nscope=packages\npackages=@waitron/db @waitron/server\n",
     );
   });
 
   it("reports a global run for root configuration", () => {
-    expect(run("tsconfig.base.json\n").stdout).toBe("scope=global\npackages=\n");
+    expect(run("tsconfig.base.json\n").stdout).toBe("code=true\nscope=global\npackages=\n");
   });
 
   it("reports a documentation-only push through the CLI too", () => {
-    expect(run("docs/backlog.md\nCLAUDE.md\n").stdout).toBe("scope=documentation\npackages=\n");
+    expect(run("docs/backlog.md\nCLAUDE.md\n").stdout).toBe(
+      "code=false\nscope=documentation\npackages=\n",
+    );
   });
 
   it("fails closed on empty stdin", () => {
-    expect(run("").stdout).toBe("scope=global\npackages=\n");
-    expect(run("\n").stdout).toBe("scope=global\npackages=\n");
+    expect(run("").stdout).toBe("code=true\nscope=global\npackages=\n");
+    expect(run("\n").stdout).toBe("code=true\nscope=global\npackages=\n");
   });
 
   it("puts the reason on stderr, where the hook's sed cannot reach it", () => {
     const { stdout, stderr } = run("packages/db/src/index.ts\n");
     expect(stderr).toContain("@waitron/db");
     expect(stdout).not.toContain("changed-packages:");
+  });
+});
+
+// The guard both test shards and the hook run before `pnpm <filters> test:coverage`. It reads a
+// `pnpm <the same filters> ls --depth -1 --json` result and answers with an EXIT CODE, which is the
+// only part of it the shell can act on — so these spawn it rather than calling scriptRunCheck.
+//
+// Every input below is a real path in this checkout, because the reader this CLI passes in is
+// `readFileSync` on `<dir>/package.json`: pointing it at a fabricated directory would only ever
+// exercise the unreadable-manifest branch.
+describe("the runnable CLI", () => {
+  const repoRoot = join(import.meta.dirname, "..");
+  const script = join(import.meta.dirname, "changed-packages.mjs");
+
+  /** One `pnpm ls --depth -1 --json` entry, with an absolute path as pnpm emits. */
+  const entry = (name, dir) => ({ name, version: "0.0.0", path: join(repoRoot, dir) });
+
+  const runnable = (entries) =>
+    spawnSync(process.execPath, [script, "runnable", "test:coverage"], {
+      input: JSON.stringify(entries),
+      encoding: "utf8",
+      cwd: repoRoot,
+    });
+
+  it("exits 0 when a selected package really declares test:coverage", () => {
+    const result = runnable([entry("@waitron/db", "packages/db")]);
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("test:coverage");
+  });
+
+  // The defect this branch closes, end to end: `pnpm --filter "...[origin/main]"` answered a
+  // root-config-only pull request with the workspace root alone, and the light shard's
+  // `pnpm --filter "waitron" --no-sort test:coverage` then printed `No projects matched the filters`
+  // and exited 0. Run in this workspace on 2026-08-01 — `pnpm --filter "waitron" --no-sort
+  // format:check` prints exactly that and exits 0.
+  it("exits 1 for a selection that is the workspace root and nothing else", () => {
+    const result = runnable([{ name: "waitron", version: "0.0.0", path: repoRoot }]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/no workspace member/i);
+  });
+
+  // `pnpm ls` emits zero bytes on both streams, exit 0, when its filter matches nothing. The guard
+  // has to read that as "nothing would run", not as "no packages needed running".
+  it("exits 1 on an empty pnpm ls result", () => {
+    const empty = spawnSync(process.execPath, [script, "runnable", "test:coverage"], {
+      input: "",
+      encoding: "utf8",
+      cwd: repoRoot,
+    });
+    expect(empty.status).toBe(1);
+  });
+
+  it("exits 0 when the only selected package is the exempt one", () => {
+    const result = runnable([entry(PACKAGES_WITHOUT_TESTS[0], "bench/pglite-throughput")]);
+    expect(result.status).toBe(0);
+    expect(result.stderr).toMatch(/nothing to run/i);
+  });
+
+  // Same real directory, a name that is not on the exemption list — which is what a NEW member with
+  // no test:coverage script would look like.
+  it("exits 1 for an unexempt package that declares no test:coverage script", () => {
+    const result = runnable([entry("@waitron/newcomer", "bench/pglite-throughput")]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("@waitron/newcomer");
+  });
+
+  it("exits 1 when a selected package's manifest cannot be read", () => {
+    const result = runnable([entry("@waitron/gone", "packages/does-not-exist")]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("@waitron/gone");
   });
 });
