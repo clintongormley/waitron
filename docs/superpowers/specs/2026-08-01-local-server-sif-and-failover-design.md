@@ -404,9 +404,9 @@ on one schema at many versions — and that objection does **not** exist for a *
 server, which runs one client's version, code and schema deployed together, exactly like a local box.
 So this is not a blind reversal: it **scopes §2 to what its reasoning covers** — the *shared* store
 stays sync-root-only; a *dedicated single-tenant* server may originate transactions wherever it runs.
-Add the dated pointer to the cloud-storage spec at land time (per `CLAUDE.md` §6's "don't rewrite
-history" rule). Cloud-primary/standalone stays a deliberate choice with the posture cost above, not
-the recommended shape.
+Add the dated pointer to the cloud-storage spec at land time — `CLAUDE.md` §6 keeps historical docs
+as written and adds a dated pointer rather than rewriting them. Cloud-primary/standalone stays a
+deliberate choice with the posture cost above, not the recommended shape.
 
 ### Open regulatory edge — now central, not disaster-only
 
@@ -517,9 +517,10 @@ rectificativa; under factura-before-payment the invoice is already fixed, so a d
 a pure payment refund.
 
 **Implementation note.** Verify the ownership wiring against the actual `packages/payments` code
-(`reconcile.ts`, `store.ts`'s `resolvePending`) rather than this prose — the memory records those
-Stripe adapters had real-role tenancy defects fixed only recently, so "who may write what" must be
-checked against the code.
+(`reconcile.ts`, `store.ts`'s `resolvePending`) **and its tests exercised under the non-superuser
+deployment role** — the Stripe adapters have a documented history of behaving differently under the
+real role than under a superuser test connection, so "who may write what" must be confirmed against
+the code and a real-role test, not assumed from this prose.
 
 ---
 
