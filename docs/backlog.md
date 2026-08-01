@@ -317,8 +317,24 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   `test-light` step exit **1** naming it, and deleting each of the four new checks in turn failed
   the tests written for it.
 
-  **Not yet verified:** all of the above is local. The first run of the new `changes` job on real
-  GitHub Actions is this pull request's own — read it before merging, the way #27's runs were read
+  **Verified on real GitHub Actions**, run `30692329110` on this pull request — which touches only
+  root-level paths, so it is exactly the shape that used to run nothing. `changes` printed
+  `scope=global`, and `test-heavy` (3m30s), `mutation-verifactu` (3m28s) and `mutation-shared` (56s)
+  all **ran**. Under the mechanism this replaces, all three would have been skipped
+- **`packages/ui` hung the whole-workspace `test-light` shard once, on 2026-08-01, and it has not
+  recurred.** Recorded rather than ruled a flake, because this change makes the shard it hung in run
+  far more often. Attempt 1 of run `30692329110`: twelve of the thirteen packages finished — the last
+  was `packages/payments` at 08:47:36 — and then nothing at all was printed for **25 minutes**, until
+  the run was cancelled at 09:13:20. The one package that never reported was `packages/ui`, the only
+  Chromium/Playwright suite; its `playwright install --with-deps chromium` step had already
+  succeeded. Attempt 2, same commit, same command: **3m58s, green**.
+  `pnpm --filter "!@waitron/db" --no-sort test:coverage` starts all thirteen at once, several of them
+  spinning up their own Testcontainers Postgres, so a browser suite is the plausible loser under
+  contention — plausible, not measured, and one occurrence is not a shape (`CLAUDE.md` §7). What
+  makes it worth a line: before this fix a root-config pull request ran none of that shard, so the
+  fix increases exposure to whatever this is. If it recurs, the shape to reach for is giving
+  `packages/ui` its own shard rather than dropping `--no-sort`, since the sort order is what §1.1 of
+  the design measured as pure cost
 - **The sign-off (DCO) check is implemented twice.** `.husky/pre-push`'s `check_signoff` and
   `licence.yml`'s `dco` job carry the same `grep -qiE '^Signed-off-by: .+ <.+@.+>'` over the same
   per-commit loop. The PREDICATE is byte-identical; the reporting is not — CI emits `::error::`
