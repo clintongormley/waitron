@@ -369,7 +369,7 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   **First two runs with the shard in place, both green.** Run `30699486147` (head `e34d467`):
   `test-ui` 12:20:50 → 12:21:35, **45s**, and `test-light` — now thirteen packages rather than
   fourteen, with no Playwright step at all — 12:20:50 → 12:24:12, 3m22s. Run `30699812104`
-  (head `350f071`, the merged tip): all ten jobs green, 4m23s wall clock. Two green runs is not proof
+  (head `350f071`, the merged tip): all ten jobs green, 4m23s wall clock. Two green runs are not proof
   against a hang that took two attempts to recur, so this stays open; the number to watch is
   `test-ui`'s own duration, since a hang now shows up there rather than taking twelve other packages
   with it. If it does hang there, the cause is inside the suite rather than contention, and the next
