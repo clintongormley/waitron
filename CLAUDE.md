@@ -489,6 +489,15 @@ enforce, so the suite testing the sign-off gate was breaking it. It also wrote `
 authored by `Fixture Author`. The tell is a branch that gains commits **during `git push`**: the hook
 mutates the ref and git pushes the moved value, so the push reports a SHA that is no longer the tip.
 
+**The config damage outlasts the commits, and is worse.** A fixture's `git init` under a redirected
+`GIT_DIR` re-initialises the real repository, and it set **`core.bare = true`** on the main checkout —
+after which `git checkout`, `git pull` and `git status` all fail with
+`fatal: this operation must be run in a work tree`, in a directory whose files are all still present.
+`git worktree list` reports the checkout as `(bare)`, which is the quickest way to spot it.
+`git config --unset core.bare` restores it; nothing is lost, but the failure names the operation
+rather than the cause and reads like a corrupted repository. Check `core.bare`, `user.name` and
+`user.email` on the shared config after any suite that shells out to `git` has run inside a hook.
+
 `GIT_DIR` is the one that bites, but clear the whole family — `GIT_WORK_TREE`, `GIT_INDEX_FILE`,
 `GIT_COMMON_DIR`, `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_NAMESPACE` —
 since each relocates a write just as effectively. Pointing `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` at

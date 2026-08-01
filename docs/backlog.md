@@ -366,6 +366,15 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   judged from future runs.** The previous version of this entry recorded one occurrence, declined to
   call it a shape, and named the fix to reach for if it recurred. It recurred, and that is the fix.
 
+  **First two runs with the shard in place, both green.** Run `30699486147` (head `e34d467`):
+  `test-ui` 12:20:50 → 12:21:35, **45s**, and `test-light` — now thirteen packages rather than
+  fourteen, with no Playwright step at all — 12:20:50 → 12:24:12, 3m22s. Run `30699812104`
+  (head `350f071`, the merged tip): all ten jobs green, 4m23s wall clock. Two green runs is not proof
+  against a hang that took two attempts to recur, so this stays open; the number to watch is
+  `test-ui`'s own duration, since a hang now shows up there rather than taking twelve other packages
+  with it. If it does hang there, the cause is inside the suite rather than contention, and the next
+  move is a per-test timeout plus a Playwright trace.
+
   **Both runs, read back with `gh api repos/clintongormley/waitron/actions/runs/<id>/…` rather than
   `gh run view --json`, which reports only the LATEST attempt and shows the first of these as a
   success:**
