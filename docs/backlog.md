@@ -40,8 +40,8 @@ reprioritisation rather than assumed.
 | **Sale settlement model** — design | **Merged** (#20) |
 | **This backlog** | **Merged** (#21) |
 | **Pre-push hook skips deletions** | **Merged** (#23) |
-| **Scoped CI** — stop running every check on every push | **Done.** Both merged: #25 (the `ci` gate) and #27 (the scoping). Against the 7m20s baseline: a documentation-only pull request now takes **44s**, and a full unfiltered `push` on `main` **4m12s**. Two follow-ups remain under **Debt and odd jobs** |
-| **Scoped pre-push hook** — the same treatment for the local gate | **In flight** on `feat/scoped-pre-push-hook`. Scopes `typecheck` and `test:coverage` to the changed packages and their dependents, adds the sign-off (DCO) check CI was catching for us, runs `test:coverage` rather than `test`, adds `pnpm install --frozen-lockfile`, and skips `lint` on a documentation-only push. Measured on this machine on 2026-08-01, one crafted push per shape, `TESTCONTAINERS_RYUK_DISABLED=true`, wall clock bracketed in `time.time()` — `main`'s hook (`558c62b`, one run each) → this branch's: deletions-only 9ms → 7-9ms (unchanged, #23 already did that); an **unsigned commit 104s and exit 0 → 27-36ms and exit 1**, because `main`'s hook has no sign-off check at all and so charged a full run and then let it through; documentation-only 105s → **3.1-3.5s**; a push to `packages/ui`, which no other package depends on, 105s → **8.2-8.8s**. **It is not faster everywhere.** A `packages/db` push is 112s and a root-config or lockfile push 116s — both SLOWER than `main`'s 105s, because this hook also runs `test:coverage` rather than `test` and installs first. Scoping pays on the leaves, not on the trunk; **Debt and odd jobs** carries the expansion sizes and what the hook still does not cover |
+| **Scoped CI** — stop running every check on every push | **Done.** Both merged: #25 (the `ci` gate) and #27 (the scoping). Against the 7m20s baseline: a documentation-only pull request now takes **44s**, and a full unfiltered `push` on `main` **4m12s**. The scope resolution it shipped skipped every package's tests on a root-config pull request; that is fixed under **Debt and odd jobs**, where one follow-up (what `test-light` reports) remains |
+| **Scoped pre-push hook** — the same treatment for the local gate | **Merged** (#31). Scopes `typecheck` and `test:coverage` to the changed packages and their dependents, adds the sign-off (DCO) check CI was catching for us, runs `test:coverage` rather than `test`, adds `pnpm install --frozen-lockfile`, and skips `lint` on a documentation-only push. Measured on this machine on 2026-08-01, one crafted push per shape, `TESTCONTAINERS_RYUK_DISABLED=true`, wall clock bracketed in `time.time()` — `main`'s hook (`558c62b`, one run each) → #31's: deletions-only 9ms → 7-9ms (unchanged, #23 already did that); an **unsigned commit 104s and exit 0 → 27-36ms and exit 1**, because `main`'s hook has no sign-off check at all and so charged a full run and then let it through; documentation-only 105s → **3.1-3.5s**; a push to `packages/ui`, which no other package depends on, 105s → **8.2-8.8s**. **It is not faster everywhere.** A `packages/db` push is 112s and a root-config or lockfile push 116s — both SLOWER than `main`'s 105s, because this hook also runs `test:coverage` rather than `test` and installs first. Scoping pays on the leaves, not on the trunk; **Debt and odd jobs** carries the expansion sizes and what the hook still does not cover |
 | **Cloud storage model** — design | **Merged** (#19), corrected by **#22** |
 | **Sale settlement model** — implementation plan | Not written. **The next build step** |
 | **Close Q13 and Q15 on primary source** | Not started. Cheaper than hiring — see below |
@@ -207,8 +207,9 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   `fiscal-verifactu` at fourteen and `payments` at twelve reach further). Scoping is close to free on
   the leaves and close to worthless on the trunk, and the trunk is not the rare case.
 
-  The new classifier `scripts/changed-packages.mjs` is fully tested by the root Vitest project,
-  whose `include` now covers `scripts/` as well as `.github/scripts/`. **The shell is not.** The
+  The classifier `scripts/changed-packages.mjs` is fully tested by the root Vitest project, whose
+  `include` covers `scripts/` — one directory since 2026-08-01, when `.github/scripts/` was merged
+  into it. **The shell is not.** The
   deletion guard (#23), the range computation and the sign-off loop are all backed only by having
   run the real hook against crafted stdin and recorded the results — the same evidence #23 had, no
   better. Three things to know before writing a suite for the shell: the root project's `include`
@@ -218,9 +219,11 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   `grep` outside an `if` kills the script silently mid-gate — the hook's own header records that
   measurement.
 
-  **Four known gaps. Two are the honest answer, two are follow-ups.** The hook's header states the
-  last three in its "NOT RUN HERE" list rather than leaving them for a reader to discover; the first
-  is a cost rather than a gap in what runs, and the header's SCOPING paragraph covers it.
+  **Four known gaps. Three are the honest answer, one is a follow-up** — gap 4 was closed on
+  2026-08-01 and is kept here because what replaced it is a rule someone has to know about. The
+  hook's header states the last three in its "NOT RUN HERE" list rather than leaving them for a
+  reader to discover; the first is a cost rather than a gap in what runs, and the header's SCOPING
+  paragraph covers it.
 
   1. A `global` push — root config, `.github/`, `.husky/`, `scripts/`, the lockfile — runs
      `pnpm test:coverage` for the whole workspace, which is the 116s in the row above. The heaviest
@@ -228,7 +231,7 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
      measured **38s** on 2026-08-01 (two runs, 37.8s and 38.2s,
      `TESTCONTAINERS_RYUK_DISABLED=true`). It is not 38s OF the 116s — `pnpm -r` runs the members
      concurrently — and it is emphatically not the **189s** in
-     `.github/scripts/changed-scope.mjs`, which is a CI-runner figure ("189s of the old 387s test
+     `scripts/changed-scope.mjs`, which is a CI-runner figure ("189s of the old 387s test
      step, on its own runner"). An earlier version of this entry quoted that CI number as the local
      one, where it could not fit inside the whole-workspace figure beside it. The whole-workspace
      run is the honest answer for a change that can affect anything, and it is the CI entry below
@@ -253,60 +256,67 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
      has to be widened to cover `.husky/` (see above) — rather than in a package most changes do not
      reach. Moving them there takes both suites out of `packages/db`'s coverage accounting, which is
      enough of a change to want its own branch
-  4. **A scope of only script-less packages makes the test step a silent no-op.** Measured on
-     2026-08-01: `pnpm --filter "...@waitron/bench-pglite" test:coverage` prints
+  4. **CLOSED, 2026-08-01 — a scope of only script-less packages no longer makes the test step a
+     silent no-op.** It was one: `pnpm --filter "...@waitron/bench-pglite" test:coverage` prints
      `None of the selected packages has a "test:coverage" script` and exits **0**, so the hook
-     reports the step as passed. Honest today — that package deliberately defines no `test` script
-     and holds no `*.test.ts` (see `bench/pglite-throughput/README.md`) — but nothing enforces a
-     future member declaring one, and it is the same shape the repository already records for
-     `test-light`: `.github/scripts/changed-scope.mjs`'s own comment quotes that identical message
-     from that shard's "Run the light shard" step on run 30653487133.
-     The guard would be a check that the scoped run selected at least one package with the script;
-     deliberately not added here, because it wants its own test and this branch has no way to test
-     the shell at all (see above)
-- **CI SKIPS `test-heavy` and both mutation runs on a root-config-only pull request — a known
-  defect, not a design choice. Promote this out of "odd jobs" as soon as
-  `feat/scoped-pre-push-hook` lands**: the wide review of that branch drew out the consequence, and
-  it is worse than the entry originally read. Put the three receipts below together — `test-heavy`
-  and both mutation jobs skipped, `test-light` gated true but selecting nothing, the ungated `lint`
-  job running only the repo-level Vitest project — and **no package's test suite runs in CI at all**
-  on a root-config-only or lockfile-only pull request. The pre-push hook is what covers it, and
-  `feat/scoped-pre-push-hook` keeps it covering it: it fail-CLOSES to a whole-workspace run on
-  exactly those paths — confirmed on 2026-08-01, `pnpm-lock.yaml` and `tsconfig.base.json` each give
-  `scope=global` from `scripts/changed-packages.mjs`, and a crafted `tsconfig.base.json` push ran the
-  whole workspace end to end (the row above has the timing). That is the branch NOT making this
-  worse; it is not a fix, because the
-  hook is **the only gate anywhere that runs a package's tests on such a change**, and one
-  `--no-verify` is all that stands between such a change and `main`. A local hook a developer can
-  skip is not an acceptable last line for a pull-request gate, which is what moves this out of
-  "things that make later work cheaper" and into work with a consequence.
+     reported the step as passed. Both gates now run a `scope is runnable` check first — one
+     `pnpm <the same filters> ls`, piped into `node scripts/changed-packages.mjs runnable
+     test:coverage` — which fails on a selection that would run nothing. The rule to know: a
+     workspace member that deliberately has no tests must be named in `PACKAGES_WITHOUT_TESTS`
+     (`scripts/changed-scope.mjs`), or every scoped run that selects it fails. `@waitron/bench-pglite`
+     is the only one, `changed-scope.test.mjs` pins the list against the real workspace in both
+     directions, and the `light` gate discounts it too, so a bench-only pull request now skips
+     `test-light` rather than provisioning a runner to select nothing
+- **CI SKIPPED `test-heavy` and both mutation runs on a root-config-only pull request — fixed on
+  2026-08-01, in the change that rewrote this entry.** Worth keeping because the SHAPE recurs: two
+  mechanisms answering the same question, and the one nobody exercised drifting in the quiet
+  direction.
 
-  `ci.yml`'s `changes` job resolves scope with
-  `pnpm --filter "...[origin/$BASE_REF]" ls --depth -1 --json`, and a change that belongs to no
-  workspace member resolves to the workspace ROOT. Run locally on 2026-08-01 against a
-  `git clone --no-hardlinks` of this repository (a clone, because the same filter matches nothing in
-  a worktree — `CLAUDE.md` §2), branching off `main` and committing one change to
-  `tsconfig.base.json`: that filter printed exactly **one** entry, `{"name": "waitron"}`, and piping
-  it into `node .github/scripts/changed-scope.mjs gates` gave
-  `heavy=false light=true verifactu=false shared=false`. So `test-heavy` — `packages/db`, 189s on
-  its own CI runner — and both mutation jobs are skipped by a change to the TypeScript configuration
-  every package extends. A `pnpm-lock.yaml`-only commit gave byte-identical output. The control ran
-  too: one commit touching `packages/db/src/index.ts` gave 11 entries and `heavy=true`.
+  **What it was.** `ci.yml`'s `changes` job resolved scope with
+  `pnpm --filter "...[origin/$BASE_REF]" ls --depth -1 --json`, and a change belonging to no
+  workspace member resolves to the workspace ROOT — the one member that runs no tests. Reproduced in
+  a `git clone --no-hardlinks` of this repository (a clone, because that filter matches nothing in a
+  worktree — `CLAUDE.md` §2), one commit on top of `main` per shape:
 
-  `test-light` is gated `true` and does get a runner, but selects nothing to run. Its step is
-  `pnpm --filter "$SCOPE" --filter "!@waitron/db" --no-sort test:coverage`, which on that scope
-  resolves to the workspace root alone — and pnpm does not run a filtered script in the workspace
-  root without `--include-workspace-root`. Measured in this worktree:
-  `pnpm --filter "waitron" --no-sort typecheck` prints `No projects matched the filters`, while
-  adding `--include-workspace-root` runs it. So no package's suite executes on that pull request at
-  all. What still runs is the ungated `lint` job, which is `pnpm lint`, `pnpm format:check` and
-  `pnpm vitest run --coverage` — the repo-level project only.
+  | commit touches | that filter listed | gates |
+  | --- | --- | --- |
+  | `tsconfig.base.json` | `["waitron"]` | `heavy=false light=true verifactu=false shared=false` |
+  | `pnpm-lock.yaml` | `["waitron"]` | identical |
+  | `packages/ui/src/index.ts` | `["@waitron/ui"]` | `heavy=false light=true …` (control: narrowing was right) |
+  | `packages/shared/src/errors.ts` | 12 packages | `heavy=true … shared=true` (control) |
 
-  Not fixed on `feat/scoped-pre-push-hook` deliberately: it changes what CI runs, so it wants its
-  own pull request and its own verification on a real run rather than a local reproduction of the
-  commands. The obvious fix is to make an unattributable path fail closed to every gate, which is
-  what the pre-push hook already does — `scripts/changed-packages.mjs` returns `scope=global` for
-  exactly these paths, and the hook then runs the whole workspace
+  `test-light` was gated `true` and did get a runner, but selected nothing: pnpm does not run a
+  filtered script in the workspace root without `--include-workspace-root`, and
+  `pnpm --filter "waitron" --no-sort format:check` prints `No projects matched the filters in "…"`
+  and exits **0**. Add the ungated `lint` job running only the repo-level Vitest project, and **no
+  package's test suite ran at all** on a root-config-only or lockfile-only pull request.
+
+  **What replaced it.** The `changes` job now runs `scripts/changed-packages.mjs` — the same script,
+  the same call, that `.husky/pre-push` runs — which attributes each changed path to the workspace
+  member whose directory contains it and answers `scope=global` for anything outside every member.
+  Expanding a changed package to its DEPENDENTS is still pnpm's (`--filter "...<pkg>"`); only the
+  attribution moved. The docs gate `code=` comes out of the same call, so the two verdicts cannot
+  disagree. Verified by running `ci.yml`'s own step scripts — read out of the workflow file, not
+  transcribed — against crafted commits in a clone, with a `pnpm` shim capturing what the shards
+  would run:
+
+  | commit touches | `scope` | `test-heavy` | `test-light` selects | mutations |
+  | --- | --- | --- | --- | --- |
+  | `tsconfig.base.json` | `global` | RUNS | 13 packages | both RUN |
+  | `pnpm-lock.yaml` | `global` | RUNS | 13 packages | both RUN |
+  | `packages/ui/src/index.ts` | `packages` | skipped | `...@waitron/ui` | both skipped |
+  | `packages/shared/src/errors.ts` | `packages` | RUNS | 11 packages | `shared` RUNS |
+  | `docs/backlog.md` | `documentation` | skipped (`code=false`) | skipped | both skipped |
+  | `bench/pglite-throughput/**` | `packages` | skipped | skipped (`light=false`) | both skipped |
+  | a `push` on `main` | forced `global` | RUNS | 13 packages | both RUN |
+  | a `push` with an all-zero `before` | `global` | RUNS | 13 packages | both RUN |
+
+  Two negative controls ran too: a crafted new member declaring no `test:coverage` script made the
+  `test-light` step exit **1** naming it, and deleting each of the four new checks in turn failed
+  the tests written for it.
+
+  **Not yet verified:** all of the above is local. The first run of the new `changes` job on real
+  GitHub Actions is this pull request's own — read it before merging, the way #27's runs were read
 - **The sign-off (DCO) check is implemented twice.** `.husky/pre-push`'s `check_signoff` and
   `licence.yml`'s `dco` job carry the same `grep -qiE '^Signed-off-by: .+ <.+@.+>'` over the same
   per-commit loop. The PREDICATE is byte-identical; the reporting is not — CI emits `::error::`
@@ -350,14 +360,14 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   `playwright install --with-deps chromium` before finding nothing to do — 48s of run
   `30653487133` (18:01:36 → 18:02:24, its longest job) for zero test execution. What is **still
   open** is the reporting half: a `test-light` that ran two packages and one that ran the whole
-  workspace both report `success`, and only the step log tells them apart. One scope the new gate
-  does not help with, for the same reason — it answers "is a package other than `@waitron/db` in
-  scope?", not "does any selected package have a `test:coverage` script?". `@waitron/bench-pglite`
-  has no such script, so a change touching only it gives `light=true` and the step still prints
-  `None of the selected packages has a "test:coverage" script`, exit 0 (run in this workspace:
-  `pnpm --filter "@waitron/bench-pglite" --filter "!@waitron/db" --no-sort test:coverage`). Both
-  remaining halves are the same fix — make the job name the packages it selected. Found by the
-  base-to-tip review of PR 2, not by any per-task pass
+  workspace both report `success`, and only the step log tells them apart. **The `@waitron/bench-pglite`
+  half of this entry is closed** (2026-08-01): the `light` gate now discounts every member listed in
+  `PACKAGES_WITHOUT_TESTS`, so a change touching only that package gives `light=false` and skips the
+  shard rather than provisioning a runner to print `None of the selected packages has a
+  "test:coverage" script` and exit 0; and the shard's new `runnable` guard fails on any selection
+  that would run nothing. What remains is only the reporting — make the job NAME the packages it
+  selected, rather than leaving `success` to mean either. Found by the base-to-tip review of PR 2,
+  not by any per-task pass
 - **`packages/db`'s test suite is 189s**, mostly one Testcontainers Postgres per suite. It is now its
   own CI shard (`test-heavy`), which stops it blocking the other packages but does not make it any
   shorter. Sharing a container across suites beats every CI-config change combined, but it means

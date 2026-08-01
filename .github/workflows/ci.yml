@@ -41,11 +41,40 @@ jobs:
   #   `scope` — on a pull request, narrow the test shards to the packages that changed and the
   #             packages that depend on them. On main, run everything, because that unfiltered run
   #             is what verifies the narrowing was right.
+  #
+  # Both come out of ONE `scripts/changed-packages.mjs` call, which is the same call and the same
+  # file `.husky/pre-push` runs. Until 2026-08-01 this job resolved the scope a second way — pnpm's
+  # own changed-since filter, `pnpm --filter "...[origin/$BASE_REF]" ls` — and the two mechanisms
+  # disagreed in the silent direction. Reproduced on 2026-08-01 in a `git clone --no-hardlinks` of
+  # this repository, one commit on top of `main` touching only `tsconfig.base.json`:
+  #
+  #   git diff --name-only main...HEAD               → tsconfig.base.json
+  #   pnpm --filter "...[main]" ls --depth -1 --json → one entry, {"name": "waitron"}
+  #   … | node .github/scripts/changed-scope.mjs gates
+  #                                                  → heavy=false light=true verifactu=false
+  #                                                    shared=false
+  #
+  # (that last command is spelled as it was on `main` at the time — the file has since moved to
+  # `scripts/` and lost the `gates` subcommand, in the same change as this comment)
+  #
+  # A `pnpm-lock.yaml`-only commit gave byte-identical output; a `packages/ui`-only commit gave one
+  # entry and a `packages/shared` one gave twelve, so the narrowing itself was right — it was
+  # unattributable paths that resolved to the workspace ROOT, the one member that runs no tests.
+  # `test-heavy` and both mutation jobs skipped outright, and `test-light` was gated true but
+  # selected nothing to run: `pnpm --filter "waitron" --no-sort format:check` prints `No projects
+  # matched the filters in "…"` and exits 0 (run in this workspace, same date). So on a
+  # root-config-only or lockfile-only pull request, no package's suite ran at all.
+  #
+  # scripts/changed-packages.mjs attributes each path to the workspace member whose directory
+  # contains it and fails CLOSED — anything outside every member is `scope=global`, which is no
+  # filter at all. Expanding a changed package to its DEPENDENTS is still pnpm's job, via the
+  # `--filter "...<pkg>"` arguments built below.
   changes:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.classify.outputs.code }}
       scope: ${{ steps.classify.outputs.scope }}
+      packages: ${{ steps.classify.outputs.packages }}
       heavy: ${{ steps.gates.outputs.heavy }}
       light: ${{ steps.gates.outputs.light }}
       verifactu: ${{ steps.gates.outputs.verifactu }}
@@ -58,9 +87,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Needed for the `pnpm ls` membership query below. No `pnpm install` is required — `pnpm ls
-      # --filter` resolves from the workspace manifests alone (verified in a clone with no
-      # node_modules present).
+      # Needed for the two `pnpm ls` queries below — the workspace layout the classifier resolves,
+      # and the membership query that answers the gates. No `pnpm install` is required: `pnpm ls`
+      # resolves from the workspace manifests alone, filtered or not (measured on 2026-08-01 in a
+      # `git clone --no-hardlinks` with no node_modules anywhere in it — `pnpm ls -r --depth -1
+      # --json` exited 0 with all 16 entries).
       - uses: pnpm/action-setup@v6
         with:
           version: 9.15.0
@@ -99,15 +130,13 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
           BEFORE: ${{ github.event.before }}
           SHA: ${{ github.sha }}
+          EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
 
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "$EVENT" = "pull_request" ]; then
             git fetch --no-tags origin "$BASE_REF"
             paths=$(git diff --name-only "origin/$BASE_REF...HEAD")
-            # Changed packages AND THEIR DEPENDENTS. The ellipsis goes on the LEFT — `[ref]...`
-            # is the other direction (a package and its dependencies) and would test the wrong set.
-            scope="...[origin/$BASE_REF]"
           else
             case "$BEFORE" in
               # An all-zero `before` means a new branch or a force-push: no usable base, so no diff.
@@ -115,44 +144,81 @@ jobs:
               *[!0]*) paths=$(git diff --name-only "$BEFORE" "$SHA") ;;
               *) echo "no usable base ref ($BEFORE) — running everything" >&2; paths="" ;;
             esac
-            # main always runs the full suite: it is what verifies the pull request's narrowing.
-            scope=""
           fi
 
-          printf '%s\n' "$paths" | node scripts/changed-scope.mjs >> "$GITHUB_OUTPUT"
-          echo "scope=$scope" >> "$GITHUB_OUTPUT"
+          # Three lines out — `code=`, `scope=` (one of documentation, global, packages) and
+          # `packages=` — from ONE classifier call, which is also the one `.husky/pre-push` makes.
+          # Its reason goes to stderr, so it lands in this job's log rather than in $GITHUB_OUTPUT.
+          #
+          # `set -e` is what makes a classifier that cannot run FAIL this step rather than quietly
+          # emit nothing. Both directions are safe — an empty `scope` is not the literal `packages`,
+          # so every branch below falls through to running everything — but a step that fails is a
+          # step somebody reads.
+          out=$(printf '%s\n' "$paths" | node scripts/changed-packages.mjs)
+          code=$(printf '%s\n' "$out" | sed -n 's/^code=//p')
+          scope=$(printf '%s\n' "$out" | sed -n 's/^scope=//p')
+          packages=$(printf '%s\n' "$out" | sed -n 's/^packages=//p')
+
+          # main always runs the full suite: it is what verifies the pull request's narrowing. The
+          # docs verdict is left alone, so a documentation-only merge is still cheap there too.
+          if [ "$EVENT" != "pull_request" ]; then
+            scope="global"
+            packages=""
+          fi
+
+          {
+            echo "code=$code"
+            echo "scope=$scope"
+            echo "packages=$packages"
+          } >> "$GITHUB_OUTPUT"
 
       # Which gated jobs have anything to do? Four today — both test shards and the two mutation
       # runs — and none of them CAN be expressed as a filter on the job itself; see gateOutputs' own
       # comment for the two wrong formulations and why each fails.
       #
       # Three of the four ask whether one named package is in the resolved scope. `light` does not:
-      # test-light's own filter SUBTRACTS @waitron/db, so it has work when the scope holds anything
-      # other than db — which is why a gate is a predicate over the scope rather than a package
-      # name. See SCOPE_GATES in scripts/changed-scope.mjs.
+      # test-light's own filter SUBTRACTS @waitron/db, so it has work when the scope holds a package
+      # that is neither db nor one of the members with no test script — which is why a gate is a
+      # predicate over the scope rather than a package name. See SCOPE_GATES in
+      # scripts/changed-scope.mjs.
       #
       # ONE `pnpm ls` for all four. Not mainly for the time — measured locally, the query is 0.20s
       # against the node script's 0.04s, so four of them would cost well under a second — but
       # because all four gates are answers about the SAME resolved scope. Resolving it once makes
       # them consistent by construction, and keeps this step from growing a stanza per gated job.
       #
-      # `--unscoped` is main, where there is no scope to resolve and everything must run: the script
-      # emits every gate as true from its own SCOPE_GATES list, so a gate added there does not also
-      # need adding here. Getting that wrong would leave a new job never running on main, which is
-      # the direction nothing else would notice.
+      # That query is where the EXPANSION happens, and it is still pnpm's: one `--filter "...<pkg>"`
+      # per attributed package, whose LEFT-hand ellipsis selects that package AND ITS DEPENDENTS
+      # (`<pkg>...` is the other direction, a package and its dependencies, and would gate on the
+      # wrong set). Only the attribution moved out of pnpm's hands.
+      #
+      # Anything that is not `scope=packages` runs unscoped: `global` because an unattributable path
+      # could affect anything, `documentation` because the gates are ANDed with `code` anyway, and an
+      # empty or unexpected value because a scope nobody can read is not a reason to skip a suite.
+      # The `--unscoped` flag emits every gate as true from the script's own SCOPE_GATES list, so a
+      # gate added there does not also need adding here. Getting that wrong would leave a new job
+      # never running on main, which is the direction nothing else would notice.
       - id: gates
         env:
           SCOPE: ${{ steps.classify.outputs.scope }}
+          PACKAGES: ${{ steps.classify.outputs.packages }}
         run: |
           set -euo pipefail
-          if [ -z "$SCOPE" ]; then
-            node scripts/changed-scope.mjs gates --unscoped >> "$GITHUB_OUTPUT"
+          if [ "$SCOPE" != "packages" ] || [ -z "$PACKAGES" ]; then
+            node scripts/changed-scope.mjs --unscoped >> "$GITHUB_OUTPUT"
           else
+            # The filters are accumulated as POSITIONAL PARAMETERS rather than concatenated into a
+            # string for `eval`, exactly as .husky/pre-push does: the `for` word-splits on the
+            # single space the classifier emits, but nothing re-parses the result, so a quote, a
+            # `$`, a backtick or a glob in a package name reaches pnpm literally.
+            set --
+            for pkg in $PACKAGES; do set -- "$@" --filter "...$pkg"; done
+
             # stderr is deliberately NOT discarded: only stdout is piped, so anything pnpm says goes
             # to the job log where it can be read, and cannot reach the classifier. An earlier
             # version sent it to /dev/null and bought nothing but a harder debugging session.
-            pnpm --filter "$SCOPE" ls --depth -1 --json \
-              | node scripts/changed-scope.mjs gates >> "$GITHUB_OUTPUT"
+            pnpm "$@" ls --depth -1 --json \
+              | node scripts/changed-scope.mjs >> "$GITHUB_OUTPUT"
           fi
 
   # Always runs, on every path, including a documentation-only change — Prettier is the only tool
@@ -352,9 +418,10 @@ jobs:
   test-heavy:
     needs: changes
     # Gated on `heavy`, not on the scope filter. Two inclusion filters are OR-ed rather than
-    # intersected, so `--filter "$SCOPE" --filter "@waitron/db"` would run this 189s suite on every
-    # code change; and `@waitron/db[<base>]` misses db when one of db's own dependencies changed.
-    # The `changes` job resolves membership properly and answers here with a boolean.
+    # intersected, so adding `--filter "@waitron/db"` to the scope's own filters would run this 189s
+    # suite on every code change; and `@waitron/db[<base>]` — pnpm's changed-since form, which this
+    # workflow no longer uses at all — misses db when one of db's own dependencies changed. The
+    # `changes` job resolves membership properly and answers here with a boolean.
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true'
     runs-on: ubuntu-latest
     env:
@@ -380,10 +447,20 @@ jobs:
 
       # No scope filter here: the `changes` job already decided this shard has work to do, so the
       # only question left is which package, and that is always packages/db.
+      #
+      # The guard first, for the reason in its own doc comment: pnpm answers "nothing to do" with
+      # exit 0 and a line on stdout, so a shard whose filter selects nothing — or selects something
+      # with no `test:coverage` script — reports success having run no tests. That is what happened
+      # to test-light on a root-config pull request before this branch, and it costs nothing to
+      # refuse it here too.
       - name: Run the db shard
         env:
           TESTCONTAINERS_RYUK_DISABLED: "true"
-        run: pnpm --filter "@waitron/db" test:coverage
+        run: |
+          set -euo pipefail
+          pnpm --filter "@waitron/db" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:coverage
+          pnpm --filter "@waitron/db" test:coverage
 
   # Everything except packages/db. --no-sort removes the dependency ordering, which earns nothing
   # for tests: all 15 workspace members resolve to ./src/*.ts and no test imports a sibling's dist/,
@@ -392,7 +469,10 @@ jobs:
   test-light:
     needs: changes
     # `light` is not a membership gate like the other three: the step below subtracts @waitron/db
-    # from the scope, so this job has work when the resolved scope holds ANY package other than db.
+    # from the scope, so this job has work when the resolved scope holds a package that is neither
+    # db nor one of the members that declare no `test:coverage` script (PACKAGES_WITHOUT_TESTS —
+    # today just @waitron/bench-pglite, which is why a bench-only pull request skips this job
+    # instead of provisioning a runner to select nothing).
     #
     # It gated on `code` alone until this was added, which meant a code change touching no package
     # at all still got a runner. Read off run 30653487133 (`gh run view 30653487133 --json jobs`):
@@ -447,27 +527,38 @@ jobs:
       # is never part of what actions/cache restored above.
       - run: pnpm --filter @waitron/ui exec playwright install --with-deps chromium
 
-      # Exclusions SUBTRACT from the scoped set rather than being OR-ed with it — measured: with one
-      # commit touching packages/db, `--filter "...[main]"` gives 11 packages and adding
-      # `--filter "!@waitron/db"` gives the same 11 minus db. That is what makes this shard "the
-      # scoped set, minus what test-heavy already ran".
+      # Exclusions SUBTRACT from the scoped set rather than being OR-ed with it — measured on
+      # 2026-08-01 in this workspace: `--filter "...@waitron/db"` gives 11 packages and adding
+      # `--filter "!@waitron/db"` gives the same 11 minus db, in either order (the two orderings
+      # printed the identical ten names). That is what makes this shard "the scoped set, minus what
+      # test-heavy already ran".
       #
-      # The `-n "$SCOPE"` guard is load-bearing, not defensive decoration: on main SCOPE is the
-      # empty string, and `pnpm --filter ""` is neither "no filter" nor "match nothing". Measured on
-      # pnpm 9.15.0 with this workspace: it exits 1 with
-      # `ERROR  Unsupported package selector: {"exclude":false,…}` before selecting anything, so
-      # without the guard every main run would fail this shard outright.
+      # `scope=global` — main, an unattributable path, a diff we could not work out — leaves the
+      # positional parameters empty and runs the whole workspace minus db, which is the
+      # fail-CLOSED direction and the one the old `--filter "...[<base>]"` mechanism got wrong.
+      #
+      # Then the guard, BEFORE the tests so it fails in a second rather than after the suite: pnpm
+      # reports both "No projects matched the filters" and `None of the selected packages has a
+      # "test:coverage" script` on stdout with exit 0 (both measured on 2026-08-01, pnpm 9.15.0), so
+      # without it this step can report success having run nothing at all. It reads the SAME filters
+      # through `pnpm ls`, so it is measuring this run's real selection rather than restating the
+      # gate's opinion of it.
       - name: Run the light shard
         env:
           SCOPE: ${{ needs.changes.outputs.scope }}
+          PACKAGES: ${{ needs.changes.outputs.packages }}
           TESTCONTAINERS_RYUK_DISABLED: "true"
         run: |
           set -euo pipefail
-          if [ -n "$SCOPE" ]; then
-            pnpm --filter "$SCOPE" --filter "!@waitron/db" --no-sort test:coverage
-          else
-            pnpm --filter "!@waitron/db" --no-sort test:coverage
+          set --
+          if [ "$SCOPE" = "packages" ] && [ -n "$PACKAGES" ]; then
+            for pkg in $PACKAGES; do set -- "$@" --filter "...$pkg"; done
           fi
+          set -- "$@" --filter "!@waitron/db"
+
+          pnpm "$@" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:coverage
+          pnpm "$@" --no-sort test:coverage
 
   # Mutation testing for packages/verifactu only. Unlike packages/ui — whose
   # mutation run is weekly in mutation.yml because each mutant reruns the full
@@ -487,7 +578,7 @@ jobs:
   #
   # So it now gates on membership of the resolved scope, exactly as test-heavy does, and for the
   # same reason a filter on the job cannot express it (see gateOutputs in
-  # scripts/changed-scope.mjs). On main the scope is empty and this always runs.
+  # scripts/changed-scope.mjs). On main the scope is `global` and this always runs.
   mutation-verifactu:
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.verifactu == 'true'

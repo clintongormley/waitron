@@ -3,9 +3,15 @@
 **Date:** 2026-07-31
 **Status:** design approved, not yet implemented
 
-> **Dated pointer, 2026-08-01.** `.github/scripts/changed-scope.mjs`, named below, is now
-> `scripts/changed-scope.mjs` — the two script directories were merged into one. The rest of this
-> document is as written.
+> **Dated pointer, 2026-08-01 — §3.5 no longer describes the implementation.** Two things changed
+> after this was written. `.github/scripts/changed-scope.mjs`, named below, is now
+> `scripts/changed-scope.mjs`: the two script directories were merged into one. And the package
+> scoping in §3.5 no longer uses pnpm's changed-since filter — `--filter "...[<base>]"` attributes a
+> path belonging to no workspace member to the workspace ROOT, so a root-config or lockfile-only
+> pull request skipped every package's tests. `ci.yml` now attributes paths with
+> `scripts/changed-packages.mjs`, the same script `.husky/pre-push` uses, and fails closed to an
+> unfiltered run; the EXPANSION to dependents in §3.5 is unchanged and still pnpm's. The rest of
+> this document is as written; `docs/backlog.md` carries the receipts for the change.
 
 Today every push runs every check. A one-line correction to `CLAUDE.md` costs the same seven and a
 half minutes as a migration to `packages/db`. This design cuts that to the work a change can

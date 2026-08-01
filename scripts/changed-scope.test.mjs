@@ -1,11 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   HEAVY_PACKAGE,
+  PACKAGES_WITHOUT_TESTS,
   SCOPE_GATES,
   classify,
-  formatOutput,
   gateOutputs,
   isInertPath,
   packagesInScope,
@@ -158,6 +159,23 @@ describe("gateOutputs", () => {
     expect(gates(packagesInScope("[]")).light).toBe("false");
   });
 
+  // A package with no `test:coverage` script gives the light shard nothing to do, exactly as
+  // @waitron/db does — it is subtracted by pnpm rather than by a filter, but the shard is just as
+  // empty. Measured in this workspace on 2026-08-01:
+  // `pnpm --filter "...@waitron/bench-pglite" test:coverage` prints `None of the selected packages
+  // has a "test:coverage" script` and exits 0. Before this gate learned about the exemption list,
+  // that scope gave light=true and bought a runner, a `pnpm install` and a
+  // `playwright install --with-deps chromium` for zero test execution, reported as success.
+  it("skips the light shard when the only package in scope declares no tests", () => {
+    expect(gates(packagesInScope(ls(...PACKAGES_WITHOUT_TESTS))).light).toBe("false");
+  });
+
+  it("runs the light shard when a package that does have tests is in scope alongside it", () => {
+    expect(gates(packagesInScope(ls(...PACKAGES_WITHOUT_TESTS, "@waitron/payments"))).light).toBe(
+      "true",
+    );
+  });
+
   // Fails closed like every other gate, and centrally: gateOutputs applies the `inScope === null`
   // check before any gate's predicate is called, so a gate cannot forget it. Asserted on `light`
   // by name rather than only through the SCOPE_GATES-wide test below, which would keep passing if
@@ -216,6 +234,47 @@ describe("gateOutputs", () => {
   });
 });
 
+// The exemption list is the one piece of this module that is a claim about the TREE rather than a
+// rule about a scope, so it is checked against the real workspace instead of against a fixture.
+// Both directions matter and both are one `pnpm ls` away: a stale entry silently weakens the guard
+// in scripts/changed-packages.mjs, and a missing one makes a shard that ran nothing fail for a
+// package whose author never meant to declare tests.
+//
+// This is the enforcement docs/backlog.md asked for ("nothing enforces a future member declaring
+// one"), and it lands in the ungated `lint` job, so it answers on the pull request rather than on
+// the `main` merge that follows it.
+describe("PACKAGES_WITHOUT_TESTS", () => {
+  const repoRoot = join(import.meta.dirname, "..");
+
+  /** Every workspace member (never the root), as `{name, declares}`. */
+  const members = () => {
+    const ls = spawnSync("pnpm", ["ls", "-r", "--depth", "-1", "--json"], {
+      encoding: "utf8",
+      cwd: repoRoot,
+    });
+    expect(ls.status).toBe(0);
+
+    return JSON.parse(ls.stdout)
+      .filter((pkg) => resolve(pkg.path) !== resolve(repoRoot))
+      .map((pkg) => ({
+        name: pkg.name,
+        declares:
+          JSON.parse(readFileSync(join(pkg.path, "package.json"), "utf8")).scripts?.[
+            "test:coverage"
+          ] !== undefined,
+      }));
+  };
+
+  it("lists exactly the workspace members that declare no test:coverage script", () => {
+    expect(
+      members()
+        .filter((member) => !member.declares)
+        .map((member) => member.name)
+        .sort(),
+    ).toEqual([...PACKAGES_WITHOUT_TESTS].sort());
+  });
+});
+
 describe("SCOPE_GATES", () => {
   // The gate NAMES are the interface: ci.yml declares one `changes` output per entry and each gated
   // job reads one by name, and the `--unscoped` path emits this list verbatim. What each gate MEANS
@@ -234,16 +293,6 @@ describe("SCOPE_GATES", () => {
   });
 });
 
-describe("formatOutput", () => {
-  it("emits a GitHub Actions output line for a code change", () => {
-    expect(formatOutput(["packages/db/src/index.ts"])).toBe("code=true");
-  });
-
-  it("emits a GitHub Actions output line for a docs change", () => {
-    expect(formatOutput(["docs/backlog.md"])).toBe("code=false");
-  });
-});
-
 // The CLI is only reachable by running the file, so these spawn it. What they add over the unit
 // tests above is the part no exported function can show: WHICH STREAM each line goes to. The
 // workflow appends this process's stdout straight to $GITHUB_OUTPUT, so a stray line there becomes
@@ -258,29 +307,14 @@ describe("the CLI", () => {
     return result;
   };
 
-  it("writes only the output line to stdout, for a docs-only diff", () => {
-    expect(run("docs/backlog.md\nCLAUDE.md\n").stdout).toBe("code=false\n");
-  });
-
-  it("writes only the output line to stdout, for a diff touching a package", () => {
-    expect(run("docs/backlog.md\npackages/db/src/index.ts\n").stdout).toBe("code=true\n");
-  });
-
-  // The all-zero `github.event.before` path: the workflow pipes an empty `paths` in, and the run
-  // must fail closed to a full one rather than skipping everything.
-  it("fails closed on empty stdin", () => {
-    expect(run("").stdout).toBe("code=true\n");
-    expect(run("\n").stdout).toBe("code=true\n");
-  });
-
   // One `pnpm ls` invocation answers every gate. The `changes` job appends this stdout verbatim to
   // $GITHUB_OUTPUT, so the line ORDER does not matter to it but the line COUNT does — a fifth line
   // here would become a fifth job output, and ci.yml declares exactly four.
-  it("answers the gates subcommand from one pnpm ls result", () => {
-    expect(run(ls("@waitron/db", "@waitron/shared"), "gates").stdout).toBe(
+  it("answers every gate from one pnpm ls result", () => {
+    expect(run(ls("@waitron/db", "@waitron/shared")).stdout).toBe(
       "heavy=true\nlight=true\nverifactu=false\nshared=true\n",
     );
-    expect(run(ls("@waitron/payments"), "gates").stdout).toBe(
+    expect(run(ls("@waitron/payments")).stdout).toBe(
       "heavy=false\nlight=true\nverifactu=false\nshared=false\n",
     );
   });
@@ -288,7 +322,7 @@ describe("the CLI", () => {
   // The whole point of the `light` gate, through the CLI: a scope that is @waitron/db and nothing
   // else leaves test-light with no package to run, because its own filter subtracts db.
   it("reports no light work for a scope that is only @waitron/db", () => {
-    expect(run(ls("@waitron/db"), "gates").stdout).toBe(
+    expect(run(ls("@waitron/db")).stdout).toBe(
       "heavy=true\nlight=false\nverifactu=false\nshared=false\n",
     );
   });
@@ -298,9 +332,7 @@ describe("the CLI", () => {
   // against `--filter "@waitron/nonexistent"`, `--filter "...[main]"` and
   // `--filter "...[origin/main]"`, in both a worktree and a fresh clone.
   it("reads an empty pnpm ls result as no work for any gated job", () => {
-    expect(run("", "gates").stdout).toBe(
-      "heavy=false\nlight=false\nverifactu=false\nshared=false\n",
-    );
+    expect(run("").stdout).toBe("heavy=false\nlight=false\nverifactu=false\nshared=false\n");
   });
 
   // main has no scope to resolve, so there is no `pnpm ls` to run. The flag keeps the gate list in
@@ -310,16 +342,16 @@ describe("the CLI", () => {
   // A resolved scope is fed in anyway, and must be ignored: that is what shows the flag decides on
   // its own rather than falling through to whatever happens to be on stdin.
   it("emits every gate for an unscoped run, ignoring stdin entirely", () => {
-    expect(run(ls("@waitron/payments"), "gates", "--unscoped").stdout).toBe(
+    expect(run(ls("@waitron/payments"), "--unscoped").stdout).toBe(
       "heavy=true\nlight=true\nverifactu=true\nshared=true\n",
     );
-    expect(run("", "gates", "--unscoped").stdout).toBe(
+    expect(run("", "--unscoped").stdout).toBe(
       "heavy=true\nlight=true\nverifactu=true\nshared=true\n",
     );
   });
 
   it("fails closed to every gate when pnpm ls output cannot be parsed", () => {
-    expect(run("No projects matched the filters", "gates").stdout).toBe(
+    expect(run("No projects matched the filters").stdout).toBe(
       "heavy=true\nlight=true\nverifactu=true\nshared=true\n",
     );
   });
@@ -333,25 +365,19 @@ describe("the CLI", () => {
   // to be different, but the untested path was real.
   it("fails closed when pnpm reports its own error as JSON on stdout", () => {
     const pnpmError = '{"error":{"code":"pnpm","message":"Unsupported package selector: …"}}';
-    expect(run(pnpmError, "gates").stdout).toBe(
-      "heavy=true\nlight=true\nverifactu=true\nshared=true\n",
-    );
+    expect(run(pnpmError).stdout).toBe("heavy=true\nlight=true\nverifactu=true\nshared=true\n");
   });
 
   it("treats a genuinely empty scope as empty, not as an error", () => {
     // `pnpm ls` emits zero bytes and exits 0 when its filter matches nothing, so this is the
     // ordinary "this change touches no package" case and must SKIP rather than run everything.
-    expect(run("[]", "gates").stdout).toBe(
-      "heavy=false\nlight=false\nverifactu=false\nshared=false\n",
-    );
-    expect(run("", "gates").stdout).toBe(
-      "heavy=false\nlight=false\nverifactu=false\nshared=false\n",
-    );
+    expect(run("[]").stdout).toBe("heavy=false\nlight=false\nverifactu=false\nshared=false\n");
+    expect(run("").stdout).toBe("heavy=false\nlight=false\nverifactu=false\nshared=false\n");
   });
 
   it("puts the reason on stderr, where it cannot reach $GITHUB_OUTPUT", () => {
-    const { stdout, stderr } = run("docs/backlog.md\n");
-    expect(stderr).toContain("are documentation");
-    expect(stdout).not.toContain("documentation");
+    const { stdout, stderr } = run(ls("@waitron/db"));
+    expect(stderr).toContain("changed-scope:");
+    expect(stdout).not.toContain("changed-scope:");
   });
 });

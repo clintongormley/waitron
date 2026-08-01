@@ -35,6 +35,10 @@
 #                                              so it runs on a documentation-only push.
 #   pnpm lint                       code       1681-1860ms (3 runs)
 #   pnpm typecheck                  code       scoped to the changed packages and their dependents
+#   scope is runnable               scoped     199-202ms (5 runs, `...@waitron/ui` scope) — one
+#                                              `pnpm <the same filters> ls` piped into node. Only on
+#                                              a scoped push. Refuses a scope that would run no test
+#                                              at all — see the step's own comment.
 #   pnpm test:coverage              code       ditto — and `test:coverage`, NOT `test`: CI's shards
 #                                              run coverage thresholds and a plain `pnpm test` does
 #                                              not, so a threshold regression used to pass here and
@@ -66,10 +70,11 @@
 #     appending a mis-formatted heading to CLAUDE.md made `prettier --check CLAUDE.md` print
 #     `[warn] CLAUDE.md` and exit 1.
 #
-# The classifier is scripts/changed-packages.mjs, which imports `classify` and `isInertPath` from
-# scripts/changed-scope.mjs — the same functions CI's docs gate calls — so the two cannot
-# disagree about what documentation is. ONE invocation answers both questions this hook asks: is
-# this prose, and if not, what does it reach.
+# The classifier is scripts/changed-packages.mjs. ONE invocation answers both questions this hook
+# asks: is this prose, and if not, what does it reach. Since 2026-08-01 it is also the ONLY
+# mechanism — ci.yml's `changes` job runs this same script on the pull request's diff, where it used
+# to run pnpm's changed-since filter instead and skip every package's tests on a root-config change.
+# One tested code path rather than two that can drift; docs/backlog.md carries what the drift cost.
 #
 # SCOPING. That script maps the push's changed paths onto workspace packages; this hook turns each
 # into `--filter "...<pkg>"`, whose LEFT-hand ellipsis selects that package AND ITS DEPENDENTS
@@ -85,7 +90,9 @@
 # while `pnpm --filter "...[main]" ls --depth -1 --json` gave 2760 bytes and 11 packages in a plain
 # `git clone` and 0 bytes, exit 0 in a `git worktree` — indistinguishable from a filter that matched
 # nothing. All work in this repository happens in a worktree (CLAUDE.md §6), so a hook built on that
-# filter would narrow every push to nothing.
+# filter would narrow every push to nothing. CI ran in a clone, where that filter does work, and it
+# is gone from there too as of 2026-08-01 — for a different reason: it answers a path belonging to
+# no package with the workspace ROOT, which is narrower than the truth rather than wider.
 #
 # NOT RUN HERE, deliberately — so a green hook does NOT imply a green CI:
 #
@@ -116,13 +123,15 @@
 #     CLAUDE.md §2's "a filtered test run does not load a package's guard suites", one level up:
 #     the filter is now over PACKAGES rather than over test names. Recorded as a follow-up in
 #     docs/backlog.md; not fixed here.
-#   * ANY TEST AT ALL, when the scope holds only packages with no `test:coverage` script. Measured
-#     on 2026-08-01: `pnpm --filter "...@waitron/bench-pglite" test:coverage` prints `None of the
-#     selected packages has a "test:coverage" script` and exits 0, and the end-to-end hook run on a
-#     crafted `bench/pglite-throughput` push reported `all checks passed in 7s`. Honest today —
-#     that package deliberately has no tests (bench/pglite-throughput/README.md) — but nothing
-#     enforces a future member declaring the script. Same shape ci.yml already records for
-#     `test-light`. Also a docs/backlog.md follow-up.
+#   * ANY TEST AT ALL, when the scope holds only packages that declare no `test:coverage` script.
+#     Measured on 2026-08-01: `pnpm --filter "...@waitron/bench-pglite" test:coverage` prints `None
+#     of the selected packages has a "test:coverage" script` and exits 0. That is still true and
+#     still honest — @waitron/bench-pglite deliberately has no tests
+#     (bench/pglite-throughput/README.md) — but it is now DECLARED rather than assumed: the package
+#     is named in PACKAGES_WITHOUT_TESTS in scripts/changed-scope.mjs, and the "scope is runnable"
+#     step below fails on any other package that turns up with no such script. So a green hook still
+#     does not imply tests ran on such a push; it does imply nobody added a package that quietly
+#     runs none.
 #
 # In a hurry / hook is wrong? Bypass with: git push --no-verify
 # Please still fix the underlying failure — CI runs the same checks and will block the PR either
@@ -410,6 +419,33 @@ run_step "lint" "pnpm lint" pnpm lint
 # package directory and so report `scope=global` — asserted for both paths in
 # scripts/changed-packages.test.mjs.
 run_step "typecheck ($scope_label)" "pnpm$repro_filters typecheck" pnpm "$@" typecheck
+
+# Refuses a SCOPED run that would execute no test at all. pnpm reports both of its "nothing to do"
+# outcomes on stdout with exit 0 — measured on 2026-08-01, pnpm 9.15.0:
+#
+#   pnpm --filter "@waitron/nope" test:coverage        → No projects matched the filters in "…"
+#   pnpm --filter "...@waitron/bench-pglite" test:cov… → None of the selected packages has a
+#                                                        "test:coverage" script
+#
+# so the step below cannot tell "everything passed" from "nothing ran". This reads the SAME filters
+# through `pnpm ls` and fails on a selection that would run nothing, unless every package in it is
+# declared test-less in PACKAGES_WITHOUT_TESTS.
+#
+# Only on a scoped push. With no filters `pnpm test:coverage` runs the ROOT script — `vitest run
+# --coverage && pnpm -r test:coverage` — so the repo-level project runs whatever else does, and the
+# guard's question does not arise. Running it there would also FAIL every global push: measured on
+# 2026-08-01, `pnpm ls --depth -1 --json` with no filter prints one entry, the workspace root
+# itself, which the guard drops by path and then reads as an empty selection.
+if [ "$#" -gt 0 ]; then
+  check_scope_runnable() {
+    pnpm "$@" ls --depth -1 --json | node scripts/changed-packages.mjs runnable test:coverage
+  }
+
+  run_step "scope is runnable ($scope_label)" \
+    "pnpm$repro_filters ls --depth -1 --json | node scripts/changed-packages.mjs runnable test:coverage" \
+    check_scope_runnable "$@"
+fi
+
 run_step "tests with coverage ($scope_label)" "pnpm$repro_filters test:coverage" \
   pnpm "$@" test:coverage
 

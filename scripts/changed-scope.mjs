@@ -1,7 +1,13 @@
 import { readFileSync } from "node:fs";
 
-// Decides whether a change can affect anything but prose, so CI can skip the expensive jobs when it
-// cannot. Design: docs/superpowers/specs/2026-07-31-scoped-ci-design.md §3.4.
+// Two jobs, both of them answers ABOUT a scope rather than derivations OF one (that is
+// changed-packages.mjs, which imports `classify` and `isInertPath` from here):
+//
+//   * whether a change can affect anything but prose, so CI can skip the expensive jobs when it
+//     cannot — `isInertPath` and `classify`, design §3.4;
+//   * which gated jobs a resolved scope gives work to — `SCOPE_GATES` and `gateOutputs`, §3.6.
+//
+// Design: docs/superpowers/specs/2026-07-31-scoped-ci-design.md.
 //
 // The rule is an ALLOWLIST OF PATHS, never a file extension. A `**/*.md` rule looks equivalent and
 // is not: packages/verifactu/schemas/README.md holds the SHA-256 of every AEAT schema file, and
@@ -45,8 +51,27 @@ export function classify(paths) {
 /** The package the heavy shard exists for: 189s of the old 387s test step, on its own runner. */
 export const HEAVY_PACKAGE = "@waitron/db";
 
+/**
+ * Workspace members that deliberately declare no `test:coverage` script.
+ *
+ * A member listed here contributes nothing to a test shard, so the `light` gate below discounts it
+ * and the guard in scripts/changed-packages.mjs lets a selection of nothing but these pass. A
+ * member NOT listed here that declares no such script is a mistake, and that guard fails on it.
+ *
+ * `@waitron/bench-pglite` is the only one today, and `changed-scope.test.mjs` pins that against the
+ * real workspace in both directions rather than leaving it to be remembered:
+ * bench/pglite-throughput/README.md records that it defines no `test` script and holds no
+ * `*.test.ts`, both deliberate. Measured in this workspace on 2026-08-01:
+ * `pnpm --filter "...@waitron/bench-pglite" test:coverage` prints `None of the selected packages
+ * has a "test:coverage" script` on STDOUT and exits **0**.
+ */
+export const PACKAGES_WITHOUT_TESTS = ["@waitron/bench-pglite"];
+
 /** A gate that fires when one named package is in the resolved scope — three of the four. */
 const membership = (packageName) => (inScope) => inScope.has(packageName);
+
+/** True when this package would give a test shard something to actually run. */
+const runsTests = (name) => name !== HEAVY_PACKAGE && !PACKAGES_WITHOUT_TESTS.includes(name);
 
 /**
  * Every gated job, as a predicate over the resolved scope, in the order the CLI emits them.
@@ -60,9 +85,10 @@ const membership = (packageName) => (inScope) => inScope.has(packageName);
  *
  * `light` joined them for the same kind of reason and is the one gate that is NOT membership of a
  * named package, which is why an entry holds a PREDICATE rather than a package name. test-light
- * runs `--filter "$SCOPE" --filter "!@waitron/db"`, so it has work exactly when the resolved scope
- * holds something other than the heavy package — true when db is in scope alongside anything else,
- * false when db is the whole of it. Read off run 30653487133 (`gh run view 30653487133 --json
+ * runs one `--filter "...<pkg>"` per changed package plus `--filter "!@waitron/db"`, so it has work
+ * exactly when the resolved scope holds a package that both survives that subtraction and has a
+ * `test:coverage` script to run — false when db is the whole of it, and false when the whole of it
+ * is in PACKAGES_WITHOUT_TESTS. Read off run 30653487133 (`gh run view 30653487133 --json
  * jobs`): gated on `code` alone, test-light was that run's LONGEST job — 18:01:36 → 18:02:24, 48s
  * — and its "Run the light shard" step printed `None of the selected packages has a
  * "test:coverage" script`. A runner, a `pnpm install` and a `playwright install --with-deps
@@ -77,7 +103,7 @@ const membership = (packageName) => (inScope) => inScope.has(packageName);
  */
 export const SCOPE_GATES = [
   { output: "heavy", covers: membership(HEAVY_PACKAGE) },
-  { output: "light", covers: (inScope) => [...inScope].some((name) => name !== HEAVY_PACKAGE) },
+  { output: "light", covers: (inScope) => [...inScope].some(runsTests) },
   { output: "verifactu", covers: membership("@waitron/verifactu") },
   { output: "shared", covers: membership("@waitron/shared") },
 ];
@@ -162,45 +188,35 @@ export function gateOutputs(inScope) {
   ).join("\n");
 }
 
-/** Renders a classification as the single GitHub Actions output line the workflow consumes. */
-export function formatOutput(paths) {
-  return `code=${classify(paths).code}`;
-}
-
-// CLI, two subcommands:
-//   classify           — changed paths on stdin, one per line → `code=<bool>`
-//   gates              — one `pnpm ls --json` result on stdin → one `<gate>=<bool>` line per gate
-//   gates --unscoped   — no scope to resolve (main)           → every gate true, stdin ignored
-// One `pnpm ls` invocation answers every gate, which is why `gates` emits the whole list rather than
-// taking a gate name: the alternative was running the same workspace query once per gated job.
-// Kept to the smallest possible body: every decision worth testing lives in the exported functions
-// above. What is left is the stream split — stdout is appended verbatim to `$GITHUB_OUTPUT`, so it
-// carries the output lines and nothing else, while the reason goes to stderr for whoever reads the
-// job log. No exported function can show that, so changed-scope.test.mjs spawns this file with
-// `spawnSync` and reads the two streams apart.
+// CLI: one `pnpm ls --json` result on stdin → one `<gate>=<bool>` line per gate. With `--unscoped`
+// (main, where there is no scope to resolve) stdin is ignored and every gate is true.
+//
+// ONE invocation answers every gate, which is why it emits the whole list rather than taking a gate
+// name: the alternative was running the same workspace query once per gated job. Kept to the
+// smallest possible body: every decision worth testing lives in the exported functions above. What
+// is left is the stream split — stdout is appended verbatim to `$GITHUB_OUTPUT`, so it carries the
+// output lines and nothing else, while the reason goes to stderr for whoever reads the job log. No
+// exported function can show that, so changed-scope.test.mjs spawns this file with `spawnSync` and
+// reads the two streams apart.
+//
+// It used to carry a second, argument-less subcommand that answered ci.yml's `code` gate by calling
+// `classify` on a list of changed paths. That gate is now one of the three lines
+// scripts/changed-packages.mjs emits, from the same `classify` call that decides the scope, so CI
+// and the pre-push hook classify a diff exactly once and by exactly one route.
 //
 // Ignored for coverage because those tests run it in a CHILD process, and the v8 provider only
 // measures the module graph loaded into the test process — so this block reads as 0% however
 // thoroughly it is exercised. Ignored for being unmeasurable, not for being untested: delete the
-// `describe("the CLI")` suite and six assertions about this block's behaviour go with it.
+// `describe("the CLI")` suite and eight assertions about this block's behaviour go with it.
 /* v8 ignore start */
 if (process.argv[1] && process.argv[1].endsWith("changed-scope.mjs")) {
-  // Read lazily. `gates --unscoped` is invoked with nothing piped into it, and its whole point is
-  // that stdin is irrelevant — so it does not touch fd 0 at all rather than reading an fd whose
-  // contents it would discard. (Whether reading it there would block was not tested; not reading it
-  // makes the question moot.)
-  const stdin = () => readFileSync(0, "utf8");
-
-  if (process.argv[2] === "gates") {
-    const unscoped = process.argv.includes("--unscoped");
-    const lines = gateOutputs(unscoped ? null : packagesInScope(stdin()));
-    console.error(`changed-scope: ${lines.split("\n").join(" ")}`);
-    console.log(lines);
-  } else {
-    const paths = stdin().split("\n");
-    const { code, reason } = classify(paths);
-    console.error(`changed-scope: code=${code} (${reason})`);
-    console.log(formatOutput(paths));
-  }
+  // `--unscoped` is invoked with nothing piped into it, and its whole point is that stdin is
+  // irrelevant — so it does not touch fd 0 at all rather than reading an fd whose contents it would
+  // discard. (Whether reading it there would block was not tested; not reading it makes the
+  // question moot.)
+  const unscoped = process.argv.includes("--unscoped");
+  const lines = gateOutputs(unscoped ? null : packagesInScope(readFileSync(0, "utf8")));
+  console.error(`changed-scope: ${lines.split("\n").join(" ")}`);
+  console.log(lines);
 }
 /* v8 ignore stop */

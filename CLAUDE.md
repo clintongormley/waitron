@@ -175,10 +175,13 @@ Traps that each cost a round trip (deliberately uncounted — the last version o
   the full unfiltered suite **whenever anything but documentation changed**, and that run is what
   verifies the narrowing was right — a documentation-only merge skips there too, which is the whole
   point of the two decisions being separate. So a green pull
-  request is evidence about the packages that RAN — read the `changes` job's log for its `code` and
-  `scope` outputs and its per-job `heavy` / `verifactu` / `shared` gates before treating it as
-  evidence about the workspace. Design:
-  `docs/superpowers/specs/2026-07-31-scoped-ci-design.md`.
+  request is evidence about the packages that RAN — read the `changes` job's log for its `code`,
+  `scope` and `packages` outputs and its per-job `heavy` / `light` / `verifactu` / `shared` gates
+  before treating it as evidence about the workspace. Design:
+  `docs/superpowers/specs/2026-07-31-scoped-ci-design.md`. Since 2026-08-01 the `changes` job and
+  the pre-push hook resolve that scope with the SAME script (`scripts/changed-packages.mjs`); before
+  that they used two mechanisms, and CI's one attributed root config and the lockfile to the
+  workspace root, so no package's tests ran at all on such a pull request.
 - **A cheap job can still be the critical path, and only the whole-run measurement shows it.**
   `mutation-verifactu` was gated on `code` alone because a mutation run over a pure-Node package is
   cheap _per mutant_. Read off the first scoped run
@@ -199,12 +202,25 @@ Traps that each cost a round trip (deliberately uncounted — the last version o
 - **`pnpm --filter ""` is a hard error, not a no-op.** Measured on pnpm 9.15.0 in this workspace:
   `pnpm --filter "" --filter "!@waitron/db" --no-sort exec node -e "0"` exits **1** with
   `ERROR  Unsupported package selector: {"exclude":false,…}` before selecting anything, while the same
-  command with the empty filter dropped exits 0. That is exactly the shape of `test-light`'s `SCOPE`
-  — empty on `main`, non-empty on a pull request — so its `[ -n "$SCOPE" ]` guard is load-bearing,
-  not decoration: without it every `main` run would fail that shard outright. The plan for this
-  change asserted the opposite, that an empty filter "matches nothing rather than everything". It
-  fails loudly, which is the better of the two directions, but a possibly-empty interpolated filter
-  still needs the guard.
+  command with the empty filter dropped exits 0. The plan for that change asserted the opposite,
+  that an empty filter "matches nothing rather than everything". It fails loudly, which is the
+  better of the two directions, but never interpolate a possibly-empty value into a `--filter`:
+  build the argument list so the filter is absent when there is nothing to narrow to. Both `ci.yml`
+  and `.husky/pre-push` now accumulate `--filter "...<pkg>"` as positional parameters and simply
+  append none, which removes the question rather than guarding it.
+- **A scoped `pnpm` run that selects nothing REPORTS SUCCESS.** Two different ways, both on stdout,
+  both exit **0**, both measured in this workspace on 2026-08-01 (pnpm 9.15.0):
+  `pnpm --filter "@waitron/nope" test:coverage` prints `No projects matched the filters in "…"`, and
+  `pnpm --filter "...@waitron/bench-pglite" test:coverage` prints
+  `None of the selected packages has a "test:coverage" script`. So a green test shard is not
+  evidence that a test ran, and "the filter is wrong" looks identical to "everything passed". This
+  cost a real defect — CI's whole `test-light` shard reporting green having executed nothing on a
+  root-config pull request. Both gates now run
+  `pnpm <the same filters> ls --depth -1 --json | node scripts/changed-packages.mjs runnable
+test:coverage` first, which refuses a selection that would run nothing; a member that deliberately
+  has no tests must be named in `PACKAGES_WITHOUT_TESTS` (`scripts/changed-scope.mjs`). The guard
+  reads the SELECTION, not pnpm's wording — a message that changes would switch a grep-based guard
+  off silently.
 - **The workspace root is outside `pnpm -r`, so root config is linted and never typechecked.**
   `pnpm typecheck` is `pnpm -r typecheck`, and `pnpm -r exec node -e "console.log(process.cwd())"`
   visits the fifteen workspace members and never the root; there is no root `tsconfig.json` either,
