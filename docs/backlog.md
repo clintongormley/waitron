@@ -46,8 +46,8 @@ reprioritisation rather than assumed.
 | **Scoped pre-push hook** — the same treatment for the local gate | **Merged** (#31). Scopes `typecheck` and `test:coverage` to the changed packages and their dependents, adds the sign-off (DCO) check CI was catching for us, runs `test:coverage` rather than `test`, adds `pnpm install --frozen-lockfile`, and skips `lint` on a documentation-only push. Measured on this machine on 2026-08-01, one crafted push per shape, `TESTCONTAINERS_RYUK_DISABLED=true`, wall clock bracketed in `time.time()` — `main`'s hook (`558c62b`, one run each) → #31's: deletions-only 9ms → 7-9ms (unchanged, #23 already did that); an **unsigned commit 104s and exit 0 → 27-36ms and exit 1**, because `main`'s hook has no sign-off check at all and so charged a full run and then let it through; documentation-only 105s → **3.1-3.5s**; a push to `packages/ui`, which no other package depends on, 105s → **8.2-8.8s**. **It is not faster everywhere.** A `packages/db` push is 112s and a root-config or lockfile push 116s — both SLOWER than `main`'s 105s, because this hook also runs `test:coverage` rather than `test` and installs first. Scoping pays on the leaves, not on the trunk; **Debt and odd jobs** carries the expansion sizes and what the hook still does not cover. **Re-measured the same way on 2026-08-01**, after the tree-wide guards moved into the repo-level project and the hook grew a step for it (two runs per shape): documentation-only **3.17-3.59s** and an unsigned commit **30ms, exit 1**, both unchanged — neither path reaches that step; `packages/ui` **10.75-11.20s**, the whole of the ~2.4s being the step; `packages/db` **113.22-116.81s** and root config **116.48-117.98s**, where it costs nothing at all, because the root `test:coverage` script was already running that project on the global path |
 | **Cloud storage model** — design | **Merged** (#19), corrected by **#22** |
 | **Local server as SIF, active-active + failover** — design | **Merged** (#33). Promotes the arch-design fallback (the *server* is the SIF, not each till) to the primary model; adds active-active chaining, a single relocatable submitter, human-driven boot-time failover, and an optional dedicated cloud server that can hold any role. **Topology only** — the buildable pieces are follow-ups below |
-| **Sale settlement model** — implementation plan | Not written. **The next build step** |
-| **Close Q13 and Q15 on primary source** | Not started. Cheaper than hiring — see below |
+| **Sale settlement model** — implementation plan | **Written; build in flight** on `feat/sale-settlement-model` (subagent-driven, [plan](superpowers/plans/2026-08-01-sale-settlement-model.md)) — piece 1 of the fiscal sequence below |
+| **Close Q13 and Q15 on primary source** | **Done** (#37). Q13 (tips) and Q15's core CLOSED on primary/official source ([findings](compliance/verifactu-findings.md) §§11–12); Q14 (precuenta) stays open — see the advisor gap below |
 | **Consolidate the session-memory notes** | Not started. They predate this file and now overlap it — see below |
 
 ---
@@ -83,7 +83,15 @@ decided the **topology only**; its §14 defers the buildable pieces, each to its
 
 - **The sync / replication protocol** between the two local servers and the cloud mirror — the
   largest. Partitioned-write active-active with full cross-replication (not multi-master); it must be
-  prototyped against the real migrations, not assumed from config.
+  prototyped against the real migrations, not assumed from config. **A first-draft spec exists**
+  ([2026-08-01-sif-sync-replication-protocol-design.md](superpowers/specs/2026-08-01-sif-sync-replication-protocol-design.md),
+  branch `docs/sif-sync-protocol-design`, held — not PR'd), reviewed against the schema. It raised two
+  things: a gap in #33 itself (below), and one of its own — its ownership map omits `sales` and
+  `working_orders`, which the two apply paths carry NOT-NULL foreign keys into, so the next draft needs
+  a "parent rows replicate before their referents" apply-ordering rule. Two container prototypes gate
+  it: whether a foreign `registro` INSERTs under FORCE RLS as a non-BYPASSRLS `withTenant` role, and
+  whether native logical replication can satisfy FORCE RLS at all (decides application-level sync vs.
+  native).
 - **Promotion + fencing tooling and the till-side failover list** — boot-time role resolution,
   continuous conflict-detection, the "one primary" invariant.
 - **The submitter as a relocatable role** — one venue submitter, certificate resolved from wherever
@@ -101,6 +109,14 @@ Also left open by that design:
 - The **reconcile remediation UI** and the **orphan-drift hold** (both already under *Debt and odd
   jobs*) are the backstop for the design's double-charge-across-failover path (§10) — no new work, but
   now they have a second caller.
+- **#33's "the SIF is the server" premise has no schema support yet — a decision to take before the
+  sync protocol advances.** Every fiscal key is per `till_id`: `registro_sif` (one live identity per
+  till), `cadenas` (chain head keyed `(tenant, till)`), `registros_facturacion` (`(tenant, till,
+  secuencia)`, `till_id NOT NULL`), `invoice_series` (`(tenant, till, code)`), and `tills` carries no
+  server column — verified against the schema on 2026-08-01. So server-as-SIF needs either the till
+  column re-read as a stand-in for "server" or an explicit `server_id`, and which one must be
+  **prototyped against `record-sale.ts`'s series↔till check and the chain-append path**, not assumed.
+  It loops back to whether #33 is itself complete.
 
 ---
 
@@ -114,10 +130,10 @@ Two of the four are not idle curiosity — they check assumptions **already buil
 
 | Q | Assumption already in the tree | If the answer is no |
 | --- | --- | --- |
-| **Q13** | Tips are outside the VAT base and appear on no invoice — `sales.tip_amount`, `record-sale.ts`, and a test pinning that the tip does not enter the huella | Every invoice modelled so far understates its base, and the tip has to enter the hash |
-| **Q5(a)** | One invoice series per till | The numbering scheme's foundation moves |
-| Q14 | A printed pre-bill obliges an amendment log | Changes the till design, not existing code |
-| Q15 | Short payment is a discount | Changes the till design, not existing code |
+| **Q13** *(CLOSED #37)* | Tips are outside the VAT base and appear on no invoice — `sales.tip_amount`, and `record-sale.ts` hands the fiscal backend only `total` (never the tip), so it never reaches the huella — a structural absence, not a dedicated test | Confirmed (findings §11): the tip does **not** enter the hash |
+| **Q5(a)** | One invoice series per till | The numbering scheme's foundation moves — and #33 already reshapes it (a series belongs to the server-SIF; two concurrent SIFs need disjoint series), see the SIF follow-ups above |
+| Q14 | A printed pre-bill obliges an amendment log | Changes the till design, not existing code. **Still open** — no primary text names the *precuenta* (findings §8) |
+| Q15 *(core CLOSED #37)* | Short payment accepted before issuance is a discount | Confirmed (findings §12): a *descuento* agreed at/before the operation is outside the base (LIVA art. 78.Tres.2º) |
 
 **Engaging someone is itself a task, and it has a lead time.**
 [compliance/who-to-ask.md](compliance/who-to-ask.md) is blunt about the market: *"No Spanish advisory
@@ -164,24 +180,27 @@ collide on the identity triple. And it **raises a new hosting question** — a c
 question above. `asesor-questions.md` carries a dated note; the full re-read this section calls for now
 has two designs to read against, not one.
 
-### Task: try to close Q13 and Q15 on primary source first
+### Q13 and Q15 closed on primary source (done 2026-08-01, #37); Q14 still open
 
-**Q5(b) was closed without asking anyone** — RD 1619/2012 art. 6.1.a) states it plainly, and reading
-the BOE took minutes. Two of the remaining questions may go the same way, and that is worth an
-afternoon before committing to a relationship the research above says will need managing.
+Closed following the Q5(b) precedent — primary/official source rather than waiting on an advisor. Q13
+(tips) and Q15's core are recorded in [verifactu-findings.md](compliance/verifactu-findings.md) §§11–12
+and marked closed in `asesor-questions.md`. In short: a voluntary tip is not *contraprestación*, so it
+is outside the VAT base whether paid in cash or on the same card capture (the test is *voluntariedad*,
+not payment method); a short payment agreed as payment-in-full before the factura issues is a
+*descuento* outside the base (LIVA art. 78.Tres.2º).
 
-- **Q13 (tips).** Every secondary source cites **DGT consulta vinculante 2174-03**, and none of them
-  was read at source. Start there, in [PETETE](https://petete.tributos.hacienda.gob.es/consultas/).
-  Highest value of the four: the answer is already assumed by the schema, by `record-sale.ts`, and by
-  a test pinning tips out of the huella.
-- **Q15 (short payment).** Discount versus bad debt is well-trodden ground in DGT doctrine; the
-  card-present wrinkle — one capture exceeding the invoice — may not be.
-- **Q14 (precuenta)** is the one least likely to yield, since it turns on whether AEAT's
-  *prefactura* list is exhaustive, which is an interpretive question rather than a stated rule.
-
-Record whatever is found in [compliance/verifactu-findings.md](compliance/verifactu-findings.md)
-and mark the question closed in `asesor-questions.md`, following the Q5(b) precedent — do not leave a
-closed question sitting in the open list.
+- **Q14 (precuenta) stays open** — a bounded search found no primary text naming the restaurant
+  *precuenta*, only the general prefactura doctrine (findings §8). Whether AEAT's
+  *albaranes / proformas / prefacturas* list is exhaustive is the interpretive hinge; it is one for
+  the advisor.
+- **New non-fiscal duty surfaced by Q13's card-present analysis:** a tip collected through the card
+  terminal (unlike cash handed straight to a waiter) is business income — *ingreso* for the Impuesto
+  sobre Sociedades and *rendimiento del trabajo* with retención for the employee. It does **not** touch
+  the factura or the huella; it is an accounting/payroll matter, recorded under *Not started* below.
+- **Provenance caveat** (carried in the findings): PETETE was unreachable (TLS), so the DGT consultas
+  were read via faithful legal-database reproductions; art. 78.Tres.2º was read at an official AEAT
+  source. Confirm the consulta wording on PETETE if an advisor engages. Correction landed in #37: DGT
+  **2174-03 is a *general* consulta, not vinculante** — the binding restatements are V3095-17 / V1808-22.
 
 ---
 
@@ -201,6 +220,14 @@ Nothing below has any code.
 
 The two marked **launch-day legal duty** are worth watching: they are not fiscal, they are not
 optional, and they are currently as unstarted as the restaurant-phase items they sit beside.
+
+**Card-collected tips are business income (new, 2026-08-01, #37).** A tip taken through the card
+terminal — unlike cash handed straight to a waiter — is *ingreso* for the Impuesto sobre Sociedades and
+*rendimiento del trabajo* with retención for the employee (IRPF / nómina). It does **not** touch the
+factura or the huella (the fiscal path is unchanged and correct — findings §11), but it is a real
+accounting/payroll duty for the **tip-payroll (13)** and **workforce (16)** tracks — integrate-not-build,
+and it needs the tip attributed to the payer (which the sale-settlement model, piece 1, now does by
+putting the tip on `tenders`).
 
 ---
 
