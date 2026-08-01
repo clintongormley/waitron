@@ -632,6 +632,126 @@ an edge case.
 
 ---
 
+## 11. Propinas — outside the base imponible del IVA, off the factura, off the huella (added 2026-08-01)
+
+Confirms what the schema already encodes: `sales.tip_amount` is documented *"non-taxable, in no fiscal
+record at all"* (`packages/db/src/schema/sales.ts:52`), `record-sale.ts` keeps it out of `total` and
+the taxable base, and a test pins that it never enters `computeHuella`. **That assumption holds** on
+the DGT's own doctrine.
+
+**Provenance — read this before citing.** PETETE (the DGT consulta database,
+`petete.tributos.hacienda.gob.es`) could **not** be reached: every fetch failed TLS chain validation
+(*"unable to verify the first certificate"*). DGT consultas are not published in the BOE — PETETE is
+their only primary home — so the verbatim below comes from **faithful legal-database reproductions**
+(Iberley, loyra.com, fiscal-impuestos.com) cross-checked across the three consultas below, whose text
+agrees, **not** from PETETE itself. Treat this as "the DGT's words at one remove", not "read on
+PETETE"; confirm on PETETE before relying on exact wording. The *substance* — a voluntary tip is not
+*contraprestación*, so it is outside the base imponible — is stated identically by every source and by
+two **binding** consultas, so the design question is answered even though the primary database was
+unreachable by tool.
+
+**Correction to the citation Q13 carried.** [asesor-questions.md](asesor-questions.md) Q13 (following
+the secondary commentary) called this *"DGT consulta vinculante 2174-03"*. **2174-03 is a consulta
+GENERAL, not vinculante** — every reproduction labels it *"Consulta general"*, dated 11 December 2003,
+and it carries no *"V"* prefix (the marker of the vinculante series). The binding restatements are
+**V3095-17** and **V1808-22**. This is §1's "quote the source's own words" landing on a load-bearing
+adjective.
+
+The verbatim doctrine, most on-point first:
+
+| Consulta | Type | Facts | Verbatim (IVA) |
+| --- | --- | --- | --- |
+| **2174-03** (11 dic 2003) | general | restaurant staff tips | *"Las cantidades que en concepto de propinas satisfagan con carácter voluntario y unilateral los destinatarios de los servicios de restaurante, y que no los sean exigibles por la prestación de tales servicios, no constituirán un crédito efectivo a favor de la sociedad consultante ni tampoco contraprestación de dichos servicios a efectos del Impuesto sobre el Valor Añadido, por lo que no formarán parte de la base imponible de dicho Impuesto…"* |
+| **V3095-17** (29 nov 2017) | **vinculante** | casino tips collected by the house, distributed via a *tronco de propinas* | *"las propinas que de manera voluntaria y unilateral satisfagan los clientes a los crupieres trabajadores del casino no forman parte de la base imponible del IVA"* |
+| **V1808-22** (29 jul 2022) | **vinculante** | voluntary donativos on a website | *"no determinarán la realización de operaciones sujetas al impuesto en la medida en que no constituyan la remuneración de entregas de bienes o prestaciones de servicios"* |
+
+**The test is voluntariedad, not payment method — which answers Q13(b), the card-present case.** The
+worry was that a tip charged in a single card capture exceeding the invoice total might be pulled into
+the base. It is not: the doctrine rests entirely on the tip not being *contraprestación*, and
+**V3095-17 is precisely the "collected by the business" shape** — the house takes the tips into a
+*tronco* and redistributes them, exactly the flow a card tip follows through the merchant account —
+and still holds them outside the base imponible. None of the three distinguishes cash from card for
+IVA. So the tip stays out of the factura's base and out of the huella whether it arrives as cash or on
+the same card capture as the bill.
+
+**But the card-present case creates a NON-fiscal duty the cash case does not, and it is worth
+flagging.** V3095-17 also holds that once the tip is **collected by the business** it is
+*"ingreso contable"* that *"deberá integrarse en la base imponible del IS"*, and for the employees the
+amounts from the *tronco* are *"rendimientos del trabajo a efectos del IRPF"* that are *"sujetas a
+retención"*. A tip handed directly in cash from customer to waiter is a pass-through the business never
+books; a tip that flows through Waitron's card terminal is **business income** that must reach the IS
+books and the employee's nómina with withholding. **This does not touch the factura or the huella** —
+`tip_amount` staying out of the fiscal record is correct and unchanged — but a card-collected tip is
+not "nothing to us" for accounting and payroll. Workforce/accounting concern (integrate-not-build),
+not a fiscal-record one, and a product decision rather than a compliance blocker.
+
+**Q13(c) — documenting the tip to the customer — is not squarely answered.** No consulta requires the
+tip on the factura, and none prohibits it; the sources are silent on receipt format. What the
+base-imponible holding fixes is that **if** shown, the tip must be an amount *outside* the base
+imponible (a non-taxable memo), never a taxable line. Left open.
+
+**Net for the code:** the fiscal path is confirmed correct — no change to `computeHuella`, the factura
+or the base. The open items are product/accounting, not fiscal: (b)'s card-tip income/payroll duty and
+(c)'s receipt format.
+
+---
+
+## 12. Short payment — a descuento reduces the base only if it reaches the bill before issuance (added 2026-08-01)
+
+The counter case (Q15): bill €70, customer is €5 short, staff accept €65 as payment in full. Which of
+two treatments applies is decided by primary law, and the boundary is **whether the reduction is
+agreed before or after the factura is issued.**
+
+**A reduction agreed at or before the operation is a descuento, and descuentos are outside the base
+imponible.** LIVA (Ley 37/1992) art. 78.Tres.2º, verbatim from **AEAT's own Manual práctico de IVA
+2025** (read directly on `sede.agenciatributaria.gob.es` — an official AEAT source, unlike the
+PETETE-blocked consultas in §11):
+
+> *"Los descuentos y bonificaciones concedidos previa o simultáneamente al momento en que la operación
+> se realice y en función de ella y que se justifiquen por cualquier medio de prueba admitido en
+> derecho."*
+
+— these *"no se incluirán en la base imponible"*. So when staff accept €65 as payment in full **before
+the factura simplificada is generated**, the operation genuinely is €65: base imponible €65, VAT on
+€65, one invoice, nothing outstanding. **This confirms the design assumption in Q15** — *"the reduction
+has to reach the bill before the invoice is issued"* — on primary/official text.
+
+**Once the factura is issued, correcting it needs a factura rectificativa, and the route forks:**
+
+- **Agreed price reduction (descuento posterior)** — art. 80.Uno.2º LIVA reduces the base for
+  descuentos *"concedidos con posterioridad al momento en que la operación se haya realizado"* when
+  duly justified, via a rectificativa. This is the natural reading of "we agreed to take €65", and it
+  does **not** require the incobrable machinery.
+- **Unpaid debt (crédito incobrable)** — art. 80.Cuatro LIVA, whose conditions make recovering the €5
+  of VAT practically impossible: a waiting period (**one year**, six months for smaller businesses),
+  a *fehaciente* reclamación of the debt, a minimum base imponible when the debtor is a final consumer,
+  a rectificativa within a further window, and a communication to AEAT. Ley 31/2022 relaxed these
+  (reclamación *"por cualquier medio que acredite fehacientemente la reclamación del cobro"* replacing
+  the old requerimiento notarial / reclamación judicial; the final-consumer minimum lowered, reported
+  as €50 excl. IVA). **These art. 80.Cuatro figures are from secondary summaries — confirm the current
+  thresholds at BOE before relying on them** (the consolidated BOE page truncated before Title V in the
+  fetcher, so art. 80 was not read at source here; art. 78.Tres.2º above was, on the AEAT manual).
+
+**The boundary is a legal characterization Q15 turns on, and it is the one genuinely interpretive
+part.** Accepting a lower amount *"as payment in full"* at the counter is an **agreed reduction** — a
+descuento — not an impago, because the parties settle on a new price rather than leaving €5
+outstanding. So even after issuance the correct route is art. 80.Uno.2º (rectificativa reducing the
+base), not the art. 80.Cuatro incobrable path. The distinction matters only because the impago reading
+would leave VAT due on the uncollected €5; and for €5 nobody issues a rectificativa either way, so the
+practical rule is: **apply the reduction before issuing.**
+
+**Q15(c) — cash rounding — is the same shape at higher frequency.** Rounding a cash total down to the
+nearest five cents is a descuento concedido simultáneamente (art. 78.Tres.2º): applied before the
+factura is issued it reduces the base, so the invoiced and collected amounts coincide with no separate
+line required — the base is simply the rounded figure. (Rounding *up* is not a descuento and would add
+to the base; the realistic case is rounding down.)
+
+**Net for the code:** the assumption that a short payment of this size is a discount, applied to the
+bill before issuance, is correct on primary law. The residual is the characterization boundary above
+(interpretive) and the exact art. 80.Cuatro thresholds (confirm at BOE).
+
+---
+
 ## Sources
 
 | Source | Type |
@@ -645,7 +765,13 @@ an edge case.
 | LGT art. 201 bis (introduced by Ley 11/2021) | primary |
 | LGT art. 29.2.j) (Ley 58/2003) — quoted in the developer FAQ, §8 above | primary |
 | BOE-A-2012-14696 — RD 1619/2012 (ROF), arts. 2, 9, 11, 18 | primary |
+| BOE-A-1992-28740 — LIVA (Ley 37/1992), arts. 78.Tres.2º (base imponible), 80.Uno.2º / 80.Cuatro (modificación) | primary — art. 78.Tres.2º via AEAT Manual práctico IVA 2025 (official); art. 80 via secondary summary, NOT read at source (§12) |
+| DGT consulta general **2174-03** (11 dic 2003) — propinas de restaurante fuera de la base imponible del IVA | primary (DGT) — read via legal-database reproduction; PETETE unreachable by tool (TLS), §11 |
+| DGT consultas vinculantes **V3095-17** (29 nov 2017), **V1808-22** (29 jul 2022) — propinas/donativos fuera de la base imponible; propina cobrada por la empresa = ingreso IS + rendimiento del trabajo | primary (DGT) — read via legal-database reproduction; PETETE unreachable by tool (TLS), §11 |
 
 AEAT sede FAQ pages stamped *"Actualizadas a 5 de diciembre de 2025"*. Several AEAT PDFs
 could not be read by normal fetching (FlateDecode/font encoding) and were extracted locally —
-findings resting on those are text-verified rather than model-summarised.
+findings resting on those are text-verified rather than model-summarised. The DGT consultas in §11
+were verified against faithful legal-database reproductions because `petete.tributos.hacienda.gob.es`
+failed TLS chain validation on every fetch — the substance is corroborated across four sources and two
+binding consultas, but a human should confirm the exact wording on PETETE.
