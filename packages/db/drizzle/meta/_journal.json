@@ -85,6 +85,13 @@
       "when": 1785350527112,
       "tag": "0011_provisioner_role",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1785611326769,
+      "tag": "0012_sale_settlement",
+      "breakpoints": true
     }
   ]
 }

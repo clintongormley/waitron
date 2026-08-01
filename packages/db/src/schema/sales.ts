@@ -44,14 +44,15 @@ export const tenderMethod = pgEnum("tender_method", [
 ]);
 
 /**
- * The immutable commercial record of a completed sale — written once, when the
- * LAST tender settles (spec §4), and never edited. The deliberate opposite of
- * working_orders.
+ * The immutable commercial record of a completed sale — written once, at
+ * issuance, and never edited. The deliberate opposite of working_orders.
  *
- * total       — taxable base plus VAT; the figure the fiscal record reports.
- * tip_amount  — non-taxable, in no fiscal record at all.
- * amount_charged — what hit the payment instruments; reconciles against the
- *                  acquirer. Three distinct numbers, held together by CHECK.
+ * total — taxable base plus VAT; the figure the fiscal record reports, and now
+ * the ONLY number here. The tip moved to `tenders.tip_amount` (attributed to
+ * the payer who left it), and `amount_charged` is derived — `total + sum(tips)`
+ * — never stored, because nothing in production ever read it (design §3). This
+ * is what lets an invoice be issued before payment settles: the sale carries no
+ * payment fact that would be unknown at that moment.
  *
  * locale and invoice_locales are snapshotted as at issuance (spec §9), so a
  * receipt reprinted a year later reads identically to the one the customer
@@ -94,8 +95,6 @@ export const sales = pgTable(
     issuedAt: timestamp("issued_at", { withTimezone: true, mode: "string" }).notNull(),
     issuedOffsetMinutes: integer("issued_offset_minutes").notNull(),
     total: numeric("total", { precision: 12, scale: 2 }).notNull(),
-    tipAmount: numeric("tip_amount", { precision: 12, scale: 2 }).notNull().default("0.00"),
-    amountCharged: numeric("amount_charged", { precision: 12, scale: 2 }).notNull(),
     locale: text("locale").notNull(),
     invoiceLocales: text("invoice_locales").array().notNull(),
     fiscalBackend: text("fiscal_backend").notNull(),
@@ -108,8 +107,6 @@ export const sales = pgTable(
     unique("sales_tenant_id_key").on(t.tenantId, t.id),
     index("sales_tenant_issued_idx").on(t.tenantId, t.issuedAt),
     index("sales_fiscal_state_idx").on(t.tenantId, t.fiscalState),
-    check("sales_amount_charged_ck", sql`${t.amountCharged} = ${t.total} + ${t.tipAmount}`),
-    check("sales_tip_amount_ck", sql`${t.tipAmount} >= 0`),
     check("sales_total_ck", sql`${t.total} >= 0`),
     check("sales_invoice_number_ck", sql`${t.invoiceNumber} >= 1`),
     check("sales_invoice_locales_ck", sql`array_length(${t.invoiceLocales}, 1) between 1 and 2`),
@@ -150,8 +147,15 @@ export const saleLines = pgTable(
 
 /**
  * One row per payment against one invoice. Split tender is several rows; the
- * sale exists only once they sum to amount_charged, checked at COMMIT by a
- * deferred constraint trigger.
+ * sale is fully paid only once they sum to `total + sum(tip_amount)`, checked
+ * when settlement is DECLARED — the INSERT into `sale_settlements` (design §5),
+ * not at COMMIT and no longer on this table's own INSERT.
+ *
+ * `tip_amount` is the payer's affirmed gratuity, non-taxable and on no invoice
+ * (design §9.2). It rides on the tender rather than the sale so it is
+ * attributed to the payer who left it. `amount` is the whole instrument charge;
+ * the tip is a part of it, never on top (`tip_amount <= amount`), because the
+ * terminal is sent one final figure (design §4).
  */
 export const tenders = pgTable(
   "tenders",
@@ -161,6 +165,7 @@ export const tenders = pgTable(
     saleId: uuid("sale_id").notNull(),
     method: tenderMethod("method").notNull(),
     amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+    tipAmount: numeric("tip_amount", { precision: 12, scale: 2 }).notNull().default("0.00"),
     settledAt: timestamp("settled_at", { withTimezone: true, mode: "string" }).notNull(),
   },
   (t) => [
@@ -170,6 +175,35 @@ export const tenders = pgTable(
       name: "tenders_sale_fk",
     }).onDelete("restrict"),
     index("tenders_sale_idx").on(t.saleId),
-    check("tenders_amount_ck", sql`${t.amount} <> 0`),
+    // Tightened from `amount <> 0` (design §3): the permission for a negative
+    // tender was an artefact of spelling, never a decision, and `tip_amount <=
+    // amount` cannot coexist with a negative amount.
+    check("tenders_amount_ck", sql`${t.amount} > 0`),
+    check("tenders_tip_amount_ck", sql`${t.tipAmount} >= 0 and ${t.tipAmount} <= ${t.amount}`),
+  ],
+).enableRLS();
+
+/**
+ * One row per fully-settled sale — appended when settlement is *declared*
+ * complete. Append-only (REVOKE UPDATE/DELETE + reject_mutation triggers) like
+ * `tenders`. Its existence is the answer to "is this sale paid?"; under
+ * invoice-first an unsettled sale is a legitimate steady state, not an anomaly
+ * (design §3).
+ */
+export const saleSettlements = pgTable(
+  "sale_settlements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull(),
+    saleId: uuid("sale_id").notNull(),
+    settledAt: timestamp("settled_at", { withTimezone: true, mode: "string" }).notNull(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.tenantId, t.saleId],
+      foreignColumns: [sales.tenantId, sales.id],
+      name: "sale_settlements_sale_fk",
+    }).onDelete("restrict"),
+    unique("sale_settlements_sale_key").on(t.tenantId, t.saleId),
   ],
 ).enableRLS();
