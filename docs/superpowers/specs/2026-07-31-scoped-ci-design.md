@@ -3,6 +3,10 @@
 **Date:** 2026-07-31
 **Status:** design approved, not yet implemented
 
+> **Dated pointer, 2026-08-01.** `.github/scripts/changed-scope.mjs`, named below, is now
+> `scripts/changed-scope.mjs` — the two script directories were merged into one. The rest of this
+> document is as written.
+
 Today every push runs every check. A one-line correction to `CLAUDE.md` costs the same seven and a
 half minutes as a migration to `packages/db`. This design cuts that to the work a change can
 plausibly affect, and shortens the full run when one is warranted.

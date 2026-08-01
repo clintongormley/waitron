@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
-import { classify, isInertPath } from "../.github/scripts/changed-scope.mjs";
+import { classify, isInertPath } from "./changed-scope.mjs";
 
 // Answers, in ONE call, the only question `.husky/pre-push` asks about a push's changed paths: is
 // this documentation, is it something that could reach anything, or is it a specific set of
@@ -41,7 +41,7 @@ import { classify, isInertPath } from "../.github/scripts/changed-scope.mjs";
  * a member's name is a manifest field anyone can change while its path is a fact about the tree.
  *
  * `null` and the empty array are deliberately different answers, the same distinction
- * `packagesInScope` keeps in .github/scripts/changed-scope.mjs: `null` is "we do not know", which
+ * `packagesInScope` keeps in scripts/changed-scope.mjs: `null` is "we do not know", which
  * `scopeForPaths` turns into a global run, while an empty array would be the definite answer
  * "this workspace has no members".
  *
@@ -152,7 +152,7 @@ function owningPackage(path, packages) {
  * the thunk is untouched on both outcomes, so that is a tested property rather than a reading of
  * the control flow.
  *
- * DOCUMENTATION is decided by `classify` from .github/scripts/changed-scope.mjs — the same function
+ * DOCUMENTATION is decided by `classify` from scripts/changed-scope.mjs — the same function
  * CI's docs gate calls — and the per-path filter below by that module's `isInertPath`, so "what
  * counts as documentation" has exactly one definition and this cannot report code work and then
  * find no code path to attribute. Without the exception a global run would be the common case, not

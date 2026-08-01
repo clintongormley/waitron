@@ -67,7 +67,7 @@
 #     `[warn] CLAUDE.md` and exit 1.
 #
 # The classifier is scripts/changed-packages.mjs, which imports `classify` and `isInertPath` from
-# .github/scripts/changed-scope.mjs — the same functions CI's docs gate calls — so the two cannot
+# scripts/changed-scope.mjs — the same functions CI's docs gate calls — so the two cannot
 # disagree about what documentation is. ONE invocation answers both questions this hook asks: is
 # this prose, and if not, what does it reach.
 #
@@ -406,8 +406,8 @@ run_step "lint" "pnpm lint" pnpm lint
 
 # `pnpm test:coverage` at the root is `vitest run --coverage && pnpm -r test:coverage`, so the
 # unscoped branch also runs the repo-level project. The scoped branch does not, and does not need
-# to: that project's only sources are `.github/scripts/` and `scripts/`, both of which lie outside
-# every package directory and so report `scope=global` — asserted for both paths in
+# to: that project's only sources are the two classifiers under `scripts/`, which lie outside every
+# package directory and so report `scope=global` — asserted for both paths in
 # scripts/changed-packages.test.mjs.
 run_step "typecheck ($scope_label)" "pnpm$repro_filters typecheck" pnpm "$@" typecheck
 run_step "tests with coverage ($scope_label)" "pnpm$repro_filters test:coverage" \

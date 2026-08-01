@@ -316,12 +316,6 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   the whole point — but the way to keep them agreeing is one script both call, not two copies and a
   comment. Held back from `feat/scoped-pre-push-hook` because extracting it edits a workflow that
   branch otherwise never touches
-- **`scripts/` and `.github/scripts/` are one directory's worth of code in two places.**
-  `scripts/changed-packages.mjs` imports `classify` and `isInertPath` from
-  `.github/scripts/changed-scope.mjs`; the root Vitest project's `include` and its coverage
-  `include`/`exclude` each name both directories; `vitest.config.ts` explains at length that
-  `**/[.]**` had to be filtered out of the coverage defaults to reach the dot-prefixed one. Merging
-  them removes the split and the paragraph. Small, and nothing depends on it
 - **`errors.reachability.test.ts` does not test reachability.** Proven by deletion. Eight packages
   carry a copy. Closing it needs a `tsc`-based downstream probe or a narrowed `include`. See
   `CLAUDE.md` §4 — do not cite these tests as evidence in the meantime

@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { classify } from "../.github/scripts/changed-scope.mjs";
+import { classify } from "./changed-scope.mjs";
 import { formatScope, scopeForPaths, workspacePackages } from "./changed-packages.mjs";
 
 const ROOT = "/repo";
@@ -57,7 +57,7 @@ describe("workspacePackages", () => {
   // Every caller treats null as "we could not read the workspace", which is a reason to run
   // everything. The empty ARRAY would be the definite answer "this workspace has no members", and
   // nothing produces it today — but the two must not be conflated, for the same reason
-  // packagesInScope keeps them apart in .github/scripts/changed-scope.mjs.
+  // packagesInScope keeps them apart in scripts/changed-scope.mjs.
   it("returns null when pnpm emitted nothing at all", () => {
     expect(workspacePackages("", ROOT)).toBeNull();
     expect(workspacePackages("   ", ROOT)).toBeNull();
@@ -68,7 +68,7 @@ describe("workspacePackages", () => {
   });
 
   // `pnpm ls --json` reports its OWN failures as valid JSON on stdout (measured on pnpm 9.15.0 and
-  // recorded in .github/scripts/changed-scope.mjs's packagesInScope). It parses, so only the shape
+  // recorded in scripts/changed-scope.mjs's packagesInScope). It parses, so only the shape
   // check tells it apart from a real result.
   it("returns null for pnpm's own error object, which is valid JSON", () => {
     expect(
@@ -148,7 +148,7 @@ describe("scopeForPaths", () => {
   // narrowed away on account of them.
   it.each([
     ".github/workflows/ci.yml",
-    ".github/scripts/changed-scope.mjs",
+    "scripts/changed-scope.mjs",
     ".husky/pre-push",
     "pnpm-workspace.yaml",
     "pnpm-lock.yaml",
@@ -227,7 +227,7 @@ describe("scopeForPaths", () => {
   });
 
   // Same predicate as the docs gate, so the hook cannot classify a push as "has code work" and then
-  // find no code path to attribute. isInertPath is imported from .github/scripts/changed-scope.mjs
+  // find no code path to attribute. isInertPath is imported from scripts/changed-scope.mjs
   // rather than reimplemented, which is what makes this hold by construction.
   it("treats exactly the paths classify() calls documentation as documentation", () => {
     const docsOnly = ["docs/superpowers/specs/x.md", "README.md"];

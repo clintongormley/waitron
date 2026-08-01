@@ -423,16 +423,22 @@ still passes with the guard removed is not testing the guard. Do the same for a 
 confirm it fails for the reason you think it does.
 
 **Vitest's default coverage excludes swallow the whole of `.github/`.** Coverage `include` and
-`exclude` replace rather than merge, so the house style spreads `coverageConfigDefaults.exclude`
-back in — and one of its seventeen entries, `**/[.]**`, matches any dot-prefixed path segment. The
-root `vitest.config.ts`'s first version spread them verbatim and measured
+`exclude` replace rather than merge, so a config that spreads `coverageConfigDefaults.exclude` back
+in inherits all seventeen entries — one of which, `**/[.]**`, matches any dot-prefixed path segment.
+The root `vitest.config.ts`'s first version spread them verbatim and measured
 **nothing**: `vitest run --coverage` printed `All files | 0 | 0 | 0 | 0`, wrote a
 `coverage-summary.json` whose every `pct` was the string `"Unknown"`, and **exited 0** — the
-98/98/98/95 thresholds passed without a line of source being read. Both configs were re-run here
-against `vitest@3.2.7`: the verbatim spread exits 0 at zero coverage, the committed one (which
-filters that one pattern out) reports `changed-scope.mjs` at 100/100/100/100. A coverage gate cannot
-fail on a file it never opened, so whenever `include` points anywhere dot-prefixed, read the per-file
-table rather than the exit code.
+98/98/98/95 thresholds passed without a line of source being read. Both configs were re-run against
+`vitest@3.2.7`: the verbatim spread exits 0 at zero coverage, the one that filtered that single
+pattern out reported `changed-scope.mjs` at 100/100/100/100. A coverage gate cannot fail on a file it
+never opened, so whenever `include` points anywhere dot-prefixed, read the per-file table rather than
+the exit code.
+
+That workaround is **gone from the tree** as of 2026-08-01: both classifiers moved to `scripts/`,
+nothing measured is dot-prefixed any more, and the root config now carries no `exclude` at all
+(measured there, in both directions, that an explicit one would be dead config). The trap is a
+property of Vitest's defaults, not of that config, so it is waiting for the next `include` that
+points inside a dot-directory.
 
 **`errors.reachability.test.ts` does not test reachability.** The rule it exists to enforce is real —
 an `errors.ts` unreachable from its package's own barrel is invisible to external consumers — but the

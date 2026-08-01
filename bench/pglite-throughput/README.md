@@ -35,8 +35,8 @@ added by reflex later, Vitest's default include pattern would match nothing here
 20-second, Docker-dependent benchmark out of CI's test shards and the pre-push hook permanently.
 
 Root `pnpm test` also runs `vitest run` at the repository root first, but that project cannot reach
-here either: its `include` is `[".github/scripts/**/*.test.mjs", "scripts/**/*.test.mjs"]` (see the
-root `vitest.config.ts`). Neither pattern reaches `bench/`.
+here either: its `include` is `["scripts/**/*.test.mjs"]` (see the root `vitest.config.ts`), which
+does not reach `bench/`.
 
 ## Single-file constraint
 

@@ -119,7 +119,7 @@ jobs:
             scope=""
           fi
 
-          printf '%s\n' "$paths" | node .github/scripts/changed-scope.mjs >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$paths" | node scripts/changed-scope.mjs >> "$GITHUB_OUTPUT"
           echo "scope=$scope" >> "$GITHUB_OUTPUT"
 
       # Which gated jobs have anything to do? Four today — both test shards and the two mutation
@@ -129,7 +129,7 @@ jobs:
       # Three of the four ask whether one named package is in the resolved scope. `light` does not:
       # test-light's own filter SUBTRACTS @waitron/db, so it has work when the scope holds anything
       # other than db — which is why a gate is a predicate over the scope rather than a package
-      # name. See SCOPE_GATES in .github/scripts/changed-scope.mjs.
+      # name. See SCOPE_GATES in scripts/changed-scope.mjs.
       #
       # ONE `pnpm ls` for all four. Not mainly for the time — measured locally, the query is 0.20s
       # against the node script's 0.04s, so four of them would cost well under a second — but
@@ -146,13 +146,13 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "$SCOPE" ]; then
-            node .github/scripts/changed-scope.mjs gates --unscoped >> "$GITHUB_OUTPUT"
+            node scripts/changed-scope.mjs gates --unscoped >> "$GITHUB_OUTPUT"
           else
             # stderr is deliberately NOT discarded: only stdout is piped, so anything pnpm says goes
             # to the job log where it can be read, and cannot reach the classifier. An earlier
             # version sent it to /dev/null and bought nothing but a harder debugging session.
             pnpm --filter "$SCOPE" ls --depth -1 --json \
-              | node .github/scripts/changed-scope.mjs gates >> "$GITHUB_OUTPUT"
+              | node scripts/changed-scope.mjs gates >> "$GITHUB_OUTPUT"
           fi
 
   # Always runs, on every path, including a documentation-only change — Prettier is the only tool
@@ -184,8 +184,8 @@ jobs:
       - run: pnpm format:check
 
       # The repo-level project only (`vitest run` at the root, NOT `pnpm test`, which would also run
-      # every package). Covers .github/scripts/changed-scope.mjs — if the classifier is wrong, every
-      # gating decision below is wrong, so it must run even on the paths it would otherwise skip.
+      # every package). Covers both classifiers under `scripts/` — if either is wrong, every gating
+      # decision below is wrong, so it must run even on the paths it would otherwise skip.
       - run: pnpm vitest run --coverage
 
   # The bundles operators actually run. Nothing else in this workflow builds them: dist/ is
@@ -487,7 +487,7 @@ jobs:
   #
   # So it now gates on membership of the resolved scope, exactly as test-heavy does, and for the
   # same reason a filter on the job cannot express it (see gateOutputs in
-  # .github/scripts/changed-scope.mjs). On main the scope is empty and this always runs.
+  # scripts/changed-scope.mjs). On main the scope is empty and this always runs.
   mutation-verifactu:
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.verifactu == 'true'
