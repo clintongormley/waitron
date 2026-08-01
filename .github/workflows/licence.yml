@@ -19,6 +19,18 @@ jobs:
           echo "48255018b41fc0e965b1115af7e6779bc218bb8a6747d561da800d5022622aa2  LICENSE" \
             | sha256sum -c -
 
+  # `name:` IS the interface to branch protection. Ruleset 19899160 requires the context "Every
+  # commit is signed off" (read back on 2026-08-01 with `gh api repos/:owner/:repo/rulesets/
+  # 19899160`), which is this string — renaming the job silently stops it matching, and a required
+  # check that never reports leaves every pull request waiting for a status that is not coming.
+  #
+  # The predicate and the per-commit walk are scripts/check-signoff.sh, which .husky/pre-push runs
+  # too. Until 2026-08-01 the two carried byte-identical copies of
+  # `grep -qiE '^Signed-off-by: .+ <.+@.+>'` and of the loop around it; the whole value of the hook's
+  # copy is that it agrees with this one, and two copies is not how that is kept true.
+  #
+  # This job installs nothing — no pnpm, no setup-node — which is why the shared file is `sh` and
+  # not `.mjs`. See scripts/check-signoff.test.mjs's header for that decision and the tests.
   dco:
     name: Every commit is signed off
     if: github.event_name == 'pull_request'
@@ -36,15 +48,16 @@ jobs:
             echo "::error::Could not enumerate the pull request's commits ($BASE_SHA..$HEAD_SHA)"
             exit 1
           fi
-          fail=0
-          for sha in $commits; do
-            if ! git log -1 --format=%B "$sha" | grep -qiE '^Signed-off-by: .+ <.+@.+>'; then
-              echo "::error::Missing Signed-off-by: $(git log -1 --oneline "$sha")"
-              fail=1
-            fi
-          done
-          if [ "$fail" -ne 0 ]; then
-            echo "Sign off with: git commit -s   (or: git rebase --signoff <base>)"
-            exit 1
+          # The range stays here rather than in the script: this one is a pull request's, and the
+          # hook's is accumulated per pushed ref. Only the predicate and the walk are shared.
+          if missing=$(printf '%s\n' "$commits" | scripts/check-signoff.sh); then
+            echo "All commits signed off."
+            exit 0
           fi
-          echo "All commits signed off."
+          # One annotation per failing commit, which is this job's own reporting — the script writes
+          # the commits and nothing else to stdout precisely so this can wrap them.
+          printf '%s\n' "$missing" | while IFS= read -r line; do
+            if [ -n "$line" ]; then echo "::error::Missing Signed-off-by: $line"; fi
+          done
+          echo "Sign off with: git commit -s   (or: git rebase --signoff <base>)"
+          exit 1

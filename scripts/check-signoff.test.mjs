@@ -1,0 +1,243 @@
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+// The sign-off (DCO) predicate, and the walk over a push's commits, in ONE place both gates call:
+// `.husky/pre-push`'s `check_signoff` and licence.yml's `dco` job. They kept byte-identical copies
+// of `grep -qiE '^Signed-off-by: .+ <.+@.+>'` and of the loop around it, and "the way to keep them
+// agreeing is one script both call" is docs/backlog.md's own conclusion about that.
+//
+// Shell rather than `.mjs`, decided on how the two callers invoke it rather than on taste:
+//
+//   * The hook runs this step FIRST, before `pnpm install` and before the classifier, and it is
+//     documented as working with no node on PATH — .husky/pre-push carries the run where the
+//     interpreter was taken away (`env -i HOME=$HOME PATH=/usr/bin:/bin:...`), the classifier
+//     printed `node: command not found`, and the sign-off step still named the offending commit
+//     and still exited 1. A node script would retire that property for the cheapest step in the
+//     gate.
+//   * licence.yml's `dco` job is `actions/checkout` plus one `run:` step — no pnpm, no setup-node,
+//     nothing installed. A `.mjs` script would make a REQUIRED status check ("Every commit is
+//     signed off", ruleset 19899160) depend either on whatever node the runner image happens to
+//     ship or on a setup step added to the fastest job in the file.
+//
+// So it is exercised the way both callers exercise it: spawned as a program, against throwaway git
+// repositories built here. Nothing measures its coverage — v8 sees JavaScript in this process, and
+// this is `sh` in a child — so these assertions are the whole of the evidence, and deleting them
+// deletes it.
+const script = join(import.meta.dirname, "check-signoff.sh");
+
+/**
+ * Runs `git` in `cwd`, isolated from whoever is running the suite: `GIT_CONFIG_GLOBAL` and
+ * `GIT_CONFIG_SYSTEM` are pointed at /dev/null so a developer's `commit.gpgsign = true` (or their
+ * name, or a `format.signoff = true` that would make every fixture pass) cannot reach these
+ * fixtures. Throws on failure rather than returning a status nobody reads.
+ */
+function git(cwd, ...args) {
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null" },
+  });
+  if (result.status !== 0) {
+    throw new Error(`git ${args.join(" ")} failed (${result.status}): ${result.stderr}`);
+  }
+  return result.stdout.trim();
+}
+
+/** Runs the script under test with `input` on stdin, from `cwd`. */
+function checkSignoff(cwd, input) {
+  return spawnSync(script, [], { cwd, encoding: "utf8", input });
+}
+
+describe("check-signoff.sh", () => {
+  let repo;
+  /** Commit subject → sha, for the fixtures built once below. */
+  const sha = {};
+
+  beforeAll(() => {
+    repo = mkdtempSync(join(tmpdir(), "waitron-signoff-"));
+    git(repo, "init", "-q", "-b", "main");
+    git(repo, "config", "user.name", "Fixture Author");
+    git(repo, "config", "user.email", "fixture@example.com");
+
+    // Written as messages rather than as `git commit -s` where the trailer's SHAPE is the point,
+    // because that is the only way to reach the near-misses. The one commit that does use `-s` is
+    // there so the suite also pins what the command a developer actually runs produces.
+    const commits = [
+      ["signed", null],
+      ["unsigned", "unsigned\n\nno trailer here at all\n"],
+      ["lowercase", "lowercase\n\nsigned-off-by: Fixture Author <fixture@example.com>\n"],
+      ["indented", "indented\n\n  Signed-off-by: Fixture Author <fixture@example.com>\n"],
+      ["no-email", "no-email\n\nSigned-off-by: Fixture Author\n"],
+      ["empty-angles", "empty-angles\n\nSigned-off-by: Fixture Author <>\n"],
+      ["mid-line", "mid-line\n\nsee Signed-off-by: Fixture Author <fixture@example.com>\n"],
+    ];
+
+    for (const [name, message] of commits) {
+      if (message === null) git(repo, "commit", "-s", "--allow-empty", "-q", "-m", name);
+      else git(repo, "commit", "--allow-empty", "-q", "-m", message);
+      sha[name] = git(repo, "rev-parse", "HEAD");
+    }
+  });
+
+  afterAll(() => {
+    // Guarded because a `mkdtempSync` that threw leaves `repo` undefined, and an unguarded teardown
+    // then reports a second, spurious failure on top of the real one (CLAUDE.md §4).
+    if (repo !== undefined) rmSync(repo, { recursive: true, force: true });
+  });
+
+  it("accepts what `git commit -s` writes", () => {
+    const result = checkSignoff(repo, `${sha.signed}\n`);
+    expect(result.stdout).toBe("");
+    expect(result.status).toBe(0);
+  });
+
+  it("accepts a lowercase trailer, as both callers' `grep -i` did", () => {
+    expect(checkSignoff(repo, `${sha.lowercase}\n`).status).toBe(0);
+  });
+
+  it("reports a commit with no trailer, naming it as `git log --oneline` does", () => {
+    const result = checkSignoff(repo, `${sha.unsigned}\n`);
+    expect(result.status).toBe(1);
+    expect(result.stdout.trim()).toBe(git(repo, "log", "-1", "--oneline", sha.unsigned));
+    expect(result.stdout).toContain("unsigned");
+  });
+
+  // The three near-misses. Each is a message that CONTAINS the words and is still not a sign-off,
+  // and each is exactly one property of the regex: `^`, the `<...@...>`, and `^` again from the
+  // other side. A guard that passed any of them would accept a commit GitHub's own DCO app rejects.
+  it.each([
+    ["an indented trailer", "indented"],
+    ["a trailer with no email", "no-email"],
+    ["a trailer with empty angle brackets", "empty-angles"],
+    ["the words in the middle of a line", "mid-line"],
+  ])("rejects %s", (_label, name) => {
+    const result = checkSignoff(repo, `${sha[name]}\n`);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(name);
+  });
+
+  it("walks every commit it is given and reports all the failures, not the first", () => {
+    const result = checkSignoff(
+      repo,
+      [sha.signed, sha.unsigned, sha.lowercase, sha["no-email"]].join("\n") + "\n",
+    );
+    expect(result.status).toBe(1);
+    const reported = result.stdout.trim().split("\n");
+    expect(reported).toHaveLength(2);
+    expect(reported[0]).toContain("unsigned");
+    expect(reported[1]).toContain("no-email");
+  });
+
+  it("passes on empty input, which is what an empty range gives both callers", () => {
+    expect(checkSignoff(repo, "").status).toBe(0);
+    expect(checkSignoff(repo, "\n").status).toBe(0);
+    expect(checkSignoff(repo, "\n\n\n").stdout).toBe("");
+  });
+
+  it("skips blank lines between shas rather than reporting them", () => {
+    const result = checkSignoff(repo, `\n${sha.signed}\n\n${sha.lowercase}\n\n`);
+    expect(result.stdout).toBe("");
+    expect(result.status).toBe(0);
+  });
+
+  // The hook feeds this the commits it accumulated from `git rev-list`; a sha this checkout does
+  // not have means the range was wrong, and reporting it as SIGNED would be the silent direction.
+  it("reports a sha this repository does not have, by name", () => {
+    const bogus = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+    const result = checkSignoff(repo, `${bogus}\n`);
+    expect(result.status).toBe(1);
+    expect(result.stdout.trim()).toBe(bogus);
+  });
+
+  // Both callers read the failing commits off STDOUT and wrap them in their own reporting —
+  // licence.yml in `::error::` annotations, the hook in an indented list — so anything the script
+  // wants to say to a human has to go to stderr or the annotations come out malformed.
+  it("puts nothing but the failing commits on stdout", () => {
+    const result = checkSignoff(repo, `${sha.signed}\n${sha.unsigned}\n`);
+    expect(result.stdout.trim().split("\n")).toHaveLength(1);
+  });
+
+  // The CI half, run rather than read. The step's shell is EXTRACTED FROM licence.yml rather than
+  // transcribed here — a transcription tests this file's copy of a workflow, which is the shape of
+  // duplication this whole change exists to remove. What cannot be run locally is the `${{ }}`
+  // interpolation, so the extraction refuses a block that has any: both shas reach that step as
+  // environment variables, and this asserts they still do.
+  describe("licence.yml's dco step", () => {
+    let step;
+
+    beforeAll(() => {
+      const workflow = readFileSync(
+        join(import.meta.dirname, "..", ".github", "workflows", "licence.yml"),
+        "utf8",
+      );
+      // Anchored on the STEP NAME, not on the first `run: |` in the file — that one belongs to the
+      // licence-integrity job, and taking it would run a `sha256sum` check against three shas and
+      // report whatever it felt like.
+      const lines = workflow.split("\n");
+      const named = lines.findIndex((line) => line.includes("name: Check Signed-off-by trailers"));
+      expect(named).toBeGreaterThan(-1);
+      const start = lines.findIndex((line, index) => index > named && line.trim() === "run: |");
+      expect(start).toBeGreaterThan(named);
+
+      const indent = " ".repeat(lines[start].indexOf("run:") + 2);
+      const body = [];
+      for (const line of lines.slice(start + 1)) {
+        if (line.trim() !== "" && !line.startsWith(indent)) break;
+        body.push(line.slice(indent.length));
+      }
+      step = body.join("\n");
+
+      // A silently-empty extraction would make every assertion below pass against nothing.
+      expect(step).toContain("check-signoff.sh");
+      expect(step).toContain("BASE_SHA");
+      expect(step).not.toContain("${{");
+
+      // The step runs `scripts/check-signoff.sh` relative to its working directory, which on the
+      // runner is the checkout root. A symlink rather than a copy, so this exercises the real file
+      // and cannot drift from it.
+      mkdirSync(join(repo, "scripts"));
+      symlinkSync(script, join(repo, "scripts", "check-signoff.sh"));
+    });
+
+    /** Runs the extracted step in the fixture repository, as CI runs it: shas in the environment. */
+    const runStep = (base, head) =>
+      spawnSync("sh", ["-c", step], {
+        cwd: repo,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          BASE_SHA: base,
+          HEAD_SHA: head,
+          GIT_CONFIG_GLOBAL: "/dev/null",
+          GIT_CONFIG_SYSTEM: "/dev/null",
+        },
+      });
+
+    it("passes a range whose every commit is signed off", () => {
+      const result = runStep(sha.unsigned, sha.lowercase);
+      expect(result.stdout).toContain("All commits signed off.");
+      expect(result.stdout).not.toContain("::error::");
+      expect(result.status).toBe(0);
+    });
+
+    it("annotates each unsigned commit and fails", () => {
+      const result = runStep(sha.signed, sha["no-email"]);
+      const annotations = result.stdout
+        .split("\n")
+        .filter((line) => line.startsWith("::error::Missing Signed-off-by: "));
+      expect(annotations).toHaveLength(3); // unsigned, indented, no-email
+      expect(annotations.some((line) => line.includes("unsigned"))).toBe(true);
+      expect(result.stdout).toContain("Sign off with: git commit -s");
+      expect(result.status).toBe(1);
+    });
+
+    it("fails with its own annotation when the range cannot be enumerated", () => {
+      const result = runStep("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", sha.signed);
+      expect(result.stdout).toContain("::error::Could not enumerate the pull request's commits");
+      expect(result.status).toBe(1);
+    });
+  });
+});

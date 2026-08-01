@@ -7,12 +7,19 @@
 # several runs are quoted the spread is quoted with them, because the first run of anything here is
 # consistently the slowest.
 #
-#   sign-off (DCO)                  always     7-8ms for one commit (5 runs). Every commit in the
-#                                              push range needs a Signed-off-by trailer; same regex
-#                                              and same per-commit loop as licence.yml's `dco` job.
-#                                              This is the check the branch was written for and the
-#                                              cheapest thing here, so it goes FIRST — see the
-#                                              receipt beside the classifier for why it can.
+#   sign-off (DCO)                  always     7-8ms for one commit (5 runs) when the walk was
+#                                              inline here. It is now one more process — the walk
+#                                              moved into scripts/check-signoff.sh, the same file
+#                                              licence.yml's `dco` job runs — and the two shapes
+#                                              were timed against each other on 2026-08-01, five
+#                                              runs each, both wrapped in an outer `sh -c` so the
+#                                              comparison is like for like: 14.0-18.5ms inline
+#                                              against 20.1-31.6ms through the script. (Those
+#                                              figures are NOT the 7-8ms measured differently
+#                                              above; what they establish is the delta, ~6-13ms for
+#                                              the extra process.) Still the cheapest step here, so
+#                                              it goes FIRST — see the receipt beside the classifier
+#                                              for why it can.
 #   classify the push               always     46-51ms on a documentation-only push (5 runs),
 #                                              241-248ms when there is code to attribute (5 runs).
 #                                              The difference is one `pnpm ls -r --depth -1 --json`
@@ -290,10 +297,17 @@ run_step() {
   fi
 }
 
-# Every commit in the push range needs a `Signed-off-by` trailer. Same regex and same per-commit
-# loop as licence.yml's `dco` job, which is a REQUIRED status check ("Every commit is signed off",
-# ruleset 19899160) — so a commit missing one blocks the pull request from merging until it is
-# rebased away.
+# Every commit in the push range needs a `Signed-off-by` trailer. The predicate and the walk are
+# scripts/check-signoff.sh — ONE copy, which licence.yml's `dco` job runs too. That job is a
+# REQUIRED status check ("Every commit is signed off", ruleset 19899160, read back on 2026-08-01
+# with `gh api repos/:owner/:repo/rulesets/19899160`), so a commit missing one blocks the pull
+# request from merging until it is rebased away — and the two gates giving the same answer is the
+# only thing that makes failing here cheaper than failing there. They held byte-identical copies of
+# the regex and the loop until 2026-08-01; docs/backlog.md's entry has why that was not good enough.
+#
+# What is NOT shared is how the commit list is built — CI diffs the pull request, this hook
+# accumulates a range per pushed ref — nor the reporting: `::error::` annotations there, the
+# indented list below here.
 #
 # This is the step that failed in CI and prompted this hook: `git revert --no-edit` writes a commit
 # message with no trailer, and nothing local said so until CI did.
@@ -321,18 +335,19 @@ check_signoff() {
     return 0
   fi
 
-  missing=""
-  for sha in $commits; do
-    if ! git log -1 --format=%B "$sha" | grep -qiE '^Signed-off-by: .+ <.+@.+>'; then
-      missing="$missing
-    $(git log -1 --oneline "$sha" || echo "$sha")"
-    fi
-  done
-
-  if [ -n "$missing" ]; then
-    echo "  Commits with no Signed-off-by trailer:$missing"
+  # The predicate and the walk are scripts/check-signoff.sh, which licence.yml's `dco` job runs
+  # too; what stays here is this hook's own reporting. It prints the failing commits on stdout, one
+  # `git log --oneline` line each, and exits 1 when there are any.
+  #
+  # The `||` is not decoration: husky runs this file under `sh -e`, where an unguarded
+  # `x=$(false)` kills the script silently mid-gate — this file's header carries the measurement.
+  # A command substitution assigns what it captured whatever the exit status, so `$missing` holds
+  # the lines by the time this branch runs.
+  missing=$(printf '%s\n' "$commits" | scripts/check-signoff.sh) || {
+    echo "  Commits with no Signed-off-by trailer:"
+    printf '%s\n' "$missing" | sed 's/^/    /'
     return 1
-  fi
+  }
   return 0
 }
 

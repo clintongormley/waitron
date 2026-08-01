@@ -209,15 +209,18 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
 
   The classifier `scripts/changed-packages.mjs` is fully tested by the root Vitest project, whose
   `include` covers `scripts/` — one directory since 2026-08-01, when `.github/scripts/` was merged
-  into it. **The shell is not.** The
-  deletion guard (#23), the range computation and the sign-off loop are all backed only by having
-  run the real hook against crafted stdin and recorded the results — the same evidence #23 had, no
-  better. Three things to know before writing a suite for the shell: the root project's `include`
-  has to be widened again to reach `.husky/`; root config is linted but never typechecked
-  (`pnpm typecheck` is `pnpm -r typecheck`, and `pnpm -r` never visits the workspace root, see
-  `CLAUDE.md` §2); and husky runs the hook under `sh -e`, where an unguarded `x=$(false)` or a
-  `grep` outside an `if` kills the script silently mid-gate — the hook's own header records that
-  measurement.
+  into it. **Most of the shell still is not.** The sign-off walk left the hook that day and is
+  tested where it landed (`scripts/check-signoff.sh`, twelve assertions in
+  `scripts/check-signoff.test.mjs`, spawned the way both callers spawn it); the deletion guard
+  (#23) and the range computation are still backed only by having run the real hook against crafted
+  stdin and recorded the results — the same evidence #23 had, no better. Three things to know
+  before writing a suite for what is left: the root project's `include` has to be widened again to
+  reach `.husky/`; root config is linted but never typechecked (`pnpm typecheck` is
+  `pnpm -r typecheck`, and `pnpm -r` never visits the workspace root, see `CLAUDE.md` §2); and
+  husky runs the hook under `sh -e`, where an unguarded `x=$(false)` or a `grep` outside an `if`
+  kills the script silently mid-gate — the hook's own header records that measurement. The shape
+  that worked for the sign-off check is worth copying: what is testable is the PREDICATE, once it
+  is a file of its own, and the extraction is what made it testable rather than any new harness.
 
   **Four entries below, and only the first two are live gaps** — both of them the honest answer to
   what a local gate can be, rather than anything left undone. Entries 3 and 4 are closed, kept
@@ -340,15 +343,22 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   fix increases exposure to whatever this is. If it recurs, the shape to reach for is giving
   `packages/ui` its own shard rather than dropping `--no-sort`, since the sort order is what §1.1 of
   the design measured as pure cost
-- **The sign-off (DCO) check is implemented twice.** `.husky/pre-push`'s `check_signoff` and
-  `licence.yml`'s `dco` job carry the same `grep -qiE '^Signed-off-by: .+ <.+@.+>'` over the same
-  per-commit loop. The PREDICATE is byte-identical; the reporting is not — CI emits `::error::`
-  annotations and carries its own `git rev-list` failure branch, while the hook accumulates a list
-  and hands it to `run_step`. That duplication is
-  deliberate for now — the hook's copy was written to match CI's exactly, and the two agreeing is
-  the whole point — but the way to keep them agreeing is one script both call, not two copies and a
-  comment. Held back from `feat/scoped-pre-push-hook` because extracting it edits a workflow that
-  branch otherwise never touches
+- **CLOSED, 2026-08-01 — the sign-off (DCO) check is one script both gates call.** It was two
+  byte-identical copies of `grep -qiE '^Signed-off-by: .+ <.+@.+>'` and of the loop around it, in
+  `.husky/pre-push`'s `check_signoff` and `licence.yml`'s `dco` job. Now `scripts/check-signoff.sh`:
+  shas on stdin, the failing commits on stdout as `git log --oneline` renders them, exit 1 if any.
+  Each caller keeps what was never shared — CI builds the range from the pull request and wraps the
+  lines in `::error::` annotations, the hook accumulates a range per pushed ref and indents them.
+
+  **Three things to know before touching it.** It is `sh`, not `.mjs`, and that is about the
+  callers: the `dco` job installs nothing (no pnpm, no setup-node), and the hook runs this step
+  first, before `pnpm install`, with no node needed — re-run on 2026-08-01 under
+  `env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin`, where it still named the offending commit and still
+  exited 1. The job's `name:` — `Every commit is signed off` — IS the required-status-check context
+  in ruleset 19899160, so renaming the job silently unhooks branch protection. And
+  `scripts/check-signoff.test.mjs` tests both halves: twelve assertions spawning the script against
+  throwaway git repositories, and three that run the `dco` step's shell EXTRACTED from `licence.yml`
+  rather than transcribed, which is the only part of CI that can be exercised without pushing
 - **`errors.reachability.test.ts` does not test reachability.** Proven by deletion. Eight packages
   carry a copy. Closing it needs a `tsc`-based downstream probe or a narrowed `include`. See
   `CLAUDE.md` §4 — do not cite these tests as evidence in the meantime
