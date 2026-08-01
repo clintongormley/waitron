@@ -9,36 +9,64 @@ Each question has English context (for us) and a Spanish formulation (to hand ov
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
 priority. Q9 is referenced from other documents; do not renumber it.
 
-Last revised **2026-07-31**.
+Last revised **2026-08-01**.
 
-> **⚠ Read before sending, 2026-07-31.** Some questions here are premised on Waitron **hosting the
-> client's fiscal system**. Q11 puts it as *"Nosotros alojamos y operamos su sistema de facturación:
-> la clave privada se genera en el servidor que la utiliza y nunca sale de él, pero ese servidor lo
-> operamos nosotros, no el cliente"* — quoted rather than paraphrased, because this is the one file
-> whose purpose is handing exact Spanish to a paid professional. `docs/superpowers/specs/2026-07-31-cloud-storage-model-design.md` abolishes that
-> premise: the cloud is a sync root that never holds the key ring, the fiscal certificate stays on the
-> client's own local server sealed under a key ring only they hold, and **the local server always
-> submits**. A question built on the old premise buys an answer to a situation that will not exist.
+> **⚠ Read before sending, 2026-08-01.** Two architecture designs and one research pass have moved
+> this list since the questions below were written. Read this before paying for any answer.
 >
-> Affected at least: Q11 (its "Why it matters" block and Spanish text), Q12, and
-> `getting-to-production.md`'s "One consequence of Model A when we host".
-> **Re-read every question against the new architecture before paying for answers.** That design
-> raises replacement questions, and they are about the **ROF** (RD 1619/2012 — conservation of
-> records) rather than the RRSIF. The reasoning, which is a reasoned reading and not a settled point:
-> the RRSIF governs invoicing *systems*, and an archive issues nothing, so it is **probably** out of
-> RRSIF scope — the spec's §8 leaves open what follows if it is not. Either way the ROF is what
-> governs records once they exist. The questions are written out in that spec's **§8a**:
+> **Newly closed on primary source (2026-08-01) — do not ask.** **Q13 (propinas)** and the core of
+> **Q15 (short payment)** are answered and moved to [verifactu-findings.md](verifactu-findings.md)
+> §§11–12. A voluntary tip is not *contraprestación*, so it sits outside the base imponible del IVA
+> (off the factura, off the huella) whether paid in cash or on the same card capture that pays the
+> bill — the test is *voluntariedad*, not payment method (DGT 2174-03, V3095-17, V1808-22). A short
+> payment accepted as payment in full **before the factura is issued** is a *descuento* excluded from
+> the base (LIVA art. 78.Tres.2º); once the factura is issued, correcting it needs a rectificativa.
+> The residuals are product/interpretive, not fiscal — see the findings. (Caveat recorded there: the
+> DGT consultas were read via reproduction because PETETE failed TLS validation; confirm the exact
+> wording on PETETE if an asesor engages.)
 >
-> 1. Is Waitron a *tercero* under ROF art. 19.3 while the client's own server remains the system of
->    record — or only in the disaster case, when our archive is briefly the only copy?
-> 2. If so, does art. 22.2's prior-notification duty fall on every client whose records we hold
->    outside Spain, and must we prompt them to discharge it?
-> 3. Does art. 23's online-access requirement reach us as holder, or only the client as obligado?
+> **① Server-as-SIF** ([`../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md`](../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md), #33).
+> The unit AEAT holds responsible for issuing invoices — the SIF — is the **local server**, not the
+> till. Consequences for this list:
 >
-> An earlier version of this note pointed at *"does the RRSIF reach a backup archive that is not
-> itself a SIF?"* — a question the spec had already answered itself, aimed at the wrong regulation.
-> Do not ask it. Individual questions below are left as written rather than rewritten in place, per
-> `CLAUDE.md` §6.
+> - **Q1 is moot.** A till need not qualify as a SIF, so nobody must argue it is; server + tills are
+>   plainly one real-time integrated system → one SIF, one chain.
+> - **Q2 is non-load-bearing.** The SIF files its own records. (It is separately CLOSED favourably on
+>   primary source anyway, so the relay pattern remains available regardless — the design just no
+>   longer *depends* on it.)
+> - **Q5(a) is reshaped.** A series now belongs to the **server**-SIF, and a venue runs **two**
+>   concurrent SIFs (active-active). They must issue under **DISJOINT series**, or their records
+>   collide on the identity triple `(NIF, NumSerieFactura, FechaExpedicionFactura)` → AEAT error 3000
+>   — the installation number is **not** part of the triple. See design §3 and Q5's own banner.
+> - **New hosting question — Q16.** A cloud server that *issues* invoices operates the **SIF abroad**,
+>   a stronger case than merely conserving records. Under a cloud-primary or standalone topology it is
+>   the **normal** operating state, not a disaster edge, so it must be answered before those topologies
+>   are offered. This absorbs the cloud-custody angle of Q11/Q12 (design §13, §9).
+>
+> **② Cloud storage** ([`../superpowers/specs/2026-07-31-cloud-storage-model-design.md`](../superpowers/specs/2026-07-31-cloud-storage-model-design.md), #19).
+> The cloud is a **sync root, not a system of record**: it never holds the key ring, the fiscal
+> certificate stays on the client's own local server (the SIF, per #33) sealed under a key ring only
+> they hold, and the local server always submits. So any question premised on Waitron **hosting the
+> client's fiscal system** buys an answer to a situation that will not exist in the default
+> architecture:
+>
+> - **Q11 and Q12** are premised on that retired model — see their own banners. Custody by Waitron
+>   survives only in the opt-in cloud-primary/standalone topology, where it merges into **Q16**.
+> - The replacement questions are about the **ROF** (RD 1619/2012 — conservation of records), **not**
+>   the RRSIF. The reasoning (a reasoned reading, not a settled point): the RRSIF governs invoicing
+>   *systems*, and an archive issues nothing, so it is **probably** out of RRSIF scope — cloud-storage
+>   §8 leaves open what follows if it is not. Either way the ROF governs records once they exist. The
+>   three questions are written out in that spec's **§8a**:
+>   1. Is Waitron a *tercero* under ROF art. 19.3 while the client's own server remains the system of
+>      record — or only in the disaster case, when our archive is briefly the only copy?
+>   2. If so, does art. 22.2's prior-notification duty fall on every client whose records we hold
+>      outside Spain, and must we prompt them to discharge it?
+>   3. Does art. 23's online-access requirement reach us as holder, or only the client as obligado?
+> - **Do NOT re-add** the retired *"does the RRSIF reach a backup archive that is not itself a SIF?"*
+>   question — the spec answered it itself and it aimed at the wrong regulation (#22).
+>
+> Individual questions below are left as written, with dated banners, rather than rewritten in place,
+> per `CLAUDE.md` §6.
 
 ---
 
@@ -348,11 +376,27 @@ with one reliable till and one in a dead spot is a realistic configuration.
 > example is *varios establecimientos*, not several tills in one. See
 > [verifactu-findings.md §10.1](verifactu-findings.md). Do not re-ask (b).
 
+> **(a) reshaped by server-as-SIF, 2026-08-01 (#33).** The subject of (a) has changed: under
+> [`../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md`](../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md)
+> a series belongs to the **server**-SIF, not the till, so "one series per till" is no longer the
+> shape to ask about. What replaces it is a **hard architectural constraint, not an open question**: a
+> venue runs **two** concurrent SIFs (active-active), and AEAT identifies a record by the triple
+> `(NIF, NumSerieFactura, FechaExpedicionFactura)` — **not** by installation number — so the two
+> servers **must issue under disjoint series**, or a same-day collision on that triple is a duplicate
+> (AEAT error 3000). The Spanish below is now best framed as *"¿una serie por SIF-servidor, y qué
+> exige que dos SIF concurrentes usen series disjuntas?"* rather than *"una serie por TPV"*. (The
+> disaster-*restore* flow is different — the dead server is confirmed dead and numbering resumes above
+> a high-water mark on the same series, no concurrency; see cloud-storage §5.)
+
 **Why it matters.** We assume one series per till. Research confirmed the chaining rules but
 never verified the underlying series permission in RD 1619/2012 art. 6.1.a. Low risk, but it
 is the foundation of the numbering scheme. The rectificativa question is the practical one:
 it is the case where a single till needs two series (and, per art. 7.c, still one chain).
 
+> **(a) is superseded — see the 2026-08-01 banner above; do not hand this (a) to an advisor as
+> written.** Under server-as-SIF the question is a series per SIF-servidor, with disjoint series
+> across the two concurrent SIFs — not "una serie por TPV". Kept verbatim per CLAUDE.md §6.
+>
 > **(a)** ¿Permite el artículo 6.1.a del RD 1619/2012 que un mismo obligado tributario utilice
 > una serie de facturación distinta por cada TPV? ¿Qué exige exactamente "cuando existan
 > razones que lo justifiquen" — basta una justificación operativa, debe documentarse, y puede
@@ -368,9 +412,27 @@ it is the case where a single till needs two series (and, per art. 7.c, still on
 
 ### Q13. Propinas — outside the VAT base, and off the invoice? (added 2026-07-31)
 
+> 🟢 **CLOSED 2026-08-01 — moved to [verifactu-findings.md §11](verifactu-findings.md). Do not ask
+> (a) or (b).** A voluntary tip is not *contraprestación*, so it is outside the base imponible del IVA,
+> off the factura and out of the huella — the assumption the schema already encodes. The test is
+> *voluntariedad*, **not** payment method, which is what answers (b): **V3095-17** (vinculante) is the
+> case where the *house collects the tips into a tronco and redistributes them* — the card-present
+> shape — and still holds them outside the IVA base. The card case does, though, create a **non-fiscal**
+> duty the cash case does not: a tip collected through the merchant account is *ingreso* for the
+> Impuesto sobre Sociedades and *rendimiento del trabajo* (with retención) for the employee. That is a
+> workforce/accounting matter, not a fiscal-record one, and a product decision — it does not touch the
+> factura or the huella.
+>
+> **Correction to this question's own citation:** **2174-03 is a consulta GENERAL, not vinculante** —
+> the binding restatements are V3095-17 and V1808-22. **(c)** (whether to show the tip on the receipt)
+> is the only genuine residual and it is a design choice, not an asesor question: no consulta requires
+> it, and if shown it must be an amount *outside* the base imponible. **Provenance caveat:** PETETE
+> failed TLS on every fetch, so the DGT consultas were read via faithful legal-database reproductions
+> and cross-checked; confirm the exact wording on PETETE if an asesor engages.
+
 **Why it matters.** The schema already asserts it. `sales.tip_amount` is documented as
-*"non-taxable, in no fiscal record at all"*, `record-sale.ts` excludes it from `total`, and a test
-pins that two records differing only in the tip hash identically. **None of that was ever put to an
+*"non-taxable, in no fiscal record at all"*, and `record-sale.ts` hands the fiscal backend only
+`total`, never the tip, so the tip never reaches `computeHuella`'s inputs. **None of that was ever put to an
 advisor.** The sources are asesor commentary citing **DGT consulta vinculante 2174-03** — the DGT
 text itself was not read. If the position is wrong, every invoice we have ever modelled understates
 its base imponible, and the tip would have to enter `computeHuella`'s inputs.
@@ -393,6 +455,15 @@ gesture but part of a single card capture that exceeds the invoice total.
 ---
 
 ### Q14. Is a restaurant *precuenta* a *prefactura* for art. 29.2.j LGT? (added 2026-07-31)
+
+> **Still OPEN — bounded search 2026-08-01 found no primary text on point.** A pass over PETETE and
+> AEAT material for *"precuenta"* turned up the general prefactura/proforma treatment already in
+> [verifactu-findings.md §8](verifactu-findings.md) (a *documento sin validez fiscal* that, once
+> *expedido*, carries a preservation duty under art. 29.2.j LGT, amendable via a later logged record)
+> but **nothing that names the restaurant *precuenta* specifically**. Whether AEAT's list *albaranes,
+> proformas, prefacturas* is exhaustive is the interpretive hinge, and it is unresolved — this is the
+> genuinely-still-open one of Q13/Q14/Q15, exactly as anticipated. Keep it for the asesor; do not
+> treat the prefactura doctrine as settling the precuenta question.
 
 **Why it matters.** It decides whether printing a bill obliges us to keep an append-only record of
 every subsequent change to the order — see [verifactu-findings.md §8](verifactu-findings.md). AEAT's
@@ -418,6 +489,20 @@ rather than freezing it.
 ---
 
 ### Q15. Short payment — a discount, or a bad debt? (added 2026-07-31)
+
+> 🟢 **Core CLOSED 2026-08-01 on primary law — moved to [verifactu-findings.md §12](verifactu-findings.md).**
+> A reduction agreed as payment in full **before the factura is issued** is a *descuento* — LIVA
+> art. 78.Tres.2º (*"descuentos y bonificaciones concedidos previa o simultáneamente al momento en que
+> la operación se realice"*, verbatim from AEAT's own Manual práctico de IVA) keeps it **out of the
+> base imponible**, so the invoice is issued for the amount actually agreed (€65 on a €70 bill), VAT
+> on €65. This confirms the design assumption *"the reduction has to reach the bill before the invoice
+> is issued"*. **(b)** once the factura is issued, correcting it needs a *factura rectificativa* —
+> art. 80.Uno.2º (agreed descuento posterior) or the impractical art. 80.Cuatro incobrable route for a
+> genuine impago; for €5 nobody does either. **(c)** cash rounding down is the same *descuento
+> simultáneo*, applied before issuance so the invoiced and collected amounts coincide. **Residual:**
+> the descuento-vs-impago characterization is interpretive but low-stakes at this size, and the exact
+> art. 80.Cuatro thresholds should be confirmed at BOE (findings §12 flags them). Worth a sentence if
+> an asesor is engaged; not worth a consulta.
 
 **Why it matters.** It happens at the counter: the bill is €70, the customer is paying cash and is
 €5 short, and staff accept €65 as payment in full. The two readings have different consequences and
@@ -685,6 +770,19 @@ that muddies the one that matters. Given the exposure, a lawyer rather than a ge
 
 ### Q11. May the software provider hold the client's qualified certificate?
 
+> **Premise largely retired, 2026-08-01 (#19 / #33). Do not ask as written.** This question assumes
+> Waitron **hosts and operates the client's fiscal system** — the Spanish text below says so in as
+> many words (*"ese servidor lo operamos nosotros, no el cliente"*). The
+> [cloud-storage design](../superpowers/specs/2026-07-31-cloud-storage-model-design.md) (#19) abolishes
+> that as the default: the cloud never holds the key ring, the fiscal certificate stays on the
+> **client's own local server**, which is the SIF (#33) and always submits. So in the default
+> architecture there is no third-party key custody to ask about. Custody by Waitron **re-emerges only
+> in the opt-in cloud-primary/standalone topology**, where the key ring follows the primary into the
+> cloud (server-SIF §9) — and there it is the **same** problem as the new **Q16** (a cloud server that
+> issues invoices operating the SIF abroad). Fold Q11 into Q16 for that topology; do not send it
+> against the default. Part (d) — seal vs representante certificate — survives as a small sub-point of
+> Q16 if that topology is pursued.
+
 **Why it matters.** Under the architecture recorded in
 [getting-to-production.md §3](getting-to-production.md) each client is the obligado and files
 under its own certificate — but we host the system, so the client's private key lives on our
@@ -729,6 +827,16 @@ load-bearing or merely tidy.
 
 ### Q12. Must a hosting provider use its own certificate under convenio 017?
 
+> **Premise largely retired, 2026-08-01 (#19 / #33). Do not ask as written.** Like Q11, this assumes
+> Waitron **hosts** the client's fiscal system (*"la clave privada se genera y permanece en la
+> infraestructura que nosotros operamos"*). Under the [cloud-storage default](../superpowers/specs/2026-07-31-cloud-storage-model-design.md)
+> (#19) the client's own local server is the SIF and submits under the client's own certificate — the
+> convenio-017 "provider submits under its own certificate" model is not in play. It **re-emerges only
+> in the opt-in cloud-primary/standalone topology**, which is exactly the new **Q16**. The convenio
+> mechanics (its obligations, revocability) remain a real AEAT question **if** that topology is offered
+> at scale, and can still be asked directly at `comunicacion.sepri@correo.aeat.es`; but they belong
+> under Q16 now, not as a standalone question premised on hosting being the default.
+
 **Why it matters.** [getting-to-production.md §3](getting-to-production.md) records Model A —
 each client is the obligado and files under its own certificate, which our software presents.
 mdiago's answer points the other way for hosted deployments, and if they are right the
@@ -772,22 +880,67 @@ hold is clearly fine; fifty is clearly Model B.
 **Route.** Partly a lawyer question (custody, contract) and partly an AEAT one (convenio
 mechanics). The convenio side can be asked directly at `comunicacion.sepri@correo.aeat.es`.
 
+### Q16. Where may an *active* cloud SIF run — issuing invoices from abroad? (added 2026-08-01)
+
+**Why it matters.** [cloud-storage §8a](../superpowers/specs/2026-07-31-cloud-storage-model-design.md)
+constrains where the cloud may **conserve** records: records kept outside Spain trigger a
+prior-notification duty on the client (ROF art. 22.2), and outside the EU is more restricted
+(art. 19.4). That analysis leaned on *"the archive is not a SIF."* The
+[server-as-SIF design](../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md) §13
+raises the stronger case: a cloud server that **issues** invoices *is* the SIF, operating the
+invoicing system abroad, not merely holding a copy of its output. Under the tertiary/disaster default
+that is an edge; under a **cloud-primary or standalone** topology it is the **normal operating
+state**, and it must be answered before those topologies are offered. This is also where the retired
+custody question of Q11/Q12 lands: in a cloud-primary topology the key ring follows the primary into
+the cloud (server-SIF §9), so the same node both issues invoices and holds the certificate abroad.
+
+To hand over:
+
+> Un servidor alojado en la nube, que nosotros operamos, actúa como el **sistema informático de
+> facturación (SIF)** de nuestro cliente (el obligado tributario): genera y encadena los registros de
+> facturación, expide las facturas y las remite a la AEAT con el certificado de sello de entidad del
+> cliente, cuya clave privada reside en ese mismo servidor. El servidor puede estar ubicado fuera de
+> España, o incluso fuera de la Unión Europea.
+>
+> **(a)** ¿Es admisible que el SIF de un obligado tributario español opere físicamente fuera de
+> España? ¿Cambia la respuesta según esté dentro o fuera de la UE?
+>
+> **(b)** El artículo 22.2 del RD 1619/2012 exige comunicar con carácter previo a la AEAT la
+> conservación de la documentación fuera de España, y el artículo 19.4 restringe el cumplimiento
+> material por un tercero fuera de la UE. **¿Alcanzan estos deberes a un SIF que *expide* facturas
+> desde el extranjero, y no sólo a la conservación de los registros?** ¿Sobre quién recae la
+> comunicación previa — el cliente obligado, o nosotros como operadores del servidor?
+>
+> **(c)** En esa configuración alojada, ¿debe el proveedor presentar con su propio certificado al
+> amparo de un convenio de colaboración social (código 017), o puede seguir presentándose con el
+> certificado del cliente que reside en el servidor? (Esto absorbe las antiguas Q11 y Q12.)
+
+**Route.** Partly a lawyer question (hosting location, custody) and partly an AEAT one (convenio, SIF
+location); the AEAT side can be asked at `comunicacion.sepri@correo.aeat.es`. Only relevant if a
+cloud-primary or standalone topology is offered — under the default (client's own local server is the
+SIF) it does not arise. Server-SIF §13 records that everything else on the AEAT side is closed on
+primary source.
+
 ---
 
 ## Notes for the conversation
 
 - **Nothing here blocks the build any more.** As of 2026-07-27 this document is a list of things
   worth confirming, not things worth waiting for. If an asesor engagement slips, build anyway.
-- **Lead with Q1 and Q2 anyway** if you get a meeting. They are demoted on inference rather than
-  on a source, and an asesor who engages properly with them is one worth keeping; one who waves
-  them through has told you something too.
-- **Q3, Q4, Q8, Q9(b) and Q10 are answered** — do not ask them. Q4 in particular is settled on
-  AEAT's own text; asking invites a confident wrong answer to a question we no longer have.
-- **Q9(a) is the only consulta candidate**, and it is a lawyer's question. RD-ley 15/2025 moved
+- **Q1 and Q2 are now moot / non-load-bearing** under server-as-SIF (#33) — the server is the SIF,
+  so a till need not be one (Q1) and the SIF files its own records (Q2). They were demoted on
+  inference before; the architecture change retires them outright. Don't lead with them any more.
+- **Q3, Q4, Q8, Q9(b), Q10, Q13 and Q15 are answered** — do not ask them. Q4 is settled on AEAT's own
+  text; Q13 (propinas) and Q15's core (short payment) are closed on primary source and moved to
+  [verifactu-findings.md](verifactu-findings.md) §§11–12. Asking any of these invites a confident
+  wrong answer to a question we no longer have.
+- **Q9(a) is the standing consulta candidate**, and it is a lawyer's question. RD-ley 15/2025 moved
   the obligation to January 2027, so a 3–6 month consulta fits comfortably — file it rather than
   building on an opinion.
-- **Q11 and Q12 are the same problem from opposite ends** — ask them together, and expect the
-  answer to be about where the crossover sits rather than a clean yes or no.
+- **Q16 is the live architecture question**, and only if a cloud-primary or standalone topology is on
+  the table. It absorbs the retired **Q11/Q12** (certificate custody in a hosted deployment): under
+  the default architecture (client's own local server is the SIF) that custody question does not
+  arise; it re-emerges only when the SIF runs in a cloud we operate, which is what Q16 asks.
 - **Do not open with "can I use multiple series".** It is settled, it is boring, and it
   invites a confident answer to a question we did not need to ask. The series is not the
   mechanism — the SIF is.
