@@ -283,7 +283,7 @@ jobs:
       - run: pnpm format:check
 
       # The repo-level project only (`vitest run` at the root, NOT `pnpm test`, which would also run
-      # every package). Two reasons it belongs in the one job nothing gates:
+      # every package). Three reasons it belongs in the one job nothing gates:
       #
       #   the two CLASSIFIERS under `scripts/` — if either is wrong, every gating decision below is
       #   wrong, so they must run even on the paths they would otherwise skip;
@@ -291,7 +291,9 @@ jobs:
       #   `scripts/english-only.test.ts`, which read `packages/` and `apps/` whole. They lived in
       #   `packages/db` until 2026-08-01, where `test-heavy`'s own gate decided whether they ran —
       #   so a pull request touching only `packages/payments` ran neither, and their first run was
-      #   the unfiltered `main` merge.
+      #   the unfiltered `main` merge;
+      #   `scripts/check-signoff.test.mjs`, which covers the script licence.yml's `dco` job runs and
+      #   runs that job's own step, extracted from the workflow file rather than transcribed.
       - run: pnpm vitest run --coverage
 
   # The bundles operators actually run. Nothing else in this workflow builds them: dist/ is

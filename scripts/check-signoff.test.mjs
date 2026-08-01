@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -202,9 +202,17 @@ describe("check-signoff.sh", () => {
       symlinkSync(script, join(repo, "scripts", "check-signoff.sh"));
     });
 
-    /** Runs the extracted step in the fixture repository, as CI runs it: shas in the environment. */
-    const runStep = (base, head) =>
-      spawnSync("sh", ["-c", step], {
+    /**
+     * Runs the extracted step in the fixture repository, as CI runs it: the shas in the
+     * environment, and `bash -e <file>`. That is GitHub's default shell for a `run:` step with no
+     * `shell:` key of its own — not `sh -c`, and not the `-o pipefail` that an explicit
+     * `shell: bash` would add. `-e` is the part that matters here: a command failing outside a
+     * conditional would end the step early, which is how a `run:` block quietly stops half way.
+     */
+    const runStep = (base, head) => {
+      const file = join(repo, "dco-step.sh");
+      writeFileSync(file, step);
+      return spawnSync("bash", ["-e", file], {
         cwd: repo,
         encoding: "utf8",
         env: {
@@ -215,6 +223,7 @@ describe("check-signoff.sh", () => {
           GIT_CONFIG_SYSTEM: "/dev/null",
         },
       });
+    };
 
     it("passes a range whose every commit is signed off", () => {
       const result = runStep(sha.unsigned, sha.lowercase);

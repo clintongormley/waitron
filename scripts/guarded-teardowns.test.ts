@@ -31,7 +31,7 @@ import { describe, expect, it } from "vitest";
  * constructor and the migrator, and `testing/postgres.test.ts` tests the very surface the helper is
  * built on.
  *
- * ## Two limits, stated because neither is obvious
+ * ## Three limits, stated because none is obvious
  *
  * 1. **It cannot see a suite with no teardown at all.** It inspects closers INSIDE
  *    `afterAll`/`afterEach`; a suite that creates a resource per test and never closes one is
@@ -40,6 +40,13 @@ import { describe, expect, it } from "vitest";
  *    whole time. It was found by reading, not by scanning.
  * 2. **`isGuarded` proves a check exists in the hook, not that it covers this call.** See its own
  *    doc comment.
+ * 3. **The suites in this directory are outside it, including one with a real teardown.** The scan
+ *    roots are `packages/` and `apps/`, and it matches `*.test.ts`; `scripts/check-signoff.test.mjs`
+ *    fails both tests and has an `afterAll` that removes a temp directory (guarded by hand). Adding
+ *    `scripts/` as a root is not the fix — measured on 2026-08-01, it makes this file report its own
+ *    template-literal fixtures as violations, which is what the assertion in "the scan itself"
+ *    pins. A root-level suite keeps the rule by hand until someone finds a scan that can tell a
+ *    fixture from a teardown.
  *
  * ## Why not an ESLint rule
  *

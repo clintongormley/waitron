@@ -1,12 +1,14 @@
 import { defineConfig } from "vitest/config";
 
 // The repo-level test project — the one gate that is never narrowed away. It holds the work that
-// belongs to no package, which since 2026-08-01 is two different kinds:
+// belongs to no package, which since 2026-08-01 is three kinds:
 //
 //   the two CLASSIFIERS (`scripts/changed-*.mjs`) that decide what CI and the pre-push hook run;
 //   the two repo-wide GUARDS (`scripts/*.test.ts`), which read `packages/` and `apps/` whole —
 //   guarded-teardowns scans every `*.test.ts` under both, english-only scans the seven generic
-//   packages' `src/`.
+//   packages' `src/`;
+//   `scripts/check-signoff.test.mjs`, which covers the sign-off predicate both gates share and
+//   runs licence.yml's `dco` step extracted from the workflow file.
 //
 // The guards lived in `packages/db` until then, and both gates had stopped running them on most
 // pushes: they only load when `packages/db` is in scope, and the scoping ships two shapes that do

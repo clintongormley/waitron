@@ -326,8 +326,9 @@ Every file that throws a code imports its registry (`import "./errors.js"`) dire
 **Spanish domain terms are deliberate**, guarded by `packages/db/src/english-only.ts` — whose suite
 is `scripts/english-only.test.ts`, in the root Vitest project rather than beside it (§4). Fiscal
 tables and columns use the Veri*Factu vocabulary (`envios`, `estado`, `huella`, `secuencia`,
-`entorno`). Add new Spanish schema tokens to `SPANISH_WORDS`. `packages/verifactu` and `packages/fiscal-verifactu`
-are exempt from the guard; `apps/*` is out of scope by a recorded decision.
+`entorno`). Add new Spanish schema tokens to `SPANISH_WORDS`. `packages/verifactu` and
+`packages/fiscal-verifactu` are exempt from the guard; `apps/*` is out of scope by a recorded
+decision.
 
 **`@waitron/db`'s `exports` map is enumerated, not a wildcard** — `.`, `./testing/postgres.js`,
 `./testing/seed.js`. A wildcard would publish the harness and give `asAppUser` a second import path.
@@ -490,11 +491,12 @@ scoping by package, most pushes stopped reaching `packages/db`: measured on 2026
 neither guard in either place and their first run was the unfiltered `main` merge — the §2 trap
 below, one level up, with the filter over PACKAGES rather than over test names. They now live in
 `scripts/`, which `pnpm vitest run --coverage` runs from ci.yml's ungated `lint` job and from
-`.husky/pre-push` on every push that is not documentation-only. Two consequences worth knowing
-before adding a third: **the root project does not typecheck** (`pnpm typecheck` is `pnpm -r
-typecheck` and never visits the workspace root, §2), and a module tested only from there has to be
-named in the root `vitest.config.ts`'s `coverage.include` and excluded from its own package's, or
-it is measured twice or not at all.
+`.husky/pre-push` on every push that is not documentation-only. Two things to know before putting a
+third guard there: **the root project does not typecheck** (`pnpm typecheck` is `pnpm -r typecheck`
+and never visits the workspace root, §2 — so a type error in one of those files is caught only when
+it is also a runtime error), and a module tested only from there has to be named in the root
+`vitest.config.ts`'s `coverage.include` and excluded from its own package's, or it is measured twice
+or not at all.
 
 Suites sharing a database must clean up in a `finally` so they are order-independent, not
 order-reliant — several tests have been fixed for exactly this.

@@ -41,13 +41,14 @@
 #   pnpm format:check               always     1912-2066ms (3 runs). The ONLY step that reads prose,
 #                                              so it runs on a documentation-only push.
 #   pnpm lint                       code       1681-1860ms (3 runs)
-#   pnpm vitest run --coverage      code       2.20-2.22s (3 runs, 2026-08-01). The REPO-LEVEL
-#                                              Vitest project, which is never narrowed: the two
-#                                              classifiers below and the two guards that read
-#                                              `packages/` and `apps/` whole. Unscoped by
-#                                              construction — see the step's own comment for why it
-#                                              is not on the documentation path and why it is a step
-#                                              of its own rather than part of the run below.
+#   pnpm vitest run --coverage      code       2.22-2.24s (3 runs, 2026-08-01, five suites). The
+#                                              REPO-LEVEL Vitest project, which is never narrowed:
+#                                              the two classifiers below, the two guards that read
+#                                              `packages/` and `apps/` whole, and the tests for the
+#                                              sign-off script this file's first step runs. Unscoped
+#                                              by construction — see the step's own comment for why
+#                                              it is not on the documentation path and why it is a
+#                                              step of its own rather than part of the run below.
 #   pnpm typecheck                  code       scoped to the changed packages and their dependents
 #   scope is runnable               scoped     199-202ms (5 runs, `...@waitron/ui` scope) — one
 #                                              `pnpm <the same filters> ls` piped into node. Only on
@@ -454,11 +455,12 @@ fi
 run_step "lint" "pnpm lint" pnpm lint
 
 # The REPO-LEVEL Vitest project, and the only step here that no scope can narrow. It holds the two
-# classifiers under `scripts/` — if either is wrong every gating decision above it is wrong — and,
-# since 2026-08-01, the two guards that read `packages/` and `apps/` whole: guarded-teardowns
-# scans every `*.test.ts` under both, english-only scans the seven generic packages' `src/`. They
-# lived in `packages/db` until then, where they only loaded when `packages/db` was in scope; the
-# receipts for what that skipped are in the repo-root vitest.config.ts.
+# classifiers under `scripts/` — if either is wrong every gating decision above it is wrong — the
+# tests for check-signoff.sh, which the first step of this file runs, and, since 2026-08-01, the two
+# guards that read `packages/` and `apps/` whole: guarded-teardowns scans every `*.test.ts` under
+# both, english-only scans the seven generic packages' `src/`. Those two lived in `packages/db`
+# until then, where they only loaded when `packages/db` was in scope; the receipts for what that
+# skipped are in the repo-root vitest.config.ts.
 #
 # Its own step rather than part of the `test:coverage` run below, because that run is scoped and
 # this must not be. Until this step existed the root `test:coverage` SCRIPT was what ran the
@@ -466,12 +468,14 @@ run_step "lint" "pnpm lint" pnpm lint
 # on the scoped pushes that need it most. The step below now runs `pnpm -r`, so the project runs
 # exactly once on either path rather than twice on one of them.
 #
-# NOT on the documentation path, which is a claim about what those two suites read rather than a
-# judgement about cost. They read `packages/**/*.test.ts`, `apps/**/*.test.ts`,
-# `packages/<generic>/src/**/*.ts` and `scripts/**`; `isInertPath` (scripts/changed-scope.mjs)
-# calls a path documentation only when it is under `docs/` or is a root-level `*.md`. The two sets
-# do not intersect, so on such a push this can only fail for something already on `main`. CI runs
-# it there anyway — ci.yml's `lint` job is ungated — so that half is covered.
+# NOT on the documentation path, which is a claim about what these suites read rather than a
+# judgement about cost. Between them they read `packages/**/*.test.ts`, `apps/**/*.test.ts`,
+# `packages/<generic>/src/**/*.ts`, `scripts/**`, `.github/workflows/licence.yml` (extracted, not
+# transcribed, by check-signoff.test.mjs) and throwaway git repositories under $TMPDIR;
+# `isInertPath` (scripts/changed-scope.mjs) calls a path documentation only when it is under
+# `docs/` or is a root-level `*.md`. The two sets do not intersect, so on such a push this can only
+# fail for something already on `main`. CI runs it there anyway — ci.yml's `lint` job is ungated —
+# so that half is covered.
 run_step "repo-level suite" "pnpm vitest run --coverage" pnpm vitest run --coverage
 
 run_step "typecheck ($scope_label)" "pnpm$repro_filters typecheck" pnpm "$@" typecheck
