@@ -63,20 +63,35 @@ import "@waitron/shared";
  * needs no such addition here: it is already registered by `packages/fiscal/src/errors.ts` (Task
  * 10), and `./record-sale.ts` reuses `TrustedReading.warning` — an `AppError` already carrying
  * that exact code — verbatim rather than re-deriving it.
+ *
+ * **Sale-settlement model addition (2026-08-01).** Two codes added — `sale.already_settled` and
+ * `sale.voided` — and two RE-SHAPED: `sale.tender_unsettled` and `sale.tender_shortfall` now carry
+ * `saleId` where they carried `workingOrderId`, because both are now raised by the settlement path
+ * (`settleSale`, and `recordSale`'s inline `settlement:{kind:"immediate"}` half that calls the same
+ * code) — which holds a `saleId` and no `workingOrderId` (design §4, decision 2). The CODES are
+ * unchanged, only their params: codes are never renamed once shipped, so a param re-shape is the
+ * only move available. `sale.tender_shortfall`'s identity is now `sum(amount) = total +
+ * sum(tip_amount)` because the tip moved off the sale and onto each tender (`tenders.tip_amount`).
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
-    /** Thrown by `recordSale` before any row is written: at least one tender in
-     * `RecordSaleInput.tenders` has `settledAt: null`. A card declined mid-tender must leave the
-     * working order open and retryable with nothing chained — see `./record-sale.ts`'s
-     * `assertAllTendersSettled`. */
-    "sale.tender_unsettled": { tillId: string; workingOrderId: string; unsettledCount: number };
-    /** Thrown by `recordSale` before any row is written: every tender has settled, but their sum
-     * does not equal `total + tipAmount`. Distinct from `sale.tender_unsettled` — a translator
-     * needs to tell "still waiting on a payment" from "the payments don't add up" apart. */
+    /** Raised by the settlement path — `settleSale`, and `recordSale`'s inline
+     * `settlement:{kind:"immediate"}` half that calls the same code (design §4) — when at least one
+     * tender still has `settledAt: null`. The settlement (its `sale_settlements` row and `tenders`)
+     * is refused, so the sale stays unsettled and retryable rather than a settlement being recorded
+     * against a payment that has not landed. Sale-centric: the settlement path holds a `saleId`,
+     * never a `workingOrderId` (decision 2 — codes are never renamed once shipped, only re-shaped). */
+    "sale.tender_unsettled": { tillId: string; saleId: string; unsettledCount: number };
+    /** Raised by the settlement path (like `sale.tender_unsettled`, from both the inline and the
+     * deferred half) when every tender has settled but `sum(amount) = total + sum(tip_amount)` does
+     * not hold — the tip now lives per tender (`tenders.tip_amount`), not on the sale. Despite the
+     * name it still fires in BOTH directions: `charged` under OR over `due`. Kept distinct from
+     * `sale.tender_unsettled` so a translator can tell "still waiting on a payment" from "the
+     * payments don't add up" apart. Sale-centric `saleId`, never `workingOrderId` — codes are never
+     * renamed once shipped (design §4). */
     "sale.tender_shortfall": {
       tillId: string;
-      workingOrderId: string;
+      saleId: string;
       due: string;
       charged: string;
     };
@@ -110,6 +125,21 @@ declare module "@waitron/shared" {
      * failure: a second void of an already-voided sale is a staff/UI error, not a fiscal
      * condition, and must not be confused with a chain-verification failure. */
     "sale.already_voided": { saleId: string };
+    /** Thrown by `settleSale` when `sale_settlements` already carries a row for this sale — the
+     * translation of `sale_settlements_sale_key`'s `UNIQUE (tenant_id, sale_id)` violation
+     * (`packages/db/drizzle/0012_sale_settlement.sql`), surfaced via `isUniqueViolation` exactly as
+     * `sale.already_voided` translates `sale_voids_sale_id_key` in `./record-void.ts`. The
+     * constraint, not a prior SELECT, is the control: two concurrent settlements both pass a
+     * check-then-insert and only one passes the INSERT. An operational failure — a sale settles
+     * once — not a fiscal one, so it must not be confused with a chain-verification failure. */
+    "sale.already_settled": { saleId: string };
+    /** Thrown by `settleSale` when the sale already carries a `sale_voids` row
+     * (`packages/db/src/schema/sale-voids.ts`) — a voided sale can never be settled, a state that
+     * could not arise before deferred settlement split payment from the fiscal record (design §4).
+     * Distinct from `sale.already_voided` (a second void of the same sale): this is a SETTLEMENT
+     * attempt on a sale that was voided, refused by `settleSale` before it writes the settlement.
+     * An operational failure, not a fiscal one. */
+    "sale.voided": { saleId: string };
     /** Thrown-and-caught internally by `recordSale`/`recordVoid` (never crosses either function's
      * own boundary — it is constructed only to hand its `.code`/`.params` to `recordIncident`) to
      * wrap the `IntegrityIssue`s from a failed `FiscalBackend.checkIntegrity` call as a stable,
