@@ -1,9 +1,22 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, sales, saleSettlements, saleVoids, tenders, withTenant } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import {
+  asAppUser,
+  captureError,
+  pgErrorCode,
+  sales,
+  saleSettlements,
+  saleVoids,
+  tenders,
+  withTenant,
+} from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
-import { AppError, saleId as brandSaleId } from "@waitron/shared";
+import {
+  AppError,
+  saleId as brandSaleId,
+  tenantId as brandTenantId,
+} from "@waitron/shared";
 import type { SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { seedTenant } from "../test/fixtures.js";
 import { settleSale } from "./settle-sale.js";
@@ -371,5 +384,48 @@ describe("settleSale — the concurrent settlement race (real Postgres only)", (
       if (holder !== undefined) await holder.close();
       if (waiter !== undefined) await waiter.close();
     }
+  });
+});
+
+describe("settleSale — error propagation", () => {
+  it("rethrows a non-unique error from the settlement insert, untranslated", async () => {
+    // The settlement insert's OTHER failure path. `settleSale` catches the `sale_settlements` UNIQUE
+    // violation and maps it to `sale.already_settled`; ANY other database failure (a future
+    // constraint, a transport error) must reach the caller as-is rather than be mislabelled as
+    // already-settled. Mirrors record-void.test.ts's identical "propagates a database error that is
+    // not a unique violation" stub for recordVoid's analogous catch/rethrow. A hand-built
+    // Transaction stub, not the real PGlite/PG one: there is no second schema-level constraint on
+    // `sale_settlements` to provoke a genuinely different SQLSTATE, so this drives settleSale's own
+    // catch/rethrow branch directly. A tenderless (€0) settlement so the ONLY insert reached is the
+    // `sale_settlements` one that rejects — no tender insert runs before it.
+    let selects = 0;
+    const fakeTx = {
+      select: () => ({
+        from: () => ({
+          // 1: the sale row; 2: sale_voids (none); 3: existing settlement (none).
+          where: () => {
+            selects += 1;
+            return selects === 1
+              ? Promise.resolve([
+                  { tillId: "t", total: "0.00", issuedAt: SETTLED_AT.toISOString() },
+                ])
+              : Promise.resolve([]);
+          },
+        }),
+      }),
+      insert: () => ({
+        values: () => Promise.reject(Object.assign(new Error("disk full"), { code: "53100" })),
+      }),
+    } as unknown as Transaction;
+
+    const error = await captureError(() =>
+      settleSale(fakeTx, {
+        tenantId: brandTenantId("00000000-0000-4000-8000-000000000000"),
+        saleId: brandSaleId("11111111-1111-4111-8111-111111111111"),
+        tenders: [],
+      }),
+    );
+    expect(error).not.toBeInstanceOf(AppError);
+    expect(pgErrorCode(error)).toBe("53100");
   });
 });

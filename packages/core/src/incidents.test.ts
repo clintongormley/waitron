@@ -93,7 +93,6 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     total: "14.41",
-    tipAmount: "1.90",
     lines: [
       {
         lineNo: 1,
@@ -112,7 +111,12 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
         lineTotal: "2.10",
       },
     ],
-    tenders: [{ method: "card", amount: "16.31", settledAt: BASE }],
+    // Immediate settlement with the tip on the tender (design D2): sum(amount) 16.31 = total 14.41 +
+    // tip 1.90, the coverage identity settleSale enforces inside recordSale's immediate half.
+    settlement: {
+      kind: "immediate",
+      tenders: [{ method: "card", amount: "16.31", tipAmount: "1.90", settledAt: BASE }],
+    },
     fiscalBackend: "fake",
     clock: steadyClock,
     ...overrides,

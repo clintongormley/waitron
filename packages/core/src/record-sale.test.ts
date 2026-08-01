@@ -621,6 +621,42 @@ describe("recordSale — settlement modes", () => {
     expect(new Date(aSettle!.settledAt).getTime()).toBe(new Date(bSettle!.settledAt).getTime());
     expect(new Date(aSettle!.settledAt).getTime()).toBe(later.getTime());
   });
+
+  it("immediate settles a fully-comped €0 sale with no tenders", async () => {
+    // The tenderless immediate path, driven end to end through `recordSale` rather than only through
+    // a direct `settleSale` (settle-sale.test.ts already covers the latter). A fully-comped sale is
+    // total 0.00 with NO tender — `tenders_amount_ck` forbids a €0 tender — so immediate mode hands
+    // `settleSale` an EMPTY tender list; it must record the settlement (stamped at the sale's own
+    // issuance instant, decision 5) rather than crash on an empty `reduce`/`insert().values([])`. The
+    // coverage identity `0 = 0 + 0` holds, so the settlement is written and the sale is still chained.
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId } = await run(backend, {
+      total: "0.00",
+      lines: [
+        {
+          lineNo: 1,
+          descriptions: { "es-ES": "Free item", "ca-ES": "Free item" },
+          quantity: "1",
+          unitPrice: "0.00",
+          vatRate: "0.00",
+          lineTotal: "0.00",
+        },
+      ],
+      settlement: { kind: "immediate", tenders: [] },
+    });
+
+    expect(await countRows("sales")).toBe(1);
+    expect(await countRows("tenders")).toBe(0);
+    expect(await countRows("sale_settlements")).toBe(1);
+    expect(await backend.recordsFor(tillId)).toHaveLength(1);
+    // Stamped at the sale's issuance instant — there is no tender to time it by.
+    const [settled] = await suite.db
+      .select()
+      .from(saleSettlements)
+      .where(eq(saleSettlements.saleId, saleId));
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
+    expect(new Date(settled!.settledAt).getTime()).toBe(new Date(row!.issuedAt).getTime());
+  });
 });
 
 describe("recordSale — numbering", () => {
