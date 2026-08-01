@@ -21,6 +21,8 @@ Two companion documents, deliberately not duplicated here:
 **Finish the fiscal story before building anything user-facing.**
 
 The reasoning: the till has to be built against the invoicing model, and that model is mid-change.
+(The **SIF topology** — which node is the SIF, and how a venue keeps trading through a server death —
+is now settled by #33; the fiscal sequence below is the rest of the model still moving.)
 Building a counter screen now means building it twice. The fiscal work is also the part that cannot
 be repaired afterwards — invoice numbers are never reused and records are hash-chained — so it is
 where care pays best.
@@ -43,6 +45,7 @@ reprioritisation rather than assumed.
 | **Scoped CI** — stop running every check on every push | **Done.** Both merged: #25 (the `ci` gate) and #27 (the scoping). Against the 7m20s baseline: a documentation-only pull request now takes **44s**, and a full unfiltered `push` on `main` **4m12s**. The scope resolution it shipped skipped every package's tests on a root-config pull request; that is fixed under **Debt and odd jobs**, where one follow-up (what `test-light` reports) remains |
 | **Scoped pre-push hook** — the same treatment for the local gate | **Merged** (#31). Scopes `typecheck` and `test:coverage` to the changed packages and their dependents, adds the sign-off (DCO) check CI was catching for us, runs `test:coverage` rather than `test`, adds `pnpm install --frozen-lockfile`, and skips `lint` on a documentation-only push. Measured on this machine on 2026-08-01, one crafted push per shape, `TESTCONTAINERS_RYUK_DISABLED=true`, wall clock bracketed in `time.time()` — `main`'s hook (`558c62b`, one run each) → #31's: deletions-only 9ms → 7-9ms (unchanged, #23 already did that); an **unsigned commit 104s and exit 0 → 27-36ms and exit 1**, because `main`'s hook has no sign-off check at all and so charged a full run and then let it through; documentation-only 105s → **3.1-3.5s**; a push to `packages/ui`, which no other package depends on, 105s → **8.2-8.8s**. **It is not faster everywhere.** A `packages/db` push is 112s and a root-config or lockfile push 116s — both SLOWER than `main`'s 105s, because this hook also runs `test:coverage` rather than `test` and installs first. Scoping pays on the leaves, not on the trunk; **Debt and odd jobs** carries the expansion sizes and what the hook still does not cover. **Re-measured the same way on 2026-08-01**, after the tree-wide guards moved into the repo-level project and the hook grew a step for it (two runs per shape): documentation-only **3.17-3.59s** and an unsigned commit **30ms, exit 1**, both unchanged — neither path reaches that step; `packages/ui` **10.75-11.20s**, the whole of the ~2.4s being the step; `packages/db` **113.22-116.81s** and root config **116.48-117.98s**, where it costs nothing at all, because the root `test:coverage` script was already running that project on the global path |
 | **Cloud storage model** — design | **Merged** (#19), corrected by **#22** |
+| **Local server as SIF, active-active + failover** — design | **Merged** (#33). Promotes the arch-design fallback (the *server* is the SIF, not each till) to the primary model; adds active-active chaining, a single relocatable submitter, human-driven boot-time failover, and an optional dedicated cloud server that can hold any role. **Topology only** — the buildable pieces are follow-ups below |
 | **Sale settlement model** — implementation plan | Not written. **The next build step** |
 | **Close Q13 and Q15 on primary source** | Not started. Cheaper than hiring — see below |
 | **Consolidate the session-memory notes** | Not started. They predate this file and now overlap it — see below |
@@ -70,6 +73,34 @@ Design and sources for all four:
 
 **Then reassess.** The next question after piece 4 is whether to keep going fiscal (reporting, daily
 close) or turn to the till. Do not answer it here in advance.
+
+---
+
+## SIF topology follow-ups (from #33)
+
+The [server-as-SIF + failover design](superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md)
+decided the **topology only**; its §14 defers the buildable pieces, each to its own spec:
+
+- **The sync / replication protocol** between the two local servers and the cloud mirror — the
+  largest. Partitioned-write active-active with full cross-replication (not multi-master); it must be
+  prototyped against the real migrations, not assumed from config.
+- **Promotion + fencing tooling and the till-side failover list** — boot-time role resolution,
+  continuous conflict-detection, the "one primary" invariant.
+- **The submitter as a relocatable role** — one venue submitter, certificate resolved from wherever
+  it runs.
+- **Till UX for the timed-out card case** (retry / alternative tender / wait).
+
+Also left open by that design:
+
+- **`CLAUDE.md` §5's "nothing blocks a sale" invariant must be rewritten** — but *in the change that
+  implements server-as-SIF*, not before, because the current code still honours the old wording.
+  Deferred deliberately; recorded here so it is not lost.
+- **A new asesor question** — a cloud server that *issues* invoices (cloud-primary or standalone)
+  operates the SIF from a cloud location, a stronger form of the §8a hosting question (RD 1619/2012
+  arts. 22.2 / 19.4). See the design's §13, and the advisor gap below.
+- The **reconcile remediation UI** and the **orphan-drift hold** (both already under *Debt and odd
+  jobs*) are the backstop for the design's double-charge-across-failover path (§10) — no new work, but
+  now they have a second caller.
 
 ---
 
@@ -122,6 +153,16 @@ binds us or only them.
 anything is built rather than after — see the same spec's §10.
 
 Q13, Q14 and Q15 post-date that design and do not depend on hosting, so they are unaffected.
+
+**A second architectural shift, 2026-08-01 (#33).** The
+[server-as-SIF design](superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md) makes
+**Q1** moot (the server is the SIF, so a till need not qualify as one) and leaves the closed **Q2**
+(relayed submission) non-load-bearing. It **reshapes Q5(a)**: a series now belongs to the
+*server*-SIF, and the two concurrent SIFs must issue under **disjoint** series or their records
+collide on the identity triple. And it **raises a new hosting question** — a cloud server that
+*issues* invoices (cloud-primary / standalone) operates the SIF abroad, a stronger form of the §8a
+question above. `asesor-questions.md` carries a dated note; the full re-read this section calls for now
+has two designs to read against, not one.
 
 ### Task: try to close Q13 and Q15 on primary source first
 

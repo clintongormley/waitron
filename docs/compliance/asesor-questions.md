@@ -117,6 +117,13 @@ that Q1, Q2 and Q9(b) have all come off the list.
 
 ### Q1. Is a till that syncs to a shared backend within minutes an independent SIF?
 
+> **Also moot under the server-as-SIF design, 2026-08-01 (#33).** That design makes the *server* the
+> SIF, so whether a *till* qualifies as one no longer arises; the already-closed **Q2** (relayed
+> submission) becomes non-load-bearing; and **Q5(a)** (one series per till) is reshaped — a series now
+> belongs to the server-SIF, and two concurrent SIFs must issue under disjoint series. See
+> [`../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md`](../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md)
+> §§1, 3, 11. A full re-read of this list against the new architecture is a backlog task.
+
 > 🟢 **CLOSED 2026-07-27 on primary source, same trip as Q2.** The developer FAQ answers the
 > sync-frequency worry twice over:
 >

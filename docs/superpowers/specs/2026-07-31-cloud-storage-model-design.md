@@ -30,6 +30,14 @@ get their own spec (§10).
 
 **Every venue runs a local server as its system of record.** The cloud holds copies.
 
+> **Scoped, 2026-08-01 (#33).** This rule governs the **shared multi-tenant** store, and its reason is
+> version skew — many tenants on one schema at many versions. A **dedicated single-tenant** cloud
+> server has no such skew and *may* originate transactions: as a failover mirror, or deliberately as a
+> venue's primary or only server (with the key ring then in the cloud as a standing posture). See
+> [`2026-08-01-local-server-sif-and-failover-design.md`](2026-08-01-local-server-sif-and-failover-design.md)
+> §9. The shared store described here is unchanged; the text below is left as written, per `CLAUDE.md`
+> §6.
+
 **This supersedes one row of `2026-07-18-pos-architecture-design.md` §5's topology table.** That table
 lists "Cloud SaaS, no local hardware | till → cloud" as a supported deployment; under this design it
 is not, because it would make the cloud a primary transactional store for those tenants and
