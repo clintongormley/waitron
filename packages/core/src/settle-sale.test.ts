@@ -1,0 +1,344 @@
+import { eq } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
+import { asAppUser, sales, saleSettlements, saleVoids, tenders, withTenant } from "@waitron/db";
+import type { Database } from "@waitron/db";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { AppError, saleId as brandSaleId } from "@waitron/shared";
+import type { SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import { seedTenant } from "../test/fixtures.js";
+import { settleSale } from "./settle-sale.js";
+import type { SettleSaleInput } from "./settle-sale.js";
+import { startRealPostgres } from "./testing/postgres.js";
+
+// Real Postgres, not PGlite, for the whole suite — mandatory here (design §7, CLAUDE.md §4). The
+// cross-tenant `not_found` path needs a non-superuser role that RLS is FORCED against, and the
+// settlement race needs two callers on two backend processes; PGlite gives neither (its one
+// superuser backend bypasses RLS and serialises every query).
+const postgres = useRealPostgres({
+  start: startRealPostgres,
+  // The container image may be pulled cold on a fresh CI runner; the package's own real-PG suites
+  // set 180s for the same reason (see `useRealPostgres`'s note on why there is no default).
+  timeoutMs: 180_000,
+});
+
+const SETTLED_AT = new Date("2026-08-01T12:00:00Z");
+
+/**
+ * Inserts one `sales` row as the seeding (superuser) connection — RLS is bypassed there, exactly as
+ * `test/fixtures.ts`'s `seedTenant` relies on for the tenant/till/series it seeds. Written on the
+ * NEW schema: `total` is the only money column left (the tip moved to `tenders.tip_amount` and
+ * `amount_charged` was dropped in migration 0012).
+ */
+async function seedSale(
+  db: Database,
+  seed: { tenantId: TenantId; tillId: TillId; seriesId: SeriesId },
+  overrides: { total?: string; invoiceNumber?: number } = {},
+): Promise<SaleId> {
+  const [row] = await db
+    .insert(sales)
+    .values({
+      tenantId: seed.tenantId,
+      tillId: seed.tillId,
+      seriesId: seed.seriesId,
+      invoiceNumber: overrides.invoiceNumber ?? 1,
+      issuedAt: new Date("2026-08-01T11:00:00Z").toISOString(),
+      issuedOffsetMinutes: 0,
+      total: overrides.total ?? "65.00",
+      locale: "es-ES",
+      invoiceLocales: ["es-ES"],
+      fiscalBackend: "fake",
+      fiscalState: "recorded",
+    })
+    .returning({ id: sales.id });
+  return brandSaleId(row!.id);
+}
+
+/**
+ * Runs `settleSale` exactly as the application will: inside a tenant-scoped transaction, AS the
+ * non-superuser app role. Both matter — `withTenant` sets `app.tenant_id`, `asAppUser` switches off
+ * the superuser bypass — so a cross-tenant sale is genuinely hidden by RLS rather than merely
+ * filtered by a predicate the superuser would ignore.
+ */
+function settle(db: Database, tenantId: TenantId, input: SettleSaleInput): Promise<void> {
+  return withTenant(db, tenantId, async (tx) => {
+    await asAppUser(tx);
+    await settleSale(tx, input);
+  });
+}
+
+describe("settleSale — the happy path", () => {
+  it("writes tenders + a settlement row when tenders cover total + tips", async () => {
+    const seed = await seedTenant(postgres.admin);
+    const saleId = await seedSale(postgres.admin, seed, { total: "65.00" });
+
+    // total 65.00 → 70.00 = 65.00 + 5.00 covers.
+    await settle(postgres.admin, seed.tenantId, {
+      tenantId: seed.tenantId,
+      saleId,
+      tenders: [{ method: "cash", amount: "70.00", tipAmount: "5.00", settledAt: SETTLED_AT }],
+    });
+
+    const settled = await postgres.admin
+      .select()
+      .from(saleSettlements)
+      .where(eq(saleSettlements.saleId, saleId));
+    expect(settled).toHaveLength(1);
+    // The tender's own moment, round-tripped through Postgres. Compared as an instant rather than
+    // as a string literal: a `timestamptz` read back through the driver is rendered in the session
+    // timezone (`2026-08-01 12:00:00+00`), not as the ISO string it was written from — the same
+    // reason `record-sale.test.ts` and `manual.test.ts` both wrap the read in `new Date(...)`.
+    // **Deviation from the brief**, whose `toBe("2026-08-01T12:00:00.000Z")` assumes the ISO form.
+    expect(new Date(settled[0]!.settledAt).getTime()).toBe(SETTLED_AT.getTime());
+
+    const tenderRows = await postgres.admin
+      .select()
+      .from(tenders)
+      .where(eq(tenders.saleId, saleId));
+    expect(tenderRows).toHaveLength(1);
+    expect(tenderRows[0]!.amount).toBe("70.00");
+    expect(tenderRows[0]!.tipAmount).toBe("5.00");
+  });
+
+  it("stamps the settlement at the LATEST tender's settledAt, across a split payment", async () => {
+    // Decision ⑤: settled_at is the moment the last tender landed. Two tenders settling at
+    // different times prove the reduce picks the max rather than the first/last positionally.
+    const seed = await seedTenant(postgres.admin);
+    const saleId = await seedSale(postgres.admin, seed, { total: "65.00" });
+    const earlier = new Date("2026-08-01T12:00:00Z");
+    const later = new Date("2026-08-01T18:30:00Z");
+
+    await settle(postgres.admin, seed.tenantId, {
+      tenantId: seed.tenantId,
+      saleId,
+      // 40.00 + 25.00 = 65.00 = total + 0 tips. `later` is supplied on the FIRST tender to prove
+      // the max is by value, not by array position.
+      tenders: [
+        { method: "card", amount: "40.00", tipAmount: "0.00", settledAt: later },
+        { method: "cash", amount: "25.00", tipAmount: "0.00", settledAt: earlier },
+      ],
+    });
+
+    const [settled] = await postgres.admin
+      .select()
+      .from(saleSettlements)
+      .where(eq(saleSettlements.saleId, saleId));
+    expect(new Date(settled!.settledAt).getTime()).toBe(later.getTime());
+  });
+});
+
+describe("settleSale — guards", () => {
+  it("throws sale.tender_unsettled for a null settledAt", async () => {
+    const seed = await seedTenant(postgres.admin);
+    const saleId = await seedSale(postgres.admin, seed, { total: "65.00" });
+
+    await expect(
+      settle(postgres.admin, seed.tenantId, {
+        tenantId: seed.tenantId,
+        saleId,
+        tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: null }],
+      }),
+    ).rejects.toMatchObject({
+      code: "sale.tender_unsettled",
+      params: { saleId, unsettledCount: 1 },
+    });
+
+    // Refused before any write: the sale stays unsettled and retryable.
+    const settled = await postgres.admin
+      .select()
+      .from(saleSettlements)
+      .where(eq(saleSettlements.saleId, saleId));
+    expect(settled).toHaveLength(0);
+  });
+
+  it("throws sale.tender_shortfall when sum(amount) != total + sum(tip)", async () => {
+    const seed = await seedTenant(postgres.admin);
+    const saleId = await seedSale(postgres.admin, seed, { total: "65.00" });
+
+    // 60.00 charged against a 65.00 due — under-coverage.
+    await expect(
+      settle(postgres.admin, seed.tenantId, {
+        tenantId: seed.tenantId,
+        saleId,
+        tenders: [{ method: "cash", amount: "60.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+      }),
+    ).rejects.toMatchObject({
+      code: "sale.tender_shortfall",
+      params: { saleId, due: "65.00", charged: "60.00" },
+    });
+
+    const tenderRows = await postgres.admin
+      .select()
+      .from(tenders)
+      .where(eq(tenders.saleId, saleId));
+    expect(tenderRows).toHaveLength(0);
+  });
+
+  it("throws sale.not_found for an unknown sale id", async () => {
+    const seed = await seedTenant(postgres.admin);
+    await expect(
+      settle(postgres.admin, seed.tenantId, {
+        tenantId: seed.tenantId,
+        saleId: brandSaleId("00000000-0000-4000-8000-000000000000"),
+        tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+      }),
+    ).rejects.toMatchObject({ code: "sale.not_found" });
+  });
+
+  it("throws sale.not_found for a cross-tenant sale (RLS-hidden, not forbidden)", async () => {
+    // The load-bearing RLS test, and why this suite is real-PG. The sale is real, but belongs to
+    // another tenant; under `FORCE ROW LEVEL SECURITY` as `app_user`, `settleSale`'s own tenant-
+    // unqualified `where(eq(sales.id, ...))` reads back zero rows, so it is genuinely not-found
+    // rather than forbidden. As a superuser (PGlite) the same SELECT would return the row and this
+    // test would fail — which is the point.
+    const other = await seedTenant(postgres.admin);
+    const foreignSaleId = await seedSale(postgres.admin, other, { total: "65.00" });
+    const seed = await seedTenant(postgres.admin);
+
+    await expect(
+      settle(postgres.admin, seed.tenantId, {
+        tenantId: seed.tenantId,
+        saleId: foreignSaleId,
+        tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+      }),
+    ).rejects.toMatchObject({ code: "sale.not_found", params: { saleId: foreignSaleId } });
+  });
+
+  it("throws sale.voided when the sale carries a sale_voids row", async () => {
+    const seed = await seedTenant(postgres.admin);
+    const saleId = await seedSale(postgres.admin, seed, { total: "65.00" });
+    await postgres.admin.insert(saleVoids).values({
+      tenantId: seed.tenantId,
+      saleId,
+      reason: "Wrong table",
+      voidedAt: new Date("2026-08-01T11:30:00Z").toISOString(),
+    });
+
+    await expect(
+      settle(postgres.admin, seed.tenantId, {
+        tenantId: seed.tenantId,
+        saleId,
+        tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+      }),
+    ).rejects.toMatchObject({ code: "sale.voided", params: { saleId } });
+  });
+
+  it("throws sale.already_settled on a second (sequential) settle", async () => {
+    const seed = await seedTenant(postgres.admin);
+    const saleId = await seedSale(postgres.admin, seed, { total: "65.00" });
+    const input: SettleSaleInput = {
+      tenantId: seed.tenantId,
+      saleId,
+      tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+    };
+
+    await settle(postgres.admin, seed.tenantId, input);
+    // The second attempt is caught by the pre-check SELECT, not the UNIQUE violation (that is the
+    // concurrent path below).
+    await expect(settle(postgres.admin, seed.tenantId, input)).rejects.toMatchObject({
+      code: "sale.already_settled",
+      params: { saleId },
+    });
+
+    const settled = await postgres.admin
+      .select()
+      .from(saleSettlements)
+      .where(eq(saleSettlements.saleId, saleId));
+    expect(settled).toHaveLength(1);
+  });
+});
+
+describe("settleSale — the concurrent settlement race (real Postgres only)", () => {
+  it("lets exactly one settlement win; the loser surfaces sale.already_settled", async () => {
+    // The race the pre-check SELECT cannot arbitrate on its own — proving that `sale_settlements`'s
+    // UNIQUE constraint is the real control (design decision ③). Two callers on DISTINCT backend
+    // processes: PGlite serialises every query onto one backend, so this is a FALSE PASS there, not
+    // a weak one — hence real-PG only (design §7, CLAUDE.md §4).
+    //
+    // The interleaving is forced deterministically with the acquired/held gate the package's other
+    // concurrency suites use (async-settle, reversal, incident-dedup): the holder pauses AFTER
+    // `settleSale` has inserted its tenders and its `sale_settlements` row but BEFORE its
+    // transaction commits, so its UNIQUE key is held-but-invisible. Left ungated, the loser could
+    // instead insert its tenders after the winner had already committed, and the WT002
+    // post-settlement trigger — not `isUniqueViolation` — would fire, surfacing a raw error rather
+    // than `sale.already_settled`. The gate keeps the loser on the intended UNIQUE-violation path.
+    const seed = await seedTenant(postgres.admin);
+    const saleId = await seedSale(postgres.admin, seed, { total: "65.00" });
+    const input: SettleSaleInput = {
+      tenantId: seed.tenantId,
+      saleId,
+      tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+    };
+
+    // Distinct connections, so the two callers land on two backend processes (`connect()`'s own
+    // contract). Guarded closes even though these live in a `finally` inside the test, not an
+    // afterAll — the convention CLAUDE.md §4 states and `guarded-teardowns.test.ts` backstops.
+    let holder: Database | undefined;
+    let waiter: Database | undefined;
+    let release: () => void = () => {};
+    let holderRun: Promise<void> | undefined;
+    let waiterRun: Promise<unknown> | undefined;
+    try {
+      holder = await postgres.pg.connect();
+      waiter = await postgres.pg.connect();
+
+      const held = new Promise<void>((resolve) => (release = resolve));
+      let acquire!: () => void;
+      const acquired = new Promise<void>((resolve) => (acquire = resolve));
+
+      // Holder: settles fully (tenders + sale_settlements), signals it holds the uncommitted UNIQUE
+      // key, and pauses before commit — keeping its transaction, and the key, open.
+      holderRun = withTenant(holder, seed.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await settleSale(tx, input);
+        acquire();
+        await held;
+      });
+      await acquired; // do not start the waiter before the key is actually held
+
+      // Waiter: the real path, unmodified. Its pre-check passes (the holder's row is uncommitted and
+      // invisible), it inserts its own tenders (WT002 sees no committed settlement), then BLOCKS on
+      // the sale_settlements UNIQUE key.
+      let waiterDone = false;
+      waiterRun = settle(waiter, seed.tenantId, input)
+        .then(() => undefined)
+        .catch((error: unknown) => error)
+        .finally(() => {
+          waiterDone = true;
+        });
+
+      const resolvedEarly = await Promise.race([
+        waiterRun.then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 300)),
+      ]);
+      expect(resolvedEarly).toBe(false); // genuinely blocked on the holder's uncommitted key
+      expect(waiterDone).toBe(false);
+
+      release(); // holder commits → the waiter's INSERT collides → 23505 → sale.already_settled
+      await holderRun;
+      const loser = await waiterRun;
+
+      expect(loser).toBeInstanceOf(AppError);
+      expect((loser as AppError).code).toBe("sale.already_settled");
+      expect((loser as AppError).params).toMatchObject({ saleId });
+
+      // Exactly one settlement, and exactly the winner's single tender — the loser's tender rolled
+      // back with its whole transaction.
+      const settled = await postgres.admin
+        .select()
+        .from(saleSettlements)
+        .where(eq(saleSettlements.saleId, saleId));
+      expect(settled).toHaveLength(1);
+      const tenderRows = await postgres.admin
+        .select()
+        .from(tenders)
+        .where(eq(tenders.saleId, saleId));
+      expect(tenderRows).toHaveLength(1);
+    } finally {
+      release();
+      if (holderRun !== undefined) await holderRun.catch(() => {});
+      if (waiterRun !== undefined) await waiterRun.catch(() => {});
+      if (holder !== undefined) await holder.close();
+      if (waiter !== undefined) await waiter.close();
+    }
+  });
+});

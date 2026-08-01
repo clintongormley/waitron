@@ -45,6 +45,13 @@ export interface RecordSaleLine {
 export interface RecordSaleTender {
   method: string;
   amount: string;
+  /** The payer's affirmed gratuity on THIS tender, non-taxable and on no invoice — it rides on
+   * the tender so it is attributed to the payer who left it, and is a part of `amount`, never on
+   * top of it (`tip_amount <= amount`; design §9.2). Consumed by `settleSale`, which sums it into
+   * the coverage identity `sum(amount) = total + sum(tip)` and writes it to `tenders.tip_amount`.
+   * Widened onto this interface in Task 4; `recordSale`'s own settlement half populates it at its
+   * call sites in a later task (until then that path leaves it defaulted). */
+  tipAmount: string;
   /** `null` means the payment has not completed. Nothing is chained until every one is set. */
   settledAt: Date | null;
 }
