@@ -71,7 +71,6 @@ function buildInput(s: SeededForSale, settledAt: Date | null): RecordSaleInput {
     locale: "es",
     invoiceLocales: ["es"],
     total: "12.10",
-    tipAmount: "0.00",
     lines: [
       {
         lineNo: 1,
@@ -82,7 +81,11 @@ function buildInput(s: SeededForSale, settledAt: Date | null): RecordSaleInput {
         lineTotal: "10.00",
       },
     ],
-    tenders: [{ method: "card", amount: "12.10", settledAt }],
+    // Immediate settlement, tip on the tender (zero here): sum(amount) 12.10 = total 12.10 + tip 0.00.
+    settlement: {
+      kind: "immediate",
+      tenders: [{ method: "card", amount: "12.10", tipAmount: "0.00", settledAt }],
+    },
     fiscalBackend: "fake",
     clock: steadyClock,
   };
