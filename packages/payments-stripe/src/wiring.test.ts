@@ -81,7 +81,6 @@ function buildInput(
     locale: "es",
     invoiceLocales: ["es"],
     total: "12.10",
-    tipAmount: "0.00",
     lines: [
       {
         lineNo: 1,
@@ -92,7 +91,13 @@ function buildInput(
         lineTotal: "10.00",
       },
     ],
-    tenders: [{ method: "card", amount: tender.amount, settledAt: tender.settledAt }],
+    // Immediate settlement, tip on the tender (zero here): sum(amount) = total 12.10 + tip 0.00.
+    settlement: {
+      kind: "immediate",
+      tenders: [
+        { method: "card", amount: tender.amount, tipAmount: "0.00", settledAt: tender.settledAt },
+      ],
+    },
     fiscalBackend: "fake",
     clock: steadyClock,
   };
