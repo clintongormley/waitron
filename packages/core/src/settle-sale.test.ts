@@ -99,6 +99,37 @@ describe("settleSale — the happy path", () => {
     expect(tenderRows[0]!.tipAmount).toBe("5.00");
   });
 
+  it("settles a €0 comped sale with no tenders, stamped at issuance (no raw TypeError)", async () => {
+    // A fully-comped sale is €0 and has NO payment: `tenders_amount_ck` forbids a €0 tender, so a
+    // comp is genuinely tenderless. The schema permits the settlement — `sales_total_ck` allows a
+    // total of 0, and the coverage trigger's `coalesce(sum(amount),0)` makes `0 = 0 + 0` hold — so
+    // `settleSale` must RECORD it, not crash on an empty `reduce`/empty `insert().values([])`. With
+    // no tender to time it by, the settlement takes the sale's own issuance instant (design decision
+    // 5 defines settled_at as the last tender's moment; there is no tender here).
+    const seed = await seedTenant(postgres.admin);
+    const saleId = await seedSale(postgres.admin, seed, { total: "0.00" });
+
+    await settle(postgres.admin, seed.tenantId, {
+      tenantId: seed.tenantId,
+      saleId,
+      tenders: [],
+    });
+
+    const [settled] = await postgres.admin
+      .select()
+      .from(saleSettlements)
+      .where(eq(saleSettlements.saleId, saleId));
+    expect(settled).toBeDefined();
+    // seedSale stamps issued_at at 11:00Z; a tenderless settlement inherits exactly that instant.
+    expect(new Date(settled!.settledAt).getTime()).toBe(new Date("2026-08-01T11:00:00Z").getTime());
+
+    const tenderRows = await postgres.admin
+      .select()
+      .from(tenders)
+      .where(eq(tenders.saleId, saleId));
+    expect(tenderRows).toHaveLength(0);
+  });
+
   it("stamps the settlement at the LATEST tender's settledAt, across a split payment", async () => {
     // Decision ⑤: settled_at is the moment the last tender landed. Two tenders settling at
     // different times prove the reduce picks the max rather than the first/last positionally.

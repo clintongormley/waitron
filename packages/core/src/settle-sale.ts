@@ -23,7 +23,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   // The sale's fiscal total, and fail-closed on cross-tenant: RLS hides another
   // tenant's row, so it is genuinely not-found rather than forbidden (as record-void).
   const [sale] = await tx
-    .select({ tillId: sales.tillId, total: sales.total })
+    .select({ tillId: sales.tillId, total: sales.total, issuedAt: sales.issuedAt })
     .from(sales)
     .where(eq(sales.id, input.saleId));
   if (sale === undefined) {
@@ -75,20 +75,32 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
     });
   }
 
-  // settled_at = the moment the LAST tender landed (design decision 5). settledAt is
-  // guaranteed non-null by the guard above; `!` reflects that rather than asserting blind.
-  const settledAt = input.tenders.map((t) => t.settledAt!).reduce((a, b) => (b > a ? b : a));
+  // settled_at = the moment the LAST tender landed (design decision 5). A fully-comped sale is €0
+  // and has NO payment — `tenders_amount_ck` forbids a €0 tender, so a comp is genuinely tenderless
+  // — and the schema permits settling it: `sales_total_ck` allows a total of 0, and the coverage
+  // trigger's `coalesce(sum(amount),0)` makes `0 = 0 + 0` hold, so the shortfall check above passes.
+  // With no tender to time it by, the settlement takes the sale's own issuance instant rather than
+  // crashing on an empty `reduce`. On a present tender, `settledAt` is guaranteed non-null by the
+  // guard above; `!` reflects that rather than asserting blind.
+  const settledAt =
+    input.tenders.length === 0
+      ? new Date(sale.issuedAt)
+      : input.tenders.map((t) => t.settledAt!).reduce((a, b) => (b > a ? b : a));
 
-  await tx.insert(tenders).values(
-    input.tenders.map((tender) => ({
-      tenantId: input.tenantId,
-      saleId: input.saleId,
-      method: tender.method as (typeof tenders.$inferInsert)["method"],
-      amount: tender.amount,
-      tipAmount: tender.tipAmount,
-      settledAt: tender.settledAt!.toISOString(),
-    })),
-  );
+  // Skipped entirely when tenderless: a comped sale has no payments to record, and Drizzle rejects
+  // `insert().values([])` outright — the empty case is written by its `sale_settlements` row alone.
+  if (input.tenders.length > 0) {
+    await tx.insert(tenders).values(
+      input.tenders.map((tender) => ({
+        tenantId: input.tenantId,
+        saleId: input.saleId,
+        method: tender.method as (typeof tenders.$inferInsert)["method"],
+        amount: tender.amount,
+        tipAmount: tender.tipAmount,
+        settledAt: tender.settledAt!.toISOString(),
+      })),
+    );
+  }
 
   try {
     await tx.insert(saleSettlements).values({

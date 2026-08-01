@@ -10,11 +10,10 @@ import {
   locations,
   saleLines,
   sales,
-  tenders,
   tills,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError, addDecimal, compareDecimal, decimal, sumDecimals } from "@waitron/shared";
+import { AppError, addDecimal, decimal } from "@waitron/shared";
 import type { Decimal, SaleId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
 import type {
   FiscalBackend,
@@ -24,6 +23,7 @@ import type {
 } from "@waitron/fiscal";
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
+import { settleSale } from "./settle-sale.js";
 import { percentOf } from "./vat.js";
 
 export interface RecordSaleLine {
@@ -49,10 +49,9 @@ export interface RecordSaleTender {
    * the tender so it is attributed to the payer who left it, and is a part of `amount`, never on
    * top of it (`tip_amount <= amount`; design §9.2). Consumed by `settleSale`, which sums it into
    * the coverage identity `sum(amount) = total + sum(tip)` and writes it to `tenders.tip_amount`.
-   * Widened onto this interface in Task 4; `recordSale`'s own settlement half populates it at its
-   * call sites in a later task (until then that path leaves it defaulted). */
+   * `recordSale`'s `settlement:{kind:"immediate"}` half hands these straight to `settleSale`. */
   tipAmount: string;
-  /** `null` means the payment has not completed. Nothing is chained until every one is set. */
+  /** `null` means the payment has not completed. Nothing is settled until every one is set. */
   settledAt: Date | null;
 }
 
@@ -69,9 +68,7 @@ export interface RecordSaleInput {
    * already the figure the till displayed and the customer paid against, and re-deriving it from
    * `lines` would risk it silently disagreeing with what was actually charged. */
   total: string;
-  tipAmount: string;
   lines: RecordSaleLine[];
-  tenders: RecordSaleTender[];
   /**
    * Which backend recorded this sale — for the `sales.fiscal_backend` column. Supplied by the
    * caller rather than read off `backend`'s own return value, because it must be known BEFORE
@@ -82,6 +79,15 @@ export interface RecordSaleInput {
    */
   fiscalBackend: string;
   clock: TrustedClock;
+  /**
+   * Pay-first vs invoice-first, chosen per sale (design D5). `immediate` settles in the SAME
+   * transaction — its `tenders` are handed straight to `settleSale` (design D6), so pay-first
+   * behaviour cannot drift from the deferred path. `deferred` records the invoice with no tender
+   * and no settlement; the sale is a legitimate unsettled steady state, settled later by
+   * `settleSale`. Whether staff are OFFERED the choice is till-UI policy (sub-project 7), never a
+   * `tenants` column.
+   */
+  settlement: { kind: "immediate"; tenders: RecordSaleTender[] } | { kind: "deferred" };
 }
 
 /**
@@ -92,34 +98,6 @@ export interface RecordSaleInput {
  */
 export function formatInvoiceNumber(code: string, number: number): string {
   return `${code}/${number}`;
-}
-
-/**
- * The fiscal record is created when ALL tenders settle, never per payment.
- *
- * Checked before anything at all is written, so a declined card leaves the working order open and
- * retryable with nothing chained. The alternative chains records for sales that never happened,
- * correctable only by issuing a rectifying record later.
- */
-function assertAllTendersSettled(input: RecordSaleInput): void {
-  const unsettled = input.tenders.filter((tender) => tender.settledAt === null);
-  if (unsettled.length > 0) {
-    throw new AppError("sale.tender_unsettled", {
-      tillId: input.tillId,
-      workingOrderId: input.workingOrderId,
-      unsettledCount: unsettled.length,
-    });
-  }
-  const due = addDecimal(decimal(input.total), decimal(input.tipAmount));
-  const charged = sumDecimals(input.tenders.map((tender) => decimal(tender.amount)));
-  if (compareDecimal(charged, due) !== 0) {
-    throw new AppError("sale.tender_shortfall", {
-      tillId: input.tillId,
-      workingOrderId: input.workingOrderId,
-      due,
-      charged,
-    });
-  }
 }
 
 /**
@@ -153,8 +131,6 @@ export async function recordSale(
   backend: FiscalBackend,
   input: RecordSaleInput,
 ): Promise<{ saleId: SaleId; fiscal: FiscalRecordRef }> {
-  assertAllTendersSettled(input);
-
   // Steps 1 and 2, one call and deliberately so. A real backend's `checkIntegrity` takes the
   // (tenant, till) chain-head row lock as its own first statement and holds it until commit, so
   // art. 7.i verification runs against exactly the state this transaction is about to extend
@@ -229,9 +205,9 @@ export async function recordSale(
     pending.push({ error: now.warning, severity: "warning" });
   }
 
-  const amountCharged = addDecimal(decimal(input.total), decimal(input.tipAmount));
-
-  // Step 4.
+  // Step 4. `total` is the only money column left on the sale: the tip moved to
+  // `tenders.tip_amount` and `amount_charged` is derived, never stored (design D1-D3, migration
+  // 0012) — which is exactly what lets the sale be written before payment settles.
   const [inserted] = await tx
     .insert(sales)
     .values({
@@ -242,8 +218,6 @@ export async function recordSale(
       issuedAt: now.instant.toISOString(),
       issuedOffsetMinutes: now.offsetMinutes,
       total: input.total,
-      tipAmount: input.tipAmount,
-      amountCharged,
       locale: input.locale,
       invoiceLocales: input.invoiceLocales,
       fiscalBackend: input.fiscalBackend,
@@ -288,17 +262,19 @@ export async function recordSale(
     })),
   );
 
-  await tx.insert(tenders).values(
-    input.tenders.map((tender) => ({
+  if (input.settlement.kind === "immediate") {
+    // The one settlement implementation both modes take (design D6): pay-first hands its tenders
+    // straight to `settleSale`, in this same transaction. A shortfall or an unsettled tender throws
+    // HERE, which aborts the whole transaction — the allocated invoice number and everything written
+    // so far roll back — so a declined card still leaves nothing chained (as before), by atomicity
+    // rather than by an early pre-check. Placed before `backend.recordSale` so the fiscal write is
+    // never reached on a settlement that cannot complete.
+    await settleSale(tx, {
       tenantId: input.tenantId,
       saleId,
-      // `assertAllTendersSettled` above already guarantees every `settledAt` is non-null; the
-      // `!` reflects that guard rather than asserting past it blind.
-      method: tender.method as (typeof tenders.$inferInsert)["method"],
-      amount: tender.amount,
-      settledAt: tender.settledAt!.toISOString(),
-    })),
-  );
+      tenders: input.settlement.tenders,
+    });
+  }
 
   const [location] = await tx
     .select({ operationDescription: locations.operationDescription })
