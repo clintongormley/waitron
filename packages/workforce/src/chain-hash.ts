@@ -32,8 +32,9 @@ export interface EntryHashInput {
   eventOffsetMinutes: number;
   recordedByPersonId: string;
   /** The till that captured the event, when one did — null for a manually recorded entry. Capture
-   * attribution the record itself carries (art. 34.9), so it is hashed: a party past the immutability
-   * floor must not be able to re-point a captured event at a different till undetected. */
+   * provenance, hashed for tamper-evidence (art. 34.9 names the start/end times themselves, not the
+   * capturing device): a party past the immutability floor must not be able to re-point a captured
+   * event at a different till undetected. */
   capturedByTillId: string | null;
   /** On a correction, the entry it supersedes; null on a base event. */
   correctsEntryId: string | null;
@@ -94,7 +95,8 @@ function canonicalString(input: EntryHashInput): string {
     // The event as an absolute instant (epoch ms), never its wall-clock string — see `eventAt`.
     ["EventAtMs", String(Date.parse(input.eventAt))],
     ["EventOffsetMinutes", String(input.eventOffsetMinutes)],
-    // Capture attribution: who recorded the event and which till captured it (both art. 34.9).
+    // Who recorded the event, and which till captured it — capture provenance, hashed so neither can
+    // be re-pointed undetected (the till is not itself an art. 34.9 field; see `capturedByTillId`).
     ["RecordedByPersonId", input.recordedByPersonId],
     ["CapturedByTillId", input.capturedByTillId ?? ""],
     // The correction group — what it supersedes, why, its lifecycle state, and the accountable actor.

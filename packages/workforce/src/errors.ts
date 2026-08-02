@@ -41,7 +41,7 @@ declare module "@waitron/shared" {
     "attendance.append_contention": { tenantId: string; locationId: string; attempts: number };
     /** A correction was requested against, or an approval named, an entry that does not exist under
      * the current tenant — never appended, or hidden by RLS (identical from the caller's side).
-     * `correction.*`, not `attendance.*`/`person.*`: this is a fact about the correction workflow (a
+     * `correction.*`, not `attendance.*`: this is a fact about the correction workflow (a
      * missing target of a correct/approve), grepped against the registry — `correction.*` was
      * unused. */
     "correction.target_not_found": { tenantId: string; entryId: string };
