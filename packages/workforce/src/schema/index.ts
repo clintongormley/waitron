@@ -9,3 +9,7 @@ export { timeEntries, workforceCorrectionStatus, workforceEntryKind } from "./ti
 export { workforceChains } from "./workforce-chains.js";
 export { rosterVersions, rosterVersionStatus } from "./roster-versions.js";
 export { shifts } from "./shifts.js";
+export { absences, absenceKind, absenceStatus } from "./absences.js";
+export { availability } from "./availability.js";
+export { shiftTemplates } from "./shift-templates.js";
+export { shiftSwaps, shiftSwapStatus } from "./shift-swaps.js";

@@ -96,6 +96,108 @@ export async function insertDraftShift(
   return result.rows[0]!.id;
 }
 
+/** An `absences` row for the tenant/person. Defaults to a 5–8 Jan holiday, status `requested`, no
+ * note. Planning data (mutable). Returns its id. */
+export async function insertAbsence(
+  db: Database | Transaction,
+  params: {
+    tenantId: string;
+    personId: string;
+    kind?: string;
+    startsOn?: string;
+    endsOn?: string;
+    status?: string;
+    note?: string | null;
+  },
+): Promise<string> {
+  const result = await db.execute<{ id: string }>(sql`
+    insert into absences (tenant_id, person_id, absence_kind, starts_on, ends_on, status, note)
+    values (
+      ${params.tenantId}, ${params.personId}, ${params.kind ?? "holiday"},
+      ${params.startsOn ?? "2026-01-05"}, ${params.endsOn ?? "2026-01-08"},
+      ${params.status ?? "requested"}, ${params.note ?? null}
+    )
+    returning id`);
+  return result.rows[0]!.id;
+}
+
+/** An `availability` row for the tenant/person. Defaults to weekday 0, 09:00–17:00, from 1 Jan,
+ * open-ended. Planning data (mutable). Returns its id. */
+export async function insertAvailability(
+  db: Database | Transaction,
+  params: {
+    tenantId: string;
+    personId: string;
+    weekday?: number;
+    availableFromMinute?: number;
+    availableToMinute?: number;
+    effectiveFrom?: string;
+    effectiveTo?: string | null;
+  },
+): Promise<string> {
+  const result = await db.execute<{ id: string }>(sql`
+    insert into availability (
+      tenant_id, person_id, weekday, available_from_minute, available_to_minute,
+      effective_from, effective_to
+    ) values (
+      ${params.tenantId}, ${params.personId}, ${params.weekday ?? 0},
+      ${params.availableFromMinute ?? 540}, ${params.availableToMinute ?? 1020},
+      ${params.effectiveFrom ?? "2026-01-01"}, ${params.effectiveTo ?? null}
+    )
+    returning id`);
+  return result.rows[0]!.id;
+}
+
+/** A `shift_templates` row for the tenant/location. Defaults to "Evening bar", weekday 0,
+ * 18:00–24:00, role null. Planning data (mutable). Returns its id. */
+export async function insertShiftTemplate(
+  db: Database | Transaction,
+  params: {
+    tenantId: string;
+    locationId: string;
+    label?: string;
+    weekday?: number;
+    startsMinute?: number;
+    endsMinute?: number;
+    role?: string | null;
+  },
+): Promise<string> {
+  const result = await db.execute<{ id: string }>(sql`
+    insert into shift_templates (
+      tenant_id, location_id, label, weekday, starts_minute, ends_minute, role
+    ) values (
+      ${params.tenantId}, ${params.locationId}, ${params.label ?? "Evening bar"},
+      ${params.weekday ?? 0}, ${params.startsMinute ?? 1080}, ${params.endsMinute ?? 1440},
+      ${params.role ?? null}
+    )
+    returning id`);
+  return result.rows[0]!.id;
+}
+
+/** A `shift_swaps` row for the tenant. Status defaults to `requested`, `to_shift_id` null. Planning
+ * data (mutable). Returns its id. */
+export async function insertShiftSwap(
+  db: Database | Transaction,
+  params: {
+    tenantId: string;
+    requestedByPersonId: string;
+    fromShiftId: string;
+    toPersonId: string;
+    toShiftId?: string | null;
+    status?: string;
+  },
+): Promise<string> {
+  const result = await db.execute<{ id: string }>(sql`
+    insert into shift_swaps (
+      tenant_id, requested_by_person_id, from_shift_id, to_person_id, to_shift_id, status
+    ) values (
+      ${params.tenantId}, ${params.requestedByPersonId}, ${params.fromShiftId},
+      ${params.toPersonId}, ${params.toShiftId ?? null}, ${params.status ?? "requested"}
+    )
+    returning id`);
+  return result.rows[0]!.id;
+}
+
 /** Appends one clock event THROUGH the Slice-4 chain, so seeded rows are chained exactly as the
  * write path produces them (`recorded_by_person_id` defaults to the subject — self-service).
  *

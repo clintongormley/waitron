@@ -18,6 +18,17 @@ describe("the public surface", () => {
         "rosterVersions",
         "rosterVersionStatus",
         "shifts",
+        "absences",
+        "absenceKind",
+        "absenceStatus",
+        "availability",
+        "shiftTemplates",
+        "shiftSwaps",
+        "shiftSwapStatus",
+        "createAbsence",
+        "setAbsenceStatus",
+        "requestSwap",
+        "acceptSwap",
         "appendToChain",
         "isUniqueViolation",
         "lockChainHead",
@@ -169,5 +180,69 @@ describe("shifts constraint declarations (forces the lazy extraConfig callback)"
     expect(checkNames).toContain("shifts_starts_offset_ck");
     expect(checkNames).toContain("shifts_ends_offset_ck");
     expect(checkNames).toContain("shifts_interval_ck");
+  });
+});
+
+describe("absences constraint declarations (forces the lazy extraConfig callback)", () => {
+  it("declares absences' foreign keys and its range check", () => {
+    const config = getTableConfig(api.absences);
+
+    const fkNames = config.foreignKeys.map((fk) => fk.getName());
+    expect(fkNames).toEqual(expect.arrayContaining(["absences_tenant_fk", "absences_person_fk"]));
+
+    expect(config.checks.map((c) => c.name)).toContain("absences_range_ck");
+  });
+});
+
+describe("availability constraint declarations (forces the lazy extraConfig callback)", () => {
+  it("declares availability's foreign keys and its window/effective checks", () => {
+    const config = getTableConfig(api.availability);
+
+    const fkNames = config.foreignKeys.map((fk) => fk.getName());
+    expect(fkNames).toEqual(
+      expect.arrayContaining(["availability_tenant_fk", "availability_person_fk"]),
+    );
+
+    const checkNames = config.checks.map((c) => c.name);
+    expect(checkNames).toContain("availability_weekday_ck");
+    expect(checkNames).toContain("availability_from_minute_ck");
+    expect(checkNames).toContain("availability_to_minute_ck");
+    expect(checkNames).toContain("availability_window_ck");
+    expect(checkNames).toContain("availability_effective_ck");
+  });
+});
+
+describe("shift_templates constraint declarations (forces the lazy extraConfig callback)", () => {
+  it("declares shift_templates' foreign keys and its label/weekday/minute checks", () => {
+    const config = getTableConfig(api.shiftTemplates);
+
+    const fkNames = config.foreignKeys.map((fk) => fk.getName());
+    expect(fkNames).toEqual(
+      expect.arrayContaining(["shift_templates_tenant_fk", "shift_templates_location_fk"]),
+    );
+
+    const checkNames = config.checks.map((c) => c.name);
+    expect(checkNames).toContain("shift_templates_label_ck");
+    expect(checkNames).toContain("shift_templates_weekday_ck");
+    expect(checkNames).toContain("shift_templates_starts_minute_ck");
+    expect(checkNames).toContain("shift_templates_ends_minute_ck");
+  });
+});
+
+describe("shift_swaps constraint declarations (forces the lazy extraConfig callback)", () => {
+  it("declares shift_swaps' five foreign keys, incl. the cascade/set-null shift links", () => {
+    const config = getTableConfig(api.shiftSwaps);
+
+    const fkNames = config.foreignKeys.map((fk) => fk.getName());
+    expect(fkNames).toEqual(
+      expect.arrayContaining([
+        "shift_swaps_tenant_fk",
+        "shift_swaps_requested_by_person_fk",
+        "shift_swaps_to_person_fk",
+        // from_shift cascades (a swap dies with its offered shift), to_shift SET NULLs.
+        "shift_swaps_from_shift_fk",
+        "shift_swaps_to_shift_fk",
+      ]),
+    );
   });
 });

@@ -50,11 +50,10 @@ declare module "@waitron/shared" {
      * §5), so a staff-role approver is refused here rather than silently ignored. */
     "correction.not_permitted": { tenantId: string; personId: string };
     /** No `shifts` row for this id under the current tenant — never created, or hidden by RLS
-     * (identical from the caller's side). Forward-declared for the D2.2 shift-mutation consumers
-     * (move/reassign/delete a specific shift), the same way `person.not_found`/`person.pin_invalid`
-     * above are declared ahead of the identity sub-project's lookups. `shift.*`, grepped against the
-     * whole registry — unused before D2, never `schedule.*` (a shift is the entity, the schedule is
-     * the aggregate). */
+     * (identical from the caller's side). Declared in D2.1 ahead of a consumer; its first thrower is
+     * D2.2's `requestSwap` (../shift-swaps.ts), which rejects a swap naming a `from_shift`/`to_shift`
+     * that does not exist under the tenant. `shift.*`, grepped against the whole registry — never
+     * `schedule.*` (a shift is the entity, the schedule is the aggregate). */
     "shift.not_found": { tenantId: string; shiftId: string };
     /** No `roster_versions` row for this id under the current tenant — never created, or hidden by
      * RLS. Raised by `publishRoster` (../clocking.ts) when asked to publish a version that does not
@@ -75,5 +74,27 @@ declare module "@waitron/shared" {
      * from `correction.target_not_found`, which is no such correction row at all; here the correction
      * EXISTS but is not approvable. `correction.*`, grepped against the registry — never renamed. */
     "correction.not_pending": { tenantId: string; correctionId: string };
+    /** No `absences` row for this id under the current tenant — never created, or hidden by RLS.
+     * Raised by `setAbsenceStatus` (../absences.ts) when asked to move a non-existent absence to
+     * approved/rejected. `absence.*`, grepped against the whole registry — unused before D2, and the
+     * English `absence` term (the Spanish `ausencia` is in SPANISH_WORDS, so the code stays English
+     * like the schema, following the domain-concept convention). */
+    "absence.not_found": { tenantId: string; absenceId: string };
+    /** `createAbsence` (../absences.ts) was asked to create an absence whose date range overlaps an
+     * existing absence for the SAME person under this tenant (inclusive on both ends). One person
+     * cannot be absent twice over the same day, so the overlapping range is refused before insert.
+     * `absence.*`, same reasoning as `absence.not_found`. */
+    "absence.overlaps": { tenantId: string; personId: string };
+    /** No `shift_swaps` row for this id under the current tenant — never created, or hidden by RLS.
+     * Raised by `acceptSwap` (../shift-swaps.ts) when asked to accept a swap that does not exist.
+     * `swap.*`, grepped against the registry — unused before D2; the entity is the swap (a shift is
+     * `shift.*`, a person `person.*`). */
+    "swap.not_found": { tenantId: string; swapId: string };
+    /** A swap action was attempted by a person not permitted it: `requestSwap` (../shift-swaps.ts)
+     * refuses a requester offering a `from_shift` that is not THEIRS, and `acceptSwap` refuses anyone
+     * but the swap's named `to_person` accepting it. A fact about the swap's permission rule, not a
+     * missing entity (that is `swap.not_found`/`shift.not_found`). `swap.*`, grepped — never
+     * renamed. */
+    "swap.not_permitted": { tenantId: string; personId: string };
   }
 }

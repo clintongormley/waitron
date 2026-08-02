@@ -14,6 +14,10 @@ const OWNED = [
   "workforce_chains",
   "roster_versions",
   "shifts",
+  "absences",
+  "availability",
+  "shift_templates",
+  "shift_swaps",
 ];
 
 /** Every core table this package's schema files import to declare foreign keys. None of these may
