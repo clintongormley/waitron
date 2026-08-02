@@ -110,21 +110,20 @@ describe("registro-row round-trip of the four AEAT rectificativa fields", () => 
     expect(rebuilt.FacturasRectificadas).toEqual(built.FacturasRectificadas);
   });
 
-  it("round-trips a record carrying all four fields — S mode, FacturasSustituidas and ImporteRectificacion", async () => {
-    // Not a shape v1 issues (that is I mode, above), but registro-row is a pure flatten/rehydrate
-    // layer with no AEAT-rule opinion, and this is the one case that stores all four columns
-    // non-null at once — proving FacturasSustituidas and ImporteRectificacion survive storage too,
-    // and exercising the "present" arm of every one of fromRegistroRow's four conditional spreads.
+  it("round-trips an R5 rectificativa in S mode — TipoRectificativa, FacturasRectificadas and ImporteRectificacion", async () => {
+    // The rectificativa trio non-null on one R5 registro: proves ImporteRectificacion survives
+    // storage (the S-mode field, absent from the I-mode case above) alongside TipoRectificativa and
+    // FacturasRectificadas — the "present" arm of three of fromRegistroRow's conditional spreads.
+    //
+    // FacturasSustituidas — the F3 canje block — is deliberately NOT set here. It was, in an earlier
+    // version of this test, purely to store all four columns non-null in one row; but migration 0011
+    // added registros_facturas_sustituidas_f3_ck, which requires FacturasSustituidas to sit on an F3
+    // (tipo_factura R1–R5 and F3 are mutually exclusive), so an R5 carrying it is no longer
+    // storable. Its round-trip moved to the F3 case below — the fourth "present" arm — so no
+    // coverage is lost.
     const built = buildAltaRecord({
       ...r5RectificativaInput(),
       TipoRectificativa: "S",
-      FacturasSustituidas: [
-        {
-          IDEmisorFactura: TEST_NIF,
-          NumSerieFactura: "A/8",
-          FechaExpedicionFactura: new Date("2026-07-20T00:00:00+02:00"),
-        },
-      ],
       ImporteRectificacion: {
         BaseRectificada: "102.02",
         CuotaRectificada: "21.43",
@@ -134,6 +133,47 @@ describe("registro-row round-trip of the four AEAT rectificativa fields", () => 
     const row = await storeAndReadBack(built);
 
     expect(fromRegistroRow(row)).toEqual(built);
+  });
+
+  it("round-trips an F3 canje carrying FacturasSustituidas", async () => {
+    // The fourth conditional-spread "present" arm: FacturasSustituidas names the substituted
+    // simplified tickets on an F3 canje (plan §1). An F3 is a full invoice with a POSITIVE total and
+    // carries none of the three rectificativa fields; registros_facturas_sustituidas_f3_ck requires
+    // the block to sit on an F3, so this is the one record shape that stores it.
+    const built = buildAltaRecord({
+      IDEmisorFactura: TEST_NIF,
+      NumSerieFactura: "F3/1",
+      FechaExpedicionFactura: new Date("2026-07-21T00:00:00+02:00"),
+      NombreRazonEmisor: "Waitron SL",
+      TipoFactura: "F3",
+      FacturasSustituidas: [
+        {
+          IDEmisorFactura: TEST_NIF,
+          NumSerieFactura: "A/8",
+          FechaExpedicionFactura: new Date("2026-07-20T00:00:00+02:00"),
+        },
+      ],
+      DescripcionOperacion: "Canje de tiques simplificados",
+      Desglose: [
+        {
+          BaseImponibleOimporteNoSujeto: "102.02",
+          CuotaRepercutida: "21.43",
+          TipoImpositivo: "21",
+          CalificacionOperacion: "S1",
+        },
+      ],
+      CuotaTotal: "21.43",
+      ImporteTotal: "123.45",
+      SistemaInformatico: TEST_SISTEMA,
+      generadoEn: new Date(Date.UTC(2026, 6, 21, 17, 20, 30)),
+      offsetMinutes: 120,
+      Encadenamiento: { PrimerRegistro: "S" },
+    });
+    const row = await storeAndReadBack(built);
+
+    const rebuilt = fromRegistroRow(row) as RegistroAlta;
+    expect(rebuilt).toEqual(built);
+    expect(rebuilt.FacturasSustituidas).toEqual(built.FacturasSustituidas);
   });
 
   it("round-trips an ordinary alta, leaving all four fields absent (not null)", async () => {

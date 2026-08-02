@@ -78,6 +78,13 @@
       "when": 1785672143363,
       "tag": "0010_registro_rectificativa",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785693439057,
+      "tag": "0011_registro_canje",
+      "breakpoints": true
     }
   ]
 }
