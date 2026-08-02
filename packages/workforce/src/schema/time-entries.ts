@@ -189,5 +189,15 @@ export const timeEntries = pgTable(
       sql`(${t.isFirstEntry} and ${t.prevEntryHash} is null)
           or (not ${t.isFirstEntry} and ${t.prevEntryHash} is not null)`,
     ),
+    // Defence-in-depth for the Slice-4 hash chain: `event_at` must carry NO sub-second component.
+    // The chain hashes `event_at` as the absolute instant (chain-hash.ts), but every read-back
+    // projects it at SECOND precision (`to_char(… 'HH24:MI:SS')`), so a stored fractional second
+    // would recompute to a different hash and read as tampered — a false `hash_mismatch` on genuine
+    // data. `appendToChain` truncates to whole seconds at the write choke point (../chain.ts); this
+    // CHECK backstops any writer that bypasses it (the escape-or-validate ethos, CLAUDE.md §3).
+    check(
+      "time_entries_event_at_second_ck",
+      sql`date_trunc('second', ${t.eventAt}) = ${t.eventAt}`,
+    ),
   ],
 ).enableRLS();

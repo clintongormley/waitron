@@ -120,6 +120,25 @@ export async function lockChainHead(
   return created;
 }
 
+/**
+ * Floors an ISO-8601 instant to whole-second granularity, preserving the instant (epoch ms), and
+ * returns it as a UTC `…Z` string with no sub-second component.
+ *
+ * The chain hashes `event_at` as the absolute instant (chain-hash.ts's `EventAtMs`), but every
+ * read-back projects it at SECOND precision (`to_char(… 'HH24:MI:SS')`, clocking.ts / the chain
+ * test read-backs). Truncating here, at the single write choke point, is what keeps the stored
+ * column, the committed hash and the read-back one identical representation — so a millisecond-
+ * precision trusted clock cannot make a genuine, untouched row recompute to a different hash (a
+ * false `hash_mismatch`). Mirrors the fiscal precedent: verifactu/src/format.ts's `formatDateTime`
+ * always emits whole seconds, the single canonical form for both the hashed literal and its
+ * reconstruction. `Math.floor` matches Postgres `date_trunc('second', …)` for the (always positive)
+ * instants a registro de jornada records, and the DB CHECK `time_entries_event_at_second_ck`
+ * backstops it.
+ */
+function truncateToWholeSecond(eventAt: string): string {
+  return new Date(Math.floor(Date.parse(eventAt) / 1000) * 1000).toISOString();
+}
+
 async function attemptAppend(
   tx: Transaction,
   tenantId: string,
@@ -131,12 +150,16 @@ async function attemptAppend(
   const isFirstEntry = head.lastEntryId === null;
   const prevEntryHash = head.lastEntryHash;
 
+  // ONE truncation, feeding BOTH the hash and the stored column, so clock events and corrections are
+  // all covered here and the three representations can never diverge (whole-branch review fix).
+  const eventAt = truncateToWholeSecond(entry.eventAt);
+
   const entryHash = computeEntryHash({
     sequenceNo,
     personId: entry.personId,
     locationId,
     entryKind: entry.entryKind,
-    eventAt: entry.eventAt,
+    eventAt,
     eventOffsetMinutes: entry.eventOffsetMinutes,
     recordedByPersonId: entry.recordedByPersonId,
     correctsEntryId: entry.correctsEntryId ?? null,
@@ -151,7 +174,7 @@ async function attemptAppend(
       personId: entry.personId,
       locationId,
       entryKind: entry.entryKind,
-      eventAt: entry.eventAt,
+      eventAt,
       eventOffsetMinutes: entry.eventOffsetMinutes,
       capturedByTillId: entry.capturedByTillId ?? null,
       recordedByPersonId: entry.recordedByPersonId,

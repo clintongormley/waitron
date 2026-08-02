@@ -95,6 +95,8 @@ describe("time_entries constraint declarations (forces the lazy extraConfig call
     expect(checkNames).toContain("time_entries_entry_hash_ck");
     expect(checkNames).toContain("time_entries_sequence_no_ck");
     expect(checkNames).toContain("time_entries_chaining_ck");
+    // Slice 4 defence-in-depth: event_at must carry no sub-second component (whole-branch review).
+    expect(checkNames).toContain("time_entries_event_at_second_ck");
 
     // `ingest_seq` is GENERATED ALWAYS AS IDENTITY — the app cannot forge the append order.
     const ingest = config.columns.find((c) => c.name === "ingest_seq");

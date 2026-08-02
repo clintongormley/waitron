@@ -1,4 +1,4 @@
-import { CORE_MIGRATIONS, captureError, pgErrorCode } from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, pgErrorCode, pgErrorMessage } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
@@ -138,6 +138,36 @@ describe("appendToChain", () => {
     // The read-back rows recompute to their stored hashes — the eventAt round-trip through the
     // timestamptz column and back matches what was hashed at insert.
     expect(verifyChain(await readChain(locationId))).toEqual({ ok: true });
+  });
+
+  it("re-verifies an event_at that carries a sub-second fraction", async () => {
+    // The trusted clock is millisecond-precision, but every read-back projects event_at at SECOND
+    // precision (`to_char(… 'HH24:MI:SS')`). Hashing the fractional instant at insert while the
+    // read-back recomputes over the truncated one is a spurious hash_mismatch on genuine, untouched
+    // data — a false tamper alarm on ~999/1000 of real timestamps. Truncating to whole seconds ONCE
+    // at the write choke point makes the stored column, the committed hash and the read-back one
+    // identical representation, so the chain re-verifies.
+    await pg.db.transaction((tx) =>
+      appendToChain(tx, tenantId, locationId, inputAt("2026-01-05T09:00:00.123Z")),
+    );
+    expect(verifyChain(await readChain(locationId))).toEqual({ ok: true });
+  });
+
+  it("rejects a raw insert whose event_at carries a sub-second fraction (defence-in-depth CHECK)", async () => {
+    // The DB CHECK backstops the write-path truncation: a row that bypasses appendToChain still
+    // cannot store a sub-second event_at that would later read back as tampered. Every other column
+    // here is a valid genesis row, so the only constraint this can trip is the new one.
+    const error = await captureError(() =>
+      pg.db.execute(sql`
+        insert into time_entries (
+          tenant_id, person_id, location_id, entry_kind, event_at, event_offset_minutes,
+          recorded_by_person_id, entry_hash, sequence_no, is_first_entry
+        ) values (
+          ${tenantId}, ${personId}, ${locationId}, 'in', '2026-01-05T09:00:00.123Z', 0,
+          ${personId}, ${"0".repeat(64)}, 1, true)`),
+    );
+    expect(pgErrorCode(error)).toBe("23514");
+    expect(pgErrorMessage(error)).toContain("time_entries_event_at_second_ck");
   });
 
   it("rejects a second entry claiming an occupied chain position", async () => {

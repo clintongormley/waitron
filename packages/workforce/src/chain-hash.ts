@@ -19,10 +19,15 @@ export interface EntryHashInput {
   personId: string;
   locationId: string;
   entryKind: string;
-  /** The trusted event instant, an ISO-8601 timestamptz string. Hashed as the INSTANT (epoch ms),
-   * not the string, so a change of offset representation that preserves the instant does not change
-   * the digest — and a read-back through the timestamptz column (which normalises to UTC) recomputes
-   * to the same value under either driver. */
+  /** The trusted event instant, an ISO-8601 timestamptz string, ALREADY TRUNCATED to whole seconds
+   * by chain.ts's `attemptAppend` before it reaches here. Hashed as the INSTANT (epoch ms), not the
+   * string, so a change of offset representation that preserves the instant does not change the
+   * digest. The read-back projects `event_at` at SECOND precision (`to_char(… 'HH24:MI:SS')` in
+   * clocking.ts and the chain-test read-backs), so the recompute matches the stored hash ONLY at
+   * whole-second granularity: a sub-second component would be hashed here but dropped on read-back,
+   * recomputing a different digest — a false `hash_mismatch`. The whole-second truncation at the
+   * single write choke point, backstopped by the `time_entries_event_at_second_ck` CHECK, is what
+   * keeps the stored column, the committed hash and the read-back one identical representation. */
   eventAt: string;
   eventOffsetMinutes: number;
   recordedByPersonId: string;

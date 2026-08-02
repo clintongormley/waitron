@@ -575,6 +575,10 @@
         "time_entries_chaining_ck": {
           "name": "time_entries_chaining_ck",
           "value": "(\"time_entries\".\"is_first_entry\" and \"time_entries\".\"prev_entry_hash\" is null)\n          or (not \"time_entries\".\"is_first_entry\" and \"time_entries\".\"prev_entry_hash\" is not null)"
+        },
+        "time_entries_event_at_second_ck": {
+          "name": "time_entries_event_at_second_ck",
+          "value": "date_trunc('second', \"time_entries\".\"event_at\") = \"time_entries\".\"event_at\""
         }
       },
       "isRLSEnabled": true

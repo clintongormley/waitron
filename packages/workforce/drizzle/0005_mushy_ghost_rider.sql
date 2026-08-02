@@ -21,4 +21,10 @@ CREATE UNIQUE INDEX "time_entries_chain_position_uq" ON "time_entries" USING btr
 ALTER TABLE "time_entries" ADD CONSTRAINT "time_entries_entry_hash_ck" CHECK ("time_entries"."entry_hash" ~ '^[0-9A-F]{64}$');--> statement-breakpoint
 ALTER TABLE "time_entries" ADD CONSTRAINT "time_entries_sequence_no_ck" CHECK ("time_entries"."sequence_no" > 0);--> statement-breakpoint
 ALTER TABLE "time_entries" ADD CONSTRAINT "time_entries_chaining_ck" CHECK (("time_entries"."is_first_entry" and "time_entries"."prev_entry_hash" is null)
-          or (not "time_entries"."is_first_entry" and "time_entries"."prev_entry_hash" is not null));
+          or (not "time_entries"."is_first_entry" and "time_entries"."prev_entry_hash" is not null));--> statement-breakpoint
+-- Defence-in-depth for the hash chain (whole-branch review fix): event_at must carry NO sub-second
+-- component. The chain hashes the absolute instant but every read-back projects event_at at SECOND
+-- precision, so a stored fractional second would recompute to a different hash and read as tampered.
+-- appendToChain truncates to whole seconds at the write choke point (../src/chain.ts); this CHECK
+-- backstops any writer that bypasses it. Folded into this migration (pre-production, no bwc).
+ALTER TABLE "time_entries" ADD CONSTRAINT "time_entries_event_at_second_ck" CHECK (date_trunc('second', "time_entries"."event_at") = "time_entries"."event_at");
