@@ -104,8 +104,12 @@ export type DetalleDesglose =
 
 /**
  * `sf:IDOtroType` — a non-NIF identifier for a foreign counterparty: a country
- * code, an identifier type (02-07 per PersonaFisicaJuridicaIDTypeType), and up
- * to 15 characters of value. The XSD forbids CodigoPais=ES with IDType=01, in
+ * code, an identifier type (02-07 per PersonaFisicaJuridicaIDTypeType), and the
+ * identifier value. The enforced restriction on `ID` is `sf:TextMax20Type`
+ * (maxLength 20, SuministroInformacion.xsd:368) — note IDOtroType's own Spanish
+ * annotation prose says «hasta 15 caractéres», which the machine type
+ * contradicts; 20 is the limit a validator would apply. The XSD forbids
+ * CodigoPais=ES with IDType=01, in
  * which case NIF must be used instead — see IDOtroType's own annotation in
  * SuministroInformacion.xsd. CodigoPais is optional (minOccurs=0); IDType and
  * ID are mandatory.

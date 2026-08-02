@@ -734,6 +734,22 @@ describe("validate — Destinatarios rules (F1/F3 require, F2 forbids)", () => {
   it("does not forbid Destinatarios on an F3 that carries one", () => {
     expect(codes(withDestinatario("F3"))).not.toContain("DESTINATARIOS_FORBIDDEN");
   });
+
+  // buildAltaRecord passes a present Destinatarios through unchanged (records.ts
+  // spreads it when `!== undefined`), so an empty IDDestinatario array survives
+  // to serialization, where it would emit a schema-invalid empty <sf:Destinatarios/>.
+  it("rejects a present-but-empty Destinatarios (XSD requires at least one IDDestinatario)", () => {
+    const record = buildAltaRecord({
+      ...INPUT,
+      TipoFactura: "F3",
+      Destinatarios: { IDDestinatario: [] },
+    });
+    expect(codes(record)).toContain("DESTINATARIOS_EMPTY");
+  });
+
+  it("does not flag a Destinatarios that carries a recipient as empty", () => {
+    expect(codes(withDestinatario("F3"))).not.toContain("DESTINATARIOS_EMPTY");
+  });
 });
 
 describe("validate — RegistroAnulacion", () => {

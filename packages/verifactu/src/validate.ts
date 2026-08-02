@@ -35,7 +35,11 @@ export type ValidationCode =
   | "DESTINATARIOS_REQUIRED"
   // A simplified ticket (F2) must NOT carry a recipient — it records the absence
   // via FacturaSinIdentifDestinatarioArt61d instead.
-  | "DESTINATARIOS_FORBIDDEN";
+  | "DESTINATARIOS_FORBIDDEN"
+  // sf:Destinatarios is minOccurs=0, but its inner IDDestinatario is
+  // minOccurs=1 maxOccurs=1000 (SuministroInformacion.xsd:159) — so a present
+  // Destinatarios with an empty IDDestinatario array is not schema-valid.
+  | "DESTINATARIOS_EMPTY";
 
 export interface ValidationIssue {
   code: ValidationCode;
@@ -267,6 +271,18 @@ export function validate(record: RegistroAlta | RegistroAnulacion): ValidationIs
       "DESTINATARIOS_FORBIDDEN",
       "Destinatarios",
       "Destinatarios must not be set when TipoFactura is F2 (simplified ticket)",
+    );
+  }
+  // sf:Destinatarios is minOccurs=0, but once present its inner IDDestinatario
+  // is minOccurs=1 maxOccurs=1000 (SuministroInformacion.xsd:159). An empty
+  // array is type-valid and passes the `!== undefined` checks above, yet would
+  // serialize to a schema-invalid empty <sf:Destinatarios/> that AEAT rejects —
+  // so fail locally with a structured issue instead of emitting invalid XML.
+  if (record.Destinatarios !== undefined && record.Destinatarios.IDDestinatario.length < 1) {
+    add(
+      "DESTINATARIOS_EMPTY",
+      "Destinatarios",
+      "Destinatarios, when present, must carry at least one IDDestinatario",
     );
   }
 
