@@ -55,6 +55,9 @@ const unreachableBackend: FiscalBackend = {
   recordCorrection: () => {
     throw new Error("backend must not be reached");
   },
+  recordSubstitution: () => {
+    throw new Error("backend must not be reached");
+  },
   checkIntegrity: () => {
     throw new Error("backend must not be reached");
   },

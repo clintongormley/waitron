@@ -273,5 +273,26 @@ declare module "@waitron/shared" {
      * human resolving it sees WHICH invoice type was refused, not merely that one was.
      */
     "fiscal.correction_unsupported": { saleId: string; tipoFactura: string };
+
+    /**
+     * Thrown by `VerifactuBackend.recordSubstitution` (./backend.ts) when a sale it was asked to
+     * substitute with an F3 canje is a `TipoFactura` this operation cannot exchange. A factura de
+     * canje (F3) substitutes SIMPLIFIED tickets only (`F2 → F3`, findings §10.2) — the one type the
+     * till issues today (`backend.ts`: `counterparty === null ? "F2" : "F1"`, and `packages/core`
+     * always passes `counterparty: null`), so a non-`F2` original is unreachable through the real
+     * write path now and becomes reachable only once B2B `F1` issuance lands. Substituting an `F1`
+     * (or an `R*`) is not a canje at all, and filing the wrong record is unrepairable (§5), so this
+     * asserts rather than silently mis-filing — the direct sibling of `fiscal.correction_unsupported`
+     * above, which makes the identical F2-only assertion on the rectificativa path.
+     *
+     * `fiscal.*`, matching this file's own regime-neutral-shaped codes: a fact about the sale being
+     * substituted, even though `F2`/`F3` are Veri*Factu vocabulary (this package is exempt from the
+     * english-only guard). `recordSubstitution` throws it beside `@waitron/fiscal`'s own
+     * `fiscal.sale_not_recorded` (the absent-original case), so both share a `saleId` param naming the
+     * substituted sale — one of the `substitutedSaleIds` the caller passed. `tipoFactura` carries the
+     * original's own type so the human resolving it sees WHICH invoice type was refused, not merely
+     * that one was.
+     */
+    "fiscal.substitution_unsupported": { saleId: string; tipoFactura: string };
   }
 }
