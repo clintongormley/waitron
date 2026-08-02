@@ -24,6 +24,18 @@ import type { RecordSaleLine } from "./record-sale.js";
 
 export interface RecordCorrectionInput {
   tenantId: TenantId;
+  /**
+   * The till/SIF that will ISSUE this rectificativa and whose chain it extends. Caller-supplied and
+   * used verbatim: it is checked against the corrective SERIES (`sale.series_wrong_till`, step 2) but
+   * NOT against the original sale's own `tillId`. This differs from `recordVoid`, which reads the
+   * original sale's `tillId` and so can only annul on the till/SIF that issued it.
+   *
+   * WARNING: whether a rectificativa may lawfully be issued from a DIFFERENT till/SIF than the
+   * original invoice is an OPEN fiscal-policy question — one for the asesor, and a till-design
+   * decision — that a future till-facing caller MUST resolve before it allows a cross-till
+   * correction. Unreachable today (the only callers are tests; no till-facing caller exists yet), and
+   * unrepairable once filed, so this is deferred rather than decided.
+   */
   tillId: TillId;
   /**
    * MUST name a `purpose='rectificative'` series (spec §5). A correction draws its own new number
@@ -61,6 +73,9 @@ export interface RecordCorrectionInput {
  * the correction proceeds anyway, because a staff member correcting the very sale an incident
  * concerns must never be blocked by it (spec §5, «NUNCA debe interrumpirse») — the same rule
  * `recordSale`/`recordVoid` follow.
+ *
+ * Issues on the caller-supplied `input.tillId`, NOT the original sale's till — see that field's doc
+ * for the open cross-till fiscal-policy question a future till caller must resolve first.
  *
  * Takes a transaction handle, like every write in this package: atomicity between the corrective
  * sale and its fiscal record is the whole point, and step 7 (the caller's commit) is what lets a

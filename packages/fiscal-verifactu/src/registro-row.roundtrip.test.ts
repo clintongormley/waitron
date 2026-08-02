@@ -180,8 +180,9 @@ describe("drain serialisation files the mandatory rectificativa fields (the gap-
     // EXACT path the drainer submits by (drain.ts:722-729 `toEnvioRegistro` -> serializeEnvio, and
     // the real client serialises via the very same serializeEnvio — client.ts:50). If the four
     // fields did not survive `fromRegistroRow`, the XML AEAT receives would omit the mandatory
-    // TipoRectificativa and be rejected (error 1114). Built directly via `toRegistroRow` (NOT
-    // recordCorrection — that is Slice 4 and does not exist yet).
+    // TipoRectificativa and be rejected (error 1114). Built directly via `toRegistroRow`, NOT
+    // through `recordCorrection`, so this isolates the storage round-trip and serialisation from the
+    // record-assembly path.
     const built = buildAltaRecord(r5RectificativaInput());
     const row = await storeAndReadBack(built);
 
