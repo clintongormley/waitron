@@ -28,4 +28,4 @@ ALTER TABLE "registros_facturacion" ADD COLUMN "facturas_rectificadas" jsonb;-->
 ALTER TABLE "registros_facturacion" ADD COLUMN "facturas_sustituidas" jsonb;--> statement-breakpoint
 ALTER TABLE "registros_facturacion" ADD COLUMN "importe_rectificacion" jsonb;--> statement-breakpoint
 ALTER TABLE "registros_facturacion" ADD CONSTRAINT "registros_tipo_rectificativa_ck" CHECK ("registros_facturacion"."tipo_rectificativa" is null or "registros_facturacion"."tipo_rectificativa" in ('S', 'I'));--> statement-breakpoint
-ALTER TABLE "registros_facturacion" ADD CONSTRAINT "registros_tipo_factura_rectificativa_ck" CHECK ("registros_facturacion"."tipo_rectificativa" is null or "registros_facturacion"."tipo_factura" ~ '^R[1-5]$');
+ALTER TABLE "registros_facturacion" ADD CONSTRAINT "registros_tipo_factura_rectificativa_ck" CHECK ("registros_facturacion"."tipo_rectificativa" is null or ("registros_facturacion"."tipo_factura" is not null and "registros_facturacion"."tipo_factura" ~ '^R[1-5]$'));

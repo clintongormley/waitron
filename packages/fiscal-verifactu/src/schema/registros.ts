@@ -183,9 +183,14 @@ export const registrosFacturacion = pgTable(
     // sit on a rectificativa TipoFactura (R1–R5). The full rule-1114 direction (an R-type REQUIRES
     // a tipo_rectificativa) stays at the app layer (validate.ts), because tipo_factura is nullable
     // (anulación) and that cross-field NULL logic is awkward and duplicative here.
+    //
+    // The `tipo_factura is not null` arm is load-bearing, not redundant (Copilot): tipo_factura is
+    // NULL on an anulación, and `NULL ~ '^R[1-5]$'` evaluates to NULL, which a CHECK treats as
+    // PASSING — so without the explicit not-null a tipo_rectificativa on a NULL-tipo_factura row
+    // would slip past this backstop. Regression-pinned in rectificativa-columns.test.ts.
     check(
       "registros_tipo_factura_rectificativa_ck",
-      sql`${t.tipoRectificativa} is null or ${t.tipoFactura} ~ '^R[1-5]$'`,
+      sql`${t.tipoRectificativa} is null or (${t.tipoFactura} is not null and ${t.tipoFactura} ~ '^R[1-5]$')`,
     ),
     check(
       "registros_encadenamiento_ck",

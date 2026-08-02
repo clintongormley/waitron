@@ -967,7 +967,7 @@
         },
         "registros_tipo_factura_rectificativa_ck": {
           "name": "registros_tipo_factura_rectificativa_ck",
-          "value": "\"registros_facturacion\".\"tipo_rectificativa\" is null or \"registros_facturacion\".\"tipo_factura\" ~ '^R[1-5]$'"
+          "value": "\"registros_facturacion\".\"tipo_rectificativa\" is null or (\"registros_facturacion\".\"tipo_factura\" is not null and \"registros_facturacion\".\"tipo_factura\" ~ '^R[1-5]$')"
         },
         "registros_encadenamiento_ck": {
           "name": "registros_encadenamiento_ck",

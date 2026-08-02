@@ -140,6 +140,21 @@ describe("registros_tipo_factura_rectificativa_ck — rule 1115 at the DB", () =
       insertRegistro(pg.db, { tipoFactura: "R1", tipoRectificativa: "I" }),
     ).resolves.toBeUndefined();
   });
+
+  it("rejects a tipo_rectificativa sitting on a NULL tipo_factura", async () => {
+    // The three-valued-logic hole (Copilot): with the constraint written
+    // `tipo_rectificativa is null or tipo_factura ~ '^R[1-5]$'`, a NULL tipo_factura makes the
+    // regex arm evaluate to NULL, and a CHECK treats NULL as PASSING — so a rectificativa field on
+    // an anulación-shaped row (no TipoFactura) slipped past the rule-1115 backstop. PROVEN BY
+    // DELETION IN REVERSE (recorded in this task's report): against the pre-fix constraint this
+    // exact insert SUCCEEDS. The tightened `tipo_factura is not null and tipo_factura ~ '^R[1-5]$'`
+    // is what rejects it.
+    const error = await captureError(() =>
+      insertRegistro(pg.db, { tipoFactura: null, tipoRectificativa: "I" }),
+    );
+    expect(pgErrorCode(error)).toBe("23514");
+    expect(pgErrorMessage(error)).toMatch(/registros_tipo_factura_rectificativa_ck/);
+  });
 });
 
 describe("the rectificativa columns are jsonb and round-trip", () => {
