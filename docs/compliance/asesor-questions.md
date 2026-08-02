@@ -429,10 +429,16 @@ it is the case where a single till needs two series (and, per art. 7.c, still on
 > it, and if shown it must be an amount *outside* the base imponible. **Provenance caveat:** PETETE
 > failed TLS on every fetch, so the DGT consultas were read via faithful legal-database reproductions
 > and cross-checked; confirm the exact wording on PETETE if an asesor engages.
+>
+> **Schema note, 2026-08-02 (#39).** The tip now lives on `tenders.tip_amount` (attributed to the
+> payer who left it), not `sales.tip_amount` — #39 took it off the immutable sale row. The fiscal
+> path is unchanged: the tip still never reaches `computeHuella`. The current picture is in
+> [verifactu-findings.md §11](verifactu-findings.md).
 
-**Why it matters.** The schema already asserts it. `sales.tip_amount` is documented as
-*"non-taxable, in no fiscal record at all"*, and `record-sale.ts` hands the fiscal backend only
-`total`, never the tip, so the tip never reaches `computeHuella`'s inputs. **None of that was ever put to an
+**Why it matters.** The schema already asserts it. `tenders.tip_amount` is documented as the payer's
+*"affirmed gratuity, non-taxable and on no invoice"* (the tip moved off the sale in #39), and
+`record-sale.ts` hands the fiscal backend only `total`, never the tip, so the tip never reaches
+`computeHuella`'s inputs. **None of that was ever put to an
 advisor.** The sources are asesor commentary citing **DGT consulta vinculante 2174-03** — the DGT
 text itself was not read. If the position is wrong, every invoice we have ever modelled understates
 its base imponible, and the tip would have to enter `computeHuella`'s inputs.

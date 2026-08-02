@@ -148,7 +148,9 @@ obtained by someone else does not bind AEAT in relation to us was itself **refut
 treat the whole question as open. Worth resolving before drafting, since the answer may mean
 filing through a friendly restaurant client instead.
 
-**File Q9 here.** Q1 and Q2 may no longer need it given the developer FAQ.
+**File Q9 here.** Q1 and Q2 are closed and moot: the developer FAQ v1.3 (§§4–5) answered them and #33
+(server-as-SIF) retired them outright; do not file either. See
+[asesor-questions.md](asesor-questions.md).
 
 ---
 

@@ -13,6 +13,17 @@ the unverified items as settled.**
 
 This is the single most important correction to the original design assumption.
 
+> **Design pointer, 2026-08-01 (#33).** The primary-source finding in this section — one chain per
+> SIF, and per-till chains lawful *because each till is its own SIF* — is unchanged. What the
+> [server-as-SIF design](../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md)
+> (#33) decides is *which node Waitron treats as the SIF*: the **local server**, not the till. The
+> intended topology is therefore one chain per **server**, with a venue running two concurrent
+> server-SIFs that must issue under disjoint series (see [asesor-questions.md](asesor-questions.md)'s
+> §① banner). That is a design decision layered on this finding, not a correction to it — and **the
+> schema still keys the fiscal tables by `till_id`**; the rekey to a `server_id` column is a pending
+> backlog item, so the per-till language below still matches the current code. Read "per till" here
+> as "per SIF", the SIF being the server once the rekey lands.
+
 **Orden HAC/1177/2024 art. 7.c):**
 
 > Para un determinado obligado tributario, cada sistema informático producirá una única
@@ -634,11 +645,16 @@ an edge case.
 
 ## 11. Propinas — outside the base imponible del IVA, off the factura, off the huella (added 2026-08-01)
 
-Confirms what the schema already encodes: `sales.tip_amount` is documented *"non-taxable, in no fiscal
-record at all"* (`packages/db/src/schema/sales.ts:52`), `record-sale.ts` keeps it out of `total` and
-the taxable base, and `record-sale.ts` hands the fiscal backend only `total` (never the tip), so the
-tip is never among the inputs the fiscal record and its huella are built from — a structural absence,
-not something a dedicated test asserts. **That assumption holds** on the DGT's own doctrine.
+Confirms what the schema already encodes. Since **#39 (sale settlement)** the tip lives on
+`tenders.tip_amount`, documented as the payer's *"affirmed gratuity, non-taxable and on no invoice"*
+(`packages/db/src/schema/sales.ts:154`) — #39 took it off the immutable `sales` row, which now
+carries only `total`. `record-sale.ts` hands the fiscal backend only that `total`, described there as
+the taxable base *"excluding the tip, which is non-taxable and never reaches the fiscal record"*
+(`packages/core/src/record-sale.ts:65`); `settleSale` sums the tip into the coverage identity
+`sum(amount) = total + sum(tip)` and writes it to `tenders`, never near `computeHuella`'s inputs — a
+structural absence, not something a dedicated test asserts. **That assumption holds** on the DGT's own
+doctrine. (The `sales.tip_amount` location this section first cited was retired by #39; the fiscal
+path — the tip never reaching the huella — is unchanged.)
 
 **Provenance — read this before citing.** PETETE (the DGT consulta database,
 `petete.tributos.hacienda.gob.es`) could **not** be reached: every fetch failed TLS chain validation

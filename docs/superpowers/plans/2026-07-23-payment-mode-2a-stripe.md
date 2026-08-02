@@ -12,7 +12,7 @@
 
 Every task's requirements implicitly include this section.
 
-- **Worktree root:** all commands run from `/Users/clintongormley/workspace/worktrees/waitron-payment-mode-2a-stripe`. `git -C <that path>` for commits; `cd` into it each shell invocation (the shell resets between calls). `git add` **only the paths a task names** — never `-A`/`.`.
+- **Worktree root:** all commands run from `/Users/<user>/workspace/worktrees/waitron-payment-mode-2a-stripe`. `git -C <that path>` for commits; `cd` into it each shell invocation (the shell resets between calls). `git add` **only the paths a task names** — never `-A`/`.`.
 - **Two packages change.** `@waitron/payments` (neutral — Tasks 1–3) gains the `attempting` state, store helpers, `PaymentRow.externalRef`, and the failed-refund path. `@waitron/payments-stripe` (new, Tasks 4–8) is the adapter. Keep vendor vocabulary (`stripe`, `reader`, `terminal`, `PaymentIntent`) **out of `@waitron/payments`** — it is English-only + guarded by `no-provider-vocabulary.test.ts`; the only neutral addition is `attempting`.
 - **`payments-stripe` is in NEITHER `GENERIC_PACKAGES` nor `EXEMPT_PACKAGES`.** Do **not** edit `packages/db/src/english-only.ts` or its pinned tests — verified: the Spanish guard scans only `GENERIC_PACKAGES`, `no-provider-vocabulary` only `@waitron/payments`, and no completeness guard requires classification. Adding it would break `english-only.test.ts:25` + `vocabulary-scope.test.ts:34` for no benefit (its vocabulary is English).
 - **Exact decimals.** Money is `Decimal` (branded string, scale 2) / `numeric(12,2)`. **Never** reach for a float; there is deliberately no `toNumber`. Stripe minor-unit conversion goes through the exact `toMinorUnits` helper (Task 4).
@@ -235,13 +235,13 @@ Expected: PASS.
 - [ ] **Step 10: Commit**
 
 ```bash
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-2a-stripe add \
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-2a-stripe add \
   packages/payments/src/schema/payments.ts packages/payments/src/provider.ts \
   packages/payments/src/store.ts packages/payments/src/index.ts \
   packages/payments/src/migrations.test.ts \
   packages/payments/drizzle/0003_payment_attempting.sql \
   packages/payments/drizzle/meta/0003_snapshot.json packages/payments/drizzle/meta/_journal.json
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-2a-stripe commit -m "feat(payments): neutral 'attempting' state + T1/T2 store helpers"
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-2a-stripe commit -m "feat(payments): neutral 'attempting' state + T1/T2 store helpers"
 ```
 
 ---
@@ -421,11 +421,11 @@ Expected: PASS.
 - [ ] **Step 9: Commit**
 
 ```bash
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-2a-stripe add \
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-2a-stripe add \
   packages/payments/src/store.ts packages/payments/src/provider.ts \
   packages/payments/src/testing/fake-provider.ts packages/payments/src/testing/fake-provider.test.ts \
   packages/payments/src/store.test.ts packages/payments/src/index.ts
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-2a-stripe commit -m "feat(payments): PaymentRow.externalRef, recordRefund succeeded-filter + failed-refund path, fake partialRefund amount"
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-2a-stripe commit -m "feat(payments): PaymentRow.externalRef, recordRefund succeeded-filter + failed-refund path, fake partialRefund amount"
 ```
 
 ---
@@ -519,8 +519,8 @@ Expected: PASS. If it hangs near 120s, the `finally` release/await ordering is w
 - [ ] **Step 3: Commit**
 
 ```bash
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-2a-stripe add packages/payments/src/reversal.concurrency.test.ts
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-2a-stripe commit -m "test(payments): real-PG reversal-concurrency test (FOR UPDATE serialisation)"
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-2a-stripe add packages/payments/src/reversal.concurrency.test.ts
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-2a-stripe commit -m "test(payments): real-PG reversal-concurrency test (FOR UPDATE serialisation)"
 ```
 
 ---
@@ -622,7 +622,7 @@ export default defineConfig({
 
 - [ ] **Step 2: Run `pnpm install` to wire the workspace + add `stripe`**
 
-Run: `cd /Users/clintongormley/workspace/worktrees/waitron-payment-mode-2a-stripe && pnpm install`
+Run: `cd /Users/<user>/workspace/worktrees/waitron-payment-mode-2a-stripe && pnpm install`
 Expected: resolves `@waitron/payments-stripe` and installs `stripe@^22.3.2`. Confirm: `node -e "require('stripe/package.json')" ` isn't needed; instead `pnpm --filter @waitron/payments-stripe exec node -e "import('stripe').then(()=>console.log('ok'))"` prints `ok`.
 
 - [ ] **Step 3: Errors + reachability.** Create `packages/payments-stripe/src/errors.ts`:
@@ -889,8 +889,8 @@ Expected: both PASS.
 - [ ] **Step 11: Commit**
 
 ```bash
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-2a-stripe add packages/payments-stripe pnpm-lock.yaml
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-2a-stripe commit -m "feat(payments-stripe): scaffold package + narrow StripeClient seam + FakeStripe"
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-2a-stripe add packages/payments-stripe pnpm-lock.yaml
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-2a-stripe commit -m "feat(payments-stripe): scaffold package + narrow StripeClient seam + FakeStripe"
 ```
 
 ---
@@ -1108,10 +1108,10 @@ Expected: PASS (capture, decline, timeout).
 - [ ] **Step 7: Run wiring — expect PASS**, then commit.
 
 ```bash
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-2a-stripe add \
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-2a-stripe add \
   packages/payments-stripe/src/provider.ts packages/payments-stripe/src/provider.test.ts \
   packages/payments-stripe/src/wiring.test.ts packages/payments-stripe/src/index.ts
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-2a-stripe commit -m "feat(payments-stripe): StripeTerminalProvider.collect (poll-to-completion, T1/T2) + wiring"
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-2a-stripe commit -m "feat(payments-stripe): StripeTerminalProvider.collect (poll-to-completion, T1/T2) + wiring"
 ```
 
 ---
@@ -1231,9 +1231,9 @@ Expected: PASS (collect + reversal cases).
 - [ ] **Step 5: Commit**
 
 ```bash
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-2a-stripe add \
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-2a-stripe add \
   packages/payments-stripe/src/provider.ts packages/payments-stripe/src/provider.test.ts
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-2a-stripe commit -m "feat(payments-stripe): void/refund/partialRefund via stripe.refunds (+ failed-refund path)"
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-2a-stripe commit -m "feat(payments-stripe): void/refund/partialRefund via stripe.refunds (+ failed-refund path)"
 ```
 
 ---
@@ -1283,8 +1283,8 @@ Expected: PASS, ≥98/95. `stripe-client.ts` excluded; everything else covered. 
 - [ ] **Step 5: Commit**
 
 ```bash
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-2a-stripe add packages/payments-stripe/src/testing/postgres.ts packages/payments-stripe/src/stripe.rls.test.ts
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-2a-stripe commit -m "test(payments-stripe): real-PG RLS test for the attempting/capture lifecycle"
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-2a-stripe add packages/payments-stripe/src/testing/postgres.ts packages/payments-stripe/src/stripe.rls.test.ts
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-2a-stripe commit -m "test(payments-stripe): real-PG RLS test for the attempting/capture lifecycle"
 ```
 
 ---
@@ -1412,10 +1412,10 @@ Run: `pnpm --filter @waitron/payments-stripe typecheck && pnpm --filter @waitron
 Expected: PASS.
 
 ```bash
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-2a-stripe add \
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-2a-stripe add \
   packages/payments-stripe/vitest.sandbox.config.ts packages/payments-stripe/src/collect.sandbox.test.ts \
   .github/workflows/stripe-sandbox.yml
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-2a-stripe commit -m "test(payments-stripe): nightly Stripe test-mode sandbox suite + workflow"
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-2a-stripe commit -m "test(payments-stripe): nightly Stripe test-mode sandbox suite + workflow"
 ```
 
 ---

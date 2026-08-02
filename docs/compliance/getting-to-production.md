@@ -55,6 +55,13 @@ slack. Anyone marketing a SIF is already inside the regime regardless of their c
 | 3 | Colaboración social / apoderamientos *(only if we submit for clients)* | Third-party submission | Unknown; start early. See §3 |
 | — | Fiscal layer against conformance vectors | Nothing | **Start now, needs no certificate** |
 
+> **Update, 2026-07-28 — task 1 is done, and the connection is proven.** The deli's **representante**
+> certificate completed an unattended mTLS `consultar` against AEAT preproduction (`prewww1`),
+> returning a well-formed `SinDatos` — so the certificate is no longer the thing to wait on. The
+> **sello de entidad** stays the right instrument for the unattended production shape (§1, §3), and
+> what remains unproven is that a `RegistroAlta` **submission** is accepted: `consultar` exercises no
+> XSD validation or chaining. Full record in [first-aeat-contact.md](first-aeat-contact.md).
+
 The conformance vectors (`borjamrd/verifactu-conformance`, MIT) let us build and validate hash
 construction, chaining, QR generation and XML shape entirely offline. **The certificate only
 gates the final leg — actually talking to AEAT.** So: start the certificate paperwork

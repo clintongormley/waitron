@@ -19,7 +19,7 @@
 - **`@waitron/core` stays a devDependency of `@waitron/payments`.** Only the test-only fake imports it (for `recordIncidentOnce`). Do NOT move it to `dependencies`. The production barrel (`src/index.ts`) never imports `@waitron/core`.
 - **`format:check` (prettier) and `lint` (eslint) are push/CI gates, separate from the tests.** Run `pnpm --filter @waitron/payments lint` and `pnpm format:check` (or `prettier --write`) before the final commit of each task.
 - **Migrations are ordered core-first.** Nothing enforces it at runtime; test harnesses run `CORE_MIGRATIONS` then `PAYMENTS_MIGRATIONS` explicitly.
-- **Worktree:** all work happens in `/Users/clintongormley/workspace/worktrees/waitron-payments-2b-offline-layer`. Commit there. Run package commands as `pnpm --filter @waitron/payments <script>`.
+- **Worktree:** all work happens in `/Users/<user>/workspace/worktrees/waitron-payments-2b-offline-layer`. Commit there. Run package commands as `pnpm --filter @waitron/payments <script>`.
 
 ---
 
