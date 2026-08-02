@@ -219,6 +219,26 @@ export interface FiscalBackend {
   recordVoid(tx: Transaction, saleId: SaleId, reason: string): Promise<FiscalRecordRef>;
 
   /**
+   * Records a corrective fiscal record — a credit note, the rectificativa of a prior sale. Like
+   * `recordSale` it takes the transaction: atomicity between the corrective sale and its fiscal
+   * record is the entire point, exactly as for a sale. `sale` is the corrective invoice's OWN data
+   * — its own new number, its own (negative) total and breakdown — while `correction.correctsSaleId`
+   * names the earlier sale being corrected. The regime maps this onto its own corrective mechanism;
+   * no fiscal condition blocks it (spec §4), a correction being a staff remedy the till must always
+   * be able to issue.
+   *
+   * Regime-neutral in name and shape, like every method here: nothing about a corrective mechanism's
+   * own vocabulary leaks across this boundary (the guard in ./no-regime-vocabulary.test.ts enforces
+   * it), and `SaleForFiscalRecord` is reused unchanged — a corrective's negative total and breakdown
+   * fit its existing shape with no new field.
+   */
+  recordCorrection(
+    tx: Transaction,
+    sale: SaleForFiscalRecord,
+    correction: { correctsSaleId: SaleId },
+  ): Promise<FiscalRecordRef>;
+
+  /**
    * Whatever this backend must check about what it has already recorded, before recording
    * anything more. `tenantId` is passed explicitly — the caller is always inside a tenant-scoped
    * transaction and already holds it, so the backend need not re-derive it. The caller records the

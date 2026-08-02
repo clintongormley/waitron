@@ -1,3 +1,8 @@
+// Side-effect import registering this package's own `fiscal.correction_unsupported` code (thrown
+// by `recordCorrection` below) on the shared registry — the convention every file that throws a
+// local code follows (./chain.ts, ./registro-sif.ts). `fiscal.sale_not_recorded`, also thrown
+// here, is `@waitron/fiscal`'s and arrives with its types.
+import "./errors.js";
 import { eq, sql } from "drizzle-orm";
 import { tenants, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -140,6 +145,18 @@ export interface VerifactuBackendOptions {
 type OriginalAlta = Pick<
   RegistroRow,
   "tenant_id" | "till_id" | "id_emisor_factura" | "num_serie_factura" | "fecha_expedicion_factura"
+>;
+
+/**
+ * The columns `recordCorrection` reads off the alta being corrected. Narrower than `OriginalAlta`
+ * in one axis and wider in another: no `tenant_id`/`till_id` (the corrective's OWN `sale` carries
+ * those, unlike a void which must recover them), but `tipo_factura` too — the R-type is derived
+ * from it (F2 → R5), so it is read here rather than assumed. The three identity columns feed
+ * `FacturasRectificadas` directly, the same shortcut `recordVoid` takes for the anulada identity.
+ */
+type OriginalAltaForCorrection = Pick<
+  RegistroRow,
+  "id_emisor_factura" | "num_serie_factura" | "fecha_expedicion_factura" | "tipo_factura"
 >;
 
 /**
@@ -399,6 +416,124 @@ export class VerifactuBackend implements FiscalBackend {
       state: "pending",
       issuedAt: now.instant,
       offsetMinutes: now.offsetMinutes,
+    };
+  }
+
+  /**
+   * Records a rectificativa (credit note) for a prior sale — a hybrid of `recordSale` (it assembles
+   * an `AltaInput` from the corrective's OWN `sale`: its new number, its negative total and
+   * breakdown) and `recordVoid` (it reads the ORIGINAL alta registro to point at). A rectificativa
+   * is an alta, NOT an anulación: it takes the next `secuencia`, hashes its own huella over the same
+   * eight fields (`TipoFactura = R5` and the negative `ImporteTotal`/`CuotaTotal` flow in), and gets
+   * its own `pendiente` sidecar — everything `recordSale`'s own path does. `chain.ts` needs no
+   * change; the R5 record flows through it unaltered.
+   *
+   * The `entorno` invariant (§5) is preserved exactly as `recordSale`: it travels BESIDE `input` in
+   * the `PendingRegistro`, never inside it, so our own metadata never reaches `computeHuella`.
+   */
+  async recordCorrection(
+    tx: Transaction,
+    sale: SaleForFiscalRecord,
+    correction: { correctsSaleId: SaleId },
+  ): Promise<FiscalRecordRef> {
+    // The original alta being corrected. Read exactly as `recordVoid` reads the alta it voids
+    // (same `sale_id` + `tipo_registro = 'alta'` filter); its own three identity columns become the
+    // `FacturasRectificadas` pointer with no NIF/number reconstruction — the same shortcut.
+    const { rows } = await tx.execute<OriginalAltaForCorrection>(sql`
+      select id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_factura
+      from registros_facturacion
+      where sale_id = ${correction.correctsSaleId} and tipo_registro = 'alta'
+      limit 1
+    `);
+    const original = rows[0];
+    if (original === undefined) {
+      throw new AppError("fiscal.sale_not_recorded", { saleId: correction.correctsSaleId });
+    }
+    // Derive the R-type from the original's own TipoFactura. v1 corrects only a simplified F2
+    // (→ R5, findings §10.2), the only type the till issues today. Rectifying an F1 is an R1, not
+    // this R5 — deferred until B2B `F1` issuance lands (open decision #1) — so assert rather than
+    // silently mis-type a filing that cannot be repaired (§5).
+    if (original.tipo_factura !== "F2") {
+      throw new AppError("fiscal.correction_unsupported", {
+        saleId: correction.correctsSaleId,
+        // An alta always carries a non-null `tipo_factura` (`toRegistroRow` sets it for altas; only
+        // an anulación is NULL, and the `tipo_registro = 'alta'` filter above excludes those) — a
+        // cast, like `fromRegistroRow`'s own `tipo_factura` read, not a `?? ""` branch no alta row
+        // can take.
+        tipoFactura: original.tipo_factura as string,
+      });
+    }
+
+    const sif = await currentSif(tx, sale.tenantId, sale.tillId);
+    const tenant = await this.legalNameFor(tx, sale.tenantId);
+
+    const desglose: DetalleDesgloseInput[] = sale.vatBreakdown.map((line) => ({
+      BaseImponibleOimporteNoSujeto: line.base,
+      TipoImpositivo: line.rate,
+      CuotaRepercutida: line.tax,
+      // Same S1 (sujeta y no exenta) qualification `recordSale` applies — a rectificativa por
+      // diferencias carries the identical breakdown shape, its figures merely negative.
+      CalificacionOperacion: "S1",
+    }));
+    const cuotaTotal = sumDecimals(sale.vatBreakdown.map((line) => line.tax));
+
+    const input: Omit<AltaInput, "Encadenamiento"> = {
+      IDEmisorFactura: sif.nif,
+      // The corrective's OWN new number/date, like `recordSale` — a rectificativa is a new invoice
+      // from its own series (§5), not a copy of the one it corrects.
+      NumSerieFactura: formatInvoiceNumber(sale.seriesCode, sale.invoiceNumber),
+      FechaExpedicionFactura: sale.issuedAt,
+      NombreRazonEmisor: tenant.legalName,
+      TipoFactura: "R5",
+      // "I" (por diferencias) — the only TipoRectificativa v1 issues (findings §10.2), hardcoded
+      // like "R5"/"S1". "S" (sustitución), which additionally requires ImporteRectificacion (rule
+      // 1118), is the future option (open decision #2).
+      TipoRectificativa: "I",
+      FacturasRectificadas: [
+        {
+          IDEmisorFactura: original.id_emisor_factura,
+          NumSerieFactura: original.num_serie_factura,
+          // The original's stored calendar day, reconstructed EXACTLY for any offset: its `date`
+          // column dropped the offset that produced it (./registro-row.ts), and
+          // `buildAltaRecord`/`formatIDFacturaAR` re-renders whatever Date this carries with THIS
+          // corrective's own `offsetMinutes`. Anchoring at midnight-UTC minus that offset makes the
+          // render land back on the exact stored day regardless of the offset's sign or magnitude —
+          // the same algebraic cancellation `recordVoid`'s `FechaExpedicionFacturaAnulada` documents
+          // and proves above, not the noon anchor that comment supersedes.
+          FechaExpedicionFactura: new Date(
+            Date.parse(`${original.fecha_expedicion_factura}T00:00:00Z`) -
+              sale.offsetMinutes * 60_000,
+          ),
+        },
+      ],
+      // No FacturasSustituidas, no ImporteRectificacion: those belong to S (sustitución) mode; rule
+      // 1118 requires ImporteRectificacion only there, not for I.
+      DescripcionOperacion: sale.descriptionOfOperation,
+      Desglose: desglose,
+      CuotaTotal: cuotaTotal,
+      ImporteTotal: sale.total,
+      SistemaInformatico: this.buildSistemaInformatico(sif, tenant.legalName),
+      generadoEn: sale.issuedAt,
+      offsetMinutes: sale.offsetMinutes,
+    };
+
+    const appended = await appendToChain(
+      tx,
+      sale.tenantId,
+      sale.tillId,
+      { tipo: "alta", saleId: sale.saleId, entorno: this.deploymentEnvironment, input },
+      sif,
+    );
+
+    await tx.insert(envios).values({ registroId: appended.id, tenantId: sale.tenantId });
+
+    return {
+      backend: BACKEND_ID,
+      recordId: appended.id,
+      state: "pending",
+      issuedAt: sale.issuedAt,
+      offsetMinutes: sale.offsetMinutes,
+      verificationUrl: await this.qrPayloadFor(tx, appended.id),
     };
   }
 

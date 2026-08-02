@@ -27,7 +27,7 @@ export type FakeFiscalRecord = {
   tillId: string;
   saleId: string;
   sequence: number;
-  kind: "sale" | "void";
+  kind: "sale" | "void" | "correction";
   invoiceNumber: number;
   total: string;
   state: string;
@@ -182,6 +182,38 @@ export class FakeFiscalBackend implements FiscalBackend {
       total: original.total,
       issuedAt: new Date(),
       offsetMinutes: 0,
+    });
+  }
+
+  async recordCorrection(
+    tx: Transaction,
+    sale: SaleForFiscalRecord,
+    correction: { correctsSaleId: SaleId },
+  ): Promise<FiscalRecordRef> {
+    // Mirrors recordVoid's precondition: the sale being corrected must already have a fiscal
+    // record. A correction references a prior sale (spec §4); there is nothing to correct if the
+    // original was never recorded.
+    const rows = await tx.execute<{ record_id: string }>(sql`
+      select record_id from fake_fiscal_records
+      where sale_id = ${correction.correctsSaleId} and kind = 'sale'
+      limit 1
+    `);
+    if (rows.rows[0] === undefined) {
+      throw new AppError("fiscal.sale_not_recorded", { saleId: correction.correctsSaleId });
+    }
+    // Unlike a void, a correction carries its OWN data (its own saleId, invoice number and negative
+    // total), so it is appended from `sale`, not from the corrected record's columns — the same
+    // shape recordSale uses. The real backend validates none of this beyond what appendToChain
+    // does, so neither does the fake.
+    return this.append(tx, {
+      tenantId: sale.tenantId,
+      tillId: sale.tillId,
+      saleId: sale.saleId,
+      kind: "correction",
+      invoiceNumber: sale.invoiceNumber,
+      total: sale.total,
+      issuedAt: sale.issuedAt,
+      offsetMinutes: sale.offsetMinutes,
     });
   }
 
@@ -342,7 +374,7 @@ export class FakeFiscalBackend implements FiscalBackend {
       tenantId: string;
       tillId: string;
       saleId: string;
-      kind: "sale" | "void";
+      kind: "sale" | "void" | "correction";
       invoiceNumber: number;
       total: string;
       issuedAt: Date;

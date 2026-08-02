@@ -143,6 +143,7 @@ function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>)
     registerTill: (tx, till, params) => fake.registerTill(tx, till, params),
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
     recordVoid: (tx, id, reason) => fake.recordVoid(tx, id, reason),
+    recordCorrection: (tx, sale, correction) => fake.recordCorrection(tx, sale, correction),
     checkIntegrity: (tx, tenant, till) => fake.checkIntegrity(tx, tenant, till),
     pendingCount: (tenant, till) => fake.pendingCount(tenant, till),
     drain: (now) => fake.drain(now),
@@ -331,6 +332,9 @@ describe("recordVoid — error propagation", () => {
       },
       recordVoid: () => {
         throw new Error("recordVoid must not be reached: the insert above always rejects first");
+      },
+      recordCorrection: () => {
+        throw new Error("not used by this test");
       },
       checkIntegrity: async () => ({ ok: true, checked: 0, issues: [] }),
       // Both params are part of FiscalBackend's real signature; this override never reads

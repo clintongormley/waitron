@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
 import { CORE_MIGRATIONS, asAppUser, sales, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import type { TrustedClock } from "@waitron/fiscal";
+import type { SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
 import type { SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
 import { decimal, saleId as brandSaleId, tillId as brandTillId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
@@ -175,6 +175,89 @@ describe("recordVoid — date reconstruction", () => {
     const alta = rows.find((row) => row.tipoRegistro === "alta");
     const anulacion = rows.find((row) => row.tipoRegistro === "anulacion");
     expect(anulacion?.fechaExpedicionFactura).toBe(alta?.fechaExpedicionFactura);
+  });
+});
+
+describe("recordCorrection — refusals", () => {
+  // PGlite, deliberately (CLAUDE.md §4): both cases assert a REFUSAL that happens before
+  // `appendToChain` runs at all — the original-registro lookup and the F2 gate — so neither
+  // exercises the chain append under the deployment role or under contention. The chain-append
+  // path and the concurrency property are `correction-path.e2e.test.ts`'s real-PG job.
+
+  /** A minimal corrective `SaleForFiscalRecord`. Its own fields are never read on the refusal
+   * paths below (both throw before assembling anything from `sale`), but a well-formed value keeps
+   * the call type-correct. */
+  function correctiveSale(): SaleForFiscalRecord {
+    return {
+      tenantId,
+      tillId,
+      saleId: brandSaleId("33333333-3333-4333-8333-333333333333"),
+      seriesId,
+      seriesCode: "R",
+      invoiceNumber: 1,
+      issuedAt: new Date("2026-03-02T12:05:00.000Z"),
+      offsetMinutes: 60,
+      descriptionOfOperation: "Rectificacion por diferencias",
+      total: decimal("-12.10"),
+      vatBreakdown: [{ rate: decimal("21.00"), base: decimal("-10.00"), tax: decimal("-2.10") }],
+      counterparty: null,
+    };
+  }
+
+  it("throws fiscal.sale_not_recorded when the sale being corrected has no prior alta", async () => {
+    const neverRecorded = brandSaleId("00000000-0000-4000-8000-000000000000");
+    await expect(
+      withTenant(pg.db, tenantId, (tx) =>
+        backend.recordCorrection(tx, correctiveSale(), { correctsSaleId: neverRecorded }),
+      ),
+    ).rejects.toMatchObject({ code: "fiscal.sale_not_recorded", params: { saleId: neverRecorded } });
+  });
+
+  it("refuses to correct a non-simplified invoice, since only F2 → R5 is supported (R1 deferred)", async () => {
+    // The R-type derivation asserts rather than assumes: rectifying an F1 is an R1, not the R5 this
+    // method assembles, and filing the wrong TipoFactura is unrepairable (§5). Build a real F1 alta
+    // directly (bypassing core, which only ever issues F2), then try to correct it.
+    const original = brandSaleId("44444444-4444-4444-8444-444444444444");
+    await withTenant(pg.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      await tx.insert(sales).values({
+        id: original,
+        tenantId,
+        tillId,
+        seriesId,
+        invoiceNumber: 500,
+        issuedAt: "2026-03-01T12:05:00.000Z",
+        issuedOffsetMinutes: 60,
+        total: "0.00",
+        locale: "es-ES",
+        invoiceLocales: ["es-ES"],
+        fiscalBackend: "verifactu",
+        fiscalState: "recorded",
+      });
+      await backend.recordSale(tx, {
+        tenantId,
+        tillId,
+        saleId: original,
+        seriesId,
+        seriesCode: "A",
+        invoiceNumber: 500,
+        issuedAt: new Date("2026-03-01T12:05:00.000Z"),
+        offsetMinutes: 60,
+        descriptionOfOperation: "Venta en establecimiento",
+        total: decimal("12.10"),
+        vatBreakdown: [{ rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") }],
+        counterparty: { taxId: "B12345678", legalName: "Cliente SL", countryCode: "ES" },
+      });
+    });
+
+    await expect(
+      withTenant(pg.db, tenantId, (tx) =>
+        backend.recordCorrection(tx, correctiveSale(), { correctsSaleId: original }),
+      ),
+    ).rejects.toMatchObject({
+      code: "fiscal.correction_unsupported",
+      params: { saleId: original, tipoFactura: "F1" },
+    });
   });
 });
 
