@@ -66,7 +66,7 @@ async function workedMinutes(personId: string): Promise<number> {
         personId,
         period: { start: "2026-01-05", end: "2026-01-12" },
       },
-      { workingDaysPerWeek: 5, overtimeModel: "daily-accrual" },
+      { workingDaysPerWeek: 5, overtimeModel: "daily-accrual", dailyTargetMinutes: null },
     ),
   );
   return summary.workedMinutes;

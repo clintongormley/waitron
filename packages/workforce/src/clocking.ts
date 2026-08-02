@@ -42,20 +42,27 @@ export interface WorkSummaryQuery {
 
 /**
  * The convenio-driven inputs `workSummary` reads — resolved from a `convenio_config` row by
- * `packages/workforce-es` and passed in (a full `WorkTimeRuleset` satisfies this subset). Both are
- * REQUIRED: there is no fallback duplicated here, so the single source of their defaults is the
- * `convenio_config` column defaults. A DEFAULT row resolves to `working_days_per_week = 5` /
- * `overtime_model = daily_accrual`, and that this reproduces today's numbers is pinned as a checked
- * invariant by `packages/workforce-es`'s `work-summary.test.ts` (a default row resolved through
- * `resolveWorkTimeRuleset`), not asserted by a comment the code does not enforce.
+ * `packages/workforce-es` and passed in (a full `WorkTimeRuleset` satisfies this subset). The single
+ * source of their defaults is the `convenio_config` column defaults: a DEFAULT row resolves to
+ * `working_days_per_week = 5` / `overtime_model = daily_accrual` / `daily_target_minutes = NULL`, and
+ * that this reproduces today's numbers is pinned as a checked invariant by `packages/workforce-es`'s
+ * `work-summary.test.ts` (a default row resolved through `resolveWorkTimeRuleset`), not asserted by a
+ * comment the code does not enforce. `dailyTargetMinutes` is the one field with a code-side fallback
+ * — a null column means "derive the per-day target from the weekly jornada ÷ `workingDaysPerWeek`"
+ * rather than a duplicated numeric default.
  */
 export interface WorkSummaryRuleset {
-  /** Ordinary working days per week — the daily-target denominator
+  /** Ordinary working days per week — the daily-target denominator when `dailyTargetMinutes` is null
    * (`convenio_config.working_days_per_week`). */
   workingDaysPerWeek: number;
   /** Which overtime reading is the headline (`convenio_config.overtime_model`). Changing it moves
    * only the headline, never the two underlying figures. */
   overtimeModel: OvertimeModel;
+  /** An explicit per-day target (`convenio_config.daily_target_minutes`). When non-null it IS the
+   * daily-accrual target and the weekly ÷ `workingDaysPerWeek` derivation is bypassed; null falls
+   * back to that derivation. A DEFAULT convenio_config row leaves it null, so the derivation — and
+   * today's numbers — are unchanged. */
+  dailyTargetMinutes: number | null;
 }
 
 /** A request to correct an entry's timestamp — an append, never an edit of the target. */
@@ -166,17 +173,20 @@ export class WorkforceBackend {
   /**
    * Worked minutes and overtime for a person over a pay period, computed from the `time_entries`
    * stream against the employment's contracted week. Returns BOTH overtime models (daily-accrual and
-   * period-net) side by side plus the per-day breakdown — the binding model is convenio/contract
-   * driven, not decided here (see `summarisePeriod`). The period-net baseline scales the weekly
-   * jornada to the period length; the daily target is a floor-scope default until D2's
-   * schedule/convenio_config supplies a true per-day figure (`dailyContractedTargetMinutes`).
+   * period-net) side by side plus the per-day breakdown, and selects the headline model from the
+   * supplied `ruleset.overtimeModel` (convenio_config-sourced) — which model BINDS for a given
+   * employment is still a convenio/asesor-laboral decision, carried on that row, not hard-coded here
+   * (see `summarisePeriod`). The period-net baseline scales the weekly jornada to the period length.
+   * The daily-accrual target is `ruleset.dailyTargetMinutes` when the convenio sets one, else the
+   * weekly jornada ÷ `ruleset.workingDaysPerWeek` derivation (`dailyContractedTargetMinutes`); a
+   * DEFAULT convenio_config row leaves `dailyTargetMinutes` null, so today's per-day figure stands.
    */
   async workSummary(
     tx: Transaction,
     query: WorkSummaryQuery,
     ruleset: WorkSummaryRuleset,
   ): Promise<PeriodSummary> {
-    const { workingDaysPerWeek, overtimeModel } = ruleset;
+    const { workingDaysPerWeek, overtimeModel, dailyTargetMinutes } = ruleset;
     const contractedPerWeek = await this.contractedMinutesPerWeek(
       tx,
       query.tenantId,
@@ -190,7 +200,11 @@ export class WorkforceBackend {
       query.period,
       {
         periodMinutes: Math.round((contractedPerWeek * periodDays) / 7),
-        dailyTargetMinutes: dailyContractedTargetMinutes(contractedPerWeek, workingDaysPerWeek),
+        // An explicit convenio per-day target wins; a null column falls back to the weekly derivation
+        // (`??` treats only null/undefined as "unset", so a 0 override — a CHECK would reject it — is
+        // still honoured rather than silently re-derived).
+        dailyTargetMinutes:
+          dailyTargetMinutes ?? dailyContractedTargetMinutes(contractedPerWeek, workingDaysPerWeek),
       },
       overtimeModel,
     );

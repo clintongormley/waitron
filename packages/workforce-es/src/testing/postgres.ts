@@ -20,8 +20,11 @@ export const CONTAINER_SETUP_TIMEOUT_MS = 180_000;
 /**
  * Starts a real PostgreSQL server and runs the three migration sets against it, core first — ordering
  * across packages is the runtime's responsibility and nothing enforces it, so it is explicit here.
- * `convenio_config` (workforce-es) only depends on core, but the RLS/end-to-end suites also seed
- * persons/employments/time_entries, so the workforce set is applied too.
+ * The `convenio_config` table's FKs reach only core (tenants/locations), and the sole real-PG suite,
+ * `convenio-config.rls.test.ts`, seeds only a tenant and a location — never a workforce row. The
+ * workforce set is applied because the workforce-es PACKAGE depends on `@waitron/workforce` (this file
+ * and `convenio.ts` import from it), so the helper migrates workforce-es's full package stack rather
+ * than a core-plus-`convenio_config` subset.
  */
 export function startRealPostgres(): Promise<RealPostgres> {
   return startMigratedPostgres({

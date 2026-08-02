@@ -15,7 +15,11 @@ const backend = new WorkforceBackend();
  * that column, not a fallback in `workSummary`. The generic package cannot import the -es resolver,
  * so its tests pass the resolved values explicitly; `packages/workforce-es`'s `work-summary.test.ts`
  * pins that a default row resolves to exactly these and reproduces these same numbers. */
-const DEFAULT_RULESET = { workingDaysPerWeek: 5, overtimeModel: "daily-accrual" } as const;
+const DEFAULT_RULESET = {
+  workingDaysPerWeek: 5,
+  overtimeModel: "daily-accrual",
+  dailyTargetMinutes: null,
+} as const;
 
 let tenantId: string;
 let locationId: string;
@@ -234,6 +238,27 @@ describe("workSummary", () => {
         tx,
         { tenantId, personId: p, period: { start: "2026-01-05", end: "2026-01-12" } },
         { ...DEFAULT_RULESET, workingDaysPerWeek: 6 },
+      ),
+    );
+    expect(summary.days[0]?.contractedTargetMinutes).toBe(400);
+    expect(summary.dailyAccrualOvertimeMinutes).toBe(140);
+  });
+
+  it("uses an explicit dailyTargetMinutes override as the daily-accrual target, bypassing the weekly derivation", async () => {
+    // convenio_config.daily_target_minutes, once the asesor sets one, IS the per-day target — the
+    // weekly ÷ working-days derivation is bypassed. A 400-min override against a 9h (540) day is 140
+    // over it, where the derived 2400 ÷ 5 = 480 target gives 60. Prove by deletion: drop the
+    // `ruleset.dailyTargetMinutes ??` in workSummary and this reverts to 480/60. The NULL path (a
+    // DEFAULT convenio_config row → derivation, the 2700/2400/300 case) is pinned by the
+    // default-ruleset tests above, which carry `dailyTargetMinutes: null` and stay green.
+    const p = await freshPerson("summary-daily-override");
+    await seedEmployment(suite.db, { tenantId, personId: p, contractedMinutesPerWeek: 2400 });
+    await nineHourDay(p, "2026-01-05");
+    const summary = await run((tx) =>
+      backend.workSummary(
+        tx,
+        { tenantId, personId: p, period: { start: "2026-01-05", end: "2026-01-12" } },
+        { ...DEFAULT_RULESET, dailyTargetMinutes: 400 },
       ),
     );
     expect(summary.days[0]?.contractedTargetMinutes).toBe(400);

@@ -12,12 +12,16 @@ import type { OvertimeModel } from "./projection.js";
  * ET statutory floor or today's hard-coded default, so a default config row reproduces current
  * behaviour and an asesor-laboral later edits the ROW, not this code.
  *
- * D2.0 consumes only `workingDaysPerWeek` and `overtimeModel` (via `WorkforceBackend.workSummary`);
- * the remaining guardrail fields are carried for the D2.3 validation engine and are not read yet.
+ * `WorkforceBackend.workSummary` reads the OVERTIME-PROJECTION inputs — `workingDaysPerWeek`,
+ * `overtimeModel` and `dailyTargetMinutes`. `referencePeriodDays`/`compensationWindowDays` are the
+ * remaining overtime-projection inputs (art. 34.2 distribución irregular / the period-net reference
+ * period), carried but not yet consumed anywhere. Every OTHER field is a roster GUARDRAIL threshold
+ * read by the D2.3 validation engine (`validateRoster` in `roster-validation.ts`), never by the
+ * projection.
  */
 export interface WorkTimeRuleset {
-  /** Ordinary working days in the week — the daily-target denominator
-   * (`convenio_config.working_days_per_week`, default 5, a Mon–Fri week). */
+  /** Ordinary working days in the week — the daily-target denominator when `dailyTargetMinutes` is
+   * null (`convenio_config.working_days_per_week`, default 5, a Mon–Fri week). */
   workingDaysPerWeek: number;
   /** Which overtime reading is the headline figure (`convenio_config.overtime_model`, default
    * daily-accrual — art. 35). Flipping it never changes the two underlying figures, only the
@@ -27,8 +31,10 @@ export interface WorkTimeRuleset {
   referencePeriodDays: number | null;
   /** art. 34.2 compensation window in days, or null. */
   compensationWindowDays: number | null;
-  /** An explicit per-day target override; null falls back to the weekly ÷ `workingDaysPerWeek`
-   * derivation. */
+  /** An explicit per-day target override, now HONOURED by `workSummary` (`dailyContractedTargetMinutes`
+   * is used only as the fallback): when non-null it is the daily-accrual target directly; null falls
+   * back to the weekly ÷ `workingDaysPerWeek` derivation. A DEFAULT convenio_config row leaves it
+   * null, so the derivation still produces today's numbers. */
   dailyTargetMinutes: number | null;
   /** art. 34.1 average weekly cap (default 2400 = 40h). */
   maxWeeklyMinutes: number;
