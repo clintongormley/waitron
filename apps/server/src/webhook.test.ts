@@ -363,11 +363,47 @@ describe("the webhook shares the app with /health", () => {
   });
 });
 
-describe("a non-400 failure is surfaced 5xx so Stripe retries", () => {
+describe("permanent client errors are 400 (a retry can never fix them)", () => {
+  it("answers 400 for a malformed :tenantId path and settles nothing", async () => {
+    const app = new Hono();
+    const lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[] = [];
+    mountWebhook(app, deps(suite.db), collect(lines));
+
+    // `brandTenantId` rejects a non-uuid segment before any DB access — the request is unroutable,
+    // not transient, so 400 (not the 5xx retry-bias) and nothing is touched.
+    const body = completedEvent("cs_bad_tenant");
+    const res = await post(app, "not-a-uuid", body, signStripeBody(body, "whsec_any"));
+
+    expect(res.status).toBe(400);
+    expect(lines.map((l) => l.event)).toContain("shared.invalid_id");
+  });
+
+  it("answers 400 for a wrong-environment key and settles nothing", async () => {
+    // A LIVE key sealed on this pre-production host: `stripeSecretKeyFrom` throws
+    // `payment.credential_environment_mismatch` before verification — a provisioning mistake, not a
+    // race, so a retry can never succeed. 400, not 5xx.
+    const seeded = await seedInitiated(suite.db, {
+      webhookSecret: "whsec_envmix",
+      secretKey: "sk_live_wrongenv",
+    });
+    const app = new Hono();
+    const lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[] = [];
+    mountWebhook(app, deps(suite.db), collect(lines));
+
+    const body = completedEvent(seeded.sessionId);
+    const res = await post(app, seeded.tenantId, body, signStripeBody(body, seeded.webhookSecret));
+
+    expect(res.status).toBe(400);
+    expect(await paymentState(suite.db, seeded.tenantId, seeded.sessionId)).toBe("initiated");
+    expect(lines.map((l) => l.event)).toContain("payment.credential_environment_mismatch");
+  });
+});
+
+describe("a transient failure is surfaced 5xx so Stripe retries — the distinction holds", () => {
   it("answers 500 when the path tenant has no payments.stripe credential at all", async () => {
-    // A real tenant uuid with no Stripe credential: the vault's `credentials.missing` is neither a
-    // signature failure nor a tenant mismatch, so it is a 5xx (a provisioning race then resolves
-    // itself on Stripe's retry) rather than a 400 that would drop the event.
+    // A real tenant uuid with no Stripe credential: the vault's `credentials.missing` is a tenant
+    // not-yet-provisioned — a mid-provisioning race that resolves itself on Stripe's retry, so 5xx
+    // rather than a 400 that would drop the event. This is the control for the two 400 cases above.
     const tenantId = await seedTenant(suite.db);
     const app = new Hono();
     const lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[] = [];

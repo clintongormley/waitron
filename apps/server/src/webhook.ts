@@ -16,6 +16,27 @@ import "./errors.js";
 
 const PURPOSE = "payments.stripe";
 
+/**
+ * The AppError codes the route answers **400** to — PERMANENT client errors a retry can never fix,
+ * which deliberately break the endpoint's otherwise-5xx "never drop a settlement" bias:
+ *
+ * - `payment.webhook_signature_invalid` / `payment.webhook_tenant_mismatch` — this file's own gate.
+ * - `shared.invalid_id` — a malformed `:tenantId` path segment (`brandTenantId` throws it before any
+ *   database access); the request is unroutable, not merely unlucky.
+ * - `payment.credential_environment_mismatch` — a live key on a pre-production host (or vice versa):
+ *   a provisioning MISTAKE, not a transient state, so retrying forever changes nothing.
+ *
+ * Everything else stays 5xx so Stripe retries: `server.credential_unusable` (a missing field can be a
+ * transient mid-provisioning state), `credentials.missing` (a tenant not yet provisioned), and any DB
+ * fault are all recoverable on retry — and dropping a real settlement is the costlier failure.
+ */
+const CLIENT_ERROR_CODES: ReadonlySet<string> = new Set([
+  "payment.webhook_signature_invalid",
+  "payment.webhook_tenant_mismatch",
+  "shared.invalid_id",
+  "payment.credential_environment_mismatch",
+]);
+
 export interface WebhookDeps {
   db: Database;
   ring: KeyRing;
@@ -169,11 +190,7 @@ export function mountWebhook(app: Hono, deps: WebhookDeps, log: Logger): void {
       await settleWebhook(deps, pathTenantId, rawBody, signature, log);
       return c.body(null, 200);
     } catch (cause) {
-      if (
-        isAppError(cause) &&
-        (cause.code === "payment.webhook_signature_invalid" ||
-          cause.code === "payment.webhook_tenant_mismatch")
-      ) {
+      if (isAppError(cause) && CLIENT_ERROR_CODES.has(cause.code)) {
         log("warn", cause.code, cause.params);
         return c.body(null, 400);
       }
