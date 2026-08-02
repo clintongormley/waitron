@@ -5,27 +5,21 @@ import "@waitron/shared";
 
 /**
  * packages/workforce's contribution to the shared error registry, by declaration merging — the
- * DOMAIN-CONCEPT, lowercase, dot-namespaced convention (`person.*`), never the package name (see
- * the design note atop packages/shared/src/errors.ts).
+ * DOMAIN-CONCEPT, lowercase, dot-namespaced convention (`employment.*`), never the package name
+ * (see the design note atop packages/shared/src/errors.ts).
  *
  * Namespace choice: `attendance.*`, NOT `clock.*`. `clock.*` is already taken by packages/fiscal for
  * the trusted clock (`clock.degraded`, `clock.jump_detected` — packages/fiscal/src/errors.ts), so
  * clock-in/out failures are `attendance.*` — a fact about a worker's shift state, not about the
- * clock. `person.*`/`employment.*` name failures of their own entities (an identity lookup, an
- * employment lookup), following the `<entity>.not_found` shape `person.not_found` set. Codes are
- * never renamed once shipped, so the prefix was grepped against the whole registry first.
+ * clock. `employment.*` names failures of its own entity (an employment lookup), following the
+ * `<entity>.not_found` shape. Codes are never renamed once shipped, so the prefix was grepped
+ * against the whole registry first.
  *
  * Reachability: index.ts side-effect-imports ./errors.js, so this augmentation is reachable from
  * the package's own public barrel. See ./errors.reachability.test.ts.
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
-    /** No `persons` row for this id under the current tenant — never provisioned, or hidden by RLS
-     * (identical from the caller's side). */
-    "person.not_found": { tenantId: string; personId: string };
-    /** The supplied PIN did not verify against `persons.pin_hash` (../verify-pin.ts returned
-     * false). Carries no PIN and no hash — only the identity that failed. */
-    "person.pin_invalid": { tenantId: string; personId: string };
     /** No `employments` row for this person under the current tenant — the overtime baseline a
      * work-session summary needs (art. 35.5) does not exist. */
     "employment.not_found": { tenantId: string; personId: string };
