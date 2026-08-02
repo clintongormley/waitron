@@ -135,11 +135,15 @@ describe("registro-row round-trip of the four AEAT rectificativa fields", () => 
     expect(fromRegistroRow(row)).toEqual(built);
   });
 
-  it("round-trips an F3 canje carrying FacturasSustituidas", async () => {
-    // The fourth conditional-spread "present" arm: FacturasSustituidas names the substituted
-    // simplified tickets on an F3 canje (plan §1). An F3 is a full invoice with a POSITIVE total and
-    // carries none of the three rectificativa fields; registros_facturas_sustituidas_f3_ck requires
-    // the block to sit on an F3, so this is the one record shape that stores it.
+  it("round-trips an F3 canje carrying FacturasSustituidas and Destinatarios", async () => {
+    // The fourth conditional-spread "present" arm, plus the recipient this slice adds:
+    // FacturasSustituidas names the substituted simplified tickets on an F3 canje (plan §1), and
+    // Destinatarios carries the recipient an F3 must always bear (findings §10.2 — "siempre debe
+    // llevar el destinatario"). An F3 is a full invoice with a POSITIVE total and carries none of
+    // the three rectificativa fields; registros_facturas_sustituidas_f3_ck requires the block to sit
+    // on an F3, so this is the one record shape that stores both. If `destinatarios` did NOT
+    // round-trip, the drainer would file the F3 stripped of its mandatory recipient and AEAT would
+    // reject it — the same failure mode #46 fixed for the R5's TipoRectificativa (plan §2.3).
     const built = buildAltaRecord({
       IDEmisorFactura: TEST_NIF,
       NumSerieFactura: "F3/1",
@@ -153,6 +157,9 @@ describe("registro-row round-trip of the four AEAT rectificativa fields", () => 
           FechaExpedicionFactura: new Date("2026-07-20T00:00:00+02:00"),
         },
       ],
+      Destinatarios: {
+        IDDestinatario: [{ NombreRazon: "Cliente Empresarial SL", NIF: "B12345678" }],
+      },
       DescripcionOperacion: "Canje de tiques simplificados",
       Desglose: [
         {
@@ -173,7 +180,10 @@ describe("registro-row round-trip of the four AEAT rectificativa fields", () => 
 
     const rebuilt = fromRegistroRow(row) as RegistroAlta;
     expect(rebuilt).toEqual(built);
+    // Named, not only covered by the deep-equal, so a regression report points straight at the two
+    // fields the F3 canje record exists to carry.
     expect(rebuilt.FacturasSustituidas).toEqual(built.FacturasSustituidas);
+    expect(rebuilt.Destinatarios).toEqual(built.Destinatarios);
   });
 
   it("round-trips an ordinary alta, leaving all four fields absent (not null)", async () => {
@@ -211,6 +221,9 @@ describe("registro-row round-trip of the four AEAT rectificativa fields", () => 
     expect("FacturasRectificadas" in rebuilt).toBe(false);
     expect("FacturasSustituidas" in rebuilt).toBe(false);
     expect("ImporteRectificacion" in rebuilt).toBe(false);
+    // The recipient's "absent" arm too: an ordinary alta (and the R5 above) stores a NULL
+    // `destinatarios`, and a rehydrated record must OMIT the key, never set it to null.
+    expect("Destinatarios" in rebuilt).toBe(false);
   });
 });
 
