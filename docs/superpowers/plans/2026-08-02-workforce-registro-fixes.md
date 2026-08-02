@@ -134,13 +134,38 @@ Tests (RED first each):
    `core`, before `credentials`"; the manifest's adjacent successor is `fiscal`, not `credentials`.
    Correct it to match the manifest.
 
-## Deferred — NOT in this PR
+## Whole-branch review — additional fixes (D, E, and comment fixes)
 
-- **The clockIn/clockOut TOCTOU** (`clocking.ts`): `currentState` is an unlocked SELECT and the head
-  lock is only taken later in `appendToChain`, so two concurrent same-person clock-ins can both read
-  "out" and append a double-`in`, which the projection resolves by keeping the second — undercounting
-  worked time. It is a real gap, but the clock state machine has no production caller yet (the till
-  integration is D2), a proper fix needs a per-person serialization plus a real-PG concurrency test,
-  and D2 is actively in flight on `feat/workforce-d2-scheduling` and owns that path. Fixing it here
-  would likely conflict with D2. Record as a backlog row against the workforce track; fix it with the
-  caller in D2. (Documented so the deferral is a decision, not a silent drop — CLAUDE.md §1.)
+The pre-PR whole-branch review (two read-only reviewers) surfaced more, and on the owner's
+instruction to fix rather than defer, these landed in this PR too:
+
+- **Comment fixes** (claim-rigor, §1/§7): a stale `person.*` reference in `errors.ts`'s
+  `correction.target_not_found` doc that Task C's header scrub missed below its hunk; the
+  `capturedByTillId` hash justification over-cited art. 34.9 (which names the start/end times, not the
+  capturing device) — reworded to "capture provenance, hashed for tamper-evidence" (the hashing is
+  unchanged and correct); and a house-style note on `localWallClock` that it deliberately mirrors, but
+  does not import, the fiscal `formatDateTime` (cross-domain dependency avoided).
+
+- **Fix D — correction precedence on the hashed `sequence_no`, not the unhashed `ingest_seq`.**
+  `applyCorrections` tie-broke "latest approved correction wins" on `ingest_seq`, which is NOT in the
+  chain hash — so a party past the immutability floor could swap two corrections' `ingest_seq` and
+  flip which corrected time is effective while `verifyChain` still returned `ok`. `sequence_no` IS
+  hashed and contiguity-checked, and is the same append order made tamper-evident (so this is not a
+  reversal of design §5's "chain by ingest"). Behaviour-preserving in normal operation; proven by a
+  disagree-fixture unit test (higher `ingest_seq` paired with lower `sequence_no`) and by mutation.
+
+- **Fix E — per-person serialization for the clockIn/clockOut TOCTOU.** `currentState` was an
+  unlocked SELECT before `appendToChain`'s per-location head lock, so two concurrent same-person
+  clock-ins could both read "out" and append a double-`in`, which the projection resolves by keeping
+  the second — undercounting worked time in a legal record. Fixed with a `SELECT … FOR UPDATE` on the
+  `persons` row (a `lockPerson` helper) at the head of all four clock methods, before the state read;
+  lock order is persons → `workforce_chains` head, uniform across methods, so no deadlock. Proven by a
+  REAL-Postgres concurrency test (PGlite can't show it — single backend), RED-as-bug first (both
+  clock-ins committed) and load-bearing by deletion.
+
+**Why these were fixed here, not deferred to D2** (the deferral this section originally proposed): the
+review checked `feat/workforce-d2-scheduling` directly — D2 adds new code to `clocking.ts`/
+`projection.ts` (roster publish, overtime projection) but does NOT fix either bug and does NOT touch
+`applyCorrections` or the clock state machine. So both fixes are self-contained and collide with D2
+only as a routine same-file rebase at land time, not a design conflict. Nothing from this review
+remains deferred.
