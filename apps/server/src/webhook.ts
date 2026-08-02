@@ -184,9 +184,14 @@ export async function settleWebhook(
 export function mountWebhook(app: Hono, deps: WebhookDeps, log: Logger): void {
   app.post("/webhooks/stripe/:tenantId", async (c) => {
     const pathTenantId = c.req.param("tenantId");
-    const signature = c.req.header("stripe-signature") ?? "";
-    const rawBody = await c.req.text();
     try {
+      // Read INSIDE the try: `c.req.text()` can reject on an aborted or mis-encoded body, and a read
+      // that threw above the try would escape to Hono's default 500 — bypassing this route's
+      // structured `webhook.failed` log and its status mapping. Guarding the reads routes such a
+      // failure through the same 5xx-with-logging path as any other non-client error, so Stripe
+      // retries and the tenant is named in the log. `pathTenantId` stays out so the catch can name it.
+      const signature = c.req.header("stripe-signature") ?? "";
+      const rawBody = await c.req.text();
       await settleWebhook(deps, pathTenantId, rawBody, signature, log);
       return c.body(null, 200);
     } catch (cause) {
