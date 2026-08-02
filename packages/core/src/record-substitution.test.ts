@@ -24,7 +24,7 @@ import type { RecordSubstitutionInput } from "./record-substitution.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { recordVoid } from "./record-void.js";
-import { seedBareSale, seedTenant } from "../test/fixtures.js";
+import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 
 let tenantId: TenantId;
 let tillId: TillId;
@@ -301,6 +301,24 @@ describe("recordSubstitution — the series (till-ownership guards)", () => {
         params: { seriesId: other.seriesId, expected: other.tillId, actual: tillId },
       },
     );
+  });
+
+  it("rejects a non-standard series: an F3 draws its number from the standard series", async () => {
+    // The F3 reuses the `standard` series; a `rectificative` (or any non-standard) series must be
+    // refused, or the F3 would draw an invoice number from a series reserved for a different
+    // purpose — corrupting a legally-load-bearing, unrepairable series. Mirrors record-sale.ts /
+    // record-correction.ts's symmetric purpose guard. The guard fires before any write, so nothing
+    // is chained.
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId } = await sellTicket(backend);
+    const rectSeries = await seedRectificativeSeries(suite.db, tenantId, tillId);
+    await expect(substitute(backend, [saleId], { seriesId: rectSeries })).rejects.toMatchObject({
+      code: "sale.series_wrong_purpose",
+      params: { seriesId: rectSeries, expected: "standard", actual: "rectificative" },
+    });
+    expect(await countRows("sale_substitutions")).toBe(0);
+    const records = await backend.recordsFor(tillId);
+    expect(records.map((r) => r.kind)).toEqual(["sale"]); // only the ticket's alta, no F3
   });
 });
 

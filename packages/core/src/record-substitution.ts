@@ -37,9 +37,11 @@ export interface RecordSubstitutionInput {
   tillId: TillId;
   /**
    * The series the F3 draws its own new number from. v1 REUSES the ordinary `standard` series (owner
-   * decision — no separate `'substitution'` purpose is added), so unlike `record-correction.ts` there
-   * is no purpose to distinguish: the till-ownership guards are the only series guards that apply
-   * (step 2). Supplied by the caller exactly as `recordSale` is; no series is auto-provisioned.
+   * decision — no separate `'substitution'` purpose is added), so it is guarded exactly as
+   * `recordSale`'s series is: it must exist for this tenant (`sale.series_not_found`), belong to
+   * this till (`sale.series_wrong_till`) AND be `purpose='standard'` (`sale.series_wrong_purpose`) —
+   * a series reserved for another purpose must not number an F3 (step 2). Supplied by the caller
+   * exactly as `recordSale` is; no series is auto-provisioned.
    */
   seriesId: SeriesId;
   /**
@@ -152,13 +154,20 @@ export async function recordSubstitution(
     }
   }
 
-  // Step 2. The series, and the till-ownership guards. Only these two apply: the F3 reuses the
-  // ordinary `standard` series (owner decision — no separate `'substitution'` purpose), so there is
-  // no purpose to gate on the way `./record-correction.ts` gates its corrective series. The explicit
-  // tenant predicate mirrors `recordSale` and is redundant under RLS but guards a non-scoped
-  // connection too.
+  // Step 2. The series, and its guards. The F3 reuses the ordinary `standard` series (owner
+  // decision — no separate `'substitution'` purpose), so it must draw its number from a
+  // `purpose='standard'` series, exactly as `recordSale` does: a series reserved for another purpose
+  // (a `rectificative` one) numbers a different kind of document «en todo caso» (RD 1619/2012 art.
+  // 6.1.a), and drawing an F3's number from it would corrupt a legally-load-bearing, unrepairable
+  // series. The purpose guard is the mirror of the one `./record-correction.ts` applies from its
+  // side (which demands `rectificative`). The explicit tenant predicate mirrors `recordSale` and is
+  // redundant under RLS but guards a non-scoped connection too.
   const [series] = await tx
-    .select({ code: invoiceSeries.code, tillId: invoiceSeries.tillId })
+    .select({
+      code: invoiceSeries.code,
+      tillId: invoiceSeries.tillId,
+      purpose: invoiceSeries.purpose,
+    })
     .from(invoiceSeries)
     .where(and(eq(invoiceSeries.id, input.seriesId), eq(invoiceSeries.tenantId, input.tenantId)));
 
@@ -173,6 +182,13 @@ export async function recordSubstitution(
       seriesId: input.seriesId,
       expected: series.tillId,
       actual: input.tillId,
+    });
+  }
+  if (series.purpose !== "standard") {
+    throw new AppError("sale.series_wrong_purpose", {
+      seriesId: input.seriesId,
+      expected: "standard",
+      actual: series.purpose,
     });
   }
 
