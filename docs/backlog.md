@@ -618,7 +618,13 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
 - **Fiscal follow-ups** — a partial index on `acks`, a sargable reconcile period filter. Both gated
   on scale that does not exist yet
 - **Provisioning and credentials follow-ups** — test-infra duplication, `bin.ts` connect-before-
-  validate ordering, `rotate` coupled to `PURPOSES`. Four more carried from
+  validate ordering, `rotate` coupled to `PURPOSES`. A sibling of that last one, still undecided:
+  the credential READ path (`getCredential` / `tryGetCredential`,
+  `packages/credentials/src/store.ts`) runs the shape guard (object, non-null, non-array) but not
+  `validatePayload`, so a row sealed under an older `PURPOSES` field-list is returned with a missing
+  field as `undefined` rather than rejected — a fail-loudly-vs-keep-serving design call worth
+  settling before the first consumer relies on it (migrated from a since-deleted memory note,
+  2026-08-02). Four more carried from
   [#11](https://github.com/clintongormley/waitron/pull/11), none claimed: password redaction in
   `applyInstance` is enforced by listing the statements that carry a secret rather than structurally,
   so the next statement added is unsafe by default; `bin.ts`'s `ask()` is real logic on the
