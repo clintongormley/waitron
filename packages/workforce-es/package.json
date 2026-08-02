@@ -9,14 +9,21 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "db:generate": "drizzle-kit generate",
+    "db:generate:custom": "drizzle-kit generate --custom"
   },
   "dependencies": {
-    "@waitron/workforce": "workspace:*"
+    "@waitron/db": "workspace:*",
+    "@waitron/shared": "workspace:*",
+    "@waitron/workforce": "workspace:*",
+    "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.4",
     "@types/node": "^24.0.0",
     "@vitest/coverage-v8": "^3.0.0",
+    "drizzle-kit": "^0.31.10",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }

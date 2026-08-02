@@ -113,6 +113,7 @@ describe("applyInstance against a blank container", () => {
       expect(after.inside?.migratedSets).toEqual([
         "core",
         "workforce",
+        "workforce-es",
         "fiscal",
         "payments",
         "scheduler",

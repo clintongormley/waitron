@@ -366,6 +366,9 @@ importers:
       '@waitron/workforce':
         specifier: workspace:*
         version: link:../workforce
+      '@waitron/workforce-es':
+        specifier: workspace:*
+        version: link:../workforce-es
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@electric-sql/pglite@0.5.4)(@types/pg@8.20.0)(pg@8.22.0)
@@ -631,16 +634,31 @@ importers:
 
   packages/workforce-es:
     dependencies:
+      '@waitron/db':
+        specifier: workspace:*
+        version: link:../db
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@waitron/workforce':
         specifier: workspace:*
         version: link:../workforce
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@electric-sql/pglite@0.5.4)(@types/pg@8.20.0)(pg@8.22.0)
     devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.5.4
+        version: 0.5.4
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
       '@vitest/coverage-v8':
         specifier: ^3.0.0
         version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      drizzle-kit:
+        specifier: ^0.31.10
+        version: 0.31.10
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

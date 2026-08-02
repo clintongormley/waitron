@@ -7,6 +7,7 @@ import {
   dailyContractedTargetMinutes,
   projectWorkSessions,
   summarisePeriod,
+  type OvertimeModel,
   type Period,
   type PeriodSummary,
   type TimeEntryRecord,
@@ -36,6 +37,26 @@ export interface WorkSummaryQuery {
   /** The pay period, as a half-open local-date window `[start, end)`. */
   period: Period;
 }
+
+/**
+ * The convenio-driven inputs `workSummary` reads, resolved from a `convenio_config` row by
+ * `packages/workforce-es` and passed in (a full `WorkTimeRuleset` satisfies this subset). Both
+ * default to the same neutral values the projection used before D2 — a 5-day week and the
+ * daily-accrual headline — so a caller that passes nothing reproduces the old behaviour exactly.
+ */
+export interface WorkSummaryOptions {
+  /** Ordinary working days per week — the daily-target denominator
+   * (`convenio_config.working_days_per_week`). Defaults to 5. */
+  workingDaysPerWeek?: number;
+  /** Which overtime reading is the headline (`convenio_config.overtime_model`). Defaults to
+   * daily-accrual. Changing it moves only the headline, never the two underlying figures. */
+  overtimeModel?: OvertimeModel;
+}
+
+/** Today's neutral defaults, equal to the `convenio_config` column defaults, applied when a caller
+ * resolves no convenio_config row — never authoritative over a resolved ruleset. */
+const DEFAULT_WORKING_DAYS_PER_WEEK = 5;
+const DEFAULT_OVERTIME_MODEL: OvertimeModel = "daily-accrual";
 
 /** A request to correct an entry's timestamp — an append, never an edit of the target. */
 export interface CorrectionRequestInput {
@@ -132,7 +153,13 @@ export class WorkforceBackend {
    * jornada to the period length; the daily target is a floor-scope default until D2's
    * schedule/convenio_config supplies a true per-day figure (`dailyContractedTargetMinutes`).
    */
-  async workSummary(tx: Transaction, query: WorkSummaryQuery): Promise<PeriodSummary> {
+  async workSummary(
+    tx: Transaction,
+    query: WorkSummaryQuery,
+    options: WorkSummaryOptions = {},
+  ): Promise<PeriodSummary> {
+    const workingDaysPerWeek = options.workingDaysPerWeek ?? DEFAULT_WORKING_DAYS_PER_WEEK;
+    const overtimeModel = options.overtimeModel ?? DEFAULT_OVERTIME_MODEL;
     const contractedPerWeek = await this.contractedMinutesPerWeek(
       tx,
       query.tenantId,
@@ -141,10 +168,15 @@ export class WorkforceBackend {
     const entries = await this.entriesInPeriod(tx, query);
     const sessions = projectWorkSessions(entries);
     const periodDays = (Date.parse(query.period.end) - Date.parse(query.period.start)) / MS_PER_DAY;
-    return summarisePeriod(sessions, query.period, {
-      periodMinutes: Math.round((contractedPerWeek * periodDays) / 7),
-      dailyTargetMinutes: dailyContractedTargetMinutes(contractedPerWeek),
-    });
+    return summarisePeriod(
+      sessions,
+      query.period,
+      {
+        periodMinutes: Math.round((contractedPerWeek * periodDays) / 7),
+        dailyTargetMinutes: dailyContractedTargetMinutes(contractedPerWeek, workingDaysPerWeek),
+      },
+      overtimeModel,
+    );
   }
 
   /**

@@ -18,8 +18,10 @@ export type {
   ClockEventInput,
   CorrectionApprovalInput,
   CorrectionRequestInput,
+  WorkSummaryOptions,
   WorkSummaryQuery,
 } from "./clocking.js";
+export type { WorkTimeRuleset } from "./ruleset.js";
 export {
   dailyContractedTargetMinutes,
   localWallClock,
