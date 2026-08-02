@@ -156,4 +156,23 @@ describe("publishRoster", () => {
     );
     expect(code).toBe("roster.already_published");
   });
+
+  it("detaches — never deletes — a shift when its roster version is deleted (ON DELETE set null)", async () => {
+    // Planning data is discardable: deleting a version SET NULLs the attached shifts' roster_version_id
+    // rather than blocking (restrict) or cascading the shifts away. Attach via publish, delete the
+    // version, then assert the shift row SURVIVES with roster_version_id back to null. Changing the FK
+    // to `restrict` fails the delete here; changing it to `cascade` fails the survives-assertion.
+    const versionId = await insertRosterVersion(suite.db, { tenantId, locationId });
+    const shiftId = await insertDraftShift(suite.db, { tenantId, personId, locationId });
+    await run((tx) => backend.publishRoster(tx, { tenantId, versionId }));
+    expect(await attachedVersion(shiftId)).toBe(versionId);
+
+    await suite.db.execute(sql`delete from roster_versions where id = ${versionId}`);
+
+    const rows = await suite.db.execute<{ id: string; roster_version_id: string | null }>(
+      sql`select id, roster_version_id from shifts where id = ${shiftId}`,
+    );
+    expect(rows.rows).toHaveLength(1);
+    expect(rows.rows[0]!.roster_version_id).toBeNull();
+  });
 });

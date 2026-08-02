@@ -14,10 +14,12 @@ import { persons } from "./persons.js";
 
 /**
  * A roster version's lifecycle. A `draft` is edited freely; publishing flips it to `published` and
- * stamps `published_at` (`publishRoster`, ../clocking.ts); a later publish for the same period
- * `supersedes` the earlier one. English tokens — `draft`/`published`/`superseded` — because this is a
- * GENERIC package the english-only guard scans; the Spanish `borrador`/`publicado` rendering, if ever
- * needed, belongs to packages/workforce-es.
+ * stamps `published_at` (`publishRoster`, ../clocking.ts). `superseded` is a value RESERVED for a
+ * future lifecycle step — a later publish marking an earlier published version stale — and is NOT
+ * written by this slice: D2.1 delivers draft→published only, and `publishRoster` never supersedes a
+ * prior version (a recorded follow-up). English tokens — `draft`/`published`/`superseded` — because
+ * this is a GENERIC package the english-only guard scans; the Spanish `borrador`/`publicado`
+ * rendering, if ever needed, belongs to packages/workforce-es.
  *
  * A pgEnum rather than a text CHECK, matching persons' `personStatus`/`workforceRole` precedent: the
  * three values are settled, and one declaration yields both the TypeScript union and the DB
@@ -33,8 +35,9 @@ export const rosterVersionStatus = pgEnum("roster_version_status", [
  * A published (or draft) snapshot of a location's schedule for a date period — PLANNING data, NOT the
  * legal record. Unlike `time_entries` (the immutable registro de jornada), a roster version is
  * ordinary mutable data: the app role holds SELECT, INSERT, UPDATE and DELETE
- * (drizzle/0008_scheduling_rls.sql), a draft is discarded, a superseded one is kept beside the new
- * one. No append-only trigger and no hash chain: no Spanish statute requires a *schedule* to be
+ * (drizzle/0008_scheduling_rls.sql) — a draft is edited or discarded, a published version can be
+ * re-stamped or removed. No append-only trigger and no hash chain: no Spanish statute requires a
+ * *schedule* to be
  * tamper-evident — that obligation (art. 34.9) is on the record of hours WORKED, which `time_entries`
  * satisfies alone (design 2026-07-22 §... / plan 2026-08-02-workforce-d2-scheduling §2.1). Freezing
  * published snapshots for labour-dispute purposes would be an additive owner decision, not a legal
