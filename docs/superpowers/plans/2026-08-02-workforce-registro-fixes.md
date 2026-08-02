@@ -157,11 +157,18 @@ instruction to fix rather than defer, these landed in this PR too:
 - **Fix E — per-person serialization for the clockIn/clockOut TOCTOU.** `currentState` was an
   unlocked SELECT before `appendToChain`'s per-location head lock, so two concurrent same-person
   clock-ins could both read "out" and append a double-`in`, which the projection resolves by keeping
-  the second — undercounting worked time in a legal record. Fixed with a `SELECT … FOR UPDATE` on the
-  `persons` row (a `lockPerson` helper) at the head of all four clock methods, before the state read;
-  lock order is persons → `workforce_chains` head, uniform across methods, so no deadlock. Proven by a
-  REAL-Postgres concurrency test (PGlite can't show it — single backend), RED-as-bug first (both
-  clock-ins committed) and load-bearing by deletion.
+  the second — undercounting worked time in a legal record. Fixed with a `SELECT … FOR NO KEY UPDATE`
+  on the `persons` row (a `lockPerson` helper) at the head of all four clock methods, before the state
+  read. `FOR NO KEY UPDATE`, not `FOR UPDATE`: the correction paths (`requestCorrection`/
+  `approveCorrection` → `appendToChain`) lock the chain head FIRST and then take `FOR KEY SHARE` on
+  `persons` via the `time_entries`→`persons` FKs on INSERT — the OPPOSITE order — so a plain
+  `FOR UPDATE` on the clock path (which conflicts with `FOR KEY SHARE`) ABBA-deadlocks a concurrent
+  clock-in + same-person correction (reproduced on `postgres:18`; the first draft of this fix shipped
+  that deadlock and a false "no deadlock" comment, caught by the scoped re-review). `FOR NO KEY UPDATE`
+  does not conflict with `FOR KEY SHARE` (no ABBA) but still self-conflicts, so two same-person
+  clock-ins still serialize (TOCTOU closed). Proven by REAL-Postgres concurrency tests (PGlite can't
+  show it — single backend): clock-vs-clock serializes, clock-vs-correction does not deadlock, both
+  load-bearing by reverting to `FOR UPDATE`.
 
 **Why these were fixed here, not deferred to D2** (the deferral this section originally proposed): the
 review checked `feat/workforce-d2-scheduling` directly — D2 adds new code to `clocking.ts`/
