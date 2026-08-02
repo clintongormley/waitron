@@ -130,7 +130,7 @@ describe("comparePlannedVsActual", () => {
     });
   });
 
-  it("sums a turno partido's shifts and takes the EARLIEST planned start for lateness", () => {
+  it("sums the shifts of a split shift and takes the EARLIEST planned start for lateness", () => {
     const [row] = comparePlannedVsActual(
       [
         shift("p1", "2026-01-05T09:00:00Z", "2026-01-05T13:00:00Z"), // 240

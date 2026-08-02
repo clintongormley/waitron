@@ -42,7 +42,7 @@ const FORBIDDEN_LIMITS: Array<[value: number, field: string]> = [
   [1320, "nightWindowStartMinute"],
 ];
 
-describe("the roster-guardrail engine hard-codes no convenio limit", () => {
+describe("the roster-guardrail engine hard-codes no ruleset limit", () => {
   const source = Object.values(engine)[0];
 
   it("resolves exactly one engine source file", () => {

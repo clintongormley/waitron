@@ -205,7 +205,7 @@ function byPersonSortedByStart(shifts: readonly PlannedShift[]): Map<string, Pla
 
 /** One jornada's boundary shifts: the earliest start and latest end among a person's shifts that
  * local day, with the shift ids that carry them. */
-interface Jornada {
+interface Workday {
   firstStart: string;
   firstShiftId: string;
   lastEnd: string;
@@ -228,30 +228,30 @@ function checkInterShiftRest(
 ): RestTooShortBreach[] {
   const breaches: RestTooShortBreach[] = [];
   for (const [personId, shifts] of byPerson) {
-    const jornadas = new Map<string, Jornada>();
+    const workdays = new Map<string, Workday>();
     for (const s of shifts) {
       const day = localDate(s.startsAt, s.startsOffsetMinutes);
-      const jornada = jornadas.get(day);
-      if (jornada === undefined) {
+      const workday = workdays.get(day);
+      if (workday === undefined) {
         // `byPerson` is pre-sorted ascending by start, so the FIRST shift seen for a day-key is that
         // jornada's earliest start — `firstStart`/`firstShiftId` are therefore set once and never
         // lowered. `lastEnd` still needs the max below: an earlier-starting shift may end later (a
         // long opening shift over a short evening one), so end order is not start order.
-        jornadas.set(day, {
+        workdays.set(day, {
           firstStart: s.startsAt,
           firstShiftId: s.shiftId,
           lastEnd: s.endsAt,
           lastShiftId: s.shiftId,
         });
-      } else if (Date.parse(s.endsAt) > Date.parse(jornada.lastEnd)) {
-        jornada.lastEnd = s.endsAt;
-        jornada.lastShiftId = s.shiftId;
+      } else if (Date.parse(s.endsAt) > Date.parse(workday.lastEnd)) {
+        workday.lastEnd = s.endsAt;
+        workday.lastShiftId = s.shiftId;
       }
     }
-    const days = [...jornadas.keys()].sort((a, b) => a.localeCompare(b));
+    const days = [...workdays.keys()].sort((a, b) => a.localeCompare(b));
     for (let i = 1; i < days.length; i += 1) {
-      const previous = jornadas.get(days[i - 1]!)!;
-      const current = jornadas.get(days[i]!)!;
+      const previous = workdays.get(days[i - 1]!)!;
+      const current = workdays.get(days[i]!)!;
       const restMinutes = minutesBetween(previous.lastEnd, current.firstStart);
       if (restMinutes < ruleset.minInterShiftRestMinutes) {
         breaches.push({

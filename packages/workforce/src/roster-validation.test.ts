@@ -126,7 +126,7 @@ describe("validateRoster — inter-shift rest (art. 34.3)", () => {
     expect(ofKind(breaches, "rest_too_short")).toHaveLength(0);
   });
 
-  it("does not flag a same-day split shift (turno partido) under a real inter-shift floor", () => {
+  it("does not flag a same-day split shift under a real inter-shift floor", () => {
     // A turno partido — 12:00–16:00 then 20:00–24:00 — is ONE jornada with an intra-day break, NOT
     // two jornadas 4h apart. art. 34.3's minimum rest is between working DAYS, so the 16:00→20:00
     // gap must not raise rest_too_short even under the full 12h (720-min) floor. This is the case the
@@ -141,7 +141,7 @@ describe("validateRoster — inter-shift rest (art. 34.3)", () => {
     expect(ofKind(breaches, "rest_too_short")).toHaveLength(0);
   });
 
-  it("measures inter-jornada rest from the LAST shift of one day to the FIRST of the next", () => {
+  it("measures inter-workday rest from the LAST shift of one day to the FIRST of the next", () => {
     // Day D is a split shift ending 24:00; day D+1 starts 06:00 → 6h inter-jornada rest, under 12h.
     // The breach must name the LATE shift (20:00–24:00) as the previous shift — proving the rest is
     // measured from the DAY'S last end, and the intra-day 16:00→20:00 gap is ignored.
@@ -183,7 +183,7 @@ describe("validateRoster — max ordinary daily minutes (art. 34.3)", () => {
     ]);
   });
 
-  it("sums a turno partido (two shifts on the same local day) before comparing", () => {
+  it("sums a split shift (two shifts on the same local day) before comparing", () => {
     const breaches = validateRoster(
       [
         shift("p1", "2026-01-05T09:00:00Z", "2026-01-05T14:00:00Z"), // 5h
@@ -424,7 +424,7 @@ describe("validateRoster — night window (art. 36)", () => {
     expect(ofKind(startsAtEnd, "night_work")).toHaveLength(0);
   });
 
-  it("handles a NON-wrapping night window (e.g. a convenio defining night as 00:00–06:00)", () => {
+  it("handles a NON-wrapping night window (e.g. a ruleset defining night as 00:00–06:00)", () => {
     // start (0) < end (360), so the window does not cross midnight. A 02:00–08:00 shift overlaps it
     // in [02:00, 06:00) = 240 min — exercising the non-wrapping branch of the window computation.
     const breaches = validateRoster(
