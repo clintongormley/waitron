@@ -359,8 +359,13 @@ export class WorkforceBackend {
     },
   ): Promise<string> {
     // A correction is an append like any other — it rides the SAME location chain as the clock
-    // events it supersedes, so it cannot dodge the tamper-evidence (design §5). Its actor is the
-    // recorder; its content carries the correction columns.
+    // events it supersedes, so it cannot dodge the tamper-evidence (design §5). The chain hash
+    // commits the correction's OWN content too — its reason, its accountable actor and any capturing
+    // till (chain-hash.ts's `canonicalString`) — so a party past the immutability floor (the REVOKE +
+    // reject_mutation trigger) that rewrites the reason or the actor breaks `verifyChain`, not just
+    // one that reorders or deletes rows. The actor is written to BOTH `recorded_by_person_id` (the
+    // operator) and `correction_actor_id` (the accountable actor), and both are hashed, so the actor
+    // no longer rides only on the coincidence that the two are the same person here.
     const { id } = await appendToChain(tx, params.tenantId, params.locationId, {
       personId: params.personId,
       entryKind: "correction",

@@ -38,6 +38,14 @@ function inputAt(at: string): TimeEntryAppend {
   };
 }
 
+/** Seeds a till at a location so a captured event can attribute to it. Returns its id. */
+async function seedTill(location: string): Promise<string> {
+  const { rows } = await pg.db.execute<{ id: string }>(sql`
+    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${location}, 'Till 1')
+    returning id`);
+  return rows[0]!.id;
+}
+
 /** Reads a location's whole chain back as verifiable rows, ordered by chain position. */
 async function readChain(location: string): Promise<VerifiableEntry[]> {
   const { rows } = await pg.db.execute<{
@@ -48,15 +56,19 @@ async function readChain(location: string): Promise<VerifiableEntry[]> {
     event_at: string;
     event_offset_minutes: number;
     recorded_by_person_id: string;
+    captured_by_till_id: string | null;
     corrects_entry_id: string | null;
+    correction_reason: string | null;
     correction_status: string | null;
+    correction_actor_id: string | null;
     prev_entry_hash: string | null;
     entry_hash: string;
     is_first_entry: boolean;
   }>(sql`
     select sequence_no, person_id, location_id, entry_kind,
       to_char(event_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as event_at,
-      event_offset_minutes, recorded_by_person_id, corrects_entry_id, correction_status,
+      event_offset_minutes, recorded_by_person_id, captured_by_till_id, corrects_entry_id,
+      correction_reason, correction_status, correction_actor_id,
       prev_entry_hash, entry_hash, is_first_entry
     from time_entries where tenant_id = ${tenantId} and location_id = ${location}
     order by sequence_no`);
@@ -68,8 +80,11 @@ async function readChain(location: string): Promise<VerifiableEntry[]> {
     eventAt: r.event_at,
     eventOffsetMinutes: r.event_offset_minutes,
     recordedByPersonId: r.recorded_by_person_id,
+    capturedByTillId: r.captured_by_till_id,
     correctsEntryId: r.corrects_entry_id,
+    correctionReason: r.correction_reason,
     correctionStatus: r.correction_status,
+    correctionActorId: r.correction_actor_id,
     prevEntryHash: r.prev_entry_hash,
     entryHash: r.entry_hash,
     isFirstEntry: r.is_first_entry,
@@ -239,6 +254,74 @@ describe("appendToChain", () => {
     ).catch((caught: unknown) => caught);
     expect(error).not.toBeInstanceOf(AppError);
     expect(error).toMatchObject({ code: "23503" });
+  });
+});
+
+describe("appendToChain commits the correction and capture content to the hash", () => {
+  // The tamper-evidence chain must protect the LEGAL-RECORD content it claims to (art. 34.9): the
+  // capturing till, the correction's reason, and the accountable actor. These are the record's own
+  // attribution, not our metadata (unlike the fiscal `entorno`, CLAUDE.md §5), so they belong in the
+  // hash. Each tamper below is applied to the READ-BACK row while its stored `entry_hash` is left
+  // untouched — exactly what a party past the immutability floor (the REVOKE + reject_mutation
+  // trigger) would leave behind by UPDATE-ing a column but being unable to recompute the chain.
+
+  /** A base `in` captured by a till, then a correction carrying reason + actor, read back as a chain. */
+  async function chainWithCorrection(tillId: string): Promise<VerifiableEntry[]> {
+    const base = await pg.db.transaction((tx) =>
+      appendToChain(tx, tenantId, locationId, {
+        personId,
+        entryKind: "in",
+        eventAt: "2026-01-05T09:00:00Z",
+        eventOffsetMinutes: 0,
+        recordedByPersonId: personId,
+        capturedByTillId: tillId,
+      }),
+    );
+    await pg.db.transaction((tx) =>
+      appendToChain(tx, tenantId, locationId, {
+        personId,
+        entryKind: "correction",
+        eventAt: "2026-01-05T18:00:00Z",
+        eventOffsetMinutes: 0,
+        recordedByPersonId: personId,
+        correctsEntryId: base.id,
+        correctionReason: "forgot to clock out",
+        correctionStatus: "requested",
+        correctionActorId: personId,
+      }),
+    );
+    return readChain(locationId);
+  }
+
+  it("re-verifies a till + reason + actor round-trip untampered (the negative control)", async () => {
+    const tillId = await seedTill(locationId);
+    // The read-back projects the till, the reason and the actor, so the recompute matches the stored
+    // hash — proving insert-time hashing and the read-back mapping agree on all three columns.
+    expect(verifyChain(await chainWithCorrection(tillId))).toEqual({ ok: true });
+  });
+
+  it("flags a correction whose stored reason was rewritten (teeth-test)", async () => {
+    const chain = await chainWithCorrection(await seedTill(locationId));
+    const tampered = [chain[0]!, { ...chain[1]!, correctionReason: "approved overtime" }];
+    expect(verifyChain(tampered)).toEqual({ ok: false, reason: "hash_mismatch", sequenceNo: 2 });
+  });
+
+  it("flags a correction whose stored actor was swapped (teeth-test)", async () => {
+    const chain = await chainWithCorrection(await seedTill(locationId));
+    const tampered = [
+      chain[0]!,
+      { ...chain[1]!, correctionActorId: "99999999-9999-4999-8999-999999999999" },
+    ];
+    expect(verifyChain(tampered)).toEqual({ ok: false, reason: "hash_mismatch", sequenceNo: 2 });
+  });
+
+  it("flags a base event whose stored capturing till was swapped (teeth-test)", async () => {
+    const chain = await chainWithCorrection(await seedTill(locationId));
+    const tampered = [
+      { ...chain[0]!, capturedByTillId: "99999999-9999-4999-8999-999999999999" },
+      chain[1]!,
+    ];
+    expect(verifyChain(tampered)).toEqual({ ok: false, reason: "hash_mismatch", sequenceNo: 1 });
   });
 });
 

@@ -58,15 +58,19 @@ async function readChain(location: string): Promise<VerifiableEntry[]> {
     event_at: string;
     event_offset_minutes: number;
     recorded_by_person_id: string;
+    captured_by_till_id: string | null;
     corrects_entry_id: string | null;
+    correction_reason: string | null;
     correction_status: string | null;
+    correction_actor_id: string | null;
     prev_entry_hash: string | null;
     entry_hash: string;
     is_first_entry: boolean;
   }>(sql`
     select sequence_no, person_id, location_id, entry_kind,
       to_char(event_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as event_at,
-      event_offset_minutes, recorded_by_person_id, corrects_entry_id, correction_status,
+      event_offset_minutes, recorded_by_person_id, captured_by_till_id, corrects_entry_id,
+      correction_reason, correction_status, correction_actor_id,
       prev_entry_hash, entry_hash, is_first_entry
     from time_entries where location_id = ${location} order by sequence_no`);
   return rows.map((r) => ({
@@ -77,8 +81,11 @@ async function readChain(location: string): Promise<VerifiableEntry[]> {
     eventAt: r.event_at,
     eventOffsetMinutes: r.event_offset_minutes,
     recordedByPersonId: r.recorded_by_person_id,
+    capturedByTillId: r.captured_by_till_id,
     correctsEntryId: r.corrects_entry_id,
+    correctionReason: r.correction_reason,
     correctionStatus: r.correction_status,
+    correctionActorId: r.correction_actor_id,
     prevEntryHash: r.prev_entry_hash,
     entryHash: r.entry_hash,
     isFirstEntry: r.is_first_entry,
