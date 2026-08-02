@@ -14,7 +14,10 @@ Two companion documents, deliberately not duplicated here:
   §2** — the twenty numbered sub-projects. That table is the strategy and does not change often.
   This file is the current state and changes constantly.
 
----
+**Docs land direct to `main` (2026-08-02):** the `main protection` ruleset grants the Repository-admin
+role a bypass (mode "always"), so a docs-only change can be pushed straight to `main` — no PR, no CI
+wait. Branch, `commit -s`, fast-forward `main`, push. Reserve it for docs; feature/code still goes
+through a PR (where CI + Copilot run). The other rules (no force-push, no deletion) still apply.
 
 ## Current direction
 
