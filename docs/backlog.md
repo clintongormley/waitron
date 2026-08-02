@@ -104,8 +104,8 @@ decided the **topology only**; its §14 defers the buildable pieces, each to its
   (turn RLS off on the replica copies + native replication) strips the fiscal tables' defense-in-depth
   and is declined deliberately. **The app-level sync layer is now being designed** (this session,
   building on the held first-draft
-  [2026-08-01-sif-sync-replication-protocol-design.md](superpowers/specs/2026-08-01-sif-sync-replication-protocol-design.md),
-  branch `docs/sif-sync-protocol-design`, still held). Carry-forwards for that design: its ownership
+  `2026-08-01-sif-sync-replication-protocol-design.md` (on branch `docs/sif-sync-protocol-design`,
+  still held — referenced as text, not a link, since it is not on `main`). Carry-forwards for that design: its ownership
   map omits `sales` and `working_orders` (NOT-NULL FK targets of the apply paths), so it needs a
   "parent rows replicate before their referents" apply-ordering rule; and one prototype gate remains —
   whether a non-superuser can CONSUME a logical-decoding slot (the "native decode + app-level apply"
