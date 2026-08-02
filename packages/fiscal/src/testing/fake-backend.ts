@@ -27,7 +27,7 @@ export type FakeFiscalRecord = {
   tillId: string;
   saleId: string;
   sequence: number;
-  kind: "sale" | "void" | "correction";
+  kind: "sale" | "void" | "correction" | "substitution";
   invoiceNumber: number;
   total: string;
   state: string;
@@ -217,6 +217,44 @@ export class FakeFiscalBackend implements FiscalBackend {
     });
   }
 
+  async recordSubstitution(
+    tx: Transaction,
+    sale: SaleForFiscalRecord,
+    substitution: { substitutedSaleIds: SaleId[] },
+  ): Promise<FiscalRecordRef> {
+    // A substitution replaces one or more prior simplified sales (spec §4). Two preconditions,
+    // mirroring recordCorrection's single one extended to the N:1 fan-out: the list must name at
+    // least one sale, and every sale it names must already have a fiscal record. The real backend
+    // additionally asserts each replaced sale is a simplified ticket; this fake carries no
+    // tipo-de-factura information, so — like recordCorrection — it checks only existence.
+    if (substitution.substitutedSaleIds.length === 0) {
+      throw new Error("FakeFiscalBackend.recordSubstitution: substitutedSaleIds must not be empty");
+    }
+    for (const substitutedSaleId of substitution.substitutedSaleIds) {
+      const rows = await tx.execute<{ record_id: string }>(sql`
+        select record_id from fake_fiscal_records
+        where sale_id = ${substitutedSaleId} and kind = 'sale'
+        limit 1
+      `);
+      if (rows.rows[0] === undefined) {
+        throw new AppError("fiscal.sale_not_recorded", { saleId: substitutedSaleId });
+      }
+    }
+    // Like a correction, a substitution carries its OWN data (its own saleId, invoice number and
+    // positive total), so it is appended from `sale`, not from the replaced records' columns. The
+    // replaced 'sale' records are only read above, never rewritten — nothing here annuls them.
+    return this.append(tx, {
+      tenantId: sale.tenantId,
+      tillId: sale.tillId,
+      saleId: sale.saleId,
+      kind: "substitution",
+      invoiceNumber: sale.invoiceNumber,
+      total: sale.total,
+      issuedAt: sale.issuedAt,
+      offsetMinutes: sale.offsetMinutes,
+    });
+  }
+
   async checkIntegrity(
     tx: Transaction,
     tenantId: TenantId,
@@ -374,7 +412,7 @@ export class FakeFiscalBackend implements FiscalBackend {
       tenantId: string;
       tillId: string;
       saleId: string;
-      kind: "sale" | "void" | "correction";
+      kind: "sale" | "void" | "correction" | "substitution";
       invoiceNumber: number;
       total: string;
       issuedAt: Date;

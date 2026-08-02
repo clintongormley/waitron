@@ -315,6 +315,80 @@ describe("recordCorrection", () => {
   });
 });
 
+describe("recordSubstitution", () => {
+  beforeEach(() =>
+    suite.db.transaction((tx) => backend.registerTill(tx, TILL_A, { tenantId: TENANT })),
+  );
+
+  it("refuses to substitute a sale that was never recorded", async () => {
+    // Mirrors recordCorrection's precondition, extended to the N:1 fan-out: a substitution replaces
+    // one or more prior sales (spec §4), and there is nothing to substitute if a named sale was
+    // never recorded. A stub that recorded regardless would let a core test skip the substituted
+    // sale entirely and still pass, right up to a real backend refusing.
+    const unrecorded = saleId("00000000-0000-0000-0000-000000000000");
+    try {
+      await suite.db.transaction((tx) =>
+        backend.recordSubstitution(tx, saleOn(TILL_A, 2), { substitutedSaleIds: [unrecorded] }),
+      );
+      expect.unreachable("recordSubstitution should have thrown");
+    } catch (error) {
+      expect((error as AppError).code).toBe("fiscal.sale_not_recorded");
+    }
+  });
+
+  it("refuses an empty substitutedSaleIds list", async () => {
+    // An F3 substitutes at least one ticket; a list of none has nothing to substitute and would
+    // file a full invoice naming nothing it replaces.
+    await expect(
+      suite.db.transaction((tx) =>
+        backend.recordSubstitution(tx, saleOn(TILL_A, 2), { substitutedSaleIds: [] }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("records the substitution as its own new record referencing the substituted sales, without annulling them", async () => {
+    // A substitution is a NEW full-invoice record carrying its OWN (positive) data — unlike a void,
+    // which has none of its own — that interleaves after the tickets it replaces in generation
+    // order. The replaced tickets are NEITHER edited NOR annulled: only the substitution record is
+    // appended, and both original 'sale' records stay exactly where they were.
+    const t1 = saleOn(TILL_A, 1);
+    const t2 = saleOn(TILL_A, 2);
+    await suite.db.transaction((tx) => backend.recordSale(tx, t1));
+    await suite.db.transaction((tx) => backend.recordSale(tx, t2));
+    const substitute = { ...saleOn(TILL_A, 3), total: decimal("24.20") };
+
+    const ref = await suite.db.transaction((tx) =>
+      backend.recordSubstitution(tx, substitute, {
+        substitutedSaleIds: [t1.saleId, t2.saleId],
+      }),
+    );
+
+    const records = await backend.recordsFor(TILL_A);
+    expect(records.map((r) => r.kind)).toEqual(["sale", "sale", "substitution"]);
+    expect(records.map((r) => r.sequence)).toEqual([1, 2, 3]);
+    expect(records[2].saleId).toBe(substitute.saleId);
+    expect(records[2].total).toBe("24.20");
+    expect(ref.recordId).toBe(records[2].recordId);
+    expect(ref.state).toBe("pending");
+  });
+
+  it("leaves no record behind when the transaction rolls back", async () => {
+    // The atomicity property, for substitutions too: the interface takes a transaction handle so a
+    // substitution and any surrounding work commit or roll back together.
+    const t1 = saleOn(TILL_A, 1);
+    await suite.db.transaction((tx) => backend.recordSale(tx, t1));
+    await expect(
+      suite.db.transaction(async (tx) => {
+        await backend.recordSubstitution(tx, saleOn(TILL_A, 2), {
+          substitutedSaleIds: [t1.saleId],
+        });
+        throw new Error("rolled back by the caller");
+      }),
+    ).rejects.toThrow();
+    expect((await backend.recordsFor(TILL_A)).map((r) => r.kind)).toEqual(["sale"]);
+  });
+});
+
 describe("reconcile", () => {
   beforeEach(() =>
     suite.db.transaction((tx) => backend.registerTill(tx, TILL_A, { tenantId: TENANT })),

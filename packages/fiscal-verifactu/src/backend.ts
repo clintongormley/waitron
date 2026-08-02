@@ -9,6 +9,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { AppError, sumDecimals } from "@waitron/shared";
 import type { SaleId, TenantId, TillId } from "@waitron/shared";
 import type {
+  Counterparty,
   DrainResult,
   FiscalBackend,
   FiscalRecordRef,
@@ -23,8 +24,10 @@ import { buildQrPayload } from "@waitron/verifactu";
 import type {
   AltaInput,
   AnulacionInput,
+  Destinatario,
   DetalleDesgloseInput,
   Environment,
+  IDFacturaARInput,
   RegistroAlta,
   SiNo,
   SistemaInformatico,
@@ -538,6 +541,162 @@ export class VerifactuBackend implements FiscalBackend {
   }
 
   /**
+   * Records an F3 canje — a full invoice issued in substitution of one or more prior SIMPLIFIED
+   * tickets (F2), at a customer's later request for a proper invoice. Structurally a hybrid of
+   * `recordSale` (it assembles an `AltaInput` from the F3's OWN `sale`: its new number, its POSITIVE
+   * total and breakdown, and its recipient) and `recordCorrection` (it reads each ORIGINAL alta by
+   * `saleId` to point at) — but LOOPED over N tickets, and emitting `FacturasSustituidas` instead of
+   * `FacturasRectificadas`. An F3 is an alta, NOT a rectificativa and NOT an anulación: it takes the
+   * next `secuencia`, hashes its own huella over the same eight fields (`TipoFactura = F3` and the
+   * POSITIVE `ImporteTotal`/`CuotaTotal` flow in), and gets its own `pendiente` sidecar — everything
+   * `recordSale`'s path does. `chain.ts` needs no change.
+   *
+   * **How it guarantees the substituted tickets are not re-declared (findings §10.2, the crux):** the
+   * substituted tickets' own alta registros are ONLY READ — never rewritten, never annulled. The F3
+   * is a NEW alta whose `TipoFactura=F3` + `FacturasSustituidas` block is what tells AEAT this amount
+   * was already declared when the tickets were issued, so AEAT does not re-count it. We do not
+   * suppress or negate anything; there is no anulación in this flow at all. There is NO
+   * `TipoRectificativa`, NO `FacturasRectificadas`, NO `ImporteRectificacion` — those are the
+   * rectificativa path's, a different operation.
+   *
+   * The `entorno` invariant (§5) is preserved exactly as `recordSale`/`recordCorrection`: it travels
+   * BESIDE `input` in the `PendingRegistro`, never inside it, so our own metadata never reaches
+   * `computeHuella`.
+   */
+  async recordSubstitution(
+    tx: Transaction,
+    sale: SaleForFiscalRecord,
+    substitution: { substitutedSaleIds: SaleId[] },
+  ): Promise<FiscalRecordRef> {
+    // An F3 substitutes at least one ticket; an empty list would file a full invoice naming nothing
+    // it replaces. Refused before any read — a caller precondition `packages/core` (Slice 4)
+    // enforces, defended here too since a wrong filing is unrepairable (§5).
+    if (substitution.substitutedSaleIds.length === 0) {
+      throw new Error(
+        "VerifactuBackend.recordSubstitution: substitutedSaleIds must not be empty — an F3 must name at least one ticket it substitutes",
+      );
+    }
+    // A ticket may appear at most once: a repeated id would emit a DOUBLED FacturasSustituidas entry
+    // into an unrepairable AEAT filing (§5), naming the same ticket twice. "The caller passes distinct
+    // ids" is a property of the caller, not this code (CLAUDE.md §3) — rejected here at the last layer
+    // before AEAT, a plain Error like the other preconditions above (core/Slice 4 owns the friendlier
+    // dedup/validation).
+    if (new Set(substitution.substitutedSaleIds).size !== substitution.substitutedSaleIds.length) {
+      throw new Error(
+        "VerifactuBackend.recordSubstitution: substitutedSaleIds must not contain duplicates — a ticket may be substituted at most once per F3",
+      );
+    }
+    // A full invoice must ALWAYS name its recipient (findings §10.2: "siempre debe llevar el
+    // destinatario"). `SaleForFiscalRecord.counterparty` is nullable for the ordinary simplified
+    // sale; an F3 is the one path that requires it. Captured into a const so the narrowing survives
+    // the awaits below (a mutable property re-widens to `Counterparty | null` after an await).
+    const { counterparty } = sale;
+    if (counterparty === null) {
+      throw new Error(
+        "VerifactuBackend.recordSubstitution: an F3 must name its recipient, but the sale carried no counterparty",
+      );
+    }
+    // Built before the ledger reads so a recipient shape this operation cannot yet express is refused
+    // up front (see `buildDestinatarios`).
+    const destinatarios = this.buildDestinatarios(counterparty);
+
+    // Each substituted ticket's alta, read exactly as `recordCorrection` reads the alta it corrects
+    // (same `sale_id` + `tipo_registro = 'alta'` filter, same four columns) — its identity triple
+    // becomes one `FacturasSustituidas` entry, and its `tipo_factura` gates that only an F2 may be
+    // exchanged. Looped: one F3 may substitute many tickets (the N:1 fan-out, findings §10.2).
+    const substituidas: IDFacturaARInput[] = [];
+    for (const substitutedSaleId of substitution.substitutedSaleIds) {
+      const { rows } = await tx.execute<OriginalAltaForCorrection>(sql`
+        select id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_factura
+        from registros_facturacion
+        where sale_id = ${substitutedSaleId} and tipo_registro = 'alta'
+        limit 1
+      `);
+      const original = rows[0];
+      if (original === undefined) {
+        throw new AppError("fiscal.sale_not_recorded", { saleId: substitutedSaleId });
+      }
+      // A canje exchanges simplified tickets only (F2 → F3). Substituting a full invoice (F1) is not
+      // a canje; asserting rather than mis-filing an unrepairable F3 (§5), the same shape
+      // `recordCorrection`'s F2-only gate uses.
+      if (original.tipo_factura !== "F2") {
+        throw new AppError("fiscal.substitution_unsupported", {
+          saleId: substitutedSaleId,
+          // An alta always carries a non-null `tipo_factura` (the `tipo_registro = 'alta'` filter
+          // excludes anulaciones, the only NULL case) — a cast, like `recordCorrection`'s own read.
+          tipoFactura: original.tipo_factura as string,
+        });
+      }
+      substituidas.push({
+        IDEmisorFactura: original.id_emisor_factura,
+        NumSerieFactura: original.num_serie_factura,
+        // The ticket's stored calendar day, reconstructed EXACTLY for any offset — the same algebraic
+        // offset-cancellation `recordCorrection`/`recordVoid` document and prove: the `date` column
+        // dropped the offset that produced it, and `buildAltaRecord`/`formatIDFacturaAR` re-renders
+        // this Date with THIS F3's own `offsetMinutes`, so anchoring at midnight-UTC minus that offset
+        // lands the render back on the exact stored day regardless of the offset's sign or magnitude.
+        FechaExpedicionFactura: new Date(
+          Date.parse(`${original.fecha_expedicion_factura}T00:00:00Z`) -
+            sale.offsetMinutes * 60_000,
+        ),
+      });
+    }
+
+    const sif = await currentSif(tx, sale.tenantId, sale.tillId);
+    const tenant = await this.legalNameFor(tx, sale.tenantId);
+
+    const desglose: DetalleDesgloseInput[] = sale.vatBreakdown.map((line) => ({
+      BaseImponibleOimporteNoSujeto: line.base,
+      TipoImpositivo: line.rate,
+      CuotaRepercutida: line.tax,
+      // Same S1 (sujeta y no exenta) qualification `recordSale`/`recordCorrection` apply — an F3
+      // restates the substituted operations' own breakdown, positive.
+      CalificacionOperacion: "S1",
+    }));
+    const cuotaTotal = sumDecimals(sale.vatBreakdown.map((line) => line.tax));
+
+    const input: Omit<AltaInput, "Encadenamiento"> = {
+      IDEmisorFactura: sif.nif,
+      // The F3's OWN new number/date, like `recordSale` — a canje is a new full invoice from its own
+      // series (§5), not a copy of a ticket it replaces.
+      NumSerieFactura: formatInvoiceNumber(sale.seriesCode, sale.invoiceNumber),
+      FechaExpedicionFactura: sale.issuedAt,
+      NombreRazonEmisor: tenant.legalName,
+      TipoFactura: "F3",
+      FacturasSustituidas: substituidas,
+      Destinatarios: destinatarios,
+      // No TipoRectificativa / FacturasRectificadas / ImporteRectificacion: those belong to the
+      // rectificativa (R5) path, a different operation — an F3 is not a rectificativa (§10.2).
+      DescripcionOperacion: sale.descriptionOfOperation,
+      Desglose: desglose,
+      CuotaTotal: cuotaTotal,
+      ImporteTotal: sale.total,
+      SistemaInformatico: this.buildSistemaInformatico(sif, tenant.legalName),
+      generadoEn: sale.issuedAt,
+      offsetMinutes: sale.offsetMinutes,
+    };
+
+    const appended = await appendToChain(
+      tx,
+      sale.tenantId,
+      sale.tillId,
+      { tipo: "alta", saleId: sale.saleId, entorno: this.deploymentEnvironment, input },
+      sif,
+    );
+
+    await tx.insert(envios).values({ registroId: appended.id, tenantId: sale.tenantId });
+
+    return {
+      backend: BACKEND_ID,
+      recordId: appended.id,
+      state: "pending",
+      issuedAt: sale.issuedAt,
+      offsetMinutes: sale.offsetMinutes,
+      verificationUrl: await this.qrPayloadFor(tx, appended.id),
+    };
+  }
+
+  /**
    * Delegates to `verifyChain` (art. 7.i). `tenantId` is supplied by the caller (always inside a
    * `withTenant`-scoped transaction), so there is no `tenants`/`tills` lookup to recover it.
    */
@@ -625,6 +784,33 @@ export class VerifactuBackend implements FiscalBackend {
       tenantId,
       period,
     );
+  }
+
+  /**
+   * Maps the generic `Counterparty` onto an AEAT `Destinatario` (sf:PersonaFisicaJuridicaType) for
+   * an F3's mandatory recipient block. A domestic recipient is named by NIF — the case v1 supports,
+   * since an F3 canje exchanges tickets issued at a Spanish establishment.
+   *
+   * A FOREIGN recipient must instead be named via `IDOtro` (CodigoPais + IDType + ID), whose IDType
+   * vocabulary (PersonaFisicaJuridicaIDTypeType, 02-07) is not yet pinned to a primary source (plan
+   * §1.5, deferred to the asesor / the AEAT XSD). Rather than guess an IDType into an UNREPAIRABLE
+   * record (§5, CLAUDE.md §1), a non-`ES` recipient is refused here until that shape is confirmed — a
+   * DELIBERATE refusal, not a dead branch. It IS reachable through `packages/core` today:
+   * `record-substitution.ts` types `counterparty` as a REQUIRED, non-null field and does no
+   * `countryCode` gating of its own, so a non-`ES` recipient handed to core's `recordSubstitution`
+   * flows straight into this throw. The refusal is pinned at THIS layer by `backend.test.ts`'s
+   * "refuses a non-Spanish recipient until the foreign-recipient shape is confirmed" case; core adds
+   * no gate of its own, so there is nothing extra to test at the core layer.
+   */
+  private buildDestinatarios(counterparty: Counterparty): { IDDestinatario: Destinatario[] } {
+    if (counterparty.countryCode !== "ES") {
+      throw new Error(
+        `VerifactuBackend.recordSubstitution: a non-Spanish recipient (${counterparty.countryCode}) is not yet supported — the foreign-recipient IDOtro/IDType shape awaits the asesor`,
+      );
+    }
+    return {
+      IDDestinatario: [{ NombreRazon: counterparty.legalName, NIF: counterparty.taxId }],
+    };
   }
 
   private buildSistemaInformatico(sif: SifRegistration, legalName: string): SistemaInformatico {

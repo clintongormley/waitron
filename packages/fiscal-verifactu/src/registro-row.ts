@@ -153,6 +153,12 @@ export function toRegistroRow(
       facturasRectificadas: record.FacturasRectificadas ?? null,
       facturasSustituidas: record.FacturasSustituidas ?? null,
       importeRectificacion: record.ImporteRectificacion ?? null,
+      // The F3 canje recipient, stored as-built so the drainer re-serialises the mandatory
+      // Destinatarios (fromRegistroRow reads it back). Same `?? null` / not-a-huella-input treatment
+      // as the four rectificativa fields above — an absent recipient is a NULL column, and storing
+      // it here does not affect this record's huella (huella.ts hashes 8 named fields, none of them
+      // the recipient). NULL on an ordinary F2 alta; set on a full invoice (F3, and later F1).
+      destinatarios: record.Destinatarios ?? null,
       descripcionOperacion: record.DescripcionOperacion,
       desglose: record.Desglose,
       cuotaTotal: record.CuotaTotal,
@@ -177,6 +183,9 @@ export function toRegistroRow(
     facturasRectificadas: null,
     facturasSustituidas: null,
     importeRectificacion: null,
+    // A RegistroAnulacion carries no recipient either — Destinatarios belongs to a registro de alta
+    // whose TipoFactura is a full invoice (F1/F3), never to an anulación.
+    destinatarios: null,
     descripcionOperacion: null,
     desglose: null,
     cuotaTotal: null,
@@ -249,6 +258,12 @@ export type RegistroRow = {
   facturas_rectificadas: RegistroAlta["FacturasRectificadas"] | null;
   facturas_sustituidas: RegistroAlta["FacturasSustituidas"] | null;
   importe_rectificacion: DesgloseRectificacion | null;
+  // The F3 canje recipient (jsonb comes back parsed, per this type's own doc comment above). NULL on
+  // an ordinary F2 alta and on an anulación; set on a full invoice (F3, and later F1) so the drainer
+  // can re-serialise it — without which AEAT rejects the F3 missing its mandatory recipient. Not a
+  // huella input (huella.ts hashes 8 named fields, the recipient not among them), so rehydrating it
+  // cannot change a recomputed huella.
+  destinatarios: RegistroAlta["Destinatarios"] | null;
   descripcion_operacion: string | null;
   desglose: RegistroAlta["Desglose"] | null;
   cuota_total: string | null;
@@ -355,6 +370,16 @@ export function fromRegistroRow(row: RegistroRow): RegistroAlta | RegistroAnulac
     }),
     ...(row.importe_rectificacion !== null && {
       ImporteRectificacion: row.importe_rectificacion,
+    }),
+    // The F3 canje recipient, spread back on ONLY when stored non-null — matching buildAltaRecord's
+    // own conditional-spread shape (packages/verifactu/src/records.ts:133), so an absent recipient is
+    // OMITTED, never set to null (a `Destinatarios: null` would serialise a spurious empty element
+    // and make an ordinary alta's rebuilt record deep-unequal to one built without the field). Not a
+    // huella input, exactly like the four rectificativa fields above; it exists so the drainer files
+    // a complete F3 with its mandatory recipient (findings §10.2 — "siempre debe llevar el
+    // destinatario"), the same gap #46 closed for the R5's TipoRectificativa.
+    ...(row.destinatarios !== null && {
+      Destinatarios: row.destinatarios,
     }),
     // DescripcionOperacion and Desglose are not huella inputs at all — huella.ts's
     // buildCadenaAlta hashes exactly eight named fields and neither is among them — so a plain

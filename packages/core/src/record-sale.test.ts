@@ -195,6 +195,7 @@ function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>)
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
     recordVoid: (tx, saleId, reason) => fake.recordVoid(tx, saleId, reason),
     recordCorrection: (tx, sale, correction) => fake.recordCorrection(tx, sale, correction),
+    recordSubstitution: (tx, sale, substitution) => fake.recordSubstitution(tx, sale, substitution),
     checkIntegrity: (tx, tenant, till) => fake.checkIntegrity(tx, tenant, till),
     pendingCount: (tenant, till) => fake.pendingCount(tenant, till),
     drain: (now) => fake.drain(now),

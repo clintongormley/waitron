@@ -11,6 +11,7 @@ export {
   saleLines,
   sales,
   saleSettlements,
+  saleSubstitutions,
   tenderMethod,
   tenders,
 } from "./schema/sales.js";

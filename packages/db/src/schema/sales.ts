@@ -109,6 +109,18 @@ export const sales = pgTable(
     // (pre-production, no deployed data), and immutable table-wide like every
     // other column here.
     correctsSaleId: uuid("corrects_sale_id"),
+    // The recipient (destinatario) of a full invoice — set on an F3 canje (and, later, an F1),
+    // NULL on an ordinary F2 sale. Stored on the generic sales row, not only in the fiscal
+    // registro's `destinatarios`, for the same reason `corrects_sale_id`/`fiscal_state` are here
+    // (see this table's own comment above): a full invoice's recipient is a reprint/Z-report fact,
+    // and keeping it here answers "who was this invoiced to?" with no cross-boundary join. English
+    // names, because `destinatario`/`destinatarios` are in SPANISH_WORDS (english-only.ts) and this
+    // package is scanned; they mirror the module's `Counterparty` shape
+    // (packages/fiscal/src/backend.ts). All NULLABLE with no backfill (pre-production, no deployed
+    // data), and immutable table-wide like every other column here.
+    counterpartyTaxId: text("counterparty_tax_id"),
+    counterpartyLegalName: text("counterparty_legal_name"),
+    counterpartyCountryCode: text("counterparty_country_code"),
   },
   (t) => [
     unique("sales_series_invoice_number_key").on(t.tenantId, t.seriesId, t.invoiceNumber),
@@ -232,5 +244,52 @@ export const saleSettlements = pgTable(
       name: "sale_settlements_sale_fk",
     }).onDelete("restrict"),
     unique("sale_settlements_sale_key").on(t.tenantId, t.saleId),
+  ],
+).enableRLS();
+
+/**
+ * The N:1 substitution link for F3 canje: one row per (F3 sale, substituted simplified ticket)
+ * pair (docs/superpowers/plans/2026-08-02-f3-canje.md §2.1). An F3 (factura de canje) issues a full
+ * invoice in substitution of one or more previously-issued simplified tickets; this is the
+ * generic-layer projection of that relationship, deliberately NOT `corrects_sale_id` reuse —
+ * `corrects_sale_id` is 1:1 and means "corrects" (a rectificativa), canje is N:1 and means
+ * "substitutes".
+ *
+ * An immutable, append-only child of `sales` exactly like `sale_lines`/`tenders`: composite
+ * tenant-consistent FKs (a row cannot reference a sale of another tenant), RLS with FORCE, and the
+ * reject_mutation() triggers — all applied in migration 0014.
+ *
+ * `unique(tenant_id, substituted_sale_id)` is the DB control for "a ticket is substituted at most
+ * once" (§5, decision 4): were the same ticket substituted by two F3s, the underlying operation
+ * would appear in two canje invoices. There is deliberately NO unique on `substitution_sale_id` —
+ * one F3 substitutes MANY tickets (N rows, the fan-out).
+ */
+export const saleSubstitutions = pgTable(
+  "sale_substitutions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull(),
+    // The F3 canje sale — the substitute.
+    substitutionSaleId: uuid("substitution_sale_id").notNull(),
+    // One substituted simplified ticket. N of these per F3.
+    substitutedSaleId: uuid("substituted_sale_id").notNull(),
+  },
+  (t) => [
+    // Composite FKs: neither the substitute nor a substituted ticket may belong to another tenant,
+    // independently of whether RLS is in force on this connection. Mirrors sale_lines_sale_fk.
+    foreignKey({
+      columns: [t.tenantId, t.substitutionSaleId],
+      foreignColumns: [sales.tenantId, sales.id],
+      name: "sale_substitutions_substitution_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.tenantId, t.substitutedSaleId],
+      foreignColumns: [sales.tenantId, sales.id],
+      name: "sale_substitutions_substituted_fk",
+    }).onDelete("restrict"),
+    // A ticket is substituted at most once (§5, decision 4). This also indexes the substituted
+    // side; the plain index below covers the substitution (F3 → its tickets) lookup.
+    unique("sale_substitutions_substituted_key").on(t.tenantId, t.substitutedSaleId),
+    index("sale_substitutions_substitution_idx").on(t.tenantId, t.substitutionSaleId),
   ],
 ).enableRLS();

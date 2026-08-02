@@ -90,6 +90,13 @@ export const registrosFacturacion = pgTable(
     facturasRectificadas: jsonb("facturas_rectificadas"),
     facturasSustituidas: jsonb("facturas_sustituidas"),
     importeRectificacion: jsonb("importe_rectificacion"),
+    // The recipient block of an F3 canje (migration 0011), storing RegistroAlta["Destinatarios"].
+    // NULL on an ordinary F2 alta and on an anulación; set on a full invoice (F3, and later F1).
+    // `jsonb`, not `text`, for the same reason as the four rectificativa fields above and the
+    // module-level note: it is NOT a huella input (huella.ts hashes 8 named fields, the recipient is
+    // not among them — packages/verifactu/src/types.ts), only ever re-serialised into XML, so jsonb
+    // key-reordering is harmless. NULLABLE with no backfill (pre-production).
+    destinatarios: jsonb("destinatarios"),
     descripcionOperacion: text("descripcion_operacion"),
     desglose: jsonb("desglose"),
     // `text`, NOT `numeric(12,2)` — deliberately, and load-bearing. `packages/verifactu/src/
@@ -191,6 +198,17 @@ export const registrosFacturacion = pgTable(
     check(
       "registros_tipo_factura_rectificativa_ck",
       sql`${t.tipoRectificativa} is null or (${t.tipoFactura} is not null and ${t.tipoFactura} ~ '^R[1-5]$')`,
+    ),
+    // Defense-in-depth for the F3 canje (given §5 unrepairability), mirroring
+    // registros_tipo_factura_rectificativa_ck above: a FacturasSustituidas block may only sit on an
+    // F3 full invoice. The `tipo_factura is not null` arm is load-bearing, not redundant (the same
+    // three-valued-logic hole Copilot found on #46): tipo_factura is NULL on an anulación, and
+    // `NULL = 'F3'` evaluates to NULL, which a CHECK treats as PASSING — so without the explicit
+    // not-null a facturas_sustituidas on a NULL-tipo_factura row would slip past this backstop.
+    // Regression-pinned in canje-columns.test.ts.
+    check(
+      "registros_facturas_sustituidas_f3_ck",
+      sql`${t.facturasSustituidas} is null or (${t.tipoFactura} is not null and ${t.tipoFactura} = 'F3')`,
     ),
     check(
       "registros_encadenamiento_ck",

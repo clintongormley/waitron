@@ -155,6 +155,19 @@ declare module "@waitron/shared" {
      * this is a settlement or correction attempt on a sale that was voided, refused before the
      * settlement or corrective record is written. An operational failure, not a fiscal one. */
     "sale.voided": { saleId: string };
+    /** Thrown by `recordSubstitution` (`./record-substitution.ts`) when a ticket named in an F3's
+     * `substitutedSaleIds` already carries a `sale_substitutions` row — the translation of
+     * `sale_substitutions_substituted_key`'s unique violation
+     * (`packages/db/src/schema/sales.ts`), which is the actual control against exchanging one
+     * ticket twice: were the same ticket substituted by two F3s, the underlying operation would
+     * appear in two canje invoices. The unique `(tenant_id, substituted_sale_id)` — not the
+     * INSERT's success — is what makes it impossible under concurrency (two callers both pass any
+     * prior SELECT, only one passes the constraint), exactly as `sale_voids_sale_id_key` backs
+     * `sale.already_voided`. A "substitute at most once" operational failure, not a fiscal one, so
+     * it must not be confused with a chain-verification failure. Distinct from a DUPLICATE id
+     * within one call's own `substitutedSaleIds` list, which `recordSubstitution` rejects earlier
+     * as a caller precondition (a plain Error) before any row is written. */
+    "sale.already_substituted": { saleId: string };
     /** Thrown-and-caught internally by `recordSale`/`recordVoid` (never crosses either function's
      * own boundary — it is constructed only to hand its `.code`/`.params` to `recordIncident`) to
      * wrap the `IntegrityIssue`s from a failed `FiscalBackend.checkIntegrity` call as a stable,

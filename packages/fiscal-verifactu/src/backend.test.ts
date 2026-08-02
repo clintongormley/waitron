@@ -264,6 +264,133 @@ describe("recordCorrection — refusals", () => {
   });
 });
 
+describe("recordSubstitution — refusals", () => {
+  // PGlite, deliberately (CLAUDE.md §4): every case asserts a REFUSAL that happens before
+  // `appendToChain` runs at all — the empty-list and recipient guards, the substituted-alta lookup,
+  // and the F2 gate — so none exercises the chain append under the deployment role or under
+  // contention. The chain-append path and the concurrency property are
+  // `substitution-path.e2e.test.ts`'s real-PG job.
+
+  /** A minimal F3 `SaleForFiscalRecord` — POSITIVE total, and (unlike every other method's fixture)
+   * a NON-null counterparty, because a full invoice must always name its recipient. Its own fields
+   * are never read on the refusal paths that throw before assembling anything from `sale`, but a
+   * well-formed value keeps the call type-correct. */
+  function substitutionSale(overrides: Partial<SaleForFiscalRecord> = {}): SaleForFiscalRecord {
+    return {
+      tenantId,
+      tillId,
+      saleId: brandSaleId("55555555-5555-4555-8555-555555555555"),
+      seriesId,
+      seriesCode: "F3",
+      invoiceNumber: 1,
+      issuedAt: new Date("2026-03-02T12:05:00.000Z"),
+      offsetMinutes: 60,
+      descriptionOfOperation: "Canje de tiques simplificados",
+      total: decimal("123.45"),
+      vatBreakdown: [{ rate: decimal("21.00"), base: decimal("102.02"), tax: decimal("21.43") }],
+      counterparty: { taxId: "B12345678", legalName: "Cliente Empresarial SL", countryCode: "ES" },
+      ...overrides,
+    };
+  }
+
+  const someTicket = brandSaleId("11111111-1111-4111-8111-111111111111");
+
+  it("throws fiscal.sale_not_recorded when a substituted sale has no prior alta", async () => {
+    const neverRecorded = brandSaleId("00000000-0000-4000-8000-000000000000");
+    await expect(
+      withTenant(pg.db, tenantId, (tx) =>
+        backend.recordSubstitution(tx, substitutionSale(), { substitutedSaleIds: [neverRecorded] }),
+      ),
+    ).rejects.toMatchObject({
+      code: "fiscal.sale_not_recorded",
+      params: { saleId: neverRecorded },
+    });
+  });
+
+  it("refuses to substitute a non-simplified invoice, since only an F2 ticket may be exchanged", async () => {
+    // An F3 canje exchanges SIMPLIFIED tickets (F2 → F3, findings §10.2); substituting a full
+    // invoice (F1) is not a canje, and mis-filing an F3 is unrepairable (§5), so this asserts rather
+    // than assumes. Build a real F1 alta directly (core only ever issues F2), then try to substitute
+    // it — the same setup `recordCorrection`'s own F1 refusal uses.
+    // A distinct id from the `recordCorrection` F1 refusal test above: this PGlite db is shared
+    // across the file and the tenant is fresh each `beforeEach`, but `sales_pkey` is global, so a
+    // reused literal id would collide with that sibling test's row.
+    const original = brandSaleId("66666666-6666-4666-8666-666666666666");
+    await withTenant(pg.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      await tx.insert(sales).values({
+        id: original,
+        tenantId,
+        tillId,
+        seriesId,
+        invoiceNumber: 600,
+        issuedAt: "2026-03-01T12:05:00.000Z",
+        issuedOffsetMinutes: 60,
+        total: "0.00",
+        locale: "es-ES",
+        invoiceLocales: ["es-ES"],
+        fiscalBackend: "verifactu",
+        fiscalState: "recorded",
+      });
+      await backend.recordSale(tx, {
+        tenantId,
+        tillId,
+        saleId: original,
+        seriesId,
+        seriesCode: "A",
+        invoiceNumber: 600,
+        issuedAt: new Date("2026-03-01T12:05:00.000Z"),
+        offsetMinutes: 60,
+        descriptionOfOperation: "Venta en establecimiento",
+        total: decimal("12.10"),
+        vatBreakdown: [{ rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") }],
+        counterparty: { taxId: "B12345678", legalName: "Cliente SL", countryCode: "ES" },
+      });
+    });
+
+    await expect(
+      withTenant(pg.db, tenantId, (tx) =>
+        backend.recordSubstitution(tx, substitutionSale(), { substitutedSaleIds: [original] }),
+      ),
+    ).rejects.toMatchObject({
+      code: "fiscal.substitution_unsupported",
+      params: { saleId: original, tipoFactura: "F1" },
+    });
+  });
+
+  it("refuses an empty substitutedSaleIds list, which would substitute nothing", async () => {
+    await expect(
+      withTenant(pg.db, tenantId, (tx) =>
+        backend.recordSubstitution(tx, substitutionSale(), { substitutedSaleIds: [] }),
+      ),
+    ).rejects.toThrow(/empty/i);
+  });
+
+  it("refuses a substitution with no recipient, which a full invoice must always name", async () => {
+    await expect(
+      withTenant(pg.db, tenantId, (tx) =>
+        backend.recordSubstitution(tx, substitutionSale({ counterparty: null }), {
+          substitutedSaleIds: [someTicket],
+        }),
+      ),
+    ).rejects.toThrow(/recipient/i);
+  });
+
+  it("refuses a non-Spanish recipient until the foreign-recipient shape is confirmed", async () => {
+    await expect(
+      withTenant(pg.db, tenantId, (tx) =>
+        backend.recordSubstitution(
+          tx,
+          substitutionSale({
+            counterparty: { taxId: "FR12345678901", legalName: "Client SARL", countryCode: "FR" },
+          }),
+          { substitutedSaleIds: [someTicket] },
+        ),
+      ),
+    ).rejects.toThrow(/non-Spanish/i);
+  });
+});
+
 describe("recordSale — invoice type selection", () => {
   it("uses F1 (factura completa) once a real counterparty is supplied", async () => {
     // Unreachable through `packages/core`'s own `recordSale`, which always passes

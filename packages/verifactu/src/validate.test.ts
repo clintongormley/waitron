@@ -22,6 +22,13 @@ const INPUT: AltaInput = {
   NombreRazonEmisor: "Waitron SL",
   TipoFactura: "F1",
   DescripcionOperacion: "Venta en establecimiento",
+  // A full invoice (F1) is well-formed only if it identifies its recipient — the
+  // DESTINATARIOS_REQUIRED rule below. This base carries one so that the tests
+  // spreading it (which override TipoFactura for the rectificativa/Destinatarios
+  // cases) start from a genuinely valid F1, not one already carrying that issue.
+  Destinatarios: {
+    IDDestinatario: [{ NombreRazon: "Cliente Factura SL", NIF: "B99999999" }],
+  },
   Desglose: [
     {
       CalificacionOperacion: "S1",
@@ -685,6 +692,63 @@ describe("validate — rectificativa rules (AEAT 1114/1115/1118)", () => {
 
   it("1118: does not require ImporteRectificacion when TipoRectificativa is absent", () => {
     expect(codes(valid())).not.toContain("IMPORTE_RECTIFICACION_REQUIRED");
+  });
+});
+
+describe("validate — Destinatarios rules (F1/F3 require, F2 forbids)", () => {
+  const DESTINATARIOS = {
+    IDDestinatario: [{ NombreRazon: "Cliente Factura SL", NIF: "B99999999" }],
+  } satisfies NonNullable<AltaInput["Destinatarios"]>;
+
+  // buildAltaRecord omits Destinatarios when it is undefined, so this yields a
+  // record of the given TipoFactura carrying no recipient.
+  const withoutDestinatario = (tipo: RegistroAlta["TipoFactura"]) =>
+    buildAltaRecord({ ...INPUT, TipoFactura: tipo, Destinatarios: undefined });
+  const withDestinatario = (tipo: RegistroAlta["TipoFactura"]) =>
+    buildAltaRecord({ ...INPUT, TipoFactura: tipo, Destinatarios: DESTINATARIOS });
+
+  it("requires Destinatarios on an F3 (canje) — «siempre debe llevar el destinatario»", () => {
+    expect(codes(withoutDestinatario("F3"))).toContain("DESTINATARIOS_REQUIRED");
+  });
+
+  it("requires Destinatarios on an F1 (full invoice)", () => {
+    expect(codes(withoutDestinatario("F1"))).toContain("DESTINATARIOS_REQUIRED");
+  });
+
+  it("does not require Destinatarios once an F3 carries one", () => {
+    expect(codes(withDestinatario("F3"))).not.toContain("DESTINATARIOS_REQUIRED");
+  });
+
+  it("does not require Destinatarios on an F2 (simplified ticket)", () => {
+    expect(codes(withoutDestinatario("F2"))).not.toContain("DESTINATARIOS_REQUIRED");
+  });
+
+  it("forbids Destinatarios on an F2 (simplified ticket)", () => {
+    expect(codes(withDestinatario("F2"))).toContain("DESTINATARIOS_FORBIDDEN");
+  });
+
+  it("does not forbid Destinatarios on an F2 that carries none", () => {
+    expect(codes(withoutDestinatario("F2"))).not.toContain("DESTINATARIOS_FORBIDDEN");
+  });
+
+  it("does not forbid Destinatarios on an F3 that carries one", () => {
+    expect(codes(withDestinatario("F3"))).not.toContain("DESTINATARIOS_FORBIDDEN");
+  });
+
+  // buildAltaRecord passes a present Destinatarios through unchanged (records.ts
+  // spreads it when `!== undefined`), so an empty IDDestinatario array survives
+  // to serialization, where it would emit a schema-invalid empty <sf:Destinatarios/>.
+  it("rejects a present-but-empty Destinatarios (XSD requires at least one IDDestinatario)", () => {
+    const record = buildAltaRecord({
+      ...INPUT,
+      TipoFactura: "F3",
+      Destinatarios: { IDDestinatario: [] },
+    });
+    expect(codes(record)).toContain("DESTINATARIOS_EMPTY");
+  });
+
+  it("does not flag a Destinatarios that carries a recipient as empty", () => {
+    expect(codes(withDestinatario("F3"))).not.toContain("DESTINATARIOS_EMPTY");
   });
 });
 
