@@ -1,5 +1,5 @@
 /**
- * The English-only vocabulary guard's suite. It scans the seven generic packages' `src/`, so it
+ * The English-only vocabulary guard's suite. It scans the eight generic packages' `src/`, so it
  * polices the tree rather than any one package, and it lives in the repo-level Vitest project for
  * that reason — see the repo-root `vitest.config.ts` for what that project is and which two gates
  * run it.
@@ -34,7 +34,7 @@ const discovered = GENERIC_PACKAGES.flatMap((name) =>
 );
 
 describe("configuration", () => {
-  it("scopes itself to the seven generic packages", () => {
+  it("scopes itself to the eight generic packages", () => {
     expect([...GENERIC_PACKAGES]).toEqual([
       "db",
       "core",
@@ -43,6 +43,7 @@ describe("configuration", () => {
       "payments",
       "scheduler",
       "credentials",
+      "workforce",
     ]);
   });
 
@@ -184,6 +185,29 @@ describe("findSpanish", () => {
       "tipo",
       "operacion",
     ]);
+  });
+});
+
+describe("the labour vocabulary (sub-project 16) fires", () => {
+  it("flags Spanish labour identifiers and column names, so packages/workforce is guarded", () => {
+    // The list carried fiscal/POS terms but no labour terms until sub-project 16 added them. This
+    // proves the additions actually fire — a token added to SPANISH_WORDS but never matched would
+    // be dead weight. The negative direction (they stay silent on the eight generics, including the
+    // new English packages/workforce) is proven by the describe.each block at the bottom passing.
+    expect(findSpanish('jornadaLaboral: text("jornada_laboral"),').map((v) => v.word)).toEqual([
+      "jornada",
+      "jornada",
+    ]);
+    expect(findSpanish("const fichaje = 1; const empleado = 2;").map((v) => v.word)).toEqual([
+      "fichaje",
+      "empleado",
+    ]);
+  });
+
+  it("does not flag English words that merely contain a new labour token", () => {
+    // Whole-token matching, same guarantee the fiscal tokens carry: `contract` is not `contrato`,
+    // `permission` is not `permiso`, `baja` is not a substring match of anything English here.
+    expect(findSpanish("const contract = permission ?? baseline;")).toEqual([]);
   });
 });
 

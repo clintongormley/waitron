@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1785672194211,
+      "tag": "0000_workforce",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785672221035,
+      "tag": "0001_workforce_rls",
+      "breakpoints": true
+    }
+  ]
+}
