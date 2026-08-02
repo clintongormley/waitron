@@ -71,6 +71,13 @@
       "when": 1785333402567,
       "tag": "0009_registro_entorno",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785672143363,
+      "tag": "0010_registro_rectificativa",
+      "breakpoints": true
     }
   ]
 }

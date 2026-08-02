@@ -74,6 +74,22 @@ export const registrosFacturacion = pgTable(
     nombreRazonEmisor: text("nombre_razon_emisor").notNull(),
     // Null on an anulación — RegistroAnulacion carries no TipoFactura at all.
     tipoFactura: text("tipo_factura"),
+    // The four AEAT rectificativa fields (migration 0010). All NULL on an ordinary alta and on an
+    // anulación; set on a registro de alta whose TipoFactura is R1–R5. See the module-level jsonb
+    // note above: these are NOT huella inputs (huella.ts hashes 8 named fields, none of them),
+    // only ever re-serialised into XML, so jsonb's key-reordering is harmless — identical to
+    // `desglose`/`sistema_informatico`. A field that WERE hashed would need `text`.
+    //   - tipo_rectificativa: 'S' | 'I', mirroring RegistroAlta["TipoRectificativa"].
+    //   - facturas_rectificadas: { IDFacturaRectificada: IDFacturaAR[] }.
+    //   - facturas_sustituidas: written only by F3/piece 5 (canje) — added now so the immutable
+    //     table is not re-migrated then; UNPOPULATED by the rectificativa work.
+    //   - importe_rectificacion: DesgloseRectificacion, populated only when tipo_rectificativa='S'.
+    // Amount strings inside these are stored already-formatted by buildAltaRecord/formatIDFacturaAR
+    // and read back verbatim, so a "123.10" vs "123.1" difference cannot arise.
+    tipoRectificativa: text("tipo_rectificativa"),
+    facturasRectificadas: jsonb("facturas_rectificadas"),
+    facturasSustituidas: jsonb("facturas_sustituidas"),
+    importeRectificacion: jsonb("importe_rectificacion"),
     descripcionOperacion: text("descripcion_operacion"),
     desglose: jsonb("desglose"),
     // `text`, NOT `numeric(12,2)` — deliberately, and load-bearing. `packages/verifactu/src/
@@ -156,6 +172,20 @@ export const registrosFacturacion = pgTable(
     check(
       "registros_entorno_ck",
       sql`${t.entorno} is null or ${t.entorno} in ('production', 'preproduction')`,
+    ),
+    // The rectificativa value domain: NULL (ordinary alta / anulación) or one of AEAT's two
+    // TipoRectificativa values. Mirrors registros_entorno_ck above.
+    check(
+      "registros_tipo_rectificativa_ck",
+      sql`${t.tipoRectificativa} is null or ${t.tipoRectificativa} in ('S', 'I')`,
+    ),
+    // Defense-in-depth for AEAT rule 1115 (given §5 unrepairability): a tipo_rectificativa may only
+    // sit on a rectificativa TipoFactura (R1–R5). The full rule-1114 direction (an R-type REQUIRES
+    // a tipo_rectificativa) stays at the app layer (validate.ts), because tipo_factura is nullable
+    // (anulación) and that cross-field NULL logic is awkward and duplicative here.
+    check(
+      "registros_tipo_factura_rectificativa_ck",
+      sql`${t.tipoRectificativa} is null or ${t.tipoFactura} ~ '^R[1-5]$'`,
     ),
     check(
       "registros_encadenamiento_ck",
