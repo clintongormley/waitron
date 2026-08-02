@@ -3,6 +3,7 @@ import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { timeEntries } from "./schema/time-entries.js";
 import {
+  dailyContractedTargetMinutes,
   projectWorkSessions,
   summarisePeriod,
   type Period,
@@ -119,9 +120,12 @@ export class WorkforceBackend {
   }
 
   /**
-   * Worked minutes and overtime for a person over a pay period (art. 35.5), computed from the
-   * `time_entries` stream against the employment's contracted week. Overtime is actual − contracted,
-   * with the weekly baseline scaled to the period's length.
+   * Worked minutes and overtime for a person over a pay period, computed from the `time_entries`
+   * stream against the employment's contracted week. Returns BOTH overtime models (daily-accrual and
+   * period-net) side by side plus the per-day breakdown — the binding model is convenio/contract
+   * driven, not decided here (see `summarisePeriod`). The period-net baseline scales the weekly
+   * jornada to the period length; the daily target is a floor-scope default until D2's
+   * schedule/convenio_config supplies a true per-day figure (`dailyContractedTargetMinutes`).
    */
   async workSummary(tx: Transaction, query: WorkSummaryQuery): Promise<PeriodSummary> {
     const contractedPerWeek = await this.contractedMinutesPerWeek(
@@ -132,8 +136,10 @@ export class WorkforceBackend {
     const entries = await this.entriesInPeriod(tx, query);
     const sessions = projectWorkSessions(entries);
     const periodDays = (Date.parse(query.period.end) - Date.parse(query.period.start)) / MS_PER_DAY;
-    const contractedMinutes = Math.round((contractedPerWeek * periodDays) / 7);
-    return summarisePeriod(sessions, query.period, contractedMinutes);
+    return summarisePeriod(sessions, query.period, {
+      periodMinutes: Math.round((contractedPerWeek * periodDays) / 7),
+      dailyTargetMinutes: dailyContractedTargetMinutes(contractedPerWeek),
+    });
   }
 
   /**

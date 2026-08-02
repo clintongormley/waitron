@@ -15,9 +15,16 @@ export type {
   CorrectionRequestInput,
   WorkSummaryQuery,
 } from "./clocking.js";
-export { projectWorkSessions, summarisePeriod } from "./projection.js";
+export {
+  dailyContractedTargetMinutes,
+  projectWorkSessions,
+  summarisePeriod,
+} from "./projection.js";
 export type {
+  ContractedTerms,
   CorrectionStatus,
+  DailyWorkTotal,
+  OvertimeModel,
   Period,
   PeriodSummary,
   TimeEntryRecord,

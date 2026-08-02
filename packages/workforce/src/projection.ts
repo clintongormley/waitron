@@ -4,9 +4,25 @@
  * full history retained"). Slice 2 has no corrections yet, so this is a plain fold; Slice 3 layers
  * reprojection on top of the SAME functions.
  *
- * Pure and DB-free on purpose: the overtime rule (art. 35.5, actual − contracted per pay period) is
- * logic, and CLAUDE.md §4 says pick the lighter target when the heavier one's justification does not
- * apply — there are no privileges, no RLS and no concurrency here, so this is unit-tested directly.
+ * Pure and DB-free on purpose: overtime is projection LOGIC over `time_entries`, and CLAUDE.md §4
+ * says pick the lighter target when the heavier one's justification does not apply — there are no
+ * privileges, no RLS and no concurrency here, so this is unit-tested on PGlite/directly, never
+ * against a real-role Postgres.
+ *
+ * Overtime has TWO lawful readings under Spanish labour law, and the code returns BOTH rather than
+ * choosing (which one binds is convenio/contract-dependent — an asesor-laboral decision, not a code
+ * decision; see `summarisePeriod` and the plan's advisor items):
+ *
+ *   - **Daily-accrual** (the reasoning attributed to ET art. 35): a day worked over its ordinary
+ *     target is an *hora extraordinaria* THAT DAY, and a shorter later day does not cancel it. So
+ *     overtime is `Σ over days of max(0, worked(day) − dailyTarget(day))`.
+ *   - **Period-net** (the reasoning attributed to ET art. 34.2, *distribución irregular de la
+ *     jornada*): hours may net out across days within a reference period — lawful only under a
+ *     convenio or the default annual-jornada allowance. Overtime is `max(0, totalWorked −
+ *     totalContracted)` over the period.
+ *
+ * These are legal-reasoning attributions to guide the model, NOT a legal opinion; the binding rule
+ * for a given employment is convenio-driven (D2 / employment terms).
  */
 
 /** The clock-event kinds a shift is built from, plus `correction` (Slice 3) — an append row that
@@ -51,11 +67,53 @@ export interface WorkSession {
   workedMinutes: number;
 }
 
-/** The art. 35.5 pay-period summary: worked, contracted, and the overtime between them. */
+/** One day's worked-vs-contracted line, exposed so any overtime rule — including future
+ * convenio-specific ones — is DERIVABLE from the data rather than baked into this module. */
+export interface DailyWorkTotal {
+  /** The worker's LOCAL calendar day. */
+  workDate: string;
+  /** All the day's sessions summed (a turno partido has more than one), so the daily target is
+   * compared against the whole day, not each session. */
+  workedMinutes: number;
+  /** The day's ordinary target — a floor-scope default today (`dailyContractedTargetMinutes`). */
+  contractedTargetMinutes: number;
+  /** `max(0, workedMinutes − contractedTargetMinutes)` — this day's daily-accrual overtime. */
+  overtimeMinutes: number;
+}
+
+/** Which of the two overtime models a caller wants as the single headline figure. */
+export type OvertimeModel = "daily-accrual" | "period-net";
+
+/** The contracted baseline the two overtime models measure against. The two figures come from
+ * DIFFERENT aggregations (the period baseline is scaled across the whole period; the daily target is
+ * a per-day floor-scope default), so they are supplied separately and may not be mutually
+ * derivable. */
+export interface ContractedTerms {
+  /** The period-net baseline: ordinary jornada scaled across the whole pay period. */
+  periodMinutes: number;
+  /** One ordinary day's target — the daily-accrual baseline. A documented default via
+   * `dailyContractedTargetMinutes`; D2 scheduling/convenio_config refines it per employment. */
+  dailyTargetMinutes: number;
+}
+
+/**
+ * A pay-period summary that reports BOTH overtime models side by side plus the per-day breakdown, so
+ * no legal reading is hard-coded away. `overtimeMinutes` is a single headline for callers that need
+ * one — a conservative default, never the authoritative figure (see `summarisePeriod`).
+ */
 export interface PeriodSummary {
   workedMinutes: number;
+  /** The period-net baseline (`ContractedTerms.periodMinutes`). */
   contractedMinutes: number;
+  /** `Σ over days of max(0, worked(day) − dailyTarget(day))` — the daily-accrual model (art. 35). */
+  dailyAccrualOvertimeMinutes: number;
+  /** `max(0, workedMinutes − contractedMinutes)` — the period-net model (art. 34.2). */
+  periodNetOvertimeMinutes: number;
+  /** The headline figure selected by `summarisePeriod`'s `headlineModel` parameter. NOT
+   * authoritative — the binding model is convenio-driven (asesor-laboral). */
   overtimeMinutes: number;
+  /** The per-day worked-vs-contracted lines, ascending by `workDate`. */
+  days: DailyWorkTotal[];
 }
 
 /** A half-open local-date window `[start, end)` — `end` exclusive so adjacent periods never
@@ -190,21 +248,78 @@ export function projectWorkSessions(entries: readonly TimeEntryRecord[]): WorkSe
   return sessions;
 }
 
+/** The standard count of ordinary working days in a week — the denominator of the floor-scope
+ * default daily target below. Five (a Mon–Fri week) is the common baseline, NOT a convenio figure:
+ * the real working-days-per-week comes from the schedule/convenio (D2). */
+const DEFAULT_WORKING_DAYS_PER_WEEK = 5;
+
 /**
- * Totalises worked minutes over a pay period and reports overtime as actual − contracted (art.
- * 35.5). Overtime is clamped at zero: undertime is a deficit, not negative overtime.
+ * A FLOOR-SCOPE DEFAULT for one ordinary day's contracted target, derived as the contracted weekly
+ * jornada divided by a standard working-days count. This is a DOCUMENTED DEFAULT, not a legal
+ * certainty: the employment only carries `contracted_minutes_per_week` today, and the true per-day
+ * target comes from the schedule/convenio (D2 `convenio_config`), which is not built. D2
+ * scheduling/convenio_config will refine this — it is isolated in this one well-named function so
+ * that refinement replaces exactly one call site.
+ *
+ * Deliberately NOT hard-coded convenio numbers (that would misrepresent the law and trip the
+ * english-only guard on Spanish labour tokens): only a division and a documented denominator.
+ */
+export function dailyContractedTargetMinutes(contractedMinutesPerWeek: number): number {
+  return Math.round(contractedMinutesPerWeek / DEFAULT_WORKING_DAYS_PER_WEEK);
+}
+
+/**
+ * Summarises a pay period, reporting BOTH overtime models plus the per-day breakdown.
+ *
+ * `dailyAccrualOvertimeMinutes` sums each day's `max(0, worked − dailyTarget)` (art. 35: a day's
+ * excess is an hora extraordinaria that day, never nettable against a later short day).
+ * `periodNetOvertimeMinutes` is `max(0, totalWorked − periodMinutes)` (art. 34.2 distribución
+ * irregular: hours may net out across days within a reference period). Both clamp at zero — undertime
+ * is a deficit, not negative overtime.
+ *
+ * `headlineModel` chooses the single `overtimeMinutes` field, defaulting to `daily-accrual`. This is
+ * a CONSERVATIVE DEFAULT, not an authoritative choice: `daily-accrual ≥ period-net` whenever both are
+ * measured against the same per-day targets — `Σ max(0, x_d) ≥ max(0, Σ x_d)` — so it never nets a
+ * day's overtime away. (That inequality can be crossed when `periodMinutes` is scaled independently
+ * of the daily targets, e.g. a 5-day-equivalent weekly baseline against a worker who worked 7 days;
+ * this is precisely why BOTH figures are returned and neither is stamped "official". Which model
+ * binds for a given employment is convenio/contract-driven — an asesor-laboral decision.)
  */
 export function summarisePeriod(
   sessions: readonly WorkSession[],
   period: Period,
-  contractedMinutes: number,
+  contracted: ContractedTerms,
+  headlineModel: OvertimeModel = "daily-accrual",
 ): PeriodSummary {
-  const workedMinutes = sessions
-    .filter((s) => s.workDate >= period.start && s.workDate < period.end)
-    .reduce((total, s) => total + s.workedMinutes, 0);
+  const inPeriod = sessions.filter((s) => s.workDate >= period.start && s.workDate < period.end);
+
+  const workedByDate = new Map<string, number>();
+  for (const s of inPeriod) {
+    workedByDate.set(s.workDate, (workedByDate.get(s.workDate) ?? 0) + s.workedMinutes);
+  }
+
+  const days: DailyWorkTotal[] = [...workedByDate.entries()]
+    // Ascending by date. `localeCompare` on zero-padded ISO dates orders chronologically; the map's
+    // keys are unique days, so no equal-key tie-break arises.
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([workDate, workedMinutes]) => ({
+      workDate,
+      workedMinutes,
+      contractedTargetMinutes: contracted.dailyTargetMinutes,
+      overtimeMinutes: Math.max(0, workedMinutes - contracted.dailyTargetMinutes),
+    }));
+
+  const workedMinutes = inPeriod.reduce((total, s) => total + s.workedMinutes, 0);
+  const dailyAccrualOvertimeMinutes = days.reduce((total, d) => total + d.overtimeMinutes, 0);
+  const periodNetOvertimeMinutes = Math.max(0, workedMinutes - contracted.periodMinutes);
+
   return {
     workedMinutes,
-    contractedMinutes,
-    overtimeMinutes: Math.max(0, workedMinutes - contractedMinutes),
+    contractedMinutes: contracted.periodMinutes,
+    dailyAccrualOvertimeMinutes,
+    periodNetOvertimeMinutes,
+    overtimeMinutes:
+      headlineModel === "period-net" ? periodNetOvertimeMinutes : dailyAccrualOvertimeMinutes,
+    days,
   };
 }

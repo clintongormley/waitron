@@ -143,7 +143,9 @@ describe("workSummary", () => {
     await run((tx) => backend.clockOut(tx, event(personId, `${date}T17:00:00Z`)));
   }
 
-  it("reports worked and overtime against the employment's contracted week", async () => {
+  it("reports worked and both overtime figures against the employment's contracted week", async () => {
+    // Five 9h days against a 40h (2400) week. Every day is 60 over its 8h (480) target, so the two
+    // models agree at 300 here; the daily target is 2400 ÷ 5 = 480 (`dailyContractedTargetMinutes`).
     const p = await freshPerson("summary-over");
     await seedEmployment(suite.db, { tenantId, personId: p, contractedMinutesPerWeek: 2400 });
     for (const day of ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08", "2026-01-09"]) {
@@ -156,13 +158,28 @@ describe("workSummary", () => {
         period: { start: "2026-01-05", end: "2026-01-12" },
       }),
     );
-    expect(summary).toEqual({ workedMinutes: 2700, contractedMinutes: 2400, overtimeMinutes: 300 });
+    expect(summary).toEqual({
+      workedMinutes: 2700,
+      contractedMinutes: 2400,
+      dailyAccrualOvertimeMinutes: 300,
+      periodNetOvertimeMinutes: 300,
+      overtimeMinutes: 300,
+      days: ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08", "2026-01-09"].map(
+        (workDate) => ({
+          workDate,
+          workedMinutes: 540,
+          contractedTargetMinutes: 480,
+          overtimeMinutes: 60,
+        }),
+      ),
+    });
   });
 
-  it("scales the contracted baseline to the length of the period", async () => {
-    // A two-week period against a 2400-minute week is a 4800-minute baseline. One 9h day (540) is
-    // well under it, so overtime is zero — proving the baseline is period-length-scaled, not a bare
-    // weekly figure.
+  it("scales the period-net baseline to the period length while the daily model stays per-day", async () => {
+    // A two-week period against a 2400-minute week is a 4800-minute PERIOD-NET baseline. One 9h day
+    // (540) is well under it, so period-net overtime is zero — proving the baseline is
+    // period-length-scaled, not a bare weekly figure. The daily model is unaffected by period length:
+    // that same day is still 60 over its 8h target, so the two figures legitimately diverge here.
     const p = await freshPerson("summary-scaled");
     await seedEmployment(suite.db, { tenantId, personId: p, contractedMinutesPerWeek: 2400 });
     await nineHourDay(p, "2026-01-05");
@@ -173,7 +190,21 @@ describe("workSummary", () => {
         period: { start: "2026-01-05", end: "2026-01-19" },
       }),
     );
-    expect(summary).toEqual({ workedMinutes: 540, contractedMinutes: 4800, overtimeMinutes: 0 });
+    expect(summary).toEqual({
+      workedMinutes: 540,
+      contractedMinutes: 4800,
+      dailyAccrualOvertimeMinutes: 60,
+      periodNetOvertimeMinutes: 0,
+      overtimeMinutes: 60,
+      days: [
+        {
+          workDate: "2026-01-05",
+          workedMinutes: 540,
+          contractedTargetMinutes: 480,
+          overtimeMinutes: 60,
+        },
+      ],
+    });
   });
 
   it("throws employment.not_found when the person has no employment", async () => {

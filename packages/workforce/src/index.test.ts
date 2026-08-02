@@ -19,6 +19,7 @@ describe("the public surface", () => {
         "WorkforceBackend",
         "projectWorkSessions",
         "summarisePeriod",
+        "dailyContractedTargetMinutes",
       ].sort(),
     );
   });
