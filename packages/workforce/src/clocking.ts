@@ -176,8 +176,11 @@ export class WorkforceBackend {
    * value. The request row stays in history beside it. Only `approved` corrections are followed by
    * the projection, so the approval — targeting the original entry — is what the reprojection sees.
    *
-   * Throws `correction.not_permitted` if the approver's role is not supervisor/manager/admin, and
-   * `correction.target_not_found` if no such requested correction exists under this tenant.
+   * Throws `correction.not_permitted` if the approver's role is not supervisor/manager/admin,
+   * `correction.target_not_found` if no such correction row exists under this tenant, and
+   * `correction.not_pending` if that correction's target already carries an approved correction —
+   * a second approval of the same request, or an approval naming an already-`approved` row, both of
+   * which would append a duplicate `approved` row (the request→approve-once invariant).
    */
   async approveCorrection(tx: Transaction, input: CorrectionApprovalInput): Promise<string> {
     const role = await this.roleOf(tx, input.tenantId, input.approverPersonId);
@@ -188,6 +191,16 @@ export class WorkforceBackend {
       });
     }
     const request = await this.correctionById(tx, input.tenantId, input.correctionId);
+    // Refuse a second approval BEFORE appending (the immutability floor forbids mutating the request
+    // row, so its status stays `requested` and cannot itself signal "already approved"; the signal is
+    // an existing approved correction against the SAME target). This is a guard on the append, not a
+    // mutation — the request and any prior approval stay in history untouched (design §5).
+    if (await this.hasApprovedCorrection(tx, input.tenantId, request.correctsEntryId)) {
+      throw new AppError("correction.not_pending", {
+        tenantId: input.tenantId,
+        correctionId: input.correctionId,
+      });
+    }
     return this.appendCorrection(tx, {
       tenantId: input.tenantId,
       personId: request.personId,
@@ -257,7 +270,9 @@ export class WorkforceBackend {
     return { personId: entry.person_id, locationId: entry.location_id };
   }
 
-  /** A requested correction's fields, or `correction.target_not_found` if there is no such row. */
+  /** A correction row's fields (whatever its `correction_status`), or `correction.target_not_found`
+   * if there is no such `correction` row — `approveCorrection` reads the status guard off the target,
+   * so it must be handed an already-`approved` row rather than told it does not exist. */
   private async correctionById(
     tx: Transaction,
     tenantId: string,
@@ -296,6 +311,23 @@ export class WorkforceBackend {
       offsetMinutes: row.event_offset_minutes,
       reason: row.correction_reason,
     };
+  }
+
+  /** Whether an `approved` correction already targets `targetEntryId` under this tenant — the signal
+   * that a request has already been approved (approval targets the ORIGINAL entry, not the request
+   * row). One approved correction per target is the invariant `approveCorrection` enforces; a further
+   * correction of an already-corrected value chains off the approval instead (a distinct target). */
+  private async hasApprovedCorrection(
+    tx: Transaction,
+    tenantId: string,
+    targetEntryId: string,
+  ): Promise<boolean> {
+    const { rows } = await tx.execute<{ one: number }>(sql`
+      select 1 as one from time_entries
+      where tenant_id = ${tenantId} and corrects_entry_id = ${targetEntryId}
+        and entry_kind = 'correction' and correction_status = 'approved'
+      limit 1`);
+    return rows.length > 0;
   }
 
   /** A person's `role`, or `undefined` when no such person exists under the tenant. */

@@ -185,4 +185,40 @@ describe("approveCorrection", () => {
     );
     expect(code).toBe("correction.target_not_found");
   });
+
+  it("refuses a SECOND approval of the same request and appends no duplicate approved row", async () => {
+    const { personId, outEntryId } = await nineToFive("appr-4");
+    const sup = await supervisor("appr-4-sup");
+    const correctionId = await run((tx) =>
+      backend.requestCorrection(tx, {
+        tenantId,
+        correctsEntryId: outEntryId,
+        at: "2026-01-05T18:00:00Z",
+        offsetMinutes: 0,
+        reason: "forgot to clock out",
+        actorPersonId: personId,
+      }),
+    );
+    // First approval takes effect (the request row stays `requested` — approval is a second append,
+    // never a mutation, so the id passed the second time still names a `requested` row).
+    await run((tx) =>
+      backend.approveCorrection(tx, { tenantId, correctionId, approverPersonId: sup }),
+    );
+    // Second approval of the SAME request is refused: the target already carries an approved
+    // correction, so re-approving would append a duplicate `approved` row (the request→approve-once
+    // invariant). Restricting the lookup to `requested` would NOT catch this — the request is still
+    // `requested` — so the guard is on the target's existing approval.
+    const code = await codeOfRejection(() =>
+      run((tx) => backend.approveCorrection(tx, { tenantId, correctionId, approverPersonId: sup })),
+    );
+    expect(code).toBe("correction.not_pending");
+    // Exactly ONE approved correction row exists — the refused approval appended nothing.
+    const approved = await suite.db.execute<{ n: number }>(sql`
+      select count(*)::int as n from time_entries
+      where person_id = ${personId} and entry_kind = 'correction'
+        and correction_status = 'approved'`);
+    expect(approved.rows[0]!.n).toBe(1);
+    // And the projection is exactly the single approved value (9h), not doubled or re-applied.
+    expect(await workedMinutes(personId)).toBe(540);
+  });
 });

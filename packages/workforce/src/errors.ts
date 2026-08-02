@@ -55,5 +55,13 @@ declare module "@waitron/shared" {
      * supervisor/manager/admin. A correction takes effect only when a supervisor approves it (design
      * §5), so a staff-role approver is refused here rather than silently ignored. */
     "correction.not_permitted": { tenantId: string; personId: string };
+    /** An approval named a correction that is not an approvable PENDING request — its target entry
+     * already carries an `approved` correction. Covers both re-approving the same request (the
+     * request row stays `requested` forever, since approval is a second append, never a mutation —
+     * so a status check on the request cannot catch it) and naming an already-`approved` row. Either
+     * would append a duplicate `approved` row and break the request→approve-once invariant. Distinct
+     * from `correction.target_not_found`, which is no such correction row at all; here the correction
+     * EXISTS but is not approvable. `correction.*`, grepped against the registry — never renamed. */
+    "correction.not_pending": { tenantId: string; correctionId: string };
   }
 }

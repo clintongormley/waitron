@@ -122,7 +122,12 @@ export async function lockChainHead(
 
 /**
  * Floors an ISO-8601 instant to whole-second granularity, preserving the instant (epoch ms), and
- * returns it as a UTC `…Z` string with no sub-second component.
+ * returns it as a UTC `…Z` string. `Date.prototype.toISOString` always emits milliseconds, so the
+ * fractional second is present but ZERO (`…00.000Z`, never a truncated `…00Z`) — the truncation
+ * removes any sub-second VALUE, not the field. That zero fractional second is immaterial downstream:
+ * `Date.parse` (the hash's `EventAtMs`) and the second-precision read-back (`to_char(… 'HH24:MI:SS')`)
+ * both collapse `…00.000Z` and a bare `…00Z` to the identical instant, and the DB CHECK
+ * `date_trunc('second', event_at) = event_at` treats `…00.000Z` as a whole second.
  *
  * The chain hashes `event_at` as the absolute instant (chain-hash.ts's `EventAtMs`), but every
  * read-back projects it at SECOND precision (`to_char(… 'HH24:MI:SS')`, clocking.ts / the chain
