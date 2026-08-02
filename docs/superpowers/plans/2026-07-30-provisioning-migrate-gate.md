@@ -21,7 +21,7 @@ pnpm workspaces.
 
 ## Global Constraints
 
-- **Worktree:** `/Users/clintongormley/workspace/worktrees/waitron-fix-provisioning-migrate-gate`,
+- **Worktree:** `/Users/<user>/workspace/worktrees/waitron-fix-provisioning-migrate-gate`,
   branch `fix/provisioning-migrate-gate`. All paths below are relative to it.
 - **Every commit needs `git commit -s`.** CI's `dco` job walks the whole PR range.
 - **`TESTCONTAINERS_RYUK_DISABLED=true` is required locally** for any suite that starts a container,
@@ -82,7 +82,7 @@ Add to `instance-plan.test.ts`, inside the existing
 - [ ] **Step 2: Run the test to verify it fails**
 
 ```bash
-cd /Users/clintongormley/workspace/worktrees/waitron-fix-provisioning-migrate-gate
+cd /Users/<user>/workspace/worktrees/waitron-fix-provisioning-migrate-gate
 pnpm --filter @waitron/provisioning test instance-plan -- -t "whatever the journals say"
 ```
 
@@ -568,7 +568,7 @@ This is the deletion proof, and it is the whole reason this test exists. Tempora
 in `instance-plan.ts` (re-add the `manifestSets` import and the `if`), then:
 
 ```bash
-cd /Users/clintongormley/workspace/worktrees/waitron-fix-provisioning-migrate-gate
+cd /Users/<user>/workspace/worktrees/waitron-fix-provisioning-migrate-gate
 TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/provisioning test instance-apply.rls -- -t "rolled-back migration"
 ```
 
@@ -709,7 +709,7 @@ Do not write "as expected" or "confirmed" unless the transcript shows it.
 - [ ] **Step 4: Run the full gate**
 
 ```bash
-cd /Users/clintongormley/workspace/worktrees/waitron-fix-provisioning-migrate-gate
+cd /Users/<user>/workspace/worktrees/waitron-fix-provisioning-migrate-gate
 pnpm install
 TESTCONTAINERS_RYUK_DISABLED=true pnpm lint && pnpm typecheck && pnpm format:check && pnpm test
 ```

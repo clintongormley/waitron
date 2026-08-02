@@ -12,7 +12,7 @@
 
 Every task's requirements implicitly include this section.
 
-- **Worktree root:** all commands run from `/Users/clintongormley/workspace/worktrees/waitron-payment-mode-1-manual-tender` unless a step says otherwise. The design doc is already committed on this branch (`b0e725b`).
+- **Worktree root:** all commands run from `/Users/<user>/workspace/worktrees/waitron-payment-mode-1-manual-tender` unless a step says otherwise. The design doc is already committed on this branch (`b0e725b`).
 - **English-only source.** `@waitron/payments` is a `GENERIC_PACKAGES` member (`packages/db/src/english-only.ts`), so Spanish words are banned **in identifiers and string literals** (comments are stripped before scanning, so Spanish *in comments* is allowed). Never write a Spanish word from `SPANISH_WORDS` (`pago`, `cobro`, `venta`, `importe`, `estado`, `operacion`, …) as an identifier or string. Use `manual`, `external_ref`, `acquirer`, `bank terminal`, `operation number`. The enforcing test — `packages/db/src/english-only.test.ts` — is **cross-package and is NOT run by the payments per-package suite**; it must be run explicitly (Task 5). (This is the 4a lesson: a shared/cross-package guard the per-package SDD suites never run.)
 - **Exact decimals.** Money is `numeric(12,2)`; use `Decimal`/`decimal()` from `@waitron/shared`. No float ever touches the money path.
 - **Manual mode is NOT a `PaymentProvider`.** No adapter class, no network, no `collect`. It reuses the store with `provider = "manual"`.
@@ -92,13 +92,13 @@ Expected: PASS (all migration tests, including the new one).
 - [ ] **Step 7: Commit**
 
 ```bash
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-1-manual-tender add \
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-1-manual-tender add \
   packages/payments/src/schema/payments.ts \
   packages/payments/src/migrations.test.ts \
   packages/payments/drizzle/0002_payment_external_ref.sql \
   packages/payments/drizzle/meta/0002_snapshot.json \
   packages/payments/drizzle/meta/_journal.json
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-1-manual-tender commit -m "feat(payments): add nullable external_ref column (manual-tender acquirer ref)"
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-1-manual-tender commit -m "feat(payments): add nullable external_ref column (manual-tender acquirer ref)"
 ```
 
 ---
@@ -194,10 +194,10 @@ Expected: PASS (the whole store suite, including both new cases).
 - [ ] **Step 5: Commit**
 
 ```bash
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-1-manual-tender add \
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-1-manual-tender add \
   packages/payments/src/store.ts \
   packages/payments/src/store.test.ts
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-1-manual-tender commit -m "feat(payments): persist external_ref via insertCapturedPayment"
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-1-manual-tender commit -m "feat(payments): persist external_ref via insertCapturedPayment"
 ```
 
 ---
@@ -473,12 +473,12 @@ Expected: PASS.
 - [ ] **Step 8: Commit**
 
 ```bash
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-1-manual-tender add \
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-1-manual-tender add \
   packages/payments/src/manual.ts \
   packages/payments/src/manual.test.ts \
   packages/payments/src/index.ts \
   packages/payments/src/index.test.ts
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-1-manual-tender commit -m "feat(payments): manual-tender module (recordManualCardPayment / recordManualRefund)"
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-1-manual-tender commit -m "feat(payments): manual-tender module (recordManualCardPayment / recordManualRefund)"
 ```
 
 ---
@@ -655,9 +655,9 @@ Expected: PASS (both cases). If the happy path fails on the composite `payments_
 - [ ] **Step 3: Commit**
 
 ```bash
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-1-manual-tender add \
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-1-manual-tender add \
   packages/payments/src/manual.wiring.test.ts
-git -C /Users/clintongormley/workspace/worktrees/waitron-payment-mode-1-manual-tender commit -m "test(payments): manual-tender atomic wiring + rollback capstone"
+git -C /Users/<user>/workspace/worktrees/waitron-payment-mode-1-manual-tender commit -m "test(payments): manual-tender atomic wiring + rollback capstone"
 ```
 
 ---

@@ -3,12 +3,20 @@
 Written **2026-07-26**. Plain action list; the reasoning and sources are in
 [getting-to-production.md](getting-to-production.md).
 
+> **Updated 2026-08-02.** Step 1 is done — a valid certificate for the deli exists and has been
+> proven to work unattended against AEAT preproduction (see Step 1 and
+> [first-aeat-contact.md](first-aeat-contact.md)). Nothing on this list blocks testing against AEAT
+> any more; the remaining items are production-shape and administrative.
+>
+> **Identifying details omitted.** The obligado's registered name, NIF and any named individuals are
+> intentionally kept out of this repository; `<DELI SL>` and `<NIF>` below are placeholders.
+
 ---
 
 ## The situation in five lines
 
 - **Waitron is the producer** of the invoicing software. It issues the declaración responsable.
-- **Santet Deli Co SL is the obligado** — the taxpayer whose invoice records get filed.
+- **The deli's SL is the obligado** — the taxpayer whose invoice records get filed.
 - **The deli files under its own certificate.** Waitron never authenticates to AEAT as itself.
 - **The deli's deadline is 1 January 2027.** Waitron's producer deadline already passed
   (29 July 2025).
@@ -16,9 +24,25 @@ Written **2026-07-26**. Plain action list; the reasoning and sources are in
 
 ---
 
-## Step 1 — Get the deli's certificate confirmed *(blocks everything)*
+## Step 1 — ~~Get the deli's certificate confirmed~~ **Done — a working certificate is in hand**
 
-Ask the gestor for the SL's current certificate and check it:
+> **Status, 2026-07-28.** A valid **representante** certificate for the deli exists and has been
+> proven to work **unattended** against AEAT preproduction: an mTLS `consultar`
+> against `prewww1.aeat.es` returned a well-formed `SinDatos` in 300 ms, from an exported PKCS#12
+> key with no hardware token and no interactive unlock. Subject `O=<DELI SL>`,
+> `organizationIdentifier=VATES-<NIF>`; issuer `CN=AC Representación`; **valid
+> 2025-10-03 → 2027-10-03**. Full record, and what it does *not* yet prove, in
+> [first-aeat-contact.md](first-aeat-contact.md). **This step no longer blocks anything, and it
+> unblocks Step 2** — a representante certificate is exactly what signs the sello contract.
+>
+> Two residuals to keep in view. This proves a *read* (`consultar`), not that a *submission*
+> (`RegistroAlta`) is accepted — XSD validation, chaining and registration coherence are still
+> unexercised. And the working key is a **representante** certificate tied to a named natural
+> person; the **sello de entidad** in Step 2 remains the right instrument for unattended
+> production. The renewal deadline **2027-10-03** is now the live operational fact — diarise it with
+> the same discipline as Step 4.
+
+To re-check any certificate you are handed (a renewal, or the sello from Step 2):
 
 ```bash
 openssl pkcs12 -in deli.p12 -clcerts -nokeys -legacy | \
@@ -31,13 +55,13 @@ It must show:
 | --- | --- |
 | `notAfter` | in the future |
 | `issuer` | `O=FNMT-RCM … CN=AC Representación` |
-| `subject` | `O=SANTET DELI CO SL`, `organizationIdentifier=VATES-B13817952` |
+| `subject` | `O=<DELI SL>`, `organizationIdentifier=VATES-<NIF>` |
 | policy | `1.3.6.1.4.1.5734.3.11.1` or `.11.2` |
 
-The old one (titular David Stewart Kalucy, issued 12 July 2023) **expired on 12 July 2025** and
-cannot be renewed — an expired FNMT certificate always needs a fresh application.
-
-Until a valid one exists, nothing can be tested against AEAT.
+The old certificate (a previous representante certificate, issued 12 July 2023) **expired on 12 July 2025**
+and could not be renewed — an expired FNMT certificate always needs a fresh application. A valid
+certificate (valid from 2025-10-03, per the status box above) is now in hand, so testing against
+AEAT is no longer blocked.
 
 ## Step 2 — Order the deli's sello de entidad
 
@@ -173,12 +197,14 @@ deadline passed on 29 July 2025.
 ## Order of play
 
 ```text
-Step 1 (gestor's cert)  ──▶  Step 2 (sello)  ──▶  AEAT preproduction
-Step 3 (junta)          ──▶  Waitron works for the deli
-Step 4, 5 (certs)       ──▶  independent, deadline July 2027
-Step 6 (incorporate)    ──▶  before client #2
-Step 7 (mdiago FAQ)     ──▶  whenever; we owe it
-Step 8 (DR)             ──▶  before anyone else uses it
+Step 1 ✓ (cert in hand)  ──▶  Step 2 (sello)  ──▶  AEAT preproduction (read proven)
+Step 3 (junta)           ──▶  Waitron works for the deli
+Step 4, 5 (certs)        ──▶  independent, deadline July 2027
+Step 6 (incorporate)     ──▶  before client #2
+Step 7 (mdiago FAQ)      ──▶  whenever; we owe it
+Step 8 (DR)              ──▶  before anyone else uses it
 ```
 
-Only step 1 is on the critical path.
+Step 1 is done — a working certificate is in hand (see Step 1), which unblocks Step 2 and AEAT
+preproduction access. The residual critical-path item is Step 2, the **sello de entidad**, for the
+unattended production shape; everything else is administrative and can proceed in parallel.

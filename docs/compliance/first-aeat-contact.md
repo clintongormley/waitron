@@ -3,6 +3,9 @@
 A running record, written as it happens rather than summarised afterwards. Failures are the point:
 the second deli should cost a fraction of the first.
 
+> **Identifying details omitted.** The obligado's registered name, NIF and any named individuals are
+> intentionally kept out of this repository; `<DELI SL>` and `<NIF>` are placeholders.
+
 ---
 
 ## 2026-07-28 — the certificate works unattended
@@ -37,8 +40,8 @@ to return. It is a well-formed reply to a well-formed query, not a fault.
 
 - Issuer: `C=ES, O=FNMT-RCM, OU=CERES, CN=AC Representación` — confirms `certKind: "representante"`,
   which is what routes to `SOAP_ENDPOINTS` rather than `SOAP_ENDPOINTS_SELLO`.
-- Obligado: `SANTET DELI CO SL`, NIF `B13817952` (from the subject's `organizationIdentifier`,
-  `VATES-B13817952`).
+- Obligado: the deli's SL, NIF `<NIF>` (from the subject's `organizationIdentifier`,
+  `VATES-<NIF>`).
 - **Valid 2025-10-03 → 2027-10-03.**
 
 **Two things this raises, neither blocking:**
@@ -49,7 +52,7 @@ to return. It is a well-formed reply to a well-formed query, not a fault.
    currently warns on approaching expiry.
 2. **The obligado's NIF is not the certificate holder's ID.** The certificate identifies a natural
    person acting for the company; the filing is made for the company. `ObligadoEmision.NIF` must be
-   `B13817952`, never the `SERIALNUMBER` in the certificate subject. Easy to get backwards, and
+   the deli's NIF, never the `SERIALNUMBER` in the certificate subject. Easy to get backwards, and
    getting it backwards files against the wrong taxpayer.
 
 **What it does not establish:** that a *submission* will be accepted. `consultar` is a read — it

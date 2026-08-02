@@ -19,11 +19,11 @@
 - **`docs/compliance/consulta-mdiago.md` must never be committed.** It is untracked today and stays that way.
 - **Third-party MIT references must not be changed.** Statements about `borjamrd/verifactu-conformance`, `inoguerols/verifactu`, `zarpilla/verifactu-node-lib` and `doscientos-es/verifactu` are true and stay.
 - **Nothing is pushed until Task 6, which requires explicit human confirmation.**
-- **Scratchpad:** `/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad` — referred to below as `$SCRATCH`.
+- **Scratchpad:** `/private/tmp/claude-503/-Users-<user>-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad` — referred to below as `$SCRATCH`.
 - **Shell state does not persist between command blocks.** Working directory carries over; exported variables do not. **Every block that references `$SCRATCH` must begin with this line, verbatim:**
 
   ```bash
-  export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+  export SCRATCH=/private/tmp/claude-503/-Users-<user>-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
   ```
 
   Values that must survive between blocks (`OLD_MAIN_SHA`, `LOCAL_PRE_REWRITE`) are written to `$SCRATCH/pre-relicense-state.txt` and read back, never held in a shell variable across calls.
@@ -49,8 +49,8 @@ No repository content changes. This task establishes that the assumptions in the
 - [ ] **Step 1: Record the current state**
 
 ```bash
-cd /Users/clintongormley/workspace/repos/waitron
-export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+cd /Users/<user>/workspace/repos/waitron
+export SCRATCH=/private/tmp/claude-503/-Users-<user>-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 {
   echo "OLD_MAIN_SHA=$(git rev-parse main)"
   echo "recorded: $(git log -1 --format='%h %s' main)"
@@ -81,8 +81,8 @@ Expected final line: `consulta-mdiago.md correctly untracked`
 - [ ] **Step 3: Confirm the dirty state of the other worktree**
 
 ```bash
-git -C /Users/clintongormley/workspace/worktrees/waitron-db-exports-map status --porcelain
-git -C /Users/clintongormley/workspace/worktrees/waitron-db-exports-map rev-list --count main..HEAD
+git -C /Users/<user>/workspace/worktrees/waitron-db-exports-map status --porcelain
+git -C /Users/<user>/workspace/worktrees/waitron-db-exports-map rev-list --count main..HEAD
 ```
 
 Expected: empty status, and a commit count of `1`. **If the status is non-empty, stop** — uncommitted work there would be lost by the Task 7 rebase. Commit it in that worktree first.
@@ -90,8 +90,8 @@ Expected: empty status, and a commit count of `1`. **If the status is non-empty,
 - [ ] **Step 4: Create the backup bundle**
 
 ```bash
-export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
-cd /Users/clintongormley/workspace/repos/waitron
+export SCRATCH=/private/tmp/claude-503/-Users-<user>-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+cd /Users/<user>/workspace/repos/waitron
 git bundle create "$SCRATCH/waitron-pre-relicense.bundle" --all
 ```
 
@@ -100,7 +100,7 @@ git bundle create "$SCRATCH/waitron-pre-relicense.bundle" --all
 A bundle you have not verified is not a backup.
 
 ```bash
-export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-<user>-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 git bundle verify "$SCRATCH/waitron-pre-relicense.bundle"
 rm -rf "$SCRATCH/restore-test"
 git clone "$SCRATCH/waitron-pre-relicense.bundle" "$SCRATCH/restore-test" 2>&1 | tail -2
@@ -133,7 +133,7 @@ This is PR 0 from the spec. It must happen before the rewrite so the pending doc
 `.git/info/exclude` is local to the clone and never committed — unlike `.gitignore`, which would publicly name the file it hides.
 
 ```bash
-cd /Users/clintongormley/workspace/repos/waitron
+cd /Users/<user>/workspace/repos/waitron
 printf '\n# Private outreach correspondence — never publish (see spec 2026-07-28 §6)\ndocs/compliance/consulta-mdiago.md\n' >> .git/info/exclude
 git status --porcelain | grep consulta-mdiago || echo "correctly excluded"
 ```
@@ -257,7 +257,7 @@ git log -1 --stat | head -20
 Do not transcribe the licence. Fetch it and check the hash.
 
 ```bash
-cd /Users/clintongormley/workspace/repos/waitron
+cd /Users/<user>/workspace/repos/waitron
 curl -sSL -o LICENSE https://raw.githubusercontent.com/elastic/elasticsearch/main/licenses/ELASTIC-LICENSE-2.0.txt
 echo "48255018b41fc0e965b1115af7e6779bc218bb8a6747d561da800d5022622aa2  LICENSE" | shasum -a 256 -c -
 ```
@@ -509,8 +509,8 @@ never become shell code.
 The check is only worth having if it actually fails on a modified licence.
 
 ```bash
-export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
-cd /Users/clintongormley/workspace/repos/waitron
+export SCRATCH=/private/tmp/claude-503/-Users-<user>-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+cd /Users/<user>/workspace/repos/waitron
 echo "48255018b41fc0e965b1115af7e6779bc218bb8a6747d561da800d5022622aa2  LICENSE" | shasum -a 256 -c -
 cp LICENSE "$SCRATCH/LICENSE.bak"
 printf '\nCopyright (c) 2026 Clinton Gormley\n' >> LICENSE
@@ -566,13 +566,13 @@ and the seven stale branches are simply never fetched, and are deleted directly 
 Task 6.
 
 ```bash
-export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-<user>-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 rm -rf "$SCRATCH/waitron-relicense"
 git clone --no-hardlinks --single-branch --branch main --no-tags \
-  /Users/clintongormley/workspace/repos/waitron "$SCRATCH/waitron-relicense"
+  /Users/<user>/workspace/repos/waitron "$SCRATCH/waitron-relicense"
 cd "$SCRATCH/waitron-relicense"
 git log --oneline | wc -l          # must equal the source repo's count, recorded below
-git -C /Users/clintongormley/workspace/repos/waitron rev-list --count main   # the authority
+git -C /Users/<user>/workspace/repos/waitron rev-list --count main   # the authority
 git branch -a                       # Expected: only main
 git tag | wc -l                     # Expected: 0
 ```
@@ -584,7 +584,7 @@ reference to the mdiago letter. A script file rather than an inline `--tree-filt
 because it can be tested on its own first.
 
 ```bash
-export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-<user>-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 cat > "$SCRATCH/rewrite-tree.sh" <<'SCRIPT'
 #!/bin/sh
 # Runs once per commit, inside a checkout of that commit's tree.
@@ -616,13 +616,13 @@ Note the `s{}{}` delimiters: the paths contain `/`, so a `s///` form would termi
 early, and `\Q…\E` must contain the plain unescaped path or the quoting swallows the escapes.
 
 ```bash
-export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-<user>-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 rm -rf "$SCRATCH/scripttest"
 mkdir -p "$SCRATCH/scripttest/docs/superpowers/specs"
 cd "$SCRATCH/scripttest"
-cp /Users/clintongormley/workspace/repos/waitron/docs/superpowers/specs/2026-07-26-server-host-design.md \
+cp /Users/<user>/workspace/repos/waitron/docs/superpowers/specs/2026-07-26-server-host-design.md \
    docs/superpowers/specs/
-ELV2_SRC=/Users/clintongormley/workspace/repos/waitron/LICENSE "$SCRATCH/rewrite-tree.sh"
+ELV2_SRC=/Users/<user>/workspace/repos/waitron/LICENSE "$SCRATCH/rewrite-tree.sh"
 sed -n '105,110p' docs/superpowers/specs/2026-07-26-server-host-design.md
 grep -c 'consulta-mdiago' docs/superpowers/specs/2026-07-26-server-host-design.md || echo "0 references — correct"
 head -1 LICENSE
@@ -636,9 +636,9 @@ partially-working script.
 - [ ] **Step 4: Rewrite every commit**
 
 ```bash
-export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-<user>-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 cd "$SCRATCH/waitron-relicense"
-export ELV2_SRC=/Users/clintongormley/workspace/repos/waitron/LICENSE
+export ELV2_SRC=/Users/<user>/workspace/repos/waitron/LICENSE
 export FILTER_BRANCH_SQUELCH_WARNING=1
 git filter-branch --force --tree-filter "$SCRATCH/rewrite-tree.sh" -- --all
 ```
@@ -652,7 +652,7 @@ ref is deleted the entire MIT history is still reachable**, and the verification
 correctly report failure. Delete it, then expire the reflog and garbage-collect.
 
 ```bash
-export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-<user>-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 cd "$SCRATCH/waitron-relicense"
 git for-each-ref --format='%(refname)' refs/original | while read -r r; do git update-ref -d "$r"; done
 git reflog expire --expire=now --all
@@ -667,7 +667,7 @@ Expected: `refs/original gone`.
 This is the whole point of the task. Check every commit, not just the tip.
 
 ```bash
-export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-<user>-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 cd "$SCRATCH/waitron-relicense"
 echo "--- commits whose LICENSE is not ELv2 (expect none) ---"
 for c in $(git rev-list --all); do
@@ -700,12 +700,12 @@ and fix it before pushing**, because those objects would otherwise be pushed.
 The rewrite must alter `LICENSE` and one documentation line, and nothing else.
 
 ```bash
-export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-<user>-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 cd "$SCRATCH/waitron-relicense"
-diff <(git -C /Users/clintongormley/workspace/repos/waitron ls-tree -r --name-only main | sort) \
+diff <(git -C /Users/<user>/workspace/repos/waitron ls-tree -r --name-only main | sort) \
      <(git ls-tree -r --name-only main | sort) \
   && echo "PASS: no files added or removed"
-diff <(git -C /Users/clintongormley/workspace/repos/waitron show main:docs/superpowers/specs/2026-07-26-server-host-design.md) \
+diff <(git -C /Users/<user>/workspace/repos/waitron show main:docs/superpowers/specs/2026-07-26-server-host-design.md) \
      <(git show main:docs/superpowers/specs/2026-07-26-server-host-design.md)
 git log --oneline | wc -l    # Expected: 41 — no commits lost
 git log --format='%an|%ae|%ad' -1 main   # author identity and date preserved
@@ -740,7 +740,7 @@ Present to the human, and wait for an unambiguous go-ahead:
 - [ ] **Step 2: Force-push the rewritten main**
 
 ```bash
-export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-<user>-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 cd "$SCRATCH/waitron-relicense"
 git remote set-url origin https://github.com/clintongormley/waitron.git
 git push --force-with-lease origin main
@@ -799,8 +799,8 @@ detect ELv2, which is expected and not a problem.
 - [ ] **Step 1: Reset local main onto the rewritten history**
 
 ```bash
-export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
-cd /Users/clintongormley/workspace/repos/waitron
+export SCRATCH=/private/tmp/claude-503/-Users-<user>-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+cd /Users/<user>/workspace/repos/waitron
 # Record the pre-rewrite tip BEFORE resetting — Step 2 needs it as the rebase base,
 # and shell variables do not survive to the next command block.
 echo "LOCAL_PRE_REWRITE=$(git rev-parse main)" >> "$SCRATCH/pre-relicense-state.txt"
@@ -820,11 +820,11 @@ That branch carries one commit — `f3f2233`, the exports-map spec — on top of
 `main`. Rebase it onto the new history.
 
 ```bash
-export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-<user>-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 LOCAL_PRE_REWRITE=$(grep '^LOCAL_PRE_REWRITE=' "$SCRATCH/pre-relicense-state.txt" | cut -d= -f2)
 echo "rebasing onto origin/main, off base $LOCAL_PRE_REWRITE"
-git -C /Users/clintongormley/workspace/worktrees/waitron-db-exports-map status --porcelain
-git -C /Users/clintongormley/workspace/worktrees/waitron-db-exports-map \
+git -C /Users/<user>/workspace/worktrees/waitron-db-exports-map status --porcelain
+git -C /Users/<user>/workspace/worktrees/waitron-db-exports-map \
   rebase --onto origin/main "$LOCAL_PRE_REWRITE" db-exports-map
 ```
 
@@ -833,7 +833,7 @@ Expected: a clean rebase of one commit. If the status was non-empty, stash there
 - [ ] **Step 3: Verify the replayed branch**
 
 ```bash
-cd /Users/clintongormley/workspace/worktrees/waitron-db-exports-map
+cd /Users/<user>/workspace/worktrees/waitron-db-exports-map
 git log --oneline -2
 head -1 LICENSE
 test -f docs/superpowers/specs/2026-07-28-db-exports-map-design.md && echo "spec intact"
@@ -846,7 +846,7 @@ parent; `spec intact`.
 - [ ] **Step 4: Clean up the throwaway clone, keep the bundle**
 
 ```bash
-export SCRATCH=/private/tmp/claude-503/-Users-clintongormley-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
+export SCRATCH=/private/tmp/claude-503/-Users-<user>-workspace-repos-waitron/7014046a-3265-482a-a5fa-65489ac68570/scratchpad
 rm -rf "$SCRATCH/waitron-relicense" "$SCRATCH/scripttest" "$SCRATCH/regextest" \
        "$SCRATCH/LICENSE.bak" "$SCRATCH/old-files.txt" "$SCRATCH/new-files.txt"
 ls -la "$SCRATCH/waitron-pre-relicense.bundle"
@@ -869,7 +869,7 @@ it wants care rather than speed.
 - [ ] **Step 1: Branch**
 
 ```bash
-cd /Users/clintongormley/workspace/repos/waitron
+cd /Users/<user>/workspace/repos/waitron
 git checkout -b licence-paper-trail
 ```
 

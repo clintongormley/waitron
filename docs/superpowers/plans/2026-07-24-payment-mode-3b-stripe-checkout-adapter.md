@@ -295,7 +295,7 @@ Expected: PASS, no type errors.
 - [ ] **Step 11: Commit**
 
 ```bash
-cd /Users/clintongormley/workspace/repos/waitron
+cd /Users/<user>/workspace/repos/waitron
 pnpm --filter @waitron/payments-stripe exec prettier --write src/client.ts src/client.test.ts src/hosted-client.ts src/testing/fake-stripe-hosted.ts src/testing/fake-stripe-hosted.test.ts src/index.ts
 git add packages/payments-stripe/src/client.ts packages/payments-stripe/src/client.test.ts packages/payments-stripe/src/hosted-client.ts packages/payments-stripe/src/testing/fake-stripe-hosted.ts packages/payments-stripe/src/testing/fake-stripe-hosted.test.ts packages/payments-stripe/src/index.ts
 git commit -m "feat(payments-stripe): Mode 3 Slice B — fromMinorUnits + StripeHostedClient seam + FakeStripeHosted"
@@ -537,7 +537,7 @@ Run: `pnpm --filter @waitron/payments-stripe typecheck`
 Expected: clean.
 
 ```bash
-cd /Users/clintongormley/workspace/repos/waitron
+cd /Users/<user>/workspace/repos/waitron
 pnpm --filter @waitron/payments-stripe exec prettier --write src/hosted-provider.ts src/hosted-provider.test.ts src/index.ts
 git add packages/payments-stripe/src/hosted-provider.ts packages/payments-stripe/src/hosted-provider.test.ts packages/payments-stripe/src/index.ts
 git commit -m "feat(payments-stripe): Mode 3 Slice B — StripeHostedProvider (initiate + verifyAndParse)"
@@ -700,7 +700,7 @@ Expected: PASS. This is an integration test over already-implemented pieces — 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/clintongormley/workspace/repos/waitron
+cd /Users/<user>/workspace/repos/waitron
 pnpm --filter @waitron/payments-stripe exec prettier --write src/hosted.wiring.test.ts
 git add packages/payments-stripe/src/hosted.wiring.test.ts
 git commit -m "test(payments-stripe): Mode 3 Slice B — hosted capstone (initiate -> webhook -> settle -> recordSale -> associate)"
@@ -880,7 +880,7 @@ Expected: hermetic run green and excludes the sandbox test; typecheck clean. **N
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/clintongormley/workspace/repos/waitron
+cd /Users/<user>/workspace/repos/waitron
 pnpm --filter @waitron/payments-stripe exec prettier --write src/stripe-hosted-client.ts src/checkout.sandbox.test.ts src/index.ts vitest.config.ts
 git add packages/payments-stripe/src/stripe-hosted-client.ts packages/payments-stripe/src/checkout.sandbox.test.ts packages/payments-stripe/src/index.ts packages/payments-stripe/vitest.config.ts
 git commit -m "feat(payments-stripe): Mode 3 Slice B — real stripeHostedClient binding + nightly checkout sandbox"
@@ -994,7 +994,7 @@ Expected: all clean.
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/clintongormley/workspace/repos/waitron
+cd /Users/<user>/workspace/repos/waitron
 pnpm --filter @waitron/payments-stripe exec prettier --write src/hosted.rls.test.ts
 git add packages/payments-stripe/src/hosted.rls.test.ts
 git commit -m "test(payments-stripe): Mode 3 Slice B — real-PG RLS test (initiate persists + untenanted resolve)"

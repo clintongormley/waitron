@@ -19,7 +19,7 @@
 - **Errors are structured codes + params**, never prose (localisation rule). New codes are declared in `packages/payments/src/errors.ts` via declaration merging on `ErrorParams`.
 - **T1/T2:** never hold a database transaction across a network call. The report fetch and every reversal run outside `withTenant`.
 - **Import style:** ESM with explicit `.js` specifiers (`from "./store.js"`), `import type` for type-only imports.
-- **Every step's commands run from the worktree root:** `/Users/clintongormley/workspace/worktrees/waitron-payment-reconcile-slice-a`.
+- **Every step's commands run from the worktree root:** `/Users/<user>/workspace/worktrees/waitron-payment-reconcile-slice-a`.
 - **Test command:** `pnpm --filter @waitron/payments test`. Coverage (`test:coverage`, thresholds 98/98/98/95) is run once, in Task 10 — it is a CI-only gate that no local hook runs.
 - **Real-Postgres suites throw, never skip,** when Docker is absent (`startRealPostgres` already does this). If Docker is down, that is an environment failure to report, not a test to weaken.
 - **Prettier is a separate gate from eslint.** Run `pnpm format:check` before the final commit; `pnpm --filter @waitron/payments lint` does not cover it.
