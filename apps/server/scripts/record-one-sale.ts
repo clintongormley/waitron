@@ -136,7 +136,10 @@ async function main(): Promise<void> {
   // wrong.
   const tax = divideDecimal(multiplyDecimal(baseAmount, vatRate), decimal("100"), MONEY_SCALE);
   const total = addDecimal(baseAmount, tax);
-  const amountCharged = addDecimal(total, tipAmount);
+  // The single tender's whole charge: total plus the tip, which now rides ON the tender
+  // (`tenders.tip_amount`) rather than on the sale — `amount_charged` was dropped from `sales` in
+  // migration 0012. This is the coverage identity settleSale enforces: sum(amount) = total + tip.
+  const tenderAmount = addDecimal(total, tipAmount);
 
   const db = await createPostgresDb(databaseUrl);
   try {
@@ -177,7 +180,6 @@ async function main(): Promise<void> {
       locale: LOCALE,
       invoiceLocales: [LOCALE],
       total,
-      tipAmount,
       lines: [
         {
           lineNo: 1,
@@ -188,7 +190,15 @@ async function main(): Promise<void> {
           lineTotal: baseAmount,
         },
       ],
-      tenders: [{ method: "cash", amount: amountCharged, settledAt: clock.now().instant }],
+      // Pay-first: one cash tender carrying its own tip, settled at this instant, handed straight to
+      // settleSale inside recordSale's immediate mode (design D6). This script records a completed
+      // sale, so there is nothing deferred to settle later.
+      settlement: {
+        kind: "immediate",
+        tenders: [
+          { method: "cash", amount: tenderAmount, tipAmount, settledAt: clock.now().instant },
+        ],
+      },
       fiscalBackend: "verifactu",
       clock,
     };

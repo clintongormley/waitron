@@ -77,7 +77,6 @@ export function saleInput(
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     total: "14.41",
-    tipAmount: "1.90",
     lines: [
       {
         lineNo: 1,
@@ -96,7 +95,13 @@ export function saleInput(
         lineTotal: "2.10",
       },
     ],
-    tenders: [{ method: "card", amount: "16.31", settledAt: BASE }],
+    // Immediate settlement with the tip on the tender (design D2): sum(amount) 16.31 = total 14.41 +
+    // tip 1.90, matching record-sale.test.ts's own DEFAULT_TENDERS so the numbers line up across
+    // suites.
+    settlement: {
+      kind: "immediate",
+      tenders: [{ method: "card", amount: "16.31", tipAmount: "1.90", settledAt: BASE }],
+    },
     fiscalBackend: "verifactu",
     clock: steadyClock,
     ...overrides,

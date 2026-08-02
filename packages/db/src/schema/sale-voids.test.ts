@@ -72,8 +72,6 @@ function saleValues(overrides: Record<string, unknown> = {}) {
     issuedAt: AT,
     issuedOffsetMinutes: 120,
     total: "1.00",
-    tipAmount: "0.50",
-    amountCharged: "1.50",
     locale: "es",
     invoiceLocales: ["es", "ca"],
     fiscalBackend: "verifactu",
@@ -82,9 +80,10 @@ function saleValues(overrides: Record<string, unknown> = {}) {
   };
 }
 
-/** Writes a complete sale — header, line and covering tender — in one transaction, because the
- * deferred coverage-check trigger only permits that shape. Mirrors sales.test.ts's identical
- * recordCompleteSale, trimmed to the single-tender case this file needs. */
+/** Writes a sale — header, line and a covering tender — in one transaction. Mirrors sales.test.ts's
+ * recordCompleteSale, trimmed to the single-tender case this file needs. Since 0012 the coverage
+ * check no longer fires at sale COMMIT (it moved to the sale_settlements INSERT), so this shape is
+ * no longer forced; the tender covers the sale anyway (amount = total, no tip). */
 async function recordCompleteSale(
   db: Database,
   overrides: Record<string, unknown> = {},
@@ -105,7 +104,7 @@ async function recordCompleteSale(
       tenantId: (overrides.tenantId as string) ?? TENANT_A,
       saleId: sale.id,
       method: "card",
-      amount: "1.50",
+      amount: "1.00",
       settledAt: AT,
     });
     return sale.id;

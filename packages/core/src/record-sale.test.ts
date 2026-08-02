@@ -18,13 +18,15 @@ import {
   invoiceSeries,
   pgErrorCode,
   saleLines,
+  saleSettlements,
   sales,
   tenders,
   withTenant,
 } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { formatInvoiceNumber, recordSale } from "./record-sale.js";
-import type { RecordSaleInput } from "./record-sale.js";
+import type { RecordSaleInput, RecordSaleTender } from "./record-sale.js";
+import { settleSale } from "./settle-sale.js";
 import { seedTenant } from "../test/fixtures.js";
 
 let tenantId: TenantId;
@@ -89,6 +91,14 @@ const steadyClock: TrustedClock = fixedClock(() => ({
   anchorAgeSeconds: 0,
 }));
 
+// The default immediate tender for the €14.41 sale: sum(amount) 16.31 = total 14.41 + tip 1.90 —
+// the coverage identity `settleSale` now enforces inside `recordSale`'s immediate half. The tip
+// rides on the tender (design D2), no longer on the sale. Reused by the mode-equivalence test so
+// the two modes settle the identical tender list.
+const DEFAULT_TENDERS: RecordSaleTender[] = [
+  { method: "card", amount: "16.31", tipAmount: "1.90", settledAt: BASE },
+];
+
 function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
     tenantId,
@@ -101,7 +111,6 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
     // 2.31) = 14.41. Deliberately reconciled by hand here rather than left to coincide with
     // `lines`, so a reader can check the arithmetic without running the suite.
     total: "14.41",
-    tipAmount: "1.90",
     lines: [
       {
         lineNo: 1,
@@ -120,9 +129,9 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
         lineTotal: "2.10",
       },
     ],
-    tenders: [{ method: "card", amount: "16.31", settledAt: BASE }],
     fiscalBackend: "fake",
     clock: steadyClock,
+    settlement: { kind: "immediate", tenders: DEFAULT_TENDERS },
     ...overrides,
   };
 }
@@ -227,16 +236,20 @@ describe("recordSale — the happy path", () => {
     expect(await countRows("sales")).toBe(1);
   });
 
-  it("keeps the tip out of total and puts it into amount_charged", async () => {
-    // total is the taxable amount; the tip is non-taxable and must never reach the fiscal
-    // record. Fixture values are deliberately different from each other and from their sum, so
-    // an implementation that copied the wrong field cannot produce the expected row by
-    // coincidence.
+  it("keeps the tip off the sale's fiscal total and onto the tender", async () => {
+    // total is the taxable amount and now the ONLY money column on the sale (design D1); the tip is
+    // non-taxable, must never reach the fiscal record, and rides on the tender it was left with
+    // (design D2). `amount_charged` is derived (total + tip = 16.31), never stored — migration 0012
+    // dropped both the tip and amount_charged columns off `sales`. Fixture values are deliberately
+    // different from each other and from their sum, so an implementation that copied the wrong field
+    // cannot produce the expected rows by coincidence.
     const { saleId } = await run(new FakeFiscalBackend(suite.db));
     const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
     expect(row?.total).toBe("14.41");
-    expect(row?.tipAmount).toBe("1.90");
-    expect(row?.amountCharged).toBe("16.31");
+
+    const [tender] = await suite.db.select().from(tenders).where(eq(tenders.saleId, saleId));
+    expect(tender?.amount).toBe("16.31");
+    expect(tender?.tipAmount).toBe("1.90");
   });
 
   it("snapshots the locale list as at issuance", async () => {
@@ -288,7 +301,6 @@ describe("recordSale — the happy path", () => {
     const backend = new FakeFiscalBackend(suite.db);
     await run(backend, {
       total: "9.68",
-      tipAmount: "0.32",
       lines: [
         {
           lineNo: 1,
@@ -307,7 +319,11 @@ describe("recordSale — the happy path", () => {
           lineTotal: "3.00",
         },
       ],
-      tenders: [{ method: "card", amount: "10.00", settledAt: BASE }],
+      // sum(amount) 10.00 = total 9.68 + tip 0.32.
+      settlement: {
+        kind: "immediate",
+        tenders: [{ method: "card", amount: "10.00", tipAmount: "0.32", settledAt: BASE }],
+      },
     });
     const [record] = await backend.recordsFor(tillId);
     expect(record?.total).toBe("9.68");
@@ -412,13 +428,20 @@ describe("recordSale — the fiscal record is created when ALL tenders settle", 
     // a rectifying record later.
     await expect(
       run(new FakeFiscalBackend(suite.db), {
-        tenders: [
-          { method: "cash", amount: "5.00", settledAt: BASE },
-          { method: "card", amount: "11.31", settledAt: null },
-        ],
+        settlement: {
+          kind: "immediate",
+          tenders: [
+            { method: "cash", amount: "5.00", tipAmount: "0.00", settledAt: BASE },
+            { method: "card", amount: "11.31", tipAmount: "1.90", settledAt: null },
+          ],
+        },
       }),
     ).rejects.toMatchObject({ code: "sale.tender_unsettled" });
 
+    // Nothing survives — but now BY ATOMICITY, not by a pre-check. `recordSale` has already written
+    // the sale and its lines by the time it calls `settleSale`; the throw rolls the whole
+    // transaction back, allocated invoice number included, so a declined card still leaves nothing
+    // chained. This is the assertion that pins that guarantee under the new order of operations.
     expect(await countRows("sales")).toBe(0);
     expect(await countRows("sale_lines")).toBe(0);
     expect(await countRows("tenders")).toBe(0);
@@ -427,7 +450,10 @@ describe("recordSale — the fiscal record is created when ALL tenders settle", 
   it("writes nothing when the settled tenders do not cover the amount due", async () => {
     await expect(
       run(new FakeFiscalBackend(suite.db), {
-        tenders: [{ method: "cash", amount: "5.00", settledAt: BASE }],
+        settlement: {
+          kind: "immediate",
+          tenders: [{ method: "cash", amount: "5.00", tipAmount: "0.00", settledAt: BASE }],
+        },
       }),
     ).rejects.toMatchObject({ code: "sale.tender_shortfall" });
     expect(await countRows("sales")).toBe(0);
@@ -436,7 +462,12 @@ describe("recordSale — the fiscal record is created when ALL tenders settle", 
   it("chains nothing when a tender has not settled", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     await expect(
-      run(backend, { tenders: [{ method: "card", amount: "16.31", settledAt: null }] }),
+      run(backend, {
+        settlement: {
+          kind: "immediate",
+          tenders: [{ method: "card", amount: "16.31", tipAmount: "1.90", settledAt: null }],
+        },
+      }),
     ).rejects.toBeInstanceOf(AppError);
     expect(await backend.recordsFor(tillId)).toHaveLength(0);
   });
@@ -445,7 +476,12 @@ describe("recordSale — the fiscal record is created when ALL tenders settle", 
     // The retry path end to end: decline, then settle. Two calls, one sale.
     const backend = new FakeFiscalBackend(suite.db);
     await expect(
-      run(backend, { tenders: [{ method: "card", amount: "16.31", settledAt: null }] }),
+      run(backend, {
+        settlement: {
+          kind: "immediate",
+          tenders: [{ method: "card", amount: "16.31", tipAmount: "1.90", settledAt: null }],
+        },
+      }),
     ).rejects.toBeInstanceOf(AppError);
     await run(backend);
     expect(await countRows("sales")).toBe(1);
@@ -454,10 +490,14 @@ describe("recordSale — the fiscal record is created when ALL tenders settle", 
 
   it("accepts a split tender that settles across several payments", async () => {
     await run(new FakeFiscalBackend(suite.db), {
-      tenders: [
-        { method: "cash", amount: "6.31", settledAt: BASE },
-        { method: "card", amount: "10.00", settledAt: BASE },
-      ],
+      // sum(amount) 6.31 + 10.00 = 16.31 = total 14.41 + tip 1.90.
+      settlement: {
+        kind: "immediate",
+        tenders: [
+          { method: "cash", amount: "6.31", tipAmount: "0.00", settledAt: BASE },
+          { method: "card", amount: "10.00", tipAmount: "1.90", settledAt: BASE },
+        ],
+      },
     });
     expect(await countRows("tenders")).toBe(2);
     expect(await countRows("sales")).toBe(1);
@@ -483,6 +523,155 @@ describe("recordSale — atomicity", () => {
   });
 });
 
+describe("recordSale — settlement modes", () => {
+  it("deferred records the sale and fiscal record with no tender and no settlement", async () => {
+    // Invoice-first: the bill is printed and handed over BEFORE payment. The sale and its fiscal
+    // record exist; there is no tender and no `sale_settlements` row — a legitimate unsettled
+    // steady state, not a half-written sale (design §3). Issuing the invoice is the fiscal event;
+    // payment is not, so the record is chained regardless of settlement.
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId } = await run(backend, { settlement: { kind: "deferred" } });
+
+    expect(await countRows("sales")).toBe(1);
+    expect(
+      await suite.db.select().from(saleLines).where(eq(saleLines.saleId, saleId)),
+    ).toHaveLength(2);
+    expect(await countRows("tenders")).toBe(0);
+    expect(await countRows("sale_settlements")).toBe(0);
+    expect(await backend.recordsFor(tillId)).toHaveLength(1);
+  });
+
+  it("immediate and deferred+settleSale produce identical tenders and settlement rows", async () => {
+    // D6, made observable: `immediate` runs the SAME `settleSale` code in the same transaction, so
+    // a sale settled inline must leave byte-for-byte identical `tenders` and `sale_settlements`
+    // rows to the identical sale recorded `deferred` and settled later by a separate `settleSale`
+    // (modulo the ids and the sale/tenant they hang off). If the two paths ever drift, this fails —
+    // which is the whole reason `recordSale` calls `settleSale` rather than re-implementing it.
+    const later = new Date(BASE.getTime() + 5 * 60_000);
+    const tendersInput: RecordSaleTender[] = [
+      { method: "cash", amount: "6.31", tipAmount: "0.00", settledAt: BASE },
+      { method: "card", amount: "10.00", tipAmount: "1.90", settledAt: later },
+    ];
+    const backend = new FakeFiscalBackend(suite.db);
+
+    // Path A — immediate, on the beforeEach tenant.
+    const a = await withTenant(suite.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      await backend.registerTill(tx, tillId, { tenantId });
+      return recordSale(
+        tx,
+        backend,
+        input({ settlement: { kind: "immediate", tenders: tendersInput } }),
+      );
+    });
+
+    // Path B — a second, independent tenant: deferred record, then a SEPARATE settleSale.
+    const other = await seedTenant(suite.db);
+    const b = await withTenant(suite.db, other.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await backend.registerTill(tx, other.tillId, { tenantId: other.tenantId });
+      return recordSale(
+        tx,
+        backend,
+        input({
+          tenantId: other.tenantId,
+          tillId: other.tillId,
+          seriesId: other.seriesId,
+          workingOrderId: other.workingOrderId,
+          settlement: { kind: "deferred" },
+        }),
+      );
+    });
+    await withTenant(suite.db, other.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await settleSale(tx, { tenantId: other.tenantId, saleId: b.saleId, tenders: tendersInput });
+    });
+
+    // Tenders, modulo id/tenant_id/sale_id, sorted for a position-independent compare.
+    const normalize = (rows: (typeof tenders.$inferSelect)[]) =>
+      rows
+        .map((r) => ({
+          method: r.method,
+          amount: r.amount,
+          tipAmount: r.tipAmount,
+          settledAt: new Date(r.settledAt).getTime(),
+        }))
+        .sort((x, y) => x.amount.localeCompare(y.amount));
+    const aTenders = normalize(
+      await suite.db.select().from(tenders).where(eq(tenders.saleId, a.saleId)),
+    );
+    const bTenders = normalize(
+      await suite.db.select().from(tenders).where(eq(tenders.saleId, b.saleId)),
+    );
+    expect(aTenders).toHaveLength(2);
+    expect(aTenders).toEqual(bTenders);
+
+    // Settlements, modulo id/tenant_id/sale_id. Both stamp the LATEST tender's instant (decision 5),
+    // which is `later`, NOT either sale's issuance instant (BASE) — proving the max-tender path.
+    const [aSettle] = await suite.db
+      .select()
+      .from(saleSettlements)
+      .where(eq(saleSettlements.saleId, a.saleId));
+    const [bSettle] = await suite.db
+      .select()
+      .from(saleSettlements)
+      .where(eq(saleSettlements.saleId, b.saleId));
+    expect(aSettle).toBeDefined();
+    expect(bSettle).toBeDefined();
+    expect(new Date(aSettle!.settledAt).getTime()).toBe(new Date(bSettle!.settledAt).getTime());
+    expect(new Date(aSettle!.settledAt).getTime()).toBe(later.getTime());
+  });
+
+  it("immediate settles a fully-comped €0 sale with no tenders", async () => {
+    // The tenderless immediate path, driven end to end through `recordSale` rather than only through
+    // a direct `settleSale` (settle-sale.test.ts already covers the latter). A fully-comped sale is
+    // total 0.00 with NO tender — `tenders_amount_ck` forbids a €0 tender — so immediate mode hands
+    // `settleSale` an EMPTY tender list; it must record the settlement (stamped at its OWN instant,
+    // `new Date()`, like `record-void.ts`) rather than crash on an empty `reduce`/`insert().values([])`.
+    // The coverage identity `0 = 0 + 0` holds, so the settlement is written and the sale is still
+    // chained.
+    const backend = new FakeFiscalBackend(suite.db);
+    // Window the run so the stamped instant is pinned to the actual settlement moment. `issued_at` is
+    // the fixed `steadyClock` reading (BASE, March), so a settlement stamped `new Date()` (now) is
+    // demonstrably NOT a copy of issuance.
+    const before = new Date();
+    const { saleId } = await run(backend, {
+      total: "0.00",
+      lines: [
+        {
+          lineNo: 1,
+          descriptions: { "es-ES": "Free item", "ca-ES": "Free item" },
+          quantity: "1",
+          unitPrice: "0.00",
+          vatRate: "0.00",
+          lineTotal: "0.00",
+        },
+      ],
+      settlement: { kind: "immediate", tenders: [] },
+    });
+    const after = new Date();
+
+    expect(await countRows("sales")).toBe(1);
+    expect(await countRows("tenders")).toBe(0);
+    expect(await countRows("sale_settlements")).toBe(1);
+    expect(await backend.recordsFor(tillId)).toHaveLength(1);
+    // Stamped at the settlement's own instant — there is no tender to time it by, and settlement is
+    // not a fiscal event.
+    const [settled] = await suite.db
+      .select()
+      .from(saleSettlements)
+      .where(eq(saleSettlements.saleId, saleId));
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
+    const settledAt = new Date(settled!.settledAt).getTime();
+    // Within the run window …
+    expect(settledAt).toBeGreaterThanOrEqual(before.getTime());
+    expect(settledAt).toBeLessThanOrEqual(after.getTime());
+    // … and strictly LATER than the fixed issued_at (BASE), proving it is the settlement instant, not
+    // a backdated copy of the print instant.
+    expect(settledAt).toBeGreaterThan(new Date(row!.issuedAt).getTime());
+  });
+});
+
 describe("recordSale — numbering", () => {
   it("never reissues a number that reached a committed sale", async () => {
     // The property that actually matters. Gaps are permitted; reuse is not.
@@ -503,8 +692,6 @@ describe("recordSale — numbering", () => {
           issuedAt: BASE.toISOString(),
           issuedOffsetMinutes: 60,
           total: "1.00",
-          tipAmount: "0.00",
-          amountCharged: "1.00",
           locale: "es-ES",
           invoiceLocales: ["es-ES"],
           fiscalBackend: "fake",

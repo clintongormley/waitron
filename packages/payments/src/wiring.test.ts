@@ -84,11 +84,11 @@ function buildInput(
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
     locale: "es",
     invoiceLocales: ["es"],
-    // total is the taxable amount and tip is zero here, so amount_charged (12.10) equals the one
-    // tender — satisfying both the sale's `amount_charged = total + tip` check and the deferred
-    // `sales_assert_tenders_cover` trigger at commit.
+    // total is the taxable amount and the tip is zero here, so the one tender's amount (12.10) equals
+    // total + tip — the coverage identity `sum(amount) = total + sum(tip)` that `settleSale` checks
+    // when the settlement is declared (migration 0012 retired the old commit-time deferred trigger
+    // and `amount_charged` alike). Immediate mode hands these tenders straight to `settleSale`.
     total: "12.10",
-    tipAmount: "0.00",
     lines: [
       {
         lineNo: 1,
@@ -99,7 +99,12 @@ function buildInput(
         lineTotal: "10.00",
       },
     ],
-    tenders: [{ method: "card", amount: tender.amount, settledAt: tender.settledAt }],
+    settlement: {
+      kind: "immediate",
+      tenders: [
+        { method: "card", amount: tender.amount, tipAmount: "0.00", settledAt: tender.settledAt },
+      ],
+    },
     fiscalBackend: "fake",
     clock: steadyClock,
   };

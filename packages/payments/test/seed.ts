@@ -50,18 +50,17 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
  * `associatePaymentWithSale` needs to point a payment at, without going through `@waitron/core`'s
  * full `recordSale` (that full path is exercised in the Task 10 wiring test).
  *
- * Every NOT NULL column on `sales` (`packages/db/src/schema/sales.ts`) is supplied, and every
- * CHECK is satisfied by construction: `amount_charged = total + tip_amount` (10.00 = 10.00 +
- * 0.00), `locale` is a member of `invoice_locales`, `issued_offset_minutes` is within range, and
- * this is the series' first (and only) sale, so `invoice_number = 1` never collides with
- * `sales_series_invoice_number_key`.
- *
- * The `sales`/`tenders` insert also has to satisfy `sales_assert_tenders_cover`
- * (`packages/db/drizzle/0005_sales.sql`) — a DEFERRED constraint trigger checked at COMMIT that
- * the sale's `tenders` sum to its `amount_charged`. Both inserts therefore run inside one
- * `db.transaction`, so the tender exists before that transaction commits and the trigger fires;
- * two separate top-level `db.execute` calls each auto-commit on their own statement and the sale
- * insert would fail the coverage check with nothing tendered yet. Run as the connection owner
+ * `total` is the only money column on `sales` now — `tip_amount`/`amount_charged` were dropped in
+ * migration 0012 (the tip moved to `tenders.tip_amount`). No `sale_settlements` row is declared, so
+ * this is a legitimate UNSETTLED sale (design §3) and NO coverage check runs against it: migration
+ * 0012 retired the old commit-time deferred `sales_assert_tenders_cover` trigger, replacing it with
+ * one that fires only when settlement is DECLARED (the `sale_settlements` INSERT). Every other NOT
+ * NULL column on `sales` (`packages/db/src/schema/sales.ts`) is supplied, `locale` is a member of
+ * `invoice_locales`, `issued_offset_minutes` is within range, and this is the series' first (and
+ * only) sale, so `invoice_number = 1` never collides with `sales_series_invoice_number_key`. The
+ * sale and its covering tender are wrapped in one `db.transaction` for atomic setup — not for the
+ * composite FK (which a committed `sales` row satisfies across separate transactions too), but so a
+ * partial failure can never leave a sale without its covering tender. Run as the connection owner
  * (superuser), like `seedWorkingOrder` — RLS is bypassed, so this is pure setup.
  */
 export async function seedSale(db: Database, seeded: Seeded): Promise<string> {
@@ -73,10 +72,10 @@ export async function seedSale(db: Database, seeded: Seeded): Promise<string> {
     const sale = await tx.execute<{ id: string }>(sql`
       insert into sales (
         tenant_id, till_id, series_id, invoice_number, issued_at, issued_offset_minutes,
-        total, tip_amount, amount_charged, locale, invoice_locales, fiscal_backend, fiscal_state
+        total, locale, invoice_locales, fiscal_backend, fiscal_state
       ) values (
         ${seeded.tenantId}, ${seeded.tillId}, ${seriesId}, 1, now(), 60,
-        '10.00', '0.00', '10.00', 'es', array['es'], 'fake', 'not_applicable'
+        '10.00', 'es', array['es'], 'fake', 'not_applicable'
       ) returning id`);
     const saleId = sale.rows[0].id;
     await tx.execute(sql`

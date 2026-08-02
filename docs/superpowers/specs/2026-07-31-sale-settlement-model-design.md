@@ -229,6 +229,27 @@ event: nothing here touches the chain, takes the chain-head lock, or submits to 
 lock-ordering hazard documented at `record-sale.ts` step 3 (chain-head before series, never the
 inversion) does not extend into it.
 
+### Ratified in implementation (2026-08-01)
+
+Three points the build settled that this spec left implicit or unnamed:
+
+- **The void-refusal above has a code: `sale.voided` `{ saleId }`.** The prose names the state
+  (`settleSale` refuses a sale carrying a `sale_voids` row) but not its code; the implementation adds
+  `sale.voided`, sibling to `sale.already_voided`. Codes are never renamed once shipped.
+- **`sale.tender_unsettled` / `sale.tender_shortfall` are re-shaped to `{ tillId, saleId, … }`**,
+  dropping `workingOrderId`. They fire from the settlement path, which has a `saleId` and reads
+  `tillId` from the sale row, but no working order — that is consumed at `recordSale` time and never
+  stored on `sales`.
+- **A fully-comped sale settles tenderless.** `sales_total_ck` permits `total = 0`, and
+  `tenders_amount_ck` (`amount > 0`) forbids a €0 tender, so a 100%-comped sale is genuinely
+  tenderless. `settleSale` records its `sale_settlements` row with no `tenders` and stamps
+  `settled_at` at the **settlement instant** (`new Date()` at settle time, exactly as
+  `record-void.ts` does — there is no tender to time it by, and settlement is not a fiscal event).
+  It must NOT borrow the sale's `issued_at`: in invoice-first mode `settleSale` runs long after
+  issuance, so backdating an append-only row to the print instant would misdate a comp finalised
+  later, uncorrectably. The coverage trigger holds because `0 = 0 + 0`. Both settlement modes derive
+  that instant the same way, so D6 holds.
+
 ---
 
 ## 5. The coverage machinery — kept, moved, and one hole closed

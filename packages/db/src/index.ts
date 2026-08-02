@@ -6,7 +6,14 @@ export type { MigrationOptions } from "./migrate.js";
 export * from "./schema/tenants.js";
 export { invoiceSeries } from "./schema/series.js";
 export { workingOrderLines, workingOrders, workingOrderStatus } from "./schema/orders.js";
-export { fiscalState, saleLines, sales, tenderMethod, tenders } from "./schema/sales.js";
+export {
+  fiscalState,
+  saleLines,
+  sales,
+  saleSettlements,
+  tenderMethod,
+  tenders,
+} from "./schema/sales.js";
 export { saleVoids } from "./schema/sale-voids.js";
 export { incidents } from "./schema/incidents.js";
 export type { IncidentSeverity } from "./schema/incidents.js";

@@ -134,8 +134,7 @@ describe("findSpanish", () => {
     expect(
       findSpanish(
         "import { invoiceSeries } from './series.js';\n" +
-          "const importedRows = delta.filter((r) => r.renumbered);\n" +
-          "const total = sale.amountCharged;\n",
+          "const importedRows = delta.filter((r) => r.renumbered);\n",
       ),
     ).toEqual([]);
   });

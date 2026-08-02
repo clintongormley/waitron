@@ -177,10 +177,10 @@ export async function seedTillsForSifContention(
 
 /**
  * Inserts one core `sales` row and returns its id — the FK `registros_facturacion.sale_id` needs.
- * `total`/`tip_amount`/`amount_charged` are all `'0.00'` deliberately: `sales`'s deferred
- * `sales_assert_tenders_cover` constraint trigger (packages/db/drizzle/0005_sales.sql) requires
- * tenders to sum to `amount_charged`, and the simplest fixture that clears it with NO tender row
- * at all is one with nothing to cover — the same convention this package's own
+ * `total` is `'0.00'` and NO tender or `sale_settlements` row is written: migration 0012 dropped
+ * `tip_amount`/`amount_charged` from `sales` and retired the old commit-time
+ * `sales_assert_tenders_cover` deferred trigger, so a bare, unsettled sale is a legitimate steady
+ * state (design §3) and nothing checks coverage against it — the same convention this package's own
  * `test/fixtures.ts`/`seedTenantTillSif` already uses. The Veri*Factu record's OWN amounts
  * (`altaFor`'s `CuotaTotal`/`ImporteTotal`) are independent of this sale's totals; nothing ties
  * `registros_facturacion.importe_total` to `sales.total` at the database level (Task 12's own
@@ -194,11 +194,10 @@ export async function seedSale(
 ): Promise<string> {
   const { rows } = await db.execute<{ id: string }>(sql`
     insert into sales (tenant_id, till_id, series_id, invoice_number, issued_at, issued_offset_minutes,
-                       total, tip_amount, amount_charged, locale, invoice_locales,
-                       fiscal_backend, fiscal_state)
+                       total, locale, invoice_locales, fiscal_backend, fiscal_state)
     values (${till.tenantId}, ${till.tillId}, ${till.seriesId}, ${invoiceNumber},
             '2026-07-20T19:20:30+02:00', 120,
-            '0.00', '0.00', '0.00',
+            '0.00',
             'es', array['es'], 'verifactu', 'recorded')
     returning id
   `);
