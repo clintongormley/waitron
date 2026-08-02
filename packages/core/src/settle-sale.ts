@@ -23,7 +23,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   // The sale's fiscal total, and fail-closed on cross-tenant: RLS hides another
   // tenant's row, so it is genuinely not-found rather than forbidden (as record-void).
   const [sale] = await tx
-    .select({ tillId: sales.tillId, total: sales.total, issuedAt: sales.issuedAt })
+    .select({ tillId: sales.tillId, total: sales.total })
     .from(sales)
     .where(eq(sales.id, input.saleId));
   if (sale === undefined) {
@@ -79,12 +79,16 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   // and has NO payment — `tenders_amount_ck` forbids a €0 tender, so a comp is genuinely tenderless
   // — and the schema permits settling it: `sales_total_ck` allows a total of 0, and the coverage
   // trigger's `coalesce(sum(amount),0)` makes `0 = 0 + 0` hold, so the shortfall check above passes.
-  // With no tender to time it by, the settlement takes the sale's own issuance instant rather than
-  // crashing on an empty `reduce`. On a present tender, `settledAt` is guaranteed non-null by the
-  // guard above; `!` reflects that rather than asserting blind.
+  // With no tender to time it by, the settlement stamps its OWN instant — `new Date()`, exactly as
+  // `record-void.ts` does (settlement is not a fiscal event: this takes no chain-head lock). It must
+  // NOT borrow the sale's `issued_at`: in invoice-first mode `settleSale` runs long after issuance,
+  // so `issued_at` is when the invoice printed, not when the comp was finalised, and backdating an
+  // append-only `sale_settlements` row to it cannot be corrected later. On a present tender,
+  // `settledAt` is guaranteed non-null by the guard above; `!` reflects that rather than asserting
+  // blind.
   const settledAt =
     input.tenders.length === 0
-      ? new Date(sale.issuedAt)
+      ? new Date()
       : input.tenders.map((t) => t.settledAt!).reduce((a, b) => (b > a ? b : a));
 
   // Skipped entirely when tenderless: a comped sale has no payments to record, and Drizzle rejects

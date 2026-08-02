@@ -243,9 +243,12 @@ Three points the build settled that this spec left implicit or unnamed:
 - **A fully-comped sale settles tenderless.** `sales_total_ck` permits `total = 0`, and
   `tenders_amount_ck` (`amount > 0`) forbids a €0 tender, so a 100%-comped sale is genuinely
   tenderless. `settleSale` records its `sale_settlements` row with no `tenders` and stamps
-  `settled_at` at the sale's **issuance instant** (there is no tender to time it by); the coverage
-  trigger holds because `0 = 0 + 0`. Both settlement modes derive that instant identically, so D6
-  holds.
+  `settled_at` at the **settlement instant** (`new Date()` at settle time, exactly as
+  `record-void.ts` does — there is no tender to time it by, and settlement is not a fiscal event).
+  It must NOT borrow the sale's `issued_at`: in invoice-first mode `settleSale` runs long after
+  issuance, so backdating an append-only row to the print instant would misdate a comp finalised
+  later, uncorrectably. The coverage trigger holds because `0 = 0 + 0`. Both settlement modes derive
+  that instant the same way, so D6 holds.
 
 ---
 

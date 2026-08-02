@@ -626,10 +626,15 @@ describe("recordSale — settlement modes", () => {
     // The tenderless immediate path, driven end to end through `recordSale` rather than only through
     // a direct `settleSale` (settle-sale.test.ts already covers the latter). A fully-comped sale is
     // total 0.00 with NO tender — `tenders_amount_ck` forbids a €0 tender — so immediate mode hands
-    // `settleSale` an EMPTY tender list; it must record the settlement (stamped at the sale's own
-    // issuance instant, decision 5) rather than crash on an empty `reduce`/`insert().values([])`. The
-    // coverage identity `0 = 0 + 0` holds, so the settlement is written and the sale is still chained.
+    // `settleSale` an EMPTY tender list; it must record the settlement (stamped at its OWN instant,
+    // `new Date()`, like `record-void.ts`) rather than crash on an empty `reduce`/`insert().values([])`.
+    // The coverage identity `0 = 0 + 0` holds, so the settlement is written and the sale is still
+    // chained.
     const backend = new FakeFiscalBackend(suite.db);
+    // Window the run so the stamped instant is pinned to the actual settlement moment. `issued_at` is
+    // the fixed `steadyClock` reading (BASE, March), so a settlement stamped `new Date()` (now) is
+    // demonstrably NOT a copy of issuance.
+    const before = new Date();
     const { saleId } = await run(backend, {
       total: "0.00",
       lines: [
@@ -644,18 +649,26 @@ describe("recordSale — settlement modes", () => {
       ],
       settlement: { kind: "immediate", tenders: [] },
     });
+    const after = new Date();
 
     expect(await countRows("sales")).toBe(1);
     expect(await countRows("tenders")).toBe(0);
     expect(await countRows("sale_settlements")).toBe(1);
     expect(await backend.recordsFor(tillId)).toHaveLength(1);
-    // Stamped at the sale's issuance instant — there is no tender to time it by.
+    // Stamped at the settlement's own instant — there is no tender to time it by, and settlement is
+    // not a fiscal event.
     const [settled] = await suite.db
       .select()
       .from(saleSettlements)
       .where(eq(saleSettlements.saleId, saleId));
     const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
-    expect(new Date(settled!.settledAt).getTime()).toBe(new Date(row!.issuedAt).getTime());
+    const settledAt = new Date(settled!.settledAt).getTime();
+    // Within the run window …
+    expect(settledAt).toBeGreaterThanOrEqual(before.getTime());
+    expect(settledAt).toBeLessThanOrEqual(after.getTime());
+    // … and strictly LATER than the fixed issued_at (BASE), proving it is the settlement instant, not
+    // a backdated copy of the print instant.
+    expect(settledAt).toBeGreaterThan(new Date(row!.issuedAt).getTime());
   });
 });
 

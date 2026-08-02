@@ -108,29 +108,39 @@ describe("settleSale — the happy path", () => {
     expect(tenderRows[0]!.tipAmount).toBe("5.00");
   });
 
-  it("settles a €0 comped sale with no tenders, stamped at issuance (no raw TypeError)", async () => {
+  it("settles a €0 comped sale with no tenders, stamped at the settlement instant (no raw TypeError)", async () => {
     // A fully-comped sale is €0 and has NO payment: `tenders_amount_ck` forbids a €0 tender, so a
     // comp is genuinely tenderless. The schema permits the settlement — `sales_total_ck` allows a
     // total of 0, and the coverage trigger's `coalesce(sum(amount),0)` makes `0 = 0 + 0` hold — so
     // `settleSale` must RECORD it, not crash on an empty `reduce`/empty `insert().values([])`. With
-    // no tender to time it by, the settlement takes the sale's own issuance instant (design decision
-    // 5 defines settled_at as the last tender's moment; there is no tender here).
+    // no tender to time it by, the settlement stamps its OWN instant (`new Date()`, like
+    // `record-void.ts`), NOT the sale's `issued_at`: in invoice-first mode settlement runs long
+    // after the invoice printed, and backdating an append-only row to issuance cannot be corrected.
     const seed = await seedTenant(postgres.admin);
     const saleId = await seedSale(postgres.admin, seed, { total: "0.00" });
 
+    // Window the settle call so the stamped instant is pinned to the actual settlement moment, not
+    // the seed's issued_at (11:00Z). `before`/`after` bracket the real `new Date()` inside settleSale.
+    const before = new Date();
     await settle(postgres.admin, seed.tenantId, {
       tenantId: seed.tenantId,
       saleId,
       tenders: [],
     });
+    const after = new Date();
 
     const [settled] = await postgres.admin
       .select()
       .from(saleSettlements)
       .where(eq(saleSettlements.saleId, saleId));
     expect(settled).toBeDefined();
-    // seedSale stamps issued_at at 11:00Z; a tenderless settlement inherits exactly that instant.
-    expect(new Date(settled!.settledAt).getTime()).toBe(new Date("2026-08-01T11:00:00Z").getTime());
+    const settledAt = new Date(settled!.settledAt).getTime();
+    // The settlement's own instant: within the call window …
+    expect(settledAt).toBeGreaterThanOrEqual(before.getTime());
+    expect(settledAt).toBeLessThanOrEqual(after.getTime());
+    // … and strictly LATER than the seed's issued_at (11:00Z), proving it is the settlement instant
+    // rather than the print instant a backdating implementation would have copied.
+    expect(settledAt).toBeGreaterThan(new Date("2026-08-01T11:00:00Z").getTime());
 
     const tenderRows = await postgres.admin
       .select()
@@ -402,9 +412,7 @@ describe("settleSale — error propagation", () => {
           where: () => {
             selects += 1;
             return selects === 1
-              ? Promise.resolve([
-                  { tillId: "t", total: "0.00", issuedAt: SETTLED_AT.toISOString() },
-                ])
+              ? Promise.resolve([{ tillId: "t", total: "0.00" }])
               : Promise.resolve([]);
           },
         }),
