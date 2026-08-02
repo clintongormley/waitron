@@ -1,6 +1,7 @@
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
+import { appendToChain } from "./chain.js";
 import { timeEntries } from "./schema/time-entries.js";
 import {
   dailyContractedTargetMinutes,
@@ -226,15 +227,16 @@ export class WorkforceBackend {
     input: ClockEventInput,
     entryKind: WorkforceEntryKind,
   ): Promise<void> {
-    await tx.insert(timeEntries).values({
-      tenantId: input.tenantId,
+    // Every clock event is appended to its location's tamper-evidence chain (Slice 4) under a row
+    // lock on the chain head — the single-writer path (design §5). The hash and chain position are
+    // computed there, never supplied here.
+    await appendToChain(tx, input.tenantId, input.locationId, {
       personId: input.personId,
-      locationId: input.locationId,
       entryKind,
       eventAt: input.at,
       eventOffsetMinutes: input.offsetMinutes,
-      capturedByTillId: input.tillId ?? null,
       recordedByPersonId: input.recordedByPersonId ?? input.personId,
+      capturedByTillId: input.tillId ?? null,
     });
   }
 
@@ -324,24 +326,22 @@ export class WorkforceBackend {
       tillId: string | null;
     },
   ): Promise<string> {
-    const [inserted] = await tx
-      .insert(timeEntries)
-      .values({
-        tenantId: params.tenantId,
-        personId: params.personId,
-        locationId: params.locationId,
-        entryKind: "correction",
-        eventAt: params.at,
-        eventOffsetMinutes: params.offsetMinutes,
-        capturedByTillId: params.tillId,
-        recordedByPersonId: params.actorPersonId,
-        correctsEntryId: params.correctsEntryId,
-        correctionReason: params.reason,
-        correctionStatus: params.status,
-        correctionActorId: params.actorPersonId,
-      })
-      .returning({ id: timeEntries.id });
-    return inserted!.id;
+    // A correction is an append like any other — it rides the SAME location chain as the clock
+    // events it supersedes, so it cannot dodge the tamper-evidence (design §5). Its actor is the
+    // recorder; its content carries the correction columns.
+    const { id } = await appendToChain(tx, params.tenantId, params.locationId, {
+      personId: params.personId,
+      entryKind: "correction",
+      eventAt: params.at,
+      eventOffsetMinutes: params.offsetMinutes,
+      recordedByPersonId: params.actorPersonId,
+      capturedByTillId: params.tillId,
+      correctsEntryId: params.correctsEntryId,
+      correctionReason: params.reason,
+      correctionStatus: params.status,
+      correctionActorId: params.actorPersonId,
+    });
+    return id;
   }
 
   private async contractedMinutesPerWeek(

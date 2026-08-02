@@ -9,6 +9,14 @@ import { WORKFORCE_MIGRATIONS } from "../migrations.js";
 export type { RealPostgres };
 
 /**
+ * The setup budget a container suite needs, passed to `useRealPostgres`'s `timeoutMs`. It restates
+ * vitest.config.ts's own `hookTimeout` (180s) because `useRealPostgres` gives its `beforeAll` no
+ * default, and the per-hook argument wins over the config value — so a suite passing nothing would
+ * silently drop to vitest's 5s default. Same reasoning as fiscal-verifactu's copy.
+ */
+export const CONTAINER_SETUP_TIMEOUT_MS = 180_000;
+
+/**
  * Starts a real PostgreSQL server and runs both migration sets against it, core first — ordering
  * across packages is the runtime's responsibility and nothing enforces it, so it is explicit here.
  */

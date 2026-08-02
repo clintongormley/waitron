@@ -143,6 +143,34 @@ describe("time_entries under real row-level security", () => {
     }
   });
 
+  it("hides another tenant's chain head — workforce_chains is tenant-isolated too (Slice 4)", async () => {
+    // The chain head is written by appendToChain (through insertTimeEntry here) and carries the same
+    // FORCE RLS + tenant policy as the entries it tracks (0006). A tenant must not see another's head
+    // row, or a cross-tenant reader could infer another venue's clock volume.
+    const mine = await seedTenant(suite.admin);
+    const theirs = await seedTenant(suite.admin);
+    const theirPerson = await seedPerson(suite.admin, theirs);
+    const theirLocation = await seedLocation(suite.admin, theirs);
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      await withTenant(probe, theirs, (tx) =>
+        insertTimeEntry(tx, { tenantId: theirs, personId: theirPerson, locationId: theirLocation }),
+      );
+      // Confirmed present as the superuser (bypasses RLS) — hiding nothing is not hiding something.
+      const seen = await suite.admin.execute<{ count: string }>(
+        sql`select count(*) as count from workforce_chains where tenant_id = ${theirs}`,
+      );
+      expect(seen.rows[0]!.count).toBe("1");
+
+      const visible = await withTenant(probe, mine, (tx) =>
+        tx.execute<{ count: string }>(sql`select count(*) as count from workforce_chains`),
+      );
+      expect(visible.rows[0]!.count).toBe("0");
+    } finally {
+      await probe.close();
+    }
+  });
+
   it("refuses to delete a clock event — DELETE was never granted to the app role", async () => {
     // The append-only floor from the app role's side, complementing immutability.test.ts's owner-side
     // proof: the grant is exactly SELECT, INSERT, so a DELETE fails with 42501. Adding DELETE to

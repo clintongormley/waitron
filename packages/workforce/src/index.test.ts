@@ -14,6 +14,12 @@ describe("the public surface", () => {
         "timeEntries",
         "workforceCorrectionStatus",
         "workforceEntryKind",
+        "workforceChains",
+        "appendToChain",
+        "isUniqueViolation",
+        "lockChainHead",
+        "computeEntryHash",
+        "verifyChain",
         "hashPin",
         "verifyPin",
         "WorkforceBackend",
@@ -85,9 +91,36 @@ describe("time_entries constraint declarations (forces the lazy extraConfig call
     expect(checkNames).toContain("time_entries_event_offset_ck");
     // Slice 3: a row is all-base or all-correction, never half of each.
     expect(checkNames).toContain("time_entries_correction_shape_ck");
+    // Slice 4: the tamper-evidence chain shape and hash format.
+    expect(checkNames).toContain("time_entries_entry_hash_ck");
+    expect(checkNames).toContain("time_entries_sequence_no_ck");
+    expect(checkNames).toContain("time_entries_chaining_ck");
 
     // `ingest_seq` is GENERATED ALWAYS AS IDENTITY — the app cannot forge the append order.
     const ingest = config.columns.find((c) => c.name === "ingest_seq");
     expect(ingest?.generatedIdentity?.type).toBe("always");
+  });
+});
+
+describe("workforce_chains constraint declarations (forces the lazy extraConfig callback)", () => {
+  it("declares the chain head's composite key, foreign keys and pointer check", () => {
+    const config = getTableConfig(api.workforceChains);
+
+    // The PK is the composite (tenant_id, location_id) in extraConfig — asserting it forces the
+    // lazy callback to run.
+    expect(config.primaryKeys.map((pk) => pk.getName())).toContain(
+      "workforce_chains_tenant_id_location_id_pk",
+    );
+
+    const fkNames = config.foreignKeys.map((fk) => fk.getName());
+    expect(fkNames).toEqual(
+      expect.arrayContaining([
+        "workforce_chains_tenant_id_tenants_id_fk",
+        "workforce_chains_location_id_locations_id_fk",
+        "workforce_chains_last_entry_id_time_entries_id_fk",
+      ]),
+    );
+
+    expect(config.checks.map((c) => c.name)).toContain("workforce_chains_pointer_ck");
   });
 });

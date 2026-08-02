@@ -93,13 +93,37 @@ describe("time_entries is immutable, as the app role", () => {
     });
   });
 
-  it("rejects TRUNCATE by statement trigger", async () => {
-    // A row trigger does NOT fire on TRUNCATE. Nothing references time_entries.id in Slice 2, so a
-    // bare TRUNCATE (no CASCADE) is enough; the statement trigger is what stops it.
+  it("rejects rewriting a chain column even when UPDATE is granted (Slice-4 columns are immutable too)", async () => {
+    // The deliverable's "confirm, don't re-add DDL": the append-only trigger and the REVOKE already
+    // cover the whole row, so the new entry_hash/prev_entry_hash/sequence_no/is_first_entry columns
+    // inherit immutability with no extra DDL. Grant UPDATE (rolled back), then watch the trigger
+    // still reject a rewrite of entry_hash. Deleting the trigger from 0003 fails this.
     await withTenant(suite.admin, ctx.tenantId, async (tx) => {
-      await tx.execute(sql`grant truncate on time_entries to app_user`);
+      await tx.execute(sql`grant update on time_entries to app_user`);
       await tx.execute(sql`set local role app_user`);
-      const error = await captureError(() => tx.execute(sql`truncate time_entries`));
+      await insertTimeEntry(tx, ctx);
+      const error = await captureError(() =>
+        tx.execute(sql`update time_entries set entry_hash = ${"0".repeat(64)}`),
+      );
+      expect(pgErrorCode(error)).toBe("WT001");
+      throw new RollbackSignal();
+    }).catch((e: unknown) => {
+      if (!(e instanceof RollbackSignal)) throw e;
+    });
+  });
+
+  it("rejects TRUNCATE by statement trigger", async () => {
+    // A row trigger does NOT fire on TRUNCATE. Since Slice 4, workforce_chains.last_entry_id
+    // references time_entries.id, so a bare TRUNCATE now fails with 0A000 (a table referenced by a
+    // foreign key cannot be truncated) BEFORE reaching the trigger — CASCADE gets past the FK check.
+    // CASCADE also drags in workforce_chains, and Postgres checks TRUNCATE privilege on EVERY table
+    // in the set before firing any trigger, so the grant must cover both or a 42501 pre-empts the
+    // trigger. With both granted, the BEFORE TRUNCATE trigger on time_entries fires first and aborts
+    // with WT001 — it runs ahead of any actual truncation, so workforce_chains is never touched.
+    await withTenant(suite.admin, ctx.tenantId, async (tx) => {
+      await tx.execute(sql`grant truncate on time_entries, workforce_chains to app_user`);
+      await tx.execute(sql`set local role app_user`);
+      const error = await captureError(() => tx.execute(sql`truncate time_entries cascade`));
       expect(pgErrorCode(error)).toBe("WT001");
       throw new RollbackSignal();
     }).catch((e: unknown) => {
@@ -109,10 +133,10 @@ describe("time_entries is immutable, as the app role", () => {
 });
 
 describe("row-level security is enabled AND forced on the new tenant-scoped tables", () => {
-  it("has relrowsecurity and relforcerowsecurity on employments and time_entries", async () => {
-    // ENABLE alone (drizzle's .enableRLS(), migration 0002) leaves the owner and every superuser
-    // exempt; FORCE (the hand-written 0003) is what binds the deployment role. Deleting either 0003
-    // FORCE line drops relforcerowsecurity to false and fails this.
+  it("has relrowsecurity and relforcerowsecurity on employments, time_entries and workforce_chains", async () => {
+    // ENABLE alone (drizzle's .enableRLS()) leaves the owner and every superuser exempt; FORCE (the
+    // hand-written 0003/0006) is what binds the deployment role. Deleting any FORCE line drops
+    // relforcerowsecurity to false and fails this. workforce_chains (Slice 4) is forced by 0006.
     const result = await suite.admin.execute<{
       relname: string;
       relrowsecurity: boolean;
@@ -120,11 +144,12 @@ describe("row-level security is enabled AND forced on the new tenant-scoped tabl
     }>(sql`
       select relname, relrowsecurity, relforcerowsecurity
       from pg_class
-      where relname in ('employments', 'time_entries')
+      where relname in ('employments', 'time_entries', 'workforce_chains')
       order by relname`);
     expect(result.rows).toEqual([
       { relname: "employments", relrowsecurity: true, relforcerowsecurity: true },
       { relname: "time_entries", relrowsecurity: true, relforcerowsecurity: true },
+      { relname: "workforce_chains", relrowsecurity: true, relforcerowsecurity: true },
     ]);
   });
 });

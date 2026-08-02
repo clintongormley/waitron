@@ -35,6 +35,16 @@ declare module "@waitron/shared" {
     /** A clock event tried to CLOSE or continue a state that is not open — a clock-out or break with
      * no open shift, or a break-end with no open break. */
     "attendance.no_open_entry": { tenantId: string; personId: string };
+    /** A clock event or correction could not be appended to its (tenant, location) tamper-evidence
+     * chain: `appendToChain` (../chain.ts) exhausted `MAX_APPEND_ATTEMPTS` savepoint retries, each
+     * losing the race to CREATE the chain head (SQLSTATE 23505 on `time_entries_chain_position_uq`)
+     * — several tills at one location racing the very first append, the one window the head-row lock
+     * cannot cover. `attendance.*`, NOT `chain.*`: `chain.*` is owned by packages/fiscal-verifactu
+     * for the fiscal encadenamiento (grepped — never renamed once shipped), and from the caller's
+     * side this is a fact about an attendance append that could not complete, not about the fiscal
+     * chain. Keyed by `locationId` (the chain key) with the retry count, matching fiscal
+     * `chain.append_contention`'s shape. */
+    "attendance.append_contention": { tenantId: string; locationId: string; attempts: number };
     /** A correction was requested against, or an approval named, an entry that does not exist under
      * the current tenant — never appended, or hidden by RLS (identical from the caller's side).
      * `correction.*`, not `attendance.*`/`person.*`: this is a fact about the correction workflow (a

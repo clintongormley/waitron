@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
+import { appendToChain } from "../src/chain.js";
 import { hashPin } from "../src/verify-pin.js";
 import type { WorkforceEntryKind } from "../src/projection.js";
 
@@ -44,7 +45,12 @@ export async function seedEmployment(
   return result.rows[0]!.id;
 }
 
-/** Appends one clock event. `recorded_by_person_id` defaults to the subject (self-service). */
+/** Appends one clock event THROUGH the Slice-4 chain, so seeded rows are chained exactly as the
+ * write path produces them (`recorded_by_person_id` defaults to the subject — self-service).
+ *
+ * Wrapped in `.transaction()` because `appendToChain` needs a Transaction for its savepoint retry
+ * and its `FOR UPDATE` head lock; both a `Database` (BEGIN) and a `Transaction` (SAVEPOINT) expose
+ * `.transaction()`, so this fixture works whether a suite hands it a pool or a live tenant tx. */
 export async function insertTimeEntry(
   tx: Database | Transaction,
   params: {
@@ -56,13 +62,13 @@ export async function insertTimeEntry(
     offsetMinutes?: number;
   },
 ): Promise<void> {
-  await tx.execute(sql`
-    insert into time_entries (
-      tenant_id, person_id, location_id, entry_kind, event_at, event_offset_minutes,
-      recorded_by_person_id
-    ) values (
-      ${params.tenantId}, ${params.personId}, ${params.locationId},
-      ${params.entryKind ?? "in"}, ${params.eventAt ?? "2026-01-05T09:00:00Z"},
-      ${params.offsetMinutes ?? 0}, ${params.personId}
-    )`);
+  await tx.transaction((inner) =>
+    appendToChain(inner, params.tenantId, params.locationId, {
+      personId: params.personId,
+      entryKind: params.entryKind ?? "in",
+      eventAt: params.eventAt ?? "2026-01-05T09:00:00Z",
+      eventOffsetMinutes: params.offsetMinutes ?? 0,
+      recordedByPersonId: params.personId,
+    }),
+  );
 }

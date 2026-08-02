@@ -6,3 +6,4 @@
 export { persons, personStatus, workforceRole } from "./persons.js";
 export { employments } from "./employments.js";
 export { timeEntries, workforceCorrectionStatus, workforceEntryKind } from "./time-entries.js";
+export { workforceChains } from "./workforce-chains.js";

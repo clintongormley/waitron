@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   check,
   foreignKey,
   index,
@@ -9,6 +10,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { locations, tenants, tills } from "@waitron/db";
@@ -93,6 +95,22 @@ export const timeEntries = pgTable(
      * `recorded_by_person_id` (the device operator) even when they are the same person. Null on a
      * base event. */
     correctionActorId: uuid("correction_actor_id"),
+    // Slice 4 — the tamper-evidence hash chain (design §5). Assigned by `appendToChain`
+    // (../chain.ts) under a row lock on `workforce_chains`, never by the device: one chain per
+    // (tenant, location), single active writer. IMMUTABLE like the rest of the row — the existing
+    // REVOKE + `reject_mutation` trigger (drizzle/0003_workforce_d1a_rls.sql) already covers these
+    // new columns, since they are written once at INSERT and the app holds no UPDATE.
+    /** This entry's own hash — `computeEntryHash(content ‖ prev_entry_hash)`, uppercase hex. */
+    entryHash: text("entry_hash").notNull(),
+    /** The predecessor's `entry_hash`; null on the genesis entry (hashed as empty). */
+    prevEntryHash: text("prev_entry_hash"),
+    /** The 1-based position within this (tenant, location) chain — `workforce_chains.sequence_no`
+     * advanced by one. Contiguous and ours, never derived from `ingest_seq` (which is global). */
+    sequenceNo: integer("sequence_no").notNull(),
+    /** The genesis marker: exactly the first entry of a chain. NOT the mutable "current head" — that
+     * is `workforce_chains.last_entry_id`. Named for the fiscal precedent's `primer_registro` shape
+     * (first record), whose CHECK this mirrors below. */
+    isFirstEntry: boolean("is_first_entry").notNull(),
   },
   (t) => [
     // Array `foreignKey({...})` form throughout — see employments.ts for why the thunk form hurts
@@ -154,6 +172,22 @@ export const timeEntries = pgTable(
              and ${t.correctionStatus} is null and ${t.correctionActorId} is null)
           or (${t.correctsEntryId} is not null and ${t.correctionReason} is not null
              and ${t.correctionStatus} is not null and ${t.correctionActorId} is not null)`,
+    ),
+    // THE backstop against two writers claiming one chain position — a real risk when several tills
+    // at one location clock in the same instant. On real Postgres a naive read-then-write loses the
+    // race here; the loser retries under `appendToChain`'s savepoint (../chain.ts). Mirrors fiscal's
+    // `registros_tenant_till_secuencia_uq`.
+    uniqueIndex("time_entries_chain_position_uq").on(t.tenantId, t.locationId, t.sequenceNo),
+    // The stored hash is uppercase SHA-256 hex (../chain-hash.ts). Mirrors `registros_huella_ck`.
+    check("time_entries_entry_hash_ck", sql`${t.entryHash} ~ '^[0-9A-F]{64}$'`),
+    check("time_entries_sequence_no_ck", sql`${t.sequenceNo} > 0`),
+    // Exactly one chain shape, mirroring the fiscal `registros_encadenamiento_ck`: the genesis entry
+    // carries no predecessor, every later entry carries one. `is_first_entry` and `prev_entry_hash`
+    // can never disagree.
+    check(
+      "time_entries_chaining_ck",
+      sql`(${t.isFirstEntry} and ${t.prevEntryHash} is null)
+          or (not ${t.isFirstEntry} and ${t.prevEntryHash} is not null)`,
     ),
   ],
 ).enableRLS();

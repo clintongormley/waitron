@@ -152,13 +152,16 @@ describe("the D1a time & attendance tables", () => {
 
   it("rejects an event_offset_minutes outside the ±840 range", async () => {
     const { personId, locationId } = await seedPersonAndLocation();
+    // Valid genesis chain columns so ONLY the offset check is violated — the Slice-4 columns are
+    // NOT NULL, so a raw insert must carry them or it fails on the wrong constraint.
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
           tenant_id, person_id, location_id, entry_kind, event_at, event_offset_minutes,
-          recorded_by_person_id
+          recorded_by_person_id, entry_hash, sequence_no, is_first_entry
         ) values (
-          ${tenantId}, ${personId}, ${locationId}, 'in', '2026-01-05T09:00:00Z', 900, ${personId})`),
+          ${tenantId}, ${personId}, ${locationId}, 'in', '2026-01-05T09:00:00Z', 900, ${personId},
+          ${"A".repeat(64)}, 1, true)`),
     );
     expect(pgErrorCode(error)).toBe("23514"); // check_violation
     expect(pgErrorMessage(error)).toMatch(/time_entries_event_offset_ck/);
@@ -198,12 +201,16 @@ describe("the D1b correction columns", () => {
   }> {
     const personId = await seedPerson(suite.db, tenantId, `d1b-${crypto.randomUUID()}`);
     const locationId = await seedLocation(suite.db, tenantId);
+    // Genesis chain columns (Slice 4, NOT NULL) so this base event is a valid position-1 entry; the
+    // D1b tests below append their (deliberately malformed) correction at position 2 of the SAME
+    // location, so the chain columns never collide on time_entries_chain_position_uq.
     const rows = await suite.db.execute<{ id: string }>(sql`
       insert into time_entries (
         tenant_id, person_id, location_id, entry_kind, event_at, event_offset_minutes,
-        recorded_by_person_id
+        recorded_by_person_id, entry_hash, sequence_no, is_first_entry
       ) values (
-        ${tenantId}, ${personId}, ${locationId}, 'in', '2026-01-05T09:00:00Z', 0, ${personId}
+        ${tenantId}, ${personId}, ${locationId}, 'in', '2026-01-05T09:00:00Z', 0, ${personId},
+        ${"A".repeat(64)}, 1, true
       ) returning id`);
     return { personId, locationId, entryId: rows.rows[0]!.id };
   }
@@ -216,10 +223,11 @@ describe("the D1b correction columns", () => {
       insert into time_entries (
         tenant_id, person_id, location_id, entry_kind, event_at, event_offset_minutes,
         recorded_by_person_id, corrects_entry_id, correction_reason, correction_status,
-        correction_actor_id
+        correction_actor_id, entry_hash, prev_entry_hash, sequence_no, is_first_entry
       ) values (
         ${tenantId}, ${personId}, ${locationId}, 'correction', '2026-01-05T18:00:00Z', 0,
-        ${personId}, ${entryId}, 'forgot to clock out', 'approved', ${personId})`);
+        ${personId}, ${entryId}, 'forgot to clock out', 'approved', ${personId},
+        ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`);
     const rows = await suite.db.execute<{ n: number }>(sql`
       select count(*)::int as n from time_entries
       where entry_kind = 'correction' and corrects_entry_id = ${entryId}`);
@@ -231,14 +239,16 @@ describe("the D1b correction columns", () => {
     // event) nor all-non-null (a correction). Deleting the OR-arm of time_entries_correction_shape_ck
     // is what this catches.
     const { personId, locationId, entryId } = await seedBaseEntry();
+    // Valid position-2 chain columns so ONLY the correction-shape check is violated.
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
           tenant_id, person_id, location_id, entry_kind, event_at, event_offset_minutes,
-          recorded_by_person_id, corrects_entry_id
+          recorded_by_person_id, corrects_entry_id, entry_hash, prev_entry_hash, sequence_no,
+          is_first_entry
         ) values (
           ${tenantId}, ${personId}, ${locationId}, 'correction', '2026-01-05T18:00:00Z', 0,
-          ${personId}, ${entryId})`),
+          ${personId}, ${entryId}, ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`),
     );
     expect(pgErrorCode(error)).toBe("23514"); // check_violation
     expect(pgErrorMessage(error)).toMatch(/time_entries_correction_shape_ck/);
@@ -248,14 +258,17 @@ describe("the D1b correction columns", () => {
     // The other direction: an `in` event with correction_status set is neither shape. The same check
     // stops a base row from smuggling in correction metadata.
     const { personId, locationId } = await seedBaseEntry();
+    // Valid position-2 chain columns so ONLY the correction-shape check (a base event with a stray
+    // correction column) is violated.
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
           tenant_id, person_id, location_id, entry_kind, event_at, event_offset_minutes,
-          recorded_by_person_id, correction_status
+          recorded_by_person_id, correction_status, entry_hash, prev_entry_hash, sequence_no,
+          is_first_entry
         ) values (
           ${tenantId}, ${personId}, ${locationId}, 'in', '2026-01-05T09:00:00Z', 0,
-          ${personId}, 'requested')`),
+          ${personId}, 'requested', ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`),
     );
     expect(pgErrorCode(error)).toBe("23514");
     expect(pgErrorMessage(error)).toMatch(/time_entries_correction_shape_ck/);
@@ -264,15 +277,17 @@ describe("the D1b correction columns", () => {
   it("rejects a correction whose corrects_entry_id references no entry", async () => {
     // The self-FK: a correction must point at a real entry.
     const { personId, locationId } = await seedBaseEntry();
+    // Valid position-2 chain columns so ONLY the self-FK (a dangling corrects_entry_id) is violated.
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
           tenant_id, person_id, location_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, corrects_entry_id, correction_reason, correction_status,
-          correction_actor_id
+          correction_actor_id, entry_hash, prev_entry_hash, sequence_no, is_first_entry
         ) values (
           ${tenantId}, ${personId}, ${locationId}, 'correction', '2026-01-05T18:00:00Z', 0,
-          ${personId}, ${crypto.randomUUID()}, 'dangling', 'approved', ${personId})`),
+          ${personId}, ${crypto.randomUUID()}, 'dangling', 'approved', ${personId},
+          ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`),
     );
     expect(pgErrorCode(error)).toBe("23503"); // foreign_key_violation
   });

@@ -7,6 +7,11 @@ export {
   workforceCorrectionStatus,
   workforceEntryKind,
 } from "./schema/time-entries.js";
+export { workforceChains } from "./schema/workforce-chains.js";
+export { appendToChain, isUniqueViolation, lockChainHead } from "./chain.js";
+export type { ChainHead, TimeEntryAppend } from "./chain.js";
+export { computeEntryHash, verifyChain } from "./chain-hash.js";
+export type { ChainVerification, EntryHashInput, VerifiableEntry } from "./chain-hash.js";
 export { hashPin, verifyPin } from "./verify-pin.js";
 export { WorkforceBackend } from "./clocking.js";
 export type {
