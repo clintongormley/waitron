@@ -23,6 +23,7 @@ import { runLoop, realSleep } from "./loop.js";
 import { reconcilerAsDuty } from "./reconcile-duty.js";
 import { runPass, DRAIN_DUTY } from "./pass.js";
 import { stripeAccountResolver, defaultMakeStripe } from "./stripe-account.js";
+import { mountWebhook } from "./webhook.js";
 import "./errors.js";
 // `DEFAULTS` is NOT imported: `loadConfig` already applied the scheduler's defaults, so reaching for
 // them again here would be a second source of truth for the same five numbers.
@@ -140,8 +141,18 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // expression: `serve()` calls `listen()` and returns immediately, but the underlying socket binds
   // ASYNCHRONOUSLY — a log line placed here in source order would assert "listening" before that
   // bind has actually happened. `listeningListener` is Node's own callback for "now it really is."
+  // One Hono app: `/health` plus the Mode 3 inbound webhook, which "attaches to this app rather than
+  // creating a second one" (health.ts's own note). `makeStripe` is `defaultMakeStripe`, the same SDK
+  // factory `stripeAccountResolver` uses above — the webhook selects each request's signing secret
+  // from the PATH tenant's own `payments.stripe` credential, never a platform one.
+  const app = healthApp(health, now);
+  mountWebhook(
+    app,
+    { db, ring, environment: config.environment, makeStripe: defaultMakeStripe },
+    log,
+  );
   const server = serve(
-    { fetch: healthApp(health, now).fetch, port: config.httpPort, hostname: config.httpHost },
+    { fetch: app.fetch, port: config.httpPort, hostname: config.httpHost },
     (info) => {
       bound = true;
       log("info", "server.listening", { port: info.port, environment: config.environment });
