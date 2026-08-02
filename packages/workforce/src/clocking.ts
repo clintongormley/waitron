@@ -93,6 +93,7 @@ const STATE_AFTER: Record<LiveEntryKind, ShiftState> = {
 export class WorkforceBackend {
   /** out → working. */
   async clockIn(tx: Transaction, input: ClockEventInput): Promise<void> {
+    await this.lockPerson(tx, input.tenantId, input.personId);
     const state = await this.currentState(tx, input.tenantId, input.personId);
     if (state !== "out") throw this.alreadyOpen(input);
     await this.append(tx, input, "in");
@@ -100,6 +101,7 @@ export class WorkforceBackend {
 
   /** working → out. */
   async clockOut(tx: Transaction, input: ClockEventInput): Promise<void> {
+    await this.lockPerson(tx, input.tenantId, input.personId);
     const state = await this.currentState(tx, input.tenantId, input.personId);
     if (state !== "working") throw this.noOpenEntry(input);
     await this.append(tx, input, "out");
@@ -107,6 +109,7 @@ export class WorkforceBackend {
 
   /** working → on_break. */
   async breakStart(tx: Transaction, input: ClockEventInput): Promise<void> {
+    await this.lockPerson(tx, input.tenantId, input.personId);
     const state = await this.currentState(tx, input.tenantId, input.personId);
     if (state === "on_break") throw this.alreadyOpen(input);
     if (state !== "working") throw this.noOpenEntry(input);
@@ -115,6 +118,7 @@ export class WorkforceBackend {
 
   /** on_break → working. */
   async breakEnd(tx: Transaction, input: ClockEventInput): Promise<void> {
+    await this.lockPerson(tx, input.tenantId, input.personId);
     const state = await this.currentState(tx, input.tenantId, input.personId);
     if (state !== "on_break") throw this.noOpenEntry(input);
     await this.append(tx, input, "break_end");
@@ -216,6 +220,35 @@ export class WorkforceBackend {
       status: "approved",
       tillId: null,
     });
+  }
+
+  /**
+   * Serialises every clock operation for ONE person by taking a row lock on that person's `persons`
+   * row, held to the end of the caller's transaction. Each of the four clock methods calls this
+   * BEFORE reading `currentState`, which makes the read-state-then-append sequence atomic per person:
+   * a second concurrent operation for the same person BLOCKS here until the first commits, then reads
+   * the UPDATED state and is correctly refused by the state-machine guard (`attendance.already_open` /
+   * `attendance.no_open_entry`). Without it (proven by deletion in clocking.concurrency.test.ts) two
+   * same-person operations both observe the same state and both append — a double-`in` the projection
+   * then undercounts (projection.ts:287 `case "in": open = { start: e }`), corrupting a LEGAL
+   * working-time record.
+   *
+   * `SELECT … FOR UPDATE` on the actual person row, NOT `pg_advisory_xact_lock`: it is collision-free
+   * (no key hashing), self-documenting, and RLS-respecting — the app role holds UPDATE on `persons`
+   * (drizzle/0001_workforce_rls.sql; persons.rls.test.ts pins that grant), which is exactly the
+   * privilege `FOR UPDATE` requires, so it is permitted for the non-superuser deployment role
+   * (exercised as that role in clocking.concurrency.test.ts). A person id that does not exist locks
+   * nothing, which is harmless: `currentState` then reports `out` exactly as before this lock existed,
+   * and `time_entries`' foreign key remains the backstop.
+   *
+   * LOCK ORDERING: this per-person `persons` lock is ALWAYS taken before `appendToChain`'s per-location
+   * `workforce_chains` head lock, uniformly across all four methods — a single, consistent global
+   * order (persons → workforce_chains). Two clock operations therefore can never grab the two locks in
+   * opposite orders, so there is no deadlock.
+   */
+  private async lockPerson(tx: Transaction, tenantId: string, personId: string): Promise<void> {
+    await tx.execute(sql`
+      select id from persons where tenant_id = ${tenantId} and id = ${personId} for update`);
   }
 
   /** The state the worker's most recent event left them in — `out` when they have no events yet.
