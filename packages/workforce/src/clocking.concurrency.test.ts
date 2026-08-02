@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { withTenant } from "@waitron/db";
+import { pgErrorCode, withTenant } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
@@ -53,17 +53,77 @@ function event(at: string): ClockEventInput {
   return { tenantId, personId, locationId, at, offsetMinutes: 0 };
 }
 
+/** Classifies a racer's outcome for an `.toEqual` assertion: a domain rejection reports its AppError
+ * code (e.g. `attendance.already_open`), a driver error reports its SQLSTATE (e.g. `40P01`,
+ * deadlock), anything else is stringified. AppError is checked FIRST because AppError carries its own
+ * string `.code` (a domain code, not a SQLSTATE), which `pgErrorCode` would otherwise return verbatim
+ * (packages/db/src/testing/errors.ts). */
+function classify(error: unknown): string {
+  if (error instanceof AppError) return error.code;
+  return pgErrorCode(error) ?? `unexpected: ${String(error)}`;
+}
+
 /** Runs `clockIn` for `personId` as the non-superuser app role, returning "ok" on success or the
- * AppError code on refusal — so a test can assert one of two racers was correctly refused. Running as
- * the probe role (not the superuser admin) is what proves the per-person `FOR UPDATE` on `persons` is
- * PERMITTED for the app role, not merely that it serialises. */
+ * classified error otherwise. Running as the probe role (not the superuser admin) is what proves the
+ * per-person `FOR NO KEY UPDATE` on `persons` is PERMITTED for the app role, not merely that it
+ * serialises. */
 async function attemptClockIn(db: Awaited<ReturnType<typeof suite.pg.connectAs>>, at: string) {
   try {
     await withTenant(db, tenantId, (tx) => backend.clockIn(tx, event(at)));
     return "ok";
   } catch (error) {
-    return error instanceof AppError ? error.code : `unexpected: ${String(error)}`;
+    return classify(error);
   }
+}
+
+/** Runs `requestCorrection` (actor = `otherPersonId`, a supervisor) of `correctsEntryId` as the
+ * non-superuser app role, returning "ok" on success or the classified error. The correction path
+ * locks the chain head first and takes `FOR KEY SHARE` on `persons` via the time_entries→persons FKs
+ * on INSERT — the OPPOSITE lock order to the clock path, which is what makes the deadlock possible. */
+async function attemptCorrection(
+  db: Awaited<ReturnType<typeof suite.pg.connectAs>>,
+  correctsEntryId: string,
+) {
+  try {
+    await withTenant(db, tenantId, (tx) =>
+      backend.requestCorrection(tx, {
+        tenantId,
+        correctsEntryId,
+        at: "2026-01-05T07:59:00Z",
+        offsetMinutes: 0,
+        reason: "clocked in a minute early",
+        actorPersonId: otherPersonId,
+      }),
+    );
+    return "ok";
+  } catch (error) {
+    return classify(error);
+  }
+}
+
+/** Seeds a COMPLETED shift for `personId` at `locationId` (in then out, so P ends "out" and a racing
+ * clock-in is a valid transition) and returns the base `in` entry's id — the row a correction targets.
+ * Runs as the superuser owner; this also creates the location chain head the holder locks below. */
+async function seedCompletedShift(): Promise<string> {
+  await insertTimeEntry(suite.admin, {
+    tenantId,
+    personId,
+    locationId,
+    entryKind: "in",
+    eventAt: "2026-01-05T08:00:00Z",
+  });
+  await insertTimeEntry(suite.admin, {
+    tenantId,
+    personId,
+    locationId,
+    entryKind: "out",
+    eventAt: "2026-01-05T12:00:00Z",
+  });
+  const { rows } = await suite.admin.execute<{ id: string }>(sql`
+    select id from time_entries
+    where person_id = ${personId} and entry_kind = 'in'
+    order by sequence_no limit 1`);
+  return rows[0]!.id;
 }
 
 /** Polls until `count` backends in this database are waiting on a heavyweight lock, or throws. This
@@ -164,6 +224,62 @@ describe("clockIn serialises per person under real contention", () => {
       await holder.close();
       await connA.close();
       await connB.close();
+    }
+  });
+});
+
+describe("clockIn does not deadlock against a concurrent same-person correction", () => {
+  it("commits both a clock-in and a correction of that person at the same location", async () => {
+    // The ABBA the per-person lock introduced (whole-branch re-review, reproduced on postgres:18):
+    // the clock path locks P's `persons` row THEN the location `workforce_chains` head; the correction
+    // path (requestCorrection → appendCorrection → appendToChain) locks the head FIRST, then takes
+    // `FOR KEY SHARE` on P via the time_entries→persons FKs (time_entries_person_fk /
+    // _recorded_by_person_fk / _correction_actor_fk) on INSERT — the OPPOSITE order. `FOR UPDATE`
+    // conflicts with `FOR KEY SHARE`, so those two orders cross into a cycle → `deadlock detected`
+    // (40P01), which appendToChain does NOT retry (only 23505). `FOR NO KEY UPDATE` does not conflict
+    // with `FOR KEY SHARE`, so both commit. With `FOR UPDATE` this test is RED (one racer dies 40P01);
+    // with `FOR NO KEY UPDATE` it is GREEN.
+    const baseEntryId = await seedCompletedShift();
+
+    const holder = await suite.pg.connect();
+    const clockConn = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const correctionConn = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    let release: () => void = () => {};
+    let holding: Promise<unknown> | undefined;
+    try {
+      // Hold the location chain head so both racers queue on it in a KNOWN order.
+      const held = new Promise<void>((resolve) => (release = resolve));
+      let acquire!: () => void;
+      const acquired = new Promise<void>((resolve) => (acquire = resolve));
+      holding = holder.transaction(async (tx) => {
+        await tx.execute(
+          sql`select 1 from workforce_chains where tenant_id = ${tenantId} and location_id = ${locationId} for update`,
+        );
+        acquire();
+        await held;
+      });
+      await acquired;
+
+      // The correction enters the head wait queue FIRST (confirmed blocked). When the head is later
+      // released it is granted the head and then needs FOR KEY SHARE on P.
+      const correctionResult = attemptCorrection(correctionConn, baseEntryId);
+      await waitForBlockedBackends(1);
+      // The clock-in takes P's persons row, then queues on the head BEHIND the correction — so at
+      // release, P is already held while the correction is about to demand it: the ABBA setup.
+      const clockResult = attemptClockIn(clockConn, "2026-01-05T13:00:00Z");
+      await waitForBlockedBackends(2);
+
+      release();
+      const [correction, clock] = await Promise.all([correctionResult, clockResult]);
+
+      // Both must land. With `FOR UPDATE` one is "40P01" (deadlock) and this fails.
+      expect({ correction, clock }).toEqual({ correction: "ok", clock: "ok" });
+    } finally {
+      release();
+      if (holding) await holding.catch(() => {});
+      await holder.close();
+      await clockConn.close();
+      await correctionConn.close();
     }
   });
 });
