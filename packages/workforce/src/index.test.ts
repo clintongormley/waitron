@@ -10,8 +10,14 @@ describe("the public surface", () => {
         "persons",
         "personStatus",
         "workforceRole",
+        "employments",
+        "timeEntries",
+        "workforceEntryKind",
         "hashPin",
         "verifyPin",
+        "WorkforceBackend",
+        "projectWorkSessions",
+        "summarisePeriod",
       ].sort(),
     );
   });
@@ -38,5 +44,43 @@ describe("persons constraint declarations (forces the lazy extraConfig callback)
     const checkNames = config.checks.map((c) => c.name);
     expect(checkNames).toContain("persons_display_name_ck");
     expect(checkNames).toContain("persons_pin_hash_ck");
+  });
+});
+
+describe("employments constraint declarations (forces the lazy extraConfig callback)", () => {
+  it("declares employments' foreign keys and check constraints", () => {
+    const config = getTableConfig(api.employments);
+
+    const fkNames = config.foreignKeys.map((fk) => fk.getName());
+    expect(fkNames).toContain("employments_tenant_fk");
+    expect(fkNames).toContain("employments_person_fk");
+
+    const checkNames = config.checks.map((c) => c.name);
+    expect(checkNames).toContain("employments_contracted_minutes_ck");
+    expect(checkNames).toContain("employments_dates_ck");
+  });
+});
+
+describe("time_entries constraint declarations (forces the lazy extraConfig callback)", () => {
+  it("declares time_entries' five foreign keys and the offset check", () => {
+    const config = getTableConfig(api.timeEntries);
+
+    const fkNames = config.foreignKeys.map((fk) => fk.getName());
+    expect(fkNames).toEqual(
+      expect.arrayContaining([
+        "time_entries_tenant_fk",
+        "time_entries_person_fk",
+        "time_entries_location_fk",
+        "time_entries_captured_by_till_fk",
+        "time_entries_recorded_by_person_fk",
+      ]),
+    );
+
+    const checkNames = config.checks.map((c) => c.name);
+    expect(checkNames).toContain("time_entries_event_offset_ck");
+
+    // `ingest_seq` is GENERATED ALWAYS AS IDENTITY — the app cannot forge the append order.
+    const ingest = config.columns.find((c) => c.name === "ingest_seq");
+    expect(ingest?.generatedIdentity?.type).toBe("always");
   });
 });

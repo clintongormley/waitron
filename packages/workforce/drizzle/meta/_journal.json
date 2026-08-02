@@ -15,6 +15,20 @@
       "when": 1785672221035,
       "tag": "0001_workforce_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785674610052,
+      "tag": "0002_time_attendance",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785674620878,
+      "tag": "0003_workforce_d1a_rls",
+      "breakpoints": true
     }
   ]
 }

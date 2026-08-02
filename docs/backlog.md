@@ -338,7 +338,7 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
      not imply a green CI.
   3. **CLOSED, 2026-08-01 — the two tree-wide guard suites are in the root Vitest project, so no
      scope can skip them.** They were `packages/db/src/guarded-teardowns.test.ts` (scans `packages/`
-     and `apps/` from the repository root) and `english-only.test.ts` (scans the seven generic
+     and `apps/` from the repository root) and `english-only.test.ts` (scans the eight generic
      packages), and living in `packages/db` meant they only loaded when `packages/db` was in scope:
      `pnpm --filter "...@waitron/ui" ls -r --depth -1 --json` lists `@waitron/ui` alone and
      `--filter "...@waitron/payments"` lists six packages, none of them `@waitron/db`, while CI

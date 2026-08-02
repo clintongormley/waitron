@@ -5,6 +5,7 @@ import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { hashPin } from "./verify-pin.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { insertTimeEntry, seedLocation, seedPerson } from "../test/fixtures.js";
 
 let tenantId: string;
 
@@ -99,5 +100,92 @@ describe("the workforce migration set", () => {
         values (gen_random_uuid(), 'Orphan', ${PIN})`),
     );
     expect(pgErrorCode(error)).toBe("23503"); // foreign_key_violation
+  });
+});
+
+describe("the D1a time & attendance tables", () => {
+  async function seedPersonAndLocation(): Promise<{ personId: string; locationId: string }> {
+    const personId = await seedPerson(suite.db, tenantId, `d1a-${crypto.randomUUID()}`);
+    const locationId = await seedLocation(suite.db, tenantId);
+    return { personId, locationId };
+  }
+
+  it("assigns ingest_seq in insertion order, increasing", async () => {
+    // The design's append/ingest ordering column. GENERATED ALWAYS AS IDENTITY, so it climbs with
+    // each INSERT regardless of event_at — deleting `.generatedAlwaysAsIdentity()` from the schema
+    // makes the column app-supplied (NULL here) and this NOT NULL / ordering check fails.
+    const { personId, locationId } = await seedPersonAndLocation();
+    await insertTimeEntry(suite.db, {
+      tenantId,
+      personId,
+      locationId,
+      entryKind: "in",
+      eventAt: "2026-01-05T09:00:00Z",
+    });
+    await insertTimeEntry(suite.db, {
+      tenantId,
+      personId,
+      locationId,
+      entryKind: "out",
+      eventAt: "2026-01-05T17:00:00Z",
+    });
+    const rows = await suite.db.execute<{ entry_kind: string; ingest_seq: string }>(sql`
+      select entry_kind, ingest_seq from time_entries
+      where person_id = ${personId} order by ingest_seq`);
+    const seqs = rows.rows.map((r) => Number(r.ingest_seq));
+    expect(rows.rows.map((r) => r.entry_kind)).toEqual(["in", "out"]);
+    expect(seqs[1]!).toBeGreaterThan(seqs[0]!);
+  });
+
+  it("rejects an entry_kind outside the enum", async () => {
+    const { personId, locationId } = await seedPersonAndLocation();
+    const error = await captureError(() =>
+      suite.db.execute(sql`
+        insert into time_entries (
+          tenant_id, person_id, location_id, entry_kind, event_at, event_offset_minutes,
+          recorded_by_person_id
+        ) values (
+          ${tenantId}, ${personId}, ${locationId}, 'lunch', '2026-01-05T09:00:00Z', 0, ${personId})`),
+    );
+    expect(pgErrorCode(error)).toBe("22P02"); // invalid_text_representation
+  });
+
+  it("rejects an event_offset_minutes outside the ±840 range", async () => {
+    const { personId, locationId } = await seedPersonAndLocation();
+    const error = await captureError(() =>
+      suite.db.execute(sql`
+        insert into time_entries (
+          tenant_id, person_id, location_id, entry_kind, event_at, event_offset_minutes,
+          recorded_by_person_id
+        ) values (
+          ${tenantId}, ${personId}, ${locationId}, 'in', '2026-01-05T09:00:00Z', 900, ${personId})`),
+    );
+    expect(pgErrorCode(error)).toBe("23514"); // check_violation
+    expect(pgErrorMessage(error)).toMatch(/time_entries_event_offset_ck/);
+  });
+
+  it("rejects a negative contracted_minutes_per_week", async () => {
+    const { personId } = await seedPersonAndLocation();
+    const error = await captureError(() =>
+      suite.db.execute(sql`
+        insert into employments (
+          tenant_id, person_id, contracted_minutes_per_week, contract_type, start_date, pay_rate
+        ) values (${tenantId}, ${personId}, -1, 'full_time', '2026-01-01', '15.00')`),
+    );
+    expect(pgErrorCode(error)).toBe("23514");
+    expect(pgErrorMessage(error)).toMatch(/employments_contracted_minutes_ck/);
+  });
+
+  it("rejects an employment whose end_date precedes its start_date", async () => {
+    const { personId } = await seedPersonAndLocation();
+    const error = await captureError(() =>
+      suite.db.execute(sql`
+        insert into employments (
+          tenant_id, person_id, contracted_minutes_per_week, contract_type,
+          start_date, end_date, pay_rate
+        ) values (${tenantId}, ${personId}, 2400, 'full_time', '2026-06-01', '2026-01-01', '15.00')`),
+    );
+    expect(pgErrorCode(error)).toBe("23514");
+    expect(pgErrorMessage(error)).toMatch(/employments_dates_ck/);
   });
 });

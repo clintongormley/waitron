@@ -8,12 +8,12 @@ import "@waitron/shared";
  * DOMAIN-CONCEPT, lowercase, dot-namespaced convention (`person.*`), never the package name (see
  * the design note atop packages/shared/src/errors.ts).
  *
- * Namespace choice: `person.*`, NOT `clock.*`. `clock.*` is already taken by packages/fiscal for
- * the trusted clock (`clock.degraded`, `clock.jump_detected` — packages/fiscal/src/errors.ts), and
- * clock-in/out attendance codes will be `attendance.*` (Slice 2) for that reason. These two name
- * the failures of this slice's own primitives — an identity lookup and a PIN verification — and
- * their throw sites arrive with the clock-in path (Slice 2). Registered here now so the type is in
- * place before the first caller, exactly as packages/shared's reachability rule intends.
+ * Namespace choice: `attendance.*`, NOT `clock.*`. `clock.*` is already taken by packages/fiscal for
+ * the trusted clock (`clock.degraded`, `clock.jump_detected` — packages/fiscal/src/errors.ts), so
+ * clock-in/out failures are `attendance.*` — a fact about a worker's shift state, not about the
+ * clock. `person.*`/`employment.*` name failures of their own entities (an identity lookup, an
+ * employment lookup), following the `<entity>.not_found` shape `person.not_found` set. Codes are
+ * never renamed once shipped, so the prefix was grepped against the whole registry first.
  *
  * Reachability: index.ts side-effect-imports ./errors.js, so this augmentation is reachable from
  * the package's own public barrel. See ./errors.reachability.test.ts.
@@ -26,5 +26,14 @@ declare module "@waitron/shared" {
     /** The supplied PIN did not verify against `persons.pin_hash` (../verify-pin.ts returned
      * false). Carries no PIN and no hash — only the identity that failed. */
     "person.pin_invalid": { tenantId: string; personId: string };
+    /** No `employments` row for this person under the current tenant — the overtime baseline a
+     * work-session summary needs (art. 35.5) does not exist. */
+    "employment.not_found": { tenantId: string; personId: string };
+    /** A clock event tried to OPEN a state that is already open — a clock-in while clocked in, or a
+     * break-start while already on break. */
+    "attendance.already_open": { tenantId: string; personId: string };
+    /** A clock event tried to CLOSE or continue a state that is not open — a clock-out or break with
+     * no open shift, or a break-end with no open break. */
+    "attendance.no_open_entry": { tenantId: string; personId: string };
   }
 }
