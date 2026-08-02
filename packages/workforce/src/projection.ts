@@ -61,8 +61,17 @@ export interface WorkSession {
   locationId: string;
   /** The worker's LOCAL calendar day (art. 34.9 records per worker per day). */
   workDate: string;
+  /** The shift start as the raw UTC instant (`event_at`). The local render is derived via
+   * `localWallClock(startedAt, startOffsetMinutes)`, never stored here. */
   startedAt: string;
+  /** The wall-clock offset in minutes at the shift start (`event_offset_minutes`). May differ from
+   * `endOffsetMinutes` across a DST boundary, so both ends are carried. */
+  startOffsetMinutes: number;
+  /** The shift end as the raw UTC instant (`event_at`); local render via
+   * `localWallClock(endedAt, endOffsetMinutes)`. */
   endedAt: string;
+  /** The wall-clock offset in minutes at the shift end (`event_offset_minutes`). */
+  endOffsetMinutes: number;
   breakMinutes: number;
   workedMinutes: number;
 }
@@ -132,6 +141,28 @@ function localDate(eventAt: string, offsetMinutes: number): string {
   return new Date(Date.parse(eventAt) + offsetMinutes * MS_PER_MINUTE).toISOString().slice(0, 10);
 }
 
+/**
+ * Renders an instant as its LOCAL wall-clock time with an explicit offset, e.g.
+ * `2026-01-06T00:30:00+01:00` — the sibling of `localDate` for a full timestamp. The part before the
+ * offset is the concrete local time a human reads (art. 34.9 requires "el horario concreto de inicio
+ * y finalización"); the `±HH:MM` offset keeps the instant recoverable and disambiguates the DST
+ * fall-back hour (the same wall-clock time appears once at +02:00 and once at +01:00).
+ *
+ * Computed as `instant + offsetMinutes`, read back as UTC — the offset is captured PER EVENT, so a
+ * January event carries +60 and a July one +120 with no timezone lookup. Whole seconds only (the
+ * stored instants are already whole-second, `time_entries_event_at_second_ck`).
+ */
+export function localWallClock(instant: string, offsetMinutes: number): string {
+  const local = new Date(Date.parse(instant) + offsetMinutes * MS_PER_MINUTE)
+    .toISOString()
+    .slice(0, 19);
+  const sign = offsetMinutes < 0 ? "-" : "+";
+  const abs = Math.abs(offsetMinutes);
+  const hh = String(Math.floor(abs / 60)).padStart(2, "0");
+  const mm = String(abs % 60).padStart(2, "0");
+  return `${local}${sign}${hh}:${mm}`;
+}
+
 interface OpenShift {
   start: TimeEntryRecord;
   breakMs: number;
@@ -145,7 +176,9 @@ function closeShift(personId: string, open: OpenShift, out: TimeEntryRecord): Wo
     locationId: open.start.locationId,
     workDate: localDate(open.start.eventAt, open.start.offsetMinutes),
     startedAt: open.start.eventAt,
+    startOffsetMinutes: open.start.offsetMinutes,
     endedAt: out.eventAt,
+    endOffsetMinutes: out.offsetMinutes,
     breakMinutes: Math.round(open.breakMs / MS_PER_MINUTE),
     workedMinutes: Math.round((spanMs - open.breakMs) / MS_PER_MINUTE),
   };

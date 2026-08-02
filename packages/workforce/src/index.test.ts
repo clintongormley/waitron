@@ -26,6 +26,7 @@ describe("the public surface", () => {
         "projectWorkSessions",
         "summarisePeriod",
         "dailyContractedTargetMinutes",
+        "localWallClock",
       ].sort(),
     );
   });

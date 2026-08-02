@@ -1,4 +1,4 @@
-import type { Period, WorkSession } from "@waitron/workforce";
+import { localWallClock, type Period, type WorkSession } from "@waitron/workforce";
 
 /**
  * The registro de jornada — the Spanish rendering of the regime-neutral work-session projection
@@ -75,8 +75,12 @@ export function exportTimeRecord(
     .map((s) => ({
       personId: s.personId,
       fecha: s.workDate,
-      horaInicio: s.startedAt,
-      horaFin: s.endedAt,
+      // El horario CONCRETO local (art. 34.9), no el instante UTC: cada extremo se renderiza con su
+      // propio offset, así una jornada que cruza el cambio de hora conserva el offset de cada extremo
+      // y nunca queda un horaInicio en el día natural anterior a `fecha`. minutosTrabajados sigue
+      // derivándose de los instantes UTC (verdadero tiempo transcurrido, inmune al DST).
+      horaInicio: localWallClock(s.startedAt, s.startOffsetMinutes),
+      horaFin: localWallClock(s.endedAt, s.endOffsetMinutes),
       minutosTrabajados: s.workedMinutes,
       minutosDescanso: s.breakMinutes,
     }));

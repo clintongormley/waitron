@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   dailyContractedTargetMinutes,
+  localWallClock,
   projectWorkSessions,
   summarisePeriod,
   type TimeEntryRecord,
@@ -39,6 +40,27 @@ function entry(
   };
 }
 
+describe("localWallClock", () => {
+  it("renders the local time with a +01:00 offset, crossing into the next day (art. 34.9 concrete local start)", () => {
+    // 23:30Z at +60 is 00:30 the next day on the wall clock — the concrete local start a human reads,
+    // with the offset kept so the instant stays recoverable.
+    expect(localWallClock("2026-01-05T23:30:00Z", 60)).toBe("2026-01-06T00:30:00+01:00");
+  });
+
+  it("renders a summer +02:00 (CEST) offset", () => {
+    // A July event carries +120: local = instant + its own offset, so no timezone lookup is needed.
+    expect(localWallClock("2026-07-05T22:30:00Z", 120)).toBe("2026-07-06T00:30:00+02:00");
+  });
+
+  it("renders a negative offset as -HH:MM", () => {
+    expect(localWallClock("2026-01-05T12:00:00Z", -300)).toBe("2026-01-05T07:00:00-05:00");
+  });
+
+  it("renders a zero offset as +00:00 (UTC)", () => {
+    expect(localWallClock("2026-01-05T09:00:00Z", 0)).toBe("2026-01-05T09:00:00+00:00");
+  });
+});
+
 describe("projectWorkSessions", () => {
   it("computes worked minutes for a single in→out shift", () => {
     const sessions = projectWorkSessions([
@@ -51,7 +73,9 @@ describe("projectWorkSessions", () => {
         locationId: "loc-1",
         workDate: "2026-01-05",
         startedAt: "2026-01-05T09:00:00Z",
+        startOffsetMinutes: 0,
         endedAt: "2026-01-05T17:00:00Z",
+        endOffsetMinutes: 0,
         breakMinutes: 0,
         workedMinutes: 480,
       },
@@ -91,6 +115,43 @@ describe("projectWorkSessions", () => {
     ]);
     expect(session?.workDate).toBe("2026-01-06");
     expect(session?.workedMinutes).toBe(180);
+  });
+
+  it("carries each end's wall offset while startedAt/endedAt stay the UTC instants", () => {
+    // The offset is captured per event, so the session must keep BOTH ends' offsets for the local
+    // render — startedAt/endedAt remain the raw UTC instants (the local time is derived, not stored).
+    // A non-zero offset here is exactly the blind spot that hid the UTC-vs-local export bug: the
+    // existing shift tests use offset 0, where the local and UTC renders look identical.
+    const [session] = projectWorkSessions([
+      entry("p1", "in", "2026-01-05T23:30:00Z", { offsetMinutes: 60 }),
+      entry("p1", "out", "2026-01-06T02:30:00Z", { offsetMinutes: 60 }),
+    ]);
+    expect(session?.startedAt).toBe("2026-01-05T23:30:00Z");
+    expect(session?.endedAt).toBe("2026-01-06T02:30:00Z");
+    expect(session?.startOffsetMinutes).toBe(60);
+    expect(session?.endOffsetMinutes).toBe(60);
+  });
+
+  it("carries different offsets across a DST fall-back while workedMinutes stays true UTC elapsed", () => {
+    // Europe/Madrid fall-back night (2026-10-25): clocks go 03:00 CEST → 02:00 CET, so 02:30 local
+    // happens twice. In at 02:30 CEST (00:30Z, +120), out at 02:30 CET (01:30Z, +60). The two ends
+    // carry DIFFERENT offsets — do NOT assume one offset per session. workedMinutes must be the true
+    // elapsed UTC hour (60), NOT the 0-minute wall-clock difference; the offset is what disambiguates
+    // the repeated hour in the render.
+    const [session] = projectWorkSessions([
+      entry("p1", "in", "2026-10-25T00:30:00Z", { offsetMinutes: 120 }),
+      entry("p1", "out", "2026-10-25T01:30:00Z", { offsetMinutes: 60 }),
+    ]);
+    expect(session?.startOffsetMinutes).toBe(120);
+    expect(session?.endOffsetMinutes).toBe(60);
+    expect(session?.workedMinutes).toBe(60);
+    const inRender = localWallClock(session!.startedAt, session!.startOffsetMinutes);
+    const outRender = localWallClock(session!.endedAt, session!.endOffsetMinutes);
+    expect(inRender).toBe("2026-10-25T02:30:00+02:00");
+    expect(outRender).toBe("2026-10-25T02:30:00+01:00");
+    // Same wall-clock time, different offset — the whole point of carrying the offset per end.
+    expect(inRender.slice(0, 19)).toBe(outRender.slice(0, 19));
+    expect(session?.startOffsetMinutes).not.toBe(session?.endOffsetMinutes);
   });
 
   it("orders out-of-order arrivals by event time before pairing (design §5: project by event_at)", () => {
