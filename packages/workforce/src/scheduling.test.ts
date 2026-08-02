@@ -10,6 +10,7 @@ import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import {
   insertDraftShift,
   insertRosterVersion,
+  makeRuleset,
   seedLocation,
   seedPerson,
 } from "../test/fixtures.js";
@@ -155,6 +156,53 @@ describe("publishRoster", () => {
       run((tx) => backend.publishRoster(tx, { tenantId, versionId })),
     );
     expect(code).toBe("roster.already_published");
+  });
+
+  it("returns the guardrail breaches when a ruleset is supplied, and PUBLISHES anyway (advisory)", async () => {
+    // OWNER DECISION: guardrail breaches are advisory. A roster that breaches a limit still publishes;
+    // the breaches are surfaced in the return value, never thrown. Two shifts 8h apart breach the
+    // 12h (720-min) inter-shift rest — publishRoster must report that and flip the version regardless.
+    const versionId = await insertRosterVersion(suite.db, {
+      tenantId,
+      locationId,
+      periodStart: "2026-01-05",
+      periodEnd: "2026-01-11",
+    });
+    await insertDraftShift(suite.db, {
+      tenantId,
+      personId,
+      locationId,
+      startsAt: "2026-01-05T09:00:00Z",
+      endsAt: "2026-01-05T17:00:00Z",
+    });
+    await insertDraftShift(suite.db, {
+      tenantId,
+      personId,
+      locationId,
+      startsAt: "2026-01-06T01:00:00Z", // 8h after the first shift's 17:00 end — under the 12h floor
+      endsAt: "2026-01-06T09:00:00Z",
+    });
+
+    const breaches = await run((tx) =>
+      backend.publishRoster(tx, {
+        tenantId,
+        versionId,
+        ruleset: makeRuleset({ minInterShiftRestMinutes: 720 }),
+      }),
+    );
+
+    expect(breaches.some((b) => b.kind === "rest_too_short")).toBe(true);
+    const version = await suite.db.execute<{ status: string }>(
+      sql`select status from roster_versions where id = ${versionId}`,
+    );
+    expect(version.rows[0]!.status).toBe("published"); // published despite the breach
+  });
+
+  it("returns no breaches when no ruleset is supplied (guardrails are opt-in on publish)", async () => {
+    const versionId = await insertRosterVersion(suite.db, { tenantId, locationId });
+    await insertDraftShift(suite.db, { tenantId, personId, locationId });
+    const breaches = await run((tx) => backend.publishRoster(tx, { tenantId, versionId }));
+    expect(breaches).toEqual([]);
   });
 
   it("detaches — never deletes — a shift when its roster version is deleted (ON DELETE set null)", async () => {

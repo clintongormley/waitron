@@ -3,6 +3,37 @@ import type { Database, Transaction } from "@waitron/db";
 import { appendToChain } from "../src/chain.js";
 import { hashPin } from "../src/verify-pin.js";
 import type { WorkforceEntryKind } from "../src/projection.js";
+import type { WorkTimeRuleset } from "../src/ruleset.js";
+
+/**
+ * A `WorkTimeRuleset` with every field at its ET-statutory / today's-default value — what a DEFAULT
+ * `convenio_config` row resolves to (see packages/workforce-es/src/convenio.ts). A suite overrides
+ * exactly the one limit it is exercising, so the guardrail thresholds are the TEST's, never the
+ * engine's (the engine hard-codes none — roster-validation.no-hardcoded-limits.test.ts proves it).
+ * Under `test/`, so its explicit numbers are out of the english-only scan and the src coverage glob.
+ */
+export function makeRuleset(overrides: Partial<WorkTimeRuleset> = {}): WorkTimeRuleset {
+  return {
+    workingDaysPerWeek: 5,
+    overtimeModel: "daily-accrual",
+    referencePeriodDays: null,
+    compensationWindowDays: null,
+    dailyTargetMinutes: null,
+    maxWeeklyMinutes: 2400,
+    minInterShiftRestMinutes: 720,
+    maxOrdinaryDailyMinutes: 540,
+    breakThresholdMinutes: 360,
+    minBreakMinutes: 15,
+    weeklyRestMinutes: 2160,
+    annualOvertimeCapHours: 80,
+    nightWindowStartMinute: 1320,
+    nightWindowEndMinute: 360,
+    nightPremiumPct: null,
+    splitShiftPremium: null,
+    breaksCountAsWorked: false,
+    ...overrides,
+  };
+}
 
 /**
  * Seed helpers for the workforce suites, run as the connection OWNER (superuser) so RLS is bypassed

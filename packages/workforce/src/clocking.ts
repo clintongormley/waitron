@@ -13,6 +13,8 @@ import {
   type TimeEntryRecord,
   type WorkforceEntryKind,
 } from "./projection.js";
+import { validateRoster, type PlannedShift, type RosterBreach } from "./roster-validation.js";
+import type { WorkTimeRuleset } from "./ruleset.js";
 // Side-effect: registers this package's attendance.*/employment.* codes so `new AppError(...)`
 // below type-checks against the shared registry (packages/shared reachability rule).
 import "./errors.js";
@@ -90,6 +92,13 @@ export interface PublishRosterInput {
   versionId: string;
   /** Who published it — recorded on the version; null when the caller does not attribute it. */
   publishedByPersonId?: string | null;
+  /** The resolved work-time ruleset the roster is checked against (D2.3). Supplied by the caller —
+   * `packages/workforce-es` resolves a `convenio_config` row into it (the Spain→generic boundary,
+   * plan §3.3); the generic `publishRoster` never touches `convenio_config`. When present, the
+   * published shifts are validated and any breaches are RETURNED (advisory — publish proceeds
+   * regardless, OWNER DECISION 2026-08-02). When omitted, guardrails are not evaluated and the
+   * return is empty. */
+  ruleset?: WorkTimeRuleset;
 }
 
 /** The three states a worker's shift can be in, derived from the most recent clock event. */
@@ -320,8 +329,12 @@ export class WorkforceBackend {
    * Throws `roster.not_found` if no such version exists under the tenant, and
    * `roster.already_published` if it is no longer a `draft` (a roster is published exactly once —
    * republishing is refused, never a silent re-stamp).
+   *
+   * Returns the guardrail breaches of the published roster (D2.3) when `input.ruleset` is supplied,
+   * an empty array otherwise. Breaches are ADVISORY (OWNER DECISION 2026-08-02): a breaching roster
+   * still publishes and the breaches are surfaced here, never thrown — see `validateRoster`.
    */
-  async publishRoster(tx: Transaction, input: PublishRosterInput): Promise<void> {
+  async publishRoster(tx: Transaction, input: PublishRosterInput): Promise<RosterBreach[]> {
     const status = await this.rosterVersionStatus(tx, input.tenantId, input.versionId);
     if (status !== "draft") {
       throw new AppError("roster.already_published", {
@@ -347,6 +360,47 @@ export class WorkforceBackend {
         and s.roster_version_id is null
         and (s.starts_at at time zone 'UTC' + s.starts_offset_minutes * interval '1 minute')::date
             between rv.period_start and rv.period_end`);
+    // Advisory guardrails: only when the caller supplied a ruleset (the workforce-es resolver's
+    // output). Validate exactly the shifts now attached to this version, then return the breaches —
+    // publishing has already committed above, so a breach never blocks it.
+    if (input.ruleset === undefined) return [];
+    return validateRoster(
+      await this.attachedShifts(tx, input.tenantId, input.versionId),
+      input.ruleset,
+    );
+  }
+
+  /** The shifts attached to a published version, as neutral `PlannedShift`s for `validateRoster`.
+   * `event_at` is normalised to a UTC ISO instant so the pure engine's `Date.parse` sees a string
+   * under either driver (node-postgres returns a Date, PGlite a string). */
+  private async attachedShifts(
+    tx: Transaction,
+    tenantId: string,
+    versionId: string,
+  ): Promise<PlannedShift[]> {
+    const { rows } = await tx.execute<{
+      id: string;
+      person_id: string;
+      starts_at: string;
+      starts_offset_minutes: number;
+      ends_at: string;
+      ends_offset_minutes: number;
+    }>(sql`
+      select id, person_id,
+        to_char(starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as starts_at,
+        starts_offset_minutes,
+        to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at,
+        ends_offset_minutes
+      from shifts
+      where tenant_id = ${tenantId} and roster_version_id = ${versionId}`);
+    return rows.map((r) => ({
+      shiftId: r.id,
+      personId: r.person_id,
+      startsAt: r.starts_at,
+      startsOffsetMinutes: r.starts_offset_minutes,
+      endsAt: r.ends_at,
+      endsOffsetMinutes: r.ends_offset_minutes,
+    }));
   }
 
   /** A roster version's `status`, or `roster.not_found` if there is no such version under the

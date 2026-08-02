@@ -37,6 +37,8 @@ describe("the public surface", () => {
         "hashPin",
         "verifyPin",
         "WorkforceBackend",
+        "validateRoster",
+        "comparePlannedVsActual",
         "projectWorkSessions",
         "summarisePeriod",
         "dailyContractedTargetMinutes",

@@ -35,6 +35,21 @@ export type {
   WorkSummaryRuleset,
 } from "./clocking.js";
 export type { WorkTimeRuleset } from "./ruleset.js";
+export { validateRoster } from "./roster-validation.js";
+export type {
+  BreakOwedBreach,
+  ExceedsDailyMaxBreach,
+  ExceedsWeeklyMaxBreach,
+  NightWorkBreach,
+  OvertimeCapExceededBreach,
+  PlannedShift,
+  RestTooShortBreach,
+  RosterBreach,
+  RosterBreachKind,
+  WeeklyRestInsufficientBreach,
+} from "./roster-validation.js";
+export { comparePlannedVsActual } from "./planned-vs-actual.js";
+export type { PlannedVsActual } from "./planned-vs-actual.js";
 export {
   dailyContractedTargetMinutes,
   localWallClock,
