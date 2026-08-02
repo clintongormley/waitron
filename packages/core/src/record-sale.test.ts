@@ -27,7 +27,7 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { formatInvoiceNumber, recordSale } from "./record-sale.js";
 import type { RecordSaleInput, RecordSaleTender } from "./record-sale.js";
 import { settleSale } from "./settle-sale.js";
-import { seedTenant } from "../test/fixtures.js";
+import { seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 
 let tenantId: TenantId;
 let tillId: TillId;
@@ -194,6 +194,7 @@ function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>)
     registerTill: (tx, till, params) => fake.registerTill(tx, till, params),
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
     recordVoid: (tx, saleId, reason) => fake.recordVoid(tx, saleId, reason),
+    recordCorrection: (tx, sale, correction) => fake.recordCorrection(tx, sale, correction),
     checkIntegrity: (tx, tenant, till) => fake.checkIntegrity(tx, tenant, till),
     pendingCount: (tenant, till) => fake.pendingCount(tenant, till),
     drain: (now) => fake.drain(now),
@@ -736,5 +737,18 @@ describe("recordSale — series validation", () => {
     await expect(
       run(new FakeFiscalBackend(suite.db), { seriesId: other.seriesId }),
     ).rejects.toMatchObject({ code: "sale.series_wrong_till" });
+  });
+
+  it("rejects a rectificative series: an ordinary sale must not draw a corrective number", async () => {
+    // The other direction of the §5 purpose guard. A corrective series (`purpose='rectificative'`)
+    // is reserved for rectificativas (RD 1619/2012 art. 6.1.a); an ordinary sale drawing from it
+    // would consume a corrective number and break the mandated separation.
+    const rectSeriesId = await seedRectificativeSeries(suite.db, tenantId, tillId);
+    await expect(
+      run(new FakeFiscalBackend(suite.db), { seriesId: rectSeriesId }),
+    ).rejects.toMatchObject({
+      code: "sale.series_wrong_purpose",
+      params: { seriesId: rectSeriesId, expected: "standard", actual: "rectificative" },
+    });
   });
 });

@@ -252,5 +252,26 @@ declare module "@waitron/shared" {
      * reasoning as `fiscal.environment_mismatch` above.
      */
     "fiscal.environment_unknown": { registroId: string; hostEnvironment: string };
+
+    /**
+     * Thrown by `VerifactuBackend.recordCorrection` (./backend.ts) when the sale it was asked to
+     * correct is a `TipoFactura` this version cannot issue a rectificativa for. v1 corrects only a
+     * simplified invoice (`F2 → R5`, findings §10.2), the only type the till issues today
+     * (`backend.ts`: `counterparty === null ? "F2" : "F1"`, and `packages/core` always passes
+     * `counterparty: null`), so an `F1`/`R*`/other original is unreachable through the real write
+     * path now and becomes reachable only once B2B `F1` issuance lands — at which point rectifying
+     * it is an `R1`, not the `R5` this method assembles. A structured, translatable refusal rather
+     * than a silently mis-typed rectificativa: filing an `R5` against an `F1` is unrepairable (§5),
+     * so this asserts rather than assumes.
+     *
+     * `fiscal.*`, matching this file's own regime-neutral-shaped codes (`fiscal.registro_rechazado`,
+     * `fiscal.environment_mismatch`, …): a fact about the record being corrected, even though
+     * `F2`/`R5` are Veri*Factu vocabulary (this package is exempt from the english-only guard).
+     * `recordCorrection` throws it beside `@waitron/fiscal`'s own `fiscal.sale_not_recorded` (the
+     * absent-original case), so both share the `saleId` param naming the sale being corrected — the
+     * same `correctsSaleId` the caller passed. `tipoFactura` carries the original's own type so the
+     * human resolving it sees WHICH invoice type was refused, not merely that one was.
+     */
+    "fiscal.correction_unsupported": { saleId: string; tipoFactura: string };
   }
 }

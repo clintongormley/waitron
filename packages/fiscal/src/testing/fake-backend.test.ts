@@ -248,6 +248,73 @@ describe("recordVoid", () => {
   });
 });
 
+describe("recordCorrection", () => {
+  beforeEach(() =>
+    suite.db.transaction((tx) => backend.registerTill(tx, TILL_A, { tenantId: TENANT })),
+  );
+
+  it("refuses to correct a sale that was never recorded", async () => {
+    // Mirrors recordVoid's precondition: a correction references a prior sale (spec §4), and there
+    // is nothing to correct if that sale was never recorded. A stub that recorded regardless would
+    // let a core test skip the original entirely and still pass, right up to a real backend refusing.
+    const unrecorded = saleId("00000000-0000-0000-0000-000000000000");
+    const corrective = { ...saleOn(TILL_A, 2), total: decimal("-12.10") };
+    try {
+      await suite.db.transaction((tx) =>
+        backend.recordCorrection(tx, corrective, { correctsSaleId: unrecorded }),
+      );
+      expect.unreachable("recordCorrection should have thrown");
+    } catch (error) {
+      expect((error as AppError).code).toBe("fiscal.sale_not_recorded");
+    }
+  });
+
+  it("records the correction as its own new record referencing the corrected sale", async () => {
+    // A correction is a NEW record carrying its own (negative) data — unlike a void, which has no
+    // data of its own — that interleaves after the original in generation order. The corrective's
+    // own saleId is recorded (not the corrected one), so it is distinguishable from the sale it
+    // corrects, and the corrected sale must exist first for it to be issued at all.
+    const original = saleOn(TILL_A, 1);
+    await suite.db.transaction((tx) => backend.recordSale(tx, original));
+    const corrective = {
+      ...saleOn(TILL_A, 2),
+      saleId: saleId("22222222-3333-4444-5555-666666666666"),
+      total: decimal("-12.10"),
+      vatBreakdown: [{ rate: decimal("21.00"), base: decimal("-10.00"), tax: decimal("-2.10") }],
+    };
+    const ref = await suite.db.transaction((tx) =>
+      backend.recordCorrection(tx, corrective, { correctsSaleId: original.saleId }),
+    );
+
+    const records = await backend.recordsFor(TILL_A);
+    expect(records.map((r) => r.kind)).toEqual(["sale", "correction"]);
+    expect(records.map((r) => r.sequence)).toEqual([1, 2]);
+    expect(records[1].saleId).toBe(corrective.saleId);
+    expect(records[1].total).toBe("-12.10");
+    expect(ref.recordId).toBe(records[1].recordId);
+    expect(ref.state).toBe("pending");
+  });
+
+  it("leaves no record behind when the transaction rolls back", async () => {
+    // The atomicity property, for corrections too: the interface takes a transaction handle so a
+    // correction and any surrounding work commit or roll back together. A fake holding an in-memory
+    // array could not show this — it writes through the caller's own transaction instead.
+    const original = saleOn(TILL_A, 1);
+    await suite.db.transaction((tx) => backend.recordSale(tx, original));
+    await expect(
+      suite.db.transaction(async (tx) => {
+        await backend.recordCorrection(
+          tx,
+          { ...saleOn(TILL_A, 2), total: decimal("-12.10") },
+          { correctsSaleId: original.saleId },
+        );
+        throw new Error("rolled back by the caller");
+      }),
+    ).rejects.toThrow();
+    expect((await backend.recordsFor(TILL_A)).map((r) => r.kind)).toEqual(["sale"]);
+  });
+});
+
 describe("reconcile", () => {
   beforeEach(() =>
     suite.db.transaction((tx) => backend.registerTill(tx, TILL_A, { tenantId: TENANT })),

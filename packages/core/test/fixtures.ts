@@ -1,11 +1,13 @@
 import { sql } from "drizzle-orm";
 import {
+  saleId as brandSaleId,
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
-import type { SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { SaleId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import { sales } from "@waitron/db";
 import type { Database } from "@waitron/db";
 
 export interface SeededTenant {
@@ -81,4 +83,57 @@ export async function seedTenant(
     // persisted or joined against. A well-formed, fabricated id is therefore enough.
     workingOrderId: brandWorkingOrderId(crypto.randomUUID()),
   };
+}
+
+/**
+ * Adds a second series to an EXISTING till whose `purpose` is `rectificative`, returning its id.
+ * `recordCorrection` requires such a series (a correction must draw its number from a corrective
+ * series, never an ordinary one — RD 1619/2012 art. 6.1.a); `recordSale` requires the opposite.
+ * Runs as a plain, unscoped statement exactly like `seedTenant` above — the seeding connection is
+ * a superuser and bypasses row-level security, so no `app.tenant_id` need be set for the
+ * tenant-isolation `WITH CHECK` to pass.
+ */
+export async function seedRectificativeSeries(
+  db: Database,
+  tenantId: TenantId,
+  tillId: TillId,
+  code = "R",
+): Promise<SeriesId> {
+  const { rows } = await db.execute<{ id: string }>(sql`
+    insert into invoice_series (tenant_id, till_id, code, purpose)
+    values (${tenantId}, ${tillId}, ${code}, 'rectificative')
+    returning id
+  `);
+  return brandSeriesId(rows[0]!.id);
+}
+
+/**
+ * Inserts one `sales` row directly, as the seeding (superuser) connection — the same
+ * RLS-bypassing path `seedTenant` uses. For tests that need an ORIGINAL sale to correct without
+ * routing it through `recordSale` (so it has NO backend fiscal record, or so a cross-tenant
+ * original can be planted under another tenant). Written on the current schema: `total` is the
+ * only money column, and `correctsSaleId` is left NULL for an ordinary original.
+ */
+export async function seedBareSale(
+  db: Database,
+  seed: { tenantId: TenantId; tillId: TillId; seriesId: SeriesId },
+  overrides: { total?: string; invoiceNumber?: number } = {},
+): Promise<SaleId> {
+  const [row] = await db
+    .insert(sales)
+    .values({
+      tenantId: seed.tenantId,
+      tillId: seed.tillId,
+      seriesId: seed.seriesId,
+      invoiceNumber: overrides.invoiceNumber ?? 1,
+      issuedAt: new Date("2026-03-01T12:00:00Z").toISOString(),
+      issuedOffsetMinutes: 0,
+      total: overrides.total ?? "65.00",
+      locale: "es-ES",
+      invoiceLocales: ["es-ES"],
+      fiscalBackend: "fake",
+      fiscalState: "recorded",
+    })
+    .returning({ id: sales.id });
+  return brandSaleId(row!.id);
 }

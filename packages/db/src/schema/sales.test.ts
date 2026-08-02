@@ -821,3 +821,178 @@ describeEachTarget("sales — fiscal_state", (target) => {
     expect(pgErrorMessage(error)).toMatch(/permission denied for table sales/);
   });
 });
+
+/**
+ * The rectificativa link (migration 0013). `corrects_sale_id` is the generic-layer
+ * projection of "this sale corrects that one" — nullable, tenant-consistent FK back onto
+ * `sales`, NOT unique (a sale may be corrected more than once), and it is what relaxes
+ * `sales_total_ck` to permit the negative total a rectificativa por diferencias carries
+ * (docs/superpowers/plans/2026-08-02-rectificativas.md §2.1).
+ *
+ * A corrective sale is written header-only here (no tenders): the refund is a separate
+ * payments action and `tenders_amount_ck` (`amount > 0`) forbids a negative tender anyway,
+ * so an unsettled corrective is the steady state.
+ */
+describeEachTarget("sales — corrective link and negative total", (target) => {
+  let db: Database;
+  let originalSaleId = "";
+
+  beforeEach(async () => {
+    db = await target.create();
+    await seed(db);
+    // An ordinary sale to be corrected. invoice_number 1 in seriesA.
+    originalSaleId = await recordCompleteSale(db);
+  });
+
+  afterEach(async () => {
+    if (db !== undefined) await db.close();
+  });
+
+  // Raw insert of a corrective (or ordinary) sale HEADER — deliberately not the drizzle
+  // `sales` object, so the RED phase fails on the real cause ("column corrects_sale_id does
+  // not exist", i.e. the migration is absent) rather than on a TypeScript compile error.
+  async function insertSale(opts: {
+    total: string;
+    correctsSaleId: string | null;
+    invoiceNumber: number;
+    tenantId?: string;
+    tillId?: string;
+    seriesId?: string;
+    invoiceLocales?: string[];
+  }): Promise<{ id: string }[]> {
+    const tenantId = opts.tenantId ?? TENANT_A;
+    const tillId = opts.tillId ?? TILL_A1;
+    const seriesId = opts.seriesId ?? seriesA;
+    const locales = opts.invoiceLocales ?? ["es", "ca"];
+    const localesArray = sql`array[${sql.join(
+      locales.map((l) => sql`${l}`),
+      sql`, `,
+    )}]::text[]`;
+    return rows<{ id: string }>(
+      db,
+      sql`insert into sales (
+             tenant_id, till_id, series_id, invoice_number, issued_at, issued_offset_minutes,
+             total, locale, invoice_locales, fiscal_backend, fiscal_state, corrects_sale_id
+           ) values (
+             ${tenantId}, ${tillId}, ${seriesId}, ${opts.invoiceNumber}, ${AT}, 120,
+             ${opts.total}, 'es', ${localesArray}, 'verifactu', 'recorded',
+             ${opts.correctsSaleId}
+           ) returning id`,
+    );
+  }
+
+  it("accepts a corrective sale carrying a negative total when the link is set", async () => {
+    // Load-bearing: record-sale passes `total` straight into the fiscal record's ImporteTotal,
+    // which the huella hashes, so `sales.total` must hold the negative value the corrective
+    // needs (findings §10.2, plan §2.1).
+    //
+    // PROVEN BY DELETION (manual, recorded in this task's report): with the migration's
+    // `sales_total_ck` reduced back to `${t.total} >= 0` (the pre-0013 form), this exact insert
+    // is rejected with 23514/sales_total_ck. The `OR corrects_sale_id IS NOT NULL` clause is
+    // what admits it — the guard is doing the work, not the FK or the column add.
+    const inserted = await insertSale({
+      total: "-1.00",
+      correctsSaleId: originalSaleId,
+      invoiceNumber: 2,
+    });
+    expect(inserted).toHaveLength(1);
+    const [row] = await db.select().from(sales).where(eq(sales.id, inserted[0].id));
+    expect(row.total).toBe("-1.00");
+    expect(row.correctsSaleId).toBe(originalSaleId);
+  });
+
+  it("rejects an ordinary sale carrying a negative total", async () => {
+    // Negative control: with no corrective link, the relaxed check still rejects a negative
+    // total exactly as the original `total >= 0` did. An ordinary sale is never negative.
+    const error = await captureError(() =>
+      insertSale({ total: "-1.00", correctsSaleId: null, invoiceNumber: 2 }),
+    );
+    expect(pgErrorCode(error)).toBe("23514");
+    expect(pgErrorMessage(error)).toMatch(/sales_total_ck/);
+  });
+
+  it("still accepts a corrective sale with a positive total", async () => {
+    // The link relaxes the sign; it does not force it. A corrective may be positive.
+    const inserted = await insertSale({
+      total: "1.00",
+      correctsSaleId: originalSaleId,
+      invoiceNumber: 2,
+    });
+    expect(inserted).toHaveLength(1);
+  });
+
+  it("leaves corrects_sale_id null on an ordinary sale", async () => {
+    // The ordinary write path is unchanged: `recordCompleteSale` sets no link.
+    const [row] = await db.select().from(sales).where(eq(sales.id, originalSaleId));
+    expect(row.correctsSaleId).toBeNull();
+  });
+
+  it("allows a sale to be corrected more than once", async () => {
+    // NOT unique, unlike sale_voids_sale_id_key: successive rectificativas against one sale are
+    // legitimate (plan §2.1). Two correctives pointing at the same original both land.
+    await insertSale({ total: "-1.00", correctsSaleId: originalSaleId, invoiceNumber: 2 });
+    const second = await insertSale({
+      total: "-0.50",
+      correctsSaleId: originalSaleId,
+      invoiceNumber: 3,
+    });
+    expect(second).toHaveLength(1);
+    const linked = await rows<{ n: number }>(
+      db,
+      sql`select count(*)::int as n from sales where corrects_sale_id = ${originalSaleId}::uuid`,
+    );
+    expect(linked[0].n).toBe(2);
+  });
+
+  it("rejects a corrective link to a sale that does not exist", async () => {
+    const error = await captureError(() =>
+      insertSale({
+        total: "-1.00",
+        correctsSaleId: "99999999-9999-4999-8999-999999999999",
+        invoiceNumber: 2,
+      }),
+    );
+    // Foreign key violation — the composite (tenant_id, corrects_sale_id) FK onto sales.
+    expect(pgErrorCode(error)).toBe("23503");
+  });
+
+  it("rejects a corrective link to another tenant's sale", async () => {
+    // The FK is composite and tenant-consistent, mirroring sale_lines_sale_fk: a corrective may
+    // only point at a sale of its OWN tenant. Tenant A cannot link to tenant B's sale even
+    // though that id exists.
+    const otherTenantSale = await recordCompleteSale(db, {
+      tenantId: TENANT_B,
+      tillId: TILL_B1,
+      seriesId: seriesB,
+      invoiceLocales: ["es"],
+      locale: "es",
+    });
+    const error = await captureError(() =>
+      insertSale({ total: "-1.00", correctsSaleId: otherTenantSale, invoiceNumber: 2 }),
+    );
+    expect(pgErrorCode(error)).toBe("23503");
+  });
+
+  it("keeps a corrective sale scoped to its tenant under the app role", async () => {
+    // RLS still scopes `sales` after the column add. Insert a corrective for tenant A; the app
+    // role sees it only under tenant A's app.tenant_id, never tenant B's. Runs against real
+    // Postgres too via describeEachTarget (PGlite is superuser and would bypass FORCE RLS, so a
+    // PGlite-only pass here would be a false pass — CLAUDE.md §4).
+    const corrective = await insertSale({
+      total: "-1.00",
+      correctsSaleId: originalSaleId,
+      invoiceNumber: 2,
+    });
+    const visibleToA = await withTenant(db, TENANT_A, async (tx) => {
+      await asAppUser(tx);
+      return tx.select({ id: sales.id }).from(sales).where(eq(sales.id, corrective[0].id));
+    });
+    expect(visibleToA).toHaveLength(1);
+
+    const visibleToB = await withTenant(db, TENANT_B, async (tx) => {
+      await asAppUser(tx);
+      return tx.select({ id: sales.id }).from(sales).where(eq(sales.id, corrective[0].id));
+    });
+    expect(visibleToB).toHaveLength(0);
+  });
+});

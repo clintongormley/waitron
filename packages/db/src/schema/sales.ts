@@ -99,6 +99,16 @@ export const sales = pgTable(
     invoiceLocales: text("invoice_locales").array().notNull(),
     fiscalBackend: text("fiscal_backend").notNull(),
     fiscalState: fiscalState("fiscal_state").notNull(),
+    // The generic-layer projection of "this sale corrects that one" — set on a
+    // rectificativa, NULL on an ordinary sale. Justified exactly as `sale_voids`
+    // and `fiscal_state`/`fiscal_backend` are (see this table's own comment
+    // above): core reads nothing fiscal from it, it exists so a
+    // Z-report/receipt/till can answer "is this a correction, and of what?" with
+    // no cross-boundary join. The tenant-consistent FK below mirrors
+    // `sale_lines_sale_fk`/`tenders_sale_fk`; NULLABLE with no backfill
+    // (pre-production, no deployed data), and immutable table-wide like every
+    // other column here.
+    correctsSaleId: uuid("corrects_sale_id"),
   },
   (t) => [
     unique("sales_series_invoice_number_key").on(t.tenantId, t.seriesId, t.invoiceNumber),
@@ -107,7 +117,24 @@ export const sales = pgTable(
     unique("sales_tenant_id_key").on(t.tenantId, t.id),
     index("sales_tenant_issued_idx").on(t.tenantId, t.issuedAt),
     index("sales_fiscal_state_idx").on(t.tenantId, t.fiscalState),
-    check("sales_total_ck", sql`${t.total} >= 0`),
+    // A rectificativa points at the sale it corrects, within its own tenant.
+    // MATCH SIMPLE (the default) means a NULL `corrects_sale_id` satisfies the
+    // FK, so ordinary sales are unaffected. NOT unique — unlike
+    // `sale_voids_sale_id_key` (one void per sale), a sale may be corrected more
+    // than once by successive rectificativas; the plain index below is for the
+    // lookup, not a uniqueness guard.
+    foreignKey({
+      columns: [t.tenantId, t.correctsSaleId],
+      foreignColumns: [t.tenantId, t.id],
+      name: "sales_corrects_fk",
+    }).onDelete("restrict"),
+    index("sales_corrects_idx").on(t.tenantId, t.correctsSaleId),
+    // `total >= 0` for an ordinary sale, but a rectificativa por diferencias
+    // carries a NEGATIVE total (findings §10.2): `record-sale` passes `total`
+    // verbatim into the fiscal record's `ImporteTotal`, which the huella hashes,
+    // so this column must be allowed to hold that negative value. A corrective
+    // (link set) may be negative; an ordinary sale (link NULL) may not.
+    check("sales_total_ck", sql`${t.total} >= 0 or ${t.correctsSaleId} is not null`),
     check("sales_invoice_number_ck", sql`${t.invoiceNumber} >= 1`),
     check("sales_invoice_locales_ck", sql`array_length(${t.invoiceLocales}, 1) between 1 and 2`),
     check("sales_locale_member_ck", sql`${t.locale} = any(${t.invoiceLocales})`),

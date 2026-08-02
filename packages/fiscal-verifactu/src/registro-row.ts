@@ -1,5 +1,6 @@
 import { formatDateTime } from "@waitron/verifactu";
 import type {
+  DesgloseRectificacion,
   Encadenamiento,
   RegistroAlta,
   RegistroAnulacion,
@@ -144,6 +145,14 @@ export function toRegistroRow(
       fechaExpedicionFactura: toIsoDate(record.IDFactura.FechaExpedicionFactura),
       nombreRazonEmisor: record.NombreRazonEmisor,
       tipoFactura: record.TipoFactura,
+      // The four AEAT rectificativa fields, stored as-built so the drainer re-serialises the whole
+      // rectificativa (fromRegistroRow reads them back). `?? null`, not `?? undefined`: an absent
+      // field is a NULL column, distinguishable from "we never looked" only at write time. None is
+      // hashed, so storing them here does not affect this record's huella.
+      tipoRectificativa: record.TipoRectificativa ?? null,
+      facturasRectificadas: record.FacturasRectificadas ?? null,
+      facturasSustituidas: record.FacturasSustituidas ?? null,
+      importeRectificacion: record.ImporteRectificacion ?? null,
       descripcionOperacion: record.DescripcionOperacion,
       desglose: record.Desglose,
       cuotaTotal: record.CuotaTotal,
@@ -162,6 +171,12 @@ export function toRegistroRow(
     // convenience, so it falls back to the one emisor name every record DOES carry.
     nombreRazonEmisor: record.SistemaInformatico.NombreRazon,
     tipoFactura: null,
+    // A RegistroAnulacion carries none of the four rectificativa fields — they belong to a
+    // registro de alta whose TipoFactura is R1–R5, never to an anulación.
+    tipoRectificativa: null,
+    facturasRectificadas: null,
+    facturasSustituidas: null,
+    importeRectificacion: null,
     descripcionOperacion: null,
     desglose: null,
     cuotaTotal: null,
@@ -225,6 +240,15 @@ export type RegistroRow = {
   fecha_expedicion_factura: string;
   nombre_razon_emisor: string;
   tipo_factura: string | null;
+  // The four AEAT rectificativa fields (jsonb comes back parsed, per this type's own doc comment
+  // above). All NULL on an ordinary alta and on an anulación; set on a rectificativa alta so the
+  // drainer can re-serialise them — without which AEAT rejects the filing missing its mandatory
+  // TipoRectificativa (error 1114). None is a huella input (huella.ts hashes 8 named fields, none
+  // of these), so rehydrating them cannot change a recomputed huella.
+  tipo_rectificativa: string | null;
+  facturas_rectificadas: RegistroAlta["FacturasRectificadas"] | null;
+  facturas_sustituidas: RegistroAlta["FacturasSustituidas"] | null;
+  importe_rectificacion: DesgloseRectificacion | null;
   descripcion_operacion: string | null;
   desglose: RegistroAlta["Desglose"] | null;
   cuota_total: string | null;
@@ -311,6 +335,27 @@ export function fromRegistroRow(row: RegistroRow): RegistroAlta | RegistroAnulac
     },
     NombreRazonEmisor: row.nombre_razon_emisor,
     TipoFactura: row.tipo_factura as RegistroAlta["TipoFactura"],
+    // The four AEAT rectificativa fields, spread back on ONLY when stored non-null — matching
+    // buildAltaRecord's own conditional-spread shape (packages/verifactu/src/records.ts:101-118),
+    // so an absent field is OMITTED, never set to null. A `TipoRectificativa: null` would make this
+    // rebuilt record deep-unequal to one built without the field, and — more to the point — would
+    // serialise a spurious empty element. None is a huella input (huella.ts hashes 8 named fields,
+    // none of them), so adding them here cannot change the recomputed huella verify.ts checks; they
+    // exist so the drainer files a complete rectificativa (its mandatory TipoRectificativa, AEAT
+    // rule 1114). The `!== null` casts mirror the `anterior_*`/`cuota_total` casts above: the value
+    // is stored parsed jsonb / text and read back verbatim, never digested.
+    ...(row.tipo_rectificativa !== null && {
+      TipoRectificativa: row.tipo_rectificativa as "S" | "I",
+    }),
+    ...(row.facturas_rectificadas !== null && {
+      FacturasRectificadas: row.facturas_rectificadas,
+    }),
+    ...(row.facturas_sustituidas !== null && {
+      FacturasSustituidas: row.facturas_sustituidas,
+    }),
+    ...(row.importe_rectificacion !== null && {
+      ImporteRectificacion: row.importe_rectificacion,
+    }),
     // DescripcionOperacion and Desglose are not huella inputs at all — huella.ts's
     // buildCadenaAlta hashes exactly eight named fields and neither is among them — so a plain
     // cast is enough; their actual value cannot affect recomputation either way.
