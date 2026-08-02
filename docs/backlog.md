@@ -27,6 +27,14 @@ Building a counter screen now means building it twice. The fiscal work is also t
 be repaired afterwards — invoice numbers are never reused and records are hash-chained — so it is
 where care pays best.
 
+**Prioritisation is by soundness, not the calendar (decided 2026-08-02).** Waitron will be finished
+before the deli is ready to trade, so the deli's 1-Jan-2027 legal deadline is *not* a reason to rank
+one piece of work above another — order by dependency, correctness, and de-risking the most-reused /
+most-uncertain foundations first. The fiscal-first ordering above stands on the **dependency** it
+names (the till is built against the invoicing model), not on the deadline. This is the principle
+under which the app-level replication mechanism was proven (see the SIF follow-ups) *before* more
+feature work resumed.
+
 **The trade being accepted:** there is no application a person can use. Thirteen packages and one
 server app exist; `packages/ui` has six primitives and nothing consumes them; there is no
 `apps/till`. The system can reconcile a Stripe account and file with AEAT, and cannot ring up a
@@ -83,16 +91,26 @@ The [server-as-SIF + failover design](superpowers/specs/2026-08-01-local-server-
 decided the **topology only**; its §14 defers the buildable pieces, each to its own spec:
 
 - **The sync / replication protocol** between the two local servers and the cloud mirror — the
-  largest. Partitioned-write active-active with full cross-replication (not multi-master); it must be
-  prototyped against the real migrations, not assumed from config. **A first-draft spec exists**
-  ([2026-08-01-sif-sync-replication-protocol-design.md](superpowers/specs/2026-08-01-sif-sync-replication-protocol-design.md),
-  branch `docs/sif-sync-protocol-design`, held — not PR'd), reviewed against the schema. It raised two
-  things: a gap in #33 itself (below), and one of its own — its ownership map omits `sales` and
-  `working_orders`, which the two apply paths carry NOT-NULL foreign keys into, so the next draft needs
-  a "parent rows replicate before their referents" apply-ordering rule. Two container prototypes gate
-  it: whether a foreign `registro` INSERTs under FORCE RLS as a non-BYPASSRLS `withTenant` role, and
-  whether native logical replication can satisfy FORCE RLS at all (decides application-level sync vs.
-  native).
+  largest piece. **Both gating container prototypes are now DONE (2026-08-02) and they DECIDE the
+  mechanism: cross-replication must be APPLICATION-LEVEL, not native Postgres logical replication.**
+  Proven on real `postgres:18-alpine` and independently re-verified
+  ([findings](superpowers/specs/2026-08-02-replication-force-rls-prototype-findings.md)): (1) a
+  non-BYPASSRLS app role with the tenant context set INSERTs a foreign server's same-tenant rows
+  verbatim under FORCE RLS — app-level apply works; (2) native logical replication's apply worker
+  **categorically refuses** to write into any RLS-enabled table under a non-BYPASSRLS role
+  (`cannot replicate into relation with row-level security enabled`) — the only native lever is
+  BYPASSRLS/superuser, which the deployment-role constraint forbids. The block keys on RLS being
+  enabled *at all*, so it hits **all ~8 RLS tables**, not only the fiscal chain. The cheaper fork
+  (turn RLS off on the replica copies + native replication) strips the fiscal tables' defense-in-depth
+  and is declined deliberately. **The app-level sync layer is now being designed** (this session,
+  building on the held first-draft
+  [2026-08-01-sif-sync-replication-protocol-design.md](superpowers/specs/2026-08-01-sif-sync-replication-protocol-design.md),
+  branch `docs/sif-sync-protocol-design`, still held). Carry-forwards for that design: its ownership
+  map omits `sales` and `working_orders` (NOT-NULL FK targets of the apply paths), so it needs a
+  "parent rows replicate before their referents" apply-ordering rule; and one prototype gate remains —
+  whether a non-superuser can CONSUME a logical-decoding slot (the "native decode + app-level apply"
+  hybrid reads the peer's WAL but applies as the app role — reading a slot was not the operation the
+  block hit, but non-superuser slot consumption is unproven).
 - **Promotion + fencing tooling and the till-side failover list** — boot-time role resolution,
   continuous conflict-detection, the "one primary" invariant.
 - **The submitter as a relocatable role** — one venue submitter, certificate resolved from wherever
