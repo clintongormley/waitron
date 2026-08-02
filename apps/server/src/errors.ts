@@ -126,5 +126,39 @@ declare module "@waitron/shared" {
       keyEnvironment: string;
       hostEnvironment: string;
     };
+    /**
+     * An inbound hosted-payment webhook failed signature verification for the tenant named in the
+     * path. The signature is the sole gate (design §2): the path tenant is attacker-controllable,
+     * so nothing acts on the event until THAT tenant's own `webhookSecret` verifies the raw bytes.
+     * A caller who names a real tenant but cannot produce a body signed by that tenant's secret gets
+     * this and an HTTP 400.
+     *
+     * `payment.*`, not `server.*`: a signature failure is a fact about a payment event, not about
+     * the process (`tenant.not_found`'s note above gives the rule). Carries ONLY the `tenantId` —
+     * never the signature, the raw body or the secret, the same no-leak discipline
+     * `server.credential_unusable` follows.
+     */
+    "payment.webhook_signature_invalid": { tenantId: string };
+    /**
+     * A webhook verified against the path tenant's secret, but the payment it settles resolves
+     * (`resolve_payment_tenant`, the #26 seam) to a DIFFERENT tenant — reachable only when two
+     * tenants share a Stripe account, i.e. a cross-tenant misconfiguration. Refused with HTTP 400
+     * rather than settling a row across the tenant boundary. Defence-in-depth on top of the
+     * signature gate, which keeps the seam load-bearing even though the path already names a tenant.
+     */
+    "payment.webhook_tenant_mismatch": {
+      pathTenantId: string;
+      resolvedTenantId: string;
+      externalRef: string;
+    };
+    /**
+     * A verified webhook whose `external_ref` resolves to no local `initiated` payment — a crash
+     * between minting the Checkout Session and writing its row, or an event for a session this host
+     * never minted. LOG-ONLY (a structured field, never thrown-and-caught): the route acks 2xx so
+     * Stripe stops retrying, and `reconcile`'s `missing_local` class backstops the settlement
+     * per-tenant. Not modelled on the credential-purpose key `payments.stripe` — that is a purpose,
+     * not an error (design §4).
+     */
+    "payment.webhook_unresolved": { provider: string; externalRef: string };
   }
 }
