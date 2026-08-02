@@ -22,7 +22,7 @@ function shift(
 }
 
 /** A projected `WorkSession` — only the fields the read model reads carry meaning; `endedAt`/
- * `breakMinutes`/`locationId` are set to inert values. */
+ * `breakMinutes`/`locationId` and the wall offsets are set to inert values. */
 function session(
   personId: string,
   workDate: string,
@@ -34,7 +34,9 @@ function session(
     locationId: "loc-1",
     workDate,
     startedAt,
+    startOffsetMinutes: 0,
     endedAt: startedAt,
+    endOffsetMinutes: 0,
     breakMinutes: 0,
     workedMinutes,
   };
