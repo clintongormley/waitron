@@ -627,6 +627,22 @@ landed after the fix, so nothing ever hit that.)
 
 - **Never commit directly to `main`** — always create a feature branch first. Feature work happens
   in a worktree (`worktree.py new waitron <branch>`), not the main checkout.
+- **A `docs/backlog.md` change is exempt from the PR ceremony** — user decision, 2026-08-02. Use a
+  plain `git worktree add <path> -b <branch>` (NOT `worktree.py new`, whose `pnpm install` a docs
+  edit does not need), commit `-s`, and merge to `main` directly: **no PR, no CI wait, no Copilot,
+  no `/land-branch`.** The gate has nothing to run on such a change, measured on 2026-08-02:
+  `pnpm exec eslint . --format json` lints **0 Markdown files and 0 files under `docs/`** (the total
+  moves per commit; the zeros are the load-bearing part); `prettier --file-info docs/backlog.md`
+  reports `ignored: true` (it is under `.prettierignore`'s `docs/`), while the same command on
+  `CLAUDE.md` and `README.md` reports `ignored: false`; and on the `docs/backlog.md`-only PR #44,
+  CI's `changes` job classified it documentation-only and `test-heavy`, `test-light`, `test-ui`,
+  `typecheck`, both `mutation-*` and `bundle-smoke` all reported `skipping`. So a PR + CI + Copilot +
+  land-branch gate is disproportionate; the cost that produced the rule was running the whole
+  apparatus for a 12-line _Debt and odd jobs_ entry (#44). Still branch — do not commit on `main`
+  directly — and still `-s` every commit. The carve-out is exactly the `docs/` prose that
+  `.prettierignore` covers: a **root-level** `CLAUDE.md` or `README.md` is format-checked (the
+  `ignored: false` above — this very edit is one), so an edit to either still runs the normal flow,
+  as does all feature/code work.
 - **Branch names are descriptive**, e.g. `feat/provisioning-cli`, `fix/rls-superuser-claim`.
 - **Do not merge a PR automatically — wait for the user's approval.** Invoking `/land-branch`
   _is_ that approval; nothing else is.
