@@ -1,6 +1,11 @@
 [
   { "name": "core", "table": "__drizzle_migrations_db", "from": "../db/drizzle" },
   {
+    "name": "workforce",
+    "table": "__drizzle_migrations_workforce",
+    "from": "../workforce/drizzle"
+  },
+  {
     "name": "fiscal",
     "table": "__drizzle_migrations_fiscal",
     "from": "../fiscal-verifactu/drizzle"

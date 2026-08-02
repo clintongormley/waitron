@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 
 /**
  * Task 3's English-only guard (packages/db/src/english-only.ts) scans `GENERIC_PACKAGES`
- * ("db", "core", "fiscal", "shared", "payments", "scheduler", "credentials") and explicitly names
- * this package — alongside packages/verifactu — in `EXEMPT_PACKAGES`.
+ * ("db", "core", "fiscal", "shared", "payments", "scheduler", "credentials", "workforce") and
+ * explicitly names this package — alongside packages/verifactu — in `EXEMPT_PACKAGES`.
  *
  * Its constants are read here as SOURCE TEXT rather than imported from `@waitron/db`, and that is
  * not merely a style choice carried over from packages/fiscal/src/no-regime-vocabulary.test.ts's
@@ -27,13 +27,13 @@ const englishOnlySource = readFileSync(
 describe("the English-only vocabulary guard is scoped out of this package", () => {
   it("does not scan fiscal-verifactu", () => {
     expect(englishOnlySource).toMatch(
-      /GENERIC_PACKAGES\s*=\s*\[\s*"db",\s*"core",\s*"fiscal",\s*"shared",\s*"payments",\s*"scheduler",\s*"credentials",?\s*\]/,
+      /GENERIC_PACKAGES\s*=\s*\[\s*"db",\s*"core",\s*"fiscal",\s*"shared",\s*"payments",\s*"scheduler",\s*"credentials",\s*"workforce",?\s*\]/,
     );
   });
 
-  it("explicitly exempts fiscal-verifactu, alongside verifactu", () => {
+  it("explicitly exempts fiscal-verifactu, alongside verifactu and workforce-es", () => {
     expect(englishOnlySource).toMatch(
-      /EXEMPT_PACKAGES\s*=\s*\["verifactu",\s*"fiscal-verifactu"\]/,
+      /EXEMPT_PACKAGES\s*=\s*\["verifactu",\s*"fiscal-verifactu",\s*"workforce-es"\]/,
     );
   });
 

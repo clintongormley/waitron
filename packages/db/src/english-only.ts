@@ -13,10 +13,14 @@ export const GENERIC_PACKAGES = [
   "payments",
   "scheduler",
   "credentials",
+  "workforce",
 ] as const;
 
-/** Spanish by design: these mirror AEAT's spec, XML and conformance vectors. */
-export const EXEMPT_PACKAGES = ["verifactu", "fiscal-verifactu"] as const;
+/** Spanish by design: `verifactu`/`fiscal-verifactu` mirror AEAT's spec, XML and conformance
+ * vectors; `workforce-es` is the Spain module for the registro de jornada, where the ET/RD-ley 8/2019
+ * vocabulary (jornada, trabajador, conservación, Inspección) IS the domain language (sub-project 16,
+ * mirroring the fiscal-verifactu precedent). */
+export const EXEMPT_PACKAGES = ["verifactu", "fiscal-verifactu", "workforce-es"] as const;
 
 // -----------------------------------------------------------------------------------------------
 // Decision record: apps/* is OUT OF SCOPE for this guard. Prose, not another `as const` array,
@@ -208,6 +212,49 @@ export const SPANISH_WORDS = new Set([
   "entornos",
   "descripcion",
   "descripciones",
+  // workforce / registro de jornada vocabulary (sub-project 16). The list above carried
+  // fiscal/POS terms but no labour terms, so packages/workforce — an English generic package — was
+  // guarded against Spanish invoice vocabulary but not against Spanish LABOUR vocabulary. These arm
+  // it before the first Spanish labour name can land (packages/workforce-es and the Slice 2/3
+  // tables), the same "in place before the package" posture `sourceFilesIn` documents below.
+  // Verified not to collide with any existing generic-package identifier by running the guard over
+  // all eight generics with this list in place; a firing check lives in scripts/english-only.test.ts.
+  "jornada",
+  "jornadas",
+  "empleado",
+  "empleados",
+  "trabajador",
+  "trabajadores",
+  "trabajo",
+  "fichaje",
+  "fichajes",
+  "presencia",
+  "descanso",
+  "descansos",
+  "ausencia",
+  "ausencias",
+  "turno",
+  "turnos",
+  "horario",
+  "horarios",
+  "nocturnidad",
+  "festivo",
+  "festivos",
+  "vacaciones",
+  "permiso",
+  "permisos",
+  "baja",
+  "bajas",
+  "finiquito",
+  "contrato",
+  "contratos",
+  "salario",
+  "salarios",
+  "nomina",
+  "nominas",
+  "convenio",
+  "convenios",
+  "retribucion",
 ]);
 
 export interface Violation {

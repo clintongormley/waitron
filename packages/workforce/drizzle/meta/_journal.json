@@ -1,0 +1,55 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1785672194211,
+      "tag": "0000_workforce",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785672221035,
+      "tag": "0001_workforce_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785674610052,
+      "tag": "0002_time_attendance",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785674620878,
+      "tag": "0003_workforce_d1a_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785676876967,
+      "tag": "0004_workforce_corrections",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785680498649,
+      "tag": "0005_mushy_ghost_rider",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785680519150,
+      "tag": "0006_brief_vampiro",
+      "breakpoints": true
+    }
+  ]
+}
