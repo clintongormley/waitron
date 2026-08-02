@@ -49,6 +49,24 @@ declare module "@waitron/shared" {
      * supervisor/manager/admin. A correction takes effect only when a supervisor approves it (design
      * §5), so a staff-role approver is refused here rather than silently ignored. */
     "correction.not_permitted": { tenantId: string; personId: string };
+    /** No `shifts` row for this id under the current tenant — never created, or hidden by RLS
+     * (identical from the caller's side). Forward-declared for the D2.2 shift-mutation consumers
+     * (move/reassign/delete a specific shift), the same way `person.not_found`/`person.pin_invalid`
+     * above are declared ahead of the identity sub-project's lookups. `shift.*`, grepped against the
+     * whole registry — unused before D2, never `schedule.*` (a shift is the entity, the schedule is
+     * the aggregate). */
+    "shift.not_found": { tenantId: string; shiftId: string };
+    /** No `roster_versions` row for this id under the current tenant — never created, or hidden by
+     * RLS. Raised by `publishRoster` (../clocking.ts) when asked to publish a version that does not
+     * exist. `roster.*`, grepped against the registry — unused before D2; the guardrail-breach codes
+     * the D2.3 engine adds group under the same prefix because they gate the roster publish. */
+    "roster.not_found": { tenantId: string; rosterVersionId: string };
+    /** `publishRoster` was asked to publish a version whose `status` is no longer `draft` — a second
+     * publish of an already-`published` (or `superseded`) roster. A roster is published exactly once;
+     * republishing is refused rather than silently re-stamping `published_at`. Distinct from
+     * `roster.not_found` (the version does not exist); here it EXISTS but is not in a publishable
+     * state. */
+    "roster.already_published": { tenantId: string; rosterVersionId: string };
     /** An approval named a correction that is not an approvable PENDING request — its target entry
      * already carries an `approved` correction. Covers both re-approving the same request (the
      * request row stays `requested` forever, since approval is a second append, never a mutation —

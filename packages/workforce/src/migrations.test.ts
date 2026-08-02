@@ -5,7 +5,13 @@ import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { hashPin } from "./verify-pin.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { insertTimeEntry, seedLocation, seedPerson } from "../test/fixtures.js";
+import {
+  insertDraftShift,
+  insertRosterVersion,
+  insertTimeEntry,
+  seedLocation,
+  seedPerson,
+} from "../test/fixtures.js";
 
 let tenantId: string;
 
@@ -290,5 +296,94 @@ describe("the D1b correction columns", () => {
           ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`),
     );
     expect(pgErrorCode(error)).toBe("23503"); // foreign_key_violation
+  });
+});
+
+describe("the D2 scheduling tables (shifts + roster_versions)", () => {
+  async function seedPersonAndLocation(): Promise<{ personId: string; locationId: string }> {
+    const personId = await seedPerson(suite.db, tenantId, `d2-${crypto.randomUUID()}`);
+    const locationId = await seedLocation(suite.db, tenantId);
+    return { personId, locationId };
+  }
+
+  it("stores a draft roster version defaulting status to draft with a null published_at", async () => {
+    const { locationId } = await seedPersonAndLocation();
+    const versionId = await insertRosterVersion(suite.db, { tenantId, locationId });
+    const rows = await suite.db.execute<{ status: string; published_at: string | null }>(sql`
+      select status, published_at from roster_versions where id = ${versionId}`);
+    expect(rows.rows[0]).toEqual({ status: "draft", published_at: null });
+  });
+
+  it("rejects a roster version whose period_end precedes its period_start", async () => {
+    const { locationId } = await seedPersonAndLocation();
+    const error = await captureError(() =>
+      suite.db.execute(sql`
+        insert into roster_versions (tenant_id, location_id, period_start, period_end)
+        values (${tenantId}, ${locationId}, '2026-03-08', '2026-03-02')`),
+    );
+    expect(pgErrorCode(error)).toBe("23514"); // check_violation
+    expect(pgErrorMessage(error)).toMatch(/roster_versions_period_ck/);
+  });
+
+  it("rejects a published status carrying a null published_at (the publish-shape invariant)", async () => {
+    // draft ⟺ published_at is null. A 'published' row with no stamp is neither shape. Deleting the
+    // roster_versions_publish_shape_ck constraint is what this catches — and it is what stops
+    // publishRoster from ever flipping status without stamping.
+    const { locationId } = await seedPersonAndLocation();
+    const error = await captureError(() =>
+      suite.db.execute(sql`
+        insert into roster_versions (tenant_id, location_id, period_start, period_end, status)
+        values (${tenantId}, ${locationId}, '2026-03-02', '2026-03-08', 'published')`),
+    );
+    expect(pgErrorCode(error)).toBe("23514");
+    expect(pgErrorMessage(error)).toMatch(/roster_versions_publish_shape_ck/);
+  });
+
+  it("rejects a draft status carrying a non-null published_at (the other direction)", async () => {
+    const { locationId } = await seedPersonAndLocation();
+    const error = await captureError(() =>
+      suite.db.execute(sql`
+        insert into roster_versions (tenant_id, location_id, period_start, period_end, published_at)
+        values (${tenantId}, ${locationId}, '2026-03-02', '2026-03-08', now())`),
+    );
+    expect(pgErrorCode(error)).toBe("23514");
+    expect(pgErrorMessage(error)).toMatch(/roster_versions_publish_shape_ck/);
+  });
+
+  it("stores a draft shift with a null roster_version_id", async () => {
+    const { personId, locationId } = await seedPersonAndLocation();
+    const shiftId = await insertDraftShift(suite.db, { tenantId, personId, locationId });
+    const rows = await suite.db.execute<{ roster_version_id: string | null }>(sql`
+      select roster_version_id from shifts where id = ${shiftId}`);
+    expect(rows.rows[0]!.roster_version_id).toBeNull();
+  });
+
+  it("rejects a shift whose ends_at is not after its starts_at", async () => {
+    const { personId, locationId } = await seedPersonAndLocation();
+    const error = await captureError(() =>
+      insertDraftShift(suite.db, {
+        tenantId,
+        personId,
+        locationId,
+        startsAt: "2026-03-03T17:00:00Z",
+        endsAt: "2026-03-03T09:00:00Z",
+      }),
+    );
+    expect(pgErrorCode(error)).toBe("23514");
+    expect(pgErrorMessage(error)).toMatch(/shifts_interval_ck/);
+  });
+
+  it("rejects a shift whose starts_offset_minutes is outside the ±840 range", async () => {
+    const { personId, locationId } = await seedPersonAndLocation();
+    const error = await captureError(() =>
+      insertDraftShift(suite.db, {
+        tenantId,
+        personId,
+        locationId,
+        startsOffsetMinutes: 900,
+      }),
+    );
+    expect(pgErrorCode(error)).toBe("23514");
+    expect(pgErrorMessage(error)).toMatch(/shifts_starts_offset_ck/);
   });
 });

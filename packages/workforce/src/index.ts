@@ -7,7 +7,10 @@ export {
   workforceCorrectionStatus,
   workforceEntryKind,
 } from "./schema/time-entries.js";
+export type { PublishRosterInput } from "./clocking.js";
 export { workforceChains } from "./schema/workforce-chains.js";
+export { rosterVersions, rosterVersionStatus } from "./schema/roster-versions.js";
+export { shifts } from "./schema/shifts.js";
 export { appendToChain, isUniqueViolation, lockChainHead } from "./chain.js";
 export type { ChainHead, TimeEntryAppend } from "./chain.js";
 export { computeEntryHash, verifyChain } from "./chain-hash.js";

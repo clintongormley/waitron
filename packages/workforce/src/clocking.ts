@@ -83,6 +83,17 @@ export interface CorrectionApprovalInput {
   approverPersonId: string;
 }
 
+/** A request to publish a draft roster version — flip it to `published`, stamp it, and attach its
+ * planned shifts. Publishing is a plain mutation over PLANNING data, not an append to the immutable
+ * record (design §2.1): `roster_versions`/`shifts` take UPDATE, unlike `time_entries`. */
+export interface PublishRosterInput {
+  tenantId: string;
+  /** The `roster_versions` row to publish. Must be a `draft`, or `roster.already_published`. */
+  versionId: string;
+  /** Who published it — recorded on the version; null when the caller does not attribute it. */
+  publishedByPersonId?: string | null;
+}
+
 /** The three states a worker's shift can be in, derived from the most recent clock event. */
 type ShiftState = "out" | "working" | "on_break";
 
@@ -294,6 +305,69 @@ export class WorkforceBackend {
   private async lockPerson(tx: Transaction, tenantId: string, personId: string): Promise<void> {
     await tx.execute(sql`
       select id from persons where tenant_id = ${tenantId} and id = ${personId} for no key update`);
+  }
+
+  /**
+   * Publishes a draft roster version (design §2.1) — the ONLY scheduling write that touches the
+   * legal-vs-planning seam, and it lands squarely on the planning side. Unlike a clock event
+   * (`append`, an immutable-ledger INSERT), this UPDATEs mutable planning rows:
+   *
+   * 1. flips the version `draft → published` and stamps `published_at` (and `published_by_person_id`
+   *    when supplied) — the `roster_versions_publish_shape_ck` invariant pairs the two;
+   * 2. attaches every still-unattached (`roster_version_id is null`) draft shift AT THE VERSION'S
+   *    LOCATION whose LOCAL wall date falls within the version's inclusive period, by setting its
+   *    `roster_version_id`. The local date is `starts_at` shifted by its wall offset — the same
+   *    offset semantics `time_entries` uses — so a shift whose UTC instant sits just outside the
+   *    period still attaches when its local date is inside.
+   *
+   * Throws `roster.not_found` if no such version exists under the tenant, and
+   * `roster.already_published` if it is no longer a `draft` (a roster is published exactly once —
+   * republishing is refused, never a silent re-stamp).
+   */
+  async publishRoster(tx: Transaction, input: PublishRosterInput): Promise<void> {
+    const status = await this.rosterVersionStatus(tx, input.tenantId, input.versionId);
+    if (status !== "draft") {
+      throw new AppError("roster.already_published", {
+        tenantId: input.tenantId,
+        rosterVersionId: input.versionId,
+      });
+    }
+    await tx.execute(sql`
+      update roster_versions
+      set status = 'published', published_at = now(),
+          published_by_person_id = ${input.publishedByPersonId ?? null}
+      where tenant_id = ${input.tenantId} and id = ${input.versionId}`);
+    // UPDATE ... FROM reads location_id/period_start/period_end straight off the version row, so no
+    // date value round-trips through TypeScript. `starts_offset_minutes * interval '1 minute'` turns
+    // the wall offset into the shift of the absolute instant onto local wall time before ::date.
+    await tx.execute(sql`
+      update shifts s
+      set roster_version_id = rv.id
+      from roster_versions rv
+      where rv.id = ${input.versionId} and rv.tenant_id = ${input.tenantId}
+        and s.tenant_id = ${input.tenantId}
+        and s.location_id = rv.location_id
+        and s.roster_version_id is null
+        and (s.starts_at at time zone 'UTC' + s.starts_offset_minutes * interval '1 minute')::date
+            between rv.period_start and rv.period_end`);
+  }
+
+  /** A roster version's `status`, or `roster.not_found` if there is no such version under the
+   * tenant. `publishRoster` reads the publish guard off this. */
+  private async rosterVersionStatus(
+    tx: Transaction,
+    tenantId: string,
+    versionId: string,
+  ): Promise<string> {
+    const { rows } = await tx.execute<{ status: string }>(sql`
+      select status from roster_versions
+      where tenant_id = ${tenantId} and id = ${versionId}
+      limit 1`);
+    const version = rows[0];
+    if (version === undefined) {
+      throw new AppError("roster.not_found", { tenantId, rosterVersionId: versionId });
+    }
+    return version.status;
   }
 
   /** The state the worker's most recent event left them in — `out` when they have no events yet.

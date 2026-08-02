@@ -45,6 +45,57 @@ export async function seedEmployment(
   return result.rows[0]!.id;
 }
 
+/** A draft roster_versions row for the tenant/location. Defaults to a one-week period. Returns its
+ * id. Planning data (mutable) — inserted as `draft` with no `published_at`. */
+export async function insertRosterVersion(
+  db: Database | Transaction,
+  params: {
+    tenantId: string;
+    locationId: string;
+    periodStart?: string;
+    periodEnd?: string;
+  },
+): Promise<string> {
+  const result = await db.execute<{ id: string }>(sql`
+    insert into roster_versions (tenant_id, location_id, period_start, period_end)
+    values (
+      ${params.tenantId}, ${params.locationId},
+      ${params.periodStart ?? "2026-01-05"}, ${params.periodEnd ?? "2026-01-11"}
+    )
+    returning id`);
+  return result.rows[0]!.id;
+}
+
+/** A draft `shifts` row (planning data, `roster_version_id` null until publish). Defaults to a
+ * 09:00–17:00 shift on 2026-01-05, wall offset 0. Returns its id. */
+export async function insertDraftShift(
+  db: Database | Transaction,
+  params: {
+    tenantId: string;
+    personId: string;
+    locationId: string;
+    startsAt?: string;
+    startsOffsetMinutes?: number;
+    endsAt?: string;
+    endsOffsetMinutes?: number;
+    role?: string | null;
+    rosterVersionId?: string | null;
+  },
+): Promise<string> {
+  const result = await db.execute<{ id: string }>(sql`
+    insert into shifts (
+      tenant_id, person_id, location_id, starts_at, starts_offset_minutes,
+      ends_at, ends_offset_minutes, role, roster_version_id
+    ) values (
+      ${params.tenantId}, ${params.personId}, ${params.locationId},
+      ${params.startsAt ?? "2026-01-05T09:00:00Z"}, ${params.startsOffsetMinutes ?? 0},
+      ${params.endsAt ?? "2026-01-05T17:00:00Z"}, ${params.endsOffsetMinutes ?? 0},
+      ${params.role ?? null}, ${params.rosterVersionId ?? null}
+    )
+    returning id`);
+  return result.rows[0]!.id;
+}
+
 /** Appends one clock event THROUGH the Slice-4 chain, so seeded rows are chained exactly as the
  * write path produces them (`recorded_by_person_id` defaults to the subject — self-service).
  *

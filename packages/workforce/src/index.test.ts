@@ -15,6 +15,9 @@ describe("the public surface", () => {
         "workforceCorrectionStatus",
         "workforceEntryKind",
         "workforceChains",
+        "rosterVersions",
+        "rosterVersionStatus",
+        "shifts",
         "appendToChain",
         "isUniqueViolation",
         "lockChainHead",
@@ -125,5 +128,46 @@ describe("workforce_chains constraint declarations (forces the lazy extraConfig 
     );
 
     expect(config.checks.map((c) => c.name)).toContain("workforce_chains_pointer_ck");
+  });
+});
+
+describe("roster_versions constraint declarations (forces the lazy extraConfig callback)", () => {
+  it("declares roster_versions' foreign keys and check constraints", () => {
+    const config = getTableConfig(api.rosterVersions);
+
+    const fkNames = config.foreignKeys.map((fk) => fk.getName());
+    expect(fkNames).toEqual(
+      expect.arrayContaining([
+        "roster_versions_tenant_fk",
+        "roster_versions_location_fk",
+        "roster_versions_published_by_person_fk",
+      ]),
+    );
+
+    const checkNames = config.checks.map((c) => c.name);
+    expect(checkNames).toContain("roster_versions_period_ck");
+    expect(checkNames).toContain("roster_versions_publish_shape_ck");
+  });
+});
+
+describe("shifts constraint declarations (forces the lazy extraConfig callback)", () => {
+  it("declares shifts' four foreign keys and its offset/interval checks", () => {
+    const config = getTableConfig(api.shifts);
+
+    const fkNames = config.foreignKeys.map((fk) => fk.getName());
+    expect(fkNames).toEqual(
+      expect.arrayContaining([
+        "shifts_tenant_fk",
+        "shifts_person_fk",
+        "shifts_location_fk",
+        // The roster-version link, SET NULL on delete — a discarded version detaches its shifts.
+        "shifts_roster_version_fk",
+      ]),
+    );
+
+    const checkNames = config.checks.map((c) => c.name);
+    expect(checkNames).toContain("shifts_starts_offset_ck");
+    expect(checkNames).toContain("shifts_ends_offset_ck");
+    expect(checkNames).toContain("shifts_interval_ck");
   });
 });
