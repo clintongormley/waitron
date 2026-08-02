@@ -350,7 +350,12 @@ export class WorkforceBackend {
   }
 
   /** A roster version's `status`, or `roster.not_found` if there is no such version under the
-   * tenant. `publishRoster` reads the publish guard off this. */
+   * tenant. `publishRoster` reads the publish guard off this. The row is locked `for update`, so the
+   * check-then-publish is race-free: a second concurrent publish blocks on this SELECT until the
+   * first commits, then reads `published` and is refused. Without the lock both could observe `draft`
+   * and the later would silently re-stamp `published_at`/`published_by_person_id` (the guard is a
+   * separate statement from the UPDATE, so a bare read cannot serialise them). The lock rides the
+   * caller's transaction, which `publishRoster` always supplies. */
   private async rosterVersionStatus(
     tx: Transaction,
     tenantId: string,
@@ -359,7 +364,8 @@ export class WorkforceBackend {
     const { rows } = await tx.execute<{ status: string }>(sql`
       select status from roster_versions
       where tenant_id = ${tenantId} and id = ${versionId}
-      limit 1`);
+      limit 1
+      for update`);
     const version = rows[0];
     if (version === undefined) {
       throw new AppError("roster.not_found", { tenantId, rosterVersionId: versionId });

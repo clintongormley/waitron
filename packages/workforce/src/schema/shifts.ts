@@ -18,7 +18,8 @@ import { rosterVersions } from "./roster-versions.js";
  * data, the inverse of `time_entries` (what ACTUALLY happened): ordinary mutable rows, so the app
  * role holds SELECT, INSERT, UPDATE and DELETE (drizzle/0008_scheduling_rls.sql) — a shift is moved,
  * re-roled, or discarded freely, with no append-only trigger and no hash chain. The planned↔actual
- * link is a READ MODEL by person + local date (design 2026-07-22 §..., plan §2.1), not an FK: a
+ * link is a READ MODEL by person + local date (design 2026-07-22 §4 "the planned-vs-actual seam",
+ * plan §2.1), not an FK: a
  * worked session may have no planned shift and a planned shift may be a no-show.
  *
  * `starts_at`/`ends_at` are the absolute instants; `starts_offset_minutes`/`ends_offset_minutes` are

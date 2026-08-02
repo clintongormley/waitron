@@ -376,6 +376,15 @@ describe("dailyContractedTargetMinutes (a contracted daily target over N working
     // gets 400, not 480. This is the de-hard-coding teeth-test.
     expect(dailyContractedTargetMinutes(2400, 6)).toBe(400);
   });
+
+  it("rejects a non-positive working-days count instead of returning Infinity/NaN", () => {
+    // Defence in depth: convenio_config's CHECK pins the denominator to 1..7, but this helper is on
+    // the public barrel, so a 0/negative/NaN divisor throws rather than silently yielding Infinity
+    // or NaN (which would corrupt the overtime target). One `> 0` guard covers all three.
+    expect(() => dailyContractedTargetMinutes(2400, 0)).toThrow(/must be positive/);
+    expect(() => dailyContractedTargetMinutes(2400, -5)).toThrow(/received -5/);
+    expect(() => dailyContractedTargetMinutes(2400, Number.NaN)).toThrow(/must be positive/);
+  });
 });
 
 describe("summarisePeriod (BOTH overtime models, side by side)", () => {

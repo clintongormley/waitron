@@ -37,9 +37,9 @@ export const rosterVersionStatus = pgEnum("roster_version_status", [
  * ordinary mutable data: the app role holds SELECT, INSERT, UPDATE and DELETE
  * (drizzle/0008_scheduling_rls.sql) — a draft is edited or discarded, a published version can be
  * re-stamped or removed. No append-only trigger and no hash chain: no Spanish statute requires a
- * *schedule* to be
- * tamper-evident — that obligation (art. 34.9) is on the record of hours WORKED, which `time_entries`
- * satisfies alone (design 2026-07-22 §... / plan 2026-08-02-workforce-d2-scheduling §2.1). Freezing
+ * *schedule* to be tamper-evident — that obligation (art. 34.9) is on the record of hours WORKED,
+ * which `time_entries` satisfies alone (design 2026-07-22 §2.1 / plan
+ * 2026-08-02-workforce-d2-scheduling §2.1). Freezing
  * published snapshots for labour-dispute purposes would be an additive owner decision, not a legal
  * one, and is out of scope here.
  *
@@ -60,7 +60,10 @@ export const rosterVersions = pgTable(
     periodEnd: date("period_end").notNull(),
     /** When the version was published; null while it is a draft. */
     publishedAt: timestamp("published_at", { withTimezone: true, mode: "string" }),
-    /** Who published it, when recorded — a manager acting; null while a draft. */
+    /** Who published it — a manager acting — recorded at publish time only when the caller supplies
+     * it, otherwise null. Unlike `published_at`, no check ties this column to `status`
+     * (`roster_versions_publish_shape_ck` constrains `published_at` alone); `publishRoster` is its
+     * only writer. */
     publishedByPersonId: uuid("published_by_person_id"),
     status: rosterVersionStatus("status").notNull().default("draft"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })

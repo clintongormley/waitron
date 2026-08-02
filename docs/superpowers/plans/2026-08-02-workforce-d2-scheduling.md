@@ -2,6 +2,9 @@
 
 **Date:** 2026-08-02
 **Status:** Design brief, for review. No code written. Read-only against the tree.
+**Update (2026-08-02):** D2.0 + D2.1 have since been implemented on `feat/workforce-d2-scheduling`
+(PR #50). The "No code written" status above describes this brief at authoring time, before the code
+landed; it is left intact as the record of what was true then (CLAUDE.md §6).
 **Scope:** Sub-project 16, deliverable **D2** — planned working time (shifts / rosters / absences /
 swaps / templates / availability) + the `convenio_config` surface that supplies the overtime rule and
 the ET/convenio guardrails. **D3 (payroll export)** is out of scope; **D1 (registro de jornada, #47)**
