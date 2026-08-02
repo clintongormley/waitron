@@ -526,6 +526,19 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
 - **`errors.reachability.test.ts` does not test reachability.** Proven by deletion. Eight packages
   carry a copy. Closing it needs a `tsc`-based downstream probe or a narrowed `include`. See
   `CLAUDE.md` §4 — do not cite these tests as evidence in the meantime
+- **Two review nits from a 2026-07-31 pass, folded here from GitHub issues #17/#18 (both closed
+  2026-08-02) — the project tracks debt in this file, not in the issue tracker, and left in Issues
+  they drifted from the tree.** (1) `packages/provisioning/src/instance-state.ts` builds
+  `any(array[...])` by string concatenation from `INSTANCE_ROLES` where drizzle would bind a `$1`
+  array — the one `sql.raw` site in the repo with a real parameterised alternative unused. **No live
+  risk** (module constant, ordinary `SELECT`), purely cosmetic. (2) Four `~10-line` copies of the
+  comment-stripper (`english-only.ts`'s private `blankBlockComments`/`dropLineComment`, plus a
+  `stripComments` each in `fiscal`/`payments`'s vocabulary tests and `scripts/guarded-teardowns.test.ts`).
+  The bug #18 was named for — a 4th copy that had dropped the URL guard — was fixed in-tree and every
+  copy now carries a URL-guard regression test; the two vocabulary tests carry a documented decision
+  **not** to consolidate (`english-only.ts` sits on neither the barrel nor the `exports` map, so reuse
+  would need a deep non-barrel import or an export addition — "neither is worth it"). Residual is only
+  "four small strippers"; dedupe **only** if a shared home appears. Neither blocks anything
 - **CI ran every check on every push — done, both PRs merged.** A Markdown-only change cost the same
   7m20s as a migration. Designed in
   [2026-07-31-scoped-ci-design.md](superpowers/specs/2026-07-31-scoped-ci-design.md), built to
