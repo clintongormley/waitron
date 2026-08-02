@@ -1,9 +1,11 @@
 import { escapeXml } from "./escape.js";
 import type {
   DesgloseRectificacion,
+  Destinatario,
   DetalleDesglose,
   Encadenamiento,
   IDFacturaAR,
+  IDOtro,
   RegistroAlta,
   RegistroAnulacion,
   SistemaInformatico,
@@ -143,6 +145,41 @@ function facturasSustituidasXml(value: RegistroAlta["FacturasSustituidas"]): str
   );
 }
 
+/** sf:IDOtroType — the CodigoPais element is optional; `el` drops it when absent. */
+function idOtroXml(value: IDOtro): string {
+  return (
+    "<sf:IDOtro>" +
+    el("sf", "CodigoPais", value.CodigoPais) +
+    el("sf", "IDType", value.IDType) +
+    el("sf", "ID", value.ID) +
+    "</sf:IDOtro>"
+  );
+}
+
+/**
+ * One Destinatarios/IDDestinatario entry — sf:PersonaFisicaJuridicaType. NIF and
+ * IDOtro are an xsd:choice; `!== undefined` (not `in`) narrows the union, since
+ * each Destinatario branch pins the other's identifier to `?: never` — the same
+ * reason formatDetalle/encadenamiento use the dotted-name check.
+ */
+function idDestinatarioXml(entry: Destinatario): string {
+  return (
+    "<sf:IDDestinatario>" +
+    el("sf", "NombreRazon", entry.NombreRazon) +
+    (entry.NIF !== undefined ? el("sf", "NIF", entry.NIF) : idOtroXml(entry.IDOtro)) +
+    "</sf:IDDestinatario>"
+  );
+}
+
+function destinatariosXml(value: RegistroAlta["Destinatarios"]): string {
+  if (value === undefined) return "";
+  return (
+    "<sf:Destinatarios>" +
+    value.IDDestinatario.map(idDestinatarioXml).join("") +
+    "</sf:Destinatarios>"
+  );
+}
+
 function importeRectificacionXml(value: DesgloseRectificacion | undefined): string {
   if (value === undefined) return "";
   return (
@@ -177,6 +214,7 @@ function registroAlta(record: RegistroAlta): string {
     el("sf", "FacturaSimplificadaArt7273", record.FacturaSimplificadaArt7273) +
     el("sf", "FacturaSinIdentifDestinatarioArt61d", record.FacturaSinIdentifDestinatarioArt61d) +
     el("sf", "Macrodato", record.Macrodato) +
+    destinatariosXml(record.Destinatarios) +
     el("sf", "Cupon", record.Cupon) +
     `<sf:Desglose>${record.Desglose.map(detalle).join("")}</sf:Desglose>` +
     el("sf", "CuotaTotal", record.CuotaTotal) +

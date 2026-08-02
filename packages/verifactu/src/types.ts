@@ -102,6 +102,33 @@ export type DetalleDesglose =
   | (DetalleDesgloseCommon & { CalificacionOperacion: string; OperacionExenta?: never })
   | (DetalleDesgloseCommon & { OperacionExenta: string; CalificacionOperacion?: never });
 
+/**
+ * `sf:IDOtroType` — a non-NIF identifier for a foreign counterparty: a country
+ * code, an identifier type (02-07 per PersonaFisicaJuridicaIDTypeType), and up
+ * to 15 characters of value. The XSD forbids CodigoPais=ES with IDType=01, in
+ * which case NIF must be used instead — see IDOtroType's own annotation in
+ * SuministroInformacion.xsd. CodigoPais is optional (minOccurs=0); IDType and
+ * ID are mandatory.
+ */
+export interface IDOtro {
+  CodigoPais?: string;
+  IDType: string;
+  ID: string;
+}
+
+/**
+ * `sf:PersonaFisicaJuridicaType` as it appears under Destinatarios/IDDestinatario:
+ * a NombreRazon plus an exclusive choice of NIF (Spanish) OR IDOtro (foreign) —
+ * an XSD xsd:choice, verified in SuministroInformacion.xsd (complexType
+ * PersonaFisicaJuridicaType, lines 344-355). Same `never`-guarded exclusive-choice
+ * idiom as Encadenamiento/DetalleDesglose above: each branch pins the other's
+ * identifier to `never` so a literal carrying BOTH NIF and IDOtro is a type error
+ * too, not merely one omitting the unused branch.
+ */
+export type Destinatario =
+  | { NombreRazon: string; NIF: string; IDOtro?: never }
+  | { NombreRazon: string; IDOtro: IDOtro; NIF?: never };
+
 export interface RegistroAlta {
   IDVersion: "1.0";
   IDFactura: IDFactura;
@@ -119,6 +146,15 @@ export interface RegistroAlta {
   FacturaSimplificadaArt7273?: SiNo;
   FacturaSinIdentifDestinatarioArt61d?: SiNo;
   Macrodato?: SiNo;
+  /**
+   * The recipient(s) of the operation — sf:Destinatarios in the XSD, whose
+   * ordinal is AFTER Macrodato and BEFORE Cupon (SuministroInformacion.xsd,
+   * RegistroFacturacionAltaType line 153; the two elements between Macrodato and
+   * Destinatarios — EmitidaPorTerceroODestinatario, Tercero — are optional and
+   * not modelled). Mandatory for a full invoice (F1/F3), forbidden on a
+   * simplified ticket (F2); see validate.ts. NOT a huella input.
+   */
+  Destinatarios?: { IDDestinatario: Destinatario[] };
   Cupon?: SiNo;
   Desglose: DetalleDesglose[];
   CuotaTotal: string;
@@ -236,6 +272,13 @@ export interface AltaInput extends RecordInputBase {
   FacturaSimplificadaArt7273?: SiNo;
   FacturaSinIdentifDestinatarioArt61d?: SiNo;
   Macrodato?: SiNo;
+  /**
+   * The recipient(s). Reused verbatim in the record — a Destinatario carries no
+   * dates or amounts to format, so it needs no separate input type (cf.
+   * SistemaInformatico/Encadenamiento, which are likewise shared unchanged,
+   * unlike IDFacturaAR/DetalleDesglose which do transform).
+   */
+  Destinatarios?: { IDDestinatario: Destinatario[] };
   Cupon?: SiNo;
   Desglose: DetalleDesgloseInput[];
   CuotaTotal: string;

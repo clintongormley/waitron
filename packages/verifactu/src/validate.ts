@@ -28,7 +28,14 @@ export type ValidationCode =
   // AEAT error 1115: TipoRectificativa is forbidden when TipoFactura is not R1-R5.
   | "TIPO_RECTIFICATIVA_FORBIDDEN"
   // AEAT error 1118: ImporteRectificacion is mandatory when TipoRectificativa is "S".
-  | "IMPORTE_RECTIFICACION_REQUIRED";
+  | "IMPORTE_RECTIFICACION_REQUIRED"
+  // A full invoice (F1/F3) must identify its recipient. For F3 (canje) AEAT is
+  // explicit: «Siempre debe llevar el destinatario»
+  // (docs/compliance/verifactu-findings.md:621).
+  | "DESTINATARIOS_REQUIRED"
+  // A simplified ticket (F2) must NOT carry a recipient — it records the absence
+  // via FacturaSinIdentifDestinatarioArt61d instead.
+  | "DESTINATARIOS_FORBIDDEN";
 
 export interface ValidationIssue {
   code: ValidationCode;
@@ -237,6 +244,29 @@ export function validate(record: RegistroAlta | RegistroAnulacion): ValidationIs
       "IMPORTE_RECTIFICACION_REQUIRED",
       "ImporteRectificacion",
       "ImporteRectificacion is mandatory when TipoRectificativa is S (sustitución)",
+    );
+  }
+
+  // A full invoice (F1/F3) must identify its recipient; for F3 canje AEAT is
+  // explicit — «Siempre debe llevar el destinatario» (verifactu-findings.md:621).
+  // A simplified ticket (F2) must NOT carry one; it records the absence via
+  // FacturaSinIdentifDestinatarioArt61d instead. The XSD makes Destinatarios
+  // minOccurs=0 for every TipoFactura, so this business rule is enforced here
+  // rather than by the schema — an F3 filed without it is rejected by AEAT, the
+  // same failure mode as an R5 missing its TipoRectificativa.
+  const requiereDestinatario = record.TipoFactura === "F1" || record.TipoFactura === "F3";
+  if (requiereDestinatario && record.Destinatarios === undefined) {
+    add(
+      "DESTINATARIOS_REQUIRED",
+      "Destinatarios",
+      "Destinatarios is mandatory when TipoFactura is F1 or F3",
+    );
+  }
+  if (record.TipoFactura === "F2" && record.Destinatarios !== undefined) {
+    add(
+      "DESTINATARIOS_FORBIDDEN",
+      "Destinatarios",
+      "Destinatarios must not be set when TipoFactura is F2 (simplified ticket)",
     );
   }
 

@@ -389,3 +389,42 @@ describe("buildAltaRecord — TipoRectificativa, FacturasRectificadas, FacturasS
     expect(validate(record)).toEqual([]);
   });
 });
+
+describe("buildAltaRecord — Destinatarios (recipient)", () => {
+  const DESTINATARIOS: NonNullable<AltaInput["Destinatarios"]> = {
+    IDDestinatario: [{ NombreRazon: "Cliente Factura SL", NIF: "B99999999" }],
+  };
+
+  it("passes Destinatarios through, one IDDestinatario per entry, when supplied", () => {
+    const record = buildAltaRecord({
+      ...ALTA_INPUT,
+      TipoFactura: "F3",
+      Destinatarios: DESTINATARIOS,
+    });
+    expect(record.Destinatarios).toEqual({
+      IDDestinatario: [{ NombreRazon: "Cliente Factura SL", NIF: "B99999999" }],
+    });
+  });
+
+  it("omits Destinatarios when not supplied", () => {
+    // Object.hasOwn, not toBeUndefined: property access can't tell an absent
+    // key from a key explicitly set to undefined, and the XML serialiser
+    // branches on the key itself.
+    expect(Object.hasOwn(buildAltaRecord(ALTA_INPUT), "Destinatarios")).toBe(false);
+  });
+
+  it("does not change the huella when Destinatarios is populated", () => {
+    // Fiscal invariant (CLAUDE.md §5): Destinatarios is NOT one of the eight
+    // fields CadenaAltaInput hashes, so a record built with a recipient must
+    // hash identically to the same record without one. If it ever fed the
+    // huella, an F3 would verify differently by recipient — which AEAT's own
+    // recomputation would reject.
+    const base = buildAltaRecord({ ...ALTA_INPUT, TipoFactura: "F3" });
+    const withDest = buildAltaRecord({
+      ...ALTA_INPUT,
+      TipoFactura: "F3",
+      Destinatarios: DESTINATARIOS,
+    });
+    expect(withDest.Huella).toBe(base.Huella);
+  });
+});

@@ -180,6 +180,26 @@ describe("parseEnvio", () => {
     expect(parseEnvio(serializeEnvio(cabecera, registros))).toEqual({ cabecera, registros });
   });
 
+  // An F3 canje carries a Destinatarios block the rectificativa fixture above never exercises.
+  // One record covers all three of parse-request's destinatarioOf branches — a NIF entry, an
+  // IDOtro entry with CodigoPais, and an IDOtro entry without — so a dropped or corrupted branch
+  // shows up as a value mismatch, exactly as the FacturasSustituidas coverage above does.
+  it("round-trips a Destinatarios block covering NIF, IDOtro with CodigoPais, and IDOtro without CodigoPais", () => {
+    const full: RegistroAlta = {
+      ...alta,
+      TipoFactura: "F3",
+      Destinatarios: {
+        IDDestinatario: [
+          { NombreRazon: "Cliente Uno SL", NIF: "B99999999" },
+          { NombreRazon: "Foreign Buyer", IDOtro: { CodigoPais: "FR", IDType: "04", ID: "X1234" } },
+          { NombreRazon: "No-Country Buyer", IDOtro: { IDType: "07", ID: "NP-1" } },
+        ],
+      },
+    };
+    const registros: EnvioRegistro[] = [{ RegistroAlta: full }];
+    expect(parseEnvio(serializeEnvio(cabecera, registros))).toEqual({ cabecera, registros });
+  });
+
   // Same reasoning as above, for RegistroAnulacion's own optional fields: the "round-trips an
   // anulación" fixture only sets RefExterna, leaving SinRegistroPrevio/RechazoPrevio/GeneradoPor
   // untouched by any test.

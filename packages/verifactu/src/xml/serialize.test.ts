@@ -924,3 +924,62 @@ describe("serializeConsulta", () => {
     expect(xml).not.toContain("FechaExpedicionFactura");
   });
 });
+
+describe("serializeEnvio — Destinatarios", () => {
+  it("emits Destinatarios at its XSD ordinal (after Macrodato, before Cupon), for both NIF and IDOtro entries", () => {
+    // One contiguous substring pins three things a wrong serialiser would break
+    // (§1.5 of the F3 design): the block's ORDINAL (between Macrodato and Cupon,
+    // which is where SuministroInformacion.xsd puts it — getting this wrong
+    // fails XSD validation), the NIF-vs-IDOtro exclusive choice on each entry,
+    // and the internal element order of IDOtro (CodigoPais, IDType, ID).
+    const input: AltaInput = {
+      ...ALTA_INPUT,
+      TipoFactura: "F3",
+      Macrodato: "S",
+      Cupon: "N",
+      Destinatarios: {
+        IDDestinatario: [
+          { NombreRazon: "Cliente Uno SL", NIF: "B99999999" },
+          { NombreRazon: "Foreign Buyer", IDOtro: { CodigoPais: "FR", IDType: "04", ID: "X1234" } },
+        ],
+      },
+    };
+    const xml = serializeEnvio(CABECERA, [{ RegistroAlta: buildAltaRecord(input) }]);
+    expect(xml).toContain(
+      `<sf:Macrodato>S</sf:Macrodato>` +
+        `<sf:Destinatarios>` +
+        `<sf:IDDestinatario>` +
+        `<sf:NombreRazon>Cliente Uno SL</sf:NombreRazon>` +
+        `<sf:NIF>B99999999</sf:NIF>` +
+        `</sf:IDDestinatario>` +
+        `<sf:IDDestinatario>` +
+        `<sf:NombreRazon>Foreign Buyer</sf:NombreRazon>` +
+        `<sf:IDOtro>` +
+        `<sf:CodigoPais>FR</sf:CodigoPais>` +
+        `<sf:IDType>04</sf:IDType>` +
+        `<sf:ID>X1234</sf:ID>` +
+        `</sf:IDOtro>` +
+        `</sf:IDDestinatario>` +
+        `</sf:Destinatarios>` +
+        `<sf:Cupon>N</sf:Cupon>`,
+    );
+  });
+
+  it("omits CodigoPais from IDOtro when it is not supplied", () => {
+    const input: AltaInput = {
+      ...ALTA_INPUT,
+      TipoFactura: "F3",
+      Destinatarios: {
+        IDDestinatario: [{ NombreRazon: "No-Country Buyer", IDOtro: { IDType: "07", ID: "NP-1" } }],
+      },
+    };
+    const xml = serializeEnvio(CABECERA, [{ RegistroAlta: buildAltaRecord(input) }]);
+    expect(xml).toContain(`<sf:IDOtro><sf:IDType>07</sf:IDType><sf:ID>NP-1</sf:ID></sf:IDOtro>`);
+    expect(xml).not.toContain("<sf:CodigoPais>");
+  });
+
+  it("emits no Destinatarios element when the record carries no recipient", () => {
+    const xml = serializeEnvio(CABECERA, [{ RegistroAlta: buildAltaRecord(ALTA_INPUT) }]);
+    expect(xml).not.toContain("Destinatarios");
+  });
+});

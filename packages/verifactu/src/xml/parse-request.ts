@@ -2,9 +2,11 @@ import { asArray, parser } from "./parse-common.js";
 import type { Cabecera, ConsultaFiltro, EnvioRegistro } from "./serialize.js";
 import type {
   DesgloseRectificacion,
+  Destinatario,
   DetalleDesglose,
   Encadenamiento,
   IDFacturaAR,
+  IDOtro,
   RegistroAlta,
   RegistroAnulacion,
   SistemaInformatico,
@@ -108,6 +110,20 @@ function idFacturaArOf(raw: RawRecord): IDFacturaAR {
   };
 }
 
+// One IDDestinatario entry — sf:PersonaFisicaJuridicaType. NIF and IDOtro are the
+// xsd:choice; CodigoPais is optional within IDOtro. Only present keys are copied
+// back, so `toEqual` against the original record holds (cf. the `pick` note above).
+function destinatarioOf(raw: RawRecord): Destinatario {
+  const NombreRazon = raw.NombreRazon as string;
+  if (raw.NIF !== undefined) {
+    return { NombreRazon, NIF: raw.NIF as string };
+  }
+  const rawOtro = raw.IDOtro as Record<string, string>;
+  const idOtro: IDOtro = { IDType: rawOtro.IDType, ID: rawOtro.ID };
+  if (rawOtro.CodigoPais !== undefined) idOtro.CodigoPais = rawOtro.CodigoPais;
+  return { NombreRazon, IDOtro: idOtro };
+}
+
 function altaOf(raw: RawRecord): RegistroAlta {
   const idf = raw.IDFactura as Record<string, string>;
   const record = {
@@ -163,6 +179,14 @@ function altaOf(raw: RawRecord): RegistroAlta {
     pick(rectif, ir, ["BaseRectificada", "CuotaRectificada", "CuotaRecargoRectificado"]);
     record.ImporteRectificacion = rectif;
   }
+  // serializeEnvio wraps each recipient in its own <sf:Destinatarios><sf:IDDestinatario>…,
+  // so raw.Destinatarios is `{ IDDestinatario: … }`, the same one-level wrapping as
+  // FacturasSustituidas above.
+  const dest = raw.Destinatarios as { IDDestinatario: RawRecord | RawRecord[] } | undefined;
+  if (dest)
+    record.Destinatarios = {
+      IDDestinatario: asArray(dest.IDDestinatario).map(destinatarioOf),
+    };
   return record;
 }
 
