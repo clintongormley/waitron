@@ -267,9 +267,7 @@ describe("recordCorrection under real chain contention", () => {
   it("commits several concurrent corrections into one gap-free, correctly-chained sequence", async () => {
     const originalId = await recordOriginal();
     const correctiveIds = await Promise.all(
-      Array.from({ length: RACERS }, (_, i) =>
-        seedCorrectiveRow(i + 2, originalId, "-123.45"),
-      ),
+      Array.from({ length: RACERS }, (_, i) => seedCorrectiveRow(i + 2, originalId, "-123.45")),
     );
 
     const dbs = await Promise.all(Array.from({ length: RACERS }, () => suite.pg.connect()));

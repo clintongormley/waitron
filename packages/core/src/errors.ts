@@ -104,6 +104,15 @@ declare module "@waitron/shared" {
      * but a series belongs to exactly one till — allocating from another till's series would let
      * two chains issue from one counter, which no constraint downstream can detect. */
     "sale.series_wrong_till": { seriesId: string; expected: string; actual: string };
+    /** Thrown when a series is real and on the right till, but the WRONG KIND for the operation:
+     * `recordSale` demands a `purpose='standard'` series, `recordCorrection` a
+     * `purpose='rectificative'` one, and each throws this if handed the other. The domain concept
+     * is "this series is not the right kind for this operation" — it models the mandatory
+     * separation of corrective numbering (RD 1619/2012 art. 6.1.a, «en todo caso»): a rectificativa
+     * draws from its own series, an ordinary sale never does. `expected`/`actual` carry the two
+     * purposes so a translator can say which was wanted. Matches `sale.series_wrong_till`'s shape
+     * on purpose (both are "the series you named is real but unusable here"). */
+    "sale.series_wrong_purpose": { seriesId: string; expected: string; actual: string };
     /** Reserved for the constraint-violation translation `UNIQUE (tenant_id, series_id,
      * invoice_number)` produces when something outside the ordinary write path tries to reuse a
      * number that already reached a committed sale. Still not thrown anywhere in this package:
@@ -137,12 +146,14 @@ declare module "@waitron/shared" {
      * `./record-void.ts`. An operational failure — a sale settles once — not a fiscal one, so it
      * must not be confused with a chain-verification failure. */
     "sale.already_settled": { saleId: string };
-    /** Thrown by `settleSale` when the sale already carries a `sale_voids` row
-     * (`packages/db/src/schema/sale-voids.ts`) — a voided sale can never be settled, a state that
-     * could not arise before deferred settlement split payment from the fiscal record (design §4).
-     * Distinct from `sale.already_voided` (a second void of the same sale): this is a SETTLEMENT
-     * attempt on a sale that was voided, refused by `settleSale` before it writes the settlement.
-     * An operational failure, not a fiscal one. */
+    /** Thrown when the sale already carries a `sale_voids` row
+     * (`packages/db/src/schema/sale-voids.ts`) — by `settleSale` (a voided sale can never be
+     * settled) and by `recordCorrection` (a voided sale is corrected by nothing: a sale that
+     * should never have existed is annulled, and correcting an already-annulled sale is a staff/UI
+     * error). Neither state could arise before deferred settlement split payment from the fiscal
+     * record (design §4). Distinct from `sale.already_voided` (a second void of the same sale):
+     * this is a settlement or correction attempt on a sale that was voided, refused before the
+     * settlement or corrective record is written. An operational failure, not a fiscal one. */
     "sale.voided": { saleId: string };
     /** Thrown-and-caught internally by `recordSale`/`recordVoid` (never crosses either function's
      * own boundary — it is constructed only to hand its `.code`/`.params` to `recordIncident`) to

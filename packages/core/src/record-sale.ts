@@ -106,7 +106,7 @@ export function formatInvoiceNumber(code: string, number: number): string {
  * rate become one breakdown entry, matching how a real VAT breakdown is reported: per rate, not
  * per line.
  */
-function buildVatBreakdown(lines: readonly RecordSaleLine[]): VatBreakdownLine[] {
+export function buildVatBreakdown(lines: readonly RecordSaleLine[]): VatBreakdownLine[] {
   const bases = new Map<Decimal, Decimal>();
   for (const line of lines) {
     const rate = decimal(line.vatRate);
@@ -165,7 +165,11 @@ export async function recordSale(
   }
 
   const [series] = await tx
-    .select({ code: invoiceSeries.code, tillId: invoiceSeries.tillId })
+    .select({
+      code: invoiceSeries.code,
+      tillId: invoiceSeries.tillId,
+      purpose: invoiceSeries.purpose,
+    })
     .from(invoiceSeries)
     .where(and(eq(invoiceSeries.id, input.seriesId), eq(invoiceSeries.tenantId, input.tenantId)));
 
@@ -180,6 +184,17 @@ export async function recordSale(
       seriesId: input.seriesId,
       expected: series.tillId,
       actual: input.tillId,
+    });
+  }
+  // An ordinary sale must draw from a `purpose='standard'` series, never a corrective one — the
+  // other half of the §5 separation `recordCorrection` enforces from its side. A corrective series
+  // exists to number rectificativas «en todo caso» (RD 1619/2012 art. 6.1.a); a normal sale drawing
+  // from it would consume a corrective number and break the mandated split.
+  if (series.purpose !== "standard") {
+    throw new AppError("sale.series_wrong_purpose", {
+      seriesId: input.seriesId,
+      expected: "standard",
+      actual: series.purpose,
     });
   }
 

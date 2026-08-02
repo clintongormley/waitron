@@ -210,7 +210,10 @@ describe("recordCorrection — refusals", () => {
       withTenant(pg.db, tenantId, (tx) =>
         backend.recordCorrection(tx, correctiveSale(), { correctsSaleId: neverRecorded }),
       ),
-    ).rejects.toMatchObject({ code: "fiscal.sale_not_recorded", params: { saleId: neverRecorded } });
+    ).rejects.toMatchObject({
+      code: "fiscal.sale_not_recorded",
+      params: { saleId: neverRecorded },
+    });
   });
 
   it("refuses to correct a non-simplified invoice, since only F2 → R5 is supported (R1 deferred)", async () => {
