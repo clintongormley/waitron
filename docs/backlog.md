@@ -656,6 +656,18 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   kind of vendor claim that goes stale silently if copied into a second place. Read them there. The
   rates in particular are already flagged there as needing confirmation against an actual contract,
   not a pricing page
+- **The three alta builders in `packages/fiscal-verifactu/src/backend.ts` are now triplicated.**
+  `recordSale`, `recordCorrection` and `recordSubstitution` (the last added by the F3 canje branch) each
+  repeat the same alta-assembly **head** — `currentSif` / `legalNameFor`, the `desglose` map with
+  `CalificacionOperacion: "S1"`, and `cuotaTotal = sumDecimals(vatBreakdown.map(tax))` — and the same
+  **tail** — `appendToChain(… { tipo: "alta", saleId, entorno, input }, sif)` → `tx.insert(envios)` →
+  the `FiscalRecordRef` return. Deferred, not skipped: these are UNREPAIRABLE-record builders (CLAUDE.md
+  §5), so a de-dup refactor needs its own review and a huella-invariance re-run across all three
+  (CLAUDE.md §4) rather than riding in on a feature branch. The safe seam if done later is a helper
+  taking the already-assembled `Omit<AltaInput, "Encadenamiento">` and running the shared tail (zero
+  huella risk — nothing about what is hashed moves), plus a small `buildDesglose(vatBreakdown)` for the
+  head. The per-method bodies (`TipoFactura`, the rectificativa vs `FacturasSustituidas`/`Destinatarios`
+  fields, positive vs negative totals) stay where they are
 
 ---
 

@@ -794,8 +794,13 @@ export class VerifactuBackend implements FiscalBackend {
    * A FOREIGN recipient must instead be named via `IDOtro` (CodigoPais + IDType + ID), whose IDType
    * vocabulary (PersonaFisicaJuridicaIDTypeType, 02-07) is not yet pinned to a primary source (plan
    * §1.5, deferred to the asesor / the AEAT XSD). Rather than guess an IDType into an UNREPAIRABLE
-   * record (§5, CLAUDE.md §1), a non-`ES` recipient is refused here until that shape is confirmed.
-   * Unreachable through `packages/core` today, which passes no counterparty at all.
+   * record (§5, CLAUDE.md §1), a non-`ES` recipient is refused here until that shape is confirmed — a
+   * DELIBERATE refusal, not a dead branch. It IS reachable through `packages/core` today:
+   * `record-substitution.ts` types `counterparty` as a REQUIRED, non-null field and does no
+   * `countryCode` gating of its own, so a non-`ES` recipient handed to core's `recordSubstitution`
+   * flows straight into this throw. The refusal is pinned at THIS layer by `backend.test.ts`'s
+   * "refuses a non-Spanish recipient until the foreign-recipient shape is confirmed" case; core adds
+   * no gate of its own, so there is nothing extra to test at the core layer.
    */
   private buildDestinatarios(counterparty: Counterparty): { IDDestinatario: Destinatario[] } {
     if (counterparty.countryCode !== "ES") {

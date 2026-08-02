@@ -277,13 +277,15 @@ declare module "@waitron/shared" {
     /**
      * Thrown by `VerifactuBackend.recordSubstitution` (./backend.ts) when a sale it was asked to
      * substitute with an F3 canje is a `TipoFactura` this operation cannot exchange. A factura de
-     * canje (F3) substitutes SIMPLIFIED tickets only (`F2 → F3`, findings §10.2) — the one type the
-     * till issues today (`backend.ts`: `counterparty === null ? "F2" : "F1"`, and `packages/core`
-     * always passes `counterparty: null`), so a non-`F2` original is unreachable through the real
-     * write path now and becomes reachable only once B2B `F1` issuance lands. Substituting an `F1`
-     * (or an `R*`) is not a canje at all, and filing the wrong record is unrepairable (§5), so this
-     * asserts rather than silently mis-filing — the direct sibling of `fiscal.correction_unsupported`
-     * above, which makes the identical F2-only assertion on the rectificativa path.
+     * canje (F3) substitutes SIMPLIFIED tickets only (`F2 → F3`, findings §10.2), so the guard reads
+     * each substituted ticket's alta registro and fires for ANY `tipo_factura` that is not `F2` —
+     * every non-`F2` tipo (`F1`, `F3`, `R1`–`R5`) alike. This is reachable TODAY, not deferred to a
+     * future B2B `F1`: passing an already-shipped `R5` (the rectificativa in #46) — or a sibling `F3`
+     * from this very path — as a `substitutedSaleId` reads a non-`F2` alta and hits this guard now.
+     * Substituting any of those is not a canje at all, and filing the wrong record is unrepairable
+     * (§5), so this asserts rather than silently mis-filing — the direct sibling of
+     * `fiscal.correction_unsupported` above, which makes the identical F2-only assertion on the
+     * rectificativa path.
      *
      * `fiscal.*`, matching this file's own regime-neutral-shaped codes: a fact about the sale being
      * substituted, even though `F2`/`F3` are Veri*Factu vocabulary (this package is exempt from the
