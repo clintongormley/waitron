@@ -769,6 +769,41 @@ bill before issuance, is correct on primary law. The residual is the characteriz
 
 ---
 
+## 13. A correction may be issued from a different SIF than the original invoice (added 2026-08-02)
+
+**Primary source — AEAT Developer FAQ (`FAQs-Desarrolladores.pdf`, 4 December 2025), on correction
+cases 2.b (subsanación) and 2.d (anulación):**
+
+> «tanto un RF de alta de subsanación como un RF de anulación se podrían generar y conservar o remitir
+> a la AEAT **desde un SIF distinto al que expidió la factura original** (aunque probablemente, lo más
+> habitual es que todo se haga en el mismo SIF).»
+
+AEAT **explicitly permits** a correction record to be produced / stored / transmitted **from a SIF
+different** from the one that issued the original. Same-SIF is the usual case, not a requirement.
+
+**Consequence for rectificativas — this closed the open question in `recordCorrection`.** A
+*rectificativa* is a self-standing new invoice (RF de alta, `TipoFactura` R1–R5) that references the
+original only by **invoice identity** — `FacturasRectificadas` = `(IdEmisorFactura, NumSerieFactura,
+FechaExpedicionFactura)`, the same triple AEAT identifies any record by (#33 §12). It does not touch
+the original's chain at all, so it is *a fortiori* unconstrained as to which SIF issues it — even more
+clearly than the subsanación/anulación the FAQ names.
+
+**Why it is not merely theoretical (server-as-SIF, #33).** A venue runs **more than one SIF** — each
+server is its own SIF with its own chain (#33 §3, "two servers, two SIFs, one venue"). So a correction
+genuinely *can* land on a different server-SIF than the original (across the two active servers, or
+after a failover). The FAQ permits that for the sibling correction records it names; a rectificativa
+follows *a fortiori* by the identity-linkage argument (see the provenance caveat below).
+`packages/core/src/record-correction.ts` therefore takes the issuing `tillId`/SIF as a caller input
+and does **not** require it to match the original's — by design, and correct **on that inference**
+(confirm with the asesor before a cross-SIF rectificativa is issued in anger).
+
+**Provenance caveat (§1).** The FAQ names cases 2.b/2.d (subsanación/anulación) explicitly; the
+extension to a *rectificativa* rests on the identity-linkage argument above — sound, but an inference,
+not a verbatim FAQ sentence about rectificativas. Confirm with the asesor if a cross-SIF rectificativa
+is ever issued in anger.
+
+---
+
 ## Sources
 
 | Source | Type |
