@@ -125,13 +125,17 @@ declare module "@waitron/shared" {
      * failure: a second void of an already-voided sale is a staff/UI error, not a fiscal
      * condition, and must not be confused with a chain-verification failure. */
     "sale.already_voided": { saleId: string };
-    /** Thrown by `settleSale` when `sale_settlements` already carries a row for this sale — the
-     * translation of `sale_settlements_sale_key`'s `UNIQUE (tenant_id, sale_id)` violation
-     * (`packages/db/drizzle/0012_sale_settlement.sql`), surfaced via `isUniqueViolation` exactly as
-     * `sale.already_voided` translates `sale_voids_sale_id_key` in `./record-void.ts`. The
-     * constraint, not a prior SELECT, is the control: two concurrent settlements both pass a
-     * check-then-insert and only one passes the INSERT. An operational failure — a sale settles
-     * once — not a fiscal one, so it must not be confused with a chain-verification failure. */
+    /** Thrown by `settleSale` when the sale is already settled. Three sources converge on this one
+     * code (`packages/db/drizzle/0012_sale_settlement.sql`): the sequential retry is caught by the
+     * prior SELECT, and a concurrent loser is caught at *whichever* insert it reaches — the
+     * `sale_settlements` `UNIQUE (tenant_id, sale_id)` violation (`sale_settlements_sale_key`,
+     * detected via `isUniqueViolation`) when it collides on the settlement row, OR the `tenders`
+     * post-settlement trigger (SQLSTATE `WT002`, detected via a local predicate) when it inserts a
+     * tender after the winner has committed. A constraint, not a prior SELECT, is the control for
+     * the concurrent paths: two settlements both pass the check-then-insert and only one wins. The
+     * UNIQUE case mirrors how `sale.already_voided` translates `sale_voids_sale_id_key` in
+     * `./record-void.ts`. An operational failure — a sale settles once — not a fiscal one, so it
+     * must not be confused with a chain-verification failure. */
     "sale.already_settled": { saleId: string };
     /** Thrown by `settleSale` when the sale already carries a `sale_voids` row
      * (`packages/db/src/schema/sale-voids.ts`) — a voided sale can never be settled, a state that

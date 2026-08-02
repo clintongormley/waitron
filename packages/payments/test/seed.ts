@@ -58,8 +58,9 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
  * NULL column on `sales` (`packages/db/src/schema/sales.ts`) is supplied, `locale` is a member of
  * `invoice_locales`, `issued_offset_minutes` is within range, and this is the series' first (and
  * only) sale, so `invoice_number = 1` never collides with `sales_series_invoice_number_key`. The
- * sale and its covering tender still commit together in one `db.transaction` so the tender's
- * composite FK onto the sale is satisfied within the transaction. Run as the connection owner
+ * sale and its covering tender are wrapped in one `db.transaction` for atomic setup — not for the
+ * composite FK (which a committed `sales` row satisfies across separate transactions too), but so a
+ * partial failure can never leave a sale without its covering tender. Run as the connection owner
  * (superuser), like `seedWorkingOrder` — RLS is bypassed, so this is pure setup.
  */
 export async function seedSale(db: Database, seeded: Seeded): Promise<string> {

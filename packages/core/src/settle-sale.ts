@@ -40,10 +40,12 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
     throw new AppError("sale.voided", { saleId: input.saleId });
   }
 
-  // Clean `already_settled` for the sequential retry. The concurrent race is caught
-  // by the UNIQUE violation below (two callers both pass this SELECT, both insert
-  // tenders — the other's uncommitted settlement is invisible — and the sale_settlements
-  // UNIQUE arbitrates; the loser's whole transaction, tenders included, rolls back).
+  // Clean `already_settled` for the sequential retry. The concurrent race is caught by the
+  // constraints below, not by this SELECT: two callers both pass it (the other's uncommitted
+  // settlement is invisible), and whichever the loser reaches first arbitrates — the `tenders`
+  // post-settlement trigger (WT002) when the winner has already committed, otherwise the
+  // `sale_settlements` UNIQUE. Both are translated to `sale.already_settled` below; the loser's
+  // whole transaction, tenders included, rolls back.
   const [existing] = await tx
     .select({ saleId: saleSettlements.saleId })
     .from(saleSettlements)
@@ -94,16 +96,30 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   // Skipped entirely when tenderless: a comped sale has no payments to record, and Drizzle rejects
   // `insert().values([])` outright — the empty case is written by its `sale_settlements` row alone.
   if (input.tenders.length > 0) {
-    await tx.insert(tenders).values(
-      input.tenders.map((tender) => ({
-        tenantId: input.tenantId,
-        saleId: input.saleId,
-        method: tender.method as (typeof tenders.$inferInsert)["method"],
-        amount: tender.amount,
-        tipAmount: tender.tipAmount,
-        settledAt: tender.settledAt!.toISOString(),
-      })),
-    );
+    try {
+      await tx.insert(tenders).values(
+        input.tenders.map((tender) => ({
+          tenantId: input.tenantId,
+          saleId: input.saleId,
+          method: tender.method as (typeof tenders.$inferInsert)["method"],
+          amount: tender.amount,
+          tipAmount: tender.tipAmount,
+          settledAt: tender.settledAt!.toISOString(),
+        })),
+      );
+    } catch (error) {
+      // The other concurrent-loser interleaving. When the winner has already COMMITTED its
+      // settlement, this INSERT trips the `tenders_reject_post_settlement` trigger, which raises
+      // SQLSTATE WT002 (`packages/db/drizzle/0012_sale_settlement.sql`). That trigger fires iff a
+      // `sale_settlements` row already exists for the sale, so WT002 here ALWAYS means "already
+      // settled" — translate it to the same code the `sale_settlements` UNIQUE path maps to below,
+      // so a retry/idempotency caller keying on `sale.already_settled` recognises the loser
+      // whichever insert it reached.
+      if (isPostSettlementViolation(error)) {
+        throw new AppError("sale.already_settled", { saleId: input.saleId });
+      }
+      throw error;
+    }
   }
 
   try {
@@ -118,4 +134,37 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
     }
     throw error;
   }
+}
+
+// SQLSTATE raised by the `tenders_reject_post_settlement` trigger
+// (`packages/db/drizzle/0012_sale_settlement.sql`) when a tender INSERT lands after the sale is
+// already settled. `WT001` is `reject_mutation`; `WT002` is this guard specifically.
+const POST_SETTLEMENT_VIOLATION = "WT002";
+
+/**
+ * Is this (or anything it wraps) the `tenders_reject_post_settlement` guard (SQLSTATE WT002)?
+ *
+ * Walks the cause chain for the same reason `@waitron/db`'s `isUniqueViolation` does — Drizzle wraps
+ * every failed query in a `DrizzleQueryError` whose own `.code` is undefined, the real SQLSTATE
+ * living on `.cause.code` (node-postgres), or nested one level deeper under PGlite. Stops at a fixed
+ * depth so a self-referential `cause` cannot spin forever. A local predicate rather than a shared
+ * helper because `@waitron/db` exports only the 23505-specific `isUniqueViolation`, and this is the
+ * one place that needs WT002 — mirrors that predicate's shape rather than reaching for the test-only
+ * `pgErrorCode`.
+ */
+function isPostSettlementViolation(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; current != null && depth < 5; depth++) {
+    if (
+      typeof current === "object" &&
+      "code" in current &&
+      (current as { code?: unknown }).code === POST_SETTLEMENT_VIOLATION
+    ) {
+      return true;
+    }
+    const next = (current as { cause?: unknown }).cause;
+    if (next === current) return false;
+    current = next;
+  }
+  return false;
 }

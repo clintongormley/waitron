@@ -432,4 +432,87 @@ describe("settleSale — error propagation", () => {
     expect(error).not.toBeInstanceOf(AppError);
     expect(pgErrorCode(error)).toBe("53100");
   });
+
+  it("translates the tenders post-settlement guard (WT002) to sale.already_settled", async () => {
+    // The OTHER concurrent-loser interleaving, driven directly. The real-PG race above forces the
+    // loser onto the `sale_settlements` UNIQUE; here the winner has already COMMITTED, so the
+    // loser's tender INSERT trips the `tenders_reject_post_settlement` trigger (SQLSTATE WT002)
+    // instead. That trigger fires iff a settlement row already exists for the sale, so WT002 on the
+    // tender insert always means "already settled" and must surface as `sale.already_settled` — the
+    // same code the UNIQUE path maps to — rather than a raw driver error a retry/idempotency caller
+    // would not recognise. A hand-built Transaction stub (like the rethrow test above): the
+    // deterministic post-commit interleaving is awkward to force on a live DB, and this drives
+    // settleSale's own tenders-insert catch/translate branch directly. Tenders are PRESENT (unlike
+    // the €0 rethrow test) so the tenders INSERT — the one WT002 fires on — is actually reached.
+    let selects = 0;
+    const fakeTx = {
+      select: () => ({
+        from: () => ({
+          // 1: the sale row (total 65.00); 2: sale_voids (none); 3: existing settlement (none).
+          where: () => {
+            selects += 1;
+            return selects === 1
+              ? Promise.resolve([{ tillId: "t", total: "65.00" }])
+              : Promise.resolve([]);
+          },
+        }),
+      }),
+      insert: () => ({
+        values: () =>
+          Promise.reject(
+            Object.assign(new Error("tender for sale rejected: the sale is already settled"), {
+              code: "WT002",
+            }),
+          ),
+      }),
+    } as unknown as Transaction;
+
+    const error = await captureError(() =>
+      settleSale(fakeTx, {
+        tenantId: brandTenantId("00000000-0000-4000-8000-000000000000"),
+        saleId: brandSaleId("11111111-1111-4111-8111-111111111111"),
+        tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+      }),
+    );
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe("sale.already_settled");
+    expect((error as AppError).params).toMatchObject({
+      saleId: "11111111-1111-4111-8111-111111111111",
+    });
+  });
+
+  it("rethrows a non-WT002 error from the tenders insert, untranslated", async () => {
+    // The tenders insert's OTHER failure path, mirroring the settlement-insert rethrow above. Only
+    // the post-settlement guard's WT002 means "already settled"; ANY other failure on the tenders
+    // insert (a transport error, a future constraint) must reach the caller as-is rather than be
+    // mislabelled `sale.already_settled`. This also exercises `isPostSettlementViolation` walking a
+    // non-matching error's cause chain to the end and returning false. Tenders are present so the
+    // tenders INSERT is the one reached; a WT002-free `.code` so the predicate declines it.
+    let selects = 0;
+    const fakeTx = {
+      select: () => ({
+        from: () => ({
+          where: () => {
+            selects += 1;
+            return selects === 1
+              ? Promise.resolve([{ tillId: "t", total: "65.00" }])
+              : Promise.resolve([]);
+          },
+        }),
+      }),
+      insert: () => ({
+        values: () => Promise.reject(Object.assign(new Error("disk full"), { code: "53100" })),
+      }),
+    } as unknown as Transaction;
+
+    const error = await captureError(() =>
+      settleSale(fakeTx, {
+        tenantId: brandTenantId("00000000-0000-4000-8000-000000000000"),
+        saleId: brandSaleId("11111111-1111-4111-8111-111111111111"),
+        tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+      }),
+    );
+    expect(error).not.toBeInstanceOf(AppError);
+    expect(pgErrorCode(error)).toBe("53100");
+  });
 });

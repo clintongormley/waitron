@@ -56,8 +56,12 @@ CREATE TRIGGER sale_settlements_block_truncate
 -- of app.tenant_id — the fail-open fix. Replace the body AS the owner: grant
 -- membership + schema CREATE to CURRENT_USER's role, SET ROLE, CREATE OR REPLACE,
 -- then revoke. Mirrors the ownership dance 0005 used for ALTER FUNCTION OWNER.
--- (This dance is exactly what the real-PG "migration applies as the deployment
---  role" test verifies — if the privileges are wrong, that test fails loudly.)
+-- (The genuine non-superuser apply is packages/provisioning/src/instance-apply.rls.test.ts,
+--  which applies this migration set — the `core` manifest, resolving to ../db/drizzle and so
+--  including this file — as `prov_admin` (login createdb createrole; the suite asserts rolsuper=f,
+--  rolbypassrls=f): if the privileges are wrong, this dance fails loudly there. packages/db's OWN
+--  real-PG suite runs migrations as the superuser OWNER (src/testing/harness.ts) and so does NOT
+--  exercise it.)
 GRANT CREATE ON SCHEMA public TO sales_coverage_checker;
 --> statement-breakpoint
 GRANT sales_coverage_checker TO CURRENT_USER WITH INHERIT FALSE;
