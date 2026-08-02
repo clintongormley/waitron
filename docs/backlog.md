@@ -1,6 +1,6 @@
 # Backlog — what is in flight, what is next, and why
 
-**Last reprioritised: 2026-07-31.** This file is the answer to "what should I work on?". It is
+**Last reprioritised: 2026-08-02.** This file is the answer to "what should I work on?". It is
 committed rather than held in a session's memory so that it can be diffed, reviewed, and checked
 against the tree — memory notes drift, and several currently point at pull request numbers that no
 longer exist (the repository was recreated for the licence change and numbering restarted at #1).
@@ -46,7 +46,7 @@ reprioritisation rather than assumed.
 | **Scoped pre-push hook** — the same treatment for the local gate | **Merged** (#31). Scopes `typecheck` and `test:coverage` to the changed packages and their dependents, adds the sign-off (DCO) check CI was catching for us, runs `test:coverage` rather than `test`, adds `pnpm install --frozen-lockfile`, and skips `lint` on a documentation-only push. Measured on this machine on 2026-08-01, one crafted push per shape, `TESTCONTAINERS_RYUK_DISABLED=true`, wall clock bracketed in `time.time()` — `main`'s hook (`558c62b`, one run each) → #31's: deletions-only 9ms → 7-9ms (unchanged, #23 already did that); an **unsigned commit 104s and exit 0 → 27-36ms and exit 1**, because `main`'s hook has no sign-off check at all and so charged a full run and then let it through; documentation-only 105s → **3.1-3.5s**; a push to `packages/ui`, which no other package depends on, 105s → **8.2-8.8s**. **It is not faster everywhere.** A `packages/db` push is 112s and a root-config or lockfile push 116s — both SLOWER than `main`'s 105s, because this hook also runs `test:coverage` rather than `test` and installs first. Scoping pays on the leaves, not on the trunk; **Debt and odd jobs** carries the expansion sizes and what the hook still does not cover. **Re-measured the same way on 2026-08-01**, after the tree-wide guards moved into the repo-level project and the hook grew a step for it (two runs per shape): documentation-only **3.17-3.59s** and an unsigned commit **30ms, exit 1**, both unchanged — neither path reaches that step; `packages/ui` **10.75-11.20s**, the whole of the ~2.4s being the step; `packages/db` **113.22-116.81s** and root config **116.48-117.98s**, where it costs nothing at all, because the root `test:coverage` script was already running that project on the global path |
 | **Cloud storage model** — design | **Merged** (#19), corrected by **#22** |
 | **Local server as SIF, active-active + failover** — design | **Merged** (#33). Promotes the arch-design fallback (the *server* is the SIF, not each till) to the primary model; adds active-active chaining, a single relocatable submitter, human-driven boot-time failover, and an optional dedicated cloud server that can hold any role. **Topology only** — the buildable pieces are follow-ups below |
-| **Sale settlement model** — implementation plan | **Written; build in flight** on `feat/sale-settlement-model` (subagent-driven, [plan](superpowers/plans/2026-08-01-sale-settlement-model.md)) — piece 1 of the fiscal sequence below |
+| **Sale settlement model** — implementation | **Merged** (#39). Piece 1 of the fiscal sequence done: tip and amount-charged off the frozen `sales` row, tip onto `tenders.tip_amount`, append-only `sale_settlements`, one `settleSale` writer (immediate mode calls it in the same transaction, so the two paths cannot drift — design D6). Coverage moved to the `sale_settlements` INSERT plus a `tenders` post-settlement guard (SQLSTATE WT002). [plan](superpowers/plans/2026-08-01-sale-settlement-model.md), [design](superpowers/specs/2026-07-31-sale-settlement-model-design.md) (with a "Ratified in implementation" note recording three decisions settled during the build) |
 | **Close Q13 and Q15 on primary source** | **Done** (#37). Q13 (tips) and Q15's core CLOSED on primary/official source ([findings](compliance/verifactu-findings.md) §§11–12); Q14 (precuenta) stays open — see the advisor gap below |
 | **Consolidate the session-memory notes** | Not started. They predate this file and now overlap it — see below |
 
@@ -54,7 +54,8 @@ reprioritisation rather than assumed.
 
 ## Next — the fiscal sequence
 
-Four pieces, in this order. They are sequenced rather than parallelised because each adds a
+Four pieces, in this order. **Piece 1 landed (#39); piece 2 (rectificativas) is now the head of the
+queue.** They are sequenced rather than parallelised because each adds a
 migration to `packages/db`, and `packages/db/drizzle/meta/_journal.json` conflicts on every
 concurrent branch. The collision is **per package**, not repo-wide — five packages carry their own
 `drizzle/` directory and journal (`credentials`, `db`, `fiscal-verifactu`, `payments`, `scheduler`),
@@ -62,8 +63,8 @@ so work touching a different package's migrations can still run alongside these.
 
 | # | Piece | Why here |
 | --- | --- | --- |
-| 1 | **Sale settlement model** | Everything else assumes it. Takes the tip and the amount charged off the frozen sale row so an invoice can exist before payment does |
-| 2 | **Rectificativas** — sustitución and diferencias | The only lawful way to change an issued invoice. Blocks piece 4 |
+| 1 | **Sale settlement model** — **done (#39)** | Everything else assumes it. Took the tip and the amount charged off the frozen sale row so an invoice can exist before payment does |
+| 2 | **Rectificativas** — sustitución and diferencias — **next** | The only lawful way to change an issued invoice. Blocks piece 4 |
 | 3 | **F3 canje** — "can I have a proper invoice?" | Unmodelled today, and issuing an ordinary invoice instead would double-declare the sale. Ordinary trade in a restaurant, not an edge case |
 | 4 | **Invoice-first mode** | Cannot be offered to staff until 2 exists: a disputed bill, a short payment and a "take a fiver off" all need a rectificativa |
 
@@ -109,14 +110,19 @@ Also left open by that design:
 - The **reconcile remediation UI** and the **orphan-drift hold** (both already under *Debt and odd
   jobs*) are the backstop for the design's double-charge-across-failover path (§10) — no new work, but
   now they have a second caller.
-- **#33's "the SIF is the server" premise has no schema support yet — a decision to take before the
-  sync protocol advances.** Every fiscal key is per `till_id`: `registro_sif` (one live identity per
-  till), `cadenas` (chain head keyed `(tenant, till)`), `registros_facturacion` (`(tenant, till,
+- **#33's "the SIF is the server" premise has no schema support yet — but the schema shape is now
+  decided (2026-08-01).** Every fiscal key is per `till_id` today: `registro_sif` (one live identity
+  per till), `cadenas` (chain head keyed `(tenant, till)`), `registros_facturacion` (`(tenant, till,
   secuencia)`, `till_id NOT NULL`), `invoice_series` (`(tenant, till, code)`), and `tills` carries no
-  server column — verified against the schema on 2026-08-01. So server-as-SIF needs either the till
-  column re-read as a stand-in for "server" or an explicit `server_id`, and which one must be
-  **prototyped against `record-sale.ts`'s series↔till check and the chain-append path**, not assumed.
-  It loops back to whether #33 is itself complete.
+  server column — verified against the schema on 2026-08-01. **Decision: add an explicit `server_id`
+  column and re-key the fiscal chain / series / SIF identity to the server. Do NOT reuse `till_id` as a
+  stand-in for "server"** — overloading a legally-load-bearing, unrepairable identity with a second
+  meaning is the dishonest option. **No backwards-compatibility or migration** — Waitron is
+  pre-production, schema changes drop and recreate (`CLAUDE.md` §3). The rekey still needs a
+  **container prototype against `record-sale.ts`'s series↔till check and the chain-append path** before
+  build, to confirm they behave under server-keying. This is the gap #33 left open; the server-as-SIF
+  implementation spec must carry the rekey, and the sync/replication spec (held) can now assume the
+  `server_id` column rather than treating `till_id`-as-server as an open option.
 
 ---
 
@@ -130,7 +136,7 @@ Two of the four are not idle curiosity — they check assumptions **already buil
 
 | Q | Assumption already in the tree | If the answer is no |
 | --- | --- | --- |
-| **Q13** *(CLOSED #37)* | Tips are outside the VAT base and appear on no invoice — `sales.tip_amount`, and `record-sale.ts` hands the fiscal backend only `total` (never the tip), so it never reaches the huella — a structural absence, not a dedicated test | Confirmed (findings §11): the tip does **not** enter the hash |
+| **Q13** *(CLOSED #37)* | Tips are outside the VAT base and appear on no invoice — the tip lives on `tenders.tip_amount` (moved off the sale by #39), and `record-sale.ts` / `settle-sale.ts` hand the fiscal backend only the sale `total` (never the tip), so it never reaches the huella — a structural absence, not a dedicated test | Confirmed (findings §11): the tip does **not** enter the hash |
 | **Q5(a)** | One invoice series per till | The numbering scheme's foundation moves — and #33 already reshapes it (a series belongs to the server-SIF; two concurrent SIFs need disjoint series), see the SIF follow-ups above |
 | Q14 | A printed pre-bill obliges an amendment log | Changes the till design, not existing code. **Still open** — no primary text names the *precuenta* (findings §8) |
 | Q15 *(core CLOSED #37)* | Short payment accepted before issuance is a discount | Confirmed (findings §12): a *descuento* agreed at/before the operation is outside the base (LIVA art. 78.Tres.2º) |
@@ -562,6 +568,13 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   is undecided. **Smaller than it first looked:** the cloud design (#19) gives every venue its own
   database and its own server, so the blast radius is one shop rather than every customer at once,
   which is what an earlier framing of this question assumed
+- **A deferred design question from the sale-settlement model (#39)** — the €0, tenderless "fully
+  comped sale" path is built and settles at the settlement instant (`new Date()`), deliberately NOT
+  backdated to the invoice's `issued_at` (which in invoice-first mode is when the invoice printed, not
+  when the comp was finalised). What is unresolved is a till-UX question, not a fiscal one: is a comp
+  ever *finalised long after the invoice printed* — the invoice-first case — a real flow a server would
+  perform, or only a theoretical one? It bears on piece 4 (invoice-first mode) and sub-project 7 (the
+  till); nothing needs deciding until the till is designed. Recorded so it is not lost
 - **Fiscal follow-ups** — a partial index on `acks`, a sargable reconcile period filter. Both gated
   on scale that does not exist yet
 - **Provisioning and credentials follow-ups** — test-infra duplication, `bin.ts` connect-before-
