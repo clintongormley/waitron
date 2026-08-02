@@ -1,5 +1,5 @@
 import { and, eq, gte, lt, sql } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { isUniqueViolation, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
 import { timeEntries } from "./schema/time-entries.js";
@@ -7,11 +7,14 @@ import {
   dailyContractedTargetMinutes,
   projectWorkSessions,
   summarisePeriod,
+  type OvertimeModel,
   type Period,
   type PeriodSummary,
   type TimeEntryRecord,
   type WorkforceEntryKind,
 } from "./projection.js";
+import { validateRoster, type PlannedShift, type RosterBreach } from "./roster-validation.js";
+import type { WorkTimeRuleset } from "./ruleset.js";
 // Side-effect: registers this package's attendance.*/employment.* codes so `new AppError(...)`
 // below type-checks against the shared registry (packages/shared reachability rule).
 import "./errors.js";
@@ -37,6 +40,31 @@ export interface WorkSummaryQuery {
   period: Period;
 }
 
+/**
+ * The convenio-driven inputs `workSummary` reads — resolved from a `convenio_config` row by
+ * `packages/workforce-es` and passed in (a full `WorkTimeRuleset` satisfies this subset). The single
+ * source of their defaults is the `convenio_config` column defaults: a DEFAULT row resolves to
+ * `working_days_per_week = 5` / `overtime_model = daily_accrual` / `daily_target_minutes = NULL`, and
+ * that this reproduces today's numbers is pinned as a checked invariant by `packages/workforce-es`'s
+ * `work-summary.test.ts` (a default row resolved through `resolveWorkTimeRuleset`), not asserted by a
+ * comment the code does not enforce. `dailyTargetMinutes` is the one field with a code-side fallback
+ * — a null column means "derive the per-day target from the weekly jornada ÷ `workingDaysPerWeek`"
+ * rather than a duplicated numeric default.
+ */
+export interface WorkSummaryRuleset {
+  /** Ordinary working days per week — the daily-target denominator when `dailyTargetMinutes` is null
+   * (`convenio_config.working_days_per_week`). */
+  workingDaysPerWeek: number;
+  /** Which overtime reading is the headline (`convenio_config.overtime_model`). Changing it moves
+   * only the headline, never the two underlying figures. */
+  overtimeModel: OvertimeModel;
+  /** An explicit per-day target (`convenio_config.daily_target_minutes`). When non-null it IS the
+   * daily-accrual target and the weekly ÷ `workingDaysPerWeek` derivation is bypassed; null falls
+   * back to that derivation. A DEFAULT convenio_config row leaves it null, so the derivation — and
+   * today's numbers — are unchanged. */
+  dailyTargetMinutes: number | null;
+}
+
 /** A request to correct an entry's timestamp — an append, never an edit of the target. */
 export interface CorrectionRequestInput {
   tenantId: string;
@@ -60,6 +88,24 @@ export interface CorrectionApprovalInput {
   correctionId: string;
   /** Who is approving — must hold a supervisor/manager/admin role. */
   approverPersonId: string;
+}
+
+/** A request to publish a draft roster version — flip it to `published`, stamp it, and attach its
+ * planned shifts. Publishing is a plain mutation over PLANNING data, not an append to the immutable
+ * record (design §2.1): `roster_versions`/`shifts` take UPDATE, unlike `time_entries`. */
+export interface PublishRosterInput {
+  tenantId: string;
+  /** The `roster_versions` row to publish. Must be a `draft`, or `roster.already_published`. */
+  versionId: string;
+  /** Who published it — recorded on the version; null when the caller does not attribute it. */
+  publishedByPersonId?: string | null;
+  /** The resolved work-time ruleset the roster is checked against (D2.3). Supplied by the caller —
+   * `packages/workforce-es` resolves a `convenio_config` row into it (the Spain→generic boundary,
+   * plan §3.3); the generic `publishRoster` never touches `convenio_config`. When present, the
+   * published shifts are validated and any breaches are RETURNED (advisory — publish proceeds
+   * regardless, OWNER DECISION 2026-08-02). When omitted, guardrails are not evaluated and the
+   * return is empty. */
+  ruleset?: WorkTimeRuleset;
 }
 
 /** The three states a worker's shift can be in, derived from the most recent clock event. */
@@ -127,12 +173,20 @@ export class WorkforceBackend {
   /**
    * Worked minutes and overtime for a person over a pay period, computed from the `time_entries`
    * stream against the employment's contracted week. Returns BOTH overtime models (daily-accrual and
-   * period-net) side by side plus the per-day breakdown — the binding model is convenio/contract
-   * driven, not decided here (see `summarisePeriod`). The period-net baseline scales the weekly
-   * jornada to the period length; the daily target is a floor-scope default until D2's
-   * schedule/convenio_config supplies a true per-day figure (`dailyContractedTargetMinutes`).
+   * period-net) side by side plus the per-day breakdown, and selects the headline model from the
+   * supplied `ruleset.overtimeModel` (convenio_config-sourced) — which model BINDS for a given
+   * employment is still a convenio/asesor-laboral decision, carried on that row, not hard-coded here
+   * (see `summarisePeriod`). The period-net baseline scales the weekly jornada to the period length.
+   * The daily-accrual target is `ruleset.dailyTargetMinutes` when the convenio sets one, else the
+   * weekly jornada ÷ `ruleset.workingDaysPerWeek` derivation (`dailyContractedTargetMinutes`); a
+   * DEFAULT convenio_config row leaves `dailyTargetMinutes` null, so today's per-day figure stands.
    */
-  async workSummary(tx: Transaction, query: WorkSummaryQuery): Promise<PeriodSummary> {
+  async workSummary(
+    tx: Transaction,
+    query: WorkSummaryQuery,
+    ruleset: WorkSummaryRuleset,
+  ): Promise<PeriodSummary> {
+    const { workingDaysPerWeek, overtimeModel, dailyTargetMinutes } = ruleset;
     const contractedPerWeek = await this.contractedMinutesPerWeek(
       tx,
       query.tenantId,
@@ -141,10 +195,19 @@ export class WorkforceBackend {
     const entries = await this.entriesInPeriod(tx, query);
     const sessions = projectWorkSessions(entries);
     const periodDays = (Date.parse(query.period.end) - Date.parse(query.period.start)) / MS_PER_DAY;
-    return summarisePeriod(sessions, query.period, {
-      periodMinutes: Math.round((contractedPerWeek * periodDays) / 7),
-      dailyTargetMinutes: dailyContractedTargetMinutes(contractedPerWeek),
-    });
+    return summarisePeriod(
+      sessions,
+      query.period,
+      {
+        periodMinutes: Math.round((contractedPerWeek * periodDays) / 7),
+        // An explicit convenio per-day target wins; a null column falls back to the weekly derivation
+        // (`??` treats only null/undefined as "unset", so a 0 override — a CHECK would reject it — is
+        // still honoured rather than silently re-derived).
+        dailyTargetMinutes:
+          dailyTargetMinutes ?? dailyContractedTargetMinutes(contractedPerWeek, workingDaysPerWeek),
+      },
+      overtimeModel,
+    );
   }
 
   /**
@@ -262,6 +325,193 @@ export class WorkforceBackend {
   private async lockPerson(tx: Transaction, tenantId: string, personId: string): Promise<void> {
     await tx.execute(sql`
       select id from persons where tenant_id = ${tenantId} and id = ${personId} for no key update`);
+  }
+
+  /**
+   * Publishes a draft roster version (design §2.1) — the ONLY scheduling write that touches the
+   * legal-vs-planning seam, and it lands squarely on the planning side. Unlike a clock event
+   * (`append`, an immutable-ledger INSERT), this UPDATEs mutable planning rows:
+   *
+   * 1. supersedes any incumbent published version for the SAME (location, exact period), then flips
+   *    THIS version `draft → published` and stamps `published_at` (and `published_by_person_id` when
+   *    supplied) — the `roster_versions_publish_shape_ck` invariant pairs the two. The supersede runs
+   *    FIRST so the incumbent is out of the `roster_versions_published_period_uq` partial index before
+   *    this one enters it (§`supersedePriorPublished`);
+   * 2. attaches every still-unattached (`roster_version_id is null`) draft shift AT THE VERSION'S
+   *    LOCATION whose LOCAL wall date falls within the version's inclusive period, by setting its
+   *    `roster_version_id`. The local date is `starts_at` shifted by its wall offset — the same
+   *    offset semantics `time_entries` uses — so a shift whose UTC instant sits just outside the
+   *    period still attaches when its local date is inside.
+   *
+   * Throws `roster.not_found` if no such version exists under the tenant, `roster.already_published`
+   * if THIS version is no longer a `draft` (a version is published exactly once — republishing it is
+   * refused, never a silent re-stamp), and `roster.period_already_published` if a DIFFERENT version
+   * won a concurrent race to publish the same period (the unique-index backstop firing — see
+   * `supersedePriorPublished`).
+   *
+   * Returns the guardrail breaches of the published roster (D2.3) when `input.ruleset` is supplied,
+   * an empty array otherwise. Breaches are ADVISORY (OWNER DECISION 2026-08-02): a breaching roster
+   * still publishes and the breaches are surfaced here, never thrown — see `validateRoster`.
+   */
+  async publishRoster(tx: Transaction, input: PublishRosterInput): Promise<RosterBreach[]> {
+    const status = await this.rosterVersionStatus(tx, input.tenantId, input.versionId);
+    if (status !== "draft") {
+      throw new AppError("roster.already_published", {
+        tenantId: input.tenantId,
+        rosterVersionId: input.versionId,
+      });
+    }
+    await this.supersedePriorPublished(tx, input.tenantId, input.versionId);
+    try {
+      await tx.execute(sql`
+        update roster_versions
+        set status = 'published', published_at = now(),
+            published_by_person_id = ${input.publishedByPersonId ?? null}
+        where tenant_id = ${input.tenantId} and id = ${input.versionId}`);
+    } catch (error) {
+      // The partial-index backstop firing: a concurrent publish of a DIFFERENT draft for this same
+      // (location, period) committed after `supersedePriorPublished` took its lock snapshot, so its
+      // published row was invisible to the supersede yet collides here (23505). A translation, not a
+      // recovery — Postgres has already aborted the transaction; catching only hands the caller a
+      // structured code instead of a raw driver string.
+      if (isUniqueViolation(error)) {
+        throw new AppError("roster.period_already_published", {
+          tenantId: input.tenantId,
+          rosterVersionId: input.versionId,
+        });
+      }
+      throw error;
+    }
+    // UPDATE ... FROM reads location_id/period_start/period_end straight off the version row, so no
+    // date value round-trips through TypeScript. `starts_offset_minutes * interval '1 minute'` turns
+    // the wall offset into the shift of the absolute instant onto local wall time before ::date.
+    await tx.execute(sql`
+      update shifts s
+      set roster_version_id = rv.id
+      from roster_versions rv
+      where rv.id = ${input.versionId} and rv.tenant_id = ${input.tenantId}
+        and s.tenant_id = ${input.tenantId}
+        and s.location_id = rv.location_id
+        and s.roster_version_id is null
+        and (s.starts_at at time zone 'UTC' + s.starts_offset_minutes * interval '1 minute')::date
+            between rv.period_start and rv.period_end`);
+    // Advisory guardrails: only when the caller supplied a ruleset (the workforce-es resolver's
+    // output). Validate exactly the shifts now attached to this version, then return the breaches —
+    // publishing has already committed above, so a breach never blocks it.
+    if (input.ruleset === undefined) return [];
+    return validateRoster(
+      await this.attachedShifts(tx, input.tenantId, input.versionId),
+      input.ruleset,
+    );
+  }
+
+  /** The shifts attached to a published version, as neutral `PlannedShift`s for `validateRoster`.
+   * `event_at` is normalised to a UTC ISO instant so the pure engine's `Date.parse` sees a string
+   * under either driver (node-postgres returns a Date, PGlite a string). */
+  private async attachedShifts(
+    tx: Transaction,
+    tenantId: string,
+    versionId: string,
+  ): Promise<PlannedShift[]> {
+    const { rows } = await tx.execute<{
+      id: string;
+      person_id: string;
+      starts_at: string;
+      starts_offset_minutes: number;
+      ends_at: string;
+      ends_offset_minutes: number;
+    }>(sql`
+      select id, person_id,
+        to_char(starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as starts_at,
+        starts_offset_minutes,
+        to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at,
+        ends_offset_minutes
+      from shifts
+      where tenant_id = ${tenantId} and roster_version_id = ${versionId}`);
+    return rows.map((r) => ({
+      shiftId: r.id,
+      personId: r.person_id,
+      startsAt: r.starts_at,
+      startsOffsetMinutes: r.starts_offset_minutes,
+      endsAt: r.ends_at,
+      endsOffsetMinutes: r.ends_offset_minutes,
+    }));
+  }
+
+  /** A roster version's `status`, or `roster.not_found` if there is no such version under the
+   * tenant. `publishRoster` reads the publish guard off this. The row is locked `for update`, so the
+   * check-then-publish is race-free: a second concurrent publish blocks on this SELECT until the
+   * first commits, then reads `published` and is refused. Without the lock both could observe `draft`
+   * and the later would silently re-stamp `published_at`/`published_by_person_id` (the guard is a
+   * separate statement from the UPDATE, so a bare read cannot serialise them). The lock rides the
+   * caller's transaction, which `publishRoster` always supplies. */
+  private async rosterVersionStatus(
+    tx: Transaction,
+    tenantId: string,
+    versionId: string,
+  ): Promise<string> {
+    const { rows } = await tx.execute<{ status: string }>(sql`
+      select status from roster_versions
+      where tenant_id = ${tenantId} and id = ${versionId}
+      limit 1
+      for update`);
+    const version = rows[0];
+    if (version === undefined) {
+      throw new AppError("roster.not_found", { tenantId, rosterVersionId: versionId });
+    }
+    return version.status;
+  }
+
+  /**
+   * Demotes any incumbent `published` version for the SAME (location, exact period) as the version
+   * about to be published, so at most one published version survives per period (design §2.1, the
+   * mutable + supersede model — OWNER DECISION).
+   *
+   * Locks the incumbent published rows `for update` FIRST (`for update of prior`, so only the
+   * incumbents — not this version's own already-locked row — are locked): this serialises concurrent
+   * publishes of the same period against a common row, so the second blocks until the first commits
+   * rather than racing it. It is NOT, however, what guarantees the invariant — a concurrent
+   * FIRST publish of two different drafts for a period with no incumbent has no row to lock, and even
+   * with an incumbent the loser's READ COMMITTED snapshot cannot see the winner's freshly-published
+   * row (it was demoted, not the one this saw). The `roster_versions_published_period_uq` partial
+   * unique index is the actual guarantee: it raises 23505 whenever a publish would leave a second
+   * published row, which `publishRoster` translates to `roster.period_already_published`. This lock
+   * makes the common (sequential, lightly-contended) supersede orderly and cuts index-abort churn;
+   * the index makes it CORRECT. Verified against real Postgres in scheduling.concurrency.test.ts.
+   *
+   * The self-join reads the target's location/period straight off its row (no value round-trips
+   * through TypeScript), the same pattern the shift-attach UPDATE in `publishRoster` uses. `prior.id
+   * <> versionId` is belt-and-suspenders: the version being published is still `draft` here, so it
+   * cannot match `status = 'published'` anyway.
+   */
+  private async supersedePriorPublished(
+    tx: Transaction,
+    tenantId: string,
+    versionId: string,
+  ): Promise<void> {
+    const { rows } = await tx.execute<{ id: string }>(sql`
+      select prior.id
+      from roster_versions prior
+      join roster_versions target on target.id = ${versionId} and target.tenant_id = ${tenantId}
+      where prior.tenant_id = ${tenantId}
+        and prior.location_id = target.location_id
+        and prior.period_start = target.period_start
+        and prior.period_end = target.period_end
+        and prior.status = 'published'
+        and prior.id <> ${versionId}
+      for update of prior`);
+    if (rows.length === 0) return;
+    await tx.execute(sql`
+      update roster_versions prior
+      set status = 'superseded'
+      from roster_versions target
+      where target.id = ${versionId} and target.tenant_id = ${tenantId}
+        and prior.tenant_id = ${tenantId}
+        and prior.location_id = target.location_id
+        and prior.period_start = target.period_start
+        and prior.period_end = target.period_end
+        and prior.status = 'published'
+        and prior.id <> ${versionId}`);
   }
 
   /** The state the worker's most recent event left them in — `out` when they have no events yet.

@@ -11,6 +11,16 @@ import { seedEmployment, seedLocation, seedPerson } from "../test/fixtures.js";
 
 const backend = new WorkforceBackend();
 
+/** The values a DEFAULT `convenio_config` row resolves to — the single source of the default is now
+ * that column, not a fallback in `workSummary`. The generic package cannot import the -es resolver,
+ * so its tests pass the resolved values explicitly; `packages/workforce-es`'s `work-summary.test.ts`
+ * pins that a default row resolves to exactly these and reproduces these same numbers. */
+const DEFAULT_RULESET = {
+  workingDaysPerWeek: 5,
+  overtimeModel: "daily-accrual",
+  dailyTargetMinutes: null,
+} as const;
+
 let tenantId: string;
 let locationId: string;
 
@@ -152,11 +162,15 @@ describe("workSummary", () => {
       await nineHourDay(p, day);
     }
     const summary = await run((tx) =>
-      backend.workSummary(tx, {
-        tenantId,
-        personId: p,
-        period: { start: "2026-01-05", end: "2026-01-12" },
-      }),
+      backend.workSummary(
+        tx,
+        {
+          tenantId,
+          personId: p,
+          period: { start: "2026-01-05", end: "2026-01-12" },
+        },
+        DEFAULT_RULESET,
+      ),
     );
     expect(summary).toEqual({
       workedMinutes: 2700,
@@ -184,11 +198,15 @@ describe("workSummary", () => {
     await seedEmployment(suite.db, { tenantId, personId: p, contractedMinutesPerWeek: 2400 });
     await nineHourDay(p, "2026-01-05");
     const summary = await run((tx) =>
-      backend.workSummary(tx, {
-        tenantId,
-        personId: p,
-        period: { start: "2026-01-05", end: "2026-01-19" },
-      }),
+      backend.workSummary(
+        tx,
+        {
+          tenantId,
+          personId: p,
+          period: { start: "2026-01-05", end: "2026-01-19" },
+        },
+        DEFAULT_RULESET,
+      ),
     );
     expect(summary).toEqual({
       workedMinutes: 540,
@@ -207,15 +225,87 @@ describe("workSummary", () => {
     });
   });
 
+  it("sizes the daily target from a supplied working_days_per_week, not the 5-day default", async () => {
+    // The de-hard-coding, end to end through the backend. A 6-day convenio week makes the daily
+    // target 2400 ÷ 6 = 400, so a 9h (540) day is 140 over it — where the 5-day `DEFAULT_RULESET`
+    // gives 480 and 60. Passing the resolved WorkTimeRuleset's working_days_per_week is what changes
+    // it.
+    const p = await freshPerson("summary-6day");
+    await seedEmployment(suite.db, { tenantId, personId: p, contractedMinutesPerWeek: 2400 });
+    await nineHourDay(p, "2026-01-05");
+    const summary = await run((tx) =>
+      backend.workSummary(
+        tx,
+        { tenantId, personId: p, period: { start: "2026-01-05", end: "2026-01-12" } },
+        { ...DEFAULT_RULESET, workingDaysPerWeek: 6 },
+      ),
+    );
+    expect(summary.days[0]?.contractedTargetMinutes).toBe(400);
+    expect(summary.dailyAccrualOvertimeMinutes).toBe(140);
+  });
+
+  it("uses an explicit dailyTargetMinutes override as the daily-accrual target, bypassing the weekly derivation", async () => {
+    // convenio_config.daily_target_minutes, once the asesor sets one, IS the per-day target — the
+    // weekly ÷ working-days derivation is bypassed. A 400-min override against a 9h (540) day is 140
+    // over it, where the derived 2400 ÷ 5 = 480 target gives 60. Prove by deletion: drop the
+    // `ruleset.dailyTargetMinutes ??` in workSummary and this reverts to 480/60. The NULL path (a
+    // DEFAULT convenio_config row → derivation, the 2700/2400/300 case) is pinned by the
+    // default-ruleset tests above, which carry `dailyTargetMinutes: null` and stay green.
+    const p = await freshPerson("summary-daily-override");
+    await seedEmployment(suite.db, { tenantId, personId: p, contractedMinutesPerWeek: 2400 });
+    await nineHourDay(p, "2026-01-05");
+    const summary = await run((tx) =>
+      backend.workSummary(
+        tx,
+        { tenantId, personId: p, period: { start: "2026-01-05", end: "2026-01-12" } },
+        { ...DEFAULT_RULESET, dailyTargetMinutes: 400 },
+      ),
+    );
+    expect(summary.days[0]?.contractedTargetMinutes).toBe(400);
+    expect(summary.dailyAccrualOvertimeMinutes).toBe(140);
+  });
+
+  it("selects the headline overtime model from the options, changing only the headline", async () => {
+    // Which model binds is convenio-driven (overtime_model). A 9h day then a 7h day is 60
+    // daily-accrual but 0 period-net against a full-week baseline. Flipping the model must move ONLY
+    // the headline `overtimeMinutes`; the two underlying figures are computed regardless and stay put.
+    const p = await freshPerson("summary-model");
+    await seedEmployment(suite.db, { tenantId, personId: p, contractedMinutesPerWeek: 2400 });
+    await run((tx) => backend.clockIn(tx, event(p, "2026-01-05T08:00:00Z"))); // 9h
+    await run((tx) => backend.clockOut(tx, event(p, "2026-01-05T17:00:00Z")));
+    await run((tx) => backend.clockIn(tx, event(p, "2026-01-06T09:00:00Z"))); // 7h
+    await run((tx) => backend.clockOut(tx, event(p, "2026-01-06T16:00:00Z")));
+    const query = { tenantId, personId: p, period: { start: "2026-01-05", end: "2026-01-12" } };
+
+    const daily = await run((tx) =>
+      backend.workSummary(tx, query, { ...DEFAULT_RULESET, overtimeModel: "daily-accrual" }),
+    );
+    const period = await run((tx) =>
+      backend.workSummary(tx, query, { ...DEFAULT_RULESET, overtimeModel: "period-net" }),
+    );
+
+    expect(daily.overtimeMinutes).toBe(60);
+    expect(period.overtimeMinutes).toBe(0);
+    // Only the headline moved: both underlying figures are identical between the two calls.
+    expect(period.dailyAccrualOvertimeMinutes).toBe(60);
+    expect(period.periodNetOvertimeMinutes).toBe(0);
+    expect(daily.dailyAccrualOvertimeMinutes).toBe(period.dailyAccrualOvertimeMinutes);
+    expect(daily.periodNetOvertimeMinutes).toBe(period.periodNetOvertimeMinutes);
+  });
+
   it("throws employment.not_found when the person has no employment", async () => {
     const p = await freshPerson("summary-no-employment");
     const code = await codeOfRejection(() =>
       run((tx) =>
-        backend.workSummary(tx, {
-          tenantId,
-          personId: p,
-          period: { start: "2026-01-05", end: "2026-01-12" },
-        }),
+        backend.workSummary(
+          tx,
+          {
+            tenantId,
+            personId: p,
+            period: { start: "2026-01-05", end: "2026-01-12" },
+          },
+          DEFAULT_RULESET,
+        ),
       ),
     );
     expect(code).toBe("employment.not_found");

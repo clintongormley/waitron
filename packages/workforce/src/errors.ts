@@ -49,6 +49,36 @@ declare module "@waitron/shared" {
      * supervisor/manager/admin. A correction takes effect only when a supervisor approves it (design
      * §5), so a staff-role approver is refused here rather than silently ignored. */
     "correction.not_permitted": { tenantId: string; personId: string };
+    /** No `shifts` row for this id under the current tenant — never created, or hidden by RLS
+     * (identical from the caller's side). Declared in D2.1 ahead of a consumer; its first thrower is
+     * D2.2's `requestSwap` (../shift-swaps.ts), which rejects a swap naming a `from_shift`/`to_shift`
+     * that does not exist under the tenant. `shift.*`, grepped against the whole registry — never
+     * `schedule.*` (a shift is the entity, the schedule is the aggregate). */
+    "shift.not_found": { tenantId: string; shiftId: string };
+    /** No `roster_versions` row for this id under the current tenant — never created, or hidden by
+     * RLS. Raised by `publishRoster` (../clocking.ts) when asked to publish a version that does not
+     * exist. `roster.*`, grepped against the registry — unused before D2; the prefix groups the three
+     * codes `publishRoster` throws (`roster.not_found`, `roster.already_published`,
+     * `roster.period_already_published`). The D2.3 guardrail breaches do NOT live here: they are
+     * ADVISORY (OWNER DECISION 2026-08-02) — a `RosterBreach` discriminated union that `validateRoster`
+     * (../roster-validation.ts) RETURNS and `publishRoster` surfaces without ever blocking the publish,
+     * never thrown codes — so no `roster.rest_too_short`-style code exists. */
+    "roster.not_found": { tenantId: string; rosterVersionId: string };
+    /** `publishRoster` was asked to publish a version whose `status` is no longer `draft` — a second
+     * publish of an already-`published` (or `superseded`) roster. A roster is published exactly once;
+     * republishing is refused rather than silently re-stamping `published_at`. Distinct from
+     * `roster.not_found` (the version does not exist); here it EXISTS but is not in a publishable
+     * state. */
+    "roster.already_published": { tenantId: string; rosterVersionId: string };
+    /** `publishRoster` (../clocking.ts) tried to publish a version but another `published` version
+     * already exists for the SAME (location, exact period), so the publish would leave two — rejected
+     * by the `roster_versions_published_period_uq` partial unique index (23505), translated here.
+     * The supersede path demotes an incumbent published version before promoting the new one, so this
+     * is reachable only under CONCURRENCY: a competing publish of a different draft for the same period
+     * committed after this transaction took its lock snapshot, so the index — not the lock — is what
+     * catches it. Distinct from `roster.already_published`, which is the SAME version being published
+     * twice. `roster.*`, grepped against the registry — never renamed once shipped. */
+    "roster.period_already_published": { tenantId: string; rosterVersionId: string };
     /** An approval named a correction that is not an approvable PENDING request — its target entry
      * already carries an `approved` correction. Covers both re-approving the same request (the
      * request row stays `requested` forever, since approval is a second append, never a mutation —
@@ -57,5 +87,27 @@ declare module "@waitron/shared" {
      * from `correction.target_not_found`, which is no such correction row at all; here the correction
      * EXISTS but is not approvable. `correction.*`, grepped against the registry — never renamed. */
     "correction.not_pending": { tenantId: string; correctionId: string };
+    /** No `absences` row for this id under the current tenant — never created, or hidden by RLS.
+     * Raised by `setAbsenceStatus` (../absences.ts) when asked to move a non-existent absence to
+     * approved/rejected. `absence.*`, grepped against the whole registry — unused before D2, and the
+     * English `absence` term (the Spanish `ausencia` is in SPANISH_WORDS, so the code stays English
+     * like the schema, following the domain-concept convention). */
+    "absence.not_found": { tenantId: string; absenceId: string };
+    /** `createAbsence` (../absences.ts) was asked to create an absence whose date range overlaps an
+     * existing absence for the SAME person under this tenant (inclusive on both ends). One person
+     * cannot be absent twice over the same day, so the overlapping range is refused before insert.
+     * `absence.*`, same reasoning as `absence.not_found`. */
+    "absence.overlaps": { tenantId: string; personId: string };
+    /** No `shift_swaps` row for this id under the current tenant — never created, or hidden by RLS.
+     * Raised by `acceptSwap` (../shift-swaps.ts) when asked to accept a swap that does not exist.
+     * `swap.*`, grepped against the registry — unused before D2; the entity is the swap (a shift is
+     * `shift.*`, a person `person.*`). */
+    "swap.not_found": { tenantId: string; swapId: string };
+    /** A swap action was attempted by a person not permitted it: `requestSwap` (../shift-swaps.ts)
+     * refuses a requester offering a `from_shift` that is not THEIRS, and `acceptSwap` refuses anyone
+     * but the swap's named `to_person` accepting it. A fact about the swap's permission rule, not a
+     * missing entity (that is `swap.not_found`/`shift.not_found`). `swap.*`, grepped — never
+     * renamed. */
+    "swap.not_permitted": { tenantId: string; personId: string };
   }
 }

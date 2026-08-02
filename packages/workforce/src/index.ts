@@ -7,7 +7,20 @@ export {
   workforceCorrectionStatus,
   workforceEntryKind,
 } from "./schema/time-entries.js";
+export type { PublishRosterInput } from "./clocking.js";
 export { workforceChains } from "./schema/workforce-chains.js";
+export { rosterVersions, rosterVersionStatus } from "./schema/roster-versions.js";
+export { shifts } from "./schema/shifts.js";
+export { absences, absenceKind, absenceStatus } from "./schema/absences.js";
+export type { AbsenceKind, AbsenceStatus } from "./schema/absences.js";
+export { availability } from "./schema/availability.js";
+export { shiftTemplates } from "./schema/shift-templates.js";
+export { shiftSwaps, shiftSwapStatus } from "./schema/shift-swaps.js";
+export type { ShiftSwapStatus } from "./schema/shift-swaps.js";
+export { createAbsence, setAbsenceStatus } from "./absences.js";
+export type { CreateAbsenceInput, SetAbsenceStatusInput } from "./absences.js";
+export { requestSwap, acceptSwap } from "./shift-swaps.js";
+export type { RequestSwapInput, AcceptSwapInput } from "./shift-swaps.js";
 export { appendToChain, isUniqueViolation, lockChainHead } from "./chain.js";
 export type { ChainHead, TimeEntryAppend } from "./chain.js";
 export { computeEntryHash, verifyChain } from "./chain-hash.js";
@@ -19,7 +32,24 @@ export type {
   CorrectionApprovalInput,
   CorrectionRequestInput,
   WorkSummaryQuery,
+  WorkSummaryRuleset,
 } from "./clocking.js";
+export type { WorkTimeRuleset } from "./ruleset.js";
+export { validateRoster } from "./roster-validation.js";
+export type {
+  BreakOwedBreach,
+  ExceedsDailyMaxBreach,
+  ExceedsWeeklyMaxBreach,
+  NightWorkBreach,
+  OvertimeCapExceededBreach,
+  PlannedShift,
+  RestTooShortBreach,
+  RosterBreach,
+  RosterBreachKind,
+  WeeklyRestInsufficientBreach,
+} from "./roster-validation.js";
+export { comparePlannedVsActual } from "./planned-vs-actual.js";
+export type { PlannedVsActual } from "./planned-vs-actual.js";
 export {
   dailyContractedTargetMinutes,
   localWallClock,

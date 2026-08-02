@@ -307,24 +307,34 @@ export function projectWorkSessions(entries: readonly TimeEntryRecord[]): WorkSe
   return sessions;
 }
 
-/** The standard count of ordinary working days in a week — the denominator of the floor-scope
- * default daily target below. Five (a Mon–Fri week) is the common baseline, NOT a convenio figure:
- * the real working-days-per-week comes from the schedule/convenio (D2). */
-const DEFAULT_WORKING_DAYS_PER_WEEK = 5;
-
 /**
- * A FLOOR-SCOPE DEFAULT for one ordinary day's contracted target, derived as the contracted weekly
- * jornada divided by a standard working-days count. This is a DOCUMENTED DEFAULT, not a legal
- * certainty: the employment only carries `contracted_minutes_per_week` today, and the true per-day
- * target comes from the schedule/convenio (D2 `convenio_config`), which is not built. D2
- * scheduling/convenio_config will refine this — it is isolated in this one well-named function so
- * that refinement replaces exactly one call site.
+ * One ordinary day's contracted target, derived as the contracted weekly jornada divided by the
+ * number of ordinary working days in the week.
+ *
+ * `workingDaysPerWeek` is now a PARAMETER, not a module constant: it comes from the resolved
+ * `WorkTimeRuleset` (D2 `convenio_config.working_days_per_week`, default 5 — a Mon–Fri week — set on
+ * the config row, no longer baked in here). The former `DEFAULT_WORKING_DAYS_PER_WEEK = 5` is now
+ * that column's default, so a default config row reproduces the old value exactly; a convenio with a
+ * different working week gets a different target without a code change.
  *
  * Deliberately NOT hard-coded convenio numbers (that would misrepresent the law and trip the
- * english-only guard on Spanish labour tokens): only a division and a documented denominator.
+ * english-only guard on Spanish labour tokens): only a division by a caller-supplied denominator.
  */
-export function dailyContractedTargetMinutes(contractedMinutesPerWeek: number): number {
-  return Math.round(contractedMinutesPerWeek / DEFAULT_WORKING_DAYS_PER_WEEK);
+export function dailyContractedTargetMinutes(
+  contractedMinutesPerWeek: number,
+  workingDaysPerWeek: number,
+): number {
+  // Defence in depth: convenio_config's `working_days_per_week` CHECK already pins this to 1..7, but
+  // this helper is on the public barrel, so a caller reaching it another way must not silently get
+  // Infinity/NaN — a 0, negative, or NaN denominator would corrupt the overtime target. `> 0` rejects
+  // all three at once (NaN > 0 is false). A plain Error, not a registered code: this is a
+  // programmer-error invariant, never a till-facing domain condition (cf. verifactu/src/format.ts).
+  if (!(workingDaysPerWeek > 0)) {
+    throw new Error(
+      `dailyContractedTargetMinutes: workingDaysPerWeek must be positive, received ${workingDaysPerWeek}`,
+    );
+  }
+  return Math.round(contractedMinutesPerWeek / workingDaysPerWeek);
 }
 
 /**

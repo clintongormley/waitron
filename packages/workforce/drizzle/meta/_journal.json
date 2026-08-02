@@ -50,6 +50,41 @@
       "when": 1785680519150,
       "tag": "0006_brief_vampiro",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785694481371,
+      "tag": "0007_scheduling",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785694490309,
+      "tag": "0008_scheduling_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785702935124,
+      "tag": "0009_scheduling_planning",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785702945259,
+      "tag": "0010_scheduling_planning_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785708867378,
+      "tag": "0011_roster_published_period_uq",
+      "breakpoints": true
     }
   ]
 }

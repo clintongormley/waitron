@@ -6,6 +6,11 @@
     "from": "../workforce/drizzle"
   },
   {
+    "name": "workforce-es",
+    "table": "__drizzle_migrations_workforce_es",
+    "from": "../workforce-es/drizzle"
+  },
+  {
     "name": "fiscal",
     "table": "__drizzle_migrations_fiscal",
     "from": "../fiscal-verifactu/drizzle"

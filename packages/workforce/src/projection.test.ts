@@ -358,16 +358,32 @@ describe("projectWorkSessions applies corrections (reprojection, latest-approved
   });
 });
 
-describe("dailyContractedTargetMinutes (a floor-scope default daily target)", () => {
-  it("divides the contracted week by the standard working-days count (5)", () => {
-    // 2400 min/week ÷ 5 working days = 480 (an 8h day). This is a DOCUMENTED DEFAULT, not a convenio
-    // figure — D2 scheduling/convenio_config refines the true per-day target.
-    expect(dailyContractedTargetMinutes(2400)).toBe(480);
+describe("dailyContractedTargetMinutes (a contracted daily target over N working days)", () => {
+  it("divides the contracted week by the supplied working-days count", () => {
+    // 2400 min/week ÷ 5 working days = 480 (an 8h day). Five is D2's convenio_config default, no
+    // longer a module constant — it is passed in from the resolved WorkTimeRuleset.
+    expect(dailyContractedTargetMinutes(2400, 5)).toBe(480);
   });
 
   it("rounds to the nearest whole minute", () => {
     // 2403 ÷ 5 = 480.6 → 481. Proves Math.round, not a floor/trunc that would silently under-target.
-    expect(dailyContractedTargetMinutes(2403)).toBe(481);
+    expect(dailyContractedTargetMinutes(2403, 5)).toBe(481);
+  });
+
+  it("divides by the supplied working-days count, not a hard-coded 5", () => {
+    // 2400 ÷ 6 = 400. Proves working_days_per_week is a PARAMETER (D2 convenio_config), not the
+    // `DEFAULT_WORKING_DAYS_PER_WEEK = 5` module constant it replaced — a caller with a 6-day week
+    // gets 400, not 480. This is the de-hard-coding teeth-test.
+    expect(dailyContractedTargetMinutes(2400, 6)).toBe(400);
+  });
+
+  it("rejects a non-positive working-days count instead of returning Infinity/NaN", () => {
+    // Defence in depth: convenio_config's CHECK pins the denominator to 1..7, but this helper is on
+    // the public barrel, so a 0/negative/NaN divisor throws rather than silently yielding Infinity
+    // or NaN (which would corrupt the overtime target). One `> 0` guard covers all three.
+    expect(() => dailyContractedTargetMinutes(2400, 0)).toThrow(/must be positive/);
+    expect(() => dailyContractedTargetMinutes(2400, -5)).toThrow(/received -5/);
+    expect(() => dailyContractedTargetMinutes(2400, Number.NaN)).toThrow(/must be positive/);
   });
 });
 

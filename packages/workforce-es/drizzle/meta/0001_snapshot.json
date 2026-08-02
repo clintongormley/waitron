@@ -1,0 +1,239 @@
+{
+  "id": "3443f4d0-9898-4094-b82d-f72988311e92",
+  "prevId": "142d002b-96d5-4086-a3ca-07f3666e7a49",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.convenio_config": {
+      "name": "convenio_config",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "working_days_per_week": {
+          "name": "working_days_per_week",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 5
+        },
+        "overtime_model": {
+          "name": "overtime_model",
+          "type": "overtime_model",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'daily_accrual'"
+        },
+        "reference_period_days": {
+          "name": "reference_period_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "compensation_window_days": {
+          "name": "compensation_window_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "daily_target_minutes": {
+          "name": "daily_target_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_weekly_minutes": {
+          "name": "max_weekly_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 2400
+        },
+        "min_inter_shift_rest_minutes": {
+          "name": "min_inter_shift_rest_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 720
+        },
+        "max_ordinary_daily_minutes": {
+          "name": "max_ordinary_daily_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 540
+        },
+        "break_threshold_minutes": {
+          "name": "break_threshold_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 360
+        },
+        "min_break_minutes": {
+          "name": "min_break_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 15
+        },
+        "weekly_rest_minutes": {
+          "name": "weekly_rest_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 2160
+        },
+        "annual_overtime_cap_hours": {
+          "name": "annual_overtime_cap_hours",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 80
+        },
+        "night_window_start_minute": {
+          "name": "night_window_start_minute",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1320
+        },
+        "night_window_end_minute": {
+          "name": "night_window_end_minute",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 360
+        },
+        "night_premium_pct": {
+          "name": "night_premium_pct",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "split_shift_premium": {
+          "name": "split_shift_premium",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "breaks_count_as_worked": {
+          "name": "breaks_count_as_worked",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "convenio_config_tenant_id_idx": {
+          "name": "convenio_config_tenant_id_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "convenio_config_tenant_fk": {
+          "name": "convenio_config_tenant_fk",
+          "tableFrom": "convenio_config",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "tableTo": "tenants",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        },
+        "convenio_config_location_fk": {
+          "name": "convenio_config_location_fk",
+          "tableFrom": "convenio_config",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "tableTo": "locations",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "convenio_config_tenant_location_uq": {
+          "name": "convenio_config_tenant_location_uq",
+          "columns": [
+            "tenant_id",
+            "location_id"
+          ],
+          "nullsNotDistinct": false
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "convenio_config_working_days_ck": {
+          "name": "convenio_config_working_days_ck",
+          "value": "\"convenio_config\".\"working_days_per_week\" between 1 and 7"
+        }
+      },
+      "isRLSEnabled": true
+    }
+  },
+  "enums": {
+    "public.overtime_model": {
+      "name": "overtime_model",
+      "schema": "public",
+      "values": [
+        "daily_accrual",
+        "period_net"
+      ]
+    }
+  },
+  "schemas": {},
+  "views": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
