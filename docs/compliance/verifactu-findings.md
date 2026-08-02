@@ -791,9 +791,11 @@ clearly than the subsanación/anulación the FAQ names.
 **Why it is not merely theoretical (server-as-SIF, #33).** A venue runs **more than one SIF** — each
 server is its own SIF with its own chain (#33 §3, "two servers, two SIFs, one venue"). So a correction
 genuinely *can* land on a different server-SIF than the original (across the two active servers, or
-after a failover). That is lawful per this FAQ. `packages/core/src/record-correction.ts` therefore
-takes the issuing `tillId`/SIF as a caller input and does **not** require it to match the original's —
-by design, and correct.
+after a failover). The FAQ permits that for the sibling correction records it names; a rectificativa
+follows *a fortiori* by the identity-linkage argument (see the provenance caveat below).
+`packages/core/src/record-correction.ts` therefore takes the issuing `tillId`/SIF as a caller input
+and does **not** require it to match the original's — by design, and correct **on that inference**
+(confirm with the asesor before a cross-SIF rectificativa is issued in anger).
 
 **Provenance caveat (§1).** The FAQ names cases 2.b/2.d (subsanación/anulación) explicitly; the
 extension to a *rectificativa* rests on the identity-linkage argument above — sound, but an inference,

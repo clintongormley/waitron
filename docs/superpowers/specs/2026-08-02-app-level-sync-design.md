@@ -328,9 +328,16 @@ consistent; deriving cannot drift.
 This is the reuse the whole exercise is for (design Q6). A table becomes a replicated, server-owned
 partition by **three** declarations, and nothing bespoke per domain.
 
-**(i) A `sync_log` transport table (one, whole DB).** No RLS — it is internal transport, like
-`deployment`/`contadores` (`0010_deployment_stamp.sql`; `sif.ts:75-83`), owned by the migrator, app
-role granted `SELECT,INSERT`:
+**(i) A `sync_log` transport table (one, whole DB), tenant-fenced.** It holds every enrolled row's
+`row_image`, so it MUST carry **FORCE ROW LEVEL SECURITY with tenant isolation** (`tenant_id NOT NULL`
+— only tenant-scoped tables are enrolled, per "not enrolled by construction" below; the `WITH CHECK
+(tenant_id = current_tenant_id())` policy mirrors the source tables). This is the opposite of the
+no-RLS `deployment`/`contadores` pattern: a no-RLS `sync_log` the app role could `SELECT` would be a
+**cross-tenant side-channel** — one tenant's app role reading another tenant's data, bypassing the RLS
+that protects the source tables (Copilot review, 2026-08-02). Grants: the writing **app role holds
+`INSERT` only** (for the capture trigger — it never needs to read the log); `SELECT` is held by a
+dedicated **sync-tailer role** that reads per-tenant under `withTenant` (one tenant on a local server;
+the cloud mirror iterates tenants). Owned by the migrator:
 
 ```
 sync_log (
@@ -338,7 +345,7 @@ sync_log (
   origin_id    uuid   not null,          -- which server produced this change (server_id / node id)
   table_name   text   not null,
   op           text   not null check (op in ('insert','update')),  -- no 'delete': no table grants DELETE
-  tenant_id    uuid,                      -- for withTenant on apply; null for non-tenant tables
+  tenant_id    uuid   not null,          -- FORCE RLS tenant isolation; for withTenant on apply (only tenant-scoped tables are enrolled)
   row_image    jsonb  not null,           -- to_jsonb(NEW); text columns stay text → byte-identical huella
   txid         xid8   not null default pg_current_xact_id(),   -- group one source txn's rows
   committed_at timestamptz not null default clock_timestamp()
