@@ -125,6 +125,45 @@ describe("validateRoster — inter-shift rest (art. 34.3)", () => {
     );
     expect(ofKind(breaches, "rest_too_short")).toHaveLength(0);
   });
+
+  it("does not flag a same-day split shift (turno partido) under a real inter-shift floor", () => {
+    // A turno partido — 12:00–16:00 then 20:00–24:00 — is ONE jornada with an intra-day break, NOT
+    // two jornadas 4h apart. art. 34.3's minimum rest is between working DAYS, so the 16:00→20:00
+    // gap must not raise rest_too_short even under the full 12h (720-min) floor. This is the case the
+    // former consecutive-pair logic got wrong (it hid because the turno tests set the floor to 0).
+    const breaches = validateRoster(
+      [
+        shift("p1", "2026-01-05T12:00:00Z", "2026-01-05T16:00:00Z"),
+        shift("p1", "2026-01-05T20:00:00Z", "2026-01-06T00:00:00Z"),
+      ],
+      makeRuleset({ minInterShiftRestMinutes: 720 }),
+    );
+    expect(ofKind(breaches, "rest_too_short")).toHaveLength(0);
+  });
+
+  it("measures inter-jornada rest from the LAST shift of one day to the FIRST of the next", () => {
+    // Day D is a split shift ending 24:00; day D+1 starts 06:00 → 6h inter-jornada rest, under 12h.
+    // The breach must name the LATE shift (20:00–24:00) as the previous shift — proving the rest is
+    // measured from the DAY'S last end, and the intra-day 16:00→20:00 gap is ignored.
+    const breaches = validateRoster(
+      [
+        shift("p1", "2026-01-05T12:00:00Z", "2026-01-05T16:00:00Z", { shiftId: "d-early" }),
+        shift("p1", "2026-01-05T20:00:00Z", "2026-01-06T00:00:00Z", { shiftId: "d-late" }),
+        shift("p1", "2026-01-06T06:00:00Z", "2026-01-06T10:00:00Z", { shiftId: "next" }),
+      ],
+      makeRuleset({ minInterShiftRestMinutes: 720 }),
+    );
+    expect(ofKind(breaches, "rest_too_short")).toEqual([
+      {
+        kind: "rest_too_short",
+        personId: "p1",
+        previousShiftId: "d-late",
+        shiftId: "next",
+        restMinutes: 360,
+        requiredMinutes: 720,
+      },
+    ]);
+  });
 });
 
 describe("validateRoster — max ordinary daily minutes (art. 34.3)", () => {
@@ -150,7 +189,7 @@ describe("validateRoster — max ordinary daily minutes (art. 34.3)", () => {
         shift("p1", "2026-01-05T09:00:00Z", "2026-01-05T14:00:00Z"), // 5h
         shift("p1", "2026-01-05T17:00:00Z", "2026-01-05T22:00:00Z"), // 5h → 10h total
       ],
-      makeRuleset({ maxOrdinaryDailyMinutes: 540, minInterShiftRestMinutes: 0 }),
+      makeRuleset({ maxOrdinaryDailyMinutes: 540 }),
     );
     expect(ofKind(breaches, "exceeds_daily_max")).toEqual([
       expect.objectContaining({ workDate: "2026-01-05", plannedMinutes: 600, maxMinutes: 540 }),
@@ -184,7 +223,7 @@ describe("validateRoster — max ordinary daily minutes (art. 34.3)", () => {
           endsOffsetMinutes: 120,
         }), // 5h, local day 01-06 → 10h total
       ],
-      makeRuleset({ maxOrdinaryDailyMinutes: 540, minInterShiftRestMinutes: 0 }),
+      makeRuleset({ maxOrdinaryDailyMinutes: 540 }),
     );
     expect(ofKind(breaches, "exceeds_daily_max")).toEqual([
       expect.objectContaining({ workDate: "2026-01-06", plannedMinutes: 600 }),

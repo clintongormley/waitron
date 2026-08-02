@@ -46,8 +46,10 @@ export type RosterBreachKind =
   | "break_owed"
   | "night_work";
 
-/** Two of a person's consecutive shifts are closer together than `minInterShiftRestMinutes`
- * (art. 34.3, ≥12h between shifts). Carries both shift ids, the actual rest gap, and the floor. */
+/** Two of a person's consecutive JORNADAS (working days) are closer together than
+ * `minInterShiftRestMinutes` (art. 34.3, ≥12h between working days — NOT between same-day segments of
+ * a turno partido). `previousShiftId` is the shift ending the earlier jornada, `shiftId` the shift
+ * opening the next; `restMinutes` is the gap between them and `requiredMinutes` the floor. */
 export interface RestTooShortBreach {
   kind: "rest_too_short";
   personId: string;
@@ -201,25 +203,62 @@ function byPersonSortedByStart(shifts: readonly PlannedShift[]): Map<string, Pla
   return groups;
 }
 
-/** art. 34.3: consecutive shifts must be ≥ `minInterShiftRestMinutes` apart. The rest is the gap
- * between one shift's END and the next shift's START (absolute instants — rest is real elapsed time,
- * so the wall offset is irrelevant here). `< required` breaches; exactly the minimum is legal. */
+/** One jornada's boundary shifts: the earliest start and latest end among a person's shifts that
+ * local day, with the shift ids that carry them. */
+interface Jornada {
+  firstStart: string;
+  firstShiftId: string;
+  lastEnd: string;
+  lastShiftId: string;
+}
+
+/**
+ * art. 34.3: the minimum rest is between JORNADAS (working days), NOT between arbitrary consecutive
+ * shifts — so a same-day turno partido (e.g. 12:00–16:00 then 20:00–24:00) is ONE jornada with an
+ * intra-day break and must never raise `rest_too_short`. Each shift is assigned to a jornada by the
+ * LOCAL date of its START (`localDate`); a shift crossing midnight therefore belongs to the day it
+ * STARTS — the documented choice, so a 22:00→02:00 shift's rest is measured from 02:00 as that day's
+ * last end. The rest measured is: end of a jornada's LAST shift → start of the next worked jornada's
+ * FIRST shift (absolute instants; the intra-day gap between a jornada's own segments is ignored).
+ * `< required` breaches; exactly the minimum is legal.
+ */
 function checkInterShiftRest(
   byPerson: ReadonlyMap<string, PlannedShift[]>,
   ruleset: WorkTimeRuleset,
 ): RestTooShortBreach[] {
   const breaches: RestTooShortBreach[] = [];
   for (const [personId, shifts] of byPerson) {
-    for (let i = 1; i < shifts.length; i += 1) {
-      const previous = shifts[i - 1]!;
-      const current = shifts[i]!;
-      const restMinutes = minutesBetween(previous.endsAt, current.startsAt);
+    const jornadas = new Map<string, Jornada>();
+    for (const s of shifts) {
+      const day = localDate(s.startsAt, s.startsOffsetMinutes);
+      const jornada = jornadas.get(day);
+      if (jornada === undefined) {
+        // `byPerson` is pre-sorted ascending by start, so the FIRST shift seen for a day-key is that
+        // jornada's earliest start — `firstStart`/`firstShiftId` are therefore set once and never
+        // lowered. `lastEnd` still needs the max below: an earlier-starting shift may end later (a
+        // long opening shift over a short evening one), so end order is not start order.
+        jornadas.set(day, {
+          firstStart: s.startsAt,
+          firstShiftId: s.shiftId,
+          lastEnd: s.endsAt,
+          lastShiftId: s.shiftId,
+        });
+      } else if (Date.parse(s.endsAt) > Date.parse(jornada.lastEnd)) {
+        jornada.lastEnd = s.endsAt;
+        jornada.lastShiftId = s.shiftId;
+      }
+    }
+    const days = [...jornadas.keys()].sort((a, b) => a.localeCompare(b));
+    for (let i = 1; i < days.length; i += 1) {
+      const previous = jornadas.get(days[i - 1]!)!;
+      const current = jornadas.get(days[i]!)!;
+      const restMinutes = minutesBetween(previous.lastEnd, current.firstStart);
       if (restMinutes < ruleset.minInterShiftRestMinutes) {
         breaches.push({
           kind: "rest_too_short",
           personId,
-          previousShiftId: previous.shiftId,
-          shiftId: current.shiftId,
+          previousShiftId: previous.lastShiftId,
+          shiftId: current.firstShiftId,
           restMinutes,
           requiredMinutes: ruleset.minInterShiftRestMinutes,
         });
