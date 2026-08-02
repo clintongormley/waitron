@@ -167,8 +167,9 @@ instruction to fix rather than defer, these landed in this PR too:
   that deadlock and a false "no deadlock" comment, caught by the scoped re-review). `FOR NO KEY UPDATE`
   does not conflict with `FOR KEY SHARE` (no ABBA) but still self-conflicts, so two same-person
   clock-ins still serialize (TOCTOU closed). Proven by REAL-Postgres concurrency tests (PGlite can't
-  show it — single backend): clock-vs-clock serializes, clock-vs-correction does not deadlock, both
-  load-bearing by reverting to `FOR UPDATE`.
+  show it — single backend): clock-vs-clock serializes (load-bearing by DELETING the lock — `FOR
+  UPDATE` self-conflicts too, so a mere mode revert keeps it green), and clock-vs-correction does not
+  deadlock (load-bearing by reverting to `FOR UPDATE`, which reintroduces the ABBA — 40P01).
 
 **Why these were fixed here, not deferred to D2** (the deferral this section originally proposed): the
 review checked `feat/workforce-d2-scheduling` directly — D2 adds new code to `clocking.ts`/
