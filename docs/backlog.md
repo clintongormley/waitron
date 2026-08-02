@@ -628,6 +628,19 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   kind of vendor claim that goes stale silently if copied into a second place. Read them there. The
   rates in particular are already flagged there as needing confirmation against an actual contract,
   not a pricing page
+- **The deli's NIF and a third-party individual's name remain in prior git history (this is a public
+  repo).** The compliance docs were refreshed to current understanding and those identifiers redacted
+  from the **current** files ([#42](https://github.com/clintongormley/waitron/pull/42)) — replaced
+  with `<DELI SL>` / `<NIF>` placeholders plus an "identifying details omitted" note in
+  `compliance/action-plan.md` and `compliance/first-aeat-contact.md`, and the OS-username in local
+  absolute paths genericised to `/Users/<user>/` across the plan docs. A **git-history rewrite** to
+  scrub the identifiers from past commits was **consciously deferred** (decision, 2026-08-02: redact
+  current files only). The mechanism exists if that is ever revisited — the licence-change rewrite is
+  the precedent — but the standing caveat is that on a public repo, once pushed, the values should be
+  treated as already disclosed, so a rewrite reduces future exposure without guaranteeing retraction.
+  Deliberately **kept**: the public copyright-holder name (README/LICENSE/CONTRIBUTING) and the
+  GitHub repo URLs. **Keep new compliance docs on placeholders, not real values** — the redaction has
+  no guard, so a real NIF or name pasted into a doc would ship
 
 ---
 
