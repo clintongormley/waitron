@@ -71,16 +71,13 @@ export async function setAbsenceStatus(
   input: SetAbsenceStatusInput,
 ): Promise<void> {
   const { rows } = await tx.execute<{ id: string }>(sql`
-    select id from absences
+    update absences set status = ${input.status}
     where tenant_id = ${input.tenantId} and id = ${input.absenceId}
-    limit 1`);
-  if (rows[0] === undefined) {
+    returning id`);
+  if (rows.length === 0) {
     throw new AppError("absence.not_found", {
       tenantId: input.tenantId,
       absenceId: input.absenceId,
     });
   }
-  await tx.execute(sql`
-    update absences set status = ${input.status}
-    where tenant_id = ${input.tenantId} and id = ${input.absenceId}`);
 }

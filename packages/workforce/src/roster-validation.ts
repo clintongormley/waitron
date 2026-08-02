@@ -135,11 +135,14 @@ export type RosterBreach =
   | BreakOwedBreach
   | NightWorkBreach;
 
-const MS_PER_MINUTE = 60_000;
+// `MS_PER_MINUTE`, `minutesBetween` and `localDate` are exported (module-level, deliberately NOT on
+// the package barrel) as the canonical local-date helpers: planned-vs-actual.ts imports them rather
+// than carrying its own byte-identical copies.
+export const MS_PER_MINUTE = 60_000;
 const MINUTES_PER_DAY = 1_440;
 const MINUTES_PER_HOUR = 60;
 
-function minutesBetween(fromInstant: string, toInstant: string): number {
+export function minutesBetween(fromInstant: string, toInstant: string): number {
   return Math.round((Date.parse(toInstant) - Date.parse(fromInstant)) / MS_PER_MINUTE);
 }
 
@@ -150,7 +153,7 @@ function shiftMinutes(s: PlannedShift): number {
 
 /** The LOCAL wall calendar day for an instant + its wall offset — the instant shifted by the offset
  * and read back as a UTC date (the `time_entries`/projection `localDate` convention). */
-function localDate(instant: string, offsetMinutes: number): string {
+export function localDate(instant: string, offsetMinutes: number): string {
   return new Date(Date.parse(instant) + offsetMinutes * MS_PER_MINUTE).toISOString().slice(0, 10);
 }
 

@@ -57,8 +57,12 @@ declare module "@waitron/shared" {
     "shift.not_found": { tenantId: string; shiftId: string };
     /** No `roster_versions` row for this id under the current tenant — never created, or hidden by
      * RLS. Raised by `publishRoster` (../clocking.ts) when asked to publish a version that does not
-     * exist. `roster.*`, grepped against the registry — unused before D2; the guardrail-breach codes
-     * the D2.3 engine adds group under the same prefix because they gate the roster publish. */
+     * exist. `roster.*`, grepped against the registry — unused before D2; the prefix groups the three
+     * codes `publishRoster` throws (`roster.not_found`, `roster.already_published`,
+     * `roster.period_already_published`). The D2.3 guardrail breaches do NOT live here: they are
+     * ADVISORY (OWNER DECISION 2026-08-02) — a `RosterBreach` discriminated union that `validateRoster`
+     * (../roster-validation.ts) RETURNS and `publishRoster` surfaces without ever blocking the publish,
+     * never thrown codes — so no `roster.rest_too_short`-style code exists. */
     "roster.not_found": { tenantId: string; rosterVersionId: string };
     /** `publishRoster` was asked to publish a version whose `status` is no longer `draft` — a second
      * publish of an already-`published` (or `superseded`) roster. A roster is published exactly once;
