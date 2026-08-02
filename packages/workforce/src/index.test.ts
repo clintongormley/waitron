@@ -12,6 +12,7 @@ describe("the public surface", () => {
         "workforceRole",
         "employments",
         "timeEntries",
+        "workforceCorrectionStatus",
         "workforceEntryKind",
         "hashPin",
         "verifyPin",
@@ -73,11 +74,16 @@ describe("time_entries constraint declarations (forces the lazy extraConfig call
         "time_entries_location_fk",
         "time_entries_captured_by_till_fk",
         "time_entries_recorded_by_person_fk",
+        // Slice 3: the self-referential correction target and the correction actor.
+        "time_entries_corrects_entry_fk",
+        "time_entries_correction_actor_fk",
       ]),
     );
 
     const checkNames = config.checks.map((c) => c.name);
     expect(checkNames).toContain("time_entries_event_offset_ck");
+    // Slice 3: a row is all-base or all-correction, never half of each.
+    expect(checkNames).toContain("time_entries_correction_shape_ck");
 
     // `ingest_seq` is GENERATED ALWAYS AS IDENTITY — the app cannot forge the append order.
     const ingest = config.columns.find((c) => c.name === "ingest_seq");

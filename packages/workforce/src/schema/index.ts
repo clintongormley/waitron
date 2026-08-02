@@ -5,4 +5,4 @@
 // `schema-ownership.test.ts` enforces this.
 export { persons, personStatus, workforceRole } from "./persons.js";
 export { employments } from "./employments.js";
-export { timeEntries, workforceEntryKind } from "./time-entries.js";
+export { timeEntries, workforceCorrectionStatus, workforceEntryKind } from "./time-entries.js";

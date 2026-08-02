@@ -9,18 +9,34 @@
  * apply — there are no privileges, no RLS and no concurrency here, so this is unit-tested directly.
  */
 
-/** The clock-event kinds a Slice-2 shift is built from. `correction` arrives in Slice 3. */
-export type WorkforceEntryKind = "in" | "out" | "break_start" | "break_end";
+/** The clock-event kinds a shift is built from, plus `correction` (Slice 3) — an append row that
+ * supersedes an earlier entry's timestamp rather than mutating it. */
+export type WorkforceEntryKind = "in" | "out" | "break_start" | "break_end" | "correction";
+
+/** A correction's lifecycle. Only `approved` corrections affect the projection; `requested` ones are
+ * retained in history but pending (the worker's art. 34.9 right to contest, not yet actioned). */
+export type CorrectionStatus = "requested" | "approved";
 
 /** Exactly the `time_entries` columns the projection reads — never the whole row. */
 export interface TimeEntryRecord {
+  /** The row's own id (`time_entries.id`) — what a correction targets via `correctsEntryId`. */
+  entryId: string;
   personId: string;
   locationId: string;
   entryKind: WorkforceEntryKind;
-  /** The trusted event instant (`event_at`), an ISO-8601 timestamptz string. */
+  /** The trusted event instant (`event_at`), an ISO-8601 timestamptz string. On a `correction` this
+   * is the CORRECTED value (the new clock time), not a creation time — creation order is `ingestSeq`. */
   eventAt: string;
   /** The wall-clock offset in minutes (`event_offset_minutes`), for deriving the local calendar day. */
   offsetMinutes: number;
+  /** Append/ingest order (`ingest_seq`). Breaks ties between two corrections of the same target:
+   * latest-correction-wins is highest `ingestSeq`. */
+  ingestSeq: number;
+  /** On a `correction`, the entry it supersedes (a base event or an earlier correction). Null/absent
+   * on a base event. */
+  correctsEntryId?: string | null;
+  /** On a `correction`, `requested` or `approved`. Null/absent on a base event. */
+  correctionStatus?: CorrectionStatus | null;
 }
 
 /** One projected workday: an `in`→`out` shift with its breaks netted out. */
@@ -88,6 +104,48 @@ function groupByPerson(entries: readonly TimeEntryRecord[]): Map<string, TimeEnt
 }
 
 /**
+ * The effective (corrected) timestamp and offset for one base event, and the base events with their
+ * corrections applied.
+ *
+ * A correction never mutates a stored row — it is an append that carries a new timestamp and points
+ * at the entry it supersedes (`correctsEntryId`). Reprojection resolves each base event by walking
+ * the approved corrections that target it, latest-correction-wins (highest `ingestSeq`), following a
+ * chain when a correction is itself corrected (design §5).
+ *
+ * Only `approved` corrections are followed; a `requested` one is retained in history but pending, so
+ * it is invisible here. The walk needs no cycle guard: a correction can only be inserted after the
+ * row it targets already exists (the self-FK), so a chain's `ingestSeq` values strictly increase and
+ * are bounded — it cannot revisit a node.
+ */
+function applyCorrections(entries: readonly TimeEntryRecord[]): TimeEntryRecord[] {
+  const latestApprovedByTarget = new Map<string, TimeEntryRecord>();
+  for (const e of entries) {
+    if (e.entryKind !== "correction" || e.correctionStatus !== "approved") continue;
+    if (e.correctsEntryId === undefined || e.correctsEntryId === null) continue;
+    const current = latestApprovedByTarget.get(e.correctsEntryId);
+    if (current === undefined || e.ingestSeq > current.ingestSeq) {
+      latestApprovedByTarget.set(e.correctsEntryId, e);
+    }
+  }
+
+  return entries
+    .filter((e) => e.entryKind !== "correction")
+    .map((base) => {
+      let effective = base;
+      for (
+        let next = latestApprovedByTarget.get(effective.entryId);
+        next !== undefined;
+        next = latestApprovedByTarget.get(effective.entryId)
+      ) {
+        effective = next;
+      }
+      return effective === base
+        ? base
+        : { ...base, eventAt: effective.eventAt, offsetMinutes: effective.offsetMinutes };
+    });
+}
+
+/**
  * Folds a flat `time_entries` stream into per-person workday sessions.
  *
  * Sorts each person's events by `event_at` BEFORE pairing — offline capture appends in ingest
@@ -98,7 +156,10 @@ function groupByPerson(entries: readonly TimeEntryRecord[]): Map<string, TimeEnt
  */
 export function projectWorkSessions(entries: readonly TimeEntryRecord[]): WorkSession[] {
   const sessions: WorkSession[] = [];
-  for (const [personId, personEntries] of groupByPerson(entries)) {
+  // Reproject over events + corrections: corrections are folded into the base events they supersede
+  // before pairing (design §5, the Slice-2 computed-projection seam), so a recompute always reflects
+  // the latest approved value while every prior row stays in the source stream (history retained).
+  for (const [personId, personEntries] of groupByPerson(applyCorrections(entries))) {
     const ordered = [...personEntries].sort(
       (a, b) => Date.parse(a.eventAt) - Date.parse(b.eventAt),
     );

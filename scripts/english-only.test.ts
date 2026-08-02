@@ -47,9 +47,11 @@ describe("configuration", () => {
     ]);
   });
 
-  it("exempts the two Spanish packages", () => {
-    // Spec §2: these mirror AEAT 1:1 and translating there would only obscure.
-    expect([...EXEMPT_PACKAGES]).toEqual(["verifactu", "fiscal-verifactu"]);
+  it("exempts the three Spanish packages", () => {
+    // Spec §2: verifactu/fiscal-verifactu mirror AEAT 1:1 and translating there would only obscure;
+    // workforce-es is the registro-de-jornada Spain module (sub-project 16), Spanish by the same
+    // logic. None of the three may also be a generic package.
+    expect([...EXEMPT_PACKAGES]).toEqual(["verifactu", "fiscal-verifactu", "workforce-es"]);
     for (const name of EXEMPT_PACKAGES) {
       expect(GENERIC_PACKAGES).not.toContain(name);
     }

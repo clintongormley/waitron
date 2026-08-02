@@ -16,8 +16,11 @@ export const GENERIC_PACKAGES = [
   "workforce",
 ] as const;
 
-/** Spanish by design: these mirror AEAT's spec, XML and conformance vectors. */
-export const EXEMPT_PACKAGES = ["verifactu", "fiscal-verifactu"] as const;
+/** Spanish by design: `verifactu`/`fiscal-verifactu` mirror AEAT's spec, XML and conformance
+ * vectors; `workforce-es` is the Spain module for the registro de jornada, where the ET/RD-ley 8/2019
+ * vocabulary (jornada, trabajador, conservación, Inspección) IS the domain language (sub-project 16,
+ * mirroring the fiscal-verifactu precedent). */
+export const EXEMPT_PACKAGES = ["verifactu", "fiscal-verifactu", "workforce-es"] as const;
 
 // -----------------------------------------------------------------------------------------------
 // Decision record: apps/* is OUT OF SCOPE for this guard. Prose, not another `as const` array,

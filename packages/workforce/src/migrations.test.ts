@@ -189,3 +189,91 @@ describe("the D1a time & attendance tables", () => {
     expect(pgErrorMessage(error)).toMatch(/employments_dates_ck/);
   });
 });
+
+describe("the D1b correction columns", () => {
+  async function seedBaseEntry(): Promise<{
+    personId: string;
+    locationId: string;
+    entryId: string;
+  }> {
+    const personId = await seedPerson(suite.db, tenantId, `d1b-${crypto.randomUUID()}`);
+    const locationId = await seedLocation(suite.db, tenantId);
+    const rows = await suite.db.execute<{ id: string }>(sql`
+      insert into time_entries (
+        tenant_id, person_id, location_id, entry_kind, event_at, event_offset_minutes,
+        recorded_by_person_id
+      ) values (
+        ${tenantId}, ${personId}, ${locationId}, 'in', '2026-01-05T09:00:00Z', 0, ${personId}
+      ) returning id`);
+    return { personId, locationId, entryId: rows.rows[0]!.id };
+  }
+
+  it("accepts a fully-populated correction row (the ADD VALUE 'correction' landed)", async () => {
+    // Proves migration 0004's `ALTER TYPE ... ADD VALUE 'correction'` applied: an entry_kind the
+    // enum did not carry before is now insertable, with all four correction columns set.
+    const { personId, locationId, entryId } = await seedBaseEntry();
+    await suite.db.execute(sql`
+      insert into time_entries (
+        tenant_id, person_id, location_id, entry_kind, event_at, event_offset_minutes,
+        recorded_by_person_id, corrects_entry_id, correction_reason, correction_status,
+        correction_actor_id
+      ) values (
+        ${tenantId}, ${personId}, ${locationId}, 'correction', '2026-01-05T18:00:00Z', 0,
+        ${personId}, ${entryId}, 'forgot to clock out', 'approved', ${personId})`);
+    const rows = await suite.db.execute<{ n: number }>(sql`
+      select count(*)::int as n from time_entries
+      where entry_kind = 'correction' and corrects_entry_id = ${entryId}`);
+    expect(rows.rows[0]!.n).toBe(1);
+  });
+
+  it("rejects a half-populated correction via the shape check", async () => {
+    // corrects_entry_id set but the other three correction columns null — neither all-null (a base
+    // event) nor all-non-null (a correction). Deleting the OR-arm of time_entries_correction_shape_ck
+    // is what this catches.
+    const { personId, locationId, entryId } = await seedBaseEntry();
+    const error = await captureError(() =>
+      suite.db.execute(sql`
+        insert into time_entries (
+          tenant_id, person_id, location_id, entry_kind, event_at, event_offset_minutes,
+          recorded_by_person_id, corrects_entry_id
+        ) values (
+          ${tenantId}, ${personId}, ${locationId}, 'correction', '2026-01-05T18:00:00Z', 0,
+          ${personId}, ${entryId})`),
+    );
+    expect(pgErrorCode(error)).toBe("23514"); // check_violation
+    expect(pgErrorMessage(error)).toMatch(/time_entries_correction_shape_ck/);
+  });
+
+  it("rejects a base event carrying a stray correction column", async () => {
+    // The other direction: an `in` event with correction_status set is neither shape. The same check
+    // stops a base row from smuggling in correction metadata.
+    const { personId, locationId } = await seedBaseEntry();
+    const error = await captureError(() =>
+      suite.db.execute(sql`
+        insert into time_entries (
+          tenant_id, person_id, location_id, entry_kind, event_at, event_offset_minutes,
+          recorded_by_person_id, correction_status
+        ) values (
+          ${tenantId}, ${personId}, ${locationId}, 'in', '2026-01-05T09:00:00Z', 0,
+          ${personId}, 'requested')`),
+    );
+    expect(pgErrorCode(error)).toBe("23514");
+    expect(pgErrorMessage(error)).toMatch(/time_entries_correction_shape_ck/);
+  });
+
+  it("rejects a correction whose corrects_entry_id references no entry", async () => {
+    // The self-FK: a correction must point at a real entry.
+    const { personId, locationId } = await seedBaseEntry();
+    const error = await captureError(() =>
+      suite.db.execute(sql`
+        insert into time_entries (
+          tenant_id, person_id, location_id, entry_kind, event_at, event_offset_minutes,
+          recorded_by_person_id, corrects_entry_id, correction_reason, correction_status,
+          correction_actor_id
+        ) values (
+          ${tenantId}, ${personId}, ${locationId}, 'correction', '2026-01-05T18:00:00Z', 0,
+          ${personId}, ${crypto.randomUUID()}, 'dangling', 'approved', ${personId})`),
+    );
+    expect(pgErrorCode(error)).toBe("23503"); // foreign_key_violation
+  });
+});

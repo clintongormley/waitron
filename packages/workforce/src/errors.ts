@@ -35,5 +35,15 @@ declare module "@waitron/shared" {
     /** A clock event tried to CLOSE or continue a state that is not open — a clock-out or break with
      * no open shift, or a break-end with no open break. */
     "attendance.no_open_entry": { tenantId: string; personId: string };
+    /** A correction was requested against, or an approval named, an entry that does not exist under
+     * the current tenant — never appended, or hidden by RLS (identical from the caller's side).
+     * `correction.*`, not `attendance.*`/`person.*`: this is a fact about the correction workflow (a
+     * missing target of a correct/approve), grepped against the registry — `correction.*` was
+     * unused. */
+    "correction.target_not_found": { tenantId: string; entryId: string };
+    /** An approval was attempted by a person whose `persons.role` is not one of
+     * supervisor/manager/admin. A correction takes effect only when a supervisor approves it (design
+     * §5), so a staff-role approver is refused here rather than silently ignored. */
+    "correction.not_permitted": { tenantId: string; personId: string };
   }
 }

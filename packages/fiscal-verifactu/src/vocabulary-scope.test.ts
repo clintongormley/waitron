@@ -31,9 +31,9 @@ describe("the English-only vocabulary guard is scoped out of this package", () =
     );
   });
 
-  it("explicitly exempts fiscal-verifactu, alongside verifactu", () => {
+  it("explicitly exempts fiscal-verifactu, alongside verifactu and workforce-es", () => {
     expect(englishOnlySource).toMatch(
-      /EXEMPT_PACKAGES\s*=\s*\["verifactu",\s*"fiscal-verifactu"\]/,
+      /EXEMPT_PACKAGES\s*=\s*\["verifactu",\s*"fiscal-verifactu",\s*"workforce-es"\]/,
     );
   });
 
