@@ -113,6 +113,7 @@ describe("exportTimeRecord", () => {
         eventAt: "2026-01-05T09:00:00Z",
         offsetMinutes: 0,
         ingestSeq: 1,
+        sequenceNo: 1,
       },
       {
         entryId: "out-1",
@@ -122,6 +123,7 @@ describe("exportTimeRecord", () => {
         eventAt: "2026-01-05T17:00:00Z",
         offsetMinutes: 0,
         ingestSeq: 2,
+        sequenceNo: 2,
       },
       {
         entryId: "corr-1",
@@ -131,6 +133,7 @@ describe("exportTimeRecord", () => {
         eventAt: "2026-01-05T18:00:00Z",
         offsetMinutes: 0,
         ingestSeq: 3,
+        sequenceNo: 3,
         correctsEntryId: "out-1",
         correctionStatus: "approved",
       },

@@ -422,6 +422,7 @@ export class WorkforceBackend {
         eventAt: sql<string>`to_char(${timeEntries.eventAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
         offsetMinutes: timeEntries.eventOffsetMinutes,
         ingestSeq: timeEntries.ingestSeq,
+        sequenceNo: timeEntries.sequenceNo,
         correctsEntryId: timeEntries.correctsEntryId,
         correctionStatus: timeEntries.correctionStatus,
       })
