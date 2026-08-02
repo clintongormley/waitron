@@ -93,6 +93,7 @@ const STATE_AFTER: Record<LiveEntryKind, ShiftState> = {
 export class WorkforceBackend {
   /** out → working. */
   async clockIn(tx: Transaction, input: ClockEventInput): Promise<void> {
+    await this.lockPerson(tx, input.tenantId, input.personId);
     const state = await this.currentState(tx, input.tenantId, input.personId);
     if (state !== "out") throw this.alreadyOpen(input);
     await this.append(tx, input, "in");
@@ -100,6 +101,7 @@ export class WorkforceBackend {
 
   /** working → out. */
   async clockOut(tx: Transaction, input: ClockEventInput): Promise<void> {
+    await this.lockPerson(tx, input.tenantId, input.personId);
     const state = await this.currentState(tx, input.tenantId, input.personId);
     if (state !== "working") throw this.noOpenEntry(input);
     await this.append(tx, input, "out");
@@ -107,6 +109,7 @@ export class WorkforceBackend {
 
   /** working → on_break. */
   async breakStart(tx: Transaction, input: ClockEventInput): Promise<void> {
+    await this.lockPerson(tx, input.tenantId, input.personId);
     const state = await this.currentState(tx, input.tenantId, input.personId);
     if (state === "on_break") throw this.alreadyOpen(input);
     if (state !== "working") throw this.noOpenEntry(input);
@@ -115,6 +118,7 @@ export class WorkforceBackend {
 
   /** on_break → working. */
   async breakEnd(tx: Transaction, input: ClockEventInput): Promise<void> {
+    await this.lockPerson(tx, input.tenantId, input.personId);
     const state = await this.currentState(tx, input.tenantId, input.personId);
     if (state !== "on_break") throw this.noOpenEntry(input);
     await this.append(tx, input, "break_end");
@@ -216,6 +220,48 @@ export class WorkforceBackend {
       status: "approved",
       tillId: null,
     });
+  }
+
+  /**
+   * Serialises every clock operation for ONE person by taking a row lock on that person's `persons`
+   * row, held to the end of the caller's transaction. Each of the four clock methods calls this
+   * BEFORE reading `currentState`, which makes the read-state-then-append sequence atomic per person:
+   * a second concurrent operation for the same person BLOCKS here until the first commits, then reads
+   * the UPDATED state and is correctly refused by the state-machine guard (`attendance.already_open` /
+   * `attendance.no_open_entry`). Without it (proven by deletion in clocking.concurrency.test.ts) two
+   * same-person operations both observe the same state and both append — a double-`in` the projection
+   * then undercounts (projection.ts:287 `case "in": open = { start: e }`), corrupting a LEGAL
+   * working-time record.
+   *
+   * `SELECT … FOR NO KEY UPDATE` on the actual person row, NOT `pg_advisory_xact_lock`: it is
+   * collision-free (no key hashing), self-documenting, and RLS-respecting — the app role holds UPDATE
+   * on `persons` (drizzle/0001_workforce_rls.sql; persons.rls.test.ts pins that grant), which is the
+   * privilege the `FOR …` row-lock clauses require, so it is permitted for the non-superuser
+   * deployment role (exercised as that role in clocking.concurrency.test.ts). A person id that does
+   * not exist locks nothing, which is harmless: `currentState` then reports `out` exactly as before
+   * this lock existed, and `time_entries`' foreign key remains the backstop.
+   *
+   * WHY `FOR NO KEY UPDATE` AND NOT `FOR UPDATE` — the lock modes are NOT interchangeable here, and
+   * `FOR UPDATE` reintroduces a deadlock this exact clause was added to avoid. The lock ORDER is not
+   * uniform across the write paths: this clock path takes the `persons` lock BEFORE `appendToChain`'s
+   * per-location `workforce_chains` head lock, but the CORRECTION paths (`requestCorrection` /
+   * `approveCorrection` → `appendCorrection` → `appendToChain`) do NOT call this — they lock the chain
+   * head FIRST and then, on the `time_entries` INSERT, implicitly take `FOR KEY SHARE` on the
+   * referenced `persons` rows via the FKs (`time_entries_person_fk`, `_recorded_by_person_fk`,
+   * `_correction_actor_fk`) — the OPPOSITE order (chain → persons). Per PostgreSQL's row-lock conflict
+   * matrix, `FOR UPDATE` conflicts with `FOR KEY SHARE`, so a same-person clock-in racing a correction
+   * of that person at the same location is an ABBA cycle → `deadlock detected` (40P01), which
+   * `appendToChain` does not retry (it retries only 23505). Reproduced deterministically on
+   * postgres:18 (clocking.concurrency.test.ts's clock-vs-correction case, RED under `FOR UPDATE`).
+   * `FOR NO KEY UPDATE` does NOT conflict with `FOR KEY SHARE`, so the clock path's `persons` lock and
+   * the correction INSERT's FK lock never block each other → no ABBA; and it DOES self-conflict, so
+   * two same-person clock-ins still serialise and the read→append TOCTOU stays closed (the
+   * clock-vs-clock case). `pg_advisory_xact_lock` would also dodge the ABBA (it is disjoint from the
+   * FK locks), but at the cost of a hashed key space and a lock nobody reading the row can see.
+   */
+  private async lockPerson(tx: Transaction, tenantId: string, personId: string): Promise<void> {
+    await tx.execute(sql`
+      select id from persons where tenant_id = ${tenantId} and id = ${personId} for no key update`);
   }
 
   /** The state the worker's most recent event left them in — `out` when they have no events yet.
@@ -359,8 +405,13 @@ export class WorkforceBackend {
     },
   ): Promise<string> {
     // A correction is an append like any other — it rides the SAME location chain as the clock
-    // events it supersedes, so it cannot dodge the tamper-evidence (design §5). Its actor is the
-    // recorder; its content carries the correction columns.
+    // events it supersedes, so it cannot dodge the tamper-evidence (design §5). The chain hash
+    // commits the correction's OWN content too — its reason, its accountable actor and any capturing
+    // till (chain-hash.ts's `canonicalString`) — so a party past the immutability floor (the REVOKE +
+    // reject_mutation trigger) that rewrites the reason or the actor breaks `verifyChain`, not just
+    // one that reorders or deletes rows. The actor is written to BOTH `recorded_by_person_id` (the
+    // operator) and `correction_actor_id` (the accountable actor), and both are hashed, so the actor
+    // no longer rides only on the coincidence that the two are the same person here.
     const { id } = await appendToChain(tx, params.tenantId, params.locationId, {
       personId: params.personId,
       entryKind: "correction",
@@ -417,6 +468,7 @@ export class WorkforceBackend {
         eventAt: sql<string>`to_char(${timeEntries.eventAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
         offsetMinutes: timeEntries.eventOffsetMinutes,
         ingestSeq: timeEntries.ingestSeq,
+        sequenceNo: timeEntries.sequenceNo,
         correctsEntryId: timeEntries.correctsEntryId,
         correctionStatus: timeEntries.correctionStatus,
       })

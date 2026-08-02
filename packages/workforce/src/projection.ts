@@ -45,9 +45,20 @@ export interface TimeEntryRecord {
   eventAt: string;
   /** The wall-clock offset in minutes (`event_offset_minutes`), for deriving the local calendar day. */
   offsetMinutes: number;
-  /** Append/ingest order (`ingest_seq`). Breaks ties between two corrections of the same target:
-   * latest-correction-wins is highest `ingestSeq`. */
+  /** Append/ingest order (`ingest_seq`) — the meaningful creation order of the stream (design §5:
+   * "project by timestamp, chain by ingest"). NOT the correction tie-break: `ingest_seq` is a
+   * `GENERATED ALWAYS AS IDENTITY` column that the tamper-evidence hash does NOT cover (chain-hash.ts
+   * `canonicalString` hashes `sequence_no`, never `ingest_seq`), so a party past the immutability
+   * floor could swap two rows' `ingest_seq` and flip which correction is effective while
+   * `verifyChain` still returns ok. Correction precedence therefore keys off `sequenceNo` (below). */
   ingestSeq: number;
+  /** The 1-based tamper-evident chain position (`sequence_no`) within this (tenant, location) chain.
+   * Monotonic in append order — the SAME order `ingestSeq` encodes — but, unlike `ingest_seq`, it is
+   * hashed (chain-hash.ts) AND contiguity-checked by `verifyChain`, so it cannot be reordered
+   * undetected. `applyCorrections` breaks ties between two approved corrections of one target on this
+   * field specifically, closing the gap where `ingest_seq` could be reordered to flip the effective
+   * corrected time. */
+  sequenceNo: number;
   /** On a `correction`, the entry it supersedes (a base event or an earlier correction). Null/absent
    * on a base event. */
   correctsEntryId?: string | null;
@@ -61,8 +72,17 @@ export interface WorkSession {
   locationId: string;
   /** The worker's LOCAL calendar day (art. 34.9 records per worker per day). */
   workDate: string;
+  /** The shift start as the raw UTC instant (`event_at`). The local render is derived via
+   * `localWallClock(startedAt, startOffsetMinutes)`, never stored here. */
   startedAt: string;
+  /** The wall-clock offset in minutes at the shift start (`event_offset_minutes`). May differ from
+   * `endOffsetMinutes` across a DST boundary, so both ends are carried. */
+  startOffsetMinutes: number;
+  /** The shift end as the raw UTC instant (`event_at`); local render via
+   * `localWallClock(endedAt, endOffsetMinutes)`. */
   endedAt: string;
+  /** The wall-clock offset in minutes at the shift end (`event_offset_minutes`). */
+  endOffsetMinutes: number;
   breakMinutes: number;
   workedMinutes: number;
 }
@@ -132,6 +152,33 @@ function localDate(eventAt: string, offsetMinutes: number): string {
   return new Date(Date.parse(eventAt) + offsetMinutes * MS_PER_MINUTE).toISOString().slice(0, 10);
 }
 
+/**
+ * Renders an instant as its LOCAL wall-clock time with an explicit offset, e.g.
+ * `2026-01-06T00:30:00+01:00` — the sibling of `localDate` for a full timestamp. The part before the
+ * offset is the concrete local time a human reads (art. 34.9 requires "el horario concreto de inicio
+ * y finalización"); the `±HH:MM` offset keeps the instant recoverable and disambiguates the DST
+ * fall-back hour (the same wall-clock time appears once at +02:00 and once at +01:00).
+ *
+ * Computed as `instant + offsetMinutes`, read back as UTC — the offset is captured PER EVENT, so a
+ * January event carries +60 and a July one +120 with no timezone lookup. Whole seconds only (the
+ * stored instants are already whole-second, `time_entries_event_at_second_ck`).
+ *
+ * Deliberately MIRRORS the fiscal `formatDateTime` (`@waitron/verifactu/src/format.ts`) — same
+ * `YYYY-MM-DDThh:mm:ss±hh:mm` shape — without importing it: `@waitron/workforce` must not depend on
+ * the fiscal domain (the same not-imported reason `isUniqueViolation` carries in chain.ts). Also
+ * mirrors its file-local sibling `localDate`, which renders the date half of the same instant.
+ */
+export function localWallClock(instant: string, offsetMinutes: number): string {
+  const local = new Date(Date.parse(instant) + offsetMinutes * MS_PER_MINUTE)
+    .toISOString()
+    .slice(0, 19);
+  const sign = offsetMinutes < 0 ? "-" : "+";
+  const abs = Math.abs(offsetMinutes);
+  const hh = String(Math.floor(abs / 60)).padStart(2, "0");
+  const mm = String(abs % 60).padStart(2, "0");
+  return `${local}${sign}${hh}:${mm}`;
+}
+
 interface OpenShift {
   start: TimeEntryRecord;
   breakMs: number;
@@ -145,7 +192,9 @@ function closeShift(personId: string, open: OpenShift, out: TimeEntryRecord): Wo
     locationId: open.start.locationId,
     workDate: localDate(open.start.eventAt, open.start.offsetMinutes),
     startedAt: open.start.eventAt,
+    startOffsetMinutes: open.start.offsetMinutes,
     endedAt: out.eventAt,
+    endOffsetMinutes: out.offsetMinutes,
     breakMinutes: Math.round(open.breakMs / MS_PER_MINUTE),
     workedMinutes: Math.round((spanMs - open.breakMs) / MS_PER_MINUTE),
   };
@@ -167,12 +216,22 @@ function groupByPerson(entries: readonly TimeEntryRecord[]): Map<string, TimeEnt
  *
  * A correction never mutates a stored row — it is an append that carries a new timestamp and points
  * at the entry it supersedes (`correctsEntryId`). Reprojection resolves each base event by walking
- * the approved corrections that target it, latest-correction-wins (highest `ingestSeq`), following a
- * chain when a correction is itself corrected (design §5).
+ * the approved corrections that target it, latest-correction-wins by highest `sequenceNo`, following
+ * a chain when a correction is itself corrected (design §5).
+ *
+ * The tie-break is `sequenceNo`, NOT `ingestSeq`, even though both encode the same append order:
+ * `sequence_no` is the position the tamper-evidence hash commits to and `verifyChain` checks for
+ * contiguity (chain-hash.ts), whereas `ingest_seq` is a `GENERATED ALWAYS AS IDENTITY` column
+ * outside the hash. Keying precedence off the unhashed column would let a party past the immutability
+ * floor swap two approved corrections' `ingest_seq` and silently flip which corrected time is
+ * effective while the chain still verified; keying off `sequence_no` makes that reorder
+ * tamper-evident. All corrections of one target share that target's location (appendCorrection copies
+ * `locationId` from the target), so they ride ONE (tenant, location) chain and their `sequence_no`s
+ * are comparable.
  *
  * Only `approved` corrections are followed; a `requested` one is retained in history but pending, so
  * it is invisible here. The walk needs no cycle guard: a correction can only be inserted after the
- * row it targets already exists (the self-FK), so a chain's `ingestSeq` values strictly increase and
+ * row it targets already exists (the self-FK), so a chain's `sequenceNo` values strictly increase and
  * are bounded — it cannot revisit a node.
  */
 function applyCorrections(entries: readonly TimeEntryRecord[]): TimeEntryRecord[] {
@@ -181,7 +240,7 @@ function applyCorrections(entries: readonly TimeEntryRecord[]): TimeEntryRecord[
     if (e.entryKind !== "correction" || e.correctionStatus !== "approved") continue;
     if (e.correctsEntryId === undefined || e.correctsEntryId === null) continue;
     const current = latestApprovedByTarget.get(e.correctsEntryId);
-    if (current === undefined || e.ingestSeq > current.ingestSeq) {
+    if (current === undefined || e.sequenceNo > current.sequenceNo) {
       latestApprovedByTarget.set(e.correctsEntryId, e);
     }
   }

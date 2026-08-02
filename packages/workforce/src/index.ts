@@ -22,6 +22,7 @@ export type {
 } from "./clocking.js";
 export {
   dailyContractedTargetMinutes,
+  localWallClock,
   projectWorkSessions,
   summarisePeriod,
 } from "./projection.js";

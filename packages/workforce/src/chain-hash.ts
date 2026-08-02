@@ -31,10 +31,23 @@ export interface EntryHashInput {
   eventAt: string;
   eventOffsetMinutes: number;
   recordedByPersonId: string;
+  /** The till that captured the event, when one did — null for a manually recorded entry. Capture
+   * provenance, hashed for tamper-evidence (art. 34.9 names the start/end times themselves, not the
+   * capturing device): a party past the immutability floor must not be able to re-point a captured
+   * event at a different till undetected. */
+  capturedByTillId: string | null;
   /** On a correction, the entry it supersedes; null on a base event. */
   correctsEntryId: string | null;
+  /** On a correction, why it was made (art. 34.9's attributable-and-contestable field); null on a
+   * base event. Hashed because the reason is the contestable legal content, not our metadata. */
+  correctionReason: string | null;
   /** On a correction, `requested`/`approved`; null on a base event. */
   correctionStatus: string | null;
+  /** On a correction, the accountable actor who requested or approved it; null on a base event.
+   * Distinct from `recordedByPersonId` (the device operator) and hashed in its own right — hashing
+   * `recordedByPersonId` alone protected the actor only by the coincidence that `appendCorrection`
+   * sets both to the same person. */
+  correctionActorId: string | null;
   /** The predecessor's `entry_hash` — null (hashed as empty) for the genesis entry, exactly as the
    * fiscal huella hashes an empty predecessor for `PrimerRegistro`. */
   prevEntryHash: string | null;
@@ -65,7 +78,14 @@ function joinFields(fields: ReadonlyArray<readonly [string, string]>): string {
   return fields.map(([name, value]) => `${name}=${value}`).join("&");
 }
 
-/** The canonical string for one entry — the exact bytes SHA-256 digests. */
+/**
+ * The canonical string for one entry — the exact bytes SHA-256 digests. The field ORDER is free (no
+ * chain data exists yet, so nothing is bound to a prior layout) but FIXED and documented: capture
+ * attribution (`RecordedByPersonId`, `CapturedByTillId`) together, then the correction group
+ * (`CorrectsEntryId`, `CorrectionReason`, `CorrectionStatus`, `CorrectionActorId`) together, and
+ * `PrevEntryHash` last so the chain link reads at the end. Changing this order changes every digest,
+ * so it must not move once real chains exist.
+ */
 function canonicalString(input: EntryHashInput): string {
   return joinFields([
     ["SequenceNo", String(input.sequenceNo)],
@@ -75,9 +95,15 @@ function canonicalString(input: EntryHashInput): string {
     // The event as an absolute instant (epoch ms), never its wall-clock string — see `eventAt`.
     ["EventAtMs", String(Date.parse(input.eventAt))],
     ["EventOffsetMinutes", String(input.eventOffsetMinutes)],
+    // Who recorded the event, and which till captured it — capture provenance, hashed so neither can
+    // be re-pointed undetected (the till is not itself an art. 34.9 field; see `capturedByTillId`).
     ["RecordedByPersonId", input.recordedByPersonId],
+    ["CapturedByTillId", input.capturedByTillId ?? ""],
+    // The correction group — what it supersedes, why, its lifecycle state, and the accountable actor.
     ["CorrectsEntryId", input.correctsEntryId ?? ""],
+    ["CorrectionReason", input.correctionReason ?? ""],
     ["CorrectionStatus", input.correctionStatus ?? ""],
+    ["CorrectionActorId", input.correctionActorId ?? ""],
     // The PREVIOUS entry's hash — empty for the genesis entry — never this entry's own hash.
     ["PrevEntryHash", input.prevEntryHash ?? ""],
   ]);

@@ -16,8 +16,11 @@ function content(over: Partial<EntryHashInput> = {}): EntryHashInput {
     eventAt: "2026-01-05T09:00:00Z",
     eventOffsetMinutes: 0,
     recordedByPersonId: "11111111-1111-4111-8111-111111111111",
+    capturedByTillId: null,
     correctsEntryId: null,
+    correctionReason: null,
     correctionStatus: null,
+    correctionActorId: null,
     prevEntryHash: null,
     ...over,
   };
@@ -72,8 +75,11 @@ describe("computeEntryHash", () => {
     ["eventAt", { eventAt: "2026-01-05T09:00:01Z" }],
     ["eventOffsetMinutes", { eventOffsetMinutes: 60 }],
     ["recordedByPersonId", { recordedByPersonId: "55555555-5555-4555-8555-555555555555" }],
+    ["capturedByTillId", { capturedByTillId: "77777777-7777-4777-8777-777777777777" }],
     ["correctsEntryId", { correctsEntryId: "66666666-6666-4666-8666-666666666666" }],
+    ["correctionReason", { correctionReason: "forgot to clock out" }],
     ["correctionStatus", { correctionStatus: "approved" }],
+    ["correctionActorId", { correctionActorId: "88888888-8888-4888-8888-888888888888" }],
   ] satisfies [string, Partial<EntryHashInput>][])(
     "changes the digest when %s changes",
     (_field, over) => {

@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
  * Its own journal table (`__drizzle_migrations_workforce`) is what keeps the workforce lane
  * migration-isolated from the fiscal sequence: journals never collide, so this lane runs in
  * parallel with no shared bookkeeping. Registered in packages/migrations/migrations.manifest.json
- * after `core`, before `credentials`.
+ * after `core`, before `fiscal`.
  */
 export const WORKFORCE_MIGRATIONS = {
   migrationsFolder: fileURLToPath(new URL("../drizzle", import.meta.url)),

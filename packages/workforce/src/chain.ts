@@ -167,8 +167,11 @@ async function attemptAppend(
     eventAt,
     eventOffsetMinutes: entry.eventOffsetMinutes,
     recordedByPersonId: entry.recordedByPersonId,
+    capturedByTillId: entry.capturedByTillId ?? null,
     correctsEntryId: entry.correctsEntryId ?? null,
+    correctionReason: entry.correctionReason ?? null,
     correctionStatus: entry.correctionStatus ?? null,
+    correctionActorId: entry.correctionActorId ?? null,
     prevEntryHash,
   });
 
