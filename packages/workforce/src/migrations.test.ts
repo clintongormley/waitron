@@ -354,6 +354,48 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
     expect(pgErrorMessage(error)).toMatch(/roster_versions_publish_shape_ck/);
   });
 
+  it("rejects a second published version for the same (tenant, location, period) via the partial unique index", async () => {
+    // roster_versions_published_period_uq (migration 0011): at most one PUBLISHED version per (tenant,
+    // location, exact period). Insert one published row directly (with a stamp so publish-shape passes),
+    // then a second identical-period published row is rejected 23505. Prove by deletion: drop the
+    // CREATE UNIQUE INDEX from 0011 and the second insert succeeds (two published rows coexist).
+    const { locationId } = await seedPersonAndLocation();
+    await suite.db.execute(sql`
+      insert into roster_versions (tenant_id, location_id, period_start, period_end, status, published_at)
+      values (${tenantId}, ${locationId}, '2026-05-04', '2026-05-10', 'published', now())`);
+    const error = await captureError(() =>
+      suite.db.execute(sql`
+        insert into roster_versions (tenant_id, location_id, period_start, period_end, status, published_at)
+        values (${tenantId}, ${locationId}, '2026-05-04', '2026-05-10', 'published', now())`),
+    );
+    expect(pgErrorCode(error)).toBe("23505"); // unique_violation
+    expect(pgErrorMessage(error)).toMatch(/roster_versions_published_period_uq/);
+  });
+
+  it("allows two DRAFT versions for the same period — the published-only index is partial", async () => {
+    // The index is WHERE status = 'published', so drafts (and superseded rows) for one period
+    // accumulate freely; only the live published row is unique. A non-partial unique index here would
+    // wrongly reject a second draft for a period being re-planned.
+    const { locationId } = await seedPersonAndLocation();
+    await insertRosterVersion(suite.db, {
+      tenantId,
+      locationId,
+      periodStart: "2026-05-11",
+      periodEnd: "2026-05-17",
+    });
+    await insertRosterVersion(suite.db, {
+      tenantId,
+      locationId,
+      periodStart: "2026-05-11",
+      periodEnd: "2026-05-17",
+    });
+    const rows = await suite.db.execute<{ n: number }>(sql`
+      select count(*)::int as n from roster_versions
+      where tenant_id = ${tenantId} and location_id = ${locationId}
+        and period_start = '2026-05-11' and period_end = '2026-05-17'`);
+    expect(rows.rows[0]!.n).toBe(2);
+  });
+
   it("stores a draft shift with a null roster_version_id", async () => {
     const { personId, locationId } = await seedPersonAndLocation();
     const shiftId = await insertDraftShift(suite.db, { tenantId, personId, locationId });

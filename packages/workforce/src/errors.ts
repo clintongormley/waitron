@@ -66,6 +66,15 @@ declare module "@waitron/shared" {
      * `roster.not_found` (the version does not exist); here it EXISTS but is not in a publishable
      * state. */
     "roster.already_published": { tenantId: string; rosterVersionId: string };
+    /** `publishRoster` (../clocking.ts) tried to publish a version but another `published` version
+     * already exists for the SAME (location, exact period), so the publish would leave two — rejected
+     * by the `roster_versions_published_period_uq` partial unique index (23505), translated here.
+     * The supersede path demotes an incumbent published version before promoting the new one, so this
+     * is reachable only under CONCURRENCY: a competing publish of a different draft for the same period
+     * committed after this transaction took its lock snapshot, so the index — not the lock — is what
+     * catches it. Distinct from `roster.already_published`, which is the SAME version being published
+     * twice. `roster.*`, grepped against the registry — never renamed once shipped. */
+    "roster.period_already_published": { tenantId: string; rosterVersionId: string };
     /** An approval named a correction that is not an approvable PENDING request — its target entry
      * already carries an `approved` correction. Covers both re-approving the same request (the
      * request row stays `requested` forever, since approval is a second append, never a mutation —

@@ -7,6 +7,7 @@ import {
   pgEnum,
   pgTable,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { locations, tenants } from "@waitron/db";
@@ -14,12 +15,15 @@ import { persons } from "./persons.js";
 
 /**
  * A roster version's lifecycle. A `draft` is edited freely; publishing flips it to `published` and
- * stamps `published_at` (`publishRoster`, ../clocking.ts). `superseded` is a value RESERVED for a
- * future lifecycle step — a later publish marking an earlier published version stale — and is NOT
- * written by this slice: D2.1 delivers draft→published only, and `publishRoster` never supersedes a
- * prior version (a recorded follow-up). English tokens — `draft`/`published`/`superseded` — because
- * this is a GENERIC package the english-only guard scans; the Spanish `borrador`/`publicado`
- * rendering, if ever needed, belongs to packages/workforce-es.
+ * stamps `published_at` (`publishRoster`, ../clocking.ts). `superseded` is written when a NEWER
+ * version is published for the same (location, exact period): `publishRoster` demotes the incumbent
+ * published version to `superseded` before promoting the new one, so at most one `published` version
+ * exists per period — the `roster_versions_published_period_uq` partial unique index below is the
+ * invariant backstop that guarantees it under concurrency. A `superseded` row keeps its
+ * `published_at` stamp (it WAS published), which the publish-shape check permits: only `draft`
+ * requires a null stamp. English tokens — `draft`/`published`/`superseded` — because this is a
+ * GENERIC package the english-only guard scans; the Spanish `borrador`/`publicado` rendering, if ever
+ * needed, belongs to packages/workforce-es.
  *
  * A pgEnum rather than a text CHECK, matching persons' `personStatus`/`workforceRole` precedent: the
  * three values are settled, and one declaration yields both the TypeScript union and the DB
@@ -92,6 +96,18 @@ export const rosterVersions = pgTable(
     }).onDelete("restrict"),
     index("roster_versions_tenant_id_idx").on(t.tenantId),
     index("roster_versions_tenant_location_idx").on(t.tenantId, t.locationId),
+    // At most one PUBLISHED version per (tenant, location, exact period). Partial (WHERE status =
+    // 'published'), so drafts and superseded rows accumulate freely — only the live published row is
+    // unique. This is the invariant backstop for `publishRoster`'s supersede-on-republish: the
+    // FOR UPDATE lock it takes on the incumbent published row serialises the common case, but a
+    // concurrent first-publish of two DIFFERENT drafts has no row to lock, so THIS index is what
+    // guarantees the second cannot also leave a published row — it raises 23505, which publishRoster
+    // translates to roster.period_already_published. Like registro_sif_activo_uq (fiscal-verifactu),
+    // it binds across the whole table even under FORCE RLS: unique indexes are not RLS-filtered, and
+    // tenant_id is the leading column so it never collides across tenants.
+    uniqueIndex("roster_versions_published_period_uq")
+      .on(t.tenantId, t.locationId, t.periodStart, t.periodEnd)
+      .where(sql`${t.status} = 'published'`),
     check("roster_versions_period_ck", sql`${t.periodEnd} >= ${t.periodStart}`),
     // draft ⟺ not yet published: `published_at` is set exactly when the version leaves draft, so
     // publishing that forgot to stamp, or a stamp on a still-draft row, is rejected. Mirrors the

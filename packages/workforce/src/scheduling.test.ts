@@ -158,6 +158,46 @@ describe("publishRoster", () => {
     expect(code).toBe("roster.already_published");
   });
 
+  it("supersedes the prior published version when a newer version for the same period is published", async () => {
+    // The mutable + supersede model: at most one published version per (location, EXACT period).
+    // Publishing v2 for the SAME period as an already-published v1 demotes v1 to `superseded` and
+    // leaves v2 the sole published version. Prove by deletion: remove the supersede step (the
+    // `supersedePriorPublished` call) in publishRoster and v1 is never demoted — the partial unique
+    // index roster_versions_published_period_uq then rejects v2's publish (roster.period_already_published)
+    // instead, so this test fails whichever way the supersede is broken.
+    const period = { periodStart: "2026-02-02", periodEnd: "2026-02-08" };
+    const v1 = await insertRosterVersion(suite.db, { tenantId, locationId, ...period });
+    const v2 = await insertRosterVersion(suite.db, { tenantId, locationId, ...period });
+    await run((tx) => backend.publishRoster(tx, { tenantId, versionId: v1 }));
+    await run((tx) => backend.publishRoster(tx, { tenantId, versionId: v2 }));
+
+    const rows = await suite.db.execute<{ id: string; status: string }>(sql`
+      select id, status from roster_versions
+      where tenant_id = ${tenantId} and location_id = ${locationId}
+        and period_start = ${period.periodStart} and period_end = ${period.periodEnd}`);
+    const byId = new Map(rows.rows.map((r) => [r.id, r.status]));
+    expect(byId.get(v1)).toBe("superseded");
+    expect(byId.get(v2)).toBe("published");
+    expect(rows.rows.filter((r) => r.status === "published")).toHaveLength(1);
+  });
+
+  it("supersedes only the SAME exact period — a version for a different period stays published", async () => {
+    // The supersede is scoped to the exact (location, period_start, period_end), not to the location.
+    // Publishing v2 for period P2 must leave v1 (period P1, same location) published. Distinct periods
+    // that no other test in this shared-DB suite touches, so the two published rows never collide.
+    const p1 = { periodStart: "2026-04-13", periodEnd: "2026-04-19" };
+    const p2 = { periodStart: "2026-04-20", periodEnd: "2026-04-26" };
+    const v1 = await insertRosterVersion(suite.db, { tenantId, locationId, ...p1 });
+    const v2 = await insertRosterVersion(suite.db, { tenantId, locationId, ...p2 });
+    await run((tx) => backend.publishRoster(tx, { tenantId, versionId: v1 }));
+    await run((tx) => backend.publishRoster(tx, { tenantId, versionId: v2 }));
+
+    const rows = await suite.db.execute<{ status: string }>(
+      sql`select status from roster_versions where id = ${v1}`,
+    );
+    expect(rows.rows[0]!.status).toBe("published");
+  });
+
   it("returns the guardrail breaches when a ruleset is supplied, and PUBLISHES anyway (advisory)", async () => {
     // OWNER DECISION: guardrail breaches are advisory. A roster that breaches a limit still publishes;
     // the breaches are surfaced in the return value, never thrown. Two shifts 8h apart breach the

@@ -101,4 +101,59 @@ describe("publishRoster under real contention", () => {
       await Promise.all(dbs.map((db) => db.close()));
     }
   });
+
+  it("leaves exactly one published version when many DIFFERENT drafts for one period race to publish", async () => {
+    // The supersede-on-republish invariant under real contention. PUBLISHERS DISTINCT drafts for the
+    // SAME (location, period) publish on distinct backends at once. `supersedePriorPublished` takes a
+    // FOR UPDATE lock on any incumbent published row, but a first-publish race has NO incumbent to
+    // lock — so the `roster_versions_published_period_uq` partial unique index is what guarantees the
+    // outcome: exactly one transaction leaves a `published` row for the period; every other either
+    // (a) had its version superseded by a later winner or (b) collided on the index and was refused
+    // with roster.period_already_published. NEVER two published, NEVER a lost supersede. The count of
+    // winners is nondeterministic under READ COMMITTED (a publish whose lock snapshot post-dates a
+    // rival's commit supersedes it and succeeds too, only to be superseded in turn); the count of
+    // PUBLISHED rows is the deterministic invariant, and it is one.
+    //
+    // Prove the INDEX is the guarantee by DELETION: drop roster_versions_published_period_uq from
+    // migration 0011 and simultaneous publishers all commit, so the published count climbs above one.
+    // Prove the LOCK is NOT the guarantee: remove `for update of prior` (or the whole supersede) and
+    // the published count is STILL one — the index alone holds it (see the report's deletion matrix).
+    const period = { periodStart: "2026-06-01", periodEnd: "2026-06-07" };
+    const versions = await Promise.all(
+      Array.from({ length: PUBLISHERS }, () =>
+        insertRosterVersion(suite.admin, { tenantId, locationId, ...period }),
+      ),
+    );
+    const dbs = await Promise.all(Array.from({ length: PUBLISHERS }, () => suite.pg.connect()));
+    try {
+      const results = await Promise.allSettled(
+        dbs.map((db, i) =>
+          db.transaction((tx) => backend.publishRoster(tx, { tenantId, versionId: versions[i]! })),
+        ),
+      );
+
+      // At least one publisher must succeed, and every failure is the index backstop translated —
+      // not some unrelated error (a deadlock or a lost-update would surface here).
+      expect(results.some((r) => r.status === "fulfilled")).toBe(true);
+      for (const r of results.filter((r) => r.status === "rejected")) {
+        const reason = (r as PromiseRejectedResult).reason;
+        expect(reason).toBeInstanceOf(AppError);
+        expect((reason as AppError).code).toBe("roster.period_already_published");
+      }
+
+      // THE invariant: exactly one published row survives for the period, and the rest are superseded
+      // or still draft (a refused publisher's transaction rolled back) — never a second published.
+      const { rows } = await suite.admin.execute<{ published: number; total: number }>(sql`
+        select
+          count(*) filter (where status = 'published')::int as published,
+          count(*)::int as total
+        from roster_versions
+        where tenant_id = ${tenantId} and location_id = ${locationId}
+          and period_start = ${period.periodStart} and period_end = ${period.periodEnd}`);
+      expect(rows[0]!.published).toBe(1);
+      expect(rows[0]!.total).toBe(PUBLISHERS);
+    } finally {
+      await Promise.all(dbs.map((db) => db.close()));
+    }
+  });
 });
