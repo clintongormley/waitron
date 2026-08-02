@@ -68,9 +68,9 @@ reprioritisation rather than assumed.
 
 ## Next — the fiscal sequence
 
-Four pieces, in this order. **Pieces 1 (#39) and 2 (#46) have landed; piece 3 (F3 canje) is now the
-head of the queue, and piece 4 (invoice-first) is now UNBLOCKED** (it needed rectificativas, which
-exist). They are sequenced rather than parallelised because each adds a
+Four pieces, in this order. **Pieces 1 (#39), 2 (#46) and 3 (F3 canje, #51) have landed; piece 4
+(invoice-first) is now the head of the queue** (it needed rectificativas, which exist — #46). They
+are sequenced rather than parallelised because each adds a
 migration to `packages/db`, and `packages/db/drizzle/meta/_journal.json` conflicts on every
 concurrent branch. The collision is **per package**, not repo-wide — five packages carry their own
 `drizzle/` directory and journal (`credentials`, `db`, `fiscal-verifactu`, `payments`, `scheduler`),
@@ -80,8 +80,8 @@ so work touching a different package's migrations can still run alongside these.
 | --- | --- | --- |
 | 1 | **Sale settlement model** — **done (#39)** | Everything else assumes it. Took the tip and the amount charged off the frozen sale row so an invoice can exist before payment does |
 | 2 | **Rectificativas** — R5 (simplified tickets) — **done (#46)** | The only lawful way to change an issued invoice. Unblocked piece 4. R1/B2B and R2–R4/accounting deferred (need F1 issuance / the asesor) |
-| 3 | **F3 canje** — "can I have a proper invoice?" — **next** | Unmodelled today, and issuing an ordinary invoice instead would double-declare the sale. Ordinary trade in a restaurant, not an edge case |
-| 4 | **Invoice-first mode** — **now unblocked** | Cannot be offered to staff until 2 exists: a disputed bill, a short payment and a "take a fiver off" all need a rectificativa — which now exists (#46) |
+| 3 | **F3 canje** — "can I have a proper invoice?" — **done (#51)** | Was unmodelled, and issuing an ordinary invoice instead would double-declare the sale. Ordinary trade in a restaurant, not an edge case. `recordSubstitution` files a positive-total F3 alta with `FacturasSustituidas` + `Destinatarios`, reading the substituted F2 tickets without annulling them (at-most-once, F2-only, series-purpose-guarded, unsettled) |
+| 4 | **Invoice-first mode** — **next** | Cannot be offered to staff until 2 exists: a disputed bill, a short payment and a "take a fiver off" all need a rectificativa — which now exists (#46) |
 
 Design and sources for all four:
 [2026-07-31-sale-settlement-model-design.md](superpowers/specs/2026-07-31-sale-settlement-model-design.md)
@@ -240,7 +240,7 @@ not payment method); a short payment agreed as payment-in-full before the factur
 ## Not started
 
 Nothing below has any code, **except sub-project 16 (workforce), whose *registro de jornada* legal
-floor landed as #47** — only its D2/D3 (below) remain unstarted.
+floor landed as #47 and whose D2 scheduling landed as #50** — only its D3 (below) remains unstarted.
 
 | Sub-project | Note |
 | --- | --- |
@@ -248,7 +248,7 @@ floor landed as #47** — only its D2/D3 (below) remain unstarted.
 | **5 — Identity** | Users, roles, permissions. The refund/void role gate waits on it |
 | **6 — Locations** | Venue and till registration, series assignment |
 | **8 — Reporting** | Daily close, VAT summary |
-| **16 — Workforce** | *Registro de jornada* legal floor **DONE (#47)**. Remaining: **D2 scheduling** (shifts/rosters + `convenio_config`; the overtime *rule* the both-model projection computes is convenio-driven — an **asesor-laboral** call, not code) and **D3 payroll export** (integrate-not-build). Deferred edges: the registro export doesn't yet surface overtime (belongs to the payslip/D3); the correction period-fetch is a ±1-day window (a >1-day-relocation correction is out of the floor's scope, chained but maybe missed by the period fetch). A post-#47 `/finish-branch` review (landed as #52) corrected four floor defects: the registro export rendered UTC instead of local wall-clock; the tamper chain omitted a correction's reason/actor and the capturing till; correction precedence tie-broke on the unhashed `ingest_seq` (a floor-bypasser could reorder corrections undetected) — now on the hashed `sequence_no`; and a `clockIn`/`clockOut` TOCTOU (an unlocked state read before the chain-head lock let two concurrent same-person clock-ins append a double-`in` that undercounts worked time) — now serialized per person with a `persons` row lock proven by a real-PG concurrency test |
+| **16 — Workforce** | *Registro de jornada* legal floor **DONE (#47)**; **D2 scheduling DONE (#50)** — `convenio_config` surface (overtime de-hard-coded, single-sourced), shifts + `roster_versions` + `publishRoster`, absences/availability/shift_templates/shift_swaps, an **advisory** guardrail engine (`validateRoster` → `RosterBreach[]`; publish surfaces breaches but proceeds — owner chose warn+override) + a planned-vs-actual read model, and supersede-on-republish (partial unique index, one published roster per `(location, period)`). The overtime *rule* the both-model projection computes stays convenio-driven — an **asesor-laboral** call, not code. Remaining: **D3 payroll export** (integrate-not-build), plus the workforce follow-ups under *Debt and odd jobs*. Deferred edges from the floor: the registro export doesn't yet surface overtime (belongs to the payslip/D3); the correction period-fetch is a ±1-day window (a >1-day-relocation correction is out of the floor's scope, chained but maybe missed by the period fetch). A post-#47 `/finish-branch` review (landed as #52) corrected four floor defects: the registro export rendered UTC instead of local wall-clock; the tamper chain omitted a correction's reason/actor and the capturing till; correction precedence tie-broke on the unhashed `ingest_seq` (a floor-bypasser could reorder corrections undetected) — now on the hashed `sequence_no`; and a `clockIn`/`clockOut` TOCTOU (an unlocked state read before the chain-head lock let two concurrent same-person clock-ins append a double-`in` that undercounts worked time) — now serialized per person with a `persons` row lock proven by a real-PG concurrency test |
 | **18 — Menu and allergens** | Allergen declaration is a **launch-day legal duty** (EU 1169/2011, RD 126/2015) |
 | 10-15, 17, 19, 20 | Tabs, floor plan, KDS, tip payroll, bookings, online ordering, accounting export, opening hours, procurement |
 
@@ -595,9 +595,21 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   changing `useRealPostgres` / `describeEachTarget` — the harness that guarantees RLS and lock
   contention are observed under a non-superuser role, which PGlite cannot show. A test-correctness
   change wearing a performance change's clothes; its own branch, its own review
-- **Payments follow-ups** — the webhook HTTP endpoint (its own cycle: per-tenant signature
-  verification needs the tenant, which is only knowable from the unverified payload), `forward`
-  retry backoff, the reconcile remediation UI
+- **Payments follow-ups** — the Mode 3 inbound Stripe webhook endpoint's **security half is DONE
+  (#49)**: `POST /webhooks/stripe/:tenantId`, per-tenant signature verification, tenant resolution,
+  settle. What remains on it is the **`recordSale` sale-chaining hand-off**, deferred because it
+  needs the till / working-orders model and the `server_id` rekey before a settled webhook can chain
+  a sale. Also still open: the pre-existing `forward` retry backoff and the reconcile remediation UI
+- **Workforce follow-ups (D2, #50)** — none blocking. (1) **Swap-workflow hardening** (Copilot,
+  deferred): `acceptSwap` has no "requested-only" status guard, and `requestSwap` doesn't verify the
+  return shift is owned by `toPerson`. Latent today — the manager approve/reject slice that produces
+  the `approved` / `rejected` statuses isn't built and nothing consumes swaps yet; closing the first
+  guard needs a new permanent error code + TDD. (2) **Guardrail advisory notes:** `break_owed` /
+  `night_work` breaches surface obligations on ordinary shifts (callers filter by `kind`), and
+  `weekly_rest` under-reports at roster edges **by design** (documented safe — judging edge weeks
+  needs the roster period boundaries passed in). (3) **Supersede** self-join could be a single
+  `UPDATE … RETURNING` (deferred — concurrency-critical; the partial unique index is the real
+  serialiser, pinned by the concurrency test)
 - **An open product question** — the orphan drift gate holds a customer's money pending a human, and
   the hold is unbounded today because nothing re-sweeps a closed period. Defensible before
   production; deserves a decision before it
@@ -667,7 +679,19 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   taking the already-assembled `Omit<AltaInput, "Encadenamiento">` and running the shared tail (zero
   huella risk — nothing about what is hashed moves), plus a small `buildDesglose(vatBreakdown)` for the
   head. The per-method bodies (`TipoFactura`, the rectificativa vs `FacturasSustituidas`/`Destinatarios`
-  fields, positive vs negative totals) stay where they are
+  fields, positive vs negative totals) stay where they are. **Two more duplications the F3 branch
+  surfaced, deferred with the same triplet:** the `fechaFromStoredDay` offset-cancellation algebra
+  (recovering the fiscal date from a stored day) is now identical across all three builders, and
+  `recordSubstitution`'s substituted-ticket loop reads each F2 ticket one query at a time — an N+1 a
+  single `sale_id = ANY(...)` collapses. All of it lands together, behind the same review and
+  huella-invariance re-runs across the three builders
+- **F3 canje open questions (#51) — asesor / XSD.** Four, none blocking a build: the piece is done
+  and its `Destinatarios` shape was verified against the committed AEAT schema, but confirm each
+  before a real F3 is filed. (1) The foreign `IDOtro` recipient path is typed but **refused at the
+  backend** pending the asesor's `IDType` shape. (2) Whether a **separate F3 series is mandatory** is
+  unconfirmed — `recordSubstitution` reuses the `standard` series today. (3) Cross-SIF F3 (a canje
+  against a ticket issued by another SIF) is a sound **inference**, not confirmed. (4) An asesor / XSD
+  confirmation of the `Destinatarios` shape is still wanted before the first real filing
 
 ---
 
