@@ -55,6 +55,9 @@ reprioritisation rather than assumed.
 | **Cloud storage model** — design | **Merged** (#19), corrected by **#22** |
 | **Local server as SIF, active-active + failover** — design | **Merged** (#33). Promotes the arch-design fallback (the *server* is the SIF, not each till) to the primary model; adds active-active chaining, a single relocatable submitter, human-driven boot-time failover, and an optional dedicated cloud server that can hold any role. **Topology only** — the buildable pieces are follow-ups below |
 | **Sale settlement model** — implementation | **Merged** (#39). Piece 1 of the fiscal sequence done: tip and amount-charged off the frozen `sales` row, tip onto `tenders.tip_amount`, append-only `sale_settlements`, one `settleSale` writer (immediate mode calls it in the same transaction, so the two paths cannot drift — design D6). Coverage moved to the `sale_settlements` INSERT plus a `tenders` post-settlement guard (SQLSTATE WT002). [plan](superpowers/plans/2026-08-01-sale-settlement-model.md), [design](superpowers/specs/2026-07-31-sale-settlement-model-design.md) (with a "Ratified in implementation" note recording three decisions settled during the build) |
+| **Rectificativas** — implementation | **Merged** (#46). Fiscal sequence **piece 2 done**: R5 corrective invoices for simplified tickets — `corrects_sale_id` link + negative-total allowance, the four AEAT rectificativa columns round-tripped so a filing carries its mandatory `TipoRectificativa`, `recordCorrection` backend + core entry point, and the mandatory separate `rectificative` series guarded. [plan](superpowers/plans/2026-08-02-rectificativas.md). Cross-till/SIF corrections confirmed **lawful** (AEAT dev FAQ 4-Dec-2025 — see findings §13); R1/B2B and R2–R4/accounting deferred |
+| **Workforce — registro de jornada** — implementation | **Merged** (#47). Sub-project 16 legal floor: new `packages/workforce` + `packages/workforce-es`, immutable append-only `time_entries` (role-revocation floor), clock in/out/break, supervisor-gated append-only corrections + registro export, **both-model** overtime (daily-accrual + period-net, convenio-selectable), and a single-active-writer tamper-evidence hash chain. [plan](superpowers/plans/2026-08-02-workforce.md). A migration-isolated parallel lane to the fiscal work |
+| **App-level cross-server sync** — design | **Designed** (this session). Application **outbox** (`sync_log` + generic capture trigger, apply as the app role under `withTenant`) — one reusable mechanism, no new DB privilege. Decisions settled with the owner: explicit `server_id` on the commercial tables too, **true active-active** for the deli, and a **payments fast lane**. Built later (after the `server_id` rekey + feature schemas settle); 9 container gates first. Spec: [2026-08-02-app-level-sync-design.md](superpowers/specs/2026-08-02-app-level-sync-design.md) |
 | **Close Q13 and Q15 on primary source** | **Done** (#37). Q13 (tips) and Q15's core CLOSED on primary/official source ([findings](compliance/verifactu-findings.md) §§11–12); Q14 (precuenta) stays open — see the advisor gap below |
 | **Consolidate the session-memory notes** | Not started. They predate this file and now overlap it — see below |
 
@@ -62,8 +65,9 @@ reprioritisation rather than assumed.
 
 ## Next — the fiscal sequence
 
-Four pieces, in this order. **Piece 1 landed (#39); piece 2 (rectificativas) is now the head of the
-queue.** They are sequenced rather than parallelised because each adds a
+Four pieces, in this order. **Pieces 1 (#39) and 2 (#46) have landed; piece 3 (F3 canje) is now the
+head of the queue, and piece 4 (invoice-first) is now UNBLOCKED** (it needed rectificativas, which
+exist). They are sequenced rather than parallelised because each adds a
 migration to `packages/db`, and `packages/db/drizzle/meta/_journal.json` conflicts on every
 concurrent branch. The collision is **per package**, not repo-wide — five packages carry their own
 `drizzle/` directory and journal (`credentials`, `db`, `fiscal-verifactu`, `payments`, `scheduler`),
@@ -72,9 +76,9 @@ so work touching a different package's migrations can still run alongside these.
 | # | Piece | Why here |
 | --- | --- | --- |
 | 1 | **Sale settlement model** — **done (#39)** | Everything else assumes it. Took the tip and the amount charged off the frozen sale row so an invoice can exist before payment does |
-| 2 | **Rectificativas** — sustitución and diferencias — **next** | The only lawful way to change an issued invoice. Blocks piece 4 |
-| 3 | **F3 canje** — "can I have a proper invoice?" | Unmodelled today, and issuing an ordinary invoice instead would double-declare the sale. Ordinary trade in a restaurant, not an edge case |
-| 4 | **Invoice-first mode** | Cannot be offered to staff until 2 exists: a disputed bill, a short payment and a "take a fiver off" all need a rectificativa |
+| 2 | **Rectificativas** — R5 (simplified tickets) — **done (#46)** | The only lawful way to change an issued invoice. Unblocked piece 4. R1/B2B and R2–R4/accounting deferred (need F1 issuance / the asesor) |
+| 3 | **F3 canje** — "can I have a proper invoice?" — **next** | Unmodelled today, and issuing an ordinary invoice instead would double-declare the sale. Ordinary trade in a restaurant, not an edge case |
+| 4 | **Invoice-first mode** — **now unblocked** | Cannot be offered to staff until 2 exists: a disputed bill, a short payment and a "take a fiver off" all need a rectificativa — which now exists (#46) |
 
 Design and sources for all four:
 [2026-07-31-sale-settlement-model-design.md](superpowers/specs/2026-07-31-sale-settlement-model-design.md)
@@ -102,15 +106,17 @@ decided the **topology only**; its §14 defers the buildable pieces, each to its
   BYPASSRLS/superuser, which the deployment-role constraint forbids. The block keys on RLS being
   enabled *at all*, so it hits **all ~8 RLS tables**, not only the fiscal chain. The cheaper fork
   (turn RLS off on the replica copies + native replication) strips the fiscal tables' defense-in-depth
-  and is declined deliberately. **The app-level sync layer is now being designed** (this session,
-  building on the held first-draft
-  `2026-08-01-sif-sync-replication-protocol-design.md` (on branch `docs/sif-sync-protocol-design`,
-  still held — referenced as text, not a link, since it is not on `main`). Carry-forwards for that design: its ownership
-  map omits `sales` and `working_orders` (NOT-NULL FK targets of the apply paths), so it needs a
-  "parent rows replicate before their referents" apply-ordering rule; and one prototype gate remains —
-  whether a non-superuser can CONSUME a logical-decoding slot (the "native decode + app-level apply"
-  hybrid reads the peer's WAL but applies as the app role — reading a slot was not the operation the
-  block hit, but non-superuser slot consumption is unproven).
+  and is declined deliberately. **The app-level sync layer is now **designed and reviewed** (this session):
+  [2026-08-02-app-level-sync-design.md](superpowers/specs/2026-08-02-app-level-sync-design.md). It
+  finalises the held first draft (`2026-08-01-sif-sync-replication-protocol-design.md`, branch
+  `docs/sif-sync-protocol-design`) with an application **outbox** (`sync_log` + one generic capture
+  trigger; apply as the app role under `withTenant`, the proven path), the FK apply-ordering rule
+  (origin seq-order is a topological order for free — fixes the held draft's missing `sales`/
+  `working_orders`), and one reusable enrolment mechanism. **Owner decisions settled (2026-08-02):**
+  explicit `server_id` on the commercial tables too, **true active-active** for the deli, and a
+  **payments fast lane**. Carries **9 container prototype gates** (§11 — esp. the capture trigger +
+  echo-suppression under FORCE RLS, and non-superuser logical-slot consumption for the native-decode
+  backfill option) that come before any build, and depends on the `server_id` rekey landing first.
 - **Promotion + fencing tooling and the till-side failover list** — boot-time role resolution,
   continuous conflict-detection, the "one primary" invariant.
 - **The submitter as a relocatable role** — one venue submitter, certificate resolved from wherever
@@ -230,7 +236,8 @@ not payment method); a short payment agreed as payment-in-full before the factur
 
 ## Not started
 
-Nothing below has any code.
+Nothing below has any code, **except sub-project 16 (workforce), whose *registro de jornada* legal
+floor landed as #47** — only its D2/D3 (below) remain unstarted.
 
 | Sub-project | Note |
 | --- | --- |
@@ -238,7 +245,7 @@ Nothing below has any code.
 | **5 — Identity** | Users, roles, permissions. The refund/void role gate waits on it |
 | **6 — Locations** | Venue and till registration, series assignment |
 | **8 — Reporting** | Daily close, VAT summary |
-| **16 — Workforce** | The *registro de jornada* is a **launch-day legal duty**, not a nicety |
+| **16 — Workforce** | *Registro de jornada* legal floor **DONE (#47)**. Remaining: **D2 scheduling** (shifts/rosters + `convenio_config`; the overtime *rule* the both-model projection computes is convenio-driven — an **asesor-laboral** call, not code) and **D3 payroll export** (integrate-not-build). Deferred edges: the registro export doesn't yet surface overtime (belongs to the payslip/D3); the correction period-fetch is a ±1-day window (a >1-day-relocation correction is out of the floor's scope, chained but maybe missed by the period fetch) |
 | **18 — Menu and allergens** | Allergen declaration is a **launch-day legal duty** (EU 1169/2011, RD 126/2015) |
 | 10-15, 17, 19, 20 | Tabs, floor plan, KDS, tip payroll, bookings, online ordering, accounting export, opening hours, procurement |
 
