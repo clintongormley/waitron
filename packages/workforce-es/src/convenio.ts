@@ -64,23 +64,14 @@ export async function resolveWorkTimeRuleset(
       locationId: params.locationId,
     });
   }
+  // The `.select({...})` above aliases every column to its exact `WorkTimeRuleset` field name and
+  // narrows to precisely the ruleset's columns (no id/tenantId/createdAt), so `...row` supplies all
+  // but the three fields that need a transform: the DB enum → the hyphenated `OvertimeModel`, and the
+  // two `numeric`-as-string premiums → number-or-null.
   return {
-    workingDaysPerWeek: row.workingDaysPerWeek,
+    ...row,
     overtimeModel: DB_TO_OVERTIME_MODEL[row.overtimeModel],
-    referencePeriodDays: row.referencePeriodDays,
-    compensationWindowDays: row.compensationWindowDays,
-    dailyTargetMinutes: row.dailyTargetMinutes,
-    maxWeeklyMinutes: row.maxWeeklyMinutes,
-    minInterShiftRestMinutes: row.minInterShiftRestMinutes,
-    maxOrdinaryDailyMinutes: row.maxOrdinaryDailyMinutes,
-    breakThresholdMinutes: row.breakThresholdMinutes,
-    minBreakMinutes: row.minBreakMinutes,
-    weeklyRestMinutes: row.weeklyRestMinutes,
-    annualOvertimeCapHours: row.annualOvertimeCapHours,
-    nightWindowStartMinute: row.nightWindowStartMinute,
-    nightWindowEndMinute: row.nightWindowEndMinute,
     nightPremiumPct: num(row.nightPremiumPct),
     splitShiftPremium: num(row.splitShiftPremium),
-    breaksCountAsWorked: row.breaksCountAsWorked,
   };
 }

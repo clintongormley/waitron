@@ -21,8 +21,8 @@ export type {
   ClockEventInput,
   CorrectionApprovalInput,
   CorrectionRequestInput,
-  WorkSummaryOptions,
   WorkSummaryQuery,
+  WorkSummaryRuleset,
 } from "./clocking.js";
 export type { WorkTimeRuleset } from "./ruleset.js";
 export {

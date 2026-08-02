@@ -39,24 +39,22 @@ export interface WorkSummaryQuery {
 }
 
 /**
- * The convenio-driven inputs `workSummary` reads, resolved from a `convenio_config` row by
- * `packages/workforce-es` and passed in (a full `WorkTimeRuleset` satisfies this subset). Both
- * default to the same neutral values the projection used before D2 — a 5-day week and the
- * daily-accrual headline — so a caller that passes nothing reproduces the old behaviour exactly.
+ * The convenio-driven inputs `workSummary` reads — resolved from a `convenio_config` row by
+ * `packages/workforce-es` and passed in (a full `WorkTimeRuleset` satisfies this subset). Both are
+ * REQUIRED: there is no fallback duplicated here, so the single source of their defaults is the
+ * `convenio_config` column defaults. A DEFAULT row resolves to `working_days_per_week = 5` /
+ * `overtime_model = daily_accrual`, and that this reproduces today's numbers is pinned as a checked
+ * invariant by `packages/workforce-es`'s `work-summary.test.ts` (a default row resolved through
+ * `resolveWorkTimeRuleset`), not asserted by a comment the code does not enforce.
  */
-export interface WorkSummaryOptions {
+export interface WorkSummaryRuleset {
   /** Ordinary working days per week — the daily-target denominator
-   * (`convenio_config.working_days_per_week`). Defaults to 5. */
-  workingDaysPerWeek?: number;
-  /** Which overtime reading is the headline (`convenio_config.overtime_model`). Defaults to
-   * daily-accrual. Changing it moves only the headline, never the two underlying figures. */
-  overtimeModel?: OvertimeModel;
+   * (`convenio_config.working_days_per_week`). */
+  workingDaysPerWeek: number;
+  /** Which overtime reading is the headline (`convenio_config.overtime_model`). Changing it moves
+   * only the headline, never the two underlying figures. */
+  overtimeModel: OvertimeModel;
 }
-
-/** Today's neutral defaults, equal to the `convenio_config` column defaults, applied when a caller
- * resolves no convenio_config row — never authoritative over a resolved ruleset. */
-const DEFAULT_WORKING_DAYS_PER_WEEK = 5;
-const DEFAULT_OVERTIME_MODEL: OvertimeModel = "daily-accrual";
 
 /** A request to correct an entry's timestamp — an append, never an edit of the target. */
 export interface CorrectionRequestInput {
@@ -167,10 +165,9 @@ export class WorkforceBackend {
   async workSummary(
     tx: Transaction,
     query: WorkSummaryQuery,
-    options: WorkSummaryOptions = {},
+    ruleset: WorkSummaryRuleset,
   ): Promise<PeriodSummary> {
-    const workingDaysPerWeek = options.workingDaysPerWeek ?? DEFAULT_WORKING_DAYS_PER_WEEK;
-    const overtimeModel = options.overtimeModel ?? DEFAULT_OVERTIME_MODEL;
+    const { workingDaysPerWeek, overtimeModel } = ruleset;
     const contractedPerWeek = await this.contractedMinutesPerWeek(
       tx,
       query.tenantId,

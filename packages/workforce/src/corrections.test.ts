@@ -59,11 +59,15 @@ async function supervisor(name: string): Promise<string> {
 async function workedMinutes(personId: string): Promise<number> {
   await seedEmployment(suite.db, { tenantId, personId });
   const summary = await run((tx) =>
-    backend.workSummary(tx, {
-      tenantId,
-      personId,
-      period: { start: "2026-01-05", end: "2026-01-12" },
-    }),
+    backend.workSummary(
+      tx,
+      {
+        tenantId,
+        personId,
+        period: { start: "2026-01-05", end: "2026-01-12" },
+      },
+      { workingDaysPerWeek: 5, overtimeModel: "daily-accrual" },
+    ),
   );
   return summary.workedMinutes;
 }

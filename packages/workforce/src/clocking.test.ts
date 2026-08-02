@@ -11,6 +11,12 @@ import { seedEmployment, seedLocation, seedPerson } from "../test/fixtures.js";
 
 const backend = new WorkforceBackend();
 
+/** The values a DEFAULT `convenio_config` row resolves to — the single source of the default is now
+ * that column, not a fallback in `workSummary`. The generic package cannot import the -es resolver,
+ * so its tests pass the resolved values explicitly; `packages/workforce-es`'s `work-summary.test.ts`
+ * pins that a default row resolves to exactly these and reproduces these same numbers. */
+const DEFAULT_RULESET = { workingDaysPerWeek: 5, overtimeModel: "daily-accrual" } as const;
+
 let tenantId: string;
 let locationId: string;
 
@@ -152,11 +158,15 @@ describe("workSummary", () => {
       await nineHourDay(p, day);
     }
     const summary = await run((tx) =>
-      backend.workSummary(tx, {
-        tenantId,
-        personId: p,
-        period: { start: "2026-01-05", end: "2026-01-12" },
-      }),
+      backend.workSummary(
+        tx,
+        {
+          tenantId,
+          personId: p,
+          period: { start: "2026-01-05", end: "2026-01-12" },
+        },
+        DEFAULT_RULESET,
+      ),
     );
     expect(summary).toEqual({
       workedMinutes: 2700,
@@ -184,11 +194,15 @@ describe("workSummary", () => {
     await seedEmployment(suite.db, { tenantId, personId: p, contractedMinutesPerWeek: 2400 });
     await nineHourDay(p, "2026-01-05");
     const summary = await run((tx) =>
-      backend.workSummary(tx, {
-        tenantId,
-        personId: p,
-        period: { start: "2026-01-05", end: "2026-01-19" },
-      }),
+      backend.workSummary(
+        tx,
+        {
+          tenantId,
+          personId: p,
+          period: { start: "2026-01-05", end: "2026-01-19" },
+        },
+        DEFAULT_RULESET,
+      ),
     );
     expect(summary).toEqual({
       workedMinutes: 540,
@@ -209,8 +223,9 @@ describe("workSummary", () => {
 
   it("sizes the daily target from a supplied working_days_per_week, not the 5-day default", async () => {
     // The de-hard-coding, end to end through the backend. A 6-day convenio week makes the daily
-    // target 2400 ÷ 6 = 400, so a 9h (540) day is 140 over it — where the 5-day default gives 480 and
-    // 60. Passing the resolved WorkTimeRuleset's working_days_per_week is what changes it.
+    // target 2400 ÷ 6 = 400, so a 9h (540) day is 140 over it — where the 5-day `DEFAULT_RULESET`
+    // gives 480 and 60. Passing the resolved WorkTimeRuleset's working_days_per_week is what changes
+    // it.
     const p = await freshPerson("summary-6day");
     await seedEmployment(suite.db, { tenantId, personId: p, contractedMinutesPerWeek: 2400 });
     await nineHourDay(p, "2026-01-05");
@@ -218,7 +233,7 @@ describe("workSummary", () => {
       backend.workSummary(
         tx,
         { tenantId, personId: p, period: { start: "2026-01-05", end: "2026-01-12" } },
-        { workingDaysPerWeek: 6 },
+        { ...DEFAULT_RULESET, workingDaysPerWeek: 6 },
       ),
     );
     expect(summary.days[0]?.contractedTargetMinutes).toBe(400);
@@ -238,10 +253,10 @@ describe("workSummary", () => {
     const query = { tenantId, personId: p, period: { start: "2026-01-05", end: "2026-01-12" } };
 
     const daily = await run((tx) =>
-      backend.workSummary(tx, query, { overtimeModel: "daily-accrual" }),
+      backend.workSummary(tx, query, { ...DEFAULT_RULESET, overtimeModel: "daily-accrual" }),
     );
     const period = await run((tx) =>
-      backend.workSummary(tx, query, { overtimeModel: "period-net" }),
+      backend.workSummary(tx, query, { ...DEFAULT_RULESET, overtimeModel: "period-net" }),
     );
 
     expect(daily.overtimeMinutes).toBe(60);
@@ -257,11 +272,15 @@ describe("workSummary", () => {
     const p = await freshPerson("summary-no-employment");
     const code = await codeOfRejection(() =>
       run((tx) =>
-        backend.workSummary(tx, {
-          tenantId,
-          personId: p,
-          period: { start: "2026-01-05", end: "2026-01-12" },
-        }),
+        backend.workSummary(
+          tx,
+          {
+            tenantId,
+            personId: p,
+            period: { start: "2026-01-05", end: "2026-01-12" },
+          },
+          DEFAULT_RULESET,
+        ),
       ),
     );
     expect(code).toBe("employment.not_found");

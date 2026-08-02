@@ -1,45 +1,20 @@
 import { sql } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
-import { hashPin } from "@waitron/workforce";
 
 /**
- * Seed helpers for the workforce-es suites, run as the connection OWNER (superuser) so RLS is
- * bypassed — pure setup, exactly as `@waitron/db`'s own `seedTenant` documents. Spanish is permitted
- * in this exempt package, but fixture strings stay English (the data is regime-neutral; only the
- * legal rendering is Spanish).
+ * Seed helpers for the workforce-es suites. `seedLocation`, `seedPerson` and `seedEmployment` are
+ * RE-EXPORTED from `@waitron/workforce`'s own fixtures — the identical inserts, kept in one place so
+ * the -es copies cannot drift from the canonical ones. (They had: this dedup's -es `seedEmployment`
+ * had silently lost the `returning id` the canonical one carries.) `@waitron/workforce` has no
+ * `exports` map, so the deep `test/` path resolves — exactly as `packages/payments-stripe`'s RLS
+ * suites import `@waitron/payments/test/seed.js`. `seedConvenioConfig` stays local: it is
+ * workforce-es-specific (there is no `convenio_config` table in the generic package).
+ *
+ * The canonical helpers run as the connection OWNER (superuser) so RLS is bypassed — pure setup,
+ * exactly as `@waitron/db`'s own `seedTenant` documents. Spanish is permitted in this exempt package,
+ * but fixture strings stay English (the data is regime-neutral; only the legal rendering is Spanish).
  */
-
-/** A location (centro de trabajo) for the tenant. Returns its id. */
-export async function seedLocation(db: Database, tenantId: string): Promise<string> {
-  const result = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Main', array['en'], 'Sale on premises')
-    returning id`);
-  return result.rows[0]!.id;
-}
-
-/** A person for the tenant, PIN '1234'. Returns its id. */
-export async function seedPerson(db: Database, tenantId: string, name = "Ana"): Promise<string> {
-  const result = await db.execute<{ id: string }>(sql`
-    insert into persons (tenant_id, display_name, pin_hash)
-    values (${tenantId}, ${name}, ${hashPin("1234")})
-    returning id`);
-  return result.rows[0]!.id;
-}
-
-/** An employment for the person, defaulting to a 40h (2400-minute) contracted week. */
-export async function seedEmployment(
-  db: Database | Transaction,
-  params: { tenantId: string; personId: string; contractedMinutesPerWeek?: number },
-): Promise<void> {
-  await db.execute(sql`
-    insert into employments (
-      tenant_id, person_id, contracted_minutes_per_week, contract_type, start_date, pay_rate
-    ) values (
-      ${params.tenantId}, ${params.personId},
-      ${params.contractedMinutesPerWeek ?? 2400}, 'full_time', '2026-01-01', '15.00'
-    )`);
-}
+export { seedEmployment, seedLocation, seedPerson } from "@waitron/workforce/test/fixtures.js";
 
 /**
  * A `convenio_config` row for the (tenant, location). With no overrides it is a DEFAULT row — only
