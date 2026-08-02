@@ -6,5 +6,7 @@ export type { SettleSaleInput } from "./settle-sale.js";
 export { recordVoid } from "./record-void.js";
 export { recordCorrection } from "./record-correction.js";
 export type { RecordCorrectionInput } from "./record-correction.js";
+export { recordSubstitution } from "./record-substitution.js";
+export type { RecordSubstitutionInput } from "./record-substitution.js";
 export { openIncidents, recordIncident, recordIncidentOnce } from "./incidents.js";
 export type { Incident, IncidentSeverity, RecordIncidentInput } from "./incidents.js";

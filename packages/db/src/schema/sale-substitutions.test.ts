@@ -190,7 +190,7 @@ describeEachTarget("sale_substitutions — the N:1 link", (target) => {
     ticket1 = await insertSale(db);
     ticket2 = await insertSale(db);
     f3SaleId = await insertSale(db, {
-      counterparty: { taxId: "B99999999", legalName: "Cliente SL", countryCode: "ES" },
+      counterparty: { taxId: "B99999999", legalName: "Acme Corp SL", countryCode: "ES" },
     });
   });
 
@@ -223,7 +223,7 @@ describeEachTarget("sale_substitutions — the N:1 link", (target) => {
     // (manual, recorded in this task's report): with sale_substitutions_substituted_key removed
     // from migration 0014, this second insert succeeds. The unique index is what rejects it.
     const secondF3 = await insertSale(db, {
-      counterparty: { taxId: "B88888888", legalName: "Otro Cliente SL", countryCode: "ES" },
+      counterparty: { taxId: "B88888888", legalName: "Beacon Corp SL", countryCode: "ES" },
     });
     await insertSubstitution(db, { substitutionSaleId: f3SaleId, substitutedSaleId: ticket1 });
     const error = await captureError(() =>
@@ -284,7 +284,7 @@ describeEachTarget("sale_substitutions — immutability", (target) => {
     await seed(db);
     const ticket = await insertSale(db);
     const f3 = await insertSale(db, {
-      counterparty: { taxId: "B99999999", legalName: "Cliente SL", countryCode: "ES" },
+      counterparty: { taxId: "B99999999", legalName: "Acme Corp SL", countryCode: "ES" },
     });
     const [row] = await insertSubstitution(db, {
       substitutionSaleId: f3,
@@ -359,7 +359,7 @@ describeEachTarget("sale_substitutions — RLS", (target) => {
     await seed(db);
     const ticket = await insertSale(db);
     const f3 = await insertSale(db, {
-      counterparty: { taxId: "B99999999", legalName: "Cliente SL", countryCode: "ES" },
+      counterparty: { taxId: "B99999999", legalName: "Acme Corp SL", countryCode: "ES" },
     });
     const [row] = await insertSubstitution(db, {
       substitutionSaleId: f3,
@@ -405,7 +405,7 @@ describeEachTarget("sales — counterparty columns", (target) => {
 
   it("stores the recipient on an F3 sale and reads it back", async () => {
     const id = await insertSale(db, {
-      counterparty: { taxId: "B99999999", legalName: "Cliente SL", countryCode: "ES" },
+      counterparty: { taxId: "B99999999", legalName: "Acme Corp SL", countryCode: "ES" },
     });
     const [row] = await rows<{
       counterparty_tax_id: string | null;
@@ -418,7 +418,7 @@ describeEachTarget("sales — counterparty columns", (target) => {
     );
     expect(row).toEqual({
       counterparty_tax_id: "B99999999",
-      counterparty_legal_name: "Cliente SL",
+      counterparty_legal_name: "Acme Corp SL",
       counterparty_country_code: "ES",
     });
   });
@@ -438,7 +438,7 @@ describeEachTarget("sales — counterparty columns", (target) => {
     // The counterparty columns inherit sales' table-wide immutability with no new DDL — the same
     // receipt corrects_sale_id/fiscal_state rely on. Owner path, asserted on WT001.
     const id = await insertSale(db, {
-      counterparty: { taxId: "B99999999", legalName: "Cliente SL", countryCode: "ES" },
+      counterparty: { taxId: "B99999999", legalName: "Acme Corp SL", countryCode: "ES" },
     });
     const error = await captureError(() =>
       db.execute(sql`update sales set counterparty_tax_id = 'B00000001' where id = ${id}::uuid`),
