@@ -627,6 +627,16 @@ landed after the fix, so nothing ever hit that.)
 
 - **Never commit directly to `main`** — always create a feature branch first. Feature work happens
   in a worktree (`worktree.py new waitron <branch>`), not the main checkout.
+- **A `docs/backlog.md` change is exempt from the PR ceremony** — user decision, 2026-08-02. Use a
+  plain `git worktree add <path> -b <branch>` (NOT `worktree.py new`, whose `pnpm install` a docs
+  edit does not need), commit `-s`, and merge to `main` directly: **no PR, no CI wait, no Copilot,
+  no `/land-branch`.** It is docs-only and cannot break the build — `lint` reads no Markdown,
+  `format:check` ignores `docs/` (`.prettierignore`), and the tests skip — so a PR + CI + Copilot +
+  land-branch approval gate is disproportionate. The cost that produced this: the whole apparatus
+  was run for a 12-line _Debt and odd jobs_ entry (#44). Still branch — do not commit on `main`
+  directly — and still `-s` every commit. The carve-out is for `docs/` prose that `.prettierignore`
+  covers; a root-level `CLAUDE.md` or `README.md` is format-checked (this very file is), so an edit
+  to one of those still runs the normal flow, as does all feature/code work.
 - **Branch names are descriptive**, e.g. `feat/provisioning-cli`, `fix/rls-superuser-claim`.
 - **Do not merge a PR automatically — wait for the user's approval.** Invoking `/land-branch`
   _is_ that approval; nothing else is.
