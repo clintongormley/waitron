@@ -576,6 +576,16 @@ export class VerifactuBackend implements FiscalBackend {
         "VerifactuBackend.recordSubstitution: substitutedSaleIds must not be empty — an F3 must name at least one ticket it substitutes",
       );
     }
+    // A ticket may appear at most once: a repeated id would emit a DOUBLED FacturasSustituidas entry
+    // into an unrepairable AEAT filing (§5), naming the same ticket twice. "The caller passes distinct
+    // ids" is a property of the caller, not this code (CLAUDE.md §3) — rejected here at the last layer
+    // before AEAT, a plain Error like the other preconditions above (core/Slice 4 owns the friendlier
+    // dedup/validation).
+    if (new Set(substitution.substitutedSaleIds).size !== substitution.substitutedSaleIds.length) {
+      throw new Error(
+        "VerifactuBackend.recordSubstitution: substitutedSaleIds must not contain duplicates — a ticket may be substituted at most once per F3",
+      );
+    }
     // A full invoice must ALWAYS name its recipient (findings §10.2: "siempre debe llevar el
     // destinatario"). `SaleForFiscalRecord.counterparty` is nullable for the ordinary simplified
     // sale; an F3 is the one path that requires it. Captured into a const so the narrowing survives

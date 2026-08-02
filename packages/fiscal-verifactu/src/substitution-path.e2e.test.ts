@@ -256,6 +256,25 @@ describe("recordSubstitution against the real Veri*Factu backend", () => {
     ]);
   });
 
+  it("refuses duplicate ids in substitutedSaleIds — a ticket may be substituted at most once per F3", async () => {
+    // Defense-in-depth (§5): a repeated id would emit a DOUBLED FacturasSustituidas entry into an
+    // unrepairable filing. Rejected at this last layer before AEAT, regardless of what core passes.
+    // Real PG so the deletion proof can observe the doubled entry actually chain: with the guard
+    // removed, the loop reads the recorded F2 twice, builds a 2-entry FacturasSustituidas and appends
+    // the F3 registro (its sales row is seeded by `substitute`), so both the reject AND the
+    // nothing-chained assertion below flip.
+    const ticketId = await recordTicket(1);
+    await expect(substitute([ticketId, ticketId])).rejects.toThrow(/duplicate/i);
+
+    // Nothing chained: the till carries only the ticket's own F2 alta; the F3 was never appended.
+    const rows = await suite.admin
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.tillId, till.tillId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.tipoFactura).toBe("F2");
+  });
+
   it("carries the recipient the F3 must always name in Destinatarios", async () => {
     const ticketId = await recordTicket(1);
     const substitutionId = await substitute([ticketId]);
