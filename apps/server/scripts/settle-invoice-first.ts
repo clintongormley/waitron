@@ -147,7 +147,7 @@ async function main(): Promise<void> {
     const before = await withTenant(db, tenant, (tx) => listOutstandingSales(tx, tenant));
     console.log(`2. outstanding: ${before.map((o) => `${o.saleId}=${o.amountDue}`).join(", ")}`);
 
-    // 3. Correct it down by 5.00 (net) via a rectificativa on the rectificative series.
+    // 3. Correct it down by 11.00 (net 110.00 → 99.00) via a rectificativa on the rectificative series.
     const corrInput: RecordCorrectionInput = {
       tenantId: tenant,
       tillId: till,
