@@ -615,3 +615,58 @@ describe("coverage trigger nets corrections", () => {
     expect(settled).toHaveLength(0);
   });
 });
+
+describe("settleSale nets corrections into the due", () => {
+  it("settles a corrected sale at the net (70 corrected by -5, pay 65)", async () => {
+    const seed = await seedTenant(postgres.admin);
+    const originalId = await seedSale(postgres.admin, seed, { total: "70.00", invoiceNumber: 1 });
+    await seedCorrective(postgres.admin, seed, originalId, { total: "-5.00", invoiceNumber: 2 });
+
+    await settle(postgres.admin, seed.tenantId, {
+      tenantId: seed.tenantId,
+      saleId: originalId,
+      tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+    });
+
+    const settled = await postgres.admin
+      .select()
+      .from(saleSettlements)
+      .where(eq(saleSettlements.saleId, originalId));
+    expect(settled).toHaveLength(1);
+  });
+
+  it("shortfall's due is the net: paying the pre-correction 70 on a -5-corrected sale is rejected", async () => {
+    const seed = await seedTenant(postgres.admin);
+    const originalId = await seedSale(postgres.admin, seed, { total: "70.00", invoiceNumber: 1 });
+    await seedCorrective(postgres.admin, seed, originalId, { total: "-5.00", invoiceNumber: 2 });
+
+    await expect(
+      settle(postgres.admin, seed.tenantId, {
+        tenantId: seed.tenantId,
+        saleId: originalId,
+        tenders: [{ method: "cash", amount: "70.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+      }),
+    ).rejects.toMatchObject({
+      code: "sale.tender_shortfall",
+      params: { saleId: originalId, due: "65.00", charged: "70.00" },
+    });
+  });
+
+  it("nets a correcting-up rectificativa (70 corrected by +5, pay 75)", async () => {
+    const seed = await seedTenant(postgres.admin);
+    const originalId = await seedSale(postgres.admin, seed, { total: "70.00", invoiceNumber: 1 });
+    await seedCorrective(postgres.admin, seed, originalId, { total: "5.00", invoiceNumber: 2 });
+
+    await settle(postgres.admin, seed.tenantId, {
+      tenantId: seed.tenantId,
+      saleId: originalId,
+      tenders: [{ method: "cash", amount: "75.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+    });
+
+    const settled = await postgres.admin
+      .select()
+      .from(saleSettlements)
+      .where(eq(saleSettlements.saleId, originalId));
+    expect(settled).toHaveLength(1);
+  });
+});

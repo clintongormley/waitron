@@ -1,6 +1,6 @@
 // Side-effect import registers this package's sale.* codes (mirrors record-sale.ts).
 import "./errors.js";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { isUniqueViolation, saleSettlements, saleVoids, sales, tenders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, addDecimal, compareDecimal, decimal, sumDecimals } from "@waitron/shared";
@@ -63,8 +63,18 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
     });
   }
 
+  // Net in every rectificativa correcting this sale (design §2). Read RLS-scoped under the app role;
+  // the explicit tenant predicate is redundant under RLS but guards a non-scoped connection too,
+  // mirroring recordCorrection. sumDecimals over the fetched signed totals avoids the numeric-sum
+  // string-render caveat.
+  const correctives = await tx
+    .select({ total: sales.total })
+    .from(sales)
+    .where(and(eq(sales.correctsSaleId, input.saleId), eq(sales.tenantId, input.tenantId)));
+  const corrections = sumDecimals(correctives.map((c) => decimal(c.total)));
+
   const due = addDecimal(
-    decimal(sale.total),
+    addDecimal(decimal(sale.total), corrections),
     sumDecimals(input.tenders.map((t) => decimal(t.tipAmount))),
   );
   const charged = sumDecimals(input.tenders.map((t) => decimal(t.amount)));
