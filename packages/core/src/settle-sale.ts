@@ -21,10 +21,14 @@ export interface SettleSaleInput {
  */
 export async function settleSale(tx: Transaction, input: SettleSaleInput): Promise<void> {
   // The sale's fiscal total, and every rectificativa correcting it netted in a correlated scalar
-  // subquery (design §2), mirroring the coalesce-sum shape listOutstandingSales reads its
-  // correctionTotal with. Fail-closed on cross-tenant: RLS hides another tenant's row, so it is
-  // genuinely not-found rather than forbidden (as record-void). The explicit tenant predicate on the
-  // subquery is redundant under RLS but guards a non-scoped connection too, mirroring recordCorrection.
+  // subquery (design §2) — the same correlated corrections-sum subquery approach listOutstandingSales
+  // uses for its correctionTotal, not an identical query: this one adds an explicit `c.tenant_id`
+  // predicate that listOutstandingSales's inner subquery omits. Fail-closed on cross-tenant: RLS
+  // hides another tenant's row, so it is genuinely not-found rather than forbidden (as record-void).
+  // The explicit tenant predicate here is belt-and-suspenders — redundant under RLS and under the
+  // tenant-consistent `sales_corrects_fk (tenant_id, corrects_sale_id) → sales(tenant_id, id)`, which
+  // together already guarantee any corrective shares the sale's tenant — but it guards a non-scoped
+  // connection too, the same convention recordCorrection follows.
   // `${sales}.id` (not `${sales.id}`) so the column renders table-qualified — inside a select-list
   // sql template Drizzle emits a bare `"id"`, which the subquery's own `sales c` would capture.
   const [sale] = await tx

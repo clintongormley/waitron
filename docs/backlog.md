@@ -709,6 +709,15 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   unconfirmed — `recordSubstitution` reuses the `standard` series today. (3) Cross-SIF F3 (a canje
   against a ticket issued by another SIF) is a sound **inference**, not confirmed. (4) An asesor / XSD
   confirmation of the `Destinatarios` shape is still wanted before the first real filing
+- **A concurrent-corrective race in settlement is untranslated.** If a rectificativa commits between
+  `settleSale`'s opening read and its `sale_settlements` INSERT, the coverage trigger recomputes the
+  net and raises a raw Postgres `P0001` (the trigger's `RAISE EXCEPTION` carries no dedicated
+  SQLSTATE), which `settleSale` does not translate to a clean `sale.*` code — it catches only WT002
+  and the `sale_settlements` unique violation. **Fail-closed** (the settlement rolls back; nothing
+  wrong is written) and **unreachable in the headless slice** — it needs same-sale correction and
+  settlement interleaving, which only the till UI (sub-project 7) makes possible. The fix, when it
+  becomes reachable: give the coverage `RAISE EXCEPTION` a dedicated SQLSTATE, the same way
+  `tenders_reject_post_settlement` got WT002, and translate it in `settleSale`
 
 ---
 
