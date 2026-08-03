@@ -24,9 +24,11 @@ export interface OutstandingSale {
 /**
  * Lists a tenant's outstanding sales: ordinary altas (corrects_sale_id NULL) that are neither an F3
  * canje substitute (already paid via their tickets — AEAT "no cobrar dos veces"), settled, nor
- * voided. RLS scopes every table reference to the tenant; the explicit tenant predicate is redundant
- * under RLS but guards a non-scoped connection too (mirrors recordCorrection). No SECURITY DEFINER —
- * a plain read.
+ * voided. RLS scopes every table reference to the tenant; the explicit tenant predicate on the outer
+ * query AND on each subquery (the corrective sum and the three `not exists` existence checks) is
+ * belt-and-suspenders — redundant under RLS and under the composite tenant-consistent FKs, but
+ * guarding a non-scoped connection too (mirrors recordCorrection and settleSale). No SECURITY
+ * DEFINER — a plain read.
  */
 export async function listOutstandingSales(
   tx: Transaction,
@@ -46,14 +48,14 @@ export async function listOutstandingSales(
       s.issued_at::text as issued_at,
       s.till_id        as till_id,
       s.total::text    as total,
-      coalesce((select sum(c.total) from sales c where c.corrects_sale_id = s.id), 0)::numeric(12, 2)::text
+      coalesce((select sum(c.total) from sales c where c.corrects_sale_id = s.id and c.tenant_id = ${tenantId}), 0)::numeric(12, 2)::text
         as correction_total
     from sales s
     where s.tenant_id = ${tenantId}
       and s.corrects_sale_id is null
-      and not exists (select 1 from sale_settlements ss where ss.sale_id = s.id)
-      and not exists (select 1 from sale_voids sv where sv.sale_id = s.id)
-      and not exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = s.id)
+      and not exists (select 1 from sale_settlements ss where ss.sale_id = s.id and ss.tenant_id = ${tenantId})
+      and not exists (select 1 from sale_voids sv where sv.sale_id = s.id and sv.tenant_id = ${tenantId})
+      and not exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = s.id and sub.tenant_id = ${tenantId})
     order by s.issued_at, s.invoice_number
   `);
 
