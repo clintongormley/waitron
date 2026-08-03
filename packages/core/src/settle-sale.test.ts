@@ -517,3 +517,101 @@ describe("settleSale — error propagation", () => {
     expect(pgErrorCode(error)).toBe("53100");
   });
 });
+
+// Local helper: insert a rectificativa (negative or positive total) that corrects `originalId`.
+async function seedCorrective(
+  db: Database,
+  seed: { tenantId: TenantId; tillId: TillId; nodeId: NodeId; seriesId: SeriesId },
+  originalId: SaleId,
+  overrides: { total: string; invoiceNumber: number },
+): Promise<void> {
+  await db.insert(sales).values({
+    tenantId: seed.tenantId,
+    tillId: seed.tillId,
+    nodeId: seed.nodeId,
+    seriesId: seed.seriesId,
+    invoiceNumber: overrides.invoiceNumber,
+    issuedAt: new Date("2026-08-01T11:30:00Z").toISOString(),
+    issuedOffsetMinutes: 0,
+    total: overrides.total, // negative allowed because correctsSaleId is set (sales_total_ck)
+    locale: "es-ES",
+    invoiceLocales: ["es-ES"],
+    fiscalBackend: "fake",
+    fiscalState: "recorded",
+    correctsSaleId: originalId,
+  });
+}
+
+// Insert tenders then a settlement row directly, as the app role — bypassing settleSale so the
+// coverage TRIGGER is what is under test. Tenders first: tenders_reject_post_settlement (WT002)
+// rejects a tender once a settlement row exists.
+async function settleDirect(
+  db: Database,
+  tenantId: TenantId,
+  saleId: SaleId,
+  amount: string,
+): Promise<void> {
+  await withTenant(db, tenantId, async (tx) => {
+    await asAppUser(tx);
+    await tx.insert(tenders).values({
+      tenantId,
+      saleId,
+      method: "cash",
+      amount,
+      tipAmount: "0.00",
+      settledAt: SETTLED_AT.toISOString(),
+    });
+    await tx
+      .insert(saleSettlements)
+      .values({ tenantId, saleId, settledAt: SETTLED_AT.toISOString() });
+  });
+}
+
+describe("coverage trigger nets corrections", () => {
+  it("accepts the net: 65 covers a 70 sale corrected by -5", async () => {
+    const seed = await seedTenant(postgres.admin);
+    const originalId = await seedSale(postgres.admin, seed, { total: "70.00", invoiceNumber: 1 });
+    await seedCorrective(postgres.admin, seed, originalId, { total: "-5.00", invoiceNumber: 2 });
+
+    await settleDirect(postgres.admin, seed.tenantId, originalId, "65.00");
+
+    const settled = await postgres.admin
+      .select()
+      .from(saleSettlements)
+      .where(eq(saleSettlements.saleId, originalId));
+    expect(settled).toHaveLength(1);
+  });
+
+  it("rejects the pre-correction total: 70 against a 70 sale corrected by -5 (net 65)", async () => {
+    const seed = await seedTenant(postgres.admin);
+    const originalId = await seedSale(postgres.admin, seed, { total: "70.00", invoiceNumber: 1 });
+    await seedCorrective(postgres.admin, seed, originalId, { total: "-5.00", invoiceNumber: 2 });
+
+    const error = await captureError(() =>
+      settleDirect(postgres.admin, seed.tenantId, originalId, "70.00"),
+    );
+    expect(error).toBeDefined();
+
+    const settled = await postgres.admin
+      .select()
+      .from(saleSettlements)
+      .where(eq(saleSettlements.saleId, originalId));
+    expect(settled).toHaveLength(0);
+  });
+
+  it("negative control: an uncorrected sale still needs its exact total (65 rejected on a 70 sale)", async () => {
+    const seed = await seedTenant(postgres.admin);
+    const originalId = await seedSale(postgres.admin, seed, { total: "70.00", invoiceNumber: 1 });
+
+    const error = await captureError(() =>
+      settleDirect(postgres.admin, seed.tenantId, originalId, "65.00"),
+    );
+    expect(error).toBeDefined();
+
+    const settled = await postgres.admin
+      .select()
+      .from(saleSettlements)
+      .where(eq(saleSettlements.saleId, originalId));
+    expect(settled).toHaveLength(0);
+  });
+});
