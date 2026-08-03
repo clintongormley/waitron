@@ -104,8 +104,8 @@ import { locations, tenants } from "./tenants.js";
  * design; called `node` here because in US restaurant English "server" means a waiter, and this
  * is a machine, not a person). One node per venue today; active-active/failover (a `role` column,
  * a second node) are later specs. Deliberately regime-neutral, like `tills`: the Veri*Factu SIF
- * identity (NúmeroInstalación, IdSistemaInformatico) lives in the module-owned `registro_sif`,
- * now keyed by node.
+ * identity (NúmeroInstalación, IdSistemaInformatico) lives in the module-owned `registro_sif`
+ * table, which the node rekey re-keys from till to node (the SIF is the node — #33).
  */
 export const nodes = pgTable(
   "nodes",
