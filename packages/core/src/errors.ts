@@ -106,7 +106,7 @@ declare module "@waitron/shared" {
      * series belongs to exactly one node — allocating from another node's series would let two
      * chains issue from one counter, which no constraint downstream can detect. */
     "sale.series_wrong_node": { seriesId: string; expected: string; actual: string };
-    /** Thrown when a series is real and on the right till, but the WRONG KIND for the operation:
+    /** Thrown when a series is real and on the right node, but the WRONG KIND for the operation:
      * `recordSale` demands a `purpose='standard'` series, `recordCorrection` a
      * `purpose='rectificative'` one, and each throws this if handed the other. The domain concept
      * is "this series is not the right kind for this operation" — it models the mandatory

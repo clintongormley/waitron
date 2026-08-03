@@ -152,8 +152,8 @@ export async function seedTenants(db: Database): Promise<void> {
 }
 
 /**
- * Advances a till's chain head to point at a fabricated-but-real `registros_facturacion` row,
- * standing in for "this till has actually sold something".
+ * Advances a node's chain head to point at a fabricated-but-real `registros_facturacion` row,
+ * standing in for "this node has actually sold something".
  *
  * Not a bare `update cadenas set ultima_huella = ...`, even though that would be enough to make
  * `esPrimerRegistro` observe a non-empty chain. `cadenas_puntero_ck`

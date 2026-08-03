@@ -10,7 +10,7 @@ import {
 } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
-import { currentSif } from "./registro-sif.js";
+import { currentSif, registerSif } from "./registro-sif.js";
 import { VerifactuBackend } from "./backend.js";
 import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 import {
@@ -174,14 +174,18 @@ describe("currentSif resolves per node", () => {
         values (${seed.tenantId}, ${loc.rows[0]!.id}, 'Node sib') returning id
       `);
       const sibling = brandNodeId(nodeRow.rows[0]!.id);
-      // Register a SIF for the sibling under the same NIF as the fixture (one obligado, two nodes).
+      // Register a SIF for the sibling under the same NIF as the fixture (one obligado, two nodes)
+      // via registerSif, so the installation number is minted from the real (NIF, IdSIF) counter
+      // rather than hand-picked, and the sibling's cadenas head is seeded the way production does it.
       const nifRow = await tx.execute<{ nif: string }>(sql`
         select nif from tenants where id = ${seed.tenantId}
       `);
-      await tx.execute(sql`
-        insert into registro_sif (tenant_id, node_id, nif, id_sistema_informatico, numero_instalacion)
-        values (${seed.tenantId}, ${sibling}, ${nifRow.rows[0]!.nif}, ${TEST_SISTEMA.IdSistemaInformatico}, 2)
-      `);
+      await registerSif(tx, {
+        tenantId: seed.tenantId,
+        nodeId: sibling,
+        nif: nifRow.rows[0]!.nif,
+        idSistemaInformatico: TEST_SISTEMA.IdSistemaInformatico,
+      });
       return sibling;
     });
   }

@@ -483,7 +483,7 @@ async function recoverStaleClaims(tx: Transaction, tenantId: string, now: Date):
  * restarting is what releases the row. `fiscal.environment_unknown` is not — the row's `entorno`
  * is NULL, and no value of `WAITRON_ENV` ever makes NULL agree with it, so this guard leaves it
  * `pendiente` forever with no configuration change able to release it. The only honest remedies
- * are re-registering the till as a SIF (which starts a fresh chain and leaves this record
+ * are re-registering the node as a SIF (which starts a fresh chain and leaves this record
  * permanently unfiled) or superuser DDL — see `errors.ts`'s own `fiscal.environment_mismatch`/
  * `fiscal.environment_unknown` doc comments.
  *
@@ -507,7 +507,7 @@ async function recoverStaleClaims(tx: Transaction, tenantId: string, now: Date):
  * alone makes its own entorno agree again, and the very next pass reclaims the whole chain in
  * order with no database repair. For a predecessor whose `entorno` is NULL, no configuration
  * change ever makes it agree — the chain stays blocked, pass after pass, until a human
- * re-registers the till as a SIF (a fresh chain, leaving the blocked one permanently unfiled) or
+ * re-registers the node as a SIF (a fresh chain, leaving the blocked one permanently unfiled) or
  * runs superuser DDL.
  *
  * **The no-successor-submitted guarantee is per-drainer within one pass, not global** — a known,

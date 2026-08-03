@@ -75,7 +75,7 @@ async function getRow(key: { tenantId: string; provider: string; paymentRef: str
  * composite `payments_sale_fk` requires a payment's `sale_id` to belong to the payment's own
  * tenant), and `seedSale` always plants its `invoice_series` at code "A" for the node it's given —
  * since the node-id rekey the series is keyed `(tenant_id, node_id, code)`, so calling it twice
- * against the same node would collide on `invoice_series_tenant_node_code_key`. A second node
+ * against the same node would collide on `invoice_series_node_code_key`. A second node
  * side-steps that without touching `../test/seed.ts`. */
 async function seedSecondSale(seeded: Seeded): Promise<string> {
   const [till] = (
