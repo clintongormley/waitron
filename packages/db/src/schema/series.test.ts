@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { findSpanish } from "../english-only.js";
-import { captureError, pgErrorMessage } from "../testing/errors.js";
+import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
 import { asAppUser } from "../testing/roles.js";
 import { describeEachTarget } from "../testing/harness.js";
 import { seedNode } from "../testing/seed.js";
@@ -193,7 +193,8 @@ describeEachTarget("invoice_series schema", (target) => {
   });
 
   it("rejects a node_id that does not exist with a foreign-key violation", async () => {
-    // The plain FK guarantees referential existence: a node id with no `nodes` row is refused.
+    // The composite (tenant_id, node_id) FK guarantees referential existence too: a node id with
+    // no `nodes` row is refused.
     const error = await captureError(() =>
       db.execute(
         sql`insert into invoice_series (tenant_id, node_id, code)
@@ -201,6 +202,23 @@ describeEachTarget("invoice_series schema", (target) => {
       ),
     );
     expect(pgErrorMessage(error)).toMatch(/violates foreign key constraint/);
+  });
+
+  it("rejects a node_id belonging to another tenant with a foreign-key violation", async () => {
+    // The composite (tenant_id, node_id) → nodes(tenant_id, id) FK bites: nodeB1 EXISTS but under
+    // TENANT_B, so the (TENANT_A, nodeB1) pair has no matching parent row and the insert is
+    // rejected 23503. node_id here is NOT NULL, so this composite FK ALWAYS checks — the strongest
+    // tenant-consistency, and the fiscally load-bearing one (the series↔node guard reads
+    // series.node_id). This is what a plain single-column node_id FK could NOT enforce — it would
+    // have accepted the cross-tenant node because the id exists in `nodes`. Mirrors `sales_node_fk`
+    // / `working_orders_node_fk` / `payments_node_fk`.
+    const error = await captureError(() =>
+      db.execute(
+        sql`insert into invoice_series (tenant_id, node_id, code)
+             values (${TENANT_A}, ${nodeB1}, 'FX')`,
+      ),
+    );
+    expect(pgErrorCode(error)).toBe("23503");
   });
 
   it("has no unique constraint on (tenant_id, node_id) alone", async () => {

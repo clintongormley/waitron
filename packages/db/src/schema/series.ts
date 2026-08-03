@@ -1,5 +1,14 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, pgTable, text, unique, uuid } from "drizzle-orm/pg-core";
+import {
+  check,
+  foreignKey,
+  index,
+  integer,
+  pgTable,
+  text,
+  unique,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { nodes } from "./nodes.js";
 import { tenants } from "./tenants.js";
 
@@ -43,12 +52,12 @@ export const invoiceSeries = pgTable(
       /* v8 ignore next */
       .references(() => tenants.id, { onDelete: "restrict" }),
     // The node that owns this series and its chain (node-id rekey, 2026-08-03:
-    // was `till_id`). Plain one-argument FK — unlike the two-argument
-    // `.references(…, { onDelete })` thunk above it, the plain form is NOT
-    // tracked by v8 as an uncovered function, so it needs no `/* v8 ignore */`.
-    nodeId: uuid("node_id")
-      .notNull()
-      .references(() => nodes.id),
+    // was `till_id`). Bare column: the FK is the tenant-consistent COMPOSITE
+    // (tenant_id, node_id) → nodes(tenant_id, id) declared in extraConfig below
+    // (mirroring the `sales`/`working_orders`/`payments` node FKs). NOT NULL, so
+    // the composite ALWAYS checks — a series can never point at a node belonging
+    // to another tenant. No `.references()` here, so nothing for v8 to track.
+    nodeId: uuid("node_id").notNull(),
     code: text("code").notNull(),
     purpose: text("purpose").notNull().default("standard"),
     nextNumber: integer("next_number").notNull().default(1),
@@ -59,6 +68,16 @@ export const invoiceSeries = pgTable(
     // child row cannot point at a parent belonging to another tenant.
     unique("invoice_series_tenant_id_key").on(t.tenantId, t.id),
     index("invoice_series_tenant_idx").on(t.tenantId),
+    // Tenant-consistent composite FK to the owning node (Copilot #54 follow-through): a series
+    // cannot point at a node belonging to another tenant, independently of whether RLS is in force
+    // on this connection. node_id is NOT NULL, so unlike the nullable node FKs on
+    // `working_orders`/`payments` this one ALWAYS checks — the strongest form, and fiscally
+    // load-bearing (the series↔node guard reads `node_id`). Mirrors `sales_node_fk`.
+    foreignKey({
+      columns: [t.tenantId, t.nodeId],
+      foreignColumns: [nodes.tenantId, nodes.id],
+      name: "invoice_series_node_fk",
+    }),
     // A CHECK rather than a pgEnum, deliberately: the permitted set depends on
     // asesor Q5(b), which is unverified. Widening a CHECK is one line of
     // migration; widening an enum needs ALTER TYPE.

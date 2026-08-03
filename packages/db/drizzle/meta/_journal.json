@@ -141,6 +141,13 @@
       "when": 1785760760647,
       "tag": "0019_working_orders_node_composite_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1785761211246,
+      "tag": "0020_invoice_series_node_composite_fk",
+      "breakpoints": true
     }
   ]
 }
