@@ -35,8 +35,12 @@ export interface RecordCorrectionInput {
    * genuinely can land on a different server-SIF than the original. AEAT's developer FAQ (4-Dec-2025)
    * confirms that is lawful for the sibling correction records — an RF de subsanación or de anulación
    * «se [podría] generar y conservar o remitir a la AEAT desde un SIF distinto al que expidió la
-   * factura original» (same-SIF is merely the usual case) — and a self-standing rectificativa is a
-   * fortiori unconstrained. (`recordVoid` pins to the original's `tillId` by its own choice, not a
+   * factura original» (same-SIF is merely the usual case). Extending that permission to a
+   * self-standing rectificativa is OUR inference, not the FAQ's words — it names only the
+   * subsanación/anulación records; the reading is sound because a rectificativa links by identity
+   * (above), but it is unverified for rectificativas specifically and to be confirmed with the
+   * asesor before a real cross-SIF till caller is wired (F3). (`recordVoid` pins to the original's
+   * `tillId` by its own choice, not a
    * regime requirement.) The chain is keyed per `till_id` today; the server-as-SIF `server_id` rekey
    * re-keys it to the server.
    */
