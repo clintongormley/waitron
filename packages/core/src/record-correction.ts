@@ -86,8 +86,9 @@ export interface RecordCorrectionInput {
  * concerns must never be blocked by it (spec §5, «NUNCA debe interrumpirse») — the same rule
  * `recordSale`/`recordVoid` follow.
  *
- * Issues on the caller-supplied `input.tillId`, NOT the original sale's till — see that field's doc
- * for the open cross-till fiscal-policy question a future till caller must resolve first.
+ * Issues on the caller-supplied `input.nodeId` (the SIF is the node, #33), NOT the original sale's
+ * node — see that field's doc for the cross-SIF fiscal-policy question (sound but asesor-pending) a
+ * future cross-SIF caller must resolve first.
  *
  * Takes a transaction handle, like every write in this package: atomicity between the corrective
  * sale and its fiscal record is the whole point, and step 7 (the caller's commit) is what lets a
