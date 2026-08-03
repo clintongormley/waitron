@@ -232,7 +232,9 @@ export async function recordSubstitution(
 
   // Step 5. Allocation takes the series row lock and comes AFTER `checkIntegrity`'s chain-head lock,
   // never before: both stay held until commit, so every write path must take them chain-then-series
-  // or two concurrent writers on one till deadlock. The guard SELECTs above take no persistent lock.
+  // or two concurrent writers on one node deadlock — the chain-head lock is the per-node `cadenas`
+  // row, which spans that node's tills (node-id rekey, 2026-08-03). The guard SELECTs above take no
+  // persistent lock.
   const invoiceNumber = await allocateInvoiceNumber(tx, input.seriesId);
 
   // Step 6. The F3 sale: a POSITIVE `total` (the ordinary `total >= 0` arm applies — `corrects_sale_id`

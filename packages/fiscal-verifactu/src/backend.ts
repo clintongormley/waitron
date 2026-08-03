@@ -51,7 +51,7 @@ const BACKEND_ID = "verifactu";
  * Software-identity fields of `SistemaInformatico` that describe THIS PRODUCT rather than any
  * one tenant, till, or sale — Waitron's own claims about what it is and how it may be used.
  * `IdSistemaInformatico` and `NumeroInstalacion` are deliberately absent from this shape: both
- * are per-(NIF, till) facts already minted by `registerSif` and read back from `registro_sif` via
+ * are per-(NIF, node) facts already minted by `registerSif` and read back from `registro_sif` via
  * `currentSif`, never configuration.
  *
  * **Unverified, matching this repo's own convention for a claim with no cited primary source**

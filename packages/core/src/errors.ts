@@ -13,7 +13,8 @@ import "@waitron/shared";
  *
  * **Deviation from Task 16's brief.** The brief's Step 1 said to append five members
  * (`sale.tender_unsettled`, `sale.tender_shortfall`, `sale.series_not_found`,
- * `sale.series_wrong_till`, `sale.number_reused`) directly to `packages/shared/src/errors.ts`'s
+ * `sale.series_wrong_till` (since renamed to `sale.series_wrong_node`), `sale.number_reused`)
+ * directly to `packages/shared/src/errors.ts`'s
  * `ErrorCode` union. That is wrong under this repo's OWN documented, already-precedented
  * convention (see `packages/shared/src/errors.ts`'s design note, and Task 13's identical
  * correction in `packages/fiscal-verifactu/src/errors.ts`, and Task 14's in the same file): only

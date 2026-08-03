@@ -215,7 +215,8 @@ export async function recordSale(
   // ordering rather than regulation: both the chain-head row and the series row stay locked
   // until commit, so every path must take them in the same order. Chain-then-series here and
   // series-then-chain anywhere else is the textbook inversion that deadlocks two concurrent
-  // sales on one till.
+  // sales on one node — the chain-head lock is the per-node `cadenas` row, which spans that
+  // node's tills (node-id rekey, 2026-08-03).
   const invoiceNumber = await allocateInvoiceNumber(tx, input.seriesId);
 
   // One clock reading for the whole transaction. Reading it again later (e.g. inside the module,
