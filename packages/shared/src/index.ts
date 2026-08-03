@@ -17,6 +17,7 @@ export type {
   Branded,
   FiscalRecordId,
   LocationId,
+  NodeId,
   SaleId,
   SaleLineId,
   SeriesId,
@@ -29,6 +30,7 @@ export type {
 export {
   fiscalRecordId,
   locationId,
+  nodeId,
   saleId,
   saleLineId,
   seriesId,

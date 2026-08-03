@@ -4,6 +4,7 @@ import type { SaleId, TenantId } from "./ids.js";
 import {
   fiscalRecordId,
   locationId,
+  nodeId,
   saleId,
   saleLineId,
   seriesId,
@@ -29,6 +30,7 @@ const ALL_ID_CONSTRUCTORS: ReadonlyArray<[string, string, (value: string) => str
   ["tenantId", "TenantId", tenantId],
   ["locationId", "LocationId", locationId],
   ["tillId", "TillId", tillId],
+  ["nodeId", "NodeId", nodeId],
   ["seriesId", "SeriesId", seriesId],
   ["workingOrderId", "WorkingOrderId", workingOrderId],
   ["workingOrderLineId", "WorkingOrderLineId", workingOrderLineId],
