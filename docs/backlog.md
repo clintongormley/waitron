@@ -60,7 +60,7 @@ reprioritisation rather than assumed.
 | **Sale settlement model** — implementation | **Merged** (#39). Piece 1 of the fiscal sequence done: tip and amount-charged off the frozen `sales` row, tip onto `tenders.tip_amount`, append-only `sale_settlements`, one `settleSale` writer (immediate mode calls it in the same transaction, so the two paths cannot drift — design D6). Coverage moved to the `sale_settlements` INSERT plus a `tenders` post-settlement guard (SQLSTATE WT002). [plan](superpowers/plans/2026-08-01-sale-settlement-model.md), [design](superpowers/specs/2026-07-31-sale-settlement-model-design.md) (with a "Ratified in implementation" note recording three decisions settled during the build) |
 | **Rectificativas** — implementation | **Merged** (#46). Fiscal sequence **piece 2 done**: R5 corrective invoices for simplified tickets — `corrects_sale_id` link + negative-total allowance, the four AEAT rectificativa columns round-tripped so a filing carries its mandatory `TipoRectificativa`, `recordCorrection` backend + core entry point, and the mandatory separate `rectificative` series guarded. [plan](superpowers/plans/2026-08-02-rectificativas.md). Cross-till/SIF corrections: AEAT permits a correction from a **different SIF** (subsanación/anulación, dev FAQ 4-Dec-2025); the rectificativa extension is a sound **inference** (identity-linkage) pending asesor confirmation — findings §13. R1/B2B and R2–R4/accounting deferred |
 | **Workforce — registro de jornada** — implementation | **Merged** (#47). Sub-project 16 legal floor: new `packages/workforce` + `packages/workforce-es`, immutable append-only `time_entries` (role-revocation floor), clock in/out/break, supervisor-gated append-only corrections + registro export, **both-model** overtime (daily-accrual + period-net, convenio-selectable), and a single-active-writer tamper-evidence hash chain. [plan](superpowers/plans/2026-08-02-workforce.md). A migration-isolated parallel lane to the fiscal work |
-| **App-level cross-server sync** — design | **Designed** (this session). Application **outbox** (`sync_log` + generic capture trigger, apply as the app role under `withTenant`) — one reusable mechanism, no new DB privilege. Decisions settled with the owner: explicit `server_id` on the commercial tables too, **true active-active** for the deli, and a **payments fast lane**. Built later (after the `server_id` rekey + feature schemas settle); 9 container gates first. Spec: [2026-08-02-app-level-sync-design.md](superpowers/specs/2026-08-02-app-level-sync-design.md) |
+| **App-level cross-server sync** — design | **Designed** (this session). Application **outbox** (`sync_log` + generic capture trigger, apply as the app role under `withTenant`) — one reusable mechanism, no new DB privilege. Decisions settled with the owner: explicit `server_id` on the commercial tables too, **true active-active** for the deli, and a **payments fast lane**. Built later (the `server_id`/node rekey it waited on **landed as #54**; still needs the feature schemas to settle); 9 container gates first. Spec: [2026-08-02-app-level-sync-design.md](superpowers/specs/2026-08-02-app-level-sync-design.md) |
 | **Close Q13 and Q15 on primary source** | **Done** (#37). Q13 (tips) and Q15's core CLOSED on primary/official source ([findings](compliance/verifactu-findings.md) §§11–12); Q14 (precuenta) stays open — see the advisor gap below |
 | **Consolidate the session-memory notes** | Not started. They predate this file and now overlap it — see below |
 
@@ -119,7 +119,9 @@ decided the **topology only**; its §14 defers the buildable pieces, each to its
   explicit `server_id` on the commercial tables too, **true active-active** for the deli, and a
   **payments fast lane**. Carries **9 container prototype gates** (§11 — esp. the capture trigger +
   echo-suppression under FORCE RLS, and non-superuser logical-slot consumption for the native-decode
-  backfill option) that come before any build, and depends on the `server_id` rekey landing first.
+  backfill option) that come before any build. The `server_id`/node rekey it depended on has **LANDED
+  (#54, 2026-08-03, under the term `node`)**, so the sync spec can now assume the `node_id` columns
+  exist rather than treating the rekey as a prerequisite.
 - **Promotion + fencing tooling and the till-side failover list** — boot-time role resolution,
   continuous conflict-detection, the "one primary" invariant.
 - **The submitter as a relocatable role** — one venue submitter, certificate resolved from wherever
@@ -137,19 +139,31 @@ Also left open by that design:
 - The **reconcile remediation UI** and the **orphan-drift hold** (both already under *Debt and odd
   jobs*) are the backstop for the design's double-charge-across-failover path (§10) — no new work, but
   now they have a second caller.
-- **#33's "the SIF is the server" premise has no schema support yet — but the schema shape is now
-  decided (2026-08-01).** Every fiscal key is per `till_id` today: `registro_sif` (one live identity
-  per till), `cadenas` (chain head keyed `(tenant, till)`), `registros_facturacion` (`(tenant, till,
-  secuencia)`, `till_id NOT NULL`), `invoice_series` (`(tenant, till, code)`), and `tills` carries no
-  server column — verified against the schema on 2026-08-01. **Decision: add an explicit `server_id`
-  column and re-key the fiscal chain / series / SIF identity to the server. Do NOT reuse `till_id` as a
-  stand-in for "server"** — overloading a legally-load-bearing, unrepairable identity with a second
-  meaning is the dishonest option. **No backwards-compatibility or migration** — Waitron is
-  pre-production, schema changes drop and recreate (`CLAUDE.md` §3). The rekey still needs a
-  **container prototype against `record-sale.ts`'s series↔till check and the chain-append path** before
-  build, to confirm they behave under server-keying. This is the gap #33 left open; the server-as-SIF
-  implementation spec must carry the rekey, and the sync/replication spec (held) can now assume the
-  `server_id` column rather than treating `till_id`-as-server as an open option.
+- **#33's "the SIF is the server" premise now has schema support — the rekey LANDED as #54
+  (2026-08-03), under the term `node`.** A `nodes` table plus a re-key of the fiscal chain / series /
+  SIF identity from `till_id` to a new `node_id`: `registro_sif` (one live SIF per node), `cadenas`
+  (chain head `(tenant, node)`), `registros_facturacion` (`(tenant, node, secuencia)`),
+  `invoice_series` (`(tenant, node, code)`); `till_id` kept as an informational snapshot on
+  `registros_facturacion`/`sales`. **The code says `node`, not `server`** — #33's "server" IS this
+  `node` (US "server" = waiter; Waitron's staff concept is `persons`/`employments`, and this is a
+  machine). The container prototype the gap called for became the real-PG concurrency gate
+  (`chain.node-rekey.concurrency.test.ts`); the huella is byte-identical (`node_id` is our metadata,
+  stamped after hashing, never in the hash). Design/plan:
+  [2026-08-03-node-id-rekey-design.md](superpowers/specs/2026-08-03-node-id-rekey-design.md). Node
+  references are tenant-consistent composite FKs `(tenant_id, node_id) → nodes(tenant_id, id)` on the
+  commercial/series tables (`sales`, `working_orders`, `payments`, `invoice_series`); the immutable
+  chain tables (`cadenas`/`registro_sif`/`registros_facturacion`) keep plain `node_id` FKs (written
+  only through the guarded chain-append path). Scope was **rekey + wire one node per venue**;
+  active-active, failover, two concurrent SIFs + disjoint-series, and the submitter role stay out (the
+  follow-ups above).
+  - **Deferred follow-up — production node-provisioning is unwired.** `apps/server/sql/bootstrap-tenant.sql`
+    still creates a till, not a node, and a first-class `provision node` CLI is unbuilt (design §8/§11):
+    the write path takes `node_id` from config, and tests mint nodes via `seedNode`, but nothing
+    provisions a production node yet — so the write path is not end-to-end runnable in production. Not
+    blocking (pre-production), but needed before a real venue trades.
+  - **Deferred follow-up — `CLAUDE.md` §5's "nothing blocks a sale" rewrite** stays open (see the bullet
+    above): this slice changed no sale-blocking behaviour, so the rewrite lands with the server-as-SIF
+    *behaviour* (failover), not this schema slice.
 
 ---
 
@@ -598,8 +612,8 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
 - **Payments follow-ups** — the Mode 3 inbound Stripe webhook endpoint's **security half is DONE
   (#49)**: `POST /webhooks/stripe/:tenantId`, per-tenant signature verification, tenant resolution,
   settle. What remains on it is the **`recordSale` sale-chaining hand-off**, deferred because it
-  needs the till / working-orders model and the `server_id` rekey before a settled webhook can chain
-  a sale. Also still open: the pre-existing `forward` retry backoff and the reconcile remediation UI
+  needs the till / working-orders model before a settled webhook can chain a sale (the `server_id`/node
+  rekey it also needed **landed as #54**). Also still open: the pre-existing `forward` retry backoff and the reconcile remediation UI
 - **Workforce follow-ups (D2, #50)** — none blocking. (1) **Swap-workflow hardening** (Copilot,
   deferred): `acceptSwap` has no "requested-only" status guard, and `requestSwap` doesn't verify the
   return shift is owned by `toPerson`. Latent today — the manager approve/reject slice that produces
