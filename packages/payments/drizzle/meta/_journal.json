@@ -78,6 +78,13 @@
       "when": 1785748206891,
       "tag": "0010_add_node_id",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785760764025,
+      "tag": "0011_payments_node_composite_fk",
+      "breakpoints": true
     }
   ]
 }

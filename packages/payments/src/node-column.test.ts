@@ -72,4 +72,18 @@ describe("payments.node_id (node rekey scaffolding, Task 3)", () => {
     const error = await captureError(() => insertPayment(seeded, "p-bad-node", BOGUS_NODE));
     expect(pgErrorCode(error)).toBe("23503");
   });
+
+  it("rejects a node_id belonging to another tenant with a foreign-key violation", async () => {
+    // The composite (tenant_id, node_id) → nodes(tenant_id, id) FK bites: `foreign.node` EXISTS
+    // but under a DIFFERENT tenant, so the (own tenant, foreign node) pair has no matching parent
+    // row and the insert is rejected 23503. This is the tenant-consistency a plain single-column
+    // node_id FK could NOT enforce — it would have accepted the cross-tenant node because the id
+    // exists in `nodes`. Mirrors payments' own composite sale/working-order FKs and `sales_node_fk`.
+    const own = await seedOrderWithNode();
+    const foreign = await seedOrderWithNode();
+    const error = await captureError(() =>
+      insertPayment(own.seeded, "p-cross-tenant-node", foreign.node),
+    );
+    expect(pgErrorCode(error)).toBe("23503");
+  });
 });
