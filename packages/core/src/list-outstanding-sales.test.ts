@@ -75,7 +75,7 @@ describe("listOutstandingSales", () => {
     expect(typeof out[0]!.issuedAt).toBe("string");
   });
 
-  it("nets a rectificativa into amountDue and hides the corrective itself", async () => {
+  it("nets a correction into amountDue and hides the corrective itself", async () => {
     const originalId = await seedBareSale(
       suite.db,
       { tenantId, tillId, nodeId, seriesId },

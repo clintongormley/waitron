@@ -652,7 +652,7 @@ describe("settleSale nets corrections into the due", () => {
     });
   });
 
-  it("nets a correcting-up rectificativa (70 corrected by +5, pay 75)", async () => {
+  it("nets a correcting-up corrective (70 corrected by +5, pay 75)", async () => {
     const seed = await seedTenant(postgres.admin);
     const originalId = await seedSale(postgres.admin, seed, { total: "70.00", invoiceNumber: 1 });
     await seedCorrective(postgres.admin, seed, originalId, { total: "5.00", invoiceNumber: 2 });
