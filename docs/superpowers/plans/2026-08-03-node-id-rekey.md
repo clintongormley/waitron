@@ -250,7 +250,7 @@ The atomic rekey. Populates `node_id` on every new row, flips all four fiscal ta
 - [ ] **Step 1: Write the §9 prototype gate (failing), real-PG**
 
 Create `packages/fiscal-verifactu/src/chain.node-rekey.concurrency.test.ts`, adapting `chain.concurrency.test.ts` to node-keying. It MUST use `useRealPostgres`/`startRealPostgres` (never a PGlite fallback — a vanished concurrency suite is a false green, `CLAUDE.md` §4). Cover:
-  1. **Concurrency backstop under `(tenant, node, secuencia)`.** Seed ONE node serving sales, run `WRITERS = 20` concurrent `appendToChain(tx, node.tenantId, node.nodeId, altaFor(...))` on distinct connections; assert all 20 committed, `secuencia` is `1..20` with no gap, each `anterior_huella` equals the predecessor's `huella`, `where node_id = ${node.nodeId}`. (This is the property `registros.ts:158-162` documents; re-proven on the node key.)
+  1. **Concurrency under `(tenant, node, secuencia)`.** Seed ONE node serving sales, run `WRITERS = 20` concurrent `appendToChain(tx, node.tenantId, node.nodeId, altaFor(...))` on distinct connections; assert all 20 committed, `secuencia` is `1..20` with no gap, each `anterior_huella` equals the predecessor's `huella`, `where node_id = ${node.nodeId}`. **What makes this pass is the per-node `cadenas` FOR UPDATE head lock, not the unique index** — the 20 lock-using appends are serialised, so no two ever attempt the same position. The `(tenant, node, secuencia)` unique index is a defense-in-depth backstop against a writer that BYPASSES that lock (`registros.ts:158-162` documents it catching a naive read-then-write, 3 of 20 committed); prove the index directly and deterministically with a duplicate-position insert (rejected 23505 with the index; succeeds once it is dropped) — see the measured note below.
   2. **Two tills, one node → ONE chain.** Seed a node with two tills; sales rung at either till append to the same node chain (`secuencia` continues across tills). This is the behaviour change the rekey introduces (per-node, not per-till serialisation) and did not exist before.
   3. **series↔node guard.** `record-sale` (or the core entry) with `input.nodeId` ≠ the series' node throws `sale.series_wrong_node`; the matching case succeeds.
   4. **`currentSif` per node.** Two nodes under one tenant resolve to distinct SIFs / distinct chains.
@@ -309,7 +309,7 @@ Run the §9 gate, then the full touched packages unfiltered (to load tree-wide g
 TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/fiscal-verifactu test chain.node-rekey
 TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/shared --filter @waitron/db --filter @waitron/fiscal --filter @waitron/fiscal-verifactu --filter @waitron/core --filter @waitron/payments test:coverage
 ```
-Prove the concurrency backstop by deletion: temporarily drop `registros_tenant_node_secuencia_uq`, confirm the gate's "distinct position, no gaps" test fails, restore it.
+Prove the index backstop is real — but measure it, do not assume the shape. Dropping `registros_tenant_node_secuencia_uq` and re-running the 20-writer test leaves it PASSING (the FOR UPDATE head lock serialises those appends, so none ever collide on a position — measured 2026-08-03), so that test does NOT prove the index. Prove the index directly instead: a duplicate-position insert is rejected `23505` with the index present and succeeds once it is dropped. Restore the index.
 
 - [ ] **Step 11: Add the #33 dated pointer**
 

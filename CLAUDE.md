@@ -367,6 +367,21 @@ parameters are typed plain `string`.
 **Never widen a grant to make a test pass.** `app_user` holds `SELECT` on `tenants` and not `INSERT`
 deliberately — the running POS cannot create tenants.
 
+**A new `tenant_id`-bearing table needs FORCE RLS + a tenant-isolation policy + grants, and
+`.enableRLS()` gives only the first.** Drizzle's `.enableRLS()` emits `ENABLE ROW LEVEL SECURITY` and
+nothing more; the `FORCE ROW LEVEL SECURITY`, the
+`CREATE POLICY <t>_tenant_isolation … USING/WITH CHECK (tenant_id = current_tenant_id())`, and the
+`GRANT`s to `app_user` are hand-written in a custom migration (`drizzle-kit generate --custom`), the
+way `0001_tenancy_rls.sql` does for `tenants`/`locations`/`tills`. ENABLE with no policy denies the app
+role everything; no FORCE lets the table owner bypass. **The guard that catches a missing FORCE lives
+in another package:** `packages/fiscal-verifactu`'s `inmutabilidad` suite scans every table in the
+database that HAS a `tenant_id` column (keyed on the column, not on "is in this package"), so a
+tenant-scoped table added in `packages/db` leaves that guard red while `packages/db`'s own suite is
+green. Cost: `nodes` shipped with `.enableRLS()` alone and its task review passed on the `@waitron/db`
+suite; the gap surfaced only when a later task ran the fiscal suite (`nodes: relforcerowsecurity=false`).
+Run `pnpm --filter @waitron/fiscal-verifactu test inmutabilidad` after adding any tenant-scoped table,
+in any package.
+
 **An object-privilege `GRANT` PostgreSQL accepted is not a `GRANT` that did anything.** Whether an
 ineffective `GRANT` is loud or silent turns on what the GRANTOR holds, and the quiet cases are the
 common ones. Run on `postgres:18-alpine` (PostgreSQL 18.4), granting on a database owned by
