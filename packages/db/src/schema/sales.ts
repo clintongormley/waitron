@@ -13,6 +13,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import { nodes } from "./nodes.js";
 import { invoiceSeries } from "./series.js";
 import { tenants, tills } from "./tenants.js";
 
@@ -88,6 +89,11 @@ export const sales = pgTable(
       .notNull()
       /* v8 ignore next */
       .references(() => invoiceSeries.id, { onDelete: "restrict" }),
+    // Nullable in this task (node rekey scaffolding); Task 4 populates it and flips it NOT NULL,
+    // adding the composite tenant-consistent (tenant_id, node_id) FK. The plain one-argument FK
+    // here is NOT tracked by v8 as an uncovered function (unlike the two-argument `onDelete`
+    // thunks above), so it needs no `/* v8 ignore */`.
+    nodeId: uuid("node_id").references(() => nodes.id),
     invoiceNumber: integer("invoice_number").notNull(),
     // mode: "string" rather than "date" — a JS Date normalises through the host
     // timezone the moment anything formats it, and nothing formatted is ever

@@ -11,7 +11,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import { sales, workingOrders } from "@waitron/db";
+import { nodes, sales, workingOrders } from "@waitron/db";
 
 /**
  * The lifecycle state of one electronic tender. 4a's online subset: `captured` (money taken),
@@ -57,6 +57,11 @@ export const payments = pgTable(
     // Nullable: the payment row exists before the sale does (the money moves first). Set to the
     // committed sale in the associate-back step.
     saleId: uuid("sale_id"),
+    // Nullable in this task (node rekey scaffolding), and stays nullable in this slice — no writer
+    // yet (design §5). Plain one-argument FK to `nodes`; this is the first column-level FK on this
+    // table (the tenant/working-order/sale FKs are composite, declared in extraConfig below), and
+    // the plain form is NOT tracked by v8 as an uncovered function so it needs no `/* v8 ignore */`.
+    nodeId: uuid("node_id").references(() => nodes.id),
     provider: text("provider").notNull(),
     /** This provider's opaque reference and the idempotency anchor. */
     paymentRef: text("payment_ref").notNull(),

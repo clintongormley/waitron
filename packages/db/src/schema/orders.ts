@@ -12,6 +12,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import { nodes } from "./nodes.js";
 import { tenants, tills } from "./tenants.js";
 
 /**
@@ -48,6 +49,10 @@ export const workingOrders = pgTable(
       .notNull()
       /* v8 ignore next */
       .references(() => tills.id, { onDelete: "restrict" }),
+    // Nullable in this task (node rekey scaffolding), and stays nullable in this slice — no
+    // writer yet (design §5). The plain one-argument FK is NOT tracked by v8 as an uncovered
+    // function (unlike the two-argument `onDelete` thunks above), so it needs no `/* v8 ignore */`.
+    nodeId: uuid("node_id").references(() => nodes.id),
     status: workingOrderStatus("status").notNull().default("open"),
     openedAt: timestamp("opened_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
     settledAt: timestamp("settled_at", { withTimezone: true, mode: "string" }),

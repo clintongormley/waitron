@@ -9,7 +9,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { tenants, tills } from "@waitron/db";
+import { nodes, tenants, tills } from "@waitron/db";
 
 /**
  * A SIF identity: NIF + IdSistemaInformatico + NúmeroInstalación (findings §1). Append-mostly —
@@ -27,6 +27,9 @@ export const registroSif = pgTable(
     tillId: uuid("till_id")
       .notNull()
       .references(() => tills.id),
+    // Nullable in this task (node rekey scaffolding); a later task populates it (the SIF IS the
+    // node — #33). Plain one-argument FK, matching the sibling `till_id` FK above.
+    nodeId: uuid("node_id").references(() => nodes.id),
     nif: text("nif").notNull(),
     idSistemaInformatico: text("id_sistema_informatico").notNull(),
     numeroInstalacion: integer("numero_instalacion").notNull(),

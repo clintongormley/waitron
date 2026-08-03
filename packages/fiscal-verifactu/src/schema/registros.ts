@@ -12,7 +12,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { sales, tenants, tills } from "@waitron/db";
+import { nodes, sales, tenants, tills } from "@waitron/db";
 import { registroSif } from "./sif.js";
 
 /**
@@ -52,6 +52,9 @@ export const registrosFacturacion = pgTable(
     tillId: uuid("till_id")
       .notNull()
       .references(() => tills.id),
+    // Nullable in this task (node rekey scaffolding); a later task populates it and flips it NOT
+    // NULL. Plain one-argument FK, matching the sibling `till_id` FK above.
+    nodeId: uuid("node_id").references(() => nodes.id),
     // Which SIF identity generated this record. A new NúmeroInstalación is a new SIF, therefore a
     // new chain (findings §1), and this column is what makes "which chain" a fact on the row
     // rather than an inference from dates.

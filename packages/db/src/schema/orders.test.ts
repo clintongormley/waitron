@@ -1,9 +1,11 @@
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { captureError, pgErrorMessage } from "../testing/errors.js";
 import { describeEachTarget } from "../testing/harness.js";
 import { asAppUser } from "../testing/roles.js";
+import { seedNode } from "../testing/seed.js";
 import { withTenant } from "../tenancy.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
 import { locations, tenants, tills } from "./tenants.js";
@@ -246,6 +248,41 @@ describeEachTarget("working_orders", (target) => {
       return tx.select({ id: workingOrders.id }).from(workingOrders);
     });
     expect(visible).toHaveLength(1);
+  });
+
+  it("carries a nullable node_id column referencing nodes", async () => {
+    // Node rekey scaffolding (Task 3): node_id is added NULLABLE with a plain FK to `nodes`, and
+    // working_orders stays nullable permanently in this slice — no writer yet (design §5).
+    const node = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
+    const meta = await rows<{ is_nullable: string }>(
+      db,
+      sql`select is_nullable from information_schema.columns
+           where table_name = 'working_orders' and column_name = 'node_id'`,
+    );
+    expect(meta).toEqual([{ is_nullable: "YES" }]);
+    // Opens fine WITHOUT node_id (nullable) ...
+    const plainId = await openOrder(db);
+    const [plain] = await db.select().from(workingOrders).where(eq(workingOrders.id, plainId));
+    expect(plain.nodeId).toBeNull();
+    // ... and accepts a valid node id when set.
+    const [withNode] = await db
+      .insert(workingOrders)
+      .values({ tenantId: TENANT_A, tillId: TILL_A1, status: "open", openedAt: AT, nodeId: node })
+      .returning({ nodeId: workingOrders.nodeId });
+    expect(withNode.nodeId).toBe(node);
+  });
+
+  it("rejects a node_id that does not exist with a foreign-key violation", async () => {
+    const error = await captureError(() =>
+      db.insert(workingOrders).values({
+        tenantId: TENANT_A,
+        tillId: TILL_A1,
+        status: "open",
+        openedAt: AT,
+        nodeId: "99999999-9999-4999-8999-999999999999",
+      }),
+    );
+    expect(pgErrorMessage(error)).toMatch(/violates foreign key constraint/);
   });
 });
 

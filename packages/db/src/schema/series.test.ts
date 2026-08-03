@@ -1,10 +1,12 @@
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { findSpanish } from "../english-only.js";
 import { captureError, pgErrorMessage } from "../testing/errors.js";
 import { asAppUser } from "../testing/roles.js";
 import { describeEachTarget } from "../testing/harness.js";
+import { seedNode } from "../testing/seed.js";
 import { withTenant } from "../tenancy.js";
 import { locations, tenants, tills } from "./tenants.js";
 import { invoiceSeries } from "./series.js";
@@ -151,6 +153,46 @@ describeEachTarget("invoice_series schema", (target) => {
       .map((c) => c.column_name)
       .filter((n) => /chain/i.test(n) || findSpanish(n).length > 0);
     expect(offenders).toEqual([]);
+  });
+
+  it("carries a nullable node_id column referencing nodes", async () => {
+    // Node rekey scaffolding (Task 3): node_id is added NULLABLE with a plain FK to `nodes`.
+    // Nothing writes it yet; a later task populates it and flips (sales, registros) NOT NULL.
+    // Raw SQL for the inserts so a pre-migration run fails on the real cause ("column node_id
+    // does not exist") rather than a drizzle column-object error — the same reason
+    // sales.test.ts's corrective-link tests use a raw insertSale().
+    const node = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
+    const meta = await rows<{ is_nullable: string }>(
+      db,
+      sql`select is_nullable from information_schema.columns
+           where table_name = 'invoice_series' and column_name = 'node_id'`,
+    );
+    expect(meta).toEqual([{ is_nullable: "YES" }]);
+    // Accepts a valid node id.
+    const withNode = await rows<{ node_id: string | null }>(
+      db,
+      sql`insert into invoice_series (tenant_id, till_id, code, node_id)
+           values (${TENANT_A}, ${TILL_A1}, 'FN', ${node}) returning node_id`,
+    );
+    expect(withNode).toEqual([{ node_id: node }]);
+    // And a row inserts fine WITHOUT it (nullable).
+    const withoutNode = await rows<{ node_id: string | null }>(
+      db,
+      sql`insert into invoice_series (tenant_id, till_id, code)
+           values (${TENANT_A}, ${TILL_A1}, 'FM') returning node_id`,
+    );
+    expect(withoutNode).toEqual([{ node_id: null }]);
+  });
+
+  it("rejects a node_id that does not exist with a foreign-key violation", async () => {
+    // The plain FK guarantees referential existence: a node id with no `nodes` row is refused.
+    const error = await captureError(() =>
+      db.execute(
+        sql`insert into invoice_series (tenant_id, till_id, code, node_id)
+             values (${TENANT_A}, ${TILL_A1}, 'FX', '99999999-9999-4999-8999-999999999999')`,
+      ),
+    );
+    expect(pgErrorMessage(error)).toMatch(/violates foreign key constraint/);
   });
 
   it("has no unique constraint on (tenant_id, till_id) alone", async () => {

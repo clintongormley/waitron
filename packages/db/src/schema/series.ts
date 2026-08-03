@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, index, integer, pgTable, text, unique, uuid } from "drizzle-orm/pg-core";
+import { nodes } from "./nodes.js";
 import { tenants, tills } from "./tenants.js";
 
 /**
@@ -44,6 +45,11 @@ export const invoiceSeries = pgTable(
       .notNull()
       /* v8 ignore next */
       .references(() => tills.id, { onDelete: "restrict" }),
+    // Nullable in this task (node rekey scaffolding); a later task populates it. The FK is the
+    // plain one-argument form — unlike the two-argument `.references(…, { onDelete })` thunks
+    // above it, the plain form is NOT tracked by v8 as an uncovered function, so it needs no
+    // `/* v8 ignore */`. Matches the sibling plain `till_id` FKs in the fiscal-verifactu tables.
+    nodeId: uuid("node_id").references(() => nodes.id),
     code: text("code").notNull(),
     purpose: text("purpose").notNull().default("standard"),
     nextNumber: integer("next_number").notNull().default(1),

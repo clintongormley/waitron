@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, integer, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import { tenants, tills } from "@waitron/db";
+import { nodes, tenants, tills } from "@waitron/db";
 import { registrosFacturacion } from "./registros.js";
 
 /**
@@ -22,6 +22,9 @@ export const cadenas = pgTable(
     tillId: uuid("till_id")
       .notNull()
       .references(() => tills.id),
+    // Nullable in this task (node rekey scaffolding); a later task populates it. Plain
+    // one-argument FK, matching the sibling `till_id` FK above.
+    nodeId: uuid("node_id").references(() => nodes.id),
     // Monotonic across SIF identities and NEVER reset. Re-registration breaks the chain POINTER
     // (below), not the counter: resetting to zero would collide head-on with
     // `registros_tenant_till_secuencia_uq`, and the sequence is ours anyway.
