@@ -4,6 +4,7 @@ export type { Database, Driver, Schema, Transaction } from "./client.js";
 export { runMigrations } from "./migrate.js";
 export type { MigrationOptions } from "./migrate.js";
 export * from "./schema/tenants.js";
+export { nodes } from "./schema/nodes.js";
 export { invoiceSeries } from "./schema/series.js";
 export { workingOrderLines, workingOrders, workingOrderStatus } from "./schema/orders.js";
 export {
