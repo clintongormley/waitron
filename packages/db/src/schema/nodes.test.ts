@@ -1,8 +1,10 @@
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import type { Database } from "../client.js";
-import { captureError, pgErrorCode } from "../testing/errors.js";
+import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
 import { describeEachTarget } from "../testing/harness.js";
+import { asAppUser } from "../testing/roles.js";
+import { withTenant } from "../tenancy.js";
 import { locations, tenants } from "./tenants.js";
 import { nodes } from "./nodes.js";
 
@@ -124,16 +126,76 @@ describeEachTarget("nodes schema", (target) => {
     expect(pgErrorCode(error)).toBe("23503");
   });
 
-  it("enables row level security", async () => {
-    // The global constraint for this table is `.enableRLS()`, mirroring every
-    // other table in tenants.ts. FORCE, a tenant-isolation policy and the
-    // app-role grants are a later task's job (nothing FKs `nodes` yet), so only
-    // ENABLE is asserted here — relforcerowsecurity is deliberately left unpinned.
-    const found = await rows<{ relrowsecurity: boolean }>(
+  it("enables and forces row level security", async () => {
+    // ENABLE + FORCE, mirroring `tills` (0001_tenancy_rls.sql). FORCE, the
+    // tenant-isolation policy and the app-role grants were added in
+    // 0017_nodes_rls.sql now that the node_id rekey makes seven fiscal/commercial
+    // tables FK `nodes` — the condition 0001 deferred FORCE on ("nothing FKs
+    // nodes yet"). FORCE is inert against the superuser test connection, so it is
+    // not the control that matters; the tenant-isolation policy the tests below
+    // exercise is. relforcerowsecurity is now pinned true — a regression that
+    // drops FORCE is caught here.
+    const found = await rows<{ relrowsecurity: boolean; relforcerowsecurity: boolean }>(
       db,
-      sql`select relrowsecurity from pg_class where relname = 'nodes'`,
+      sql`select relrowsecurity, relforcerowsecurity from pg_class where relname = 'nodes'`,
     );
     expect(found).toHaveLength(1);
     expect(found[0]?.relrowsecurity).toBe(true);
+    expect(found[0]?.relforcerowsecurity).toBe(true);
+  });
+
+  it("returns only the calling tenant's nodes to the app role", async () => {
+    // The read half of the 0017 tenant-isolation policy. No WHERE clause in the
+    // reads — RLS is what scopes them, so a scoped query would pass with the
+    // policy switched off, which is exactly why there is none. Runs against real
+    // Postgres too (describeEachTarget): PGlite's connection is superuser and
+    // bypasses FORCE RLS, so a PGlite-only pass would be a false pass (CLAUDE.md §4).
+    await db.insert(nodes).values([
+      { tenantId: TENANT_A, locationId: LOCATION_A, name: "Node A" },
+      { tenantId: TENANT_B, locationId: LOCATION_B, name: "Node B" },
+    ]);
+    const seenByA = await withTenant(db, TENANT_A, async (tx) => {
+      await asAppUser(tx);
+      return tx.select().from(nodes);
+    });
+    expect(seenByA).toHaveLength(1);
+    expect(seenByA[0]?.tenantId).toBe(TENANT_A);
+    // The other tenant's node is invisible — the assertion that bites, and would
+    // fail if the policy leaked or were absent.
+    const seenByB = await withTenant(db, TENANT_B, async (tx) => {
+      await asAppUser(tx);
+      return tx.select().from(nodes);
+    });
+    expect(seenByB).toHaveLength(1);
+    expect(seenByB[0]?.tenantId).toBe(TENANT_B);
+  });
+
+  it("lets the app role insert a node for its own tenant, and rejects a smuggled tenant id", async () => {
+    // The GRANT INSERT + WITH CHECK half of the policy, mirroring tenancy.test.ts's
+    // tills assertions. The positive insert is the one test that fails if app_user
+    // cannot write nodes at all (an over-narrow grant); the negative proves WITH
+    // CHECK stops a cross-tenant write.
+    const inserted = await withTenant(db, TENANT_A, async (tx) => {
+      await asAppUser(tx);
+      return tx
+        .insert(nodes)
+        .values({ tenantId: TENANT_A, locationId: LOCATION_A, name: "App node" })
+        .returning({ id: nodes.id });
+    });
+    // Read back as the owner (superuser, bypasses RLS): a pure check on the write
+    // path, not a second read-side RLS check.
+    const [row] = await db.select().from(nodes).where(eq(nodes.id, inserted[0].id));
+    expect(row?.tenantId).toBe(TENANT_A);
+
+    // WITH CHECK rejects a node carrying another tenant's id.
+    const error = await captureError(() =>
+      withTenant(db, TENANT_A, async (tx) => {
+        await asAppUser(tx);
+        await tx
+          .insert(nodes)
+          .values({ tenantId: TENANT_B, locationId: LOCATION_A, name: "smuggled" });
+      }),
+    );
+    expect(pgErrorMessage(error)).toMatch(/row-level security/i);
   });
 });
