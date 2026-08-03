@@ -16,7 +16,7 @@
 // The connection string is read ONLY from DATABASE_URL. WAITRON_ENV is REQUIRED (it stamps the
 // unrecoverable `entorno` onto the chain) — see record-one-sale.ts's header for why no default.
 import { listOutstandingSales, recordCorrection, recordSale, settleSale } from "@waitron/core";
-import type { RecordCorrectionInput, RecordSaleInput } from "@waitron/core";
+import type { OutstandingSale, RecordCorrectionInput, RecordSaleInput } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { createPostgresDb, withTenant } from "@waitron/db";
@@ -34,6 +34,7 @@ import {
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
+import type { Decimal } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 
 const LOCALE = "es-ES";
@@ -91,14 +92,20 @@ async function main(): Promise<void> {
   const stdSeries = brandSeriesId(stdSeriesArg);
   const rectSeries = brandSeriesId(rectSeriesArg);
 
+  const formatOutstanding = (list: OutstandingSale[]): string =>
+    list.length === 0 ? "(none)" : list.map((o) => `${o.saleId}=${o.amountDue}`).join(", ");
+
   const rate = decimal("10.00");
+  const vatOn = (base: Decimal): Decimal =>
+    divideDecimal(multiplyDecimal(base, rate), decimal("100"), MONEY_SCALE);
+
   const saleBase = decimal("100.00");
-  const saleTax = divideDecimal(multiplyDecimal(saleBase, rate), decimal("100"), MONEY_SCALE);
+  const saleTax = vatOn(saleBase);
   const saleTotal = addDecimal(saleBase, saleTax); // 110.00
 
   const reduceBase = decimal("10.00");
   const corrBase = negateDecimal(reduceBase); // -10.00
-  const corrTax = divideDecimal(multiplyDecimal(corrBase, rate), decimal("100"), MONEY_SCALE);
+  const corrTax = vatOn(corrBase);
   const corrTotal = addDecimal(corrBase, corrTax); // -11.00
   const net = addDecimal(saleTotal, corrTotal); // 99.00
 
@@ -145,7 +152,7 @@ async function main(): Promise<void> {
 
     // 2. Outstanding: the full total.
     const before = await withTenant(db, tenant, (tx) => listOutstandingSales(tx, tenant));
-    console.log(`2. outstanding: ${before.map((o) => `${o.saleId}=${o.amountDue}`).join(", ")}`);
+    console.log(`2. outstanding: ${formatOutstanding(before)}`);
 
     // 3. Correct it down by 11.00 (net 110.00 → 99.00) via a rectificativa on the rectificative series.
     const corrInput: RecordCorrectionInput = {
@@ -175,9 +182,7 @@ async function main(): Promise<void> {
 
     // 4. Outstanding: now the net.
     const afterCorrection = await withTenant(db, tenant, (tx) => listOutstandingSales(tx, tenant));
-    console.log(
-      `4. outstanding: ${afterCorrection.map((o) => `${o.saleId}=${o.amountDue}`).join(", ")}`,
-    );
+    console.log(`4. outstanding: ${formatOutstanding(afterCorrection)}`);
 
     // 5. Settle at the net.
     await withTenant(db, tenant, (tx) =>
@@ -193,9 +198,7 @@ async function main(): Promise<void> {
 
     // 6. Outstanding: empty.
     const afterSettle = await withTenant(db, tenant, (tx) => listOutstandingSales(tx, tenant));
-    console.log(
-      `6. outstanding: ${afterSettle.length === 0 ? "(none)" : afterSettle.map((o) => `${o.saleId}=${o.amountDue}`).join(", ")}`,
-    );
+    console.log(`6. outstanding: ${formatOutstanding(afterSettle)}`);
   } finally {
     await db.close();
   }

@@ -37,11 +37,13 @@ const SETTLED_AT = new Date("2026-08-01T12:00:00Z");
  * `test/fixtures.ts`'s `seedTenant` relies on for the tenant/till/node/series it seeds. Written on
  * the NEW schema: `total` is the only money column left (the tip moved to `tenders.tip_amount` and
  * `amount_charged` was dropped in migration 0012), and `node_id` is NOT NULL (node-id rekey).
+ * `correctsSaleId` defaults to NULL for an ordinary sale; pass it to seed a rectificativa correcting
+ * another sale (its negative/positive total is what `sales_total_ck` permits once it is set).
  */
 async function seedSale(
   db: Database,
   seed: { tenantId: TenantId; tillId: TillId; nodeId: NodeId; seriesId: SeriesId },
-  overrides: { total?: string; invoiceNumber?: number } = {},
+  overrides: { total?: string; invoiceNumber?: number; correctsSaleId?: SaleId } = {},
 ): Promise<SaleId> {
   const [row] = await db
     .insert(sales)
@@ -58,6 +60,7 @@ async function seedSale(
       invoiceLocales: ["es-ES"],
       fiscalBackend: "fake",
       fiscalState: "recorded",
+      correctsSaleId: overrides.correctsSaleId,
     })
     .returning({ id: sales.id });
   return brandSaleId(row!.id);
@@ -409,11 +412,11 @@ describe("settleSale — error propagation", () => {
     const fakeTx = {
       select: () => ({
         from: () => ({
-          // 1: the sale row; 2: sale_voids (none); 3: existing settlement (none).
+          // 1: the sale row (total + folded corrections); 2: sale_voids (none); 3: settlement (none).
           where: () => {
             selects += 1;
             return selects === 1
-              ? Promise.resolve([{ tillId: "t", total: "0.00" }])
+              ? Promise.resolve([{ tillId: "t", total: "0.00", corrections: "0.00" }])
               : Promise.resolve([]);
           },
         }),
@@ -449,11 +452,11 @@ describe("settleSale — error propagation", () => {
     const fakeTx = {
       select: () => ({
         from: () => ({
-          // 1: the sale row (total 65.00); 2: sale_voids (none); 3: existing settlement (none).
+          // 1: the sale row (total 65.00, no corrections); 2: sale_voids (none); 3: settlement (none).
           where: () => {
             selects += 1;
             return selects === 1
-              ? Promise.resolve([{ tillId: "t", total: "65.00" }])
+              ? Promise.resolve([{ tillId: "t", total: "65.00", corrections: "0.00" }])
               : Promise.resolve([]);
           },
         }),
@@ -496,7 +499,7 @@ describe("settleSale — error propagation", () => {
           where: () => {
             selects += 1;
             return selects === 1
-              ? Promise.resolve([{ tillId: "t", total: "65.00" }])
+              ? Promise.resolve([{ tillId: "t", total: "65.00", corrections: "0.00" }])
               : Promise.resolve([]);
           },
         }),
@@ -517,30 +520,6 @@ describe("settleSale — error propagation", () => {
     expect(pgErrorCode(error)).toBe("53100");
   });
 });
-
-// Local helper: insert a rectificativa (negative or positive total) that corrects `originalId`.
-async function seedCorrective(
-  db: Database,
-  seed: { tenantId: TenantId; tillId: TillId; nodeId: NodeId; seriesId: SeriesId },
-  originalId: SaleId,
-  overrides: { total: string; invoiceNumber: number },
-): Promise<void> {
-  await db.insert(sales).values({
-    tenantId: seed.tenantId,
-    tillId: seed.tillId,
-    nodeId: seed.nodeId,
-    seriesId: seed.seriesId,
-    invoiceNumber: overrides.invoiceNumber,
-    issuedAt: new Date("2026-08-01T11:30:00Z").toISOString(),
-    issuedOffsetMinutes: 0,
-    total: overrides.total, // negative allowed because correctsSaleId is set (sales_total_ck)
-    locale: "es-ES",
-    invoiceLocales: ["es-ES"],
-    fiscalBackend: "fake",
-    fiscalState: "recorded",
-    correctsSaleId: originalId,
-  });
-}
 
 // Insert tenders then a settlement row directly, as the app role — bypassing settleSale so the
 // coverage TRIGGER is what is under test. Tenders first: tenders_reject_post_settlement (WT002)
@@ -571,7 +550,11 @@ describe("coverage trigger nets corrections", () => {
   it("accepts the net: 65 covers a 70 sale corrected by -5", async () => {
     const seed = await seedTenant(postgres.admin);
     const originalId = await seedSale(postgres.admin, seed, { total: "70.00", invoiceNumber: 1 });
-    await seedCorrective(postgres.admin, seed, originalId, { total: "-5.00", invoiceNumber: 2 });
+    await seedSale(postgres.admin, seed, {
+      total: "-5.00",
+      invoiceNumber: 2,
+      correctsSaleId: originalId,
+    });
 
     await settleDirect(postgres.admin, seed.tenantId, originalId, "65.00");
 
@@ -585,7 +568,11 @@ describe("coverage trigger nets corrections", () => {
   it("rejects the pre-correction total: 70 against a 70 sale corrected by -5 (net 65)", async () => {
     const seed = await seedTenant(postgres.admin);
     const originalId = await seedSale(postgres.admin, seed, { total: "70.00", invoiceNumber: 1 });
-    await seedCorrective(postgres.admin, seed, originalId, { total: "-5.00", invoiceNumber: 2 });
+    await seedSale(postgres.admin, seed, {
+      total: "-5.00",
+      invoiceNumber: 2,
+      correctsSaleId: originalId,
+    });
 
     const error = await captureError(() =>
       settleDirect(postgres.admin, seed.tenantId, originalId, "70.00"),
@@ -620,7 +607,11 @@ describe("settleSale nets corrections into the due", () => {
   it("settles a corrected sale at the net (70 corrected by -5, pay 65)", async () => {
     const seed = await seedTenant(postgres.admin);
     const originalId = await seedSale(postgres.admin, seed, { total: "70.00", invoiceNumber: 1 });
-    await seedCorrective(postgres.admin, seed, originalId, { total: "-5.00", invoiceNumber: 2 });
+    await seedSale(postgres.admin, seed, {
+      total: "-5.00",
+      invoiceNumber: 2,
+      correctsSaleId: originalId,
+    });
 
     await settle(postgres.admin, seed.tenantId, {
       tenantId: seed.tenantId,
@@ -638,7 +629,11 @@ describe("settleSale nets corrections into the due", () => {
   it("shortfall's due is the net: paying the pre-correction 70 on a -5-corrected sale is rejected", async () => {
     const seed = await seedTenant(postgres.admin);
     const originalId = await seedSale(postgres.admin, seed, { total: "70.00", invoiceNumber: 1 });
-    await seedCorrective(postgres.admin, seed, originalId, { total: "-5.00", invoiceNumber: 2 });
+    await seedSale(postgres.admin, seed, {
+      total: "-5.00",
+      invoiceNumber: 2,
+      correctsSaleId: originalId,
+    });
 
     await expect(
       settle(postgres.admin, seed.tenantId, {
@@ -655,7 +650,11 @@ describe("settleSale nets corrections into the due", () => {
   it("nets a correcting-up corrective (70 corrected by +5, pay 75)", async () => {
     const seed = await seedTenant(postgres.admin);
     const originalId = await seedSale(postgres.admin, seed, { total: "70.00", invoiceNumber: 1 });
-    await seedCorrective(postgres.admin, seed, originalId, { total: "5.00", invoiceNumber: 2 });
+    await seedSale(postgres.admin, seed, {
+      total: "5.00",
+      invoiceNumber: 2,
+      correctsSaleId: originalId,
+    });
 
     await settle(postgres.admin, seed.tenantId, {
       tenantId: seed.tenantId,

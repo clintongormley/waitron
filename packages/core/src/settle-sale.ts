@@ -1,9 +1,9 @@
 // Side-effect import registers this package's sale.* codes (mirrors record-sale.ts).
 import "./errors.js";
-import { and, eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { isUniqueViolation, saleSettlements, saleVoids, sales, tenders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError, addDecimal, compareDecimal, decimal, sumDecimals } from "@waitron/shared";
+import { AppError, compareDecimal, decimal, sumDecimals } from "@waitron/shared";
 import type { SaleId, TenantId } from "@waitron/shared";
 import type { RecordSaleTender } from "./record-sale.js";
 
@@ -20,10 +20,19 @@ export interface SettleSaleInput {
  * touches no chain, takes no chain-head lock, and submits nothing (design §4).
  */
 export async function settleSale(tx: Transaction, input: SettleSaleInput): Promise<void> {
-  // The sale's fiscal total, and fail-closed on cross-tenant: RLS hides another
-  // tenant's row, so it is genuinely not-found rather than forbidden (as record-void).
+  // The sale's fiscal total, and every rectificativa correcting it netted in a correlated scalar
+  // subquery (design §2), mirroring the coalesce-sum shape listOutstandingSales reads its
+  // correctionTotal with. Fail-closed on cross-tenant: RLS hides another tenant's row, so it is
+  // genuinely not-found rather than forbidden (as record-void). The explicit tenant predicate on the
+  // subquery is redundant under RLS but guards a non-scoped connection too, mirroring recordCorrection.
+  // `${sales}.id` (not `${sales.id}`) so the column renders table-qualified — inside a select-list
+  // sql template Drizzle emits a bare `"id"`, which the subquery's own `sales c` would capture.
   const [sale] = await tx
-    .select({ tillId: sales.tillId, total: sales.total })
+    .select({
+      tillId: sales.tillId,
+      total: sales.total,
+      corrections: sql<string>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id and c.tenant_id = ${input.tenantId}), 0)::numeric(12, 2)::text`,
+    })
     .from(sales)
     .where(eq(sales.id, input.saleId));
   if (sale === undefined) {
@@ -63,20 +72,14 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
     });
   }
 
-  // Net in every rectificativa correcting this sale (design §2). Read RLS-scoped under the app role;
-  // the explicit tenant predicate is redundant under RLS but guards a non-scoped connection too,
-  // mirroring recordCorrection. sumDecimals over the fetched signed totals avoids the numeric-sum
-  // string-render caveat.
-  const correctives = await tx
-    .select({ total: sales.total })
-    .from(sales)
-    .where(and(eq(sales.correctsSaleId, input.saleId), eq(sales.tenantId, input.tenantId)));
-  const corrections = sumDecimals(correctives.map((c) => decimal(c.total)));
-
-  const due = addDecimal(
-    addDecimal(decimal(sale.total), corrections),
-    sumDecimals(input.tenders.map((t) => decimal(t.tipAmount))),
-  );
+  // Due = the printed total, net of every rectificativa (folded into `sale.corrections` by the
+  // subquery above), plus tips — summed in the decimal domain, exactly as listOutstandingSales reads
+  // its amountDue.
+  const due = sumDecimals([
+    decimal(sale.total),
+    decimal(sale.corrections),
+    ...input.tenders.map((t) => decimal(t.tipAmount)),
+  ]);
   const charged = sumDecimals(input.tenders.map((t) => decimal(t.amount)));
   if (compareDecimal(charged, due) !== 0) {
     throw new AppError("sale.tender_shortfall", {

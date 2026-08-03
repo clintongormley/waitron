@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   asAppUser,
-  sales,
   saleSettlements,
   saleSubstitutions,
   saleVoids,
@@ -32,25 +31,25 @@ function list() {
   });
 }
 
-async function seedCorrective(
-  originalId: SaleId,
-  total: string,
-  invoiceNumber: number,
-): Promise<void> {
-  await suite.db.insert(sales).values({
-    tenantId,
-    tillId,
-    nodeId,
-    seriesId,
-    invoiceNumber,
-    issuedAt: new Date("2026-08-01T11:30:00Z").toISOString(),
-    issuedOffsetMinutes: 0,
-    total,
-    locale: "es-ES",
-    invoiceLocales: ["es-ES"],
-    fiscalBackend: "fake",
-    fiscalState: "recorded",
-    correctsSaleId: originalId,
+// Settle a sale directly (bypassing settleSale) as the app role: a covering tender, then the
+// sale_settlements row. Tenders first — tenders_reject_post_settlement (WT002) rejects a tender once
+// the settlement row exists.
+async function settleDirectly(saleId: SaleId): Promise<void> {
+  await withTenant(suite.db, tenantId, async (tx) => {
+    await asAppUser(tx);
+    await tx.insert(tenders).values({
+      tenantId,
+      saleId,
+      method: "cash",
+      amount: "70.00",
+      tipAmount: "0.00",
+      settledAt: new Date("2026-08-01T12:00:00Z").toISOString(),
+    });
+    await tx.insert(saleSettlements).values({
+      tenantId,
+      saleId,
+      settledAt: new Date("2026-08-01T12:00:00Z").toISOString(),
+    });
   });
 }
 
@@ -81,7 +80,11 @@ describe("listOutstandingSales", () => {
       { tenantId, tillId, nodeId, seriesId },
       { total: "70.00", invoiceNumber: 1 },
     );
-    await seedCorrective(originalId, "-5.00", 2);
+    await seedBareSale(
+      suite.db,
+      { tenantId, tillId, nodeId, seriesId },
+      { total: "-5.00", invoiceNumber: 2, correctsSaleId: originalId },
+    );
     const out = await list();
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({
@@ -98,22 +101,7 @@ describe("listOutstandingSales", () => {
       { tenantId, tillId, nodeId, seriesId },
       { total: "70.00", invoiceNumber: 1 },
     );
-    await withTenant(suite.db, tenantId, async (tx) => {
-      await asAppUser(tx);
-      await tx.insert(tenders).values({
-        tenantId,
-        saleId,
-        method: "cash",
-        amount: "70.00",
-        tipAmount: "0.00",
-        settledAt: new Date("2026-08-01T12:00:00Z").toISOString(),
-      });
-      await tx.insert(saleSettlements).values({
-        tenantId,
-        saleId,
-        settledAt: new Date("2026-08-01T12:00:00Z").toISOString(),
-      });
-    });
+    await settleDirectly(saleId);
     expect(await list()).toHaveLength(0);
   });
 
@@ -139,22 +127,7 @@ describe("listOutstandingSales", () => {
       { tenantId, tillId, nodeId, seriesId },
       { total: "70.00", invoiceNumber: 1 },
     );
-    await withTenant(suite.db, tenantId, async (tx) => {
-      await asAppUser(tx);
-      await tx.insert(tenders).values({
-        tenantId,
-        saleId: ticketId,
-        method: "cash",
-        amount: "70.00",
-        tipAmount: "0.00",
-        settledAt: new Date("2026-08-01T12:00:00Z").toISOString(),
-      });
-      await tx.insert(saleSettlements).values({
-        tenantId,
-        saleId: ticketId,
-        settledAt: new Date("2026-08-01T12:00:00Z").toISOString(),
-      });
-    });
+    await settleDirectly(ticketId);
     const f3Id = await seedBareSale(
       suite.db,
       { tenantId, tillId, nodeId, seriesId },
