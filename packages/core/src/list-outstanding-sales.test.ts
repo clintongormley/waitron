@@ -168,4 +168,25 @@ describe("listOutstandingSales", () => {
     expect(out.map((o) => o.saleId)).not.toContain(f3Id);
     expect(out).toHaveLength(0);
   });
+
+  it("excludes another tenant's outstanding sales", async () => {
+    // Primary tenant (the beforeEach one) has an outstanding sale, so there is something to return.
+    const mineId = await seedBareSale(
+      suite.db,
+      { tenantId, tillId, nodeId, seriesId },
+      { total: "70.00", invoiceNumber: 1 },
+    );
+    // A SECOND, independent tenant with its own outstanding sale. seedTenant with no override mints a
+    // fresh tenant/till/node/series (a genuinely different tenantId), so this is another tenant's row
+    // — not a second till under the same tenant.
+    const other = await seedTenant(suite.db);
+    const theirsId = await seedBareSale(suite.db, other, { total: "40.00", invoiceNumber: 1 });
+
+    // list() runs under the PRIMARY tenant (withTenant + asAppUser), so it must see only its own.
+    const out = await list();
+    const ids = out.map((o) => o.saleId);
+    expect(ids).toContain(mineId);
+    expect(ids).not.toContain(theirsId);
+    expect(out).toHaveLength(1);
+  });
 });
