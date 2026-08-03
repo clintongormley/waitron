@@ -43,7 +43,7 @@ export async function listOutstandingSales(
     select
       s.id             as sale_id,
       s.invoice_number as invoice_number,
-      s.issued_at      as issued_at,
+      s.issued_at::text as issued_at,
       s.till_id        as till_id,
       s.total::text    as total,
       coalesce((select sum(c.total) from sales c where c.corrects_sale_id = s.id), 0)::numeric(12, 2)::text
@@ -54,7 +54,7 @@ export async function listOutstandingSales(
       and not exists (select 1 from sale_settlements ss where ss.sale_id = s.id)
       and not exists (select 1 from sale_voids sv where sv.sale_id = s.id)
       and not exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = s.id)
-    order by s.issued_at
+    order by s.issued_at, s.invoice_number
   `);
 
   return result.rows.map((r) => {
