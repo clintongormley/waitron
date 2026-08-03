@@ -27,18 +27,21 @@ export interface RecordCorrectionInput {
   /**
    * The till/SIF that ISSUES this rectificativa and whose chain it extends. Caller-supplied and used
    * verbatim: checked against the corrective SERIES (`sale.series_wrong_till`, step 2) but NOT against
-   * the original sale's own `tillId` — and that is correct, not a gap. A rectificativa is a
-   * self-standing NEW invoice that references the original only by IDENTITY (`FacturasRectificadas` =
-   * NIF + serie&número + fecha — how AEAT links a rectificativa to what it corrects), so which SIF
-   * issues it is unconstrained. This is not merely theoretical: under active-active / failover
-   * (server-as-SIF, #33) a venue runs MORE THAN ONE SIF (each server is its own SIF), so a correction
-   * genuinely can land on a different server-SIF than the original. AEAT's developer FAQ (4-Dec-2025)
-   * confirms that is lawful for the sibling correction records — an RF de subsanación or de anulación
-   * «se [podría] generar y conservar o remitir a la AEAT desde un SIF distinto al que expidió la
-   * factura original» (same-SIF is merely the usual case) — and a self-standing rectificativa is a
-   * fortiori unconstrained. (`recordVoid` pins to the original's `tillId` by its own choice, not a
-   * regime requirement.) The chain is keyed per `till_id` today; the server-as-SIF `server_id` rekey
-   * re-keys it to the server.
+   * the original sale's own `tillId` — deliberately, not a gap. A rectificativa is a self-standing NEW
+   * invoice that references the original only by IDENTITY (`FacturasRectificadas` = NIF + serie&número
+   * + fecha — how AEAT links a rectificativa to what it corrects), from which we INFER that the issuing
+   * SIF is unconstrained by the original's. That inference is not merely theoretical: under
+   * active-active / failover (server-as-SIF, #33) a venue runs MORE THAN ONE SIF (each server is its
+   * own SIF), so a correction genuinely can land on a different server-SIF than the original. AEAT's
+   * developer FAQ (4-Dec-2025) confirms cross-SIF is lawful for the SIBLING correction records — an RF
+   * de subsanación or de anulación «se [podría] generar y conservar o remitir a la AEAT desde un SIF
+   * distinto al que expidió la factura original» (same-SIF is merely the usual case). But the reach to
+   * a self-standing rectificativa is OURS, not the FAQ's words — it names only the subsanación/
+   * anulación records. The identity-linkage reading is sound, but UNVERIFIED for rectificativas
+   * specifically, and to be confirmed with the asesor before a real cross-SIF till caller is wired
+   * (F3). (`recordVoid` pins to the original's `tillId` by its own choice, not a regime requirement.)
+   * The chain is keyed per `till_id` today; the server-as-SIF `server_id` rekey re-keys it to the
+   * server.
    */
   tillId: TillId;
   /**
