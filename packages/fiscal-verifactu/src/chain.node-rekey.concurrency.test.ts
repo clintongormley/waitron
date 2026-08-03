@@ -48,9 +48,18 @@ beforeEach(async () => {
 describe("appendToChain under real contention, keyed by node", () => {
   // Property 1 (design §9.1): the concurrency backstop under (tenant, node, secuencia). One node
   // serving sales; WRITERS concurrent appends on distinct backend connections; all commit, the
-  // sequence is 1..WRITERS with no gap, and each record chains onto its predecessor's huella. This
-  // is what registros_tenant_node_secuencia_uq guarantees — proven by deletion in Step 10 (drop the
-  // index, watch the "no gaps" assertion fail, restore it).
+  // sequence is 1..WRITERS with no gap, and each record chains onto its predecessor's huella.
+  //
+  // What GUARANTEES the no-gaps property here is the per-node `cadenas` FOR UPDATE head lock
+  // (chain.ts's lockChainHead): the writers serialise on that row, each computing head.secuencia+1
+  // only after the previous one commits. MEASURED, not reasoned: dropping
+  // registros_tenant_node_secuencia_uq and re-running this exact test leaves it PASSING (observed
+  // 2026-08-03) — so the unique index is NOT what makes this test green. The index is the
+  // defense-in-depth BACKSTOP against a writer that reaches an occupied (tenant, node, secuencia) by
+  // any path that bypasses or races the lock; that is proven directly, and deterministically, by a
+  // duplicate-position insert being rejected with 23505 while the same insert succeeds once the index
+  // is dropped (task-4-report §2's delete-the-index receipt). This mirrors chain.concurrency.test.ts,
+  // which likewise attributes the property to the lock and makes no deletion claim about the index.
   it("assigns 20 concurrent appends distinct positions with no gaps, each chained to its predecessor", async () => {
     const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
     try {

@@ -13,11 +13,11 @@ import "@waitron/shared";
  * actually asking.
  *
  * The honest objection, stated rather than skirted: "provisioning" already denotes something ELSE
- * in this repository. `apps/server/src/provision-till.ts`'s `provisionTill` (line 119) registers a
- * till as a Veri*Factu SIF, and that is provisioning too — of a till, not of a deployment. So the
- * prefix is not the unambiguous domain name the convention would ideally get; it is the accurate
- * one for what these codes are about, and the ambiguity is real. A future code about a TILL's
- * provisioning should not land here.
+ * in this repository. `apps/server/src/provision-till.ts`'s `provisionNode` registers a NODE as a
+ * Veri*Factu SIF, and that is provisioning too — of a node, not of a deployment. So the prefix is
+ * not the unambiguous domain name the convention would ideally get; it is the accurate one for what
+ * these codes are about, and the ambiguity is real. A future code about a NODE's provisioning should
+ * not land here.
  *
  * Two of these are settled regardless of how that objection lands: `provisioning.invalid_identifier`
  * and `provisioning.key_generation_failed` SHIPPED in PR #8
