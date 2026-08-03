@@ -68,10 +68,9 @@ reprioritisation rather than assumed.
 
 ## Next — the fiscal sequence
 
-Four pieces, in this order. **Pieces 1 (#39), 2 (#46) and 3 (F3 canje, #51) have landed; piece 4
-(invoice-first) is now the head of the queue** (it needed rectificativas, which exist — #46). They
-are sequenced rather than parallelised because each adds a
-migration to `packages/db`, and `packages/db/drizzle/meta/_journal.json` conflicts on every
+Four pieces, in this order. **All four have now landed** — 1 (#39), 2 (#46), 3 (F3 canje, #51) and 4
+(invoice-first, this slice, headless). They were sequenced rather than parallelised because each adds
+a migration to `packages/db`, and `packages/db/drizzle/meta/_journal.json` conflicts on every
 concurrent branch. The collision is **per package**, not repo-wide — five packages carry their own
 `drizzle/` directory and journal (`credentials`, `db`, `fiscal-verifactu`, `payments`, `scheduler`),
 so work touching a different package's migrations can still run alongside these.
@@ -81,14 +80,18 @@ so work touching a different package's migrations can still run alongside these.
 | 1 | **Sale settlement model** — **done (#39)** | Everything else assumes it. Took the tip and the amount charged off the frozen sale row so an invoice can exist before payment does |
 | 2 | **Rectificativas** — R5 (simplified tickets) — **done (#46)** | The only lawful way to change an issued invoice. Unblocked piece 4. R1/B2B and R2–R4/accounting deferred (need F1 issuance / the asesor) |
 | 3 | **F3 canje** — "can I have a proper invoice?" — **done (#51)** | Was unmodelled, and issuing an ordinary invoice instead would double-declare the sale. Ordinary trade in a restaurant, not an edge case. `recordSubstitution` files a positive-total F3 alta with `FacturasSustituidas` + `Destinatarios`, reading the substituted F2 tickets without annulling them (at-most-once, F2-only, series-purpose-guarded, unsettled) |
-| 4 | **Invoice-first mode** — **next** | Cannot be offered to staff until 2 exists: a disputed bill, a short payment and a "take a fiver off" all need a rectificativa — which now exists (#46) |
+| 4 | **Invoice-first mode** — **done (headless)** | The fiscal/DB half shipped earlier (#39): a deferred `recordSale` chains and files the invoice with no payment, `settleSale` closes it later. This slice filled the headless remainder — settling a *corrected* invoice-first sale: migration 0021 nets rectificativas into the `SECURITY DEFINER` coverage function (`due = total + Σcorrections + tips`), `settleSale` nets corrections in lockstep (an app-level check in the same identity), `listOutstandingSales` (`@waitron/core`) excludes correctives / F3 canje substitutes / settled / voided and nets corrections into `amountDue`, and a `settle-invoice-first` demo script walks issue → list → correct → list → settle-at-net → list. The **till UI stays out** (sub-project 7) |
 
 Design and sources for all four:
 [2026-07-31-sale-settlement-model-design.md](superpowers/specs/2026-07-31-sale-settlement-model-design.md)
-§8, and [compliance/verifactu-findings.md](compliance/verifactu-findings.md) §§7-10.
+§8, and [compliance/verifactu-findings.md](compliance/verifactu-findings.md) §§7-10. Invoice-first
+carries its own design and plan:
+[2026-08-03-invoice-first-settlement-design.md](superpowers/specs/2026-08-03-invoice-first-settlement-design.md)
+and [2026-08-03-invoice-first-settlement.md](superpowers/plans/2026-08-03-invoice-first-settlement.md).
 
-**Then reassess.** The next question after piece 4 is whether to keep going fiscal (reporting, daily
-close) or turn to the till. Do not answer it here in advance.
+**Then reassess — now live.** With piece 4 landed the fiscal sequence is complete, and the open
+question is whether to keep going fiscal (reporting, daily close) or turn to the till. It is
+deliberately not answered here.
 
 ---
 

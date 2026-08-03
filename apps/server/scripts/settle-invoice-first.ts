@@ -184,7 +184,9 @@ async function main(): Promise<void> {
       settleSale(tx, {
         tenantId: tenant,
         saleId: sale.saleId,
-        tenders: [{ method: "cash", amount: net, tipAmount: "0.00", settledAt: clock.now().instant }],
+        tenders: [
+          { method: "cash", amount: net, tipAmount: "0.00", settledAt: clock.now().instant },
+        ],
       }),
     );
     console.log(`5. settled ${sale.saleId} at ${net}`);
