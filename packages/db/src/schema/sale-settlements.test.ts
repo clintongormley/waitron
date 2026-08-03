@@ -1,9 +1,11 @@
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
 import { describeEachTarget } from "../testing/harness.js";
 import { asAppUser } from "../testing/roles.js";
+import { seedNode } from "../testing/seed.js";
 import { withTenant } from "../tenancy.js";
 import { invoiceSeries } from "./series.js";
 import { saleLines, saleSettlements, sales, tenders } from "./sales.js";
@@ -123,6 +125,8 @@ const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 
 let seriesA = "";
+// sales.node_id is NOT NULL since the node-id rekey (2026-08-03); recordSale writes this node.
+let nodeA = "";
 
 async function seed(db: Database): Promise<void> {
   await db
@@ -138,9 +142,10 @@ async function seed(db: Database): Promise<void> {
   await db
     .insert(tills)
     .values({ id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" });
+  nodeA = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
   const [a] = await db
     .insert(invoiceSeries)
-    .values({ tenantId: TENANT_A, tillId: TILL_A1, code: "FA", purpose: "standard" })
+    .values({ tenantId: TENANT_A, nodeId: nodeA, code: "FA", purpose: "standard" })
     .returning({ id: invoiceSeries.id });
   seriesA = a.id;
 }
@@ -163,6 +168,7 @@ async function recordSale(
       .values({
         tenantId: TENANT_A,
         tillId: TILL_A1,
+        nodeId: nodeA,
         seriesId: seriesA,
         invoiceNumber: 1,
         issuedAt: AT,

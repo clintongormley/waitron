@@ -3,7 +3,7 @@ import { asAppUser, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import type { SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { recordSubstitution } from "./record-substitution.js";
 import type { RecordSubstitutionInput } from "./record-substitution.js";
 import { seedBareSale, seedTenant } from "../test/fixtures.js";
@@ -44,7 +44,7 @@ const steadyClock: TrustedClock = {
  * error rather than the expected code, which is exactly the regression worth catching.
  */
 const unreachableBackend: FiscalBackend = {
-  registerTill: () => {
+  registerNode: () => {
     throw new Error("backend must not be reached");
   },
   recordSale: () => {
@@ -74,13 +74,14 @@ const unreachableBackend: FiscalBackend = {
 };
 
 function substitutionInput(
-  seed: { tenantId: TenantId; tillId: TillId },
+  seed: { tenantId: TenantId; tillId: TillId; nodeId: NodeId },
   seriesId: SeriesId,
   substitutedSaleIds: SaleId[],
 ): RecordSubstitutionInput {
   return {
     tenantId: seed.tenantId,
     tillId: seed.tillId,
+    nodeId: seed.nodeId,
     seriesId,
     substitutedSaleIds,
     counterparty: { taxId: "B12345678", legalName: "Acme Corp SL", countryCode: "ES" },

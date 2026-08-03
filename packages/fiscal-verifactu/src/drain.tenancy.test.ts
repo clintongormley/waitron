@@ -89,7 +89,7 @@ describe("drain resolves one client per tenant", () => {
             return Promise.reject(
               new AppError("sif.not_registered", {
                 tenantId,
-                tillId: failingSeed.tillId,
+                nodeId: failingSeed.nodeId,
               }),
             );
           }
@@ -141,7 +141,7 @@ describe("drain resolves one client per tenant", () => {
         db: pg.db,
         resolveClient: (tenantId) =>
           Promise.reject(
-            new AppError("sif.not_registered", { tenantId, tillId: failingSeed.tillId }),
+            new AppError("sif.not_registered", { tenantId, nodeId: failingSeed.nodeId }),
           ),
         skipRetryMs: SKIP_RETRY_MS,
         environment: "production",
@@ -177,7 +177,7 @@ describe("drain resolves one client per tenant", () => {
         db: pg.db,
         resolveClient: (tenantId) =>
           Promise.reject(
-            new AppError("sif.not_registered", { tenantId, tillId: failingSeed.tillId }),
+            new AppError("sif.not_registered", { tenantId, nodeId: failingSeed.nodeId }),
           ),
         skipRetryMs: 90_000,
         environment: "production",

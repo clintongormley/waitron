@@ -22,20 +22,20 @@ import "@waitron/shared";
  *     `declare module "@waitron/shared"`, exactly as packages/db/src/errors.ts and
  *     packages/fiscal/src/errors.ts already do.
  *   - The naming convention is DOMAIN-CONCEPT, lowercase, dot-namespaced (`series.not_found`,
- *     `clock.degraded`, `fiscal.till_not_registered`) — never SCREAMING_SNAKE_CASE and never the
+ *     `clock.degraded`, `fiscal.node_not_registered`) — never SCREAMING_SNAKE_CASE and never the
  *     name of the package whose source throws it.
  *
- * Namespace choice: `sif.*`, not `till.not_registered` and not a reuse of packages/fiscal's own
- * `fiscal.till_not_registered`. Those are DIFFERENT facts. `fiscal.till_not_registered`
+ * Namespace choice: `sif.*`, not `node.not_registered` and not a reuse of packages/fiscal's own
+ * `fiscal.node_not_registered`. Those are DIFFERENT facts. `fiscal.node_not_registered`
  * (packages/fiscal/src/errors.ts) is the regime-neutral `FiscalBackend`'s own bookkeeping — no
- * `registerTill` call on record with the generic backend, whatever the regime. This code is about
- * a narrower and later fact: a till that IS known to some backend but has no *live* Veri*Factu SIF
- * identity — a NIF + IdSIF + NúmeroInstalación triple — registered against the upstream node. A
- * till can only reach `currentSif`/`esPrimerRegistro` after a generic `FiscalBackend.registerTill`
- * already succeeded, so collapsing the two into one code would erase which layer refused. `sif.*`
- * names the concept this package's own vocabulary already uses throughout (`registro_sif`,
- * `esPrimerRegistro`) and reads naturally as a translation key: "no SIF is registered [for this
- * till]".
+ * `registerNode` call on record with the generic backend, whatever the regime. This code is about
+ * a narrower and later fact: a node that IS known to some backend but has no *live* Veri*Factu SIF
+ * identity — a NIF + IdSIF + NúmeroInstalación triple (node-id rekey, 2026-08-03: the SIF is the
+ * node, #33). A node can only reach `currentSif`/`esPrimerRegistro` after a generic
+ * `FiscalBackend.registerNode` already succeeded, so collapsing the two into one code would erase
+ * which layer refused. `sif.*` names the concept this package's own vocabulary already uses
+ * throughout (`registro_sif`, `esPrimerRegistro`) and reads naturally as a translation key: "no SIF
+ * is registered [for this node]".
  *
  * Reachability: this file is a side-effect import of ./registro-sif.ts (`import "./errors.js"`),
  * which is re-exported from ./index.ts, so this augmentation is transitively reachable from the
@@ -45,12 +45,12 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
-    /** Thrown by `currentSif` for a till with no LIVE `registro_sif` row — never provisioned, or
-     * provisioned once and then revoked by a re-registration that has not yet completed. The
-     * concrete encoding of "a till cannot be provisioned offline" (spec's stated limitation): a
-     * caller that reaches here gets a structured, translatable refusal rather than a locally
-     * invented installation number. See ./registro-sif.ts. */
-    "sif.not_registered": { tenantId: string; tillId: string };
+    /** Thrown by `currentSif` for a node with no LIVE `registro_sif` row — never provisioned, or
+     * provisioned once and then revoked by a re-registration that has not yet completed (node-id
+     * rekey, 2026-08-03: the SIF is the node, #33). The concrete encoding of "a node cannot be
+     * provisioned offline" (spec's stated limitation): a caller that reaches here gets a structured,
+     * translatable refusal rather than a locally invented installation number. See ./registro-sif.ts. */
+    "sif.not_registered": { tenantId: string; nodeId: string };
 
     /**
      * Task 14's brief drafted this as `ErrorCode.FISCAL_CHAIN_APPEND_CONTENTION`, appended
@@ -70,13 +70,13 @@ declare module "@waitron/shared" {
      *
      * Thrown by `appendToChain` (./chain.ts) only after `MAX_APPEND_ATTEMPTS` savepoint retries
      * each lost the race on SQLSTATE 23505 — in practice, several tabs/processes racing to create
-     * the very first `cadenas` row for a till that has never sold before (the one window
-     * `lockChainHead`'s row lock cannot cover, because there is no row yet to lock). A bare
-     * `throw new Error(...)` here would reach a till screen as untranslatable prose (Global
-     * Constraint, spec §9) for exactly the failure a human most needs explained in their own
-     * language.
+     * the very first `cadenas` row for a node that has never sold before (the one window
+     * `lockChainHead`'s row lock cannot cover, because there is no row yet to lock). Keyed by node
+     * (node-id rekey, 2026-08-03: the chain is the node's, #33). A bare `throw new Error(...)` here
+     * would reach a till screen as untranslatable prose (Global Constraint, spec §9) for exactly the
+     * failure a human most needs explained in their own language.
      */
-    "chain.append_contention": { tenantId: string; tillId: string; attempts: number };
+    "chain.append_contention": { tenantId: string; nodeId: string; attempts: number };
 
     /**
      * Task 9's drainer (`./drain.ts`, `applyOutcome`). AEAT rejected this record outright
@@ -86,7 +86,7 @@ declare module "@waitron/shared" {
      * `recordIncident`, exactly as `packages/core/src/errors.ts`'s `chain.verification_failed`
      * is used from `record-sale.ts`/`record-void.ts`. `fiscal.*`, not `verifactu.*` or
      * `envio.*`: this is a fact about the submission LIFECYCLE any regime backend shares (a
-     * record it tried to file was refused), matching `fiscal.till_not_registered`'s own
+     * record it tried to file was refused), matching `fiscal.node_not_registered`'s own
      * regime-neutral `fiscal.*` prefix, even though only this package constructs it today.
      * `registroId` is included because `incidents` carries no FK back to `envios`/
      * `registros_facturacion` at all (`packages/db/src/schema/incidents.ts`) — without it, an

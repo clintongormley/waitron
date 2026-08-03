@@ -81,9 +81,10 @@ async function forwardedOffline(seeded: Seeded, paymentRef: string, externalRef:
   });
 }
 
-/** Seeds a second till + open working order under the SAME tenant/location as `seeded` —
+/** Seeds a second till + node + open working order under the SAME tenant/location as `seeded` —
  * `seedWorkingOrder` always mints a fresh tenant, so a two-till test needs this instead. Mirrors
- * store.test.ts's `seedSecondSale`. */
+ * store.test.ts's `seedSecondSale`. The fresh node keeps each returned `Seeded` self-consistent
+ * (its own chain/series key), mirroring `seedWorkingOrder`. */
 async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
   const [till] = (
     await pg.db.execute<{ location_id: string }>(
@@ -94,9 +95,17 @@ async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
     insert into tills (tenant_id, location_id, name)
     values (${seeded.tenantId}, ${till.location_id}, 'Till 2') returning id`);
   const tillId = till2.rows[0].id;
+  const node2 = await pg.db.execute<{ id: string }>(sql`
+    insert into nodes (tenant_id, location_id, name)
+    values (${seeded.tenantId}, ${till.location_id}, 'Node 2') returning id`);
   const wo2 = await pg.db.execute<{ id: string }>(sql`
     insert into working_orders (tenant_id, till_id) values (${seeded.tenantId}, ${tillId}) returning id`);
-  return { tenantId: seeded.tenantId, tillId, workingOrderId: wo2.rows[0].id };
+  return {
+    tenantId: seeded.tenantId,
+    tillId,
+    nodeId: node2.rows[0].id,
+    workingOrderId: wo2.rows[0].id,
+  };
 }
 
 async function openIncidentCodes(tenantId: string): Promise<string[]> {
@@ -152,7 +161,7 @@ describe("reconcilePayments", () => {
     await capture(seeded, "p2", "ext-2", "20.00");
     // Deliberately NOT associated with a sale: the working order stays "open", so the orphan rule
     // (which requires a non-open working order) never fires — these two rows are unsettled only.
-    // (Associating both would also collide on seedSale's fixed invoice-series code 'A' per till.)
+    // (Associating both would also collide on seedSale's fixed invoice-series code 'A' per node.)
     const result = await reconcilePayments(
       deps(new FakeSettlementReport([])),
       brandTenantId(seeded.tenantId),

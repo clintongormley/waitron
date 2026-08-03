@@ -1,11 +1,12 @@
 import { sql } from "drizzle-orm";
-import { tillId as brandTillId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import type { Database } from "@waitron/db";
 import type { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 
 export interface Seeded {
   tenantId: string;
   tillId: string;
+  nodeId: string;
   workingOrderId: string;
 }
 
@@ -26,8 +27,10 @@ export function freshNif(): string {
   return `${String(10_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** Seeds tenant → location → till → open working_order and returns their ids. Run as the
- * connection owner (superuser) — RLS is bypassed, so this is pure setup. */
+/** Seeds tenant → location → till → node → open working_order and returns their ids. The `node`
+ * is what the fiscal chain/series/SIF identity is keyed on since the node-id rekey (#33); it is
+ * created at the same (tenant, location) as the till. Run as the connection owner (superuser) —
+ * RLS is bypassed, so this is pure setup. */
 export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise<Seeded> {
   const t = await db.execute<{ id: string }>(sql`
     insert into tenants (nif, legal_name) values (${nif}, 'Test SL') returning id`);
@@ -39,13 +42,16 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
   const till = await db.execute<{ id: string }>(sql`
     insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Till 1') returning id`);
   const tillId = till.rows[0].id;
+  const node = await db.execute<{ id: string }>(sql`
+    insert into nodes (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Node 1') returning id`);
+  const nodeId = node.rows[0].id;
   const wo = await db.execute<{ id: string }>(sql`
     insert into working_orders (tenant_id, till_id) values (${tenantId}, ${tillId}) returning id`);
-  return { tenantId, tillId, workingOrderId: wo.rows[0].id };
+  return { tenantId, tillId, nodeId, workingOrderId: wo.rows[0].id };
 }
 
 /**
- * Seeds one `invoice_series` row for the till, one `sales` row against it, and the one `tenders`
+ * Seeds one `invoice_series` row for the node, one `sales` row against it, and the one `tenders`
  * row that covers it, and returns the new sale's id — the minimal commercial record
  * `associatePaymentWithSale` needs to point a payment at, without going through `@waitron/core`'s
  * full `recordSale` (that full path is exercised in the Task 10 wiring test).
@@ -65,16 +71,16 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
  */
 export async function seedSale(db: Database, seeded: Seeded): Promise<string> {
   const series = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, till_id, code)
-    values (${seeded.tenantId}, ${seeded.tillId}, 'A') returning id`);
+    insert into invoice_series (tenant_id, node_id, code)
+    values (${seeded.tenantId}, ${seeded.nodeId}, 'A') returning id`);
   const seriesId = series.rows[0].id;
   return db.transaction(async (tx) => {
     const sale = await tx.execute<{ id: string }>(sql`
       insert into sales (
-        tenant_id, till_id, series_id, invoice_number, issued_at, issued_offset_minutes,
+        tenant_id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes,
         total, locale, invoice_locales, fiscal_backend, fiscal_state
       ) values (
-        ${seeded.tenantId}, ${seeded.tillId}, ${seriesId}, 1, now(), 60,
+        ${seeded.tenantId}, ${seeded.tillId}, ${seeded.nodeId}, ${seriesId}, 1, now(), 60,
         '10.00', 'es', array['es'], 'fake', 'not_applicable'
       ) returning id`);
     const saleId = sale.rows[0].id;
@@ -86,17 +92,17 @@ export async function seedSale(db: Database, seeded: Seeded): Promise<string> {
 }
 
 /**
- * Seeds everything `@waitron/core`'s `recordSale` needs to chain a real sale on this till, for the
- * Task 10 wiring test: tenant → location → till → open working_order (via `seedWorkingOrder`), one
- * `invoice_series` row for the till, and the till registered with the injected fiscal `backend`.
- * Returns the ids plus the new `seriesId`.
+ * Seeds everything `@waitron/core`'s `recordSale` needs to chain a real sale on this node, for the
+ * Task 10 wiring test: tenant → location → till → node → open working_order (via
+ * `seedWorkingOrder`), one `invoice_series` row for the node, and the node registered with the
+ * injected fiscal `backend`. Returns the ids plus the new `seriesId`.
  *
- * `backend.registerTill` is required and not optional: `FakeFiscalBackend` refuses
- * `recordSale`/`recordVoid` for a till with no prior registration (`fiscal.till_not_registered`),
- * exactly like a real backend would, and `recordSale` itself never registers a till (provisioning
+ * `backend.registerNode` is required and not optional: `FakeFiscalBackend` refuses
+ * `recordSale`/`recordVoid` for a node with no prior registration (`fiscal.node_not_registered`),
+ * exactly like a real backend would, and `recordSale` itself never registers a node (provisioning
  * is a separate admin action). Registration runs in its OWN committed transaction here so the
- * `fake_till_registrations` row is visible to the later, separate `recordSale` transaction — the
- * till's `TillId` is branded at the call site because `registerTill` requires the branded type.
+ * `fake_node_registrations` row is visible to the later, separate `recordSale` transaction — the
+ * node's `NodeId` is branded at the call site because `registerNode` requires the branded type.
  *
  * Run as the connection owner (superuser), like `seedWorkingOrder`/`seedSale` — RLS is bypassed,
  * so this is pure setup.
@@ -108,11 +114,11 @@ export async function seedForSale(
 ): Promise<SeededForSale> {
   const seeded = await seedWorkingOrder(db, nif);
   const series = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, till_id, code)
-    values (${seeded.tenantId}, ${seeded.tillId}, 'A') returning id`);
+    insert into invoice_series (tenant_id, node_id, code)
+    values (${seeded.tenantId}, ${seeded.nodeId}, 'A') returning id`);
   const seriesId = series.rows[0].id;
   await db.transaction(async (tx) => {
-    await backend.registerTill(tx, brandTillId(seeded.tillId), { tenantId: seeded.tenantId });
+    await backend.registerNode(tx, brandNodeId(seeded.nodeId), { tenantId: seeded.tenantId });
   });
   return { ...seeded, seriesId };
 }

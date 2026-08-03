@@ -136,7 +136,7 @@ describe("drain — claim concurrency (real Postgres)", () => {
           select count(*)::text as count
           from envios e
           join registros_facturacion r on r.id = e.registro_id
-          where r.till_id = ${seeded.tillId} and e.tenant_id = ${seeded.tenantId} and e.estado = 'pendiente'
+          where r.node_id = ${seeded.nodeId} and e.tenant_id = ${seeded.tenantId} and e.estado = 'pendiente'
         `);
         return Number(rows.rows[0]!.count);
       });

@@ -49,12 +49,18 @@ export const registrosFacturacion = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id),
+    // The till the sale rang at — an informational SNAPSHOT on this immutable record (node-id
+    // rekey, 2026-08-03: `till_id` deliberately STAYS here, NOT NULL, while the chain/uniqueness key
+    // moved to `node_id` below). `reconcile.ts`/`drain.ts` read it directly; it is never read for
+    // chaining or contention after the rekey.
     tillId: uuid("till_id")
       .notNull()
       .references(() => tills.id),
-    // Nullable in this task (node rekey scaffolding); a later task populates it and flips it NOT
-    // NULL. Plain one-argument FK, matching the sibling `till_id` FK above.
-    nodeId: uuid("node_id").references(() => nodes.id),
+    // The node that owns the chain this record belongs to — the CHAIN KEY (node-id rekey,
+    // 2026-08-03). NOT NULL, stamped by the chain-append. Plain one-argument FK.
+    nodeId: uuid("node_id")
+      .notNull()
+      .references(() => nodes.id),
     // Which SIF identity generated this record. A new NúmeroInstalación is a new SIF, therefore a
     // new chain (findings §1), and this column is what makes "which chain" a fact on the row
     // rather than an inference from dates.
@@ -161,8 +167,10 @@ export const registrosFacturacion = pgTable(
     // THE non-negotiable backstop against two writers claiming one chain position — a real risk
     // with a PWA that can have several tabs open. Measured on real Postgres, a naive
     // read-then-write committed 3 of 20 concurrent appends and the chain stayed intact ONLY
-    // because of this constraint.
-    uniqueIndex("registros_tenant_till_secuencia_uq").on(t.tenantId, t.tillId, t.secuencia),
+    // because of this constraint. Keyed on `node_id` (node-id rekey, 2026-08-03: the chain is
+    // per-node, so two tills of one node share one sequence), re-proven on the node key in
+    // chain.node-rekey.concurrency.test.ts.
+    uniqueIndex("registros_tenant_node_secuencia_uq").on(t.tenantId, t.nodeId, t.secuencia),
     // AEAT record identity is IDEmisorFactura + NumSerieFactura + FechaExpedicionFactura, and a
     // duplicate returns error 3000. `tipo_registro` joins the key because an alta and its
     // anulación legitimately share the triple.
@@ -174,7 +182,7 @@ export const registrosFacturacion = pgTable(
       t.tipoRegistro,
     ),
     index("registros_sale_idx").on(t.tenantId, t.saleId),
-    index("registros_till_secuencia_idx").on(t.tenantId, t.tillId, t.secuencia),
+    index("registros_node_secuencia_idx").on(t.tenantId, t.nodeId, t.secuencia),
     check("registros_tipo_registro_ck", sql`${t.tipoRegistro} in ('alta', 'anulacion')`),
     check("registros_tipo_huella_ck", sql`${t.tipoHuella} = '01'`),
     check("registros_huella_ck", sql`${t.huella} ~ '^[0-9A-F]{64}$'`),

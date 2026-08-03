@@ -14,7 +14,15 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, addDecimal, decimal } from "@waitron/shared";
-import type { Decimal, SaleId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type {
+  Decimal,
+  NodeId,
+  SaleId,
+  SeriesId,
+  TenantId,
+  TillId,
+  WorkingOrderId,
+} from "@waitron/shared";
 import type {
   FiscalBackend,
   FiscalRecordRef,
@@ -57,7 +65,12 @@ export interface RecordSaleTender {
 
 export interface RecordSaleInput {
   tenantId: TenantId;
+  /** Where the sale rings — written to `sales.till_id` and the fiscal record's `till_id` snapshot,
+   * and used for incidents (which stay till-keyed). */
   tillId: TillId;
+  /** Which node processes and chains the sale — the SIF/chain/series key (node-id rekey,
+   * 2026-08-03, #33). The series↔node guard requires the named series to belong to this node. */
+  nodeId: NodeId;
   seriesId: SeriesId;
   workingOrderId: WorkingOrderId;
   locale: string;
@@ -132,10 +145,10 @@ export async function recordSale(
   input: RecordSaleInput,
 ): Promise<{ saleId: SaleId; fiscal: FiscalRecordRef }> {
   // Steps 1 and 2, one call and deliberately so. A real backend's `checkIntegrity` takes the
-  // (tenant, till) chain-head row lock as its own first statement and holds it until commit, so
+  // (tenant, node) chain-head row lock as its own first statement and holds it until commit, so
   // art. 7.i verification runs against exactly the state this transaction is about to extend
   // rather than a snapshot another writer may already have moved past.
-  const verification = await backend.checkIntegrity(tx, input.tenantId, input.tillId);
+  const verification = await backend.checkIntegrity(tx, input.tenantId, input.nodeId);
   // Nothing branches on `verification.ok`. A failed check records an incident (below, once
   // `saleId` exists) and the sale is chained anyway — no fiscal condition may block a sale. If a
   // later change adds `if (!verification.ok) throw ...` here, it has implemented the one
@@ -167,7 +180,7 @@ export async function recordSale(
   const [series] = await tx
     .select({
       code: invoiceSeries.code,
-      tillId: invoiceSeries.tillId,
+      nodeId: invoiceSeries.nodeId,
       purpose: invoiceSeries.purpose,
     })
     .from(invoiceSeries)
@@ -179,11 +192,11 @@ export async function recordSale(
       tenantId: input.tenantId,
     });
   }
-  if (series.tillId !== input.tillId) {
-    throw new AppError("sale.series_wrong_till", {
+  if (series.nodeId !== input.nodeId) {
+    throw new AppError("sale.series_wrong_node", {
       seriesId: input.seriesId,
-      expected: series.tillId,
-      actual: input.tillId,
+      expected: series.nodeId,
+      actual: input.nodeId,
     });
   }
   // An ordinary sale must draw from a `purpose='standard'` series, never a corrective one — the
@@ -228,6 +241,7 @@ export async function recordSale(
     .values({
       tenantId: input.tenantId,
       tillId: input.tillId,
+      nodeId: input.nodeId,
       seriesId: input.seriesId,
       invoiceNumber,
       issuedAt: now.instant.toISOString(),
@@ -315,6 +329,7 @@ export async function recordSale(
   const fiscal = await backend.recordSale(tx, {
     tenantId: input.tenantId,
     tillId: input.tillId,
+    nodeId: input.nodeId,
     saleId,
     seriesId: input.seriesId,
     seriesCode: series.code,

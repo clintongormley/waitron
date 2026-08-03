@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import type { SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { NodeId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
 // See record-sale.test.ts's identical deviation note: there is no `@waitron/fiscal/testing`
 // subpath. `packages/fiscal/src/index.ts`'s own closing comment states the real path.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
@@ -24,6 +24,7 @@ import { seedTenant } from "../test/fixtures.js";
 
 let tenantId: TenantId;
 let tillId: TillId;
+let nodeId: NodeId;
 let seriesId: SeriesId;
 let workingOrderId: WorkingOrderId;
 
@@ -37,7 +38,7 @@ const suite = usePgliteDb({
 });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenant(suite.db));
+  ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenant(suite.db));
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -88,6 +89,7 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
     tenantId,
     tillId,
+    nodeId,
     seriesId,
     workingOrderId,
     locale: "es-ES",
@@ -124,19 +126,20 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
 }
 
 /**
- * A backend whose `checkIntegrity` reports one failed issue on the current test's `tillId`.
+ * A backend whose `checkIntegrity` reports one failed issue on the current test's `nodeId` (the
+ * chain is keyed by node after the node-id rekey; the incident it produces stays till-keyed).
  *
  * **Deviation from the brief.** The brief's `failingChain()` set `backend.chainVerification =
  * { ok: false, error: new AppError(...) }` — not a real affordance on `FakeFiscalBackend`, and
  * itself contradicted by this same task's own governing dispatch, which states the real
  * `IntegrityReport` shape is `{ ok, checked, issues }`. The actual test-only control is
- * `breakIntegrity(tillId, issue)`, taking a plain `IntegrityIssue` (`{ code, params, recordId? }`)
+ * `breakIntegrity(nodeId, issue)`, taking a plain `IntegrityIssue` (`{ code, params, recordId? }`)
  * — the identical substitution record-sale.test.ts's and record-void.test.ts's own
  * "no fiscal condition blocks a sale"/"no fiscal condition blocks a void" tests already made.
  */
 function failingChain(): FakeFiscalBackend {
   const backend = new FakeFiscalBackend(suite.db);
-  backend.breakIntegrity(tillId, {
+  backend.breakIntegrity(nodeId, {
     code: "predecessor-hash-mismatch",
     params: { sequence: 7, expected: "ABC" },
   });
@@ -144,15 +147,15 @@ function failingChain(): FakeFiscalBackend {
 }
 
 /**
- * Runs the write path exactly as the application will: registers the till with the injected
+ * Runs the write path exactly as the application will: registers the node with the injected
  * backend, then sells as `app_user` inside one transaction — mirrors record-sale.test.ts's own
- * `run` helper (registration is required; `FakeFiscalBackend` refuses `recordSale` for a till
- * with no prior `registerTill`, exactly like a real backend).
+ * `run` helper (registration is required; `FakeFiscalBackend` refuses `recordSale` for a node
+ * with no prior `registerNode`, exactly like a real backend).
  */
 async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTenant(suite.db, tenantId, async (tx) => {
     await asAppUser(tx);
-    await backend.registerTill(tx, tillId, { tenantId });
+    await backend.registerNode(tx, nodeId, { tenantId });
     return recordSale(tx, backend, input(overrides));
   });
 }
@@ -193,7 +196,7 @@ describe("incidents — chain verification failure", () => {
     // asserting only the incident row would pass against an implementation that recorded the
     // incident and then aborted.
     expect(await suite.db.select().from(sales).where(eq(sales.id, saleId))).toHaveLength(1);
-    expect(await backend.recordsFor(tillId)).toHaveLength(1);
+    expect(await backend.recordsFor(nodeId)).toHaveLength(1);
   });
 
   it("carries the module's structured issue detail, not a rendered message", async () => {
@@ -231,12 +234,12 @@ describe("incidents — chain verification failure", () => {
     // issues into ONE incident whose `params.issues` carries BOTH: this is the proof the
     // aggregation preserves detail under the index.
     const backend = new FakeFiscalBackend(suite.db);
-    backend.breakIntegrity(tillId, {
+    backend.breakIntegrity(nodeId, {
       code: "predecessor-hash-mismatch",
       recordId: "rec-1",
       params: { expected: "ABC", found: "XYZ" },
     });
-    backend.breakIntegrity(tillId, {
+    backend.breakIntegrity(nodeId, {
       code: "predecessor-link-mismatch",
       recordId: "rec-1",
       params: { expected: "DEF", found: "GHI" },
@@ -274,7 +277,7 @@ describe("incidents — chain verification failure", () => {
     await expect(
       withTenant(suite.db, tenantId, async (tx) => {
         await asAppUser(tx);
-        await backend.registerTill(tx, tillId, { tenantId });
+        await backend.registerNode(tx, nodeId, { tenantId });
         await recordSale(tx, backend, input());
         throw new Error("simulated crash before commit");
       }),

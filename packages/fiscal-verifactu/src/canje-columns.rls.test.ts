@@ -30,14 +30,14 @@ const suite = useRealPostgres({
 async function seedCanje(till: SeededTill, saleId: string): Promise<void> {
   await suite.admin.execute(sql`
     insert into registros_facturacion (
-      tenant_id, till_id, sif_id, sale_id, secuencia, tipo_registro,
+      tenant_id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       tipo_factura, facturas_sustituidas, destinatarios,
       descripcion_operacion, cuota_total, importe_total,
       primer_registro, sistema_informatico,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, entorno
     ) values (
-      ${till.tenantId}, ${till.tillId}, ${till.sifId}, ${saleId}, 1, 'alta',
+      ${till.tenantId}, ${till.tillId}, ${till.nodeId}, ${till.sifId}, ${saleId}, 1, 'alta',
       '89890001K', 'F/1', '2026-07-20', 'Waitron SL',
       'F3',
       ${JSON.stringify({

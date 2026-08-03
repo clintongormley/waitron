@@ -3,6 +3,7 @@ import { CORE_MIGRATIONS } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
+  nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
   tillId as brandTillId,
@@ -31,7 +32,7 @@ import type { SeededForSale } from "../test/seed.js";
 // The core schema (tenants/locations/tills/invoice_series/sales/sale_lines/tenders) plus this
 // package's own `payments`/`payment_refunds`. Both are needed: the payment rows and the sale
 // rows both get written in this file. The setup step creates the fake backend's own
-// `fake_till_registrations`/`fake_fiscal_records` tables. Without it `registerTill`/`recordSale`
+// `fake_node_registrations`/`fake_fiscal_records` tables. Without it `registerNode`/`recordSale`
 // fail with "relation fake_fiscal_records does not exist" — the same install
 // `record-sale.test.ts` performs.
 const pg = usePgliteDb({
@@ -39,11 +40,11 @@ const pg = usePgliteDb({
   setup: (db) => FakeFiscalBackend.install(db),
 });
 
-// Each test seeds a FRESH tenant (its own till, series and working order), so nothing is truncated
-// between tests. Distinct NIFs keep those tenants collision-free against `tenants_nif_key`, and
-// each fresh till keeps the fake's `fake_till_registrations` primary key collision-free — the same
-// per-test-fresh-tenant convention `fake-provider.test.ts` uses. `freshNif` is shared from
-// ../test/seed.js.
+// Each test seeds a FRESH tenant (its own till, node, series and working order), so nothing is
+// truncated between tests. Distinct NIFs keep those tenants collision-free against
+// `tenants_nif_key`, and each fresh node keeps the fake's `fake_node_registrations` primary key
+// collision-free — the same per-test-fresh-tenant convention `fake-provider.test.ts` uses.
+// `freshNif` is shared from ../test/seed.js.
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
 
@@ -80,6 +81,7 @@ function buildInput(
   return {
     tenantId: brandTenantId(s.tenantId),
     tillId: brandTillId(s.tillId),
+    nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
     locale: "es",

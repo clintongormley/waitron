@@ -100,17 +100,18 @@ declare module "@waitron/shared" {
      * which reads identically from here (spec's own fail-closed shape for a cross-tenant probe). */
     "sale.series_not_found": { seriesId: string; tenantId: string };
     /** Thrown by `recordSale` when `RecordSaleInput.seriesId` names a real series, but one that
-     * belongs to a DIFFERENT till than `RecordSaleInput.tillId`. A till may own several series,
-     * but a series belongs to exactly one till — allocating from another till's series would let
-     * two chains issue from one counter, which no constraint downstream can detect. */
-    "sale.series_wrong_till": { seriesId: string; expected: string; actual: string };
+     * belongs to a DIFFERENT node than `RecordSaleInput.nodeId` (node-id rekey, 2026-08-03: a
+     * series is owned by a node — the SIF — not a till, #33). A node may own several series, but a
+     * series belongs to exactly one node — allocating from another node's series would let two
+     * chains issue from one counter, which no constraint downstream can detect. */
+    "sale.series_wrong_node": { seriesId: string; expected: string; actual: string };
     /** Thrown when a series is real and on the right till, but the WRONG KIND for the operation:
      * `recordSale` demands a `purpose='standard'` series, `recordCorrection` a
      * `purpose='rectificative'` one, and each throws this if handed the other. The domain concept
      * is "this series is not the right kind for this operation" — it models the mandatory
      * separation of corrective numbering (RD 1619/2012 art. 6.1.a, «en todo caso»): a rectificativa
      * draws from its own series, an ordinary sale never does. `expected`/`actual` carry the two
-     * purposes so a translator can say which was wanted. Matches `sale.series_wrong_till`'s shape
+     * purposes so a translator can say which was wanted. Matches `sale.series_wrong_node`'s shape
      * on purpose (both are "the series you named is real but unusable here"). */
     "sale.series_wrong_purpose": { seriesId: string; expected: string; actual: string };
     /** Reserved for the constraint-violation translation `UNIQUE (tenant_id, series_id,

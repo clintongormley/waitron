@@ -73,6 +73,16 @@ declare module "@waitron/shared" {
      */
     "till.not_found": { id: string; tenantId: string };
     /**
+     * No such node *for this tenant* — the node-keyed counterpart of `till.not_found` (node-id
+     * rekey, 2026-08-03: the SIF is the node, #33, so provisioning registers a node, not a till). A
+     * node belonging to ANOTHER tenant reports this same code for the identical reason `till.not_found`
+     * does: to a caller scoped to one tenant the two are the same fact, and a distinct "wrong owner"
+     * code would confirm another tenant's node to whoever asked. Enforced by comparing
+     * `nodes.tenant_id`, NOT by relying on RLS — see `provisionNode`. `node.*`, not `server.*`: it
+     * is a fact about a node, the rule `tenant.not_found`'s own note gives.
+     */
+    "node.not_found": { id: string; tenantId: string };
+    /**
      * `IdSistemaInformatico` is not a usable software identifier. AEAT caps it at two characters —
      * `packages/verifactu`'s `validate` encodes exactly that rule as `ID_SISTEMA_LENGTH`, and every
      * fixture in this repo uses `"WT"`.

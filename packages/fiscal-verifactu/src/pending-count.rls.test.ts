@@ -24,10 +24,10 @@ describe("pendingCount under real row-level security", () => {
   it("counts the tenant's pending records when run as an RLS-subject role", async () => {
     const till: SeededTill = await seedTill(suite.admin, "A");
     // Seed one pending envios row for this tenant, all as the superuser (which bypasses RLS).
-    // seedTill returns { tenantId, tillId, seriesId, sifId } — no saleId, so seedSale mints one.
+    // seedTill returns { tenantId, tillId, nodeId, seriesId, sifId } — no saleId, so seedSale mints one.
     const saleId = await seedSale(suite.admin, till, 1);
     const appended = await suite.admin.transaction((tx) =>
-      appendToChain(tx, till.tenantId, till.tillId, altaFor(saleId, 1, 1)),
+      appendToChain(tx, till.tenantId, till.nodeId, altaFor(till.tillId, saleId, 1, 1)),
     );
     await suite.admin.insert(envios).values({ registroId: appended.id, tenantId: till.tenantId });
 
@@ -42,7 +42,7 @@ describe("pendingCount under real row-level security", () => {
       });
       // Fix under test: withTenant sets app.tenant_id, so current_tenant_id() matches this tenant's
       // rows. Without it the policy sees NULL and returns 0 — the bug this test exists to catch.
-      expect(await backend.pendingCount(till.tenantId, till.tillId)).toBe(1);
+      expect(await backend.pendingCount(till.tenantId, till.nodeId)).toBe(1);
     } finally {
       await probe.close();
     }

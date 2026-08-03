@@ -35,13 +35,13 @@ describe("cuota_total / importe_total round-trip the huella's literal hash input
 
     const result = await pg.db.execute<{ cuota_total: string; importe_total: string }>(sql`
       insert into registros_facturacion (
-        tenant_id, till_id, sif_id, sale_id, secuencia, tipo_registro,
+        tenant_id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
         id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
         tipo_factura, descripcion_operacion, desglose, cuota_total, importe_total,
         primer_registro, sistema_informatico,
         fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella
       ) values (
-        ${TENANT_A.id}, ${TENANT_A.tillId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
+        ${TENANT_A.id}, ${TENANT_A.tillId}, ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
         1, 'alta',
         '89890001K', 'A/1', '2026-07-20', 'Waitron SL',
         'F2', 'Venta en establecimiento', '[]'::jsonb, ${cuotaTotal}, ${importeTotal},

@@ -46,8 +46,8 @@ beforeEach(async () => {
   // `chain.concurrency.test.ts` documents.
   till = await seedTill(suite.admin, "A");
   const series = await suite.admin.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, till_id, code, purpose, next_number)
-    values (${till.tenantId}, ${till.tillId}, 'R', 'rectificative', 1)
+    insert into invoice_series (tenant_id, node_id, code, purpose, next_number)
+    values (${till.tenantId}, ${till.nodeId}, 'R', 'rectificative', 1)
     returning id
   `);
   rectificativeSeriesId = series.rows[0]!.id;
@@ -66,6 +66,7 @@ function correctiveSaleFor(saleId: string, invoiceNumber: number): SaleForFiscal
   return {
     tenantId: till.tenantId,
     tillId: till.tillId,
+    nodeId: till.nodeId,
     saleId: brandSaleId(saleId),
     // `seriesId` is never read by `recordCorrection` (it uses `seriesCode`/`invoiceNumber` for the
     // NumSerieFactura); branded only to satisfy the type. Enforcing that this is a `rectificative`
@@ -88,6 +89,7 @@ function originalSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalRe
   return {
     tenantId: till.tenantId,
     tillId: till.tillId,
+    nodeId: till.nodeId,
     saleId: brandSaleId(saleId),
     seriesId: brandSeriesId(till.seriesId),
     seriesCode: "A",
@@ -120,10 +122,10 @@ async function seedCorrectiveRow(
   total: string,
 ): Promise<string> {
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into sales (tenant_id, till_id, series_id, invoice_number, issued_at,
+    insert into sales (tenant_id, till_id, node_id, series_id, invoice_number, issued_at,
                        issued_offset_minutes, total, corrects_sale_id,
                        locale, invoice_locales, fiscal_backend, fiscal_state)
-    values (${till.tenantId}, ${till.tillId}, ${rectificativeSeriesId}, ${invoiceNumber},
+    values (${till.tenantId}, ${till.tillId}, ${till.nodeId}, ${rectificativeSeriesId}, ${invoiceNumber},
             '2026-03-02T12:05:00+01:00', 60, ${total}, ${correctsSaleId},
             'es', array['es'], 'verifactu', 'recorded')
     returning id
@@ -259,7 +261,7 @@ describe("recordCorrection under real chain contention", () => {
   // here. What real contention still exercises, and PGlite (one backend, serialised) cannot: several
   // corrections on distinct backends racing the SAME chain-head row lock must still serialise into a
   // gap-free, correctly-chained run of distinct secuencias, never a crossed pair or a duplicated
-  // position (which `registros_tenant_till_secuencia_uq` would reject). Five, not the brief's minimal
+  // position (which `registros_tenant_node_secuencia_uq` would reject). Five, not the brief's minimal
   // two, for the same reason chain.concurrency runs twenty: a wider race is a stronger probe of the
   // same property.
   const RACERS = 5;
@@ -285,7 +287,7 @@ describe("recordCorrection under real chain contention", () => {
       const rows = await suite.admin
         .select()
         .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tillId, till.tillId))
+        .where(eq(registrosFacturacion.nodeId, till.nodeId))
         .orderBy(asc(registrosFacturacion.secuencia));
 
       // Original at 1, the five corrections at 2..6 — distinct, contiguous, no gaps.

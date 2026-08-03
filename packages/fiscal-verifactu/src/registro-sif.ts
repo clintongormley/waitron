@@ -6,14 +6,14 @@
 import "./errors.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import type { TenantId, TillId } from "@waitron/shared";
+import type { NodeId, TenantId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { cadenas } from "./schema/cadenas.js";
 import { contadoresInstalacion, registroSif } from "./schema/sif.js";
 
 export interface RegisterSifParams {
   tenantId: TenantId;
-  tillId: TillId;
+  nodeId: NodeId;
   /** The obligado tributario's NIF. Half of the SIF identity, with IdSIF and NºInstalación. */
   nif: string;
   idSistemaInformatico: string;
@@ -22,7 +22,7 @@ export interface RegisterSifParams {
 export interface SifRegistration {
   id: string;
   tenantId: TenantId;
-  tillId: TillId;
+  nodeId: NodeId;
   nif: string;
   idSistemaInformatico: string;
   numeroInstalacion: number;
@@ -85,27 +85,28 @@ async function mintNumeroInstalacion(
 }
 
 /**
- * Register a till, or re-register a reimaged one. Always mints a fresh number.
+ * Register a node, or re-register a reimaged one. Always mints a fresh number.
  *
- * Re-registration is IMPLICIT rather than gated behind an `allowReRegistration` flag. A wiped till
+ * Re-registration is IMPLICIT rather than gated behind an `allowReRegistration` flag. A wiped node
  * has no local state to distinguish itself with, so it cannot pass such a flag truthfully, and
- * upstream cannot tell a reimaged till from a mistakenly-duplicated one. Since minting a fresh
+ * upstream cannot tell a reimaged node from a mistakenly-duplicated one. Since minting a fresh
  * number is always safe and reusing one never is, the safe branch is the only branch — which is
  * what "correct by construction" means here. A flag would move the decision to a caller who does
- * not have the information to make it.
+ * not have the information to make it. (Node-id rekey, 2026-08-03: the SIF is the node — #33 — so
+ * this registers a node rather than a till.)
  *
  * Runs against the upstream node's database, where `contadores_instalacion`'s single writer
- * lives — this is the concrete meaning of "a till cannot be provisioned offline" (spec's stated
+ * lives — this is the concrete meaning of "a node cannot be provisioned offline" (spec's stated
  * limitation, not an oversight): provisioning is an admin action performed once, not a
  * mid-service event, so requiring connectivity for it costs nothing a restaurant will ever
- * notice, and nothing here weakens spec §4 — an already-registered till still sells indefinitely
+ * notice, and nothing here weakens spec §4 — an already-registered node still sells indefinitely
  * offline.
  */
 export async function registerSif(
   tx: Transaction,
   params: RegisterSifParams,
 ): Promise<SifRegistration> {
-  // Retire any live identity for this till first, so the partial unique index
+  // Retire any live identity for this node first, so the partial unique index
   // (registro_sif_activo_uq) has room for the new one. The old row is never updated beyond this
   // timestamp: its registros are immutable and must keep pointing at the identity that actually
   // generated them.
@@ -115,7 +116,7 @@ export async function registerSif(
     .where(
       and(
         eq(registroSif.tenantId, params.tenantId),
-        eq(registroSif.tillId, params.tillId),
+        eq(registroSif.nodeId, params.nodeId),
         isNull(registroSif.revocadoEn),
       ),
     );
@@ -130,7 +131,7 @@ export async function registerSif(
     .insert(registroSif)
     .values({
       tenantId: params.tenantId,
-      tillId: params.tillId,
+      nodeId: params.nodeId,
       nif: params.nif,
       idSistemaInformatico: params.idSistemaInformatico,
       numeroInstalacion,
@@ -149,19 +150,19 @@ export async function registerSif(
   // A new installation number is a new SIF identity, therefore a NEW CHAIN (findings §1). Break
   // the pointer. `secuencia` is deliberately untouched by leaving it out of the SET clause: it is
   // OUR ordering aid for the outbox, never AEAT's, and resetting it would collide with
-  // UNIQUE (tenant_id, till_id, secuencia) on the very next append.
+  // UNIQUE (tenant_id, node_id, secuencia) on the very next append.
   await tx
     .insert(cadenas)
-    .values({ tenantId: params.tenantId, tillId: params.tillId })
+    .values({ tenantId: params.tenantId, nodeId: params.nodeId })
     .onConflictDoUpdate({
-      target: [cadenas.tenantId, cadenas.tillId],
+      target: [cadenas.tenantId, cadenas.nodeId],
       set: { ultimoRegistroId: null, ultimaHuella: null, actualizadoEn: sql`now()` },
     });
 
   return {
     id: inserted.id,
     tenantId: params.tenantId,
-    tillId: params.tillId,
+    nodeId: params.nodeId,
     nif: params.nif,
     idSistemaInformatico: params.idSistemaInformatico,
     numeroInstalacion,
@@ -171,15 +172,15 @@ export async function registerSif(
 }
 
 /**
- * The till's live SIF identity. Throws `sif.not_registered` rather than returning null — every
- * caller needs one, and the concrete encoding of "a till cannot be provisioned offline": an
- * unprovisioned till gets a structured refusal that reaches a screen translatable, never a
- * locally invented number.
+ * The node's live SIF identity. Throws `sif.not_registered` rather than returning null — every
+ * caller needs one, and the concrete encoding of "a node cannot be provisioned offline": an
+ * unprovisioned node gets a structured refusal that reaches a screen translatable, never a
+ * locally invented number. (Node-id rekey, 2026-08-03: keyed per node.)
  */
 export async function currentSif(
   tx: Transaction,
   tenantId: TenantId,
-  tillId: TillId,
+  nodeId: NodeId,
 ): Promise<SifRegistration> {
   const [row] = await tx
     .select({
@@ -194,38 +195,38 @@ export async function currentSif(
     .where(
       and(
         eq(registroSif.tenantId, tenantId),
-        eq(registroSif.tillId, tillId),
+        eq(registroSif.nodeId, nodeId),
         isNull(registroSif.revocadoEn),
       ),
     )
     .limit(1);
 
   if (row === undefined) {
-    throw new AppError("sif.not_registered", { tenantId, tillId });
+    throw new AppError("sif.not_registered", { tenantId, nodeId });
   }
 
-  return { ...row, tenantId, tillId };
+  return { ...row, tenantId, nodeId };
 }
 
 /**
- * Whether the next record on this till's chain carries `PrimerRegistro="S"`.
+ * Whether the next record on this node's chain carries `PrimerRegistro="S"`.
  *
- * DERIVED from local state — the till's own chain being empty — never from a flag anyone sets.
+ * DERIVED from local state — the node's own chain being empty — never from a flag anyone sets.
  * AEAT returns a non-rejecting warning when it is claimed and records already exist for that
  * SIF+NIF; that warning is a useful re-provisioning signal only because this value reports what
  * the database holds rather than what a caller believes. No chain row at all is also a first
- * record — a till registered but never sold — and a chain row whose pointer was just reset by
+ * record — a node registered but never sold — and a chain row whose pointer was just reset by
  * `registerSif` reports the same thing, which is the point: re-registration begins a new chain.
  */
 export async function esPrimerRegistro(
   tx: Transaction,
   tenantId: TenantId,
-  tillId: TillId,
+  nodeId: NodeId,
 ): Promise<boolean> {
   const [row] = await tx
     .select({ ultimaHuella: cadenas.ultimaHuella })
     .from(cadenas)
-    .where(and(eq(cadenas.tenantId, tenantId), eq(cadenas.tillId, tillId)))
+    .where(and(eq(cadenas.tenantId, tenantId), eq(cadenas.nodeId, nodeId)))
     .limit(1);
 
   return (row?.ultimaHuella ?? null) === null;

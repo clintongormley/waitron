@@ -127,6 +127,13 @@
       "when": 1785749337643,
       "tag": "0017_nodes_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1785751780912,
+      "tag": "0018_rekey_series_sales_to_node",
+      "breakpoints": true
     }
   ]
 }

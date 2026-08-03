@@ -47,6 +47,7 @@ import {
   divideDecimal,
   multiplyDecimal,
   MONEY_SCALE,
+  nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
   tillId as brandTillId,
@@ -62,7 +63,7 @@ function usageError(message: string): never {
   console.error(
     "usage: DATABASE_URL=<...> WAITRON_ENV=<production|preproduction> " +
       "node apps/server/dist/record-one-sale.js " +
-      "<tenantId> <tillId> <seriesId> <description> <baseAmount> <vatRate> [tipAmount]",
+      "<tenantId> <tillId> <nodeId> <seriesId> <description> <baseAmount> <vatRate> [tipAmount]",
   );
   process.exit(1);
 }
@@ -99,10 +100,11 @@ function systemClock(): TrustedClock {
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  if (args.length !== 6 && args.length !== 7) {
-    usageError(`expected 6 or 7 arguments, got ${args.length}`);
+  if (args.length !== 7 && args.length !== 8) {
+    usageError(`expected 7 or 8 arguments, got ${args.length}`);
   }
-  const [tenantArg, tillArg, seriesArg, description, baseAmountArg, vatRateArg, tipArg] = args;
+  const [tenantArg, tillArg, nodeArg, seriesArg, description, baseAmountArg, vatRateArg, tipArg] =
+    args;
 
   const databaseUrl = process.env.DATABASE_URL;
   if (databaseUrl === undefined || databaseUrl === "") {
@@ -121,6 +123,7 @@ async function main(): Promise<void> {
 
   const tenant = brandTenantId(tenantArg);
   const till = brandTillId(tillArg);
+  const node = brandNodeId(nodeArg);
   const series = brandSeriesId(seriesArg);
 
   const baseAmount = decimal(baseAmountArg);
@@ -172,6 +175,7 @@ async function main(): Promise<void> {
     const input: RecordSaleInput = {
       tenantId: tenant,
       tillId: till,
+      nodeId: node,
       seriesId: series,
       // Audit-trail context only — `sales` carries no foreign key onto `working_orders` at all,
       // and this script has no working order to point at (`write-path-fixtures.ts`'s

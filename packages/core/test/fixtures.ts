@@ -1,18 +1,20 @@
 import { sql } from "drizzle-orm";
 import {
+  nodeId as brandNodeId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
-import type { SaleId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
 import { sales } from "@waitron/db";
 import type { Database } from "@waitron/db";
 
 export interface SeededTenant {
   tenantId: TenantId;
   tillId: TillId;
+  nodeId: NodeId;
   seriesId: SeriesId;
   workingOrderId: WorkingOrderId;
 }
@@ -28,17 +30,19 @@ function freshNif(): string {
 }
 
 /**
- * Seeds tenant -> location -> till -> invoice series for `record-sale.test.ts`, plus a
+ * Seeds tenant -> location -> till -> node -> invoice series for `record-sale.test.ts`, plus a
  * fabricated `WorkingOrderId`. Runs as plain, unscoped statements rather than inside `withTenant`
  * — PGlite's default connection is a superuser and bypasses row-level security unconditionally,
  * so no `app.tenant_id` needs to be set for these inserts to satisfy each table's
  * tenant-isolation `WITH CHECK` — the identical convention
  * `packages/fiscal-verifactu/test/fixtures.ts`'s `seedTenantTillSif` already uses.
  *
- * `overrides.tenantId`, when supplied, adds a SECOND till (+ location + series) under an
- * EXISTING tenant rather than minting a new one — exactly the shape `record-sale.test.ts`'s
- * "rejects a series belonging to another till" test needs: a series that is real, and real for
- * the SAME tenant, but owned by a different till than the one under test.
+ * The invoice series is keyed to the NODE, not the till (node-id rekey, 2026-08-03: the SIF is the
+ * node, #33). Each call also mints its own node, so `overrides.tenantId`, when supplied, adds a
+ * SECOND till + node (+ location + series) under an EXISTING tenant rather than minting a new
+ * tenant — exactly the shape `record-sale.test.ts`'s "rejects a series belonging to another node"
+ * test needs: a series that is real, and real for the SAME tenant, but owned by a different node
+ * than the one under test (the returned `nodeId` is genuinely different from the first call's).
  */
 export async function seedTenant(
   db: Database,
@@ -67,8 +71,14 @@ export async function seedTenant(
   `);
   const tillId = brandTillId(till.rows[0]!.id);
 
+  const node = await db.execute<{ id: string }>(sql`
+    insert into nodes (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Nodo 1')
+    returning id
+  `);
+  const nodeId = brandNodeId(node.rows[0]!.id);
+
   const series = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, till_id, code) values (${tenantId}, ${tillId}, 'A')
+    insert into invoice_series (tenant_id, node_id, code) values (${tenantId}, ${nodeId}, 'A')
     returning id
   `);
   const seriesId = brandSeriesId(series.rows[0]!.id);
@@ -76,6 +86,7 @@ export async function seedTenant(
   return {
     tenantId,
     tillId,
+    nodeId,
     seriesId,
     // No `working_orders` row is created: `sales` carries no foreign key onto `working_orders`
     // at all (packages/db/src/schema/sales.ts), and `RecordSaleInput.workingOrderId` is used
@@ -86,22 +97,22 @@ export async function seedTenant(
 }
 
 /**
- * Adds a second series to an EXISTING till whose `purpose` is `rectificative`, returning its id.
- * `recordCorrection` requires such a series (a correction must draw its number from a corrective
- * series, never an ordinary one — RD 1619/2012 art. 6.1.a); `recordSale` requires the opposite.
- * Runs as a plain, unscoped statement exactly like `seedTenant` above — the seeding connection is
- * a superuser and bypasses row-level security, so no `app.tenant_id` need be set for the
- * tenant-isolation `WITH CHECK` to pass.
+ * Adds a second series to an EXISTING node whose `purpose` is `rectificative`, returning its id
+ * (node-id rekey, 2026-08-03: a series is owned by a node, #33). `recordCorrection` requires such a
+ * series (a correction must draw its number from a corrective series, never an ordinary one — RD
+ * 1619/2012 art. 6.1.a); `recordSale` requires the opposite. Runs as a plain, unscoped statement
+ * exactly like `seedTenant` above — the seeding connection is a superuser and bypasses row-level
+ * security, so no `app.tenant_id` need be set for the tenant-isolation `WITH CHECK` to pass.
  */
 export async function seedRectificativeSeries(
   db: Database,
   tenantId: TenantId,
-  tillId: TillId,
+  nodeId: NodeId,
   code = "R",
 ): Promise<SeriesId> {
   const { rows } = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, till_id, code, purpose)
-    values (${tenantId}, ${tillId}, ${code}, 'rectificative')
+    insert into invoice_series (tenant_id, node_id, code, purpose)
+    values (${tenantId}, ${nodeId}, ${code}, 'rectificative')
     returning id
   `);
   return brandSeriesId(rows[0]!.id);
@@ -116,7 +127,7 @@ export async function seedRectificativeSeries(
  */
 export async function seedBareSale(
   db: Database,
-  seed: { tenantId: TenantId; tillId: TillId; seriesId: SeriesId },
+  seed: { tenantId: TenantId; tillId: TillId; nodeId: NodeId; seriesId: SeriesId },
   overrides: { total?: string; invoiceNumber?: number } = {},
 ): Promise<SaleId> {
   const [row] = await db
@@ -124,6 +135,7 @@ export async function seedBareSale(
     .values({
       tenantId: seed.tenantId,
       tillId: seed.tillId,
+      nodeId: seed.nodeId,
       seriesId: seed.seriesId,
       invoiceNumber: overrides.invoiceNumber ?? 1,
       issuedAt: new Date("2026-03-01T12:00:00Z").toISOString(),

@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, seriesId as brandSeriesId } from "@waitron/shared";
-import type { SaleId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
 // See record-sale.test.ts's own deviation note: there is no `@waitron/fiscal/testing` subpath. The
 // real import path — stated verbatim in `packages/fiscal/src/index.ts`'s closing comment — is
 // `@waitron/fiscal/src/testing/fake-backend.js`, used in test files only.
@@ -26,8 +26,9 @@ import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtu
 
 let tenantId: TenantId;
 let tillId: TillId;
+let nodeId: NodeId;
 let seriesId: SeriesId; // the ordinary (purpose='standard') series seedTenant creates
-let rectSeriesId: SeriesId; // a purpose='rectificative' series on the same till
+let rectSeriesId: SeriesId; // a purpose='rectificative' series on the same node
 let workingOrderId: WorkingOrderId;
 
 // PGlite for everything in this file: the guards here are pure logic (an unknown id, a series of
@@ -37,14 +38,14 @@ let workingOrderId: WorkingOrderId;
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS],
   // FakeFiscalBackend.recordSale/recordCorrection/checkIntegrity read and write
-  // fake_till_registrations/fake_fiscal_records, and nothing else creates those tables.
+  // fake_node_registrations/fake_fiscal_records, and nothing else creates those tables.
   setup: (db) => FakeFiscalBackend.install(db),
   timeoutMs: 60_000,
 });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenant(suite.db));
-  rectSeriesId = await seedRectificativeSeries(suite.db, tenantId, tillId);
+  ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenant(suite.db));
+  rectSeriesId = await seedRectificativeSeries(suite.db, tenantId, nodeId);
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -75,6 +76,7 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
     tenantId,
     tillId,
+    nodeId,
     seriesId,
     workingOrderId,
     locale: "es-ES",
@@ -119,6 +121,7 @@ function correctionInput(
   return {
     tenantId,
     tillId,
+    nodeId,
     seriesId: rectSeriesId,
     correctsSaleId,
     total: "-14.41",
@@ -147,11 +150,11 @@ function correctionInput(
 }
 
 /** Records an ORIGINAL sale exactly as the application will: as `app_user`, in one transaction,
- * on a till already registered with the backend. */
+ * on a node already registered with the backend. */
 async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTenant(suite.db, tenantId, async (tx) => {
     await asAppUser(tx);
-    await backend.registerTill(tx, tillId, { tenantId });
+    await backend.registerNode(tx, nodeId, { tenantId });
     return recordSale(tx, backend, saleInput(overrides));
   });
 }
@@ -207,16 +210,16 @@ describe("recordCorrection — series purpose guard (§5)", () => {
     ).rejects.toMatchObject({ code: "sale.series_not_found" });
   });
 
-  it("rejects a rectificative series belonging to another till", async () => {
-    // A till may own several series, but a series belongs to exactly one till — drawing from
-    // another till's counter would let two chains issue from one series.
+  it("rejects a rectificative series belonging to another node", async () => {
+    // A node may own several series, but a series belongs to exactly one node — drawing from
+    // another node's counter would let two chains issue from one series.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
     const other = await seedTenant(suite.db, { tenantId });
-    const otherRect = await seedRectificativeSeries(suite.db, tenantId, other.tillId, "R2");
+    const otherRect = await seedRectificativeSeries(suite.db, tenantId, other.nodeId, "R2");
     await expect(correct(backend, saleId, { seriesId: otherRect })).rejects.toMatchObject({
-      code: "sale.series_wrong_till",
-      params: { seriesId: otherRect, expected: other.tillId, actual: tillId },
+      code: "sale.series_wrong_node",
+      params: { seriesId: otherRect, expected: other.nodeId, actual: nodeId },
     });
   });
 });
@@ -234,7 +237,7 @@ describe("recordCorrection — the sale being corrected", () => {
     // there is nothing to reference: the backend throws `fiscal.sale_not_recorded`, mirroring the
     // same precondition `recordVoid` enforces.
     const backend = new FakeFiscalBackend(suite.db);
-    const bareOriginal = await seedBareSale(suite.db, { tenantId, tillId, seriesId });
+    const bareOriginal = await seedBareSale(suite.db, { tenantId, tillId, nodeId, seriesId });
     await expect(correct(backend, bareOriginal)).rejects.toMatchObject({
       code: "fiscal.sale_not_recorded",
       params: { saleId: bareOriginal },
@@ -307,7 +310,7 @@ describe("recordCorrection — the corrective sale", () => {
 
     const { saleId: correctiveId } = await correct(backend, originalId);
 
-    const records = await backend.recordsFor(tillId);
+    const records = await backend.recordsFor(nodeId);
     expect(records.map((r) => r.kind)).toEqual(["sale", "correction"]);
     const correction = records[1];
     expect(correction?.saleId).toBe(correctiveId);
@@ -349,11 +352,11 @@ describe("recordCorrection — no fiscal condition blocks a correction (§5)", (
     // the correction proceeds.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sell(backend);
-    backend.breakIntegrity(tillId, { code: "predecessor-hash-mismatch", params: { sequence: 1 } });
+    backend.breakIntegrity(nodeId, { code: "predecessor-hash-mismatch", params: { sequence: 1 } });
 
     const { saleId: correctiveId } = await correct(backend, originalId);
 
-    const records = await backend.recordsFor(tillId);
+    const records = await backend.recordsFor(nodeId);
     expect(records.map((r) => r.kind)).toEqual(["sale", "correction"]);
     const rows = await suite.db.select().from(incidents).where(eq(incidents.saleId, correctiveId));
     expect(rows).toHaveLength(1);

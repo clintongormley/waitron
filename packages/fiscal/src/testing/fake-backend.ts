@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import type { SaleId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, TenantId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type {
   AckState,
@@ -9,10 +9,10 @@ import type {
   FiscalRecordRef,
   IntegrityIssue,
   IntegrityReport,
+  NodeRegistration,
   ReconcileMismatch,
   ReconcileResult,
   SaleForFiscalRecord,
-  TillRegistration,
 } from "../backend.js";
 
 /**
@@ -24,7 +24,7 @@ import type {
  */
 export type FakeFiscalRecord = {
   recordId: string;
-  tillId: string;
+  nodeId: string;
   saleId: string;
   sequence: number;
   kind: "sale" | "void" | "correction" | "substitution";
@@ -63,8 +63,8 @@ export class FakeFiscalBackend implements FiscalBackend {
 
   static async install(db: Database): Promise<void> {
     await db.execute(sql`
-      create table if not exists fake_till_registrations (
-        till_id text primary key,
+      create table if not exists fake_node_registrations (
+        node_id text primary key,
         tenant_id text not null,
         registration_id text not null,
         registered_at timestamptz not null default now()
@@ -74,14 +74,14 @@ export class FakeFiscalBackend implements FiscalBackend {
       create table if not exists fake_fiscal_records (
         record_id text primary key,
         tenant_id text not null,
-        till_id text not null,
+        node_id text not null,
         sale_id text not null,
         sequence integer not null,
         kind text not null,
         invoice_number integer not null,
         total numeric(12, 2) not null,
         state text not null,
-        unique (till_id, sequence)
+        unique (node_id, sequence)
       );
     `);
     // Grants `app_user` access to this fake's own bookkeeping tables, if that role exists.
@@ -95,7 +95,7 @@ export class FakeFiscalBackend implements FiscalBackend {
     // non-owner `app_user` role — deliberately, per that suite's own doc comment: an owner-run
     // write-path test would prove the code runs, not that the application role is permitted to
     // run it. Without this grant, every insert this fake makes on `app_user`'s behalf fails with
-    // "permission denied for table fake_till_registrations" — caught live in that task's own red
+    // "permission denied for table fake_node_registrations" — caught live in that task's own red
     // phase.
     //
     // Conditional on the role actually existing, and not a bare `GRANT ... TO app_user`: this
@@ -108,7 +108,7 @@ export class FakeFiscalBackend implements FiscalBackend {
       do $$
       begin
         if exists (select 1 from pg_roles where rolname = 'app_user') then
-          grant select, insert, update on fake_till_registrations, fake_fiscal_records
+          grant select, insert, update on fake_node_registrations, fake_fiscal_records
             to app_user;
         end if;
       end
@@ -117,31 +117,31 @@ export class FakeFiscalBackend implements FiscalBackend {
   }
 
   static async truncate(db: Database): Promise<void> {
-    await db.execute(sql`truncate fake_fiscal_records, fake_till_registrations`);
+    await db.execute(sql`truncate fake_fiscal_records, fake_node_registrations`);
   }
 
-  async registerTill(
+  async registerNode(
     tx: Transaction,
-    tillId: TillId,
+    nodeId: NodeId,
     params: { tenantId: string },
-  ): Promise<TillRegistration> {
+  ): Promise<NodeRegistration> {
     const registrationId = nextId();
     await tx.execute(sql`
-      insert into fake_till_registrations (till_id, tenant_id, registration_id)
-      values (${tillId}, ${params.tenantId}, ${registrationId})
-      on conflict (till_id) do update set registration_id = excluded.registration_id
+      insert into fake_node_registrations (node_id, tenant_id, registration_id)
+      values (${nodeId}, ${params.tenantId}, ${registrationId})
+      on conflict (node_id) do update set registration_id = excluded.registration_id
     `);
-    return { backend: "fake", tillId, registrationId, registeredAt: new Date() };
+    return { backend: "fake", nodeId, registrationId, registeredAt: new Date() };
   }
 
   async recordSale(tx: Transaction, sale: SaleForFiscalRecord): Promise<FiscalRecordRef> {
-    await this.assertRegistered(tx, sale.tillId);
+    await this.assertRegistered(tx, sale.nodeId);
     if (typeof sale.total !== "string" || !DECIMAL_PATTERN.test(sale.total)) {
       throw new AppError("shared.invalid_decimal", { value: String(sale.total) });
     }
     return this.append(tx, {
       tenantId: sale.tenantId,
-      tillId: sale.tillId,
+      nodeId: sale.nodeId,
       saleId: sale.saleId,
       kind: "sale",
       invoiceNumber: sale.invoiceNumber,
@@ -160,11 +160,11 @@ export class FakeFiscalBackend implements FiscalBackend {
   async recordVoid(tx: Transaction, saleId: SaleId, _reason: string): Promise<FiscalRecordRef> {
     const rows = await tx.execute<{
       tenant_id: string;
-      till_id: string;
+      node_id: string;
       invoice_number: number;
       total: string;
     }>(sql`
-      select tenant_id, till_id, invoice_number, total
+      select tenant_id, node_id, invoice_number, total
       from fake_fiscal_records
       where sale_id = ${saleId} and kind = 'sale'
       limit 1
@@ -175,7 +175,7 @@ export class FakeFiscalBackend implements FiscalBackend {
     }
     return this.append(tx, {
       tenantId: original.tenant_id,
-      tillId: original.till_id,
+      nodeId: original.node_id,
       saleId,
       kind: "void",
       invoiceNumber: original.invoice_number,
@@ -207,7 +207,7 @@ export class FakeFiscalBackend implements FiscalBackend {
     // does, so neither does the fake.
     return this.append(tx, {
       tenantId: sale.tenantId,
-      tillId: sale.tillId,
+      nodeId: sale.nodeId,
       saleId: sale.saleId,
       kind: "correction",
       invoiceNumber: sale.invoiceNumber,
@@ -245,7 +245,7 @@ export class FakeFiscalBackend implements FiscalBackend {
     // replaced 'sale' records are only read above, never rewritten — nothing here annuls them.
     return this.append(tx, {
       tenantId: sale.tenantId,
-      tillId: sale.tillId,
+      nodeId: sale.nodeId,
       saleId: sale.saleId,
       kind: "substitution",
       invoiceNumber: sale.invoiceNumber,
@@ -258,22 +258,22 @@ export class FakeFiscalBackend implements FiscalBackend {
   async checkIntegrity(
     tx: Transaction,
     tenantId: TenantId,
-    tillId: TillId,
+    nodeId: NodeId,
   ): Promise<IntegrityReport> {
     const rows = await tx.execute<{ count: string }>(sql`
       select count(*)::text as count from fake_fiscal_records
-      where tenant_id = ${tenantId} and till_id = ${tillId}
+      where tenant_id = ${tenantId} and node_id = ${nodeId}
     `);
     const checked = Number(rows.rows[0].count);
-    const issues = this.injectedIssues.get(tillId) ?? [];
+    const issues = this.injectedIssues.get(nodeId) ?? [];
     return { ok: issues.length === 0, checked, issues };
   }
 
-  async pendingCount(tenantId: TenantId, tillId: TillId): Promise<number> {
+  async pendingCount(tenantId: TenantId, nodeId: NodeId): Promise<number> {
     const rows = await this.db.execute<{ count: string }>(sql`
       select count(*)::text as count
       from fake_fiscal_records
-      where tenant_id = ${tenantId} and till_id = ${tillId} and state = 'pending'
+      where tenant_id = ${tenantId} and node_id = ${nodeId} and state = 'pending'
     `);
     return Number(rows.rows[0].count);
   }
@@ -362,12 +362,12 @@ export class FakeFiscalBackend implements FiscalBackend {
 
   /** Makes `checkIntegrity` report a failure. Without this the "records the next sale anyway"
    * requirement — the one spec §4 states outright — could not be exercised at all. */
-  breakIntegrity(tillId: TillId, issue: IntegrityIssue): void {
-    this.injectedIssues.set(tillId, [...(this.injectedIssues.get(tillId) ?? []), issue]);
+  breakIntegrity(nodeId: NodeId, issue: IntegrityIssue): void {
+    this.injectedIssues.set(nodeId, [...(this.injectedIssues.get(nodeId) ?? []), issue]);
   }
 
-  restoreIntegrity(tillId: TillId): void {
-    this.injectedIssues.delete(tillId);
+  restoreIntegrity(nodeId: NodeId): void {
+    this.injectedIssues.delete(nodeId);
   }
 
   /** Sets what the (fake) regime reports back for `recordId` — the injectable view `reconcile`
@@ -384,12 +384,12 @@ export class FakeFiscalBackend implements FiscalBackend {
     `);
   }
 
-  async recordsFor(tillId: TillId): Promise<FakeFiscalRecord[]> {
+  async recordsFor(nodeId: NodeId): Promise<FakeFiscalRecord[]> {
     const rows = await this.db.execute<FakeFiscalRecord & { sequence: number }>(sql`
-      select record_id as "recordId", till_id as "tillId", sale_id as "saleId",
+      select record_id as "recordId", node_id as "nodeId", sale_id as "saleId",
              sequence, kind, invoice_number as "invoiceNumber", total, state
       from fake_fiscal_records
-      where till_id = ${tillId}
+      where node_id = ${nodeId}
       order by sequence
     `);
     return rows.rows;
@@ -397,12 +397,12 @@ export class FakeFiscalBackend implements FiscalBackend {
 
   // ---- internals ------------------------------------------------------------------------
 
-  private async assertRegistered(tx: Transaction, tillId: string): Promise<void> {
-    const rows = await tx.execute<{ till_id: string }>(sql`
-      select till_id from fake_till_registrations where till_id = ${tillId}
+  private async assertRegistered(tx: Transaction, nodeId: string): Promise<void> {
+    const rows = await tx.execute<{ node_id: string }>(sql`
+      select node_id from fake_node_registrations where node_id = ${nodeId}
     `);
     if (rows.rows.length === 0) {
-      throw new AppError("fiscal.till_not_registered", { tillId });
+      throw new AppError("fiscal.node_not_registered", { nodeId });
     }
   }
 
@@ -410,7 +410,7 @@ export class FakeFiscalBackend implements FiscalBackend {
     tx: Transaction,
     entry: {
       tenantId: string;
-      tillId: string;
+      nodeId: string;
       saleId: string;
       kind: "sale" | "void" | "correction" | "substitution";
       invoiceNumber: number;
@@ -426,16 +426,16 @@ export class FakeFiscalBackend implements FiscalBackend {
     const next = await tx.execute<{ sequence: number }>(sql`
       select coalesce(max(sequence), 0) + 1 as sequence
       from fake_fiscal_records
-      where till_id = ${entry.tillId}
+      where node_id = ${entry.nodeId}
     `);
     const sequence = next.rows[0].sequence;
-    // UNIQUE (till_id, sequence) is the backstop, mirroring the real one. A fake that assigned
+    // UNIQUE (node_id, sequence) is the backstop, mirroring the real one. A fake that assigned
     // positions without a constraint would let a core test interleave two writes and still pass.
     await tx.execute(sql`
       insert into fake_fiscal_records
-        (record_id, tenant_id, till_id, sale_id, sequence, kind, invoice_number, total, state)
+        (record_id, tenant_id, node_id, sale_id, sequence, kind, invoice_number, total, state)
       values
-        (${recordId}, ${entry.tenantId}, ${entry.tillId}, ${entry.saleId}, ${sequence},
+        (${recordId}, ${entry.tenantId}, ${entry.nodeId}, ${entry.saleId}, ${sequence},
          ${entry.kind}, ${entry.invoiceNumber}, ${entry.total}, 'pending')
     `);
     return {

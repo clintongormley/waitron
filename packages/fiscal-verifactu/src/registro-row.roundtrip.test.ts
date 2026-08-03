@@ -40,6 +40,7 @@ async function storeAndReadBack(record: RegistroAlta): Promise<RegistroRow> {
   const row = toRegistroRow(record, {
     tenantId: till.tenantId,
     tillId: till.tillId,
+    nodeId: till.nodeId,
     sifId: till.sifId,
     saleId,
     secuencia: 1,

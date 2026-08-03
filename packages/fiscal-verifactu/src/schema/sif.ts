@@ -9,13 +9,14 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { nodes, tenants, tills } from "@waitron/db";
+import { nodes, tenants } from "@waitron/db";
 
 /**
  * A SIF identity: NIF + IdSistemaInformatico + NúmeroInstalación (findings §1). Append-mostly —
- * a till that re-registers gets a NEW row, and the old one is marked revoked rather than updated,
+ * a node that re-registers gets a NEW row, and the old one is marked revoked rather than updated,
  * because the old identity's registros are immutable and must keep pointing at the identity that
- * actually generated them.
+ * actually generated them. (Node-id rekey, 2026-08-03: the SIF is the node — #33 — so this moved
+ * from till to node.)
  */
 export const registroSif = pgTable(
   "registro_sif",
@@ -24,12 +25,11 @@ export const registroSif = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id),
-    tillId: uuid("till_id")
+    // The node this SIF identity belongs to (node-id rekey, 2026-08-03: was `till_id`; the SIF IS
+    // the node — #33). Plain one-argument FK.
+    nodeId: uuid("node_id")
       .notNull()
-      .references(() => tills.id),
-    // Nullable in this task (node rekey scaffolding); a later task populates it (the SIF IS the
-    // node — #33). Plain one-argument FK, matching the sibling `till_id` FK above.
-    nodeId: uuid("node_id").references(() => nodes.id),
+      .references(() => nodes.id),
     nif: text("nif").notNull(),
     idSistemaInformatico: text("id_sistema_informatico").notNull(),
     numeroInstalacion: integer("numero_instalacion").notNull(),
@@ -52,9 +52,9 @@ export const registroSif = pgTable(
       t.idSistemaInformatico,
       t.numeroInstalacion,
     ),
-    // At most one live identity per till. Partial, so revoked rows accumulate freely.
+    // At most one live identity per node. Partial, so revoked rows accumulate freely.
     uniqueIndex("registro_sif_activo_uq")
-      .on(t.tenantId, t.tillId)
+      .on(t.tenantId, t.nodeId)
       .where(sql`${t.revocadoEn} is null`),
     check("registro_sif_numero_ck", sql`${t.numeroInstalacion} > 0`),
   ],

@@ -8,13 +8,16 @@ import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
 
 /**
- * node_id scaffolding (Task 3 of the node rekey): `registro_sif`, `cadenas` and
- * `registros_facturacion` each gain a NULLABLE `node_id` with a plain FK to core's `nodes`.
- * Nothing writes it yet — a later task populates it and flips the ones that must be NOT NULL.
+ * `node_id` is the NOT NULL chain key on `registro_sif`, `cadenas` and `registros_facturacion`
+ * (node-id rekey, 2026-08-03: the SIF is the compute node, #33). This supersedes Task 3's scaffolding
+ * assertions that the column was nullable — Task 4 populated it everywhere and flipped it NOT NULL,
+ * dropping the old `till_id` key from `cadenas`/`registro_sif` (it stays a snapshot on
+ * `registros_facturacion`). These tests pin the finished contract: node_id is present, NOT NULL, and
+ * FK-checked against core's `nodes` on all three tables.
  *
  * PGlite (via usePgliteDb), matching this package's other column tests (`canje-columns.test.ts`):
- * these are column-existence, nullability and FK-round-trip assertions, none of which needs the
- * non-superuser deployment role or lock contention that would require real Postgres (CLAUDE.md §4).
+ * these are column-nullability and FK-round-trip assertions, none of which needs the non-superuser
+ * deployment role or lock contention that would require real Postgres (CLAUDE.md §4).
  */
 const pg = usePgliteDb({
   migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS],
@@ -22,7 +25,7 @@ const pg = usePgliteDb({
 });
 
 // One shared PGlite database backs the whole file, so every registros_facturacion insert must claim
-// a fresh secuencia (registros_tenant_till_secuencia_uq) and num_serie (registros_identidad_uq).
+// a fresh secuencia (registros_tenant_node_secuencia_uq) and num_serie (registros_identidad_uq).
 let secuenciaSeq = 0;
 function nextSecuencia(): number {
   secuenciaSeq += 1;
@@ -36,7 +39,7 @@ async function seedNodeForA(): Promise<string> {
   return seedNode(pg.db, TENANT_A.id, brandLocationId(TENANT_A.locationId));
 }
 
-/** The `is_nullable` rows for a table's node_id column — `[{ is_nullable: "YES" }]` once added. */
+/** The `is_nullable` rows for a table's node_id column — `[{ is_nullable: "NO" }]` after the rekey. */
 async function nodeIdNullability(table: string): Promise<{ is_nullable: string }[]> {
   const { rows } = await pg.db.execute<{ is_nullable: string }>(
     sql`select is_nullable from information_schema.columns
@@ -46,39 +49,41 @@ async function nodeIdNullability(table: string): Promise<{ is_nullable: string }
 }
 
 describe("registro_sif.node_id", () => {
-  it("is a nullable column, null on the seeded row, that accepts a valid node id", async () => {
-    expect(await nodeIdNullability("registro_sif")).toEqual([{ is_nullable: "YES" }]);
-    // The seeded registro_sif row (seedTenantTillSif) carried no node_id — nullable in practice.
-    const before = await pg.db.execute<{ node_id: string | null }>(
+  it("is NOT NULL, populated on the seeded row with a real node", async () => {
+    expect(await nodeIdNullability("registro_sif")).toEqual([{ is_nullable: "NO" }]);
+    // seedTenantTillSif now registers the SIF against TENANT_A's node (node-keyed).
+    const row = await pg.db.execute<{ node_id: string | null }>(
       sql`select node_id from registro_sif where id = ${TENANT_A.sifId}`,
     );
-    expect(before.rows[0]?.node_id).toBeNull();
-    // Setting it to a real node round-trips (registro_sif is updatable — revocation updates it).
-    const node = await seedNodeForA();
-    const after = await pg.db.execute<{ node_id: string | null }>(
-      sql`update registro_sif set node_id = ${node} where id = ${TENANT_A.sifId} returning node_id`,
-    );
-    expect(after.rows[0]?.node_id).toBe(node);
+    expect(row.rows[0]?.node_id).toBe(TENANT_A.nodeId);
   });
 });
 
 describe("cadenas.node_id", () => {
-  it("is a nullable column that accepts a valid node id", async () => {
-    expect(await nodeIdNullability("cadenas")).toEqual([{ is_nullable: "YES" }]);
+  it("is NOT NULL and is the (tenant, node) chain key", async () => {
+    expect(await nodeIdNullability("cadenas")).toEqual([{ is_nullable: "NO" }]);
     const node = await seedNodeForA();
-    // A fresh chain head for TENANT_A's till (seedTenantTillSif seeds no cadenas row).
-    // ultimo_registro_id and ultima_huella stay null — both-null satisfies cadenas_puntero_ck.
+    // A fresh chain head for this node (seedTenantTillSif seeds no cadenas row). ultimo_registro_id
+    // and ultima_huella stay null — both-null satisfies cadenas_puntero_ck. No till_id column any more.
     const inserted = await pg.db.execute<{ node_id: string | null }>(
-      sql`insert into cadenas (tenant_id, till_id, node_id)
-           values (${TENANT_A.id}, ${TENANT_A.tillId}, ${node}) returning node_id`,
+      sql`insert into cadenas (tenant_id, node_id)
+           values (${TENANT_A.id}, ${node}) returning node_id`,
     );
     expect(inserted.rows[0]?.node_id).toBe(node);
+  });
+
+  it("rejects a null node_id (the chain key is required)", async () => {
+    const error = await captureError(() =>
+      pg.db.execute(sql`insert into cadenas (tenant_id) values (${TENANT_A.id})`),
+    );
+    // 23502 not_null_violation.
+    expect(pgErrorCode(error)).toBe("23502");
   });
 });
 
 describe("registros_facturacion.node_id", () => {
-  /** A minimal alta registro carrying `nodeId` (or null). Positive totals omitted — not needed for
-   * a column round-trip; `primer_registro = true` keeps every anterior_* null (encadenamiento_ck). */
+  /** A minimal alta registro carrying `nodeId` (or null). Keeps the `till_id` snapshot too, since the
+   * rekey preserved it; `primer_registro = true` keeps every anterior_* null (encadenamiento_ck). */
   async function insertRegistro(nodeId: string | null): Promise<{ node_id: string | null }[]> {
     const secuencia = nextSecuencia();
     const { rows } = await pg.db.execute<{ node_id: string | null }>(sql`
@@ -97,10 +102,11 @@ describe("registros_facturacion.node_id", () => {
     return rows;
   }
 
-  it("is nullable — a registro inserts without it", async () => {
-    expect(await nodeIdNullability("registros_facturacion")).toEqual([{ is_nullable: "YES" }]);
-    const inserted = await insertRegistro(null);
-    expect(inserted[0]?.node_id).toBeNull();
+  it("is NOT NULL — a registro without it is refused", async () => {
+    expect(await nodeIdNullability("registros_facturacion")).toEqual([{ is_nullable: "NO" }]);
+    const error = await captureError(() => insertRegistro(null));
+    // 23502 not_null_violation.
+    expect(pgErrorCode(error)).toBe("23502");
   });
 
   it("accepts a valid node id", async () => {

@@ -1,15 +1,16 @@
 import { sql } from "drizzle-orm";
 import { check, index, integer, pgTable, text, unique, uuid } from "drizzle-orm/pg-core";
 import { nodes } from "./nodes.js";
-import { tenants, tills } from "./tenants.js";
+import { tenants } from "./tenants.js";
 
 /**
  * Invoice numbering series.
  *
- * A till may own N series and has exactly ONE chain (findings §1). Nothing
- * here relates a series to a chain: no chain column, and deliberately no
- * unique constraint on (tenant_id, till_id), which would silently reimpose
- * one series per till.
+ * A **node** may own N series and has exactly ONE chain (findings §1; the
+ * node-id rekey, 2026-08-03, moved this from till to node — the SIF that owns
+ * the chain is the node, #33). Nothing here relates a series to a chain: no
+ * chain column, and deliberately no unique constraint on (tenant_id, node_id),
+ * which would silently reimpose one series per node.
  *
  * `next_number` is the live counter and the single source of truth: a plain
  * integer column, advanced in place by the allocating UPDATE under the row
@@ -26,36 +27,34 @@ export const invoiceSeries = pgTable(
   "invoice_series",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    // The `() => tenants.id` / `() => tills.id` reference thunks below are
-    // stored by drizzle-orm and called only when something resolves foreign
-    // key metadata (drizzle-kit's own generate/introspection, run in a
-    // separate CLI process) — never by ordinary query building, since
-    // Postgres enforces the constraint server-side. No test in this suite
-    // exercises that resolution path, and — verified live — passing the
-    // second `{ onDelete: ... }` argument is what makes v8 track each thunk
-    // as its own never-invoked function; the identical one-argument
-    // `.references(() => tenants.id)` calls in ./tenants.ts are not tracked as
-    // functions at all. `v8 ignore` here, rather than dropping the explicit
-    // `onDelete`, keeps the FK behaviour self-documenting.
+    // The `() => tenants.id` reference thunk below is stored by drizzle-orm and
+    // called only when something resolves foreign key metadata (drizzle-kit's
+    // own generate/introspection, run in a separate CLI process) — never by
+    // ordinary query building, since Postgres enforces the constraint
+    // server-side. No test in this suite exercises that resolution path, and —
+    // verified live — passing the second `{ onDelete: ... }` argument is what
+    // makes v8 track each thunk as its own never-invoked function; the
+    // identical one-argument `.references(() => tenants.id)` calls in
+    // ./tenants.ts are not tracked as functions at all. `v8 ignore` here,
+    // rather than dropping the explicit `onDelete`, keeps the FK behaviour
+    // self-documenting.
     tenantId: uuid("tenant_id")
       .notNull()
       /* v8 ignore next */
       .references(() => tenants.id, { onDelete: "restrict" }),
-    tillId: uuid("till_id")
+    // The node that owns this series and its chain (node-id rekey, 2026-08-03:
+    // was `till_id`). Plain one-argument FK — unlike the two-argument
+    // `.references(…, { onDelete })` thunk above it, the plain form is NOT
+    // tracked by v8 as an uncovered function, so it needs no `/* v8 ignore */`.
+    nodeId: uuid("node_id")
       .notNull()
-      /* v8 ignore next */
-      .references(() => tills.id, { onDelete: "restrict" }),
-    // Nullable in this task (node rekey scaffolding); a later task populates it. The FK is the
-    // plain one-argument form — unlike the two-argument `.references(…, { onDelete })` thunks
-    // above it, the plain form is NOT tracked by v8 as an uncovered function, so it needs no
-    // `/* v8 ignore */`. Matches the sibling plain `till_id` FKs in the fiscal-verifactu tables.
-    nodeId: uuid("node_id").references(() => nodes.id),
+      .references(() => nodes.id),
     code: text("code").notNull(),
     purpose: text("purpose").notNull().default("standard"),
     nextNumber: integer("next_number").notNull().default(1),
   },
   (t) => [
-    unique("invoice_series_till_code_key").on(t.tenantId, t.tillId, t.code),
+    unique("invoice_series_node_code_key").on(t.tenantId, t.nodeId, t.code),
     // Composite target for tenant-consistent foreign keys from `sales`: a
     // child row cannot point at a parent belonging to another tenant.
     unique("invoice_series_tenant_id_key").on(t.tenantId, t.id),

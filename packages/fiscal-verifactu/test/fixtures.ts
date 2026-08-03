@@ -1,12 +1,13 @@
 import { sql } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
 import {
+  nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tenantId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
-import type { SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { NodeId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
 import { registerSif } from "../src/registro-sif.js";
 import type { Entorno } from "../src/registro-row.js";
 
@@ -36,6 +37,11 @@ export const TENANT_A = {
   // installation-number counter is scoped to (NIF, IdSIF) rather than to a single till needs two
   // tills sharing one NIF, and every other fixture in this file predates that requirement.
   tillId2: brandTillId("a0000000-0000-4000-8000-000000000007"),
+  // The SIF/chain/series owner (node-id rekey, 2026-08-03: #33). `nodeId2` is a second node of the
+  // SAME obligado, the node-keyed counterpart of `tillId2` — proving the installation-number counter
+  // is per (NIF, IdSIF), not per node.
+  nodeId: brandNodeId("a0000000-0000-4000-8000-000000000008"),
+  nodeId2: brandNodeId("a0000000-0000-4000-8000-000000000009"),
 };
 
 /**
@@ -48,6 +54,7 @@ export const TENANT_B = {
   id: tenantId("b0000000-0000-4000-8000-000000000001"),
   locationId: "b0000000-0000-4000-8000-000000000002",
   tillId: brandTillId("b0000000-0000-4000-8000-000000000003"),
+  nodeId: brandNodeId("b0000000-0000-4000-8000-000000000004"),
 };
 
 /**
@@ -81,25 +88,29 @@ export async function seedTenantTillSif(db: Database): Promise<void> {
     values (${TENANT_A.tillId}, ${TENANT_A.id}, ${TENANT_A.locationId}, 'Caja 1')
   `);
   await db.execute(sql`
-    insert into invoice_series (id, tenant_id, till_id, code)
-    values (${TENANT_A.seriesId}, ${TENANT_A.id}, ${TENANT_A.tillId}, 'A')
+    insert into nodes (id, tenant_id, location_id, name)
+    values (${TENANT_A.nodeId}, ${TENANT_A.id}, ${TENANT_A.locationId}, 'Node 1')
+  `);
+  await db.execute(sql`
+    insert into invoice_series (id, tenant_id, node_id, code)
+    values (${TENANT_A.seriesId}, ${TENANT_A.id}, ${TENANT_A.nodeId}, 'A')
   `);
   await db.execute(sql`
     insert into sales (
-      id, tenant_id, till_id, series_id, invoice_number,
+      id, tenant_id, till_id, node_id, series_id, invoice_number,
       issued_at, issued_offset_minutes,
       total,
       locale, invoice_locales, fiscal_backend, fiscal_state
     ) values (
-      ${TENANT_A.saleId}, ${TENANT_A.id}, ${TENANT_A.tillId}, ${TENANT_A.seriesId}, 1,
+      ${TENANT_A.saleId}, ${TENANT_A.id}, ${TENANT_A.tillId}, ${TENANT_A.nodeId}, ${TENANT_A.seriesId}, 1,
       '2026-07-20T19:20:30+01:00', 60,
       '0.00',
       'es', array['es'], 'verifactu', 'recorded'
     )
   `);
   await db.execute(sql`
-    insert into registro_sif (id, tenant_id, till_id, nif, id_sistema_informatico, numero_instalacion)
-    values (${TENANT_A.sifId}, ${TENANT_A.id}, ${TENANT_A.tillId}, '89890001K', 'WAITRON01', 1)
+    insert into registro_sif (id, tenant_id, node_id, nif, id_sistema_informatico, numero_instalacion)
+    values (${TENANT_A.sifId}, ${TENANT_A.id}, ${TENANT_A.nodeId}, '89890001K', 'WAITRON01', 1)
   `);
 }
 
@@ -111,7 +122,9 @@ export async function seedTenantTillSif(db: Database): Promise<void> {
  * Deliberately narrower than `seedTenantTillSif` above: no invoice series, no sale, no
  * pre-existing `registro_sif` row. `registerSif` is exactly what mints that row under test, so
  * seeding one here would make every "first registration" assertion false before the test body
- * even runs.
+ * even runs. Seeds two NODES for TENANT_A (`nodeId`/`nodeId2`, two nodes of one obligado) and one
+ * for TENANT_B — the SIF is the node (node-id rekey, 2026-08-03), so `registerSif` keys on these.
+ * The tills are kept so the sale-ringing snapshot has a real till to reference.
  */
 export async function seedTenants(db: Database): Promise<void> {
   await db.execute(sql`
@@ -129,6 +142,12 @@ export async function seedTenants(db: Database): Promise<void> {
       (${TENANT_A.tillId}, ${TENANT_A.id}, ${TENANT_A.locationId}, 'Caja 1'),
       (${TENANT_A.tillId2}, ${TENANT_A.id}, ${TENANT_A.locationId}, 'Caja 2'),
       (${TENANT_B.tillId}, ${TENANT_B.id}, ${TENANT_B.locationId}, 'Caja 1')
+  `);
+  await db.execute(sql`
+    insert into nodes (id, tenant_id, location_id, name) values
+      (${TENANT_A.nodeId}, ${TENANT_A.id}, ${TENANT_A.locationId}, 'Node 1'),
+      (${TENANT_A.nodeId2}, ${TENANT_A.id}, ${TENANT_A.locationId}, 'Node 2'),
+      (${TENANT_B.nodeId}, ${TENANT_B.id}, ${TENANT_B.locationId}, 'Node 1')
   `);
 }
 
@@ -150,6 +169,7 @@ export async function seedSoldRegistro(
   params: {
     tenantId: string;
     tillId: string;
+    nodeId: string;
     sifId: string;
     nif: string;
     secuencia: number;
@@ -167,19 +187,19 @@ export async function seedSoldRegistro(
 ): Promise<void> {
   const entorno = params.entorno === undefined ? "production" : params.entorno;
   const series = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, till_id, code)
-    values (${params.tenantId}, ${params.tillId}, ${"S" + String(params.secuencia)})
+    insert into invoice_series (tenant_id, node_id, code)
+    values (${params.tenantId}, ${params.nodeId}, ${"S" + String(params.secuencia)})
     returning id
   `);
   const seriesId = series.rows[0]?.id;
   const sale = await db.execute<{ id: string }>(sql`
     insert into sales (
-      tenant_id, till_id, series_id, invoice_number,
+      tenant_id, till_id, node_id, series_id, invoice_number,
       issued_at, issued_offset_minutes,
       total,
       locale, invoice_locales, fiscal_backend, fiscal_state
     ) values (
-      ${params.tenantId}, ${params.tillId}, ${seriesId}, ${params.secuencia},
+      ${params.tenantId}, ${params.tillId}, ${params.nodeId}, ${seriesId}, ${params.secuencia},
       '2026-07-20T19:20:30+01:00', 60,
       '0.00',
       'es', array['es'], 'verifactu', 'recorded'
@@ -189,12 +209,12 @@ export async function seedSoldRegistro(
   const saleId = sale.rows[0]?.id;
   const registro = await db.execute<{ id: string }>(sql`
     insert into registros_facturacion (
-      tenant_id, till_id, sif_id, sale_id, secuencia, tipo_registro,
+      tenant_id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       primer_registro, sistema_informatico,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, entorno
     ) values (
-      ${params.tenantId}, ${params.tillId}, ${params.sifId}, ${saleId}, ${params.secuencia}, 'alta',
+      ${params.tenantId}, ${params.tillId}, ${params.nodeId}, ${params.sifId}, ${saleId}, ${params.secuencia}, 'alta',
       ${params.nif}, ${"S" + String(params.secuencia) + "/1"}, '2026-07-20', 'Waitron SL',
       true, '{}'::jsonb,
       '2026-07-20T19:20:30+01:00', 60, '01', ${params.huella}, ${entorno}
@@ -205,13 +225,14 @@ export async function seedSoldRegistro(
   await db.execute(sql`
     update cadenas
     set secuencia = ${params.secuencia}, ultimo_registro_id = ${registroId}, ultima_huella = ${params.huella}
-    where tenant_id = ${params.tenantId} and till_id = ${params.tillId}
+    where tenant_id = ${params.tenantId} and node_id = ${params.nodeId}
   `);
 }
 
 export interface SeededTillWithSif {
   tenantId: TenantId;
   tillId: TillId;
+  nodeId: NodeId;
   seriesId: SeriesId;
   workingOrderId: WorkingOrderId;
 }
@@ -230,7 +251,7 @@ function freshNif(): string {
 async function insertLocationTillSeries(
   tx: Transaction,
   tenant: TenantId,
-): Promise<{ tillId: TillId; seriesId: SeriesId }> {
+): Promise<{ tillId: TillId; nodeId: NodeId; seriesId: SeriesId }> {
   const location = await tx.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
     values (${tenant}, 'Sala principal', array['es-ES'], 'Venta en establecimiento')
@@ -241,11 +262,16 @@ async function insertLocationTillSeries(
     returning id
   `);
   const tillId = brandTillId(till.rows[0]!.id);
-  const series = await tx.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, till_id, code) values (${tenant}, ${tillId}, 'A')
+  const node = await tx.execute<{ id: string }>(sql`
+    insert into nodes (tenant_id, location_id, name) values (${tenant}, ${location.rows[0]!.id}, 'Node 1')
     returning id
   `);
-  return { tillId, seriesId: brandSeriesId(series.rows[0]!.id) };
+  const nodeId = brandNodeId(node.rows[0]!.id);
+  const series = await tx.execute<{ id: string }>(sql`
+    insert into invoice_series (tenant_id, node_id, code) values (${tenant}, ${nodeId}, 'A')
+    returning id
+  `);
+  return { tillId, nodeId, seriesId: brandSeriesId(series.rows[0]!.id) };
 }
 
 /**
@@ -268,16 +294,17 @@ export async function seedTenantWithSif(db: Database): Promise<SeededTillWithSif
       insert into tenants (nif, legal_name) values (${nif}, 'Waitron SL') returning id
     `);
     const tenant = tenantId(rows[0]!.id);
-    const { tillId, seriesId } = await insertLocationTillSeries(tx, tenant);
+    const { tillId, nodeId, seriesId } = await insertLocationTillSeries(tx, tenant);
     await registerSif(tx, {
       tenantId: tenant,
-      tillId,
+      nodeId,
       nif,
       idSistemaInformatico: "WT",
     });
     return {
       tenantId: tenant,
       tillId,
+      nodeId,
       seriesId,
       // No `working_orders` row: `sales` carries no foreign key onto `working_orders` at all
       // (packages/db/src/schema/sales.ts), and `RecordSaleInput.workingOrderId` is audit-trail

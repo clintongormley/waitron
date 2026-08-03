@@ -19,6 +19,14 @@ const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const TILL_A2 = "aaaaaaaa-1111-4000-8000-000000000002";
 const TILL_B1 = "bbbbbbbb-1111-4000-8000-000000000001";
 
+// A series is keyed on its NODE since the node-id rekey (2026-08-03): invoice_series dropped
+// till_id and now carries a NOT NULL node_id. seed() creates two nodes for tenant A (so the
+// per-node uniqueness tests have a second node to collide against) and one for tenant B. The tills
+// stay seeded — sales still ring on a till — but nothing in invoice_series references them.
+let nodeA1 = "";
+let nodeA2 = "";
+let nodeB1 = "";
+
 /**
  * Both drivers expose `.rows`, but the pglite driver returns its own Results
  * object rather than node-postgres's QueryResult. Normalising here keeps the
@@ -56,6 +64,9 @@ async function seed(db: Database): Promise<void> {
     { id: TILL_A2, tenantId: TENANT_A, locationId: LOCATION_A, name: "A2" },
     { id: TILL_B1, tenantId: TENANT_B, locationId: LOCATION_B, name: "B1" },
   ]);
+  nodeA1 = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
+  nodeA2 = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
+  nodeB1 = await seedNode(db, brandTenantId(TENANT_B), brandLocationId(LOCATION_B));
 }
 
 describeEachTarget("invoice_series schema", (target) => {
@@ -79,19 +90,19 @@ describeEachTarget("invoice_series schema", (target) => {
     if (db !== undefined) await db.close();
   });
 
-  it("holds several series on one till", async () => {
+  it("holds several series on one node", async () => {
     await db.insert(invoiceSeries).values([
-      { tenantId: TENANT_A, tillId: TILL_A1, code: "FA", purpose: "standard", nextNumber: 1 },
-      { tenantId: TENANT_A, tillId: TILL_A1, code: "RA", purpose: "rectificative", nextNumber: 1 },
+      { tenantId: TENANT_A, nodeId: nodeA1, code: "FA", purpose: "standard", nextNumber: 1 },
+      { tenantId: TENANT_A, nodeId: nodeA1, code: "RA", purpose: "rectificative", nextNumber: 1 },
     ]);
     const found = await db
       .select({ code: invoiceSeries.code })
       .from(invoiceSeries)
-      .where(eq(invoiceSeries.tillId, TILL_A1));
+      .where(eq(invoiceSeries.nodeId, nodeA1));
     expect(found.map((r) => r.code).sort()).toEqual(["FA", "RA"]);
   });
 
-  it("rejects a duplicate code on the same till", async () => {
+  it("rejects a duplicate code on the same node", async () => {
     // Not `.rejects.toThrow(/pattern/)`: drizzle-orm@0.45.2 wraps every failed
     // query in a DrizzleQueryError whose own `.message` is
     // `Failed query: <sql>` — the real Postgres text lives on `.cause`
@@ -100,21 +111,21 @@ describeEachTarget("invoice_series schema", (target) => {
     // at all, not specifically this one.
     await db
       .insert(invoiceSeries)
-      .values({ tenantId: TENANT_A, tillId: TILL_A1, code: "FA", purpose: "standard" });
+      .values({ tenantId: TENANT_A, nodeId: nodeA1, code: "FA", purpose: "standard" });
     const error = await captureError(() =>
       db
         .insert(invoiceSeries)
-        .values({ tenantId: TENANT_A, tillId: TILL_A1, code: "FA", purpose: "standard" }),
+        .values({ tenantId: TENANT_A, nodeId: nodeA1, code: "FA", purpose: "standard" }),
     );
     expect(pgErrorMessage(error)).toMatch(/duplicate key value/);
   });
 
-  it("permits the same code on two different tills", async () => {
-    // Series codes are a per-till numbering concern. Two tills in one venue
-    // both running series "FA" is normal, and their numbers are independent.
+  it("permits the same code on two different nodes", async () => {
+    // Series codes are a per-node numbering concern (node-id rekey, 2026-08-03). Two nodes in one
+    // venue both running series "FA" is normal, and their numbers are independent.
     await db.insert(invoiceSeries).values([
-      { tenantId: TENANT_A, tillId: TILL_A1, code: "FA", purpose: "standard" },
-      { tenantId: TENANT_A, tillId: TILL_A2, code: "FA", purpose: "standard" },
+      { tenantId: TENANT_A, nodeId: nodeA1, code: "FA", purpose: "standard" },
+      { tenantId: TENANT_A, nodeId: nodeA2, code: "FA", purpose: "standard" },
     ]);
     const found = await db.select({ id: invoiceSeries.id }).from(invoiceSeries);
     expect(found).toHaveLength(2);
@@ -126,7 +137,7 @@ describeEachTarget("invoice_series schema", (target) => {
     const error = await captureError(() =>
       db
         .insert(invoiceSeries)
-        .values({ tenantId: TENANT_A, tillId: TILL_A1, code: "XX", purpose: "invented" }),
+        .values({ tenantId: TENANT_A, nodeId: nodeA1, code: "XX", purpose: "invented" }),
     );
     expect(pgErrorMessage(error)).toMatch(/invoice_series_purpose_ck/);
   });
@@ -155,64 +166,62 @@ describeEachTarget("invoice_series schema", (target) => {
     expect(offenders).toEqual([]);
   });
 
-  it("carries a nullable node_id column referencing nodes", async () => {
-    // Node rekey scaffolding (Task 3): node_id is added NULLABLE with a plain FK to `nodes`.
-    // Nothing writes it yet; a later task populates it and flips (sales, registros) NOT NULL.
-    // Raw SQL for the inserts so a pre-migration run fails on the real cause ("column node_id
-    // does not exist") rather than a drizzle column-object error — the same reason
-    // sales.test.ts's corrective-link tests use a raw insertSale().
+  it("carries a NOT NULL node_id column referencing nodes", async () => {
+    // Node-id rekey (2026-08-03): node_id is now NOT NULL — a series is OWNED by a node (its SIF).
+    // This supersedes Task 3's scaffolding assertion that the column was nullable. Raw SQL for the
+    // inserts so a mis-migrated run fails on the real cause rather than a drizzle column-object error
+    // — the same reason sales.test.ts's corrective-link tests use a raw insert.
     const node = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
     const meta = await rows<{ is_nullable: string }>(
       db,
       sql`select is_nullable from information_schema.columns
            where table_name = 'invoice_series' and column_name = 'node_id'`,
     );
-    expect(meta).toEqual([{ is_nullable: "YES" }]);
+    expect(meta).toEqual([{ is_nullable: "NO" }]);
     // Accepts a valid node id.
     const withNode = await rows<{ node_id: string | null }>(
       db,
-      sql`insert into invoice_series (tenant_id, till_id, code, node_id)
-           values (${TENANT_A}, ${TILL_A1}, 'FN', ${node}) returning node_id`,
+      sql`insert into invoice_series (tenant_id, node_id, code)
+           values (${TENANT_A}, ${node}, 'FN') returning node_id`,
     );
     expect(withNode).toEqual([{ node_id: node }]);
-    // And a row inserts fine WITHOUT it (nullable).
-    const withoutNode = await rows<{ node_id: string | null }>(
-      db,
-      sql`insert into invoice_series (tenant_id, till_id, code)
-           values (${TENANT_A}, ${TILL_A1}, 'FM') returning node_id`,
+    // And a row WITHOUT it is now refused (NOT NULL), the flip Task 4 introduces.
+    const error = await captureError(() =>
+      db.execute(sql`insert into invoice_series (tenant_id, code) values (${TENANT_A}, 'FM')`),
     );
-    expect(withoutNode).toEqual([{ node_id: null }]);
+    expect(pgErrorMessage(error)).toMatch(/null value in column "node_id"|not-null/i);
   });
 
   it("rejects a node_id that does not exist with a foreign-key violation", async () => {
     // The plain FK guarantees referential existence: a node id with no `nodes` row is refused.
     const error = await captureError(() =>
       db.execute(
-        sql`insert into invoice_series (tenant_id, till_id, code, node_id)
-             values (${TENANT_A}, ${TILL_A1}, 'FX', '99999999-9999-4999-8999-999999999999')`,
+        sql`insert into invoice_series (tenant_id, node_id, code)
+             values (${TENANT_A}, '99999999-9999-4999-8999-999999999999', 'FX')`,
       ),
     );
     expect(pgErrorMessage(error)).toMatch(/violates foreign key constraint/);
   });
 
-  it("has no unique constraint on (tenant_id, till_id) alone", async () => {
+  it("has no unique constraint on (tenant_id, node_id) alone", async () => {
     // The subtle coupling: a unique index on the pair would silently reimpose
-    // one series per till, which is the thing N-series-from-day-one exists to
-    // avoid. It reads as a harmless index, so only a test catches it.
+    // one series per node, which is the thing N-series-from-day-one exists to
+    // avoid (node-id rekey, 2026-08-03: the pair moved from till to node). It
+    // reads as a harmless index, so only a test catches it.
     const found = await rows<{ indexdef: string }>(
       db,
       sql`select indexdef from pg_indexes where tablename = 'invoice_series'`,
     );
     const pairOnly = found.filter(
-      (i) => /UNIQUE/i.test(i.indexdef) && /\(tenant_id, till_id\)/.test(i.indexdef),
+      (i) => /UNIQUE/i.test(i.indexdef) && /\(tenant_id, node_id\)/.test(i.indexdef),
     );
     expect(pairOnly).toEqual([]);
   });
 
   it("hides another tenant's series from the app role", async () => {
     await db.insert(invoiceSeries).values([
-      { tenantId: TENANT_A, tillId: TILL_A1, code: "FA", purpose: "standard" },
-      { tenantId: TENANT_B, tillId: TILL_B1, code: "FB", purpose: "standard" },
+      { tenantId: TENANT_A, nodeId: nodeA1, code: "FA", purpose: "standard" },
+      { tenantId: TENANT_B, nodeId: nodeB1, code: "FB", purpose: "standard" },
     ]);
     const visible = await withTenant(db, TENANT_A, async (tx) => {
       await asAppUser(tx);
@@ -246,11 +255,11 @@ describeEachTarget("invoice_series schema", (target) => {
 
   it("refuses an UPDATE of any other column as the app role", async () => {
     // next_number moves; the series' identity does not. A blanket UPDATE would
-    // let the application retarget a series at another till, which the audit
+    // let the application retarget a series at another node, which the audit
     // trail assumes is stable.
     const [series] = await db
       .insert(invoiceSeries)
-      .values({ tenantId: TENANT_A, tillId: TILL_A1, code: "FA", purpose: "standard" })
+      .values({ tenantId: TENANT_A, nodeId: nodeA1, code: "FA", purpose: "standard" })
       .returning({ id: invoiceSeries.id });
     // Same wrapper issue: match the unwrapped Postgres message.
     const error = await captureError(() =>
@@ -267,7 +276,7 @@ describeEachTarget("invoice_series schema", (target) => {
     // outside the owner role at all.
     const [series] = await db
       .insert(invoiceSeries)
-      .values({ tenantId: TENANT_A, tillId: TILL_A1, code: "FA", purpose: "standard" })
+      .values({ tenantId: TENANT_A, nodeId: nodeA1, code: "FA", purpose: "standard" })
       .returning({ id: invoiceSeries.id });
     await expect(
       withTenant(db, TENANT_A, async (tx) => {

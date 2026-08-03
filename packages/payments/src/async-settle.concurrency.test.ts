@@ -5,6 +5,7 @@ import type { Database } from "@waitron/db";
 import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
+  nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
   tillId as brandTillId,
@@ -36,7 +37,7 @@ const postgres = useRealPostgres({ start: startRealPostgres });
 
 // Both doubles wrap the admin connection, so they cannot be built until the container is up —
 // hence a second hook rather than a module-level construction. `install` creates the fake backend's
-// own `fake_till_registrations`/`fake_fiscal_records` tables, which `recordSale` writes through it.
+// own `fake_node_registrations`/`fake_fiscal_records` tables, which `recordSale` writes through it.
 let backend: FakeFiscalBackend;
 let provider: FakeAsyncProvider;
 
@@ -66,6 +67,7 @@ function buildInput(s: SeededForSale, settledAt: Date | null): RecordSaleInput {
   return {
     tenantId: brandTenantId(s.tenantId),
     tillId: brandTillId(s.tillId),
+    nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
     locale: "es",

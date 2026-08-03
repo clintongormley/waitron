@@ -4,7 +4,7 @@ import { recordSale, recordVoid } from "@waitron/core";
 import { computeHuella } from "@waitron/verifactu";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import type { SaleId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { fromRegistroRow } from "./registro-row.js";
@@ -18,6 +18,7 @@ import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/writ
 let backend: VerifactuBackend;
 let tenantId: TenantId;
 let tillId: TillId;
+let nodeId: NodeId;
 let seriesId: SeriesId;
 let workingOrderId: WorkingOrderId;
 
@@ -36,7 +37,7 @@ let workingOrderId: WorkingOrderId;
 const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenantWithSif(pg.db));
+  ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenantWithSif(pg.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -48,7 +49,11 @@ beforeEach(async () => {
 async function sell() {
   return withTenant(pg.db, tenantId, async (tx) => {
     await asAppUser(tx);
-    return recordSale(tx, backend, saleInput({ tenantId, tillId, seriesId, workingOrderId }));
+    return recordSale(
+      tx,
+      backend,
+      saleInput({ tenantId, tillId, nodeId, seriesId, workingOrderId }),
+    );
   });
 }
 
@@ -135,7 +140,7 @@ describe("alta and anulación interleave in one chain", () => {
     const a = await sell();
     await voidSale(a.saleId);
     const row = await rawAnulacion(a.saleId);
-    const [head] = await pg.db.select().from(cadenas).where(eq(cadenas.tillId, tillId));
+    const [head] = await pg.db.select().from(cadenas).where(eq(cadenas.nodeId, nodeId));
     expect(head?.secuencia).toBe(2);
     expect(head?.ultimaHuella).toBe(row.huella);
   });

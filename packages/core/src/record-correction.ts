@@ -15,7 +15,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, decimal } from "@waitron/shared";
-import type { SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import type { FiscalBackend, FiscalRecordRef, TrustedClock } from "@waitron/fiscal";
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
@@ -25,25 +25,30 @@ import type { RecordSaleLine } from "./record-sale.js";
 export interface RecordCorrectionInput {
   tenantId: TenantId;
   /**
-   * The till/SIF that ISSUES this rectificativa and whose chain it extends. Caller-supplied and used
-   * verbatim: checked against the corrective SERIES (`sale.series_wrong_till`, step 2) but NOT against
-   * the original sale's own `tillId` — deliberately, not a gap. A rectificativa is a self-standing NEW
-   * invoice that references the original only by IDENTITY (`FacturasRectificadas` = NIF + serie&número
-   * + fecha — how AEAT links a rectificativa to what it corrects), from which we INFER that the issuing
-   * SIF is unconstrained by the original's. That inference is not merely theoretical: under
-   * active-active / failover (server-as-SIF, #33) a venue runs MORE THAN ONE SIF (each server is its
-   * own SIF), so a correction genuinely can land on a different server-SIF than the original. AEAT's
-   * developer FAQ (4-Dec-2025) confirms cross-SIF is lawful for the SIBLING correction records — an RF
-   * de subsanación or de anulación «se [podría] generar y conservar o remitir a la AEAT desde un SIF
-   * distinto al que expidió la factura original» (same-SIF is merely the usual case). But the reach to
-   * a self-standing rectificativa is OURS, not the FAQ's words — it names only the subsanación/
-   * anulación records. The identity-linkage reading is sound, but UNVERIFIED for rectificativas
-   * specifically, and to be confirmed with the asesor before a real cross-SIF till caller is wired
-   * (F3). (`recordVoid` pins to the original's `tillId` by its own choice, not a regime requirement.)
-   * The chain is keyed per `till_id` today; the server-as-SIF `server_id` rekey re-keys it to the
-   * server.
+   * The till this rectificativa rings at — an informational snapshot only (written to `sales.till_id`
+   * and the fiscal record's `till_id`, and used for incidents). NOT checked against the series; see
+   * `nodeId` below for the guard.
    */
   tillId: TillId;
+  /**
+   * The node/SIF that ISSUES this rectificativa and whose chain it extends (node-id rekey,
+   * 2026-08-03: the SIF is the node, #33). Caller-supplied and used verbatim: checked against the
+   * corrective SERIES (`sale.series_wrong_node`, step 2) but NOT against the original sale's own
+   * node — deliberately, not a gap. A rectificativa is a self-standing NEW invoice that references
+   * the original only by IDENTITY (`FacturasRectificadas` = NIF + serie&número + fecha — how AEAT
+   * links a rectificativa to what it corrects), from which we INFER that the issuing SIF is
+   * unconstrained by the original's. That inference is not merely theoretical: under active-active /
+   * failover (#33) a venue runs MORE THAN ONE SIF (each node is its own SIF), so a correction
+   * genuinely can land on a different node-SIF than the original. AEAT's developer FAQ (4-Dec-2025)
+   * confirms cross-SIF is lawful for the SIBLING correction records — an RF de subsanación or de
+   * anulación «se [podría] generar y conservar o remitir a la AEAT desde un SIF distinto al que
+   * expidió la factura original» (same-SIF is merely the usual case). But the reach to a
+   * self-standing rectificativa is OURS, not the FAQ's words — it names only the subsanación/
+   * anulación records. The identity-linkage reading is sound, but UNVERIFIED for rectificativas
+   * specifically, and to be confirmed with the asesor before a real cross-SIF caller is wired (F3).
+   * (`recordVoid` pins to the original's node by its own choice, not a regime requirement.)
+   */
+  nodeId: NodeId;
   /**
    * MUST name a `purpose='rectificative'` series (spec §5). A correction draws its own new number
    * from a corrective series — never the ordinary one the corrected sale used — and this is guarded
@@ -126,7 +131,7 @@ export async function recordCorrection(
   const [series] = await tx
     .select({
       code: invoiceSeries.code,
-      tillId: invoiceSeries.tillId,
+      nodeId: invoiceSeries.nodeId,
       purpose: invoiceSeries.purpose,
     })
     .from(invoiceSeries)
@@ -138,11 +143,11 @@ export async function recordCorrection(
       tenantId: input.tenantId,
     });
   }
-  if (series.tillId !== input.tillId) {
-    throw new AppError("sale.series_wrong_till", {
+  if (series.nodeId !== input.nodeId) {
+    throw new AppError("sale.series_wrong_node", {
       seriesId: input.seriesId,
-      expected: series.tillId,
-      actual: input.tillId,
+      expected: series.nodeId,
+      actual: input.nodeId,
     });
   }
   if (series.purpose !== "rectificative") {
@@ -158,7 +163,7 @@ export async function recordCorrection(
   // is chained anyway. The table-wide `incidents_open_dedup` index holds at most one open incident
   // per (tenant, till, code, sale), so emitting one row per issue would collapse to a single row and
   // drop every issue after the first; `params.issues` carries them all. Mirrors `./record-sale.ts`.
-  const verification = await backend.checkIntegrity(tx, input.tenantId, input.tillId);
+  const verification = await backend.checkIntegrity(tx, input.tenantId, input.nodeId);
   const pending: Array<{ error: AppError; severity: IncidentSeverity }> = [];
   if (verification.issues.length > 0) {
     pending.push({
@@ -199,6 +204,7 @@ export async function recordCorrection(
     .values({
       tenantId: input.tenantId,
       tillId: input.tillId,
+      nodeId: input.nodeId,
       seriesId: input.seriesId,
       invoiceNumber,
       issuedAt: now.instant.toISOString(),
@@ -273,6 +279,7 @@ export async function recordCorrection(
     {
       tenantId: input.tenantId,
       tillId: input.tillId,
+      nodeId: input.nodeId,
       saleId,
       seriesId: input.seriesId,
       seriesCode: series.code,

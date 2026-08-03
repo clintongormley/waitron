@@ -4,8 +4,8 @@ import { recordSale } from "@waitron/core";
 import { CORE_MIGRATIONS, asAppUser, sales, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
-import type { SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
-import { decimal, saleId as brandSaleId, tillId as brandTillId } from "@waitron/shared";
+import type { NodeId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import { decimal, nodeId as brandNodeId, saleId as brandSaleId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { envios } from "./schema/envios.js";
@@ -14,7 +14,7 @@ import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
 /**
- * `registerTill`/`recordVoid`/`checkIntegrity`/`pendingCount` complete the `FiscalBackend`
+ * `registerNode`/`recordVoid`/`checkIntegrity`/`pendingCount` complete the `FiscalBackend`
  * interface — TypeScript requires every one of them on a class declared `implements
  * FiscalBackend` — but are secondary to this task's own graded deliverable (`recordSale`,
  * proven end to end by `./write-path.e2e.test.ts`). These tests exist so the coverage gate does
@@ -26,13 +26,14 @@ import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/writ
 let backend: VerifactuBackend;
 let tenantId: TenantId;
 let tillId: TillId;
+let nodeId: NodeId;
 let seriesId: SeriesId;
 let workingOrderId: WorkingOrderId;
 
 const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenantWithSif(pg.db));
+  ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenantWithSif(pg.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -44,27 +45,31 @@ beforeEach(async () => {
 async function sell() {
   return withTenant(pg.db, tenantId, async (tx) => {
     await asAppUser(tx);
-    return recordSale(tx, backend, saleInput({ tenantId, tillId, seriesId, workingOrderId }));
+    return recordSale(
+      tx,
+      backend,
+      saleInput({ tenantId, tillId, nodeId, seriesId, workingOrderId }),
+    );
   });
 }
 
-describe("registerTill", () => {
-  it("reports the till's live SIF registration", async () => {
+describe("registerNode", () => {
+  it("reports the node's live SIF registration", async () => {
     const registration = await withTenant(pg.db, tenantId, (tx) =>
-      backend.registerTill(tx, tillId, { tenantId }),
+      backend.registerNode(tx, nodeId, { tenantId }),
     );
     expect(registration.backend).toBe("verifactu");
-    expect(registration.tillId).toBe(tillId);
+    expect(registration.nodeId).toBe(nodeId);
     expect(registration.registrationId).toContain("WT");
   });
 
-  it("throws the structured sif.not_registered error for a till with no live SIF", async () => {
+  it("throws the structured sif.not_registered error for a node with no live SIF", async () => {
     // A well-formed UUID that `seedTenantWithSif` never provisioned — `currentSif` (and
-    // therefore `registerTill`) treats "no matching row" identically whether the till simply
+    // therefore `registerNode`) treats "no matching row" identically whether the node simply
     // does not exist or once had a SIF that was later revoked.
-    const neverProvisioned = brandTillId("00000000-0000-4000-8000-000000000000");
+    const neverProvisioned = brandNodeId("00000000-0000-4000-8000-000000000000");
     await expect(
-      withTenant(pg.db, tenantId, (tx) => backend.registerTill(tx, neverProvisioned, { tenantId })),
+      withTenant(pg.db, tenantId, (tx) => backend.registerNode(tx, neverProvisioned, { tenantId })),
     ).rejects.toMatchObject({ code: "sif.not_registered" });
   });
 });
@@ -191,6 +196,7 @@ describe("recordCorrection — refusals", () => {
     return {
       tenantId,
       tillId,
+      nodeId,
       saleId: brandSaleId("33333333-3333-4333-8333-333333333333"),
       seriesId,
       seriesCode: "R",
@@ -227,6 +233,7 @@ describe("recordCorrection — refusals", () => {
         id: original,
         tenantId,
         tillId,
+        nodeId,
         seriesId,
         invoiceNumber: 500,
         issuedAt: "2026-03-01T12:05:00.000Z",
@@ -240,6 +247,7 @@ describe("recordCorrection — refusals", () => {
       await backend.recordSale(tx, {
         tenantId,
         tillId,
+        nodeId,
         saleId: original,
         seriesId,
         seriesCode: "A",
@@ -279,6 +287,7 @@ describe("recordSubstitution — refusals", () => {
     return {
       tenantId,
       tillId,
+      nodeId,
       saleId: brandSaleId("55555555-5555-4555-8555-555555555555"),
       seriesId,
       seriesCode: "F3",
@@ -322,6 +331,7 @@ describe("recordSubstitution — refusals", () => {
         id: original,
         tenantId,
         tillId,
+        nodeId,
         seriesId,
         invoiceNumber: 600,
         issuedAt: "2026-03-01T12:05:00.000Z",
@@ -335,6 +345,7 @@ describe("recordSubstitution — refusals", () => {
       await backend.recordSale(tx, {
         tenantId,
         tillId,
+        nodeId,
         saleId: original,
         seriesId,
         seriesCode: "A",
@@ -411,6 +422,7 @@ describe("recordSale — invoice type selection", () => {
         id: freshSaleId,
         tenantId,
         tillId,
+        nodeId,
         seriesId,
         invoiceNumber: 999,
         issuedAt: "2026-03-01T12:05:00.000Z",
@@ -424,6 +436,7 @@ describe("recordSale — invoice type selection", () => {
       await backend.recordSale(tx, {
         tenantId,
         tillId,
+        nodeId,
         saleId: freshSaleId,
         seriesId,
         seriesCode: "A",
@@ -445,17 +458,17 @@ describe("recordSale — invoice type selection", () => {
 });
 
 describe("checkIntegrity", () => {
-  it("reports nothing checked on a till that has never sold", async () => {
+  it("reports nothing checked on a node that has never sold", async () => {
     const report = await withTenant(pg.db, tenantId, (tx) =>
-      backend.checkIntegrity(tx, tenantId, tillId),
+      backend.checkIntegrity(tx, tenantId, nodeId),
     );
     expect(report).toEqual({ ok: true, checked: 0, issues: [] });
   });
 
-  it("verifies against the chain the same till actually has after a sale", async () => {
+  it("verifies against the chain the same node actually has after a sale", async () => {
     await sell();
     const report = await withTenant(pg.db, tenantId, (tx) =>
-      backend.checkIntegrity(tx, tenantId, tillId),
+      backend.checkIntegrity(tx, tenantId, nodeId),
     );
     expect(report.ok).toBe(true);
   });
@@ -464,18 +477,18 @@ describe("checkIntegrity", () => {
 describe("pendingCount", () => {
   it("counts the pending envios row a sale just created", async () => {
     await sell();
-    expect(await backend.pendingCount(tenantId, tillId)).toBe(1);
+    expect(await backend.pendingCount(tenantId, nodeId)).toBe(1);
   });
 
-  it("does not count another till's pending records", async () => {
+  it("does not count another node's pending records", async () => {
     await sell();
     const other = await seedTenantWithSif(pg.db);
-    expect(await backend.pendingCount(other.tenantId, other.tillId)).toBe(0);
+    expect(await backend.pendingCount(other.tenantId, other.nodeId)).toBe(0);
   });
 
   it("drops once the sidecar row is no longer pendiente", async () => {
     await sell();
     await pg.db.execute(sql`update envios set estado = 'aceptado' where tenant_id = ${tenantId}`);
-    expect(await backend.pendingCount(tenantId, tillId)).toBe(0);
+    expect(await backend.pendingCount(tenantId, nodeId)).toBe(0);
   });
 });
