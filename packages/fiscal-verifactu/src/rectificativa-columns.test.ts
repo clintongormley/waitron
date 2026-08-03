@@ -30,7 +30,7 @@ const pg = usePgliteDb({
 });
 
 // One shared PGlite database backs the whole file, so every insert must claim a fresh secuencia
-// (registros_tenant_till_secuencia_uq) and, since id_emisor/fecha/tipo_registro are constant, a
+// (registros_tenant_node_secuencia_uq) and, since id_emisor/fecha/tipo_registro are constant, a
 // fresh num_serie (registros_identidad_uq). A module counter gives both.
 let secuenciaSeq = 0;
 function nextSecuencia(): number {
@@ -65,14 +65,14 @@ async function insertRegistro(
   const secuencia = nextSecuencia();
   await exec.execute(sql`
     insert into registros_facturacion (
-      tenant_id, till_id, sif_id, sale_id, secuencia, tipo_registro,
+      tenant_id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       tipo_factura, tipo_rectificativa, facturas_rectificadas, facturas_sustituidas,
       importe_rectificacion, descripcion_operacion, desglose, cuota_total, importe_total,
       primer_registro, sistema_informatico,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella
     ) values (
-      ${TENANT_A.id}, ${TENANT_A.tillId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
+      ${TENANT_A.id}, ${TENANT_A.tillId}, ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
       ${secuencia}, 'alta',
       '89890001K', ${"R/" + String(secuencia)}, '2026-07-20', 'Waitron SL',
       ${fields.tipoFactura === undefined ? "R5" : fields.tipoFactura},

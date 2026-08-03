@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import type { SaleId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
 // See record-sale.test.ts's identical deviation note: there is no `@waitron/fiscal/testing`
 // subpath (no `exports` map entry, no such folder). `packages/fiscal/src/index.ts`'s own closing
 // comment states the real path: "packages/core imports it from
@@ -28,20 +28,21 @@ import { seedTenant } from "../test/fixtures.js";
 
 let tenantId: TenantId;
 let tillId: TillId;
+let nodeId: NodeId;
 let seriesId: SeriesId;
 let workingOrderId: WorkingOrderId;
 
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS],
-  // FakeFiscalBackend.recordSale/recordVoid/registerTill/checkIntegrity read and write
-  // fake_till_registrations/fake_fiscal_records, and nothing else creates those tables — see
+  // FakeFiscalBackend.recordSale/recordVoid/registerNode/checkIntegrity read and write
+  // fake_node_registrations/fake_fiscal_records, and nothing else creates those tables — see
   // record-sale.test.ts's identical setup for the same requirement.
   setup: (db) => FakeFiscalBackend.install(db),
   timeoutMs: 60_000,
 });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenant(suite.db));
+  ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenant(suite.db));
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -70,6 +71,7 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
     tenantId,
     tillId,
+    nodeId,
     seriesId,
     workingOrderId,
     locale: "es-ES",
@@ -106,14 +108,14 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
 }
 
 /**
- * Runs the write path exactly as the application will, and registers the till first —
- * `FakeFiscalBackend` refuses `recordSale`/`recordVoid` for a till with no prior `registerTill`
- * (`fiscal.till_not_registered`), matching a real backend. Mirrors record-sale.test.ts's own `run`.
+ * Runs the write path exactly as the application will, and registers the node first —
+ * `FakeFiscalBackend` refuses `recordSale`/`recordVoid` for a node with no prior `registerNode`
+ * (`fiscal.node_not_registered`), matching a real backend. Mirrors record-sale.test.ts's own `run`.
  */
 async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTenant(suite.db, tenantId, async (tx) => {
     await asAppUser(tx);
-    await backend.registerTill(tx, tillId, { tenantId });
+    await backend.registerNode(tx, nodeId, { tenantId });
     return recordSale(tx, backend, saleInput(overrides));
   });
 }
@@ -140,13 +142,13 @@ async function countRows(table: string): Promise<number> {
  */
 function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>): FiscalBackend {
   return {
-    registerTill: (tx, till, params) => fake.registerTill(tx, till, params),
+    registerNode: (tx, node, params) => fake.registerNode(tx, node, params),
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
     recordVoid: (tx, id, reason) => fake.recordVoid(tx, id, reason),
     recordCorrection: (tx, sale, correction) => fake.recordCorrection(tx, sale, correction),
     recordSubstitution: (tx, sale, substitution) => fake.recordSubstitution(tx, sale, substitution),
-    checkIntegrity: (tx, tenant, till) => fake.checkIntegrity(tx, tenant, till),
-    pendingCount: (tenant, till) => fake.pendingCount(tenant, till),
+    checkIntegrity: (tx, tenant, node) => fake.checkIntegrity(tx, tenant, node),
+    pendingCount: (tenant, node) => fake.pendingCount(tenant, node),
     drain: (now) => fake.drain(now),
     reconcile: (tenant, period) => fake.reconcile(tenant, period),
     ...overrides,
@@ -185,14 +187,14 @@ describe("recordVoid — nothing is ever edited", () => {
   it("asks the module for a new record rather than for an edit", async () => {
     // **Deviation from the brief.** The brief asserted `backend.calls.recordVoid` — a spy field
     // that does not exist on the real `FakeFiscalBackend` (see record-sale.test.ts's identical
-    // corrections for `.calls`). The real fake's own test-only affordance is `recordsFor(tillId)`,
+    // corrections for `.calls`). The real fake's own test-only affordance is `recordsFor(nodeId)`,
     // which returns every record it has appended in chain order — a sale, THEN a void, never an
     // edit of the first entry.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
     await voidSale(backend, saleId);
 
-    const records = await backend.recordsFor(tillId);
+    const records = await backend.recordsFor(nodeId);
     expect(records.map((r) => r.kind)).toEqual(["sale", "void"]);
     expect(records[1]?.saleId).toBe(saleId);
   });
@@ -248,6 +250,7 @@ describe("recordVoid — numbering", () => {
         await tx.insert(sales).values({
           tenantId,
           tillId,
+          nodeId,
           seriesId,
           invoiceNumber: 1,
           issuedAt: BASE.toISOString(),
@@ -294,7 +297,7 @@ describe("recordVoid — guards", () => {
     await voidSale(backend, saleId);
     await expect(voidSale(backend, saleId)).rejects.toBeInstanceOf(AppError);
 
-    const records = await backend.recordsFor(tillId);
+    const records = await backend.recordsFor(nodeId);
     expect(records.map((r) => r.kind)).toEqual(["sale", "void"]);
     expect(await countRows("sale_voids")).toBe(1);
   });
@@ -316,7 +319,7 @@ describe("recordVoid — error propagation", () => {
     const fakeTx = {
       select: () => ({
         from: () => ({
-          where: () => Promise.resolve([{ tenantId, tillId }]),
+          where: () => Promise.resolve([{ tenantId, tillId, nodeId }]),
         }),
       }),
       insert: () => ({
@@ -325,7 +328,7 @@ describe("recordVoid — error propagation", () => {
     } as unknown as Transaction;
 
     const backend: FiscalBackend = {
-      registerTill: () => {
+      registerNode: () => {
         throw new Error("not used by this test");
       },
       recordSale: () => {
@@ -344,7 +347,7 @@ describe("recordVoid — error propagation", () => {
       // Both params are part of FiscalBackend's real signature; this override never reads
       // either, mirroring fake-backend.ts's identical `_reason` convention.
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      pendingCount: (_tenant, _till) => {
+      pendingCount: (_tenant, _node) => {
         throw new Error("not used by this test");
       },
       drain: () => {
@@ -384,7 +387,7 @@ describe("recordVoid — atomicity", () => {
 
     expect(await countRows("sale_voids")).toBe(0);
     // No anulación either: the fake's own ledger must still show only the alta, never a void.
-    const records = await fake.recordsFor(tillId);
+    const records = await fake.recordsFor(nodeId);
     expect(records.map((r) => r.kind)).toEqual(["sale"]);
   });
 });
@@ -396,16 +399,16 @@ describe("recordVoid — no fiscal condition blocks a void", () => {
     // error would leave staff unable to correct the very sale the incident concerns.
     //
     // **Deviation from the brief.** `backend.chainVerification = {...}` is not a real affordance;
-    // the fake's actual test-only control is `breakIntegrity(tillId, issue)`, taking a plain
+    // the fake's actual test-only control is `breakIntegrity(nodeId, issue)`, taking a plain
     // `IntegrityIssue` — mirrors record-sale.test.ts's identical correction.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
-    backend.breakIntegrity(tillId, { code: "chain.verification_failed", params: { sequence: 1 } });
+    backend.breakIntegrity(nodeId, { code: "chain.verification_failed", params: { sequence: 1 } });
 
     await voidSale(backend, saleId);
 
     expect(await countRows("sale_voids")).toBe(1);
-    const records = await backend.recordsFor(tillId);
+    const records = await backend.recordsFor(nodeId);
     expect(records.map((r) => r.kind)).toEqual(["sale", "void"]);
   });
 
@@ -416,7 +419,7 @@ describe("recordVoid — no fiscal condition blocks a void", () => {
     // other test in this file.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
-    backend.breakIntegrity(tillId, { code: "predecessor-hash-mismatch", params: { sequence: 1 } });
+    backend.breakIntegrity(nodeId, { code: "predecessor-hash-mismatch", params: { sequence: 1 } });
 
     await voidSale(backend, saleId);
 
@@ -448,9 +451,9 @@ describe("recordVoid — no fiscal condition blocks a void", () => {
     const observed: string[] = [];
     const fake = new FakeFiscalBackend(suite.db);
     const backend = wrapBackend(fake, {
-      async checkIntegrity(tx, tenant, till) {
+      async checkIntegrity(tx, tenant, node) {
         observed.push("checkIntegrity");
-        return fake.checkIntegrity(tx, tenant, till);
+        return fake.checkIntegrity(tx, tenant, node);
       },
       async recordVoid(tx, id, reason) {
         observed.push("recordVoid");

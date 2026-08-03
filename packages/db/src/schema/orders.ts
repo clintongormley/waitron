@@ -12,6 +12,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import { nodes } from "./nodes.js";
 import { tenants, tills } from "./tenants.js";
 
 /**
@@ -48,6 +49,13 @@ export const workingOrders = pgTable(
       .notNull()
       /* v8 ignore next */
       .references(() => tills.id, { onDelete: "restrict" }),
+    // Nullable in this task (node rekey scaffolding), and stays nullable in this slice — no
+    // writer yet (design §5). Bare column: the FK is the tenant-consistent COMPOSITE
+    // (tenant_id, node_id) → nodes(tenant_id, id) declared in extraConfig below (mirroring
+    // `working_order_lines_order_fk`), so a set node_id must belong to THIS order's tenant, not
+    // merely exist somewhere in `nodes`. MATCH SIMPLE (the default) means a NULL node_id skips the
+    // check, so the column stays nullable. No `.references()` here, so nothing for v8 to track.
+    nodeId: uuid("node_id"),
     status: workingOrderStatus("status").notNull().default("open"),
     openedAt: timestamp("opened_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
     settledAt: timestamp("settled_at", { withTimezone: true, mode: "string" }),
@@ -55,6 +63,15 @@ export const workingOrders = pgTable(
   (t) => [
     unique("working_orders_tenant_id_key").on(t.tenantId, t.id),
     index("working_orders_tenant_status_idx").on(t.tenantId, t.status),
+    // Tenant-consistent composite FK to the owning node (Copilot #54): a working order cannot
+    // point at a node belonging to another tenant, independently of whether RLS is in force on
+    // this connection. Mirrors `working_order_lines_order_fk` here and `sales_node_fk`. MATCH
+    // SIMPLE (the default) satisfies it while node_id is NULL, so the column stays nullable.
+    foreignKey({
+      columns: [t.tenantId, t.nodeId],
+      foreignColumns: [nodes.tenantId, nodes.id],
+      name: "working_orders_node_fk",
+    }),
     // Biconditional, not two one-way checks: a settled order always carries a
     // timestamp and a non-settled one never does.
     check(

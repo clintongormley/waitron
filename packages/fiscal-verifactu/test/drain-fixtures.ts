@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
 import type { Database } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
-import { tillId as brandTillId } from "@waitron/shared";
-import type { TenantId, TillId } from "@waitron/shared";
+import { nodeId as brandNodeId, tillId as brandTillId } from "@waitron/shared";
+import type { NodeId, TenantId, TillId } from "@waitron/shared";
 import { currentSif, registerSif } from "../src/registro-sif.js";
 import type { Entorno } from "../src/registro-row.js";
 import { seedTenantWithSif } from "./fixtures.js";
@@ -46,6 +46,7 @@ export interface SeededDrainOptions {
 export interface SeededDrain {
   tenantId: TenantId;
   tillId: TillId;
+  nodeId: NodeId;
   sifId: string;
   nif: string;
   legalName: string;
@@ -84,6 +85,7 @@ export async function insertPendingAlta(
   params: {
     tenantId: string;
     tillId: string;
+    nodeId: string;
     sifId: string;
     nif: string;
     secuencia: number;
@@ -97,19 +99,19 @@ export async function insertPendingAlta(
 ): Promise<{ registroId: string; numSerieFactura: string }> {
   const numSerieFactura = `S${String(params.secuencia)}/1`;
   const series = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, till_id, code)
-    values (${params.tenantId}, ${params.tillId}, ${"S" + String(params.secuencia)})
+    insert into invoice_series (tenant_id, node_id, code)
+    values (${params.tenantId}, ${params.nodeId}, ${"S" + String(params.secuencia)})
     returning id
   `);
   const seriesId = series.rows[0]?.id;
   const sale = await db.execute<{ id: string }>(sql`
     insert into sales (
-      tenant_id, till_id, series_id, invoice_number,
+      tenant_id, till_id, node_id, series_id, invoice_number,
       issued_at, issued_offset_minutes,
       total,
       locale, invoice_locales, fiscal_backend, fiscal_state
     ) values (
-      ${params.tenantId}, ${params.tillId}, ${seriesId}, ${params.secuencia},
+      ${params.tenantId}, ${params.tillId}, ${params.nodeId}, ${seriesId}, ${params.secuencia},
       '2026-07-20T19:20:30+01:00', 60,
       '0.00',
       'es', array['es'], 'verifactu', 'recorded'
@@ -135,13 +137,13 @@ export async function insertPendingAlta(
   ]);
   const registro = await db.execute<{ id: string }>(sql`
     insert into registros_facturacion (
-      tenant_id, till_id, sif_id, sale_id, secuencia, tipo_registro,
+      tenant_id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       tipo_factura, descripcion_operacion, desglose, cuota_total, importe_total,
       primer_registro, sistema_informatico,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, entorno
     ) values (
-      ${params.tenantId}, ${params.tillId}, ${params.sifId}, ${saleId}, ${params.secuencia}, 'alta',
+      ${params.tenantId}, ${params.tillId}, ${params.nodeId}, ${params.sifId}, ${saleId}, ${params.secuencia}, 'alta',
       ${params.nif}, ${numSerieFactura}, ${params.fecha}, 'Waitron SL',
       'F2', 'Venta en establecimiento', ${desglose}::jsonb, '2.10', '12.10',
       true, '{}'::jsonb,
@@ -161,7 +163,7 @@ export async function insertPendingAlta(
   await db.execute(sql`
     update cadenas
     set secuencia = ${params.secuencia}, ultimo_registro_id = ${registroId}, ultima_huella = ${params.huella}
-    where tenant_id = ${params.tenantId} and till_id = ${params.tillId}
+    where tenant_id = ${params.tenantId} and node_id = ${params.nodeId}
   `);
   return { registroId, numSerieFactura };
 }
@@ -181,8 +183,8 @@ export async function seedPendingEnvios(
   db: Database,
   opts: SeededDrainOptions,
 ): Promise<SeededDrain> {
-  const { tenantId, tillId } = await seedTenantWithSif(db);
-  const sif = await db.transaction((tx) => currentSif(tx, tenantId, tillId));
+  const { tenantId, tillId, nodeId } = await seedTenantWithSif(db);
+  const sif = await db.transaction((tx) => currentSif(tx, tenantId, nodeId));
 
   const tenantRow = await db.execute<{ legal_name: string }>(sql`
     select legal_name from tenants where id = ${tenantId}
@@ -203,6 +205,7 @@ export async function seedPendingEnvios(
     const { registroId, numSerieFactura } = await insertPendingAlta(db, {
       tenantId,
       tillId,
+      nodeId,
       sifId: sif.id,
       nif: sif.nif,
       secuencia: i,
@@ -221,6 +224,7 @@ export async function seedPendingEnvios(
   return {
     tenantId,
     tillId,
+    nodeId,
     sifId: sif.id,
     nif: sif.nif,
     legalName,
@@ -251,6 +255,7 @@ export async function appendPendingAlta(
   const { registroId, numSerieFactura } = await insertPendingAlta(db, {
     tenantId: seeded.tenantId,
     tillId: seeded.tillId,
+    nodeId: seeded.nodeId,
     sifId: seeded.sifId,
     nif: seeded.nif,
     secuencia,
@@ -294,17 +299,23 @@ export async function seedSecondChain(
     returning id
   `);
   const tillId = brandTillId(till.rows[0]!.id);
+  const node = await db.execute<{ id: string }>(sql`
+    insert into nodes (tenant_id, location_id, name) values (${seeded.tenantId}, ${location.rows[0]!.id}, 'Node B')
+    returning id
+  `);
+  const nodeId = brandNodeId(node.rows[0]!.id);
   await db.execute(sql`
-    insert into invoice_series (tenant_id, till_id, code) values (${seeded.tenantId}, ${tillId}, 'B')
+    insert into invoice_series (tenant_id, node_id, code) values (${seeded.tenantId}, ${nodeId}, 'B')
   `);
   // Same `nif`, same `idSistemaInformatico` ("WT" — `seedTenantWithSif`'s own literal) as
   // `seeded`'s own chain: `registerSif` mints installation numbers per (nif,
-  // idSistemaInformatico), so a NEW till under that pair gets its OWN `sif_id` — a second,
-  // independent chain for the SAME obligado, exactly like two tills at one shop.
+  // idSistemaInformatico), so a NEW node under that pair gets its OWN `sif_id` — a second,
+  // independent chain for the SAME obligado, exactly like two nodes at one shop (node-id rekey,
+  // 2026-08-03: the chain is the node's).
   const sif = await db.transaction((tx) =>
     registerSif(tx, {
       tenantId: seeded.tenantId,
-      tillId,
+      nodeId,
       nif: seeded.nif,
       idSistemaInformatico: "WT",
     }),
@@ -316,6 +327,7 @@ export async function seedSecondChain(
   const { registroId, numSerieFactura } = await insertPendingAlta(db, {
     tenantId: seeded.tenantId,
     tillId,
+    nodeId,
     sifId: sif.id,
     nif: seeded.nif,
     secuencia,
@@ -369,16 +381,21 @@ export async function seedIndependentChain(
     returning id
   `);
   const tillId = brandTillId(till.rows[0]!.id);
+  const node = await db.execute<{ id: string }>(sql`
+    insert into nodes (tenant_id, location_id, name) values (${seeded.tenantId}, ${location.rows[0]!.id}, 'Node Z')
+    returning id
+  `);
+  const nodeId = brandNodeId(node.rows[0]!.id);
   await db.execute(sql`
-    insert into invoice_series (tenant_id, till_id, code) values (${seeded.tenantId}, ${tillId}, 'Z')
+    insert into invoice_series (tenant_id, node_id, code) values (${seeded.tenantId}, ${nodeId}, 'Z')
   `);
   // A fresh nif (not `seeded.nif`), so this row's own installation number can just be a fixed
   // literal with no risk of colliding with `seeded`'s real, `registerSif`-minted chain — this
   // chain's own NIF is never asserted on anywhere, only its sif_id ordering.
   const nif = `ZZ${String(seeded.tenantId).replace(/-/g, "").slice(0, 7)}`;
   await db.execute(sql`
-    insert into registro_sif (id, tenant_id, till_id, nif, id_sistema_informatico, numero_instalacion)
-    values (${params.sifId}, ${seeded.tenantId}, ${tillId}, ${nif}, 'INDEP', 1)
+    insert into registro_sif (id, tenant_id, node_id, nif, id_sistema_informatico, numero_instalacion)
+    values (${params.sifId}, ${seeded.tenantId}, ${nodeId}, ${nif}, 'INDEP', 1)
   `);
 
   const entorno = params.entorno === undefined ? DEFAULT_ENTORNO : params.entorno;
@@ -388,6 +405,7 @@ export async function seedIndependentChain(
   const { registroId, numSerieFactura } = await insertPendingAlta(db, {
     tenantId: seeded.tenantId,
     tillId,
+    nodeId,
     sifId: params.sifId,
     nif,
     secuencia: params.secuencia,

@@ -3,7 +3,7 @@ import { asAppUser, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import type { SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { recordCorrection } from "./record-correction.js";
 import type { RecordCorrectionInput } from "./record-correction.js";
 import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
@@ -43,7 +43,7 @@ const steadyClock: TrustedClock = {
  * error rather than the expected code, which is exactly the regression worth catching.
  */
 const unreachableBackend: FiscalBackend = {
-  registerTill: () => {
+  registerNode: () => {
     throw new Error("backend must not be reached");
   },
   recordSale: () => {
@@ -73,13 +73,14 @@ const unreachableBackend: FiscalBackend = {
 };
 
 function correctionInput(
-  seed: { tenantId: TenantId; tillId: TillId },
+  seed: { tenantId: TenantId; tillId: TillId; nodeId: NodeId },
   seriesId: SeriesId,
   correctsSaleId: SaleId,
 ): RecordCorrectionInput {
   return {
     tenantId: seed.tenantId,
     tillId: seed.tillId,
+    nodeId: seed.nodeId,
     seriesId,
     correctsSaleId,
     total: "-1.00",
@@ -117,7 +118,7 @@ describe("recordCorrection — cross-tenant isolation (RLS)", () => {
     const other = await seedTenant(postgres.admin);
     const foreignOriginal = await seedBareSale(postgres.admin, other);
     const seed = await seedTenant(postgres.admin);
-    const rectSeries = await seedRectificativeSeries(postgres.admin, seed.tenantId, seed.tillId);
+    const rectSeries = await seedRectificativeSeries(postgres.admin, seed.tenantId, seed.nodeId);
 
     await expect(
       correct(postgres.admin, seed.tenantId, correctionInput(seed, rectSeries, foreignOriginal)),
@@ -132,7 +133,7 @@ describe("recordCorrection — cross-tenant isolation (RLS)", () => {
     const seed = await seedTenant(postgres.admin);
     const original = await seedBareSale(postgres.admin, seed);
     const other = await seedTenant(postgres.admin);
-    const foreignRect = await seedRectificativeSeries(postgres.admin, other.tenantId, other.tillId);
+    const foreignRect = await seedRectificativeSeries(postgres.admin, other.tenantId, other.nodeId);
 
     await expect(
       correct(postgres.admin, seed.tenantId, correctionInput(seed, foreignRect, original)),

@@ -57,8 +57,8 @@ beforeEach(async () => {
   // `correction-path.e2e.test.ts` documents.
   till = await seedTill(suite.admin, "A");
   const series = await suite.admin.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, till_id, code, purpose, next_number)
-    values (${till.tenantId}, ${till.tillId}, 'F3', 'standard', 1)
+    insert into invoice_series (tenant_id, node_id, code, purpose, next_number)
+    values (${till.tenantId}, ${till.nodeId}, 'F3', 'standard', 1)
     returning id
   `);
   substitutionSeriesId = series.rows[0]!.id;
@@ -82,6 +82,7 @@ function substitutionSaleFor(
   return {
     tenantId: till.tenantId,
     tillId: till.tillId,
+    nodeId: till.nodeId,
     saleId: brandSaleId(saleId),
     // Never read by `recordSubstitution` (it uses `seriesCode`/`invoiceNumber` for NumSerieFactura);
     // branded only to satisfy the type, exactly as `correction-path`'s corrective fixture does.
@@ -104,6 +105,7 @@ function ticketSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalReco
   return {
     tenantId: till.tenantId,
     tillId: till.tillId,
+    nodeId: till.nodeId,
     saleId: brandSaleId(saleId),
     seriesId: brandSeriesId(till.seriesId),
     seriesCode: "A",
@@ -132,11 +134,11 @@ async function recordTicket(invoiceNumber: number): Promise<string> {
  * columns) as the RLS-bypassing admin, returning its generated id. */
 async function seedSubstitutionRow(invoiceNumber: number): Promise<string> {
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into sales (tenant_id, till_id, series_id, invoice_number, issued_at,
+    insert into sales (tenant_id, till_id, node_id, series_id, invoice_number, issued_at,
                        issued_offset_minutes, total,
                        counterparty_tax_id, counterparty_legal_name, counterparty_country_code,
                        locale, invoice_locales, fiscal_backend, fiscal_state)
-    values (${till.tenantId}, ${till.tillId}, ${substitutionSeriesId}, ${invoiceNumber},
+    values (${till.tenantId}, ${till.tillId}, ${till.nodeId}, ${substitutionSeriesId}, ${invoiceNumber},
             '2026-03-02T12:05:00+01:00', 60, '123.45',
             ${RECIPIENT.taxId}, ${RECIPIENT.legalName}, ${RECIPIENT.countryCode},
             'es', array['es'], 'verifactu', 'recorded')
@@ -270,7 +272,7 @@ describe("recordSubstitution against the real Veri*Factu backend", () => {
     const rows = await suite.admin
       .select()
       .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tillId, till.tillId));
+      .where(eq(registrosFacturacion.nodeId, till.nodeId));
     expect(rows).toHaveLength(1);
     expect(rows[0]?.tipoFactura).toBe("F2");
   });
@@ -296,7 +298,7 @@ describe("recordSubstitution against the real Veri*Factu backend", () => {
     const rows = await suite.admin
       .select()
       .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tillId, till.tillId));
+      .where(eq(registrosFacturacion.nodeId, till.nodeId));
     // Every registro on this till is an alta — the two F2 tickets and the one F3 — and not one of
     // them is an anulación.
     expect(rows.map((r) => r.tipoRegistro).sort()).toEqual(["alta", "alta", "alta"]);
@@ -350,7 +352,7 @@ describe("recordSubstitution under real chain contention", () => {
   // PGlite (one backend, serialised) cannot: several F3s on distinct backends racing the SAME
   // chain-head row lock must still serialise into a gap-free, correctly-chained run of distinct
   // secuencias, never a crossed pair or a duplicated position (which
-  // `registros_tenant_till_secuencia_uq` would reject). Five, like `correction-path`, for the same
+  // `registros_tenant_node_secuencia_uq` would reject). Five, like `correction-path`, for the same
   // reason: a wider race is a stronger probe of the same property.
   const RACERS = 5;
 
@@ -377,7 +379,7 @@ describe("recordSubstitution under real chain contention", () => {
       const rows = await suite.admin
         .select()
         .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tillId, till.tillId))
+        .where(eq(registrosFacturacion.nodeId, till.nodeId))
         .orderBy(asc(registrosFacturacion.secuencia));
 
       // Ticket at 1, the five F3s at 2..6 — distinct, contiguous, no gaps.

@@ -81,7 +81,7 @@ describe("drain — happy path", () => {
  */
 describe("drain — happy path, an anulación row", () => {
   it("submits a voided sale's anulación through the same accept-and-persist path as an alta", async () => {
-    const { tenantId, tillId, seriesId, workingOrderId } = await seedTenantWithSif(pg.db);
+    const { tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenantWithSif(pg.db);
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const backend = new VerifactuBackend({
       deploymentEnvironment: "production",
@@ -92,7 +92,11 @@ describe("drain — happy path, an anulación row", () => {
 
     const sale = await withTenant(pg.db, tenantId, async (tx) => {
       await asAppUser(tx);
-      return recordSale(tx, backend, saleInput({ tenantId, tillId, seriesId, workingOrderId }));
+      return recordSale(
+        tx,
+        backend,
+        saleInput({ tenantId, tillId, nodeId, seriesId, workingOrderId }),
+      );
     });
     await withTenant(pg.db, tenantId, async (tx) => {
       await asAppUser(tx);

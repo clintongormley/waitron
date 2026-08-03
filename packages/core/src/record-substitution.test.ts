@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
-import type { SaleId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
 // See record-correction.test.ts's own note: there is no `@waitron/fiscal/testing` subpath; the real
 // import path is `@waitron/fiscal/src/testing/fake-backend.js`, used in test files only.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
@@ -28,24 +28,25 @@ import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtu
 
 let tenantId: TenantId;
 let tillId: TillId;
+let nodeId: NodeId;
 let seriesId: SeriesId; // the ordinary (purpose='standard') series — the F3 reuses it (owner decision)
 let workingOrderId: WorkingOrderId;
 
 // PGlite for everything in this file: the guards here are pure logic (an empty list, a duplicate id,
-// an unknown/voided/already-substituted ticket, a wrong-till series) that a superuser backend
+// an unknown/voided/already-substituted ticket, a wrong-node series) that a superuser backend
 // exercises just as well as a forced-RLS one. The two cross-tenant "hidden reads as not-found" cases
 // genuinely need RLS and live in record-substitution.rls.test.ts (real Postgres), per the plan's §6
 // target split — the same split record-correction.test.ts / .rls.test.ts already use.
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS],
   // FakeFiscalBackend.recordSale/recordSubstitution/checkIntegrity read and write
-  // fake_till_registrations/fake_fiscal_records, and nothing else creates those tables.
+  // fake_node_registrations/fake_fiscal_records, and nothing else creates those tables.
   setup: (db) => FakeFiscalBackend.install(db),
   timeoutMs: 60_000,
 });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenant(suite.db));
+  ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenant(suite.db));
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -81,6 +82,7 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
     tenantId,
     tillId,
+    nodeId,
     seriesId,
     workingOrderId,
     locale: "es-ES",
@@ -123,6 +125,7 @@ function substitutionInput(
   return {
     tenantId,
     tillId,
+    nodeId,
     seriesId,
     substitutedSaleIds,
     counterparty: RECIPIENT,
@@ -154,11 +157,11 @@ function substitutionInput(
 }
 
 /** Records an ORIGINAL simplified ticket exactly as the application will: as `app_user`, in one
- * transaction, on a till already registered with the backend. */
+ * transaction, on a node already registered with the backend. */
 async function sellTicket(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTenant(suite.db, tenantId, async (tx) => {
     await asAppUser(tx);
-    await backend.registerTill(tx, tillId, { tenantId });
+    await backend.registerNode(tx, nodeId, { tenantId });
     return recordSale(tx, backend, saleInput(overrides));
   });
 }
@@ -278,7 +281,7 @@ describe("recordSubstitution — error propagation", () => {
   });
 });
 
-describe("recordSubstitution — the series (till-ownership guards)", () => {
+describe("recordSubstitution — the series (node-ownership guards)", () => {
   it("rejects a series that does not exist", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
@@ -289,16 +292,16 @@ describe("recordSubstitution — the series (till-ownership guards)", () => {
     ).rejects.toMatchObject({ code: "sale.series_not_found" });
   });
 
-  it("rejects a series belonging to another till", async () => {
-    // A till may own several series, but a series belongs to exactly one till — drawing the F3's
-    // number from another till's counter would let two chains issue from one series.
+  it("rejects a series belonging to another node", async () => {
+    // A node may own several series, but a series belongs to exactly one node — drawing the F3's
+    // number from another node's counter would let two chains issue from one series.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
     const other = await seedTenant(suite.db, { tenantId });
     await expect(substitute(backend, [saleId], { seriesId: other.seriesId })).rejects.toMatchObject(
       {
-        code: "sale.series_wrong_till",
-        params: { seriesId: other.seriesId, expected: other.tillId, actual: tillId },
+        code: "sale.series_wrong_node",
+        params: { seriesId: other.seriesId, expected: other.nodeId, actual: nodeId },
       },
     );
   });
@@ -311,13 +314,13 @@ describe("recordSubstitution — the series (till-ownership guards)", () => {
     // is chained.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
-    const rectSeries = await seedRectificativeSeries(suite.db, tenantId, tillId);
+    const rectSeries = await seedRectificativeSeries(suite.db, tenantId, nodeId);
     await expect(substitute(backend, [saleId], { seriesId: rectSeries })).rejects.toMatchObject({
       code: "sale.series_wrong_purpose",
       params: { seriesId: rectSeries, expected: "standard", actual: "rectificative" },
     });
     expect(await countRows("sale_substitutions")).toBe(0);
-    const records = await backend.recordsFor(tillId);
+    const records = await backend.recordsFor(nodeId);
     expect(records.map((r) => r.kind)).toEqual(["sale"]); // only the ticket's alta, no F3
   });
 });
@@ -388,7 +391,7 @@ describe("recordSubstitution — the F3 sale", () => {
 
     const { saleId: f3Id } = await substitute(backend, [ticket]);
 
-    const records = await backend.recordsFor(tillId);
+    const records = await backend.recordsFor(nodeId);
     expect(records.map((r) => r.kind)).toEqual(["sale", "substitution"]);
     const substitution = records[1];
     expect(substitution?.saleId).toBe(f3Id);
@@ -419,7 +422,7 @@ describe("recordSubstitution — a mixed batch fails atomically", () => {
     const { saleId: recorded } = await sellTicket(backend); // number 1, has a fiscal record
     const unrecorded = await seedBareSale(
       suite.db,
-      { tenantId, tillId, seriesId },
+      { tenantId, tillId, nodeId, seriesId },
       { invoiceNumber: 99 }, // distinct number: avoids the series-unique collision with the ticket
     );
 
@@ -430,7 +433,7 @@ describe("recordSubstitution — a mixed batch fails atomically", () => {
 
     // Nothing partial survived the rollback.
     expect(await countRows("sale_substitutions")).toBe(0);
-    const records = await backend.recordsFor(tillId);
+    const records = await backend.recordsFor(nodeId);
     expect(records.map((r) => r.kind)).toEqual(["sale"]); // only the ticket's own alta, no F3
     const [series] = await suite.db
       .select({ n: invoiceSeries.nextNumber })
@@ -446,11 +449,11 @@ describe("recordSubstitution — no fiscal condition blocks an F3 (§5)", () => 
     // it. The failed check is recorded against the F3 and the F3 proceeds.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: ticket } = await sellTicket(backend);
-    backend.breakIntegrity(tillId, { code: "predecessor-hash-mismatch", params: { sequence: 1 } });
+    backend.breakIntegrity(nodeId, { code: "predecessor-hash-mismatch", params: { sequence: 1 } });
 
     const { saleId: f3Id } = await substitute(backend, [ticket]);
 
-    const records = await backend.recordsFor(tillId);
+    const records = await backend.recordsFor(nodeId);
     expect(records.map((r) => r.kind)).toEqual(["sale", "substitution"]);
     const rows = await suite.db.select().from(incidents).where(eq(incidents.saleId, f3Id));
     expect(rows).toHaveLength(1);

@@ -30,7 +30,13 @@ export type Entorno = "production" | "preproduction";
 
 export interface RegistroRowContext {
   tenantId: string;
+  /** The till the sale rang at — an informational SNAPSHOT column on the immutable record (node-id
+   * rekey, 2026-08-03: `till_id` stays as a snapshot while `nodeId` below is the chain key).
+   * Travels on the `PendingRegistro` (a fact about the sale), NOT an `appendToChain` parameter. */
   tillId: string;
+  /** The node that owns this record's chain — the CHAIN KEY (node-id rekey, 2026-08-03). This is
+   * the `appendToChain` parameter, stamped onto `node_id`. */
+  nodeId: string;
   /** Which SIF identity generated this record — findings §1's "a new NúmeroInstalación is a new
    * chain" made a database fact. Resolved by the caller via `currentSif` (./registro-sif.ts),
    * never re-derived here: this file only flattens an already-built record into columns. */
@@ -116,6 +122,7 @@ export function toRegistroRow(
   const common = {
     tenantId: ctx.tenantId,
     tillId: ctx.tillId,
+    nodeId: ctx.nodeId,
     sifId: ctx.sifId,
     saleId: ctx.saleId,
     secuencia: ctx.secuencia,
@@ -240,6 +247,7 @@ export type RegistroRow = {
   id: string;
   tenant_id: string;
   till_id: string;
+  node_id: string;
   sif_id: string;
   sale_id: string;
   secuencia: number;

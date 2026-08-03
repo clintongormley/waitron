@@ -4,6 +4,7 @@
 // added later widens the type of every existing query for free, with no
 // signature in any consumer to update.
 export * from "./tenants.js";
+export * from "./nodes.js";
 export * from "./series.js";
 export * from "./orders.js";
 export * from "./sales.js";

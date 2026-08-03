@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { tenantId as brandTenantId } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
+import { nodeId as brandNodeId, tenantId as brandTenantId } from "@waitron/shared";
+import type { LocationId, NodeId, TenantId } from "@waitron/shared";
 import type { Database } from "../client.js";
 
 // Tenants accumulate for the life of a suite (nothing truncates `tenants`), so every seeded tenant
@@ -30,4 +30,19 @@ export async function seedTenant(db: Database): Promise<TenantId> {
   const result = await db.execute<{ id: string }>(sql`
     insert into tenants (nif, legal_name) values (${freshNif()}, 'Test SL') returning id`);
   return brandTenantId(result.rows[0]!.id);
+}
+
+/** Seeds one node for `tenant` at `location` and returns its id. Run as the connection owner
+ * (superuser) — RLS is bypassed, so this is pure setup, exactly like {@link seedTenant}. The name
+ * is a fixed fixture value, mirroring seedTenant's hardcoded legal_name: callers that care about a
+ * node's name insert it themselves. */
+export async function seedNode(
+  db: Database,
+  tenant: TenantId,
+  location: LocationId,
+): Promise<NodeId> {
+  const result = await db.execute<{ id: string }>(sql`
+    insert into nodes (tenant_id, location_id, name)
+    values (${tenant}, ${location}, 'Test node') returning id`);
+  return brandNodeId(result.rows[0]!.id);
 }

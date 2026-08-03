@@ -45,12 +45,12 @@ describe("PGlite cannot test lock contention", () => {
     await Promise.all(
       sales.map((saleId, i) =>
         pg.db.transaction((tx) =>
-          appendToChain(tx, till.tenantId, till.tillId, altaFor(saleId, i + 1, i)),
+          appendToChain(tx, till.tenantId, till.nodeId, altaFor(till.tillId, saleId, i + 1, i)),
         ),
       ),
     );
     const { rows } = await pg.db.execute<{ secuencia: number }>(sql`
-      select secuencia from registros_facturacion where till_id = ${till.tillId} order by secuencia
+      select secuencia from registros_facturacion where node_id = ${till.nodeId} order by secuencia
     `);
     // Green. Identical assertions to the real-Postgres suite's "commits all 20 concurrent appends
     // to one chain" / "assigns every concurrent append a distinct position with no gaps". Worthless

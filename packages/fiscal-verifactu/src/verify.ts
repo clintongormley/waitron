@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import type { TenantId, TillId } from "@waitron/shared";
+import type { NodeId, TenantId } from "@waitron/shared";
 import type { IntegrityIssue, IntegrityReport } from "@waitron/fiscal";
 import { computeHuella, verifyHuella } from "@waitron/verifactu";
 import { lockChainHead } from "./chain.js";
@@ -33,27 +33,31 @@ import { fromRegistroRow, type RegistroRow } from "./registro-row.js";
  * Both start-of-chain states are normal, not failures, and are reflected in `checked` rather than
  * in `ok`: `checked: 0` when n is itself the first record (no predecessor, neither check runs),
  * `checked: 1` when n−1 carries `PrimerRegistro=S` (no n−2, so the link check is vacuously true
- * and only the recomputation applies), `checked: 2` once both n−1 and n−2 exist. A verifier that
- * reported `ok: false` on a fresh till would raise an incident on every till's first sale.
+ * and only the recomputation applies), `checked: 2` once both n−1 and n−2 exist. The chain is
+ * per-NODE (node-id rekey, 2026-08-03), so `checked: 0` is the genesis record of a node's chain —
+ * the first sale ever recorded on a fresh node, whichever till rings it up — NOT every till's
+ * first sale: a second till's first sale on the SAME node has a predecessor and is already
+ * `checked: 1`/`2`. A verifier that reported `ok: false` on that genesis record would raise an
+ * incident on the first record of every node's chain.
  */
 export async function verifyChain(
   tx: Transaction,
   tenantId: TenantId,
-  tillId: TillId,
+  nodeId: NodeId,
 ): Promise<IntegrityReport> {
   // Under the same lock, in the same transaction, as the append that follows. Verifying a
   // predecessor another writer is concurrently replacing verifies nothing; re-acquiring the lock
   // inside appendToChain afterwards is free (chain.ts's own doc comment on lockChainHead).
-  await lockChainHead(tx, tenantId, tillId);
+  await lockChainHead(tx, tenantId, nodeId);
 
-  // (tenant_id, till_id, secuencia) is already uniquely indexed (Task 14's
-  // registros_tenant_till_secuencia_uq) — this is the same index, no new one, per this task's
-  // brief. Ordered by chain POSITION, never by invoice number: AEAT's own sample chains invoice
-  // 12345 to predecessor invoice 44, so sorting on num_serie_factura would compare the wrong pair
-  // and report a failure on an intact chain.
+  // (tenant_id, node_id, secuencia) is already uniquely indexed (node-id rekey, 2026-08-03's
+  // registros_tenant_node_secuencia_uq) — this is the same index, no new one. Ordered by chain
+  // POSITION, never by invoice number: AEAT's own sample chains invoice 12345 to predecessor
+  // invoice 44, so sorting on num_serie_factura would compare the wrong pair and report a failure
+  // on an intact chain.
   const { rows } = await tx.execute<RegistroRow>(sql`
     select * from registros_facturacion
-    where tenant_id = ${tenantId} and till_id = ${tillId}
+    where tenant_id = ${tenantId} and node_id = ${nodeId}
     order by secuencia desc
     limit 2
   `);

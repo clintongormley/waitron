@@ -1,9 +1,11 @@
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
 import { describeEachTarget } from "../testing/harness.js";
 import { asAppUser } from "../testing/roles.js";
+import { seedNode } from "../testing/seed.js";
 import { withTenant } from "../tenancy.js";
 import { invoiceSeries } from "./series.js";
 import { saleLines, sales, tenders } from "./sales.js";
@@ -17,8 +19,14 @@ const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const TILL_B1 = "bbbbbbbb-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 
+// Since the node-id rekey (2026-08-03) both invoice_series and sales carry a NOT NULL node_id;
+// sales keeps till_id too, and adds the composite (tenant_id, node_id) → nodes FK. seed() creates
+// one node per tenant so a sale's node shares its tenant (the composite FK), and saleValues()
+// defaults to tenant A's node.
 let seriesA = "";
 let seriesB = "";
+let nodeA = "";
+let nodeB = "";
 
 async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]> {
   const result = (await db.execute(query)) as unknown as { rows: T[] } | T[];
@@ -50,13 +58,15 @@ async function seed(db: Database): Promise<void> {
     { id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" },
     { id: TILL_B1, tenantId: TENANT_B, locationId: LOCATION_B, name: "B1" },
   ]);
+  nodeA = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
+  nodeB = await seedNode(db, brandTenantId(TENANT_B), brandLocationId(LOCATION_B));
   const [a] = await db
     .insert(invoiceSeries)
-    .values({ tenantId: TENANT_A, tillId: TILL_A1, code: "FA", purpose: "standard" })
+    .values({ tenantId: TENANT_A, nodeId: nodeA, code: "FA", purpose: "standard" })
     .returning({ id: invoiceSeries.id });
   const [b] = await db
     .insert(invoiceSeries)
-    .values({ tenantId: TENANT_B, tillId: TILL_B1, code: "FB", purpose: "standard" })
+    .values({ tenantId: TENANT_B, nodeId: nodeB, code: "FB", purpose: "standard" })
     .returning({ id: invoiceSeries.id });
   seriesA = a.id;
   seriesB = b.id;
@@ -66,6 +76,7 @@ function saleValues(overrides: Record<string, unknown> = {}) {
   return {
     tenantId: TENANT_A,
     tillId: TILL_A1,
+    nodeId: nodeA,
     seriesId: seriesA,
     invoiceNumber: 1,
     issuedAt: AT,
@@ -174,7 +185,7 @@ describeEachTarget("sales — the commercial record", (target) => {
   it("permits the same invoice number in two different series", async () => {
     const [other] = await db
       .insert(invoiceSeries)
-      .values({ tenantId: TENANT_A, tillId: TILL_A1, code: "RA", purpose: "rectificative" })
+      .values({ tenantId: TENANT_A, nodeId: nodeA, code: "RA", purpose: "rectificative" })
       .returning({ id: invoiceSeries.id });
     await recordCompleteSale(db);
     const second = await recordCompleteSale(db, { seriesId: other.id });
@@ -277,6 +288,51 @@ describeEachTarget("sales — the commercial record", (target) => {
     const id = await recordCompleteSale(db, { issuedOffsetMinutes: 120 });
     const [row] = await db.select().from(sales).where(eq(sales.id, id));
     expect(row.issuedOffsetMinutes).toBe(120);
+  });
+
+  it("requires a node_id referencing nodes", async () => {
+    // Node-id rekey (2026-08-03, plan Task 4 §5): sales.node_id is now NOT NULL with a composite
+    // tenant-consistent (tenant_id, node_id) → nodes FK — the node that chained the sale (#33).
+    // till_id stays (where the sale rang); this is the node beside it. (This test was the Task-3
+    // scaffolding assertion that node_id was NULLABLE; the completed rekey inverts it — see this
+    // task's report.)
+    const meta = await rows<{ is_nullable: string }>(
+      db,
+      sql`select is_nullable from information_schema.columns
+           where table_name = 'sales' and column_name = 'node_id'`,
+    );
+    expect(meta).toEqual([{ is_nullable: "NO" }]);
+    // A sale carries its node_id ...
+    const plainId = await recordCompleteSale(db);
+    const [plain] = await db.select().from(sales).where(eq(sales.id, plainId));
+    expect(plain.nodeId).toBe(nodeA);
+    // ... and a sale with no node_id is refused (NOT NULL). Raw SQL because the drizzle `sales`
+    // insert type requires node_id, so the omission can only be expressed at the SQL layer.
+    const error = await captureError(() =>
+      db.execute(
+        sql`insert into sales (
+               tenant_id, till_id, series_id, invoice_number, issued_at, issued_offset_minutes,
+               total, locale, invoice_locales, fiscal_backend, fiscal_state
+             ) values (
+               ${TENANT_A}, ${TILL_A1}, ${seriesA}, 2, ${AT}, 120,
+               '1.00', 'es', array['es', 'ca']::text[], 'verifactu', 'recorded'
+             )`,
+      ),
+    );
+    expect(pgErrorMessage(error)).toMatch(/null value in column "node_id"/);
+  });
+
+  it("rejects a node_id that does not exist with a foreign-key violation", async () => {
+    // The composite FK guarantees referential existence: a node id with no `nodes` row is refused.
+    const error = await captureError(() =>
+      db.insert(sales).values(
+        saleValues({
+          invoiceNumber: 2,
+          nodeId: "99999999-9999-4999-8999-999999999999",
+        }),
+      ),
+    );
+    expect(pgErrorMessage(error)).toMatch(/violates foreign key constraint/);
   });
 });
 
@@ -664,6 +720,7 @@ describeEachTarget("sales — immutability as the app role", (target) => {
     await recordCompleteSale(db, {
       tenantId: TENANT_B,
       tillId: TILL_B1,
+      nodeId: nodeB,
       seriesId: seriesB,
       invoiceLocales: ["es"],
       locale: "es",
@@ -688,6 +745,7 @@ describeEachTarget("sales — immutability as the app role", (target) => {
     await recordCompleteSale(db, {
       tenantId: TENANT_B,
       tillId: TILL_B1,
+      nodeId: nodeB,
       seriesId: seriesB,
       invoiceLocales: ["es"],
       locale: "es",
@@ -705,6 +763,7 @@ describeEachTarget("sales — immutability as the app role", (target) => {
     await recordCompleteSale(db, {
       tenantId: TENANT_B,
       tillId: TILL_B1,
+      nodeId: nodeB,
       seriesId: seriesB,
       invoiceLocales: ["es"],
       locale: "es",
@@ -857,11 +916,15 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
     invoiceNumber: number;
     tenantId?: string;
     tillId?: string;
+    nodeId?: string;
     seriesId?: string;
     invoiceLocales?: string[];
   }): Promise<{ id: string }[]> {
     const tenantId = opts.tenantId ?? TENANT_A;
     const tillId = opts.tillId ?? TILL_A1;
+    // node_id is NOT NULL since the rekey; these correctives are all tenant A, so nodeA is the
+    // tenant-consistent node for the composite FK.
+    const nodeId = opts.nodeId ?? nodeA;
     const seriesId = opts.seriesId ?? seriesA;
     const locales = opts.invoiceLocales ?? ["es", "ca"];
     const localesArray = sql`array[${sql.join(
@@ -871,10 +934,11 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
     return rows<{ id: string }>(
       db,
       sql`insert into sales (
-             tenant_id, till_id, series_id, invoice_number, issued_at, issued_offset_minutes,
-             total, locale, invoice_locales, fiscal_backend, fiscal_state, corrects_sale_id
+             tenant_id, till_id, node_id, series_id, invoice_number, issued_at,
+             issued_offset_minutes, total, locale, invoice_locales, fiscal_backend, fiscal_state,
+             corrects_sale_id
            ) values (
-             ${tenantId}, ${tillId}, ${seriesId}, ${opts.invoiceNumber}, ${AT}, 120,
+             ${tenantId}, ${tillId}, ${nodeId}, ${seriesId}, ${opts.invoiceNumber}, ${AT}, 120,
              ${opts.total}, 'es', ${localesArray}, 'verifactu', 'recorded',
              ${opts.correctsSaleId}
            ) returning id`,
@@ -963,6 +1027,7 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
     const otherTenantSale = await recordCompleteSale(db, {
       tenantId: TENANT_B,
       tillId: TILL_B1,
+      nodeId: nodeB,
       seriesId: seriesB,
       invoiceLocales: ["es"],
       locale: "es",

@@ -6,6 +6,7 @@ import {
   decimal,
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
+  nodeId as brandNodeId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
@@ -53,6 +54,7 @@ function buildInput(
   return {
     tenantId: brandTenantId(s.tenantId),
     tillId: brandTillId(s.tillId),
+    nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
     locale: "es",

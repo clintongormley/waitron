@@ -5,6 +5,7 @@ import {
   decimal,
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
+  nodeId as brandNodeId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
@@ -36,7 +37,7 @@ import type {
 // the row must carry `provider='stripe'`, `state='captured'`, the committed `sale_id`, and a `pi_`
 // `external_ref` (the PaymentIntent id).
 
-// The setup step creates the fake backend's own `fake_till_registrations`/`fake_fiscal_records`
+// The setup step creates the fake backend's own `fake_node_registrations`/`fake_fiscal_records`
 // tables, exactly as `record-sale.test.ts` and the neutral wiring test do.
 const pg = usePgliteDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
@@ -76,6 +77,7 @@ function buildInput(
   return {
     tenantId: brandTenantId(s.tenantId),
     tillId: brandTillId(s.tillId),
+    nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
     locale: "es",

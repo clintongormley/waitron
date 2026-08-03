@@ -62,16 +62,21 @@ declare module "@waitron/shared" {
      */
     "tenant.not_found": { id: string };
     /**
-     * No such till *for this tenant*. A till belonging to ANOTHER tenant reports this same code
-     * rather than a distinct "wrong owner" one: to a caller scoped to one tenant the two are the
-     * same fact, and a separate code would confirm the existence of another tenant's till to
+     * No such node *for this tenant*. The SIF is the compute node (#33), so provisioning registers a
+     * node, not a till (node-id rekey, 2026-08-03). A node belonging to ANOTHER tenant reports this
+     * same code rather than a distinct "wrong owner" one: to a caller scoped to one tenant the two are
+     * the same fact, and a separate code would confirm the existence of another tenant's node to
      * whoever asked.
      *
-     * Note this is enforced by comparing `tills.tenant_id`, NOT by relying on RLS to hide the
-     * foreign row — see `provisionTill`. The two agree for the deployment role; the explicit check
-     * is what makes them agree for a superuser as well.
+     * Note this is enforced by comparing `nodes.tenant_id`, NOT by relying on RLS to hide the
+     * foreign row — see `provisionNode`. The two agree for the deployment role; the explicit check
+     * is what makes them agree for a superuser as well. `node.*`, not `server.*`: it is a fact about a
+     * node, the rule `tenant.not_found`'s own note gives.
+     *
+     * (The former `till.not_found` was removed with the rekey — pre-production, no bwc — since its
+     * only thrower, `provisionTill`'s ownership check, is now `provisionNode`'s and throws this.)
      */
-    "till.not_found": { id: string; tenantId: string };
+    "node.not_found": { id: string; tenantId: string };
     /**
      * `IdSistemaInformatico` is not a usable software identifier. AEAT caps it at two characters —
      * `packages/verifactu`'s `validate` encodes exactly that rule as `ID_SISTEMA_LENGTH`, and every

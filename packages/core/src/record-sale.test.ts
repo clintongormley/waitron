@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, seriesId as brandSeriesId } from "@waitron/shared";
-import type { SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { NodeId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
 // **Deviation from the brief.** The brief imports `FakeFiscalBackend` from `@waitron/fiscal/testing`
 // — a subpath that does not exist (no `packages/fiscal/testing` folder, no `exports` map, and
 // `@waitron/fiscal`'s own `src/index.ts` re-export barrel explicitly does NOT carry the fake — see
@@ -31,6 +31,7 @@ import { seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 
 let tenantId: TenantId;
 let tillId: TillId;
+let nodeId: NodeId;
 let seriesId: SeriesId;
 let workingOrderId: WorkingOrderId;
 
@@ -42,7 +43,7 @@ let workingOrderId: WorkingOrderId;
 // **Deviation from the brief.** The brief's `beforeAll` ran BOTH `@waitron/db`'s migrations and
 // `@waitron/fiscal-verifactu`'s (`FISCAL_MIGRATIONS`). This suite never touches a module's own
 // tables at all — `FakeFiscalBackend` participates in the caller's transaction through its OWN
-// ephemeral `fake_till_registrations`/`fake_fiscal_records` tables (created below via
+// ephemeral `fake_node_registrations`/`fake_fiscal_records` tables (created below via
 // `FakeFiscalBackend.install`), never `registros_facturacion`/`cadenas`/`envios` — and importing
 // `@waitron/fiscal-verifactu` from `packages/core` at all (even from a test file: the eslint
 // boundary zone's `files` glob is `packages/core/**/*.ts`, with no `*.test.ts` carve-out) would
@@ -50,8 +51,8 @@ let workingOrderId: WorkingOrderId;
 // only.
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS],
-  // Not in the brief at all: `FakeFiscalBackend.recordSale`/`registerTill`/`checkIntegrity` read
-  // and write `fake_till_registrations`/`fake_fiscal_records`, and nothing creates those tables
+  // Not in the brief at all: `FakeFiscalBackend.recordSale`/`registerNode`/`checkIntegrity` read
+  // and write `fake_node_registrations`/`fake_fiscal_records`, and nothing creates those tables
   // except this call. Omitting it fails every test in this file with "relation
   // fake_fiscal_records does not exist" — caught in this task's own red phase.
   setup: (db) => FakeFiscalBackend.install(db),
@@ -59,7 +60,7 @@ const suite = usePgliteDb({
 });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenant(suite.db));
+  ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenant(suite.db));
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -103,6 +104,7 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
     tenantId,
     tillId,
+    nodeId,
     seriesId,
     workingOrderId,
     locale: "es-ES",
@@ -138,12 +140,12 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
 
 /**
  * Runs the write path exactly as the application will: as `app_user`, in one transaction, on a
- * till already registered with the injected backend.
+ * node already registered with the injected backend.
  *
  * Registration is not in the brief's own `run` helper, but it is required: `FakeFiscalBackend` is
- * "a genuine test double" (its own doc comment) that refuses `recordSale`/`recordVoid` for a till
- * with no prior `registerTill` — `fiscal.till_not_registered` — exactly like a real backend would.
- * `recordSale` itself never calls `registerTill` (provisioning a till is a separate, one-time
+ * "a genuine test double" (its own doc comment) that refuses `recordSale`/`recordVoid` for a node
+ * with no prior `registerNode` — `fiscal.node_not_registered` — exactly like a real backend would.
+ * `recordSale` itself never calls `registerNode` (provisioning a node is a separate, one-time
  * admin action, out of this task's seven steps), so a test that skips this fails every happy-path
  * assertion with that error instead of the one under test.
  */
@@ -153,7 +155,7 @@ async function run(backend: FiscalBackend, overrides: Partial<RecordSaleInput> =
     // write-path test would prove the code runs, not that the application role is permitted to
     // run it.
     await asAppUser(tx);
-    await backend.registerTill(tx, tillId, { tenantId });
+    await backend.registerNode(tx, nodeId, { tenantId });
     return recordSale(tx, backend, input(overrides));
   });
 }
@@ -182,7 +184,7 @@ async function countRows(table: string): Promise<number> {
  *
  * **Deviation from the brief.** The brief built this shape with `{ ...fake, async
  * checkIntegrity(...) {...} }` — object-spreading a `FakeFiscalBackend` INSTANCE. That does not
- * work against the real class: `registerTill`/`recordSale`/`recordVoid`/`checkIntegrity`/
+ * work against the real class: `registerNode`/`recordSale`/`recordVoid`/`checkIntegrity`/
  * `pendingCount` are ordinary ES class methods, which live on `FakeFiscalBackend.prototype` and
  * are non-enumerable — object spread copies only an instance's OWN enumerable properties, so
  * `{...fake}` silently produces an object with NONE of the interface's methods on it, and calling
@@ -191,13 +193,13 @@ async function countRows(table: string): Promise<number> {
  */
 function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>): FiscalBackend {
   return {
-    registerTill: (tx, till, params) => fake.registerTill(tx, till, params),
+    registerNode: (tx, node, params) => fake.registerNode(tx, node, params),
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
     recordVoid: (tx, saleId, reason) => fake.recordVoid(tx, saleId, reason),
     recordCorrection: (tx, sale, correction) => fake.recordCorrection(tx, sale, correction),
     recordSubstitution: (tx, sale, substitution) => fake.recordSubstitution(tx, sale, substitution),
-    checkIntegrity: (tx, tenant, till) => fake.checkIntegrity(tx, tenant, till),
-    pendingCount: (tenant, till) => fake.pendingCount(tenant, till),
+    checkIntegrity: (tx, tenant, node) => fake.checkIntegrity(tx, tenant, node),
+    pendingCount: (tenant, node) => fake.pendingCount(tenant, node),
     drain: (now) => fake.drain(now),
     reconcile: (tenant, period) => fake.reconcile(tenant, period),
     ...overrides,
@@ -287,7 +289,7 @@ describe("recordSale — the happy path", () => {
     // spy — the fake's one intentional test-only affordance for this.
     const backend = new FakeFiscalBackend(suite.db);
     await run(backend);
-    const [record] = await backend.recordsFor(tillId);
+    const [record] = await backend.recordsFor(nodeId);
     expect(record?.invoiceNumber).toBe(1);
     expect(record?.total).toBe("14.41");
     expect(record?.kind).toBe("sale");
@@ -327,7 +329,7 @@ describe("recordSale — the happy path", () => {
         tenders: [{ method: "card", amount: "10.00", tipAmount: "0.32", settledAt: BASE }],
       },
     });
-    const [record] = await backend.recordsFor(tillId);
+    const [record] = await backend.recordsFor(nodeId);
     expect(record?.total).toBe("9.68");
   });
 });
@@ -337,7 +339,7 @@ describe("recordSale — the order of operations", () => {
     const observed: number[] = [];
     const fake = new FakeFiscalBackend(suite.db);
     const backend = wrapBackend(fake, {
-      async checkIntegrity(tx, tenant, till) {
+      async checkIntegrity(tx, tenant, node) {
         // Read the counter from inside the verification call. If allocation had already run,
         // next_number would read 2 here. Observing only "both happened" would not discriminate
         // which came first — this is the one observation that does.
@@ -346,7 +348,7 @@ describe("recordSale — the order of operations", () => {
           .from(invoiceSeries)
           .where(eq(invoiceSeries.id, seriesId));
         observed.push(row?.n ?? -1);
-        return fake.checkIntegrity(tx, tenant, till);
+        return fake.checkIntegrity(tx, tenant, node);
       },
     });
     await run(backend);
@@ -390,16 +392,16 @@ describe("recordSale — no fiscal condition blocks a sale", () => {
     //
     // **Deviation from the brief.** `backend.chainVerification = { ok: false, error: new
     // AppError(...) }` is not a real affordance on `FakeFiscalBackend` — the actual test-only
-    // control is `breakIntegrity(tillId, issue)`, taking a plain `IntegrityIssue` (`{ code,
+    // control is `breakIntegrity(nodeId, issue)`, taking a plain `IntegrityIssue` (`{ code,
     // params, recordId? }`), never an `AppError` instance (an `IntegrityReport` is persisted and
     // displayed, and an `Error` does not survive JSON — `packages/fiscal/src/backend.ts`'s own
     // doc comment on `IntegrityIssue`).
     const backend = new FakeFiscalBackend(suite.db);
     const issue: IntegrityIssue = { code: "chain.verification_failed", params: { sequence: 4 } };
-    backend.breakIntegrity(tillId, issue);
+    backend.breakIntegrity(nodeId, issue);
     const { saleId } = await run(backend);
     expect(await countRows("sales")).toBe(1);
-    expect(await backend.recordsFor(tillId)).toHaveLength(1);
+    expect(await backend.recordsFor(nodeId)).toHaveLength(1);
     expect(saleId).toBeTruthy();
   });
 
@@ -471,7 +473,7 @@ describe("recordSale — the fiscal record is created when ALL tenders settle", 
         },
       }),
     ).rejects.toBeInstanceOf(AppError);
-    expect(await backend.recordsFor(tillId)).toHaveLength(0);
+    expect(await backend.recordsFor(nodeId)).toHaveLength(0);
   });
 
   it("records exactly one chained sale when the declined tender is retried", async () => {
@@ -487,7 +489,7 @@ describe("recordSale — the fiscal record is created when ALL tenders settle", 
     ).rejects.toBeInstanceOf(AppError);
     await run(backend);
     expect(await countRows("sales")).toBe(1);
-    expect(await backend.recordsFor(tillId)).toHaveLength(1);
+    expect(await backend.recordsFor(nodeId)).toHaveLength(1);
   });
 
   it("accepts a split tender that settles across several payments", async () => {
@@ -540,7 +542,7 @@ describe("recordSale — settlement modes", () => {
     ).toHaveLength(2);
     expect(await countRows("tenders")).toBe(0);
     expect(await countRows("sale_settlements")).toBe(0);
-    expect(await backend.recordsFor(tillId)).toHaveLength(1);
+    expect(await backend.recordsFor(nodeId)).toHaveLength(1);
   });
 
   it("immediate and deferred+settleSale produce identical tenders and settlement rows", async () => {
@@ -559,7 +561,7 @@ describe("recordSale — settlement modes", () => {
     // Path A — immediate, on the beforeEach tenant.
     const a = await withTenant(suite.db, tenantId, async (tx) => {
       await asAppUser(tx);
-      await backend.registerTill(tx, tillId, { tenantId });
+      await backend.registerNode(tx, nodeId, { tenantId });
       return recordSale(
         tx,
         backend,
@@ -571,13 +573,14 @@ describe("recordSale — settlement modes", () => {
     const other = await seedTenant(suite.db);
     const b = await withTenant(suite.db, other.tenantId, async (tx) => {
       await asAppUser(tx);
-      await backend.registerTill(tx, other.tillId, { tenantId: other.tenantId });
+      await backend.registerNode(tx, other.nodeId, { tenantId: other.tenantId });
       return recordSale(
         tx,
         backend,
         input({
           tenantId: other.tenantId,
           tillId: other.tillId,
+          nodeId: other.nodeId,
           seriesId: other.seriesId,
           workingOrderId: other.workingOrderId,
           settlement: { kind: "deferred" },
@@ -656,7 +659,7 @@ describe("recordSale — settlement modes", () => {
     expect(await countRows("sales")).toBe(1);
     expect(await countRows("tenders")).toBe(0);
     expect(await countRows("sale_settlements")).toBe(1);
-    expect(await backend.recordsFor(tillId)).toHaveLength(1);
+    expect(await backend.recordsFor(nodeId)).toHaveLength(1);
     // Stamped at the settlement's own instant — there is no tender to time it by, and settlement is
     // not a fiscal event.
     const [settled] = await suite.db
@@ -689,6 +692,7 @@ describe("recordSale — numbering", () => {
         await tx.insert(sales).values({
           tenantId,
           tillId,
+          nodeId,
           seriesId,
           invoiceNumber: 1,
           issuedAt: BASE.toISOString(),
@@ -730,21 +734,23 @@ describe("recordSale — series validation", () => {
     ).rejects.toMatchObject({ code: "sale.series_not_found" });
   });
 
-  it("rejects a series belonging to another till", async () => {
-    // A till may own N series, but a series belongs to exactly one till. Allocating from another
-    // till's series would have two chains issuing from one counter, which no constraint
-    // downstream can detect.
+  it("rejects a series belonging to another node", async () => {
+    // A node may own N series, but a series belongs to exactly one node. Allocating from another
+    // node's series would have two chains issuing from one counter, which no constraint
+    // downstream can detect. `seedTenant({ tenantId })` mints a SECOND node under the same tenant,
+    // so `other.seriesId` is real and same-tenant but owned by a different node than the one under
+    // test — the series↔node guard must reject it.
     const other = await seedTenant(suite.db, { tenantId });
     await expect(
       run(new FakeFiscalBackend(suite.db), { seriesId: other.seriesId }),
-    ).rejects.toMatchObject({ code: "sale.series_wrong_till" });
+    ).rejects.toMatchObject({ code: "sale.series_wrong_node" });
   });
 
   it("rejects a rectificative series: an ordinary sale must not draw a corrective number", async () => {
     // The other direction of the §5 purpose guard. A corrective series (`purpose='rectificative'`)
     // is reserved for rectificativas (RD 1619/2012 art. 6.1.a); an ordinary sale drawing from it
     // would consume a corrective number and break the mandated separation.
-    const rectSeriesId = await seedRectificativeSeries(suite.db, tenantId, tillId);
+    const rectSeriesId = await seedRectificativeSeries(suite.db, tenantId, nodeId);
     await expect(
       run(new FakeFiscalBackend(suite.db), { seriesId: rectSeriesId }),
     ).rejects.toMatchObject({

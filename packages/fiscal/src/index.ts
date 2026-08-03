@@ -18,10 +18,10 @@ export type {
   FiscalState,
   IntegrityIssue,
   IntegrityReport,
+  NodeRegistration,
   ReconcileMismatch,
   ReconcileResult,
   SaleForFiscalRecord,
-  TillRegistration,
   VatBreakdownLine,
 } from "./backend.js";
 // The fake is NOT re-exported here. packages/core imports it from

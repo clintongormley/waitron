@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
+import { locationId as brandLocationId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { describeEachTarget } from "./harness.js";
-import { freshNif, seedTenant } from "./seed.js";
+import { freshNif, seedNode, seedTenant } from "./seed.js";
 
 describe("freshNif", () => {
   // Deliberately asserts the SHAPE and the base, never a specific counter value: the counter is
@@ -49,5 +50,33 @@ describeEachTarget("seedTenant", (target) => {
       sql`select count(distinct nif)::int as n from tenants`,
     );
     expect((result.rows[0] as { n: number }).n).toBe(3);
+  });
+});
+
+describeEachTarget("seedNode", (target) => {
+  let db: Database;
+
+  beforeEach(async () => {
+    db = await target.create();
+  });
+
+  afterEach(async () => {
+    if (db !== undefined) await db.close();
+  });
+
+  it("inserts one node for the tenant + location and returns its id", async () => {
+    // seedNode takes the tenant and location as given, so build them first: a
+    // node FKs both, and there is deliberately no seedLocation helper (only
+    // seedTenant and seedNode exist).
+    const tenant = await seedTenant(db);
+    const locResult = await db.execute<{ id: string }>(sql`
+      insert into locations (tenant_id, name, invoice_locales, operation_description)
+      values (${tenant}, 'Test location', ARRAY['es']::text[], 'Restaurant') returning id`);
+    const location = brandLocationId(locResult.rows[0]!.id);
+    const node = await seedNode(db, tenant, location);
+    const result = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from nodes where id = ${node} and location_id = ${location}`,
+    );
+    expect((result.rows[0] as { n: number }).n).toBe(1);
   });
 });

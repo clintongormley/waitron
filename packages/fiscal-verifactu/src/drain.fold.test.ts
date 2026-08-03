@@ -64,7 +64,7 @@ describe("drain — folds the skip-retry interval as a minimum against a healthy
         resolveClient: (tenantId) =>
           tenantId === failing
             ? Promise.reject(
-                new AppError("sif.not_registered", { tenantId, tillId: failingSeed.tillId }),
+                new AppError("sif.not_registered", { tenantId, nodeId: failingSeed.nodeId }),
               )
             : Promise.resolve(unreachableClient),
         skipRetryMs: DEFAULT_SKIP_RETRY_MS,
@@ -117,7 +117,7 @@ describe("drain — folds the skip-retry interval as a minimum against a healthy
           resolveClient: (tenantId) =>
             tenantId === failing
               ? Promise.reject(
-                  new AppError("sif.not_registered", { tenantId, tillId: failingSeed.tillId }),
+                  new AppError("sif.not_registered", { tenantId, nodeId: failingSeed.nodeId }),
                 )
               : Promise.resolve(unreachableClient),
           skipRetryMs: DEFAULT_SKIP_RETRY_MS,

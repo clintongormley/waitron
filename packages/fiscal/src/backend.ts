@@ -7,7 +7,7 @@
 // from the file that documents the codes it throws — even though, unlike that file, nothing in
 // backend.ts itself throws (it is types only; ./testing/fake-backend.ts does the throwing).
 import "./errors.js";
-import type { Decimal, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { Decimal, NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 
 /**
@@ -17,9 +17,9 @@ import type { Transaction } from "@waitron/db";
  */
 export type FiscalState = "recorded" | "pending" | "acknowledged" | "rejected";
 
-export interface TillRegistration {
+export interface NodeRegistration {
   backend: string;
-  tillId: TillId;
+  nodeId: NodeId;
   /** Opaque to the POS. A número de instalación, a device id, or nothing meaningful at all. */
   registrationId: string;
   registeredAt: Date;
@@ -47,7 +47,13 @@ export interface Counterparty {
  */
 export interface SaleForFiscalRecord {
   tenantId: TenantId;
+  /** Where the sale rang — an informational snapshot on the immutable fiscal record. Kept beside
+   * `nodeId` (node-id rekey, 2026-08-03): the chain/SIF are keyed by node, the till is where it
+   * rang. */
   tillId: TillId;
+  /** Which node processed and chained this sale — the chain/SIF key (node-id rekey, 2026-08-03;
+   * the SIF is the node, #33). */
+  nodeId: NodeId;
   saleId: SaleId;
   seriesId: SeriesId;
   seriesCode: string;
@@ -65,7 +71,7 @@ export interface SaleForFiscalRecord {
 export interface FiscalRecordRef {
   backend: string;
   /**
-   * Opaque to the POS, like `TillRegistration.registrationId` — deliberately plain `string`
+   * Opaque to the POS, like `NodeRegistration.registrationId` — deliberately plain `string`
    * rather than the `FiscalRecordId` branded type `@waitron/shared` already exports. That brand's
    * own constructor (`fiscalRecordId()`) validates its input as a UUID, which is the right
    * constraint for a value this repo mints itself, but wrong here: a real backend's own identifier
@@ -203,11 +209,11 @@ export interface ReconcileResult {
  * `push` in either method's place.
  */
 export interface FiscalBackend {
-  registerTill(
+  registerNode(
     tx: Transaction,
-    tillId: TillId,
+    nodeId: NodeId,
     params: { tenantId: TenantId },
-  ): Promise<TillRegistration>;
+  ): Promise<NodeRegistration>;
 
   /**
    * Takes a transaction handle. This is a deliberate leak: atomicity between the sale and the
@@ -269,20 +275,22 @@ export interface FiscalBackend {
   /**
    * Whatever this backend must check about what it has already recorded, before recording
    * anything more. `tenantId` is passed explicitly — the caller is always inside a tenant-scoped
-   * transaction and already holds it, so the backend need not re-derive it. The caller records the
-   * report and surfaces it to staff; it must NEVER branch on `ok` to abandon the sale. No fiscal
-   * condition blocks a sale (spec §4), and a backend whose regime has nothing to check answers
+   * transaction and already holds it, so the backend need not re-derive it. `nodeId` because the
+   * chain being verified is per-node (node-id rekey, 2026-08-03). The caller records the report and
+   * surfaces it to staff; it must NEVER branch on `ok` to abandon the sale. No fiscal condition
+   * blocks a sale (spec §4), and a backend whose regime has nothing to check answers
    * `{ ok: true, checked: 0, issues: [] }`.
    */
-  checkIntegrity(tx: Transaction, tenantId: TenantId, tillId: TillId): Promise<IntegrityReport>;
+  checkIntegrity(tx: Transaction, tenantId: TenantId, nodeId: NodeId): Promise<IntegrityReport>;
 
   /**
-   * How many records this till has not yet had confirmed. The UI reads this, never the module's
+   * How many records this node has not yet had confirmed. The UI reads this, never the module's
    * own tables. Takes `tenantId` and NO transaction: the unsent-count read happens outside any
    * sale transaction, and the backend needs the tenant to establish the row-level-security scope
-   * itself (a query with no tenant scope silently counts zero under RLS).
+   * itself (a query with no tenant scope silently counts zero under RLS). `nodeId` because the
+   * chain is per-node (node-id rekey, 2026-08-03).
    */
-  pendingCount(tenantId: TenantId, tillId: TillId): Promise<number>;
+  pendingCount(tenantId: TenantId, nodeId: NodeId): Promise<number>;
 
   /**
    * Submits everything currently due as of `now`, in batches, and returns when to run again. One

@@ -17,7 +17,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, decimal } from "@waitron/shared";
-import type { SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import type { Counterparty, FiscalBackend, FiscalRecordRef, TrustedClock } from "@waitron/fiscal";
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
@@ -27,19 +27,25 @@ import type { RecordSaleLine } from "./record-sale.js";
 export interface RecordSubstitutionInput {
   tenantId: TenantId;
   /**
-   * The till/SIF that ISSUES this F3 and whose chain it extends. Checked against the SERIES
-   * (`sale.series_wrong_till`, step 2) but NOT against the substituted tickets' own tills — and, as
-   * for a rectificativa, that is correct rather than a gap: an F3 is a self-standing new full
-   * invoice that references the tickets only by IDENTITY (`FacturasSustituidas`), so which SIF
-   * issues it is unconstrained (see `record-correction.ts`'s `tillId` doc for the same reasoning and
-   * its AEAT citation).
+   * The till this F3 rings at — an informational snapshot only (written to `sales.till_id` and the
+   * fiscal record's `till_id`, and used for incidents). NOT checked against the series; see `nodeId`
+   * below for the guard.
    */
   tillId: TillId;
+  /**
+   * The node/SIF that ISSUES this F3 and whose chain it extends (node-id rekey, 2026-08-03: the SIF
+   * is the node, #33). Checked against the SERIES (`sale.series_wrong_node`, step 2) but NOT against
+   * the substituted tickets' own nodes — and, as for a rectificativa, that is correct rather than a
+   * gap: an F3 is a self-standing new full invoice that references the tickets only by IDENTITY
+   * (`FacturasSustituidas`), so which SIF issues it is unconstrained (see `record-correction.ts`'s
+   * `nodeId` doc for the same reasoning and its AEAT citation).
+   */
+  nodeId: NodeId;
   /**
    * The series the F3 draws its own new number from. v1 REUSES the ordinary `standard` series (owner
    * decision — no separate `'substitution'` purpose is added), so it is guarded exactly as
    * `recordSale`'s series is: it must exist for this tenant (`sale.series_not_found`), belong to
-   * this till (`sale.series_wrong_till`) AND be `purpose='standard'` (`sale.series_wrong_purpose`) —
+   * this node (`sale.series_wrong_node`) AND be `purpose='standard'` (`sale.series_wrong_purpose`) —
    * a series reserved for another purpose must not number an F3 (step 2). Supplied by the caller
    * exactly as `recordSale` is; no series is auto-provisioned.
    */
@@ -165,7 +171,7 @@ export async function recordSubstitution(
   const [series] = await tx
     .select({
       code: invoiceSeries.code,
-      tillId: invoiceSeries.tillId,
+      nodeId: invoiceSeries.nodeId,
       purpose: invoiceSeries.purpose,
     })
     .from(invoiceSeries)
@@ -177,11 +183,11 @@ export async function recordSubstitution(
       tenantId: input.tenantId,
     });
   }
-  if (series.tillId !== input.tillId) {
-    throw new AppError("sale.series_wrong_till", {
+  if (series.nodeId !== input.nodeId) {
+    throw new AppError("sale.series_wrong_node", {
       seriesId: input.seriesId,
-      expected: series.tillId,
-      actual: input.tillId,
+      expected: series.nodeId,
+      actual: input.nodeId,
     });
   }
   if (series.purpose !== "standard") {
@@ -197,7 +203,7 @@ export async function recordSubstitution(
   // anyway. The table-wide `incidents_open_dedup` index holds at most one open incident per (tenant,
   // till, code, sale), so emitting one row per issue would collapse to a single row and drop every
   // issue after the first; `params.issues` carries them all. Mirrors `./record-sale.ts`.
-  const verification = await backend.checkIntegrity(tx, input.tenantId, input.tillId);
+  const verification = await backend.checkIntegrity(tx, input.tenantId, input.nodeId);
   const pending: Array<{ error: AppError; severity: IncidentSeverity }> = [];
   if (verification.issues.length > 0) {
     pending.push({
@@ -226,7 +232,9 @@ export async function recordSubstitution(
 
   // Step 5. Allocation takes the series row lock and comes AFTER `checkIntegrity`'s chain-head lock,
   // never before: both stay held until commit, so every write path must take them chain-then-series
-  // or two concurrent writers on one till deadlock. The guard SELECTs above take no persistent lock.
+  // or two concurrent writers on one node deadlock — the chain-head lock is the per-node `cadenas`
+  // row, which spans that node's tills (node-id rekey, 2026-08-03). The guard SELECTs above take no
+  // persistent lock.
   const invoiceNumber = await allocateInvoiceNumber(tx, input.seriesId);
 
   // Step 6. The F3 sale: a POSITIVE `total` (the ordinary `total >= 0` arm applies — `corrects_sale_id`
@@ -238,6 +246,7 @@ export async function recordSubstitution(
     .values({
       tenantId: input.tenantId,
       tillId: input.tillId,
+      nodeId: input.nodeId,
       seriesId: input.seriesId,
       invoiceNumber,
       issuedAt: now.instant.toISOString(),
@@ -339,6 +348,7 @@ export async function recordSubstitution(
     {
       tenantId: input.tenantId,
       tillId: input.tillId,
+      nodeId: input.nodeId,
       saleId,
       seriesId: input.seriesId,
       seriesCode: series.code,

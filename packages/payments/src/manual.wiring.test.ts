@@ -4,6 +4,7 @@ import { CORE_MIGRATIONS } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
+  nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
   tillId as brandTillId,
@@ -51,6 +52,7 @@ function buildInput(s: SeededForSale, settledAt: Date): RecordSaleInput {
   return {
     tenantId: brandTenantId(s.tenantId),
     tillId: brandTillId(s.tillId),
+    nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
     locale: "es",

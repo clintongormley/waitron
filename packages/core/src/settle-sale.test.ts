@@ -13,7 +13,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import { AppError, saleId as brandSaleId, tenantId as brandTenantId } from "@waitron/shared";
-import type { SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { seedTenant } from "../test/fixtures.js";
 import { settleSale } from "./settle-sale.js";
 import type { SettleSaleInput } from "./settle-sale.js";
@@ -34,13 +34,13 @@ const SETTLED_AT = new Date("2026-08-01T12:00:00Z");
 
 /**
  * Inserts one `sales` row as the seeding (superuser) connection — RLS is bypassed there, exactly as
- * `test/fixtures.ts`'s `seedTenant` relies on for the tenant/till/series it seeds. Written on the
- * NEW schema: `total` is the only money column left (the tip moved to `tenders.tip_amount` and
- * `amount_charged` was dropped in migration 0012).
+ * `test/fixtures.ts`'s `seedTenant` relies on for the tenant/till/node/series it seeds. Written on
+ * the NEW schema: `total` is the only money column left (the tip moved to `tenders.tip_amount` and
+ * `amount_charged` was dropped in migration 0012), and `node_id` is NOT NULL (node-id rekey).
  */
 async function seedSale(
   db: Database,
-  seed: { tenantId: TenantId; tillId: TillId; seriesId: SeriesId },
+  seed: { tenantId: TenantId; tillId: TillId; nodeId: NodeId; seriesId: SeriesId },
   overrides: { total?: string; invoiceNumber?: number } = {},
 ): Promise<SaleId> {
   const [row] = await db
@@ -48,6 +48,7 @@ async function seedSale(
     .values({
       tenantId: seed.tenantId,
       tillId: seed.tillId,
+      nodeId: seed.nodeId,
       seriesId: seed.seriesId,
       invoiceNumber: overrides.invoiceNumber ?? 1,
       issuedAt: new Date("2026-08-01T11:00:00Z").toISOString(),

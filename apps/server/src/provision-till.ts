@@ -1,13 +1,16 @@
-// Registers a till as a Veri*Factu SIF — the one provisioning step between
-// `sql/bootstrap-tenant.sql` and a till that can actually sell.
+// Registers a NODE as a Veri*Factu SIF — the one provisioning step between
+// `sql/bootstrap-tenant.sql` and a node that can actually sell (node-id rekey, 2026-08-03: the SIF
+// is the compute node, #33, so provisioning registers a node, not a till). The file name is kept
+// `provision-till.ts`; a first-class `provision node` CLI rename is the deferred follow-up the
+// node-rekey design (§8/§10) leaves out of scope.
 //
-// `VerifactuBackend.recordSale` reads the till's identity through `currentSif`, which throws
-// `sif.not_registered` when no live `registro_sif` row exists, so a till created by the bootstrap
+// `VerifactuBackend.recordSale` reads the node's identity through `currentSif`, which throws
+// `sif.not_registered` when no live `registro_sif` row exists, so a node created by the bootstrap
 // SQL cannot record anything until this runs. `registerSif` has existed and been exported since the
 // chain was built; until this module there was no production caller anywhere, only tests.
 //
 // This lives in `src/`, not beside its CLI in `scripts/`, because `vitest.config.ts` excludes
-// `scripts/**` from coverage as build tooling and provisioning a till is behaviour this host owns.
+// `scripts/**` from coverage as build tooling and provisioning a node is behaviour this host owns.
 // `scripts/register-till.ts` is the argv/stdout shim over it.
 //
 // Deliberately NOT raw SQL: `registerSif` mints the installation number through
@@ -16,17 +19,17 @@
 // new SIF identity and therefore a new chain. A hand-written INSERT produces a row that looks right
 // and chains wrong.
 import { and, eq } from "drizzle-orm";
-import { tenants, tills, withTenant } from "@waitron/db";
+import { nodes, tenants, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { registerSif } from "@waitron/fiscal-verifactu";
 import type { SifRegistration } from "@waitron/fiscal-verifactu";
 import { AppError } from "@waitron/shared";
-import type { TenantId, TillId } from "@waitron/shared";
+import type { NodeId, TenantId } from "@waitron/shared";
 import "./errors.js";
 
-export interface ProvisionTillParams {
+export interface ProvisionNodeParams {
   tenantId: TenantId;
-  tillId: TillId;
+  nodeId: NodeId;
   /** Waitron's own AEAT-registered software identifier, at most `ID_SISTEMA_MAX_LENGTH` characters.
    * Half of the (NIF, IdSistemaInformatico) key `registerSif`'s installation counter is scoped by. */
   idSistemaInformatico: string;
@@ -76,59 +79,59 @@ async function obligadoNif(tx: Transaction, tenantId: TenantId): Promise<string>
 }
 
 /**
- * Refuses a till this tenant does not own.
+ * Refuses a node this tenant does not own.
  *
- * `registro_sif` carries separate foreign keys onto `tenants` and `tills` and no composite one, so
- * a row naming tenant A and a till of tenant B satisfies both — and RLS's WITH CHECK only
- * constrains the `tenant_id` column, which such a row gets right. Matching on `tills.tenant_id`
+ * `registro_sif` carries separate foreign keys onto `tenants` and `nodes` and no composite one, so
+ * a row naming tenant A and a node of tenant B satisfies both — and RLS's WITH CHECK only
+ * constrains the `tenant_id` column, which such a row gets right. Matching on `nodes.tenant_id`
  * explicitly rather than leaning on RLS to hide the foreign row is what makes this hold for a
- * superuser too, and the first till of a deployment is provisioned by whoever just ran the
+ * superuser too, and the first node of a deployment is provisioned by whoever just ran the
  * bootstrap SQL — a superuser by that file's own instructions.
  *
  * The predicate is `record-sale.ts`'s, which checks the same ownership the same way.
  */
-async function assertTillBelongsToTenant(
+async function assertNodeBelongsToTenant(
   tx: Transaction,
   tenantId: TenantId,
-  tillId: TillId,
+  nodeId: NodeId,
 ): Promise<void> {
   const [row] = await tx
-    .select({ id: tills.id })
-    .from(tills)
-    .where(and(eq(tills.id, tillId), eq(tills.tenantId, tenantId)));
+    .select({ id: nodes.id })
+    .from(nodes)
+    .where(and(eq(nodes.id, nodeId), eq(nodes.tenantId, tenantId)));
   if (row === undefined) {
-    throw new AppError("till.not_found", { id: tillId, tenantId });
+    throw new AppError("node.not_found", { id: nodeId, tenantId });
   }
 }
 
 /**
- * Registers `tillId` as a SIF of `tenantId` and returns the identity it minted.
+ * Registers `nodeId` as a SIF of `tenantId` and returns the identity it minted.
  *
  * One transaction: a registration that validated its target and then failed to write, or wrote
- * without resetting the chain head, would leave a till that looks provisioned and chains from a
+ * without resetting the chain head, would leave a node that looks provisioned and chains from a
  * previous identity's huella.
  *
- * Re-running this against an already-registered till is meaningful, not an error — `registerSif`
+ * Re-running this against an already-registered node is meaningful, not an error — `registerSif`
  * revokes the live identity, mints a fresh installation number and starts a new chain, which is
- * what a reimaged till needs. The caller decides; nothing here guards against it.
+ * what a reimaged node needs. The caller decides; nothing here guards against it.
  *
  * `async` rather than returning `withTenant`'s promise directly: the argument check below runs
  * before any transaction is opened, and a function whose type says `Promise` must not throw
- * synchronously — a caller holding it as `provisionTill(…).catch(…)` would never see the rejection.
+ * synchronously — a caller holding it as `provisionNode(…).catch(…)` would never see the rejection.
  */
-export async function provisionTill(
+export async function provisionNode(
   db: Database,
-  params: ProvisionTillParams,
+  params: ProvisionNodeParams,
 ): Promise<SifRegistration> {
   assertUsableIdSistema(params.idSistemaInformatico);
 
   return withTenant(db, params.tenantId, async (tx) => {
     const nif = await obligadoNif(tx, params.tenantId);
-    await assertTillBelongsToTenant(tx, params.tenantId, params.tillId);
+    await assertNodeBelongsToTenant(tx, params.tenantId, params.nodeId);
 
     return registerSif(tx, {
       tenantId: params.tenantId,
-      tillId: params.tillId,
+      nodeId: params.nodeId,
       nif,
       idSistemaInformatico: params.idSistemaInformatico,
     });

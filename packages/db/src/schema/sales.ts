@@ -13,6 +13,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import { nodes } from "./nodes.js";
 import { invoiceSeries } from "./series.js";
 import { tenants, tills } from "./tenants.js";
 
@@ -88,6 +89,14 @@ export const sales = pgTable(
       .notNull()
       /* v8 ignore next */
       .references(() => invoiceSeries.id, { onDelete: "restrict" }),
+    // Which node processed and chained this sale (node-id rekey, 2026-08-03).
+    // NOT NULL — the fiscal write path always supplies it. The tenant-consistent
+    // composite `(tenant_id, node_id) → nodes(tenant_id, id)` FK is declared in
+    // `extraConfig` below (mirroring `sale_lines_sale_fk`/`tenders_sale_fk`), so
+    // this column carries NO plain single-column `.references()` of its own —
+    // the composite is the FK. `till_id` STAYS (where the sale rang); this adds
+    // the node beside it, it does not replace it.
+    nodeId: uuid("node_id").notNull(),
     invoiceNumber: integer("invoice_number").notNull(),
     // mode: "string" rather than "date" — a JS Date normalises through the host
     // timezone the moment anything formats it, and nothing formatted is ever
@@ -141,6 +150,16 @@ export const sales = pgTable(
       name: "sales_corrects_fk",
     }).onDelete("restrict"),
     index("sales_corrects_idx").on(t.tenantId, t.correctsSaleId),
+    // Tenant-consistent composite FK to the owning node (node-id rekey,
+    // 2026-08-03): a sale cannot point at a node belonging to another tenant,
+    // independently of whether RLS is in force on this connection. Mirrors the
+    // `sales`→`invoice_series` composite target (`invoice_series_tenant_id_key`)
+    // and the `sale_lines_sale_fk`/`tenders_sale_fk` pattern.
+    foreignKey({
+      columns: [t.tenantId, t.nodeId],
+      foreignColumns: [nodes.tenantId, nodes.id],
+      name: "sales_node_fk",
+    }).onDelete("restrict"),
     // `total >= 0` for an ordinary sale, but a rectificativa por diferencias
     // carries a NEGATIVE total (findings §10.2): `record-sale` passes `total`
     // verbatim into the fiscal record's `ImporteTotal`, which the huella hashes,

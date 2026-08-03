@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 import { isUniqueViolation, saleVoids, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import type { SaleId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, TenantId, TillId } from "@waitron/shared";
 import type { FiscalBackend, FiscalRecordRef } from "@waitron/fiscal";
 import { recordIncident } from "./incidents.js";
 
@@ -34,7 +34,7 @@ export async function recordVoid(
   reason: string,
 ): Promise<{ fiscal: FiscalRecordRef }> {
   const [sale] = await tx
-    .select({ tenantId: sales.tenantId, tillId: sales.tillId })
+    .select({ tenantId: sales.tenantId, tillId: sales.tillId, nodeId: sales.nodeId })
     .from(sales)
     .where(eq(sales.id, saleId));
 
@@ -59,7 +59,7 @@ export async function recordVoid(
   const verification = await backend.checkIntegrity(
     tx,
     sale.tenantId as TenantId,
-    sale.tillId as TillId,
+    sale.nodeId as NodeId,
   );
   // ONE incident aggregating all of this call's issues, never one per issue — the table-wide
   // `incidents_open_dedup` index holds at most one open incident per (tenant, till, code, sale), so

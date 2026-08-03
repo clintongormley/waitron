@@ -270,12 +270,13 @@ describe("registros_facturacion.entorno migration", () => {
     await runMigrations(db, FISCAL_MIGRATIONS);
     const error = await captureError(() =>
       db.execute(sql`
-        insert into registros_facturacion (tenant_id, till_id, sif_id, sale_id, secuencia, tipo_registro,
+        insert into registros_facturacion (tenant_id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
           id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
           primer_registro, sistema_informatico,
           fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, entorno)
         values (${"00000000-0000-4000-8000-000000000000"}, ${"00000000-0000-4000-8000-000000000000"},
-          ${"00000000-0000-4000-8000-000000000000"}, ${"00000000-0000-4000-8000-000000000000"}, 1,
+          ${"00000000-0000-4000-8000-000000000000"}, ${"00000000-0000-4000-8000-000000000000"},
+          ${"00000000-0000-4000-8000-000000000000"}, 1,
           'alta', '89890001K', 'A/1', '2026-07-20', 'Waitron SL', true, '{}'::jsonb,
           '2026-07-20T19:20:31+02:00', 120, '01', ${"0".repeat(64)}, ${"staging"})
       `),

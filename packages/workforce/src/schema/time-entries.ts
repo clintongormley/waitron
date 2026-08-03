@@ -176,7 +176,7 @@ export const timeEntries = pgTable(
     // THE backstop against two writers claiming one chain position — a real risk when several tills
     // at one location clock in the same instant. On real Postgres a naive read-then-write loses the
     // race here; the loser retries under `appendToChain`'s savepoint (../chain.ts). Mirrors fiscal's
-    // `registros_tenant_till_secuencia_uq`.
+    // `registros_tenant_node_secuencia_uq`.
     uniqueIndex("time_entries_chain_position_uq").on(t.tenantId, t.locationId, t.sequenceNo),
     // The stored hash is uppercase SHA-256 hex (../chain-hash.ts). Mirrors `registros_huella_ck`.
     check("time_entries_entry_hash_ck", sql`${t.entryHash} ~ '^[0-9A-F]{64}$'`),

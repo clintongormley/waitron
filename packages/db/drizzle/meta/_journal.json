@@ -106,6 +106,48 @@
       "when": 1785693130955,
       "tag": "0014_sale_substitutions",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1785746745591,
+      "tag": "0015_nodes",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1785748199243,
+      "tag": "0016_add_node_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1785749337643,
+      "tag": "0017_nodes_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1785751780912,
+      "tag": "0018_rekey_series_sales_to_node",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785760760647,
+      "tag": "0019_working_orders_node_composite_fk",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1785761211246,
+      "tag": "0020_invoice_series_node_composite_fk",
+      "breakpoints": true
     }
   ]
 }

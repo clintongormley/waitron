@@ -41,7 +41,7 @@ afterEach(async () => {
 describe("registerSif", () => {
   it("mints an installation number on first registration", async () => {
     const reg = await withTenant(db, TENANT_A.id, (tx) =>
-      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, tillId: TENANT_A.tillId }),
+      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
     );
     expect(reg.numeroInstalacion).toBe(1);
     expect(reg.nif).toBe("89890001K");
@@ -50,10 +50,10 @@ describe("registerSif", () => {
 
   it("mints strictly increasing numbers across tills of one obligado", async () => {
     const first = await withTenant(db, TENANT_A.id, (tx) =>
-      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, tillId: TENANT_A.tillId }),
+      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
     );
     const second = await withTenant(db, TENANT_A.id, (tx) =>
-      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, tillId: TENANT_A.tillId2 }),
+      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId2 }),
     );
     expect(second.numeroInstalacion).toBeGreaterThan(first.numeroInstalacion);
   });
@@ -63,14 +63,14 @@ describe("registerSif", () => {
     // two. A global counter would still be correct but would leak one obligado's till count to
     // another, and would make the number needlessly large.
     await withTenant(db, TENANT_A.id, (tx) =>
-      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, tillId: TENANT_A.tillId }),
+      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
     );
     const other = await withTenant(db, TENANT_B.id, (tx) =>
       registerSif(tx, {
         nif: "12345678Z",
         idSistemaInformatico: "WT",
         tenantId: TENANT_B.id,
-        tillId: TENANT_B.tillId,
+        nodeId: TENANT_B.nodeId,
       }),
     );
     expect(other.numeroInstalacion).toBe(1);
@@ -82,10 +82,10 @@ describe("registerSif", () => {
     // The wipe is simulated by doing nothing to the upstream database at all and simply calling
     // registerSif again: that is exactly what a reformatted machine does.
     const before = await withTenant(db, TENANT_A.id, (tx) =>
-      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, tillId: TENANT_A.tillId }),
+      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
     );
     const after = await withTenant(db, TENANT_A.id, (tx) =>
-      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, tillId: TENANT_A.tillId }),
+      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
     );
     // Strictly greater, and explicitly NOT equal — `toBeGreaterThan` alone would pass if the
     // implementation returned NaN, and equality is the specific thing forbidden.
@@ -98,10 +98,10 @@ describe("registerSif", () => {
     // The old identity's registros are immutable and must keep pointing at the identity that
     // actually generated them. Overwriting the row would silently rewrite history.
     const before = await withTenant(db, TENANT_A.id, (tx) =>
-      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, tillId: TENANT_A.tillId }),
+      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
     );
     await withTenant(db, TENANT_A.id, (tx) =>
-      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, tillId: TENANT_A.tillId }),
+      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
     );
     const rows = await db.execute<{
       id: string;
@@ -120,7 +120,7 @@ describe("registerSif", () => {
     const seen: number[] = [];
     for (let i = 0; i < 3; i += 1) {
       const reg = await withTenant(db, TENANT_A.id, (tx) =>
-        registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, tillId: TENANT_A.tillId }),
+        registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
       );
       seen.push(reg.numeroInstalacion);
     }
@@ -134,7 +134,7 @@ describe("re-registration begins a new chain", () => {
     // A new NúmeroInstalación is a NEW SIF IDENTITY, therefore a new chain (findings §1). Chains
     // cannot be merged or migrated: the old one ends, a new one begins.
     const first = await withTenant(db, TENANT_A.id, (tx) =>
-      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, tillId: TENANT_A.tillId }),
+      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
     );
 
     // Simulate the till having sold: the chain head now points at a real registro and carries a
@@ -143,6 +143,7 @@ describe("re-registration begins a new chain", () => {
     await seedSoldRegistro(db, {
       tenantId: TENANT_A.id,
       tillId: TENANT_A.tillId,
+      nodeId: TENANT_A.nodeId,
       sifId: first.id,
       nif: SIF_PARAMS.nif,
       secuencia: 7,
@@ -150,11 +151,11 @@ describe("re-registration begins a new chain", () => {
     });
 
     expect(
-      await withTenant(db, TENANT_A.id, (tx) => esPrimerRegistro(tx, TENANT_A.id, TENANT_A.tillId)),
+      await withTenant(db, TENANT_A.id, (tx) => esPrimerRegistro(tx, TENANT_A.id, TENANT_A.nodeId)),
     ).toBe(false);
 
     const second = await withTenant(db, TENANT_A.id, (tx) =>
-      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, tillId: TENANT_A.tillId }),
+      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
     );
     expect(second.numeroInstalacion).toBeGreaterThan(first.numeroInstalacion);
 
@@ -164,13 +165,13 @@ describe("re-registration begins a new chain", () => {
       ultimo_registro_id: string | null;
     }>(
       sql`select secuencia, ultima_huella, ultimo_registro_id from cadenas
-          where tenant_id = ${TENANT_A.id} and till_id = ${TENANT_A.tillId}`,
+          where tenant_id = ${TENANT_A.id} and node_id = ${TENANT_A.nodeId}`,
     );
     // The chain POINTER is broken — the next record cannot chain to the old one.
     expect(head.rows[0]?.ultima_huella).toBeNull();
     expect(head.rows[0]?.ultimo_registro_id).toBeNull();
     // But the sequence is NOT reset. It is ours, an ordering aid for the outbox, and resetting it
-    // would collide with UNIQUE (tenant_id, till_id, secuencia) on the very next append.
+    // would collide with UNIQUE (tenant_id, node_id, secuencia) on the very next append.
     expect(head.rows[0]?.secuencia).toBe(7);
   });
 
@@ -180,22 +181,23 @@ describe("re-registration begins a new chain", () => {
     // only useful if the value is DERIVED. A caller-set flag would make the warning report the
     // caller's belief back to itself.
     const reg = await withTenant(db, TENANT_A.id, (tx) =>
-      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, tillId: TENANT_A.tillId }),
+      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
     );
     expect(
-      await withTenant(db, TENANT_A.id, (tx) => esPrimerRegistro(tx, TENANT_A.id, TENANT_A.tillId)),
+      await withTenant(db, TENANT_A.id, (tx) => esPrimerRegistro(tx, TENANT_A.id, TENANT_A.nodeId)),
     ).toBe(true);
 
     await seedSoldRegistro(db, {
       tenantId: TENANT_A.id,
       tillId: TENANT_A.tillId,
+      nodeId: TENANT_A.nodeId,
       sifId: reg.id,
       nif: SIF_PARAMS.nif,
       secuencia: 1,
       huella: "D".repeat(64),
     });
     expect(
-      await withTenant(db, TENANT_A.id, (tx) => esPrimerRegistro(tx, TENANT_A.id, TENANT_A.tillId)),
+      await withTenant(db, TENANT_A.id, (tx) => esPrimerRegistro(tx, TENANT_A.id, TENANT_A.nodeId)),
     ).toBe(false);
   });
 });
@@ -203,10 +205,10 @@ describe("re-registration begins a new chain", () => {
 describe("currentSif", () => {
   it("returns the live registration", async () => {
     const reg = await withTenant(db, TENANT_A.id, (tx) =>
-      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, tillId: TENANT_A.tillId }),
+      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
     );
     const found = await withTenant(db, TENANT_A.id, (tx) =>
-      currentSif(tx, TENANT_A.id, TENANT_A.tillId),
+      currentSif(tx, TENANT_A.id, TENANT_A.nodeId),
     );
     expect(found.id).toBe(reg.id);
   });
@@ -215,25 +217,25 @@ describe("currentSif", () => {
     // The concrete encoding of "a till cannot be provisioned offline": an unprovisioned till gets
     // a structured refusal that reaches a screen translatable, never a locally invented number.
     const err = await withTenant(db, TENANT_A.id, (tx) =>
-      currentSif(tx, TENANT_A.id, TENANT_A.tillId).then(
+      currentSif(tx, TENANT_A.id, TENANT_A.nodeId).then(
         () => null,
         (e: unknown) => e,
       ),
     );
     expect(err).toBeInstanceOf(AppError);
     expect((err as AppError).code).toBe("sif.not_registered");
-    expect((err as AppError).params).toMatchObject({ tillId: TENANT_A.tillId });
+    expect((err as AppError).params).toMatchObject({ nodeId: TENANT_A.nodeId });
   });
 
   it("does not return a revoked registration", async () => {
     const first = await withTenant(db, TENANT_A.id, (tx) =>
-      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, tillId: TENANT_A.tillId }),
+      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
     );
     const second = await withTenant(db, TENANT_A.id, (tx) =>
-      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, tillId: TENANT_A.tillId }),
+      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
     );
     const found = await withTenant(db, TENANT_A.id, (tx) =>
-      currentSif(tx, TENANT_A.id, TENANT_A.tillId),
+      currentSif(tx, TENANT_A.id, TENANT_A.nodeId),
     );
     expect(found.id).toBe(second.id);
     expect(found.id).not.toBe(first.id);
@@ -252,12 +254,12 @@ describe("the database, not the application, is what forbids a duplicate", () =>
     // it and would fail even against a correctly-enforced constraint. Confirmed live in this
     // task's red phase.
     const reg = await withTenant(db, TENANT_A.id, (tx) =>
-      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, tillId: TENANT_A.tillId }),
+      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
     );
     const error = await captureError(() =>
       db.execute(sql`
-        insert into registro_sif (tenant_id, till_id, nif, id_sistema_informatico, numero_instalacion, revocado_en)
-        values (${TENANT_A.id}, ${TENANT_A.tillId2}, ${SIF_PARAMS.nif}, ${SIF_PARAMS.idSistemaInformatico},
+        insert into registro_sif (tenant_id, node_id, nif, id_sistema_informatico, numero_instalacion, revocado_en)
+        values (${TENANT_A.id}, ${TENANT_A.nodeId2}, ${SIF_PARAMS.nif}, ${SIF_PARAMS.idSistemaInformatico},
                 ${reg.numeroInstalacion}, now())`),
     );
     expect(pgErrorCode(error)).toBe("23505");
@@ -268,12 +270,12 @@ describe("the database, not the application, is what forbids a duplicate", () =>
     // which is the behaviour that makes never-reuse true across the whole installation rather
     // than within one tenant's visible slice.
     const reg = await withTenant(db, TENANT_A.id, (tx) =>
-      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, tillId: TENANT_A.tillId }),
+      registerSif(tx, { ...SIF_PARAMS, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
     );
     const error = await captureError(() =>
       db.execute(sql`
-        insert into registro_sif (tenant_id, till_id, nif, id_sistema_informatico, numero_instalacion)
-        values (${TENANT_B.id}, ${TENANT_B.tillId}, ${SIF_PARAMS.nif}, ${SIF_PARAMS.idSistemaInformatico},
+        insert into registro_sif (tenant_id, node_id, nif, id_sistema_informatico, numero_instalacion)
+        values (${TENANT_B.id}, ${TENANT_B.nodeId}, ${SIF_PARAMS.nif}, ${SIF_PARAMS.idSistemaInformatico},
                 ${reg.numeroInstalacion})`),
     );
     expect(pgErrorCode(error)).toBe("23505");

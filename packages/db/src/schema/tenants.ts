@@ -65,9 +65,10 @@ export const locations = pgTable(
  * regime-neutral by Global Constraint. Putting them here would mean every
  * future regime either widens this table or leaves columns null, and it would
  * put Spanish column names in a package the Task 3 guard forbids them in. They
- * live in the module-owned `registro_sif` table, keyed by till, built in
- * Task 13. A till has exactly one SIF identity per regime, so the join is 1:1
- * and costs nothing.
+ * live in the module-owned `registro_sif` table, keyed by node (the SIF is
+ * the node — #33, node-id rekey), built in Task 13. A node has exactly one
+ * live SIF identity per regime, so that join is 1:1; a till reaches its SIF
+ * through the node that serves it.
  */
 export const tills = pgTable(
   "tills",

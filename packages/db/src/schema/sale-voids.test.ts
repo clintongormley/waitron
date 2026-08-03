@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { describeEachTarget } from "../testing/harness.js";
 import { asAppUser } from "../testing/roles.js";
+import { seedNode } from "../testing/seed.js";
 import { withTenant } from "../tenancy.js";
 import { invoiceSeries } from "./series.js";
 import { saleVoids } from "./sale-voids.js";
@@ -18,6 +20,10 @@ const AT = "2026-07-20T19:20:30+00:00";
 
 let seriesA = "";
 let seriesB = "";
+// sales.node_id is NOT NULL since the node-id rekey (2026-08-03); a node per tenant keeps the
+// composite (tenant_id, node_id) → nodes FK satisfied.
+let nodeA = "";
+let nodeB = "";
 
 /**
  * Mirrors sales.test.ts's identical seed/saleValues/recordCompleteSale helpers. Those are that
@@ -51,13 +57,15 @@ async function seed(db: Database): Promise<void> {
     { id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" },
     { id: TILL_B1, tenantId: TENANT_B, locationId: LOCATION_B, name: "B1" },
   ]);
+  nodeA = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
+  nodeB = await seedNode(db, brandTenantId(TENANT_B), brandLocationId(LOCATION_B));
   const [a] = await db
     .insert(invoiceSeries)
-    .values({ tenantId: TENANT_A, tillId: TILL_A1, code: "FA", purpose: "standard" })
+    .values({ tenantId: TENANT_A, nodeId: nodeA, code: "FA", purpose: "standard" })
     .returning({ id: invoiceSeries.id });
   const [b] = await db
     .insert(invoiceSeries)
-    .values({ tenantId: TENANT_B, tillId: TILL_B1, code: "FB", purpose: "standard" })
+    .values({ tenantId: TENANT_B, nodeId: nodeB, code: "FB", purpose: "standard" })
     .returning({ id: invoiceSeries.id });
   seriesA = a.id;
   seriesB = b.id;
@@ -67,6 +75,7 @@ function saleValues(overrides: Record<string, unknown> = {}) {
   return {
     tenantId: TENANT_A,
     tillId: TILL_A1,
+    nodeId: nodeA,
     seriesId: seriesA,
     invoiceNumber: 1,
     issuedAt: AT,
@@ -122,6 +131,7 @@ describeEachTarget("sale_voids — tenant isolation", (target) => {
     const saleIdB = await recordCompleteSale(db, {
       tenantId: TENANT_B,
       tillId: TILL_B1,
+      nodeId: nodeB,
       seriesId: seriesB,
       invoiceLocales: ["es"],
       locale: "es",

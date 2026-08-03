@@ -70,12 +70,13 @@ async function getRow(key: { tenantId: string; provider: string; paymentRef: str
   return pg.db.transaction((tx) => getPaymentByRef(tx, key));
 }
 
-/** Seeds a second sale for the SAME tenant as `seeded`, on a second till of that tenant.
+/** Seeds a second sale for the SAME tenant as `seeded`, on a second till + node of that tenant.
  * `associatePaymentWithSale`'s write-once test needs two real sales under one tenant (the
  * composite `payments_sale_fk` requires a payment's `sale_id` to belong to the payment's own
- * tenant), and `seedSale` always plants its `invoice_series` at code "A" for the till it's given —
- * calling it twice against the same till would collide on `invoice_series_till_code_key`. A
- * second till side-steps that without touching `../test/seed.ts`. */
+ * tenant), and `seedSale` always plants its `invoice_series` at code "A" for the node it's given —
+ * since the node-id rekey the series is keyed `(tenant_id, node_id, code)`, so calling it twice
+ * against the same node would collide on `invoice_series_node_code_key`. A second node
+ * side-steps that without touching `../test/seed.ts`. */
 async function seedSecondSale(seeded: Seeded): Promise<string> {
   const [till] = (
     await pg.db.execute<{ location_id: string }>(
@@ -85,7 +86,10 @@ async function seedSecondSale(seeded: Seeded): Promise<string> {
   const till2 = await pg.db.execute<{ id: string }>(sql`
     insert into tills (tenant_id, location_id, name)
     values (${seeded.tenantId}, ${till.location_id}, 'Till 2') returning id`);
-  return seedSale(pg.db, { ...seeded, tillId: till2.rows[0].id });
+  const node2 = await pg.db.execute<{ id: string }>(sql`
+    insert into nodes (tenant_id, location_id, name)
+    values (${seeded.tenantId}, ${till.location_id}, 'Node 2') returning id`);
+  return seedSale(pg.db, { ...seeded, tillId: till2.rows[0].id, nodeId: node2.rows[0].id });
 }
 
 describe("insertCapturedPayment", () => {
@@ -958,8 +962,10 @@ describe("markReconcileRemediated", () => {
   });
 });
 
-/** Seeds a second till + open working order under the SAME tenant/location as `seeded`. Mirrors
- * reconcile.test.ts's own `seedSecondTill` and this file's `seedSecondSale`. */
+/** Seeds a second till + node + open working order under the SAME tenant/location as `seeded`.
+ * Mirrors reconcile.test.ts's own `seedSecondTill` and this file's `seedSecondSale`. The fresh
+ * node keeps each returned `Seeded` self-consistent (its own chain/series key), mirroring
+ * `seedWorkingOrder`. */
 async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
   const [till] = (
     await pg.db.execute<{ location_id: string }>(
@@ -970,9 +976,17 @@ async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
     insert into tills (tenant_id, location_id, name)
     values (${seeded.tenantId}, ${till.location_id}, 'Till 2') returning id`);
   const tillId = till2.rows[0].id;
+  const node2 = await pg.db.execute<{ id: string }>(sql`
+    insert into nodes (tenant_id, location_id, name)
+    values (${seeded.tenantId}, ${till.location_id}, 'Node 2') returning id`);
   const wo2 = await pg.db.execute<{ id: string }>(sql`
     insert into working_orders (tenant_id, till_id) values (${seeded.tenantId}, ${tillId}) returning id`);
-  return { tenantId: seeded.tenantId, tillId, workingOrderId: wo2.rows[0].id };
+  return {
+    tenantId: seeded.tenantId,
+    tillId,
+    nodeId: node2.rows[0].id,
+    workingOrderId: wo2.rows[0].id,
+  };
 }
 
 describe("tillsForWorkingOrders", () => {

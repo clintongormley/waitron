@@ -7,7 +7,7 @@ import { buildQrPayload, computeHuella } from "@waitron/verifactu";
 import type { RegistroAlta } from "@waitron/verifactu";
 import { CORE_MIGRATIONS, asAppUser, incidents, sales, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import type { SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { NodeId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { fromRegistroRow } from "./registro-row.js";
@@ -21,6 +21,7 @@ import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/writ
 let backend: VerifactuBackend;
 let tenantId: TenantId;
 let tillId: TillId;
+let nodeId: NodeId;
 let seriesId: SeriesId;
 let workingOrderId: WorkingOrderId;
 
@@ -41,9 +42,9 @@ let workingOrderId: WorkingOrderId;
 const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, seriesId, workingOrderId } = await seedTenantWithSif(pg.db));
+  ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenantWithSif(pg.db));
   // **Deviation from the brief.** The brief constructed `new VerifactuBackend({ clock:
-  // steadyClock })`. The real constructor also requires `db`: `pendingCount(tenantId, tillId)` is the one
+  // steadyClock })`. The real constructor also requires `db`: `pendingCount(tenantId, nodeId)` is the one
   // `FiscalBackend` method with no `tx` parameter at all, so it cannot participate in a caller's
   // transaction and needs its own connection to query against (`backend.ts`'s own doc comment on
   // `VerifactuBackendOptions.db`).
@@ -61,7 +62,7 @@ async function sell(overrides: Record<string, unknown> = {}) {
     return recordSale(
       tx,
       backend,
-      saleInput({ tenantId, tillId, seriesId, workingOrderId, ...overrides }),
+      saleInput({ tenantId, tillId, nodeId, seriesId, workingOrderId, ...overrides }),
     );
   });
 }
@@ -151,7 +152,7 @@ describe("the write path against the real Veri*Factu backend", () => {
       .select()
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.saleId, saleId));
-    const [head] = await pg.db.select().from(cadenas).where(eq(cadenas.tillId, tillId));
+    const [head] = await pg.db.select().from(cadenas).where(eq(cadenas.nodeId, nodeId));
     expect(head?.secuencia).toBe(1);
     expect(head?.ultimaHuella).toBe(registro?.huella);
     expect(head?.ultimoRegistroId).toBe(registro?.id);
@@ -218,7 +219,11 @@ describe("the write path against the real Veri*Factu backend", () => {
     await expect(
       withTenant(pg.db, tenantId, async (tx) => {
         await asAppUser(tx);
-        await recordSale(tx, backend, saleInput({ tenantId, tillId, seriesId, workingOrderId }));
+        await recordSale(
+          tx,
+          backend,
+          saleInput({ tenantId, tillId, nodeId, seriesId, workingOrderId }),
+        );
         throw new Error("simulated crash after the fiscal write");
       }),
     ).rejects.toThrow("simulated crash");
@@ -234,7 +239,7 @@ describe("the write path against the real Veri*Factu backend", () => {
     // The chain head row itself still exists — `seedTenantWithSif`'s own `registerSif` call
     // created it at provisioning time, in a transaction that already committed — but its
     // `secuencia` is untouched by the rolled-back sale.
-    const [head] = await pg.db.select().from(cadenas).where(eq(cadenas.tillId, tillId));
+    const [head] = await pg.db.select().from(cadenas).where(eq(cadenas.nodeId, nodeId));
     expect(head?.secuencia).toBe(0);
   });
 

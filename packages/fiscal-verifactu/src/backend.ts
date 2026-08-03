@@ -7,16 +7,16 @@ import { eq, sql } from "drizzle-orm";
 import { tenants, withTenant } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { AppError, sumDecimals } from "@waitron/shared";
-import type { SaleId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, TenantId, TillId } from "@waitron/shared";
 import type {
   Counterparty,
   DrainResult,
   FiscalBackend,
   FiscalRecordRef,
   IntegrityReport,
+  NodeRegistration,
   ReconcileResult,
   SaleForFiscalRecord,
-  TillRegistration,
   TrustedClock,
 } from "@waitron/fiscal";
 import { formatInvoiceNumber } from "@waitron/core";
@@ -43,7 +43,7 @@ import type { Entorno, RegistroRow } from "./registro-row.js";
 import { envios } from "./schema/envios.js";
 import { verifyChain } from "./verify.js";
 
-/** `FiscalRecordRef.backend`/`TillRegistration.backend` — the regime-neutral interface's own
+/** `FiscalRecordRef.backend`/`NodeRegistration.backend` — the regime-neutral interface's own
  * "which module produced this" tag. */
 const BACKEND_ID = "verifactu";
 
@@ -51,7 +51,7 @@ const BACKEND_ID = "verifactu";
  * Software-identity fields of `SistemaInformatico` that describe THIS PRODUCT rather than any
  * one tenant, till, or sale — Waitron's own claims about what it is and how it may be used.
  * `IdSistemaInformatico` and `NumeroInstalacion` are deliberately absent from this shape: both
- * are per-(NIF, till) facts already minted by `registerSif` and read back from `registro_sif` via
+ * are per-(NIF, node) facts already minted by `registerSif` and read back from `registro_sif` via
  * `currentSif`, never configuration.
  *
  * **Unverified, matching this repo's own convention for a claim with no cited primary source**
@@ -86,7 +86,7 @@ export interface VerifactuBackendOptions {
    * (see `record-sale.ts`'s own "one clock reading for the whole transaction" note in
    * `packages/core`). `recordVoid` has no caller-supplied timestamp on its signature at all
    * (`recordVoid(tx, saleId, reason)`), so it reads this clock itself. `pendingCount(tenantId,
-   * tillId)` takes no transaction at all, so it needs its OWN `db` handle below rather than one a
+   * nodeId)` takes no transaction at all, so it needs its OWN `db` handle below rather than one a
    * caller passes in.
    */
   clock: TrustedClock;
@@ -101,7 +101,7 @@ export interface VerifactuBackendOptions {
    *
    * A function of `tenantId` because `drain` sweeps every tenant with due work and a certificate
    * identifies one presenter — see `DrainDeps.resolveClient`. Used by `drain` and `reconcile`, not
-   * by `recordSale`/`recordVoid`/`registerTill`/`checkIntegrity`/`pendingCount` — none of those
+   * by `recordSale`/`recordVoid`/`registerNode`/`checkIntegrity`/`pendingCount` — none of those
    * ever contact AEAT (spec §4: nothing here may block a sale on connectivity).
    */
   resolveClient: (tenantId: TenantId) => Promise<VerifactuClient>;
@@ -147,7 +147,12 @@ export interface VerifactuBackendOptions {
  */
 type OriginalAlta = Pick<
   RegistroRow,
-  "tenant_id" | "till_id" | "id_emisor_factura" | "num_serie_factura" | "fecha_expedicion_factura"
+  | "tenant_id"
+  | "till_id"
+  | "node_id"
+  | "id_emisor_factura"
+  | "num_serie_factura"
+  | "fecha_expedicion_factura"
 >;
 
 /**
@@ -173,7 +178,7 @@ type OriginalAltaForCorrection = Pick<
  * (inside `appendToChain` → `buildAltaRecord`), inserts it, advances the chain head, and inserts
  * the `envios` sidecar row as `pendiente` — proven end to end against real tables by
  * `./write-path.e2e.test.ts`, which is the one thing a fake cannot demonstrate at all.
- * `registerTill`/`recordVoid`/`checkIntegrity`/`pendingCount` complete the interface (TypeScript
+ * `registerNode`/`recordVoid`/`checkIntegrity`/`pendingCount` complete the interface (TypeScript
  * requires every one of them) but are secondary to that deliverable; see each method's own doc
  * comment for what it does and does not cover, and this task's report for what remains unverified
  * about them.
@@ -212,26 +217,27 @@ export class VerifactuBackend implements FiscalBackend {
   }
 
   /**
-   * Confirms — rather than performs — a till's Veri*Factu provisioning.
+   * Confirms — rather than performs — a node's Veri*Factu provisioning (node-id rekey, 2026-08-03:
+   * the SIF is the node, #33).
    *
-   * The generic `FiscalBackend.registerTill(tx, tillId, { tenantId })` signature carries no NIF
+   * The generic `FiscalBackend.registerNode(tx, nodeId, { tenantId })` signature carries no NIF
    * and no `IdSistemaInformatico`, so it cannot mint a NEW SIF identity: `registerSif`
    * (`./registro-sif.ts`) genuinely needs both, and both are regime-specific provisioning
    * inputs the generic interface has no room for. `registerSif`'s own doc comment already frames
    * first-time (and re-)registration as a rare, sequential, admin-only action performed once,
    * outside the ordinary sale flow — so this method reads back whatever `registerSif` already
    * established via `currentSif`, and reports `sif.not_registered` (thrown by `currentSif`
-   * itself) exactly like any other caller that reaches a till with no live SIF identity.
+   * itself) exactly like any other caller that reaches a node with no live SIF identity.
    */
-  async registerTill(
+  async registerNode(
     tx: Transaction,
-    tillId: TillId,
+    nodeId: NodeId,
     params: { tenantId: TenantId },
-  ): Promise<TillRegistration> {
-    const sif = await currentSif(tx, params.tenantId, tillId);
+  ): Promise<NodeRegistration> {
+    const sif = await currentSif(tx, params.tenantId, nodeId);
     return {
       backend: BACKEND_ID,
-      tillId,
+      nodeId,
       registrationId: `${sif.nif}/${sif.idSistemaInformatico}/${String(sif.numeroInstalacion)}`,
       registeredAt: sif.registradoEn,
     };
@@ -249,7 +255,7 @@ export class VerifactuBackend implements FiscalBackend {
    * instant for one event.
    */
   async recordSale(tx: Transaction, sale: SaleForFiscalRecord): Promise<FiscalRecordRef> {
-    const sif = await currentSif(tx, sale.tenantId, sale.tillId);
+    const sif = await currentSif(tx, sale.tenantId, sale.nodeId);
     const tenant = await this.legalNameFor(tx, sale.tenantId);
 
     const desglose: DetalleDesgloseInput[] = sale.vatBreakdown.map((line) => ({
@@ -287,8 +293,14 @@ export class VerifactuBackend implements FiscalBackend {
     const appended = await appendToChain(
       tx,
       sale.tenantId,
-      sale.tillId,
-      { tipo: "alta", saleId: sale.saleId, entorno: this.deploymentEnvironment, input },
+      sale.nodeId,
+      {
+        tipo: "alta",
+        saleId: sale.saleId,
+        tillId: sale.tillId,
+        entorno: this.deploymentEnvironment,
+        input,
+      },
       sif,
     );
 
@@ -351,7 +363,7 @@ export class VerifactuBackend implements FiscalBackend {
     void reason;
 
     const { rows } = await tx.execute<OriginalAlta>(sql`
-      select tenant_id, till_id, id_emisor_factura, num_serie_factura, fecha_expedicion_factura
+      select tenant_id, till_id, node_id, id_emisor_factura, num_serie_factura, fecha_expedicion_factura
       from registros_facturacion
       where sale_id = ${saleId} and tipo_registro = 'alta'
       limit 1
@@ -362,8 +374,11 @@ export class VerifactuBackend implements FiscalBackend {
     }
 
     const tenantId = original.tenant_id as TenantId;
+    // The anulación extends the ORIGINAL's chain, keyed by its node (node-id rekey, 2026-08-03),
+    // and inherits the original's `till_id` as its own informational snapshot.
     const tillId = original.till_id as TillId;
-    const sif = await currentSif(tx, tenantId, tillId);
+    const nodeId = original.node_id as NodeId;
+    const sif = await currentSif(tx, tenantId, nodeId);
     const tenant = await this.legalNameFor(tx, tenantId);
     const now = this.clock.now();
 
@@ -406,8 +421,8 @@ export class VerifactuBackend implements FiscalBackend {
     const appended = await appendToChain(
       tx,
       tenantId,
-      tillId,
-      { tipo: "anulacion", saleId, entorno: this.deploymentEnvironment, input },
+      nodeId,
+      { tipo: "anulacion", saleId, tillId, entorno: this.deploymentEnvironment, input },
       sif,
     );
 
@@ -467,7 +482,7 @@ export class VerifactuBackend implements FiscalBackend {
       });
     }
 
-    const sif = await currentSif(tx, sale.tenantId, sale.tillId);
+    const sif = await currentSif(tx, sale.tenantId, sale.nodeId);
     const tenant = await this.legalNameFor(tx, sale.tenantId);
 
     const desglose: DetalleDesgloseInput[] = sale.vatBreakdown.map((line) => ({
@@ -523,8 +538,14 @@ export class VerifactuBackend implements FiscalBackend {
     const appended = await appendToChain(
       tx,
       sale.tenantId,
-      sale.tillId,
-      { tipo: "alta", saleId: sale.saleId, entorno: this.deploymentEnvironment, input },
+      sale.nodeId,
+      {
+        tipo: "alta",
+        saleId: sale.saleId,
+        tillId: sale.tillId,
+        entorno: this.deploymentEnvironment,
+        input,
+      },
       sif,
     );
 
@@ -642,7 +663,7 @@ export class VerifactuBackend implements FiscalBackend {
       });
     }
 
-    const sif = await currentSif(tx, sale.tenantId, sale.tillId);
+    const sif = await currentSif(tx, sale.tenantId, sale.nodeId);
     const tenant = await this.legalNameFor(tx, sale.tenantId);
 
     const desglose: DetalleDesgloseInput[] = sale.vatBreakdown.map((line) => ({
@@ -679,8 +700,14 @@ export class VerifactuBackend implements FiscalBackend {
     const appended = await appendToChain(
       tx,
       sale.tenantId,
-      sale.tillId,
-      { tipo: "alta", saleId: sale.saleId, entorno: this.deploymentEnvironment, input },
+      sale.nodeId,
+      {
+        tipo: "alta",
+        saleId: sale.saleId,
+        tillId: sale.tillId,
+        entorno: this.deploymentEnvironment,
+        input,
+      },
       sif,
     );
 
@@ -703,13 +730,14 @@ export class VerifactuBackend implements FiscalBackend {
   async checkIntegrity(
     tx: Transaction,
     tenantId: TenantId,
-    tillId: TillId,
+    nodeId: NodeId,
   ): Promise<IntegrityReport> {
-    return verifyChain(tx, tenantId, tillId);
+    return verifyChain(tx, tenantId, nodeId);
   }
 
   /**
-   * How many of this till's records AEAT has not yet confirmed — the art. 16.4 unsent count.
+   * How many of this node's records AEAT has not yet confirmed — the art. 16.4 unsent count
+   * (node-id rekey, 2026-08-03: the chain is per-node, so the unsent count is per-node too).
    *
    * Filters on `tenant_id` explicitly (defense-in-depth alongside the RLS policy). `withTenant`
    * sets `app.tenant_id` (transaction-local) so `current_tenant_id()` resolves and the RLS
@@ -718,13 +746,13 @@ export class VerifactuBackend implements FiscalBackend {
    * irrelevant; the count is correct either way, which is why only real Postgres proves this
    * (`pending-count.rls.test.ts`).
    */
-  async pendingCount(tenantId: TenantId, tillId: TillId): Promise<number> {
+  async pendingCount(tenantId: TenantId, nodeId: NodeId): Promise<number> {
     return withTenant(this.db, tenantId, async (tx) => {
       const rows = await tx.execute<{ count: string }>(sql`
         select count(*)::text as count
         from envios e
         join registros_facturacion r on r.id = e.registro_id
-        where r.till_id = ${tillId} and e.tenant_id = ${tenantId} and e.estado = 'pendiente'
+        where r.node_id = ${nodeId} and e.tenant_id = ${tenantId} and e.estado = 'pendiente'
       `);
       return Number(rows.rows[0]!.count);
     });

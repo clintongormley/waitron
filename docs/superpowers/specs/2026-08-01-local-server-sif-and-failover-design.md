@@ -604,3 +604,13 @@ Each gets its own spec once this is approved: the sync/replication protocol betw
 and the cloud mirror; the promotion/fencing tooling and the till-side failover list; the submitter
 role's placement and cert resolution; the counter UX above. This document decides the **topology and
 the division of labour** only.
+
+---
+
+**2026-08-03:** the schema gap §14 left open is closed by the node-id rekey
+(`2026-08-03-node-id-rekey-design.md`); #33's *server* is the code's `node`. That change introduces
+the `nodes` table and re-keys the four fiscal-identity tables (`registro_sif`, `cadenas`,
+`registros_facturacion`, `invoice_series`) from `till_id` to `node_id`, so the "SIF is the compute
+node, not the till" decision this document made is now the schema's shape. The active-active
+sync/replication protocol, promotion/fencing, and the submitter-role split above remain out of scope
+and keep their own specs.

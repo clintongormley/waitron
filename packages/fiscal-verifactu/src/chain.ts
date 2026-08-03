@@ -6,7 +6,7 @@
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import type { TenantId, TillId } from "@waitron/shared";
+import type { NodeId, TenantId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import type { AltaInput, AnulacionInput, Encadenamiento } from "@waitron/verifactu";
 import { buildAltaRecord, buildAnulacionRecord } from "@waitron/verifactu";
@@ -37,16 +37,29 @@ const MAX_APPEND_ATTEMPTS = 3;
  * of the arm that becomes `buildAltaRecord`/`buildAnulacionRecord`'s parameter stops it from ever
  * being accidentally hashed.
  *
+ * `tillId` travels the same way, and for the same reason it is a real column: the immutable
+ * `registros_facturacion.till_id` is an informational SNAPSHOT of where the sale rang (node-id
+ * rekey, 2026-08-03). The chain KEY is the node (`appendToChain`'s parameter); `till_id` is a fact
+ * about the sale, so it rides on the `PendingRegistro` beside `saleId`, never inside `input` — it
+ * is not an AEAT field and must never reach `computeHuella`.
+ *
  * `entorno` travels the identical way, for the identical reason: which environment the caller
  * (`VerifactuBackend`) is generating this record for is this package's own metadata, never AEAT's,
  * so it lives beside `saleId` rather than inside `input` — the one arm that ever reaches
  * `buildAltaRecord`/`buildAnulacionRecord` and, from there, `computeHuella`.
  */
 export type PendingRegistro =
-  | { tipo: "alta"; saleId: string; entorno: Entorno; input: Omit<AltaInput, "Encadenamiento"> }
+  | {
+      tipo: "alta";
+      saleId: string;
+      tillId: string;
+      entorno: Entorno;
+      input: Omit<AltaInput, "Encadenamiento">;
+    }
   | {
       tipo: "anulacion";
       saleId: string;
+      tillId: string;
       entorno: Entorno;
       input: Omit<AnulacionInput, "Encadenamiento">;
     };
@@ -88,7 +101,7 @@ export function isUniqueViolation(error: unknown): boolean {
 async function selectHeadForUpdate(
   tx: Transaction,
   tenantId: TenantId,
-  tillId: TillId,
+  nodeId: NodeId,
 ): Promise<ChainHead | undefined> {
   const [row] = await tx
     .select({
@@ -97,13 +110,13 @@ async function selectHeadForUpdate(
       ultimaHuella: cadenas.ultimaHuella,
     })
     .from(cadenas)
-    .where(and(eq(cadenas.tenantId, tenantId), eq(cadenas.tillId, tillId)))
+    .where(and(eq(cadenas.tenantId, tenantId), eq(cadenas.nodeId, nodeId)))
     .for("update");
   return row;
 }
 
 /**
- * Takes the chain-head row lock, creating the head if this is a fresh till.
+ * Takes the chain-head row lock, creating the head if this is a fresh node.
  *
  * Exported separately from `appendToChain` because art. 7.i verification (a future `verifyChain`,
  * Task 15) must read the last two records under the SAME lock, in the SAME transaction — a
@@ -122,17 +135,17 @@ async function selectHeadForUpdate(
 export async function lockChainHead(
   tx: Transaction,
   tenantId: TenantId,
-  tillId: TillId,
+  nodeId: NodeId,
 ): Promise<ChainHead> {
-  const existing = await selectHeadForUpdate(tx, tenantId, tillId);
+  const existing = await selectHeadForUpdate(tx, tenantId, nodeId);
   if (existing !== undefined) return existing;
 
   await tx
     .insert(cadenas)
-    .values({ tenantId, tillId })
-    .onConflictDoNothing({ target: [cadenas.tenantId, cadenas.tillId] });
+    .values({ tenantId, nodeId })
+    .onConflictDoNothing({ target: [cadenas.tenantId, cadenas.nodeId] });
 
-  const created = await selectHeadForUpdate(tx, tenantId, tillId);
+  const created = await selectHeadForUpdate(tx, tenantId, nodeId);
   /* v8 ignore start */
   if (created === undefined) {
     // Unreachable in practice: the insert above either commits a fresh row or a concurrent
@@ -140,7 +153,7 @@ export async function lockChainHead(
     // whichever row exists. Left in rather than asserted away because a NOT NULL narrowing here
     // is cheaper than a `!` that would hide a real defect behind a TypeError instead of an
     // AppError if this invariant were ever wrong.
-    throw new AppError("chain.append_contention", { tenantId, tillId, attempts: 0 });
+    throw new AppError("chain.append_contention", { tenantId, nodeId, attempts: 0 });
   }
   /* v8 ignore stop */
   return created;
@@ -149,11 +162,11 @@ export async function lockChainHead(
 async function attemptAppend(
   tx: Transaction,
   tenantId: TenantId,
-  tillId: TillId,
+  nodeId: NodeId,
   registro: PendingRegistro,
   sif?: SifRegistration,
 ): Promise<{ id: string; secuencia: number; huella: string }> {
-  const head = await lockChainHead(tx, tenantId, tillId);
+  const head = await lockChainHead(tx, tenantId, nodeId);
   // Chain identity is sif_id, resolved independently of `secuencia` — the two must never be
   // conflated (spec's own finding: secuencia is OUR outbox ordering aid, sif_id is which SIF
   // identity actually generated the record, and neither is derived from the other or from the
@@ -162,13 +175,13 @@ async function attemptAppend(
   // A caller that already fetched the SIF (recordSale/recordVoid) threads it in to avoid a second
   // currentSif round trip. It is stable across the append retry loop — SIF identity does not change
   // mid-append — so it is reused on every attempt. Guarded because a sif for a different (tenant,
-  // till) would silently mis-attribute the record's sif_id: a programming error, so a plain Error.
-  if (sif !== undefined && (sif.tenantId !== tenantId || sif.tillId !== tillId)) {
+  // node) would silently mis-attribute the record's sif_id: a programming error, so a plain Error.
+  if (sif !== undefined && (sif.tenantId !== tenantId || sif.nodeId !== nodeId)) {
     throw new Error(
-      `appendToChain: supplied SIF is for (${sif.tenantId}, ${sif.tillId}), not (${tenantId}, ${tillId})`,
+      `appendToChain: supplied SIF is for (${sif.tenantId}, ${sif.nodeId}), not (${tenantId}, ${nodeId})`,
     );
   }
-  const resolvedSif = sif ?? (await currentSif(tx, tenantId, tillId));
+  const resolvedSif = sif ?? (await currentSif(tx, tenantId, nodeId));
   const secuencia = head.secuencia + 1;
 
   let encadenamiento: Encadenamiento;
@@ -191,7 +204,7 @@ async function attemptAppend(
       // Unreachable while `cadenas.ultimo_registro_id` only ever points at a row this same
       // package wrote: the FK to registros_facturacion(id) and that table's own immutability
       // (no DELETE, no UPDATE — Task 12) together guarantee a non-null pointer always resolves.
-      throw new AppError("chain.append_contention", { tenantId, tillId, attempts: 0 });
+      throw new AppError("chain.append_contention", { tenantId, nodeId, attempts: 0 });
     }
     /* v8 ignore stop */
     encadenamiento = { RegistroAnterior: pointerTo(previous) };
@@ -204,7 +217,8 @@ async function attemptAppend(
 
   const row = toRegistroRow(record, {
     tenantId,
-    tillId,
+    tillId: registro.tillId,
+    nodeId,
     sifId: resolvedSif.id,
     saleId: registro.saleId,
     secuencia,
@@ -225,13 +239,13 @@ async function attemptAppend(
   await tx
     .update(cadenas)
     .set({ secuencia, ultimoRegistroId: inserted.id, ultimaHuella: row.huella })
-    .where(and(eq(cadenas.tenantId, tenantId), eq(cadenas.tillId, tillId)));
+    .where(and(eq(cadenas.tenantId, tenantId), eq(cadenas.nodeId, nodeId)));
 
   return { id: inserted.id, secuencia, huella: row.huella };
 }
 
 /**
- * Appends one record to the (tenant, till) chain, in the caller's transaction.
+ * Appends one record to the (tenant, node) chain, in the caller's transaction.
  *
  * Each attempt runs inside a nested `tx.transaction()`, which Drizzle emits as
  * SAVEPOINT / RELEASE / ROLLBACK TO SAVEPOINT. That is not decoration: in Postgres a unique
@@ -254,14 +268,14 @@ async function attemptAppend(
 export async function appendToChain(
   tx: Transaction,
   tenantId: TenantId,
-  tillId: TillId,
+  nodeId: NodeId,
   registro: PendingRegistro,
   sif?: SifRegistration,
 ): Promise<{ id: string; secuencia: number; huella: string }> {
   for (let attempt = 1; attempt <= MAX_APPEND_ATTEMPTS; attempt++) {
     try {
       return await tx.transaction((nested) =>
-        attemptAppend(nested, tenantId, tillId, registro, sif),
+        attemptAppend(nested, tenantId, nodeId, registro, sif),
       );
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
@@ -269,7 +283,7 @@ export async function appendToChain(
   }
   throw new AppError("chain.append_contention", {
     tenantId,
-    tillId,
+    nodeId,
     attempts: MAX_APPEND_ATTEMPTS,
   });
 }

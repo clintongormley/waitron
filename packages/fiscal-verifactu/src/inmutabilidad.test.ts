@@ -30,13 +30,13 @@ async function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 async function insertRegistro(tx: Transaction, secuencia: number) {
   return tx.execute(sql`
     insert into registros_facturacion (
-      tenant_id, till_id, sif_id, sale_id, secuencia, tipo_registro,
+      tenant_id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       tipo_factura, descripcion_operacion, desglose, cuota_total, importe_total,
       primer_registro, sistema_informatico,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella
     ) values (
-      ${TENANT_A.id}, ${TENANT_A.tillId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
+      ${TENANT_A.id}, ${TENANT_A.tillId}, ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
       ${secuencia}, 'alta',
       '89890001K', ${"A/" + String(secuencia)}, '2026-07-20', 'Waitron SL',
       'F2', 'Venta en establecimiento', '[]'::jsonb, '12.35', '123.45',
@@ -220,7 +220,7 @@ describe("row-level security on every tenant-scoped table in this package", () =
     await probeDb.execute(sql`
       create table cadenas_rls_probe (
         tenant_id uuid not null,
-        till_id uuid not null,
+        node_id uuid not null,
         secuencia integer not null default 0
       )
     `);

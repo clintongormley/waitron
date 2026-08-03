@@ -23,6 +23,7 @@ export type Branded<T, B extends string> = T & { readonly [idBrand]: B };
 export type TenantId = Branded<string, "TenantId">;
 export type LocationId = Branded<string, "LocationId">;
 export type TillId = Branded<string, "TillId">;
+export type NodeId = Branded<string, "NodeId">;
 export type SeriesId = Branded<string, "SeriesId">;
 export type WorkingOrderId = Branded<string, "WorkingOrderId">;
 export type WorkingOrderLineId = Branded<string, "WorkingOrderLineId">;
@@ -45,6 +46,7 @@ function brandId<B extends string>(value: string, kind: B): Branded<string, B> {
 export const tenantId = (value: string): TenantId => brandId(value, "TenantId");
 export const locationId = (value: string): LocationId => brandId(value, "LocationId");
 export const tillId = (value: string): TillId => brandId(value, "TillId");
+export const nodeId = (value: string): NodeId => brandId(value, "NodeId");
 export const seriesId = (value: string): SeriesId => brandId(value, "SeriesId");
 export const workingOrderId = (value: string): WorkingOrderId => brandId(value, "WorkingOrderId");
 export const workingOrderLineId = (value: string): WorkingOrderLineId =>

@@ -31,12 +31,13 @@ declare module "@waitron/shared" {
     /** Attached once a reload's wall-clock comparison proves the wall clock moved backwards
      * while this page's monotonic reference was gone. See ./clock.ts for the detection logic. */
     "clock.jump_detected": { wallClockDeltaSeconds: number; monotonicElapsedSeconds: number };
-    /** Thrown by `FiscalBackend.recordSale`/`recordVoid` for a till with no
-     * `registerTill` call on record. `fiscal.*` here names the domain concept a
-     * generic backend enforces before writing anything — never a regime one:
-     * every backend, whatever its regime, refuses to write for a till it does
-     * not know about. See ./backend.ts and ./testing/fake-backend.ts. */
-    "fiscal.till_not_registered": { tillId: string };
+    /** Thrown by `FiscalBackend.recordSale`/`recordVoid` for a node with no
+     * `registerNode` call on record (node-id rekey, 2026-08-03: the SIF is the
+     * node — #33 — so registration is node-scoped). `fiscal.*` here names the
+     * domain concept a generic backend enforces before writing anything — never
+     * a regime one: every backend, whatever its regime, refuses to write for a
+     * node it does not know about. See ./backend.ts and ./testing/fake-backend.ts. */
+    "fiscal.node_not_registered": { nodeId: string };
     /** Thrown by `FiscalBackend.recordVoid` when the sale it references has no
      * prior `recordSale`. A void is a second record referencing the first
      * (spec §4); there is nothing to reference if the first was never made. */

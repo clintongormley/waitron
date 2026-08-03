@@ -13,11 +13,11 @@ import "@waitron/shared";
  * actually asking.
  *
  * The honest objection, stated rather than skirted: "provisioning" already denotes something ELSE
- * in this repository. `apps/server/src/provision-till.ts`'s `provisionTill` (line 119) registers a
- * till as a Veri*Factu SIF, and that is provisioning too — of a till, not of a deployment. So the
- * prefix is not the unambiguous domain name the convention would ideally get; it is the accurate
- * one for what these codes are about, and the ambiguity is real. A future code about a TILL's
- * provisioning should not land here.
+ * in this repository. `apps/server/src/provision-till.ts`'s `provisionNode` registers a NODE as a
+ * Veri*Factu SIF, and that is provisioning too — of a node, not of a deployment. So the prefix is
+ * not the unambiguous domain name the convention would ideally get; it is the accurate one for what
+ * these codes are about, and the ambiguity is real. A future code about a NODE's provisioning should
+ * not land here.
  *
  * Two of these are settled regardless of how that objection lands: `provisioning.invalid_identifier`
  * and `provisioning.key_generation_failed` SHIPPED in PR #8
@@ -27,9 +27,10 @@ import "@waitron/shared";
  * **That is not why the others kept the prefix**, and an earlier version of this paragraph said it
  * was: it argued that splitting the file between a shipped `provisioning.*` and a newer prefix
  * "would be worse than either alone". The premise is false. A registry carrying several prefixes is
- * this repository's NORM: `apps/server/src/errors.ts` holds six in one file (`server.*` at :19,
- * :34, :48, :98, :106; `tenant.*` :63; `till.*` :74; `sif.*` :90; `deployment.*` :115; `payment.*`
- * :124), `packages/core/src/errors.ts` holds `sale.*` and `chain.*`,
+ * this repository's NORM: `apps/server/src/errors.ts` holds six prefixes in one file (`server.*`,
+ * `tenant.*`, `node.*`, `sif.*`, `deployment.*` and `payment.*`; deliberately not line-numbered —
+ * they drift on every edit, which is how this list went stale on the node_id rekey that dropped
+ * `till.*` for `node.*`), `packages/core/src/errors.ts` holds `sale.*` and `chain.*`,
  * `packages/fiscal/src/errors.ts` holds `clock.*` and `fiscal.*`, `packages/db/src/errors.ts` holds
  * `series.*` and `deployment.*` across two codes — and this very file mixes, at
  * `deployment.unknown_environment` below. Splitting was available, so each unshipped code was
@@ -44,7 +45,7 @@ import "@waitron/shared";
  *   DEPLOYMENT already has" and it carries a `database` param, which makes `deployment.*` look
  *   natural. It is wrong on both counts. `deployment.*` here denotes the environment STAMP and
  *   nothing else — `deployment.already_stamped` (`packages/db/src/errors.ts:44`),
- *   `deployment.environment_mismatch` (`apps/server/src/errors.ts:115`) and
+ *   `deployment.environment_mismatch` (`apps/server/src/errors.ts:120`) and
  *   `deployment.unknown_environment` below are all about WHICH ENVIRONMENT a deployment belongs to,
  *   and this code is about none of that. Two of the four things it covers are `pg_database` and
  *   `pg_roles`, which are cluster-global and readable with no deployment in existence
@@ -86,7 +87,7 @@ declare module "@waitron/shared" {
      * has: `credentials.unknown_purpose` is `{ purpose, known }`
      * (`packages/credentials/src/errors.ts:64`) — it names the CONCEPT. So do both `deployment.*`
      * siblings: `{stamped, requested}` (`packages/db/src/errors.ts:44`) and
-     * `{databaseEnvironment, hostEnvironment}` (`apps/server/src/errors.ts:115`). Every param named
+     * `{databaseEnvironment, hostEnvironment}` (`apps/server/src/errors.ts:120`). Every param named
      * `value` in the whole registry belongs instead to a code about an input that failed a FORMAT
      * check — `shared.invalid_id`, `shared.invalid_decimal`, `shared.decimal_overflow`,
      * `server.config_invalid`, `sif.id_sistema_invalid`, and `provisioning.invalid_identifier`
