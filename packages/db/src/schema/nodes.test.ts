@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import type { Database } from "../client.js";
-import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
+import { captureError, pgErrorCode } from "../testing/errors.js";
 import { describeEachTarget } from "../testing/harness.js";
 import { asAppUser } from "../testing/roles.js";
 import { withTenant } from "../tenancy.js";
@@ -170,32 +170,27 @@ describeEachTarget("nodes schema", (target) => {
     expect(seenByB[0]?.tenantId).toBe(TENANT_B);
   });
 
-  it("lets the app role insert a node for its own tenant, and rejects a smuggled tenant id", async () => {
-    // The GRANT INSERT + WITH CHECK half of the policy, mirroring tenancy.test.ts's
-    // tills assertions. The positive insert is the one test that fails if app_user
-    // cannot write nodes at all (an over-narrow grant); the negative proves WITH
-    // CHECK stops a cross-tenant write.
-    const inserted = await withTenant(db, TENANT_A, async (tx) => {
-      await asAppUser(tx);
-      return tx
-        .insert(nodes)
-        .values({ tenantId: TENANT_A, locationId: LOCATION_A, name: "App node" })
-        .returning({ id: nodes.id });
-    });
-    // Read back as the owner (superuser, bypasses RLS): a pure check on the write
-    // path, not a second read-side RLS check.
-    const [row] = await db.select().from(nodes).where(eq(nodes.id, inserted[0].id));
-    expect(row?.tenantId).toBe(TENANT_A);
-
-    // WITH CHECK rejects a node carrying another tenant's id.
+  it("denies the app role INSERT on nodes — the grant is SELECT-only", async () => {
+    // Least privilege (0017_nodes_rls.sql): unlike `tills`, `app_user` holds SELECT
+    // and NOT INSERT/UPDATE on `nodes`, so `nodes` follows `tenants` (SELECT only)
+    // rather than `tills`. No app-role code path writes a node — the running POS only
+    // reads them, and node rows are owner-provisioned (seedNode and the fixtures insert
+    // as the connection owner). So an app_user INSERT is refused at the table-privilege
+    // check with 42501 (insufficient_privilege), which PostgreSQL evaluates BEFORE the
+    // RLS policy — the row never reaches the FOR ALL policy's WITH CHECK, which is why
+    // this asserts the permission SQLSTATE and not a row-level-security message. Runs
+    // against real Postgres too (describeEachTarget): PGlite's connection is superuser,
+    // but `asAppUser`'s `SET LOCAL ROLE app_user` drops to the non-superuser role, under
+    // which the missing grant bites on both targets. This is the assertion that fails if
+    // the grant is ever widened back to mirror `tills`.
     const error = await captureError(() =>
       withTenant(db, TENANT_A, async (tx) => {
         await asAppUser(tx);
         await tx
           .insert(nodes)
-          .values({ tenantId: TENANT_B, locationId: LOCATION_A, name: "smuggled" });
+          .values({ tenantId: TENANT_A, locationId: LOCATION_A, name: "App node" });
       }),
     );
-    expect(pgErrorMessage(error)).toMatch(/row-level security/i);
+    expect(pgErrorCode(error)).toBe("42501");
   });
 });
