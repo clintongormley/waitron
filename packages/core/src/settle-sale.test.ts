@@ -37,11 +37,13 @@ const SETTLED_AT = new Date("2026-08-01T12:00:00Z");
  * `test/fixtures.ts`'s `seedTenant` relies on for the tenant/till/node/series it seeds. Written on
  * the NEW schema: `total` is the only money column left (the tip moved to `tenders.tip_amount` and
  * `amount_charged` was dropped in migration 0012), and `node_id` is NOT NULL (node-id rekey).
+ * `correctsSaleId` defaults to NULL for an ordinary sale; pass it to seed a rectificativa correcting
+ * another sale (its negative/positive total is what `sales_total_ck` permits once it is set).
  */
 async function seedSale(
   db: Database,
   seed: { tenantId: TenantId; tillId: TillId; nodeId: NodeId; seriesId: SeriesId },
-  overrides: { total?: string; invoiceNumber?: number } = {},
+  overrides: { total?: string; invoiceNumber?: number; correctsSaleId?: SaleId } = {},
 ): Promise<SaleId> {
   const [row] = await db
     .insert(sales)
@@ -58,6 +60,7 @@ async function seedSale(
       invoiceLocales: ["es-ES"],
       fiscalBackend: "fake",
       fiscalState: "recorded",
+      correctsSaleId: overrides.correctsSaleId,
     })
     .returning({ id: sales.id });
   return brandSaleId(row!.id);
@@ -409,11 +412,11 @@ describe("settleSale — error propagation", () => {
     const fakeTx = {
       select: () => ({
         from: () => ({
-          // 1: the sale row; 2: sale_voids (none); 3: existing settlement (none).
+          // 1: the sale row (total + folded corrections); 2: sale_voids (none); 3: settlement (none).
           where: () => {
             selects += 1;
             return selects === 1
-              ? Promise.resolve([{ tillId: "t", total: "0.00" }])
+              ? Promise.resolve([{ tillId: "t", total: "0.00", corrections: "0.00" }])
               : Promise.resolve([]);
           },
         }),
@@ -449,11 +452,11 @@ describe("settleSale — error propagation", () => {
     const fakeTx = {
       select: () => ({
         from: () => ({
-          // 1: the sale row (total 65.00); 2: sale_voids (none); 3: existing settlement (none).
+          // 1: the sale row (total 65.00, no corrections); 2: sale_voids (none); 3: settlement (none).
           where: () => {
             selects += 1;
             return selects === 1
-              ? Promise.resolve([{ tillId: "t", total: "65.00" }])
+              ? Promise.resolve([{ tillId: "t", total: "65.00", corrections: "0.00" }])
               : Promise.resolve([]);
           },
         }),
@@ -496,7 +499,7 @@ describe("settleSale — error propagation", () => {
           where: () => {
             selects += 1;
             return selects === 1
-              ? Promise.resolve([{ tillId: "t", total: "65.00" }])
+              ? Promise.resolve([{ tillId: "t", total: "65.00", corrections: "0.00" }])
               : Promise.resolve([]);
           },
         }),
@@ -515,5 +518,154 @@ describe("settleSale — error propagation", () => {
     );
     expect(error).not.toBeInstanceOf(AppError);
     expect(pgErrorCode(error)).toBe("53100");
+  });
+});
+
+// Insert tenders then a settlement row directly, as the app role — bypassing settleSale so the
+// coverage TRIGGER is what is under test. Tenders first: tenders_reject_post_settlement (WT002)
+// rejects a tender once a settlement row exists.
+async function settleDirect(
+  db: Database,
+  tenantId: TenantId,
+  saleId: SaleId,
+  amount: string,
+): Promise<void> {
+  await withTenant(db, tenantId, async (tx) => {
+    await asAppUser(tx);
+    await tx.insert(tenders).values({
+      tenantId,
+      saleId,
+      method: "cash",
+      amount,
+      tipAmount: "0.00",
+      settledAt: SETTLED_AT.toISOString(),
+    });
+    await tx
+      .insert(saleSettlements)
+      .values({ tenantId, saleId, settledAt: SETTLED_AT.toISOString() });
+  });
+}
+
+describe("coverage trigger nets corrections", () => {
+  it("accepts the net: 65 covers a 70 sale corrected by -5", async () => {
+    const seed = await seedTenant(postgres.admin);
+    const originalId = await seedSale(postgres.admin, seed, { total: "70.00", invoiceNumber: 1 });
+    await seedSale(postgres.admin, seed, {
+      total: "-5.00",
+      invoiceNumber: 2,
+      correctsSaleId: originalId,
+    });
+
+    await settleDirect(postgres.admin, seed.tenantId, originalId, "65.00");
+
+    const settled = await postgres.admin
+      .select()
+      .from(saleSettlements)
+      .where(eq(saleSettlements.saleId, originalId));
+    expect(settled).toHaveLength(1);
+  });
+
+  it("rejects the pre-correction total: 70 against a 70 sale corrected by -5 (net 65)", async () => {
+    const seed = await seedTenant(postgres.admin);
+    const originalId = await seedSale(postgres.admin, seed, { total: "70.00", invoiceNumber: 1 });
+    await seedSale(postgres.admin, seed, {
+      total: "-5.00",
+      invoiceNumber: 2,
+      correctsSaleId: originalId,
+    });
+
+    const error = await captureError(() =>
+      settleDirect(postgres.admin, seed.tenantId, originalId, "70.00"),
+    );
+    expect(error).toBeDefined();
+
+    const settled = await postgres.admin
+      .select()
+      .from(saleSettlements)
+      .where(eq(saleSettlements.saleId, originalId));
+    expect(settled).toHaveLength(0);
+  });
+
+  it("negative control: an uncorrected sale still needs its exact total (65 rejected on a 70 sale)", async () => {
+    const seed = await seedTenant(postgres.admin);
+    const originalId = await seedSale(postgres.admin, seed, { total: "70.00", invoiceNumber: 1 });
+
+    const error = await captureError(() =>
+      settleDirect(postgres.admin, seed.tenantId, originalId, "65.00"),
+    );
+    expect(error).toBeDefined();
+
+    const settled = await postgres.admin
+      .select()
+      .from(saleSettlements)
+      .where(eq(saleSettlements.saleId, originalId));
+    expect(settled).toHaveLength(0);
+  });
+});
+
+describe("settleSale nets corrections into the due", () => {
+  it("settles a corrected sale at the net (70 corrected by -5, pay 65)", async () => {
+    const seed = await seedTenant(postgres.admin);
+    const originalId = await seedSale(postgres.admin, seed, { total: "70.00", invoiceNumber: 1 });
+    await seedSale(postgres.admin, seed, {
+      total: "-5.00",
+      invoiceNumber: 2,
+      correctsSaleId: originalId,
+    });
+
+    await settle(postgres.admin, seed.tenantId, {
+      tenantId: seed.tenantId,
+      saleId: originalId,
+      tenders: [{ method: "cash", amount: "65.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+    });
+
+    const settled = await postgres.admin
+      .select()
+      .from(saleSettlements)
+      .where(eq(saleSettlements.saleId, originalId));
+    expect(settled).toHaveLength(1);
+  });
+
+  it("shortfall's due is the net: paying the pre-correction 70 on a -5-corrected sale is rejected", async () => {
+    const seed = await seedTenant(postgres.admin);
+    const originalId = await seedSale(postgres.admin, seed, { total: "70.00", invoiceNumber: 1 });
+    await seedSale(postgres.admin, seed, {
+      total: "-5.00",
+      invoiceNumber: 2,
+      correctsSaleId: originalId,
+    });
+
+    await expect(
+      settle(postgres.admin, seed.tenantId, {
+        tenantId: seed.tenantId,
+        saleId: originalId,
+        tenders: [{ method: "cash", amount: "70.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+      }),
+    ).rejects.toMatchObject({
+      code: "sale.tender_shortfall",
+      params: { saleId: originalId, due: "65.00", charged: "70.00" },
+    });
+  });
+
+  it("nets a correcting-up corrective (70 corrected by +5, pay 75)", async () => {
+    const seed = await seedTenant(postgres.admin);
+    const originalId = await seedSale(postgres.admin, seed, { total: "70.00", invoiceNumber: 1 });
+    await seedSale(postgres.admin, seed, {
+      total: "5.00",
+      invoiceNumber: 2,
+      correctsSaleId: originalId,
+    });
+
+    await settle(postgres.admin, seed.tenantId, {
+      tenantId: seed.tenantId,
+      saleId: originalId,
+      tenders: [{ method: "cash", amount: "75.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+    });
+
+    const settled = await postgres.admin
+      .select()
+      .from(saleSettlements)
+      .where(eq(saleSettlements.saleId, originalId));
+    expect(settled).toHaveLength(1);
   });
 });

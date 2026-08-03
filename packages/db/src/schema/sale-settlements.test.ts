@@ -237,7 +237,9 @@ describeEachTarget("sale settlements — coverage on the settlement INSERT", (ta
     // sale_settlements INSERT, not at sale COMMIT. The coverage RAISE carries no
     // custom ERRCODE, so the message is its interface (there is no dedicated
     // SQLSTATE to assert); a wrong-reason failure — an RLS 42501, a 23514 — would
-    // not carry this text.
+    // not carry this text. Since migration 0021 the message reads
+    // `sale.total + corrections + tips`: this sale has no rectificativa, so
+    // corrections = 0 and the refusal is unchanged — only the wording moved.
     const saleId = await recordSale(db, "70.00", [{ method: "cash", amount: "50.00" }]);
     const error = await captureError(() =>
       db.insert(saleSettlements).values({ tenantId: TENANT_A, saleId, settledAt: AT }),
@@ -246,7 +248,9 @@ describeEachTarget("sale settlements — coverage on the settlement INSERT", (ta
     // custom ERRCODE); pinning it as well as the message rules out a wrong-reason
     // failure (an RLS 42501, a 23514) whose text merely failed to match.
     expect(pgErrorCode(error)).toBe("P0001");
-    expect(pgErrorMessage(error)).toMatch(/tenders for sale .* but sale\.total \+ tips is/);
+    expect(pgErrorMessage(error)).toMatch(
+      /tenders for sale .* but sale\.total \+ corrections \+ tips is/,
+    );
   });
 
   it.runIf(target.name === "postgres")(
@@ -281,7 +285,9 @@ describeEachTarget("sale settlements — coverage on the settlement INSERT", (ta
         }),
       );
       expect(pgErrorCode(error)).toBe("P0001");
-      expect(pgErrorMessage(error)).toMatch(/tenders for sale .* but sale\.total \+ tips is/);
+      expect(pgErrorMessage(error)).toMatch(
+        /tenders for sale .* but sale\.total \+ corrections \+ tips is/,
+      );
     },
   );
 });

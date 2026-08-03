@@ -148,6 +148,13 @@
       "when": 1785761211246,
       "tag": "0020_invoice_series_node_composite_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1785765680648,
+      "tag": "0021_sale_settlement_correction_aware",
+      "breakpoints": true
     }
   ]
 }

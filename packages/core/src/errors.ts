@@ -72,7 +72,9 @@ import "@waitron/shared";
  * code) — which holds a `saleId` and no `workingOrderId` (design §4, decision 2). The CODES are
  * unchanged, only their params: codes are never renamed once shipped, so a param re-shape is the
  * only move available. `sale.tender_shortfall`'s identity is now `sum(amount) = total +
- * sum(tip_amount)` because the tip moved off the sale and onto each tender (`tenders.tip_amount`).
+ * sum(corrections) + sum(tip_amount)`: the tip moved off the sale and onto each tender
+ * (`tenders.tip_amount`), and `due` nets in every rectificativa correcting the sale (invoice-first
+ * slice, 2026-08-03 — in lockstep with migration 0021's coverage trigger).
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
@@ -84,9 +86,14 @@ declare module "@waitron/shared" {
      * never a `workingOrderId` (decision 2 — codes are never renamed once shipped, only re-shaped). */
     "sale.tender_unsettled": { tillId: string; saleId: string; unsettledCount: number };
     /** Raised by the settlement path (like `sale.tender_unsettled`, from both the inline and the
-     * deferred half) when every tender has settled but `sum(amount) = total + sum(tip_amount)` does
-     * not hold — the tip now lives per tender (`tenders.tip_amount`), not on the sale. Despite the
-     * name it still fires in BOTH directions: `charged` under OR over `due`. Kept distinct from
+     * deferred half) when every tender has settled but
+     * `sum(amount) = total + sum(corrections) + sum(tip_amount)` does not hold — the tip now lives
+     * per tender (`tenders.tip_amount`), not on the sale, and `due` nets in every rectificativa
+     * correcting this sale (signed `sales.total` where `corrects_sale_id = saleId`; usually
+     * negative), so a corrected-down sale settles at the corrected amount (invoice-first slice,
+     * 2026-08-03). This matches migration 0021's coverage trigger identity in lockstep, so the app
+     * check and the trigger cannot drift. Despite the name it still fires in BOTH directions:
+     * `charged` under OR over `due`. Kept distinct from
      * `sale.tender_unsettled` so a translator can tell "still waiting on a payment" from "the
      * payments don't add up" apart. Sale-centric `saleId`, never `workingOrderId` — codes are never
      * renamed once shipped (design §4). */

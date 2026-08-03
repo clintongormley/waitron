@@ -123,12 +123,13 @@ export async function seedRectificativeSeries(
  * RLS-bypassing path `seedTenant` uses. For tests that need an ORIGINAL sale to correct without
  * routing it through `recordSale` (so it has NO backend fiscal record, or so a cross-tenant
  * original can be planted under another tenant). Written on the current schema: `total` is the
- * only money column, and `correctsSaleId` is left NULL for an ordinary original.
+ * only money column. `correctsSaleId` defaults to NULL for an ordinary original; pass it to seed a
+ * rectificativa instead (its negative/positive total is what `sales_total_ck` permits once it is set).
  */
 export async function seedBareSale(
   db: Database,
   seed: { tenantId: TenantId; tillId: TillId; nodeId: NodeId; seriesId: SeriesId },
-  overrides: { total?: string; invoiceNumber?: number } = {},
+  overrides: { total?: string; invoiceNumber?: number; correctsSaleId?: SaleId } = {},
 ): Promise<SaleId> {
   const [row] = await db
     .insert(sales)
@@ -145,6 +146,7 @@ export async function seedBareSale(
       invoiceLocales: ["es-ES"],
       fiscalBackend: "fake",
       fiscalState: "recorded",
+      correctsSaleId: overrides.correctsSaleId,
     })
     .returning({ id: sales.id });
   return brandSaleId(row!.id);
