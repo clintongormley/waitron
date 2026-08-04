@@ -162,6 +162,13 @@
       "when": 1785854321828,
       "tag": "0022_locations_provisioning_reshape",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1785855538342,
+      "tag": "0023_locations_columns",
+      "breakpoints": true
     }
   ]
 }

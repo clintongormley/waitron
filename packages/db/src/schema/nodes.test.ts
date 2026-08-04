@@ -211,4 +211,16 @@ describeEachTarget("nodes schema", (target) => {
       expect(indexes).not.toContain("tenants_nif_key");
     });
   });
+
+  it("locations carry fiscal_territory, an address, time_zone and day_cutover", async () => {
+    const cols = await db.execute<{ column_name: string; is_nullable: string }>(sql`
+      select column_name, is_nullable from information_schema.columns where table_name = 'locations'`);
+    const byName = new Map(cols.rows.map((r) => [r.column_name, r.is_nullable]));
+    expect(byName.get("fiscal_territory")).toBe("NO");
+    expect(byName.get("time_zone")).toBe("NO");
+    expect(byName.get("day_cutover")).toBe("NO");
+    for (const a of ["address_line1", "address_line2", "postal_code", "city", "province"]) {
+      expect(byName.has(a)).toBe(true);
+    }
+  });
 });
