@@ -22,7 +22,17 @@ function uuidV5(name: string, namespace: string): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
-/** The obligado's stable tenant id, derived from its fiscal identity. */
+/**
+ * The obligado's stable tenant id, derived from its fiscal identity.
+ *
+ * INVARIANT: any future PRODUCTION tenant-creation path MUST derive its id through this function,
+ * never a random one. `applyVenue`'s re-run idempotency adopts this derived id as its RLS scope and
+ * inserts the tenant with `ON CONFLICT DO NOTHING` (venue-apply.ts), and `locations.tenant_id`
+ * FK-references `tenants.id` (0000_tenancy.sql) — a second path that minted a RANDOM id for the same
+ * (country, tax_id) would make the re-run's ON CONFLICT a no-op while the scope adopts the derived
+ * id, so every location insert would fail the FK. `venue` is the only such path today; `seedTenant`
+ * and the fixtures use `defaultRandom()` ids but are test-only.
+ */
 export function obligadoTenantId(country: string, taxId: string): string {
   return uuidV5(`${country}\n${taxId}`, OBLIGADO_NAMESPACE);
 }

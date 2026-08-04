@@ -7,6 +7,7 @@ import type { CliDeps } from "./cli.js";
 import type { InstanceState, RoleFacts } from "./instance-state.js";
 import type { VenueAction } from "./venue-plan.js";
 import type { VenueApplyDeps, VenueResult } from "./venue-apply.js";
+import { obligadoTenantId } from "./tenant-id.js";
 
 const DATABASE = "waitron_demo";
 const ADMIN_URI = "postgres://admin:adminsecret@db.example:5432/postgres";
@@ -1085,6 +1086,25 @@ describe("runCli venue", () => {
     expect(h.lines.join("\n")).toContain('provisioning.invalid_country {"value":"ESP"}');
     expect(h.connect).not.toHaveBeenCalled();
     expect(h.applyVenue).not.toHaveBeenCalled();
+  });
+
+  it("upper-cases the country so es and ES resolve to the same obligado", async () => {
+    // ISO-3166 alpha-2 is upper-case by convention, but an operator may type `es`. The derived
+    // tenant id hashes `country` verbatim (tenant-id.ts) and `(country, tax_id)` is a case-sensitive
+    // unique index, so `es` and `ES` must NOT mint two permanent obligados — the CLI normalises to
+    // upper-case at the boundary, which is what makes a D8 re-run reuse the same obligado.
+    const args = VENUE_ARGS.map((arg) => (arg === "ES" ? "es" : arg));
+    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const code = await runCli([...args, "--yes"], h.deps);
+    expect(code).toBe(0);
+
+    const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
+    const ensureTenant = actions.find((action) => action.kind === "ensure-tenant");
+    expect(ensureTenant).toMatchObject({
+      kind: "ensure-tenant",
+      country: "ES",
+      tenantId: obligadoTenantId("ES", "B12345678"),
+    });
   });
 
   it("refuses a database name outside the identifier rule before connecting", async () => {

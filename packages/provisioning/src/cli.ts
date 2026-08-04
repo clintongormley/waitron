@@ -539,8 +539,13 @@ async function withState(
  * connection to manage — no cluster-admin handle, no second read, no target that may not exist yet.
  * That is why this is a thinner helper than `withState` rather than a reuse of it.
  *
- * A failure from `deps.connect` or from `body` propagates untouched; the caller's `try/catch` maps
- * an `AppError` and rethrows the rest (a broken socket or a bug), the same contract as `instance`.
+ * A failure from `deps.connect` or from `body` propagates untouched. Unlike `instance`'s
+ * `withState`, this helper does NOT wrap the connect in `asUnreadable`, so a SQLSTATE-bearing connect
+ * failure (the target database is absent, or the admin URI lacks privilege on it) surfaces through
+ * the caller's outer `try/catch` as an unexpected error rather than a structured
+ * `provisioning.state_unreadable`. That outer `try/catch` still maps a thrown `AppError` and rethrows
+ * the rest (a broken socket or a bug). Giving `venue` the same `state_unreadable` mapping would make
+ * the two contracts match; today they do not, and this comment says so rather than claiming they do.
  */
 async function withVenueState(
   adminUri: string,
@@ -691,15 +696,22 @@ function assertEnvironment(environment: string): DeploymentEnvironment {
 
 /** The shape of an ISO-3166-1 alpha-2 country code — two ASCII letters. Not a membership check
  * (there is no list here): it rejects the typo an operator makes, `ESP` or `E1`, before the derived
- * tenant id (tenant-id.ts) is built from it. Passed through unchanged — normalising the case would
- * change that derived id, which is how a re-run finds the same obligado. `value` is echoed: it is
- * operator-typed configuration, never a secret. */
+ * tenant id (tenant-id.ts) is built from it. The regex accepts either case, but the value is
+ * UPPER-CASED before it is returned, and that is load-bearing: `obligadoTenantId(country, taxId)`
+ * hashes `country` verbatim and `(country, tax_id)` is a case-sensitive unique index, so `es` and
+ * `ES` would otherwise derive DIFFERENT tenant ids and mint two permanent, unmergeable obligados —
+ * a re-run meant to add a shop would silently start a second SIF chain instead of reusing the first.
+ * Upper-casing collapses them to the one obligado (ISO-3166 alpha-2 is upper-case by convention),
+ * which is what makes a D8 re-run reuse work; there is no data to preserve either way (pre-production,
+ * no backfill). The returned value flows into `VenueRequest.country`, so both the derived id and the
+ * `tenants` row carry the normalised code. `value` is echoed: it is operator-typed configuration,
+ * never a secret. */
 const COUNTRY = /^[A-Za-z]{2}$/;
 function assertCountry(value: string): string {
   if (!COUNTRY.test(value)) {
     throw new AppError("provisioning.invalid_country", { value });
   }
-  return value;
+  return value.toUpperCase();
 }
 
 /**
