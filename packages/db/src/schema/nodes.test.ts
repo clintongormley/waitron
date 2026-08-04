@@ -223,4 +223,12 @@ describeEachTarget("nodes schema", (target) => {
       expect(byName.has(a)).toBe(true);
     }
   });
+
+  it("nodes record the resolved filing_module and tax_module", async () => {
+    const cols = await db.execute<{ column_name: string }>(sql`
+      select column_name from information_schema.columns where table_name = 'nodes'`);
+    const names = cols.rows.map((r) => r.column_name);
+    expect(names).toContain("filing_module");
+    expect(names).toContain("tax_module");
+  });
 });

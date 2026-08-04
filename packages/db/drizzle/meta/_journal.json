@@ -169,6 +169,13 @@
       "when": 1785855538342,
       "tag": "0023_locations_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1785856430493,
+      "tag": "0024_nodes_modules",
+      "breakpoints": true
     }
   ]
 }
