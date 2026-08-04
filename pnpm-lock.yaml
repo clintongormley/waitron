@@ -162,6 +162,9 @@ importers:
       '@waitron/fiscal':
         specifier: workspace:*
         version: link:../fiscal
+      '@waitron/identity':
+        specifier: workspace:*
+        version: link:../identity
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared

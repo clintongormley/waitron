@@ -17,6 +17,7 @@ import {
   withTenant,
 } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
 import { recordCorrection } from "./record-correction.js";
 import type { RecordCorrectionInput } from "./record-correction.js";
 import { recordSale } from "./record-sale.js";
@@ -30,13 +31,17 @@ let nodeId: NodeId;
 let seriesId: SeriesId; // the ordinary (purpose='standard') series seedTenant creates
 let rectSeriesId: SeriesId; // a purpose='rectificative' series on the same node
 let workingOrderId: WorkingOrderId;
+// A manager shift session authorizes the ONE precondition void this suite performs — recordVoid now
+// requires `sale.void`, and only the void's authorization matters here, not the correction's caller.
+let voidSessionId: string;
 
 // PGlite for everything in this file: the guards here are pure logic (an unknown id, a series of
 // the wrong purpose, an unsettled corrective) that a superuser backend exercises just as well as a
 // forced-RLS one. The two cross-tenant "hidden reads as not-found" cases genuinely need RLS and
 // live in record-correction.rls.test.ts (real Postgres), per the plan's §6 target split.
 const suite = usePgliteDb({
-  migrations: [CORE_MIGRATIONS],
+  // IDENTITY_MIGRATIONS after CORE: recordVoid now calls `authorize`, which reads persons/sessions.
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   // FakeFiscalBackend.recordSale/recordCorrection/checkIntegrity read and write
   // fake_node_registrations/fake_fiscal_records, and nothing else creates those tables.
   setup: (db) => FakeFiscalBackend.install(db),
@@ -46,6 +51,16 @@ const suite = usePgliteDb({
 beforeEach(async () => {
   ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenant(suite.db));
   rectSeriesId = await seedRectificativeSeries(suite.db, tenantId, nodeId);
+  // Seed a manager (holds `sale.void`) as the superuser owner and open its session, exactly as the
+  // record-void suite does — the precondition void below needs an authorizer.
+  const { rows } = await suite.db.execute<{ id: string }>(
+    sql`insert into persons (tenant_id, display_name, pin_hash, role)
+        values (${tenantId}, 'P', ${hashPin("1234")}, 'manager') returning id`,
+  );
+  const session = await withTenant(suite.db, tenantId, (tx) =>
+    loginWithPin(tx, { tenantId, tillId, personId: rows[0]!.id, pin: "1234" }),
+  );
+  voidSessionId = session.id;
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -251,7 +266,7 @@ describe("recordCorrection — the sale being corrected", () => {
     const { saleId } = await sell(backend);
     await withTenant(suite.db, tenantId, async (tx) => {
       await asAppUser(tx);
-      await recordVoid(tx, backend, saleId, "Wrong table");
+      await recordVoid(tx, backend, saleId, "Wrong table", { sessionId: voidSessionId });
     });
     await expect(correct(backend, saleId)).rejects.toMatchObject({
       code: "sale.voided",
