@@ -11,8 +11,8 @@ exact quote + page instead of re-reading the whole thing. It follows the house r
 then paraphrase" — the Spanish is verbatim; the English is a gloss, never a substitute.
 
 **Verification.** Every quote below was read **against the pinned PDF page** (pages 6–15, 22–24,
-37–43), not paraphrased from memory or from a summary. Sections of the FAQ not yet indexed here are
-listed at the bottom; add them the same way (verbatim + page) when a task needs them.
+28–33, 37–43, 47–52), not paraphrased from memory or from a summary. Sections of the FAQ not yet
+indexed here are listed at the bottom; add them the same way (verbatim + page) when a task needs them.
 
 **Companion:** [verifactu-findings.md](verifactu-findings.md) (findings on primary law/BOE),
 [asesor-questions.md](asesor-questions.md) (open questions).
@@ -255,17 +255,106 @@ AEAT's Veri\*Factu services have been in production **since 23 April 2025** (§2
 compliance timeline in [action-plan.md](action-plan.md) — v1.3 pushed the mandatory dates from 2026 to
 **2027** (per RDL 15/2025).
 
+## 17. The chain-integrity check before every RF; and modes (*SOLO Veri\*Factu* vs *DUAL*)
+
+Art. 7.i OM HAC/1177/2024 — before generating each RF (except the first), the SIF checks the previous one:
+
+> 7.i) Salvo cuando se trate del primer registro de facturación, cada vez que el sistema informático vaya
+> a generar un nuevo registro de facturación, de alta o de anulación, antes deberá comprobar que se
+> cumplen los siguientes requisitos: 1.º El último registro de facturación generado está correctamente
+> encadenado. 2.º La fecha y hora de generación del último registro de facturación generado no es superior
+> en más de un minuto a la fecha y hora actuales que se utilizarán para fechar el registro de facturación
+> a generar.
+>
+> — **FAQ §15, p.28**
+
+The check is instant and just enforces chronological order; it must not slow the sale:
+
+> La comprobación del encadenamiento es un algoritmo que puede calcularse de forma instantánea y que no
+> debería tener impacto perceptible en el tiempo del proceso de la venta. En cuanto al tema temporal basta
+> con que el sistema SOLO admita la generación de los RFs por el orden cronológico en que se encolen […]
+>
+> — **FAQ §15, p.29**
+
+Mode matters for the *registro de eventos*: a **SOLO Veri\*Factu** SIF needs none; a **DUAL** SIF (usable
+in either mode) must implement one:
+
+> El productor de un SIF que solo puede actuar exclusivamente en modo VERI\*FACTU («SOLO VERI\*FACTU»), no
+> está obligado a implementar en él un registro de eventos […] Sin embargo, si el SIF puede ser utilizado
+> para actuar en modo VERI\*FACTU o «NO VERI\*FACTU» (SIF «DUAL»), deberá obligatoriamente implementar en
+> dicho SIF un registro de eventos […]
+>
+> — **FAQ §15, p.30**
+
+**Bears on:** `CLAUDE.md` §5's chain-integrity check and the outbox's chronological `secuencia`; and the
+"Veri\*Factu vs non-Veri\*Factu as separate modules" decision — building Waitron as a **SOLO Veri\*Factu**
+SIF avoids the mandatory event-log a DUAL SIF must carry.
+
+## 18. Remitting RFs on behalf of clients needs *Convenio de colaboración social nº 17*
+
+> Sí, a través de la figura de la colaboración social (artículos 79 a 81 RD 1065/2007 y Orden
+> HAC/1398/2003, de 27 de mayo) o del apoderamiento. Pueden ser colaboradores sociales a este respecto
+> tanto las empresas suministradoras de software que hayan suscrito el correspondiente Convenio de
+> colaboración social como los profesionales de la gestión tributaria.
+>
+> — **FAQ §16, p.31** (software companies use *Convenio* **017**; a web-form / pop-up authorization at API
+> onboarding is accepted — *"la utilización auxiliar de formularios web, pop-ups al iniciar la relación […]
+> es perfectamente válida"*, p.33)
+
+**Bears on:** the cloud / relocatable-submitter model. Today's design keeps the certificate on the client's
+own server and the client submits — so this does not bite now. It is the receipt for what a
+*Waitron-operated* submitter remitting on a venue's behalf would require (Convenio 17 + the authorization
+documents).
+
+## 19. F3 canje vs rectificativa — and the **modelo 303** rule (R1–R5 count, F3 does **not**)
+
+The §27 worked examples settle how corrections and *canje* are treated for the VAT return. The load-bearing rule:
+
+> Como comentario general a todos los casos planteados, para el modelo 303 se tienen en cuenta todas las
+> facturas identificadas con clave de factura rectificativa (R1, R2, R3, R4 y R5) pero, por el contrario,
+> ninguna factura identificada con la clave F3.
+>
+> — **FAQ §27, p.49**
+
+Why F3 is excluded — it restates, it does not add turnover:
+
+> el importe total (que es la suma de bases imponibles y cuotas) de una factura de canje F3 NO se volverá a
+> tener en cuenta a efectos tributarios porque ya se declaró a medida que se fueron expidiendo las facturas
+> simplificadas a las que canjea.
+>
+> — **FAQ §27, p.52**
+
+And F3 is not a rectificativa, does not annul the tickets, and carries `FacturasSustituidas`:
+
+> La factura de tipo «F3» es una factura expedida «en sustitución o canje» de facturas simplificadas que […]
+> No tiene la consideración de rectificativa (2º párrafo del artículo 15.6 del […] «ROF» […]). […] NO hay
+> que anular la/s factura/s simplificada/s expedida/s a la/s que «canjea» […] en el registro de facturación
+> generado de la factura de canje F3 debe incorporarse la identificación de la/s factura/s simplificada/s a
+> la/s que canjea (en el bloque / agrupación «FacturasSustituidas»).
+>
+> — **FAQ §27, pp.51–52**
+
+**Bears on, two places:**
+
+- **Reporting** — this is the **primary-source resolution of the daily-close spec's asesor question (§10)**:
+  the VAT summary correctly **includes** rectificativas (R1–R5) and **excludes** F3 canje substitutes,
+  exactly as *modelo 303* does. The spec's exclusion was an inference; it is now confirmed.
+- **The fiscal canje code** (`recordSubstitution`, #51) — F3 reads `FacturasSustituidas`, does not annul the
+  substituted F2 tickets, and is not a rectificativa. Confirms that design on primary source.
+
 ---
 
 ## Not yet indexed
 
-The pinned PDF has more that no current task needs verbatim yet. Index these the same way (verbatim
-quote + page, read against the page) when they become load-bearing:
+The pinned PDF has more that no current task needs verbatim yet. Index these the same way (verbatim quote +
+page, read against the page) when they become load-bearing:
 
-- **§15 (pp.28–31)** — the art. 7.i chain-integrity check before each RF, and *modo Veri\*Factu* vs *NO
-  Veri\*Factu* / SIF *DUAL* + the *registro de eventos*. (The chain-check is already in `CLAUDE.md` §5 and
-  the code; the mode distinction bears on the "Veri\*Factu vs non-Veri\*Factu as separate modules" decision.)
-- **§16 (pp.32–33)** — remitting RFs on behalf of clients requires *Convenio de colaboración social nº 17*
-  (bears on the cloud/relocatable-submitter model).
-- **§12 (pp.23–24)** vending machines; **§23–26** Canarias/IGIC and further SII detail; **§27 (pp.48–51)**
-  worked F2/F3/R1–R5 rectificativa/substitution examples.
+- **§18 (pp.37–38)** — responding to AEAT *requerimientos* of RFs (only for NO Veri\*Factu; Veri\*Factu RFs
+  are already at AEAT).
+- **§29 (p.52)** — claves 14/15 (*IVA pendiente de devengo*): a late payment changes nothing, but a *pago
+  anticipado* generates a new alta and modifies the original's base/cuota. Bears on invoice-first / deferred
+  settlement if clave 15 is ever used.
+- **§12 (pp.23–24)** vending machines; **§22 (pp.42–43)** lottery tickets; **§23–26 (pp.43–47)** Canarias/IGIC,
+  Ceuta/Melilla IPSI, and the L10/L13 exención lists — none apply to a mainland IVA deli.
+- **§27 (pp.48–51)** also carries fuller worked R1–R5/F3 examples with `TipoRectificativa`/`ImporteTotal`
+  values, beyond the rule captured in entry 19 above.
