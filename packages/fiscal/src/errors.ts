@@ -42,5 +42,13 @@ declare module "@waitron/shared" {
      * prior `recordSale`. A void is a second record referencing the first
      * (spec §4); there is nothing to reference if the first was never made. */
     "fiscal.sale_not_recorded": { saleId: string };
+    /** No fiscal module set is implemented for this territory. Regime-NEUTRAL — the fact that a
+     * regime is unimplemented belongs to no single regime — and named for the fiscal-regime
+     * concept, never the throwing package. Its throwers, by design (spec D4's two guards):
+     * `resolveFiscalModules` (@waitron/provisioning, Task B2) refuses an unimplemented territory
+     * at venue provisioning input, and any later runtime consumer of a node's `filing_module`
+     * re-raises it as a hard error (defence-in-depth). `territory` is the operator-supplied
+     * free-text `fiscal_territory`, echoed so the refusal can be acted on. */
+    "fiscal.regime_not_implemented": { territory: string };
   }
 }
