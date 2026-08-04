@@ -133,6 +133,25 @@ describe("authorize", () => {
     expect(code).toBe("pin.invalid");
   });
 
+  it("throws person.not_found when the override personId is unknown (or another tenant's, RLS-hidden)", async () => {
+    const tillId = await seedTill(suite.db);
+    const staffId = await seedPerson(suite.db, "staff");
+    const sessionId = await openSession(tillId, staffId);
+
+    // The override names a personId that resolves to no row in this tenant — the override lookup
+    // returns nothing before status/PIN/permission are ever consulted.
+    const code = await codeOf(() =>
+      run((tx) =>
+        authorize(tx, {
+          sessionId,
+          permission: "sale.void",
+          override: { personId: crypto.randomUUID(), pin: "1234" },
+        }),
+      ),
+    );
+    expect(code).toBe("person.not_found");
+  });
+
   it("throws authorization.not_permitted when the override person also lacks the permission", async () => {
     const tillId = await seedTill(suite.db);
     const staffId = await seedPerson(suite.db, "staff");

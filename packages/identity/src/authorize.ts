@@ -23,7 +23,8 @@ export interface Authorization {
  * it). Returns the authorizing person for the caller to record. The gate is intrinsic: a gated write
  * calls this itself, so it cannot be performed without a credential this function accepts.
  *
- * Throws `session.not_open`, `person.suspended`, `pin.invalid`, `authorization.not_permitted`.
+ * Throws `session.not_open`, `person.not_found`, `person.suspended`, `pin.invalid`,
+ * `authorization.not_permitted`.
  */
 export async function authorize(
   tx: Transaction,
