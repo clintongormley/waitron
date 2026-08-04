@@ -133,6 +133,12 @@ export interface CloseCounts {
 Every money field is a `Decimal` string, summed with `sumDecimals` / cast-and-reparse in SQL. There is
 deliberately no `toNumber` in the money codec; the report never produces a JS `number`.
 
+**Implementation note (2026-08-04).** The shipped public API uses `tax` / `taxTotal` / `taxOf` where
+this design wrote `cuota` / `cuotaTotal` / `cuotaOf` — identical values and rounding. `@waitron/reporting`
+is a regime-neutral package that reads the English commercial tables, so it is English-only (it is in the
+tree-wide `english-only` guard), and `cuota` is a Spanish token reserved for `@waitron/fiscal-verifactu`.
+The Spanish fiscal term survives in code comments (the guard ignores comments) to keep the link.
+
 ## 4. The VAT half — issuance anchor
 
 Reads `sale_lines` joined to `sales`, scoped to `(tenant, node)`, where the sale's **issuance** falls
