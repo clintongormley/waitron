@@ -150,6 +150,21 @@ declare module "@waitron/shared" {
      * operator-typed configuration, never a secret, and a refusal that withheld it could not be
      * acted on. */
     "provisioning.invalid_identifier": { kind: "database" | "role"; value: string };
+    /** A venue request named a number of invoice locales the schema will not accept: the
+     * `invoice_locales` list must hold one or two entries. This is the same rule the DB CHECK
+     * `locations_invoice_locales_len` enforces — `cardinality(invoice_locales) between 1 and 2` on
+     * `locations` (`packages/db/src/schema/tenants.ts`) — refused in the pure planner (`planVenue`)
+     * so the operator is not charged an admin connection before the request is even shaped right.
+     *
+     * `provisioning.*` and not a `location.*` or `tenant.*` prefix: this is a refusal OF STANDING A
+     * VENUE UP, the same activity the header describes, caught before any location row exists to be
+     * about. The DB CHECK is the general fact about a `locations` row; this is the CLI refusing an
+     * input it can see is out of range without a database.
+     *
+     * `count` IS echoed — the length the operator supplied, operator-typed configuration and never a
+     * secret, in the format-check family with `provisioning.invalid_identifier` above: a refusal
+     * that withheld it could not be acted on. */
+    "provisioning.invalid_locales": { count: number };
     /** Waitron's own AEAT software identifier — `WAITRON_ID_SISTEMA`, a product constant rather
      * than operator input — is empty or longer than its ≤ 2-char limit (FAQ §4). Thrown by
      * `assertUsableIdSistema` (`fiscal-modules.ts`), so a wrong value is a programming error caught
