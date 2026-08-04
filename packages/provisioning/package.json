@@ -17,6 +17,8 @@
   },
   "dependencies": {
     "@waitron/db": "workspace:*",
+    "@waitron/fiscal": "workspace:*",
+    "@waitron/fiscal-verifactu": "workspace:*",
     "@waitron/migrations": "workspace:*",
     "@waitron/shared": "workspace:*",
     "drizzle-orm": "^0.45.2"

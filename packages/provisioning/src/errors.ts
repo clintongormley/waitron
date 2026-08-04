@@ -150,6 +150,27 @@ declare module "@waitron/shared" {
      * operator-typed configuration, never a secret, and a refusal that withheld it could not be
      * acted on. */
     "provisioning.invalid_identifier": { kind: "database" | "role"; value: string };
+    /** Waitron's own AEAT software identifier — `WAITRON_ID_SISTEMA`, a product constant rather
+     * than operator input — is empty or longer than its ≤ 2-char limit (FAQ §4). Thrown by
+     * `assertUsableIdSistema` (`fiscal-modules.ts`), so a wrong value is a programming error caught
+     * before it can reach `registro_sif.id_sistema_informatico` and, through that, every registro a
+     * node files, where it could only be superseded by re-registration, never corrected.
+     *
+     * `provisioning.*`, and the choice is forced as much as reasoned: `apps/server/src/errors.ts`
+     * already registers `sif.id_sistema_invalid` with this exact shape, but `apps/server` cannot be
+     * imported from a package, so that declaration is not in scope for `@waitron/provisioning`'s
+     * type-checker — `throw new AppError("sif.id_sistema_invalid", …)` here fails `tsc` with
+     * `error TS2345: Argument of type '"sif.id_sistema_invalid"' is not assignable to parameter of
+     * type 'keyof ErrorParams'` (measured on this tree). It is not a NODE-provisioning code in the
+     * sense the header above warns against: it validates Waitron's own global product constant, not
+     * any one node's SIF row. Converging the two length rules onto a single code is a noted
+     * follow-up (see the doc comment on `WAITRON_ID_SISTEMA`).
+     *
+     * `value` and `maxLength` mirror `sif.id_sistema_invalid` exactly so that follow-up changes only
+     * the prefix. `value` IS echoed — the same format-check family as
+     * `provisioning.invalid_identifier` above, `shared.invalid_id` and `server.config_invalid`: a
+     * product id or an operator's typo, never a secret. */
+    "provisioning.id_sistema_invalid": { value: string; maxLength: number };
     /** The CSPRNG returned the wrong number of bytes. `byteLength` is a size, never material. */
     "provisioning.key_generation_failed": { byteLength: number };
     /** A role this tool would use already exists carrying SUPERUSER or BYPASSRLS. Refused rather

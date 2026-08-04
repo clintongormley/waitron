@@ -467,6 +467,12 @@ importers:
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
+      '@waitron/fiscal':
+        specifier: workspace:*
+        version: link:../fiscal
+      '@waitron/fiscal-verifactu':
+        specifier: workspace:*
+        version: link:../fiscal-verifactu
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../migrations
