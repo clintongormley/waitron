@@ -21,10 +21,15 @@ This is the single most important correction to the original design assumption.
 > (#33) decides is *which node Waitron treats as the SIF*: the **local server**, not the till. The
 > intended topology is therefore one chain per **server**, with a venue running two concurrent
 > server-SIFs that must issue under disjoint series (see [asesor-questions.md](asesor-questions.md)'s
-> §① banner). That is a design decision layered on this finding, not a correction to it — and **the
-> schema still keys the fiscal tables by `till_id`**; the rekey to a `server_id` column is a pending
-> backlog item, so the per-till language below still matches the current code. Read "per till" here
-> as "per SIF", the SIF being the server once the rekey lands.
+> §① banner). That is a design decision layered on this finding, not a correction to it.
+>
+> **Update, 2026-08-03 (#54).** The rekey has **landed** — the fiscal tables (`registro_sif`,
+> `cadenas`, `registros_facturacion`) and `invoice_series` are now keyed by a **`node_id`** column,
+> not the `server_id` this note first anticipated: the code names the machine a `node` (in US
+> restaurant English "server" means a waiter), and #33's "server" IS this node. So the **per-till
+> language below is now stale against the code** — read every "per till" in this section as
+> **"per node"**, the node being the SIF. `till_id` survives only as an informational snapshot on
+> `registros_facturacion`/`sales`.
 
 **Orden HAC/1177/2024 art. 7.c):**
 
