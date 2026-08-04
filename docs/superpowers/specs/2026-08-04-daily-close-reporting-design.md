@@ -165,7 +165,8 @@ not something this design asserts.
 - **Included:** ordinary altas (F2) and rectificativas (net-negative contributions).
 
 The F3 exclusion is a fiscal judgement (it decides whether a canje adds to declared VAT or restates
-it). It matches the existing read-model, and is flagged in §10 for the asesor.
+it). It matches the existing read-model, and is **confirmed on primary source** — AEAT's developer FAQ
+excludes F3 from *modelo 303* while counting rectificativas R1–R5 (§10).
 
 ## 5. The cash-up half — settlement anchor
 
@@ -249,14 +250,17 @@ One node, one business day, one `computeDailyClose`. Explicitly **out**, each a 
 - any UI — this is a headless function plus a demo script (sub-project 7 renders it);
 - persisting timezone/cutover config — Locations (sub-project 6) owns that (D5).
 
-## 10. Open questions for the asesor
+## 10. Fiscal treatment — one resolved, one open
 
-- **F3-canje VAT treatment (§4).** This slice excludes F3 substitutes from declared base/cuota on the
-  ground that their VAT is already declared in the substituted F2 tickets, matching
-  `listOutstandingSales`. Confirm a canje **restates** rather than **adds** turnover for the daily VAT
-  total. Non-blocking (the exclusion is consistent with the existing read-model), but it should be on
-  the asesor list alongside the other Veri\*Factu questions.
-- **Recargo de equivalencia applicability (§4).** Whether the deli's retail-goods (take-away packaged
+- **F3-canje VAT treatment (§4) — RESOLVED on primary source, 2026-08-04.** This slice excludes F3
+  substitutes from declared base/cuota and includes rectificativas. AEAT's developer FAQ (v1.3, §27,
+  p.49) states that *for modelo 303* «se tienen en cuenta todas las facturas identificadas con clave de
+  factura rectificativa (R1, R2, R3, R4 y R5) pero […] ninguna factura identificada con la clave F3»,
+  because an F3's total «ya se declaró a medida que se fueron expidiendo las facturas simplificadas a las
+  que canjea» (p.52). So a canje **restates** rather than **adds** turnover — the exclusion is confirmed,
+  not an inference, and needs no asesor input. Receipt: [verifactu-faq-notes.md
+  §19](../../compliance/verifactu-faq-notes.md).
+- **Recargo de equivalencia applicability (§4) — open.** Whether the deli's retail-goods (take-away packaged
   goods) sales fall under the recargo de equivalencia regime at all — it can apply to an *autónomo*
   retailer but never to an *SL* company, and hospitality *service* sits outside it — decides whether
   the surcharge ever needs representing on the venue's own output. Surcharge is deferred on data-model
