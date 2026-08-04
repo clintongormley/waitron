@@ -144,6 +144,12 @@ export async function applyVenue(
     }
 
     if (sif === undefined) throw new Error("applyVenue: register-sif never ran");
+    // Completeness guard for the one id no LATER action depends on: the ordering guards make
+    // locationId/nodeId non-empty whenever a dependent action runs (and a plan with none of them
+    // trips `sif === undefined` above), but nothing downstream reads tillId, so an OMITTED create-till
+    // slips through and would return a "complete" venue with an empty till id — a shop that cannot
+    // sell (recordSale needs a real till). Named here rather than left to fail confusingly later.
+    if (tillId === "") throw new Error("applyVenue: plan is missing create-till");
     return { tenantId, locationId, tillId, nodeId, sif, seriesIds };
   });
 }

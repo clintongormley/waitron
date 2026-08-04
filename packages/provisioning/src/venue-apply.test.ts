@@ -135,6 +135,40 @@ describe("applyVenue", () => {
     expect(series.rows[0]?.n).toBe(1); // only one series row exists
   });
 
+  it("refuses a plan that omits create-till rather than returning an empty till id", async () => {
+    // The ordering guards check the ids a LATER action depends on (a till's location, a node's
+    // location, a SIF/series' node). Nothing downstream depends on `tillId`, so an OMITTED create-till
+    // slips past them AND past the `sif === undefined` guard, and the run used to return a "complete"
+    // VenueResult with `tillId === ""` — a venue with no real till, which fails confusingly later
+    // (recordSale needs one). A post-loop completeness guard names the missing step instead.
+    const taxId = "B44444444";
+    const tenantId = obligadoTenantId("ES", taxId);
+    const planWithoutTill: VenueAction[] = [
+      { kind: "ensure-tenant", tenantId, country: "ES", taxId, legalName: "Deli SL" },
+      {
+        kind: "create-location",
+        name: "Mostrador",
+        fiscalTerritory: "ES-common",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "venta en establecimiento",
+        addressLine1: "Calle Mayor 1",
+        addressLine2: null,
+        postalCode: "28013",
+        city: "Madrid",
+        province: "Madrid",
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00:00",
+      },
+      { kind: "create-node", name: "Mostrador", filingModule: "verifactu", taxModule: "iva" },
+      { kind: "register-sif", idSistemaInformatico: "W1" },
+      { kind: "create-series", code: "A", purpose: "standard" },
+    ];
+
+    await expect(applyVenue(planWithoutTill, { db: suite.db })).rejects.toThrow(
+      "applyVenue: plan is missing create-till",
+    );
+  });
+
   describe("guards a malformed plan whose actions arrive out of order", () => {
     // planVenue always emits create-location before create-till/create-node, and create-node before
     // register-sif/create-series, so these orderings are unreachable from it. A hand-built (or a
