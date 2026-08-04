@@ -214,7 +214,8 @@ declare module "@waitron/shared" {
     "provisioning.duplicate_series_code": { code: string };
     /** Waitron's own AEAT software identifier — `WAITRON_ID_SISTEMA`, a product constant rather
      * than operator input — is empty or longer than its ≤ 2-char limit (FAQ §4). Thrown by
-     * `assertUsableIdSistema` (`fiscal-modules.ts`), so a wrong value is a programming error caught
+     * `assertUsableIdSistema` (`fiscal-modules.ts`), which `planVenue` calls before it builds the
+     * `register-sif` action, so a wrong value is a programming error caught on the production path
      * before it can reach `registro_sif.id_sistema_informatico` and, through that, every registro a
      * node files, where it could only be superseded by re-registration, never corrected.
      *

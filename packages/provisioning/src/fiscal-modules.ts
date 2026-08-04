@@ -25,7 +25,10 @@ export interface FiscalModules {
  * EXEMPT_PACKAGES, so the english-only scan never reaches it (see the plan's placement decision).
  */
 const REGISTRY: Record<string, FiscalModules> = {
-  "ES-common": { filing: "verifactu", tax: "iva" },
+  // Frozen at definition: resolveFiscalModules returns the live entry and is public API (index.ts),
+  // so freezing stops a future caller mutating this shared process-global config. No consumer
+  // mutates it today, so this is guard-only — no behaviour change.
+  "ES-common": Object.freeze({ filing: "verifactu", tax: "iva" }),
 };
 
 export function resolveFiscalModules(territory: string): FiscalModules {

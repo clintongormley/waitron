@@ -71,13 +71,30 @@ describe("planVenue", () => {
     }
   });
 
-  it("refuses fewer than one or more than two invoice locales", () => {
-    expect(() =>
-      planVenue(request({ location: { ...request().location, invoiceLocales: [] } })),
-    ).toThrow();
-    expect(() =>
-      planVenue(request({ location: { ...request().location, invoiceLocales: ["a", "b", "c"] } })),
-    ).toThrow();
+  it("refuses fewer than one invoice locale, echoing the count", () => {
+    try {
+      planVenue(request({ location: { ...request().location, invoiceLocales: [] } }));
+      expect.unreachable("should have refused an empty locale list");
+    } catch (error) {
+      expect(isAppError(error)).toBe(true);
+      if (isAppError(error)) {
+        expect(error.code).toBe("provisioning.invalid_locales");
+        expect(error.params).toEqual({ count: 0 });
+      }
+    }
+  });
+
+  it("refuses more than two invoice locales, echoing the count", () => {
+    try {
+      planVenue(request({ location: { ...request().location, invoiceLocales: ["a", "b", "c"] } }));
+      expect.unreachable("should have refused three locales");
+    } catch (error) {
+      expect(isAppError(error)).toBe(true);
+      if (isAppError(error)) {
+        expect(error.code).toBe("provisioning.invalid_locales");
+        expect(error.params).toEqual({ count: 3 });
+      }
+    }
   });
 
   it("REFUSES equal standard and rectificative series codes before emitting anything", () => {

@@ -49,6 +49,12 @@ export async function applyVenue(
   }
   const tenantId = ensure.tenantId;
 
+  // Re-run idempotency (reuse the obligado, ON CONFLICT DO NOTHING) relies on every tenant for a
+  // (country, tax_id) having been created with this deterministic obligadoTenantId: a re-run adopts
+  // the derived id as its scope and inserts locations under it. This holds because `venue` is now
+  // the ONLY production tenant-creation path (bootstrap-tenant.sql retired 2026-08-04). A future
+  // path inserting a random-id tenant for the same identity would leave the ensure-tenant ON
+  // CONFLICT a no-op while this scope adopts the derived id, so the locations FK to tenants(id) fails.
   return withTenant(deps.db, tenantId, async (tx) => {
     let locationId = "";
     let tillId = "";

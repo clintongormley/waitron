@@ -1,5 +1,9 @@
 import { AppError } from "@waitron/shared";
-import { WAITRON_ID_SISTEMA, resolveFiscalModules } from "./fiscal-modules.js";
+import {
+  WAITRON_ID_SISTEMA,
+  assertUsableIdSistema,
+  resolveFiscalModules,
+} from "./fiscal-modules.js";
 import { obligadoTenantId } from "./tenant-id.js";
 import "@waitron/fiscal"; // side-effect: registers fiscal.regime_not_implemented on ErrorParams
 import "./errors.js"; // side-effect: registers provisioning.invalid_locales on ErrorParams
@@ -70,6 +74,14 @@ export function planVenue(request: VenueRequest): VenueAction[] {
   }
   const modules = resolveFiscalModules(request.location.fiscalTerritory); // throws for unimplemented
   const tenantId = obligadoTenantId(request.country, request.taxId);
+
+  // Defence-in-depth on an unrecoverable fiscal field. WAITRON_ID_SISTEMA is carried by the
+  // register-sif action below and reaches `registro_sif.id_sistema_informatico` via applyVenue →
+  // registerSif, where a wrong value could only be superseded by re-registration, never corrected.
+  // The constant is "W1", so this never throws in normal operation; the guard is against a future
+  // bad edit to the constant (throws provisioning.id_sistema_invalid — unit-tested in
+  // fiscal-modules.test.ts), caught here on the production path before any DB connection is spent.
+  assertUsableIdSistema(WAITRON_ID_SISTEMA);
 
   return [
     {
