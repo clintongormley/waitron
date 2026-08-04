@@ -18,6 +18,10 @@ export interface VenueResult {
   tillId: string;
   nodeId: string;
   sif: SifRegistration;
+  /** The ids of the series actually inserted, in plan order: `[standard, rectificative]`. planVenue
+   * rejects equal standard/rectificative codes, so a valid plan always yields exactly those two, in
+   * that order; a hand-built plan whose second series collides yields only `[standard]` (the
+   * create-series gate below never returns a phantom id for a row it did not insert). */
   seriesIds: string[];
 }
 
@@ -68,8 +72,8 @@ export async function applyVenue(
           // (`${action.invoiceLocales}`, as the brief drafted) is expanded by Drizzle into a
           // value LIST — `values (…, ($4), …)` binding `$4 = 'es-ES'` — which Postgres rejects
           // with `22P02 malformed array literal` (observed in this task's first green run). Build
-          // the array explicitly instead, each element its OWN bound param (`array[$n, …]::text[]`)
-          // so nothing is string-concatenated. Mirrors instance-apply.ts's `::text[]` casts.
+          // the array literal explicitly instead, each element its OWN bound param
+          // (`array[$n, …]::text[]`), so nothing is string-concatenated.
           const invoiceLocales = sql`array[${sql.join(
             action.invoiceLocales.map((locale) => sql`${locale}`),
             sql`, `,
@@ -104,11 +108,17 @@ export async function applyVenue(
           break;
         case "create-series": {
           const seriesId = randomUUID();
-          await tx.execute(sql`
+          const inserted = await tx.execute<{ id: string }>(sql`
             insert into invoice_series (id, tenant_id, node_id, code, purpose)
             values (${seriesId}, ${tenantId}, ${nodeId}, ${action.code}, ${action.purpose})
-            on conflict (tenant_id, node_id, code) do nothing`);
-          seriesIds.push(seriesId);
+            on conflict (tenant_id, node_id, code) do nothing
+            returning id`);
+          // Push ONLY when a row was actually inserted. `ON CONFLICT DO NOTHING` returns no rows on
+          // a collision, and returning the un-inserted id would put a PHANTOM id in the result — a
+          // row that does not exist. planVenue now rejects equal standard/rectificative codes
+          // up front, so a valid plan never collides here; this keeps VenueResult honest even for a
+          // hand-built plan that does (defense in depth, proven by venue-apply.test.ts).
+          if (inserted.rows.length > 0) seriesIds.push(seriesId);
           break;
         }
       }

@@ -79,6 +79,18 @@ describe("planVenue", () => {
       planVenue(request({ location: { ...request().location, invoiceLocales: ["a", "b", "c"] } })),
     ).toThrow();
   });
+
+  it("REFUSES equal standard and rectificative series codes before emitting anything", () => {
+    // Equal codes collide on the series natural key (tenant, node, code), so ON CONFLICT would
+    // silently drop the second and leave the venue with ONE series and no way to issue corrections.
+    // Rejected in the pure planner, like the other D4 input refusals.
+    try {
+      planVenue(request({ seriesCode: "A", rectificativeSeriesCode: "A" }));
+      expect.unreachable("should have refused equal series codes");
+    } catch (error) {
+      expect(isAppError(error) && error.code).toBe("provisioning.duplicate_series_code");
+    }
+  });
 });
 
 describe("describeVenueAction", () => {

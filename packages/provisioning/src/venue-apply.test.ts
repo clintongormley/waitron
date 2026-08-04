@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { FISCAL_MIGRATIONS } from "@waitron/fiscal-verifactu";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { planVenue, type VenueRequest } from "./venue-plan.js";
+import { planVenue, type VenueAction, type VenueRequest } from "./venue-plan.js";
+import { obligadoTenantId } from "./tenant-id.js";
 import { applyVenue } from "./venue-apply.js";
 
 // PGlite's default connection is a SUPERUSER, so it BYPASSES row-level security (ENABLE and FORCE
@@ -94,5 +95,43 @@ describe("applyVenue", () => {
     await expect(applyVenue(withoutTenant, { db: suite.db })).rejects.toThrow(
       "applyVenue: plan is missing ensure-tenant",
     );
+  });
+
+  it("never returns a phantom series id when ON CONFLICT drops a colliding series", async () => {
+    // planVenue rejects equal codes, so this hand-builds the colliding plan directly to prove the
+    // apply-side gate: two create-series sharing (tenant, node, code), the second dropped by
+    // ON CONFLICT DO NOTHING. Its id must NOT reach the result, and the venue must end with exactly
+    // one series row — the honest reflection of what was written.
+    const taxId = "B22222222";
+    const tenantId = obligadoTenantId("ES", taxId);
+    const collidingPlan: VenueAction[] = [
+      { kind: "ensure-tenant", tenantId, country: "ES", taxId, legalName: "Deli SL" },
+      {
+        kind: "create-location",
+        name: "Mostrador",
+        fiscalTerritory: "ES-common",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "venta en establecimiento",
+        addressLine1: "Calle Mayor 1",
+        addressLine2: null,
+        postalCode: "28013",
+        city: "Madrid",
+        province: "Madrid",
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00:00",
+      },
+      { kind: "create-till", name: "Caja 1" },
+      { kind: "create-node", name: "Mostrador", filingModule: "verifactu", taxModule: "iva" },
+      { kind: "register-sif", idSistemaInformatico: "W1" },
+      { kind: "create-series", code: "A", purpose: "standard" },
+      { kind: "create-series", code: "A", purpose: "rectificative" }, // same code ⇒ dropped
+    ];
+
+    const result = await applyVenue(collidingPlan, { db: suite.db });
+    expect(result.seriesIds).toHaveLength(1); // the dropped series' id is not returned
+
+    const series = await suite.db.execute<{ n: number }>(sql`
+      select count(*)::int as n from invoice_series where node_id = ${result.nodeId}`);
+    expect(series.rows[0]?.n).toBe(1); // only one series row exists
   });
 });

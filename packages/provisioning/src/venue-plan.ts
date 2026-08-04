@@ -62,6 +62,12 @@ export function planVenue(request: VenueRequest): VenueAction[] {
   if (locales.length < 1 || locales.length > 2) {
     throw new AppError("provisioning.invalid_locales", { count: locales.length });
   }
+  // Equal codes collide on the series natural key (tenant, node, code): applyVenue's
+  // `ON CONFLICT DO NOTHING` would drop the second series, leaving the venue unable to issue
+  // rectificative invoices. Refuse here so no admin connection is spent on a malformed request.
+  if (request.seriesCode === request.rectificativeSeriesCode) {
+    throw new AppError("provisioning.duplicate_series_code", { code: request.seriesCode });
+  }
   const modules = resolveFiscalModules(request.location.fiscalTerritory); // throws for unimplemented
   const tenantId = obligadoTenantId(request.country, request.taxId);
 

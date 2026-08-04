@@ -165,6 +165,22 @@ declare module "@waitron/shared" {
      * secret, in the format-check family with `provisioning.invalid_identifier` above: a refusal
      * that withheld it could not be acted on. */
     "provisioning.invalid_locales": { count: number };
+    /** A venue request gave its standard and rectificative series the SAME code. The two series
+     * share the natural key `(tenant_id, node_id, code)`, so a venue built from such a request would
+     * insert one series and silently drop the other on `ON CONFLICT DO NOTHING` — leaving a venue
+     * that can ring sales but cannot issue a rectificative invoice (a correction). Refused in the
+     * pure planner (`planVenue`), like the locale and territory refusals, so the operator is not
+     * charged an admin connection before the request is even shaped right.
+     *
+     * `provisioning.*` and not a `series.*` prefix: this is a refusal OF STANDING A VENUE UP — the
+     * same activity the header describes — caught before any series row exists to be about.
+     * `series.*` (`packages/db/src/errors.ts`) is about a series that DOES exist; this is the CLI
+     * refusing an input it can see is self-contradictory without a database.
+     *
+     * `code` IS echoed — the duplicated code the operator supplied, operator-typed configuration and
+     * never a secret, in the format-check family with `provisioning.invalid_locales` and
+     * `provisioning.invalid_identifier` above: a refusal that withheld it could not be acted on. */
+    "provisioning.duplicate_series_code": { code: string };
     /** Waitron's own AEAT software identifier — `WAITRON_ID_SISTEMA`, a product constant rather
      * than operator input — is empty or longer than its ≤ 2-char limit (FAQ §4). Thrown by
      * `assertUsableIdSistema` (`fiscal-modules.ts`), so a wrong value is a programming error caught
