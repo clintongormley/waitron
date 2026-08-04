@@ -1,6 +1,11 @@
 import { parseArgs } from "node:util";
 import { AppError, isAppError } from "@waitron/shared";
-import type { Database, DeploymentEnvironment } from "@waitron/db";
+import {
+  isUniqueViolation,
+  readDeploymentEnvironment,
+  type Database,
+  type DeploymentEnvironment,
+} from "@waitron/db";
 import { assertIdentifier } from "./identifiers.js";
 import { applyInstance, withDatabase, type TargetConnection } from "./instance-apply.js";
 import { describeAction, planInstance, type InstanceAction } from "./instance-plan.js";
@@ -14,6 +19,8 @@ import type { ProvisioningIo } from "./io.js";
 import { runKeyring } from "./keyring-command.js";
 import { sqlStateOf } from "./sql-state.js";
 import { formatStatus } from "./status-command.js";
+import { applyVenue } from "./venue-apply.js";
+import { describeVenueAction, planVenue, type VenueRequest } from "./venue-plan.js";
 import "./errors.js";
 
 /**
@@ -36,6 +43,15 @@ export interface CliDeps {
   migrationsRoot: string | null;
   readState: typeof readInstanceState;
   apply: typeof applyInstance;
+  /** The venue apply, injected for the same reason as `apply`: it runs the whole location flow as
+   * one transaction against a live target database, and what `venue` decides — what it prompts,
+   * prints and refuses — is testable without one. `planVenue`/`describeVenueAction` are pure, so
+   * they are NOT injected: the tests run the real ones and the summary is rendered from a real plan
+   * rather than a fixture that could drift from it, exactly as `planInstance` is treated. */
+  applyVenue: typeof applyVenue;
+  /** Reads a target database's deployment stamp. Injected so the "unstamped is refused" path is
+   * reachable without a container; the real one (`@waitron/db`) needs the target connection. */
+  readEnvironment: typeof readDeploymentEnvironment;
 }
 
 const ENVIRONMENTS: DeploymentEnvironment[] = ["production", "preproduction"];
@@ -50,6 +66,12 @@ const USAGE = [
   "  keyring                                            generate the credential key ring",
   "  instance [--database <name>] [--environment <env>] [--yes]",
   "  status   [--database <name>]",
+  "  venue    [--database <name>] [--country <cc>] [--tax-id <nif>] [--legal-name <name>]",
+  "           [--location-name <name>] [--territory <t>] [--locale <l>]...",
+  "           [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]",
+  "           [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]",
+  "           [--day-cutover <HH:MM>] [--till-name <name>] [--series-code <code>]",
+  "           [--rectificative-code <code>] [--yes]",
   "",
   `  <env> is one of: ${ENVIRONMENTS.join(", ")}`,
   "",
@@ -82,6 +104,8 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
       return instance(rest, deps);
     case "status":
       return status(rest, deps);
+    case "venue":
+      return venue(rest, deps);
     default:
       deps.io.stderr(USAGE);
       return 2;
@@ -270,6 +294,185 @@ async function status(argv: string[], deps: CliDeps): Promise<number> {
 }
 
 /**
+ * Stands a venue up: a tenant, a location, a till, a node registered as a SIF, and its two invoice
+ * series — the whole slice `planVenue`/`applyVenue` compose.
+ *
+ * The ORDER mirrors `instance`: everything that can be resolved and validated WITHOUT a database is
+ * done first — including the pure `planVenue`, which refuses an unimplemented territory, a bad
+ * locale count and duplicate series codes — so a malformed request costs the operator neither a
+ * pasted admin credential nor an opened connection (venue-plan.ts's "no admin connection is spent on
+ * a malformed request"). Only then is the admin URI asked for and the target opened.
+ *
+ * Unlike `instance`, the connection is to the TARGET database as the OWNER-admin, not to the cluster
+ * admin: `applyVenue` inserts under RLS as the role that owns the tables (Task C1), so there is no
+ * second role and no grant to widen. The whole apply is one transaction (`applyVenue`), which a
+ * partial venue must never be.
+ */
+async function venue(argv: string[], deps: CliDeps): Promise<number> {
+  let values;
+  try {
+    ({ values } = parse(argv, {
+      database: { type: "string" },
+      country: { type: "string" },
+      "tax-id": { type: "string" },
+      "legal-name": { type: "string" },
+      "location-name": { type: "string" },
+      territory: { type: "string" },
+      locale: { type: "string", multiple: true },
+      "operation-description": { type: "string" },
+      "address-line1": { type: "string" },
+      "address-line2": { type: "string" },
+      "postal-code": { type: "string" },
+      city: { type: "string" },
+      province: { type: "string" },
+      "time-zone": { type: "string" },
+      "day-cutover": { type: "string" },
+      "till-name": { type: "string" },
+      "series-code": { type: "string" },
+      "rectificative-code": { type: "string" },
+      yes: { type: "boolean" },
+    }));
+  } catch {
+    deps.io.stderr(USAGE);
+    return 2;
+  }
+
+  try {
+    // Resolved and VALIDATED before the admin connection string is even asked for — a mistyped
+    // country or database name should not cost the operator a paste of a privileged credential. Only
+    // the database name uses `assertIdentifier`; the rest are free text (a legal name has spaces, a
+    // territory has hyphens) and are checked only where a check has meaning — the country's shape
+    // here, the deeper request shape in `planVenue` below.
+    const database = await resolveOption(values.database, "database name: ", deps);
+    assertIdentifier("database", database);
+    const country = assertCountry(
+      await resolveOption(values.country, "country (ISO-3166 alpha-2, e.g. ES): ", deps),
+    );
+    const taxId = await resolveOption(values["tax-id"], "tax id (NIF): ", deps);
+    const legalName = await resolveOption(values["legal-name"], "legal name: ", deps);
+    const locationName = await resolveOption(values["location-name"], "location name: ", deps);
+    const fiscalTerritory = await resolveOption(
+      values.territory,
+      "fiscal territory (e.g. ES-common): ",
+      deps,
+    );
+    const invoiceLocales = await resolveLocales(values.locale, deps);
+    const operationDescription = await resolveOption(
+      values["operation-description"],
+      "operation description: ",
+      deps,
+    );
+    const addressLine1 = await resolveOption(values["address-line1"], "address line 1: ", deps);
+    // Optional: an empty answer means "no second line", NOT "ask again" — so `resolveOption`'s
+    // prompt-once is right and the empty string becomes `null` for the schema's nullable column.
+    const addressLine2Raw = await resolveOption(
+      values["address-line2"],
+      "address line 2 (blank if none): ",
+      deps,
+    );
+    const postalCode = await resolveOption(values["postal-code"], "postal code: ", deps);
+    const city = await resolveOption(values.city, "city: ", deps);
+    const province = await resolveOption(values.province, "province: ", deps);
+    const timeZone = await resolveOption(
+      values["time-zone"],
+      "time zone (e.g. Europe/Madrid): ",
+      deps,
+    );
+    const dayCutover = await resolveOption(values["day-cutover"], "day cutover (HH:MM): ", deps);
+    const tillName = await resolveOption(values["till-name"], "till name: ", deps);
+    const seriesCode = await resolveOption(values["series-code"], "series code: ", deps);
+    const rectificativeSeriesCode = await resolveOption(
+      values["rectificative-code"],
+      "rectificative series code: ",
+      deps,
+    );
+
+    const request: VenueRequest = {
+      country,
+      taxId,
+      legalName,
+      location: {
+        name: locationName,
+        fiscalTerritory,
+        invoiceLocales,
+        operationDescription,
+        addressLine1,
+        addressLine2: addressLine2Raw === "" ? null : addressLine2Raw,
+        postalCode,
+        city,
+        province,
+        timeZone,
+        dayCutover,
+      },
+      tillName,
+      seriesCode,
+      rectificativeSeriesCode,
+    };
+    // Pure, and the last thing that can refuse the request without touching a database: an
+    // unimplemented territory (`fiscal.regime_not_implemented`), a bad locale count, equal series
+    // codes. Kept BEFORE `resolveAdminUri` on purpose — see this function's header.
+    const actions = planVenue(request);
+
+    const adminUri = await resolveAdminUri(deps);
+
+    return await withVenueState(adminUri, database, deps, async (target) => {
+      let environment: DeploymentEnvironment | null;
+      try {
+        // The SQLSTATE-bearing STATE READ: reading the deployment stamp as an admin that may lack
+        // privilege on the target's tables fails 42501, exactly as `instance`/`status` read theirs.
+        // Classified via `asUnreadable`, like the connect in `withVenueState`; the venue APPLY below
+        // keeps its own mapping (`venue_conflict`/propagate), so an apply fault is never dressed as a
+        // read one. Only this stamp read is wrapped, NOT `applyVenue`.
+        environment = await deps.readEnvironment(target);
+      } catch (error) {
+        throw asUnreadable(error, database);
+      }
+      if (environment === null) {
+        // A venue cannot be filed against a database with no environment stamp — stamping is
+        // `instance`'s job, and one database per environment is a fiscal invariant. Refused, not
+        // stamped here.
+        throw new AppError("provisioning.database_unstamped", { database });
+      }
+
+      deps.io.stdout(`Plan for a venue in ${database} (${environment}):`);
+      // Which cluster, so the operator confirming this sees the mistake the summary otherwise hides.
+      // Never the password.
+      deps.io.stdout(`Cluster: ${describeAdmin(adminUri)}`);
+      deps.io.stdout("");
+      for (const action of actions) deps.io.stdout(`  ${describeVenueAction(action)}`);
+      deps.io.stdout("");
+
+      if (values.yes !== true) {
+        const answer = (await deps.io.prompt("Apply this plan? [y/N] ")).trim().toLowerCase();
+        if (answer !== "y" && answer !== "yes") {
+          deps.io.stderr("Nothing was applied.");
+          return 1;
+        }
+      }
+
+      try {
+        const result = await deps.applyVenue(actions, { db: target });
+        deps.io.stdout("");
+        deps.io.stdout(`tenant:   ${result.tenantId}`);
+        deps.io.stdout(`node:     ${result.nodeId}`);
+        deps.io.stdout(`SIF:      ${result.sif.id} (installation ${result.sif.numeroInstalacion})`);
+        return 0;
+      } catch (error) {
+        if (isUniqueViolation(error)) {
+          // A concurrent venue run created a conflicting row between this run's plan and its apply.
+          // `applyVenue` guards the natural keys it knows with `ON CONFLICT DO NOTHING`; this is the
+          // residual race, named rather than left to reach the operator as `unexpected failure`.
+          throw new AppError("provisioning.venue_conflict", { database });
+        }
+        throw error;
+      }
+    });
+  } catch (error) {
+    return reportFailure(error, deps);
+  }
+}
+
+/**
  * Opens the connections, reads the deployment's state, runs `body`, and closes everything.
  *
  * Two reads rather than one: `readInstanceState`'s `target` argument is a connection to a database
@@ -341,6 +544,48 @@ async function withState(
 }
 
 /**
+ * Opens the OWNER-admin connection to the TARGET database, runs `body`, and closes it in a
+ * `finally`. The venue apply owns the tables and runs as itself (Task C1), so there is only one
+ * connection to manage — no cluster-admin handle, no second read, no target that may not exist yet.
+ * That is why this is a thinner helper than `withState` rather than a reuse of it.
+ *
+ * The CONNECT is classified exactly as `instance`'s `withState` classifies its own: a
+ * SQLSTATE-bearing failure — the target database absent, or the admin URI lacking privilege on it —
+ * becomes `provisioning.state_unreadable` naming the database (via `asUnreadable`), while a failure
+ * with NO SQLSTATE (a broken socket, a bug) is rethrown untouched. The other SQLSTATE-bearing STATE
+ * READ, the deployment-stamp read (`deps.readEnvironment`), is wrapped the same way in `venue()`'s
+ * body — so `venue` now gives connect and state-read the same `state_unreadable` contract `instance`
+ * does. The two contracts match, for connect and for the stamp read.
+ *
+ * What is deliberately NOT classified is the venue APPLY: `applyVenue`'s own failures keep their
+ * mapping in `venue()` (a unique violation → `provisioning.venue_conflict`, anything else rethrown).
+ * A genuine insert error is not a fact about whether the database was readable, and labelling it
+ * `state_unreadable` would be wrong — the §1 defect class this repository guards against.
+ */
+async function withVenueState(
+  adminUri: string,
+  database: string,
+  deps: CliDeps,
+  body: (target: Database) => Promise<number>,
+): Promise<number> {
+  let target: Database;
+  try {
+    target = await deps.connect(withDatabase(adminUri, database));
+  } catch (error) {
+    // A SQLSTATE-bearing connect failure is the database's verdict (absent, or no privilege on it);
+    // `asUnreadable` maps it to `provisioning.state_unreadable` and returns a broken socket untouched,
+    // mirroring `withState`'s connect (its own `catch` above).
+    throw asUnreadable(error, database);
+  }
+  try {
+    return await body(target);
+  } finally {
+    // A pool; leaking it keeps the process alive after `main` returns.
+    await target.close();
+  }
+}
+
+/**
  * The structured form of a failure to reach or read a deployment — or the original error, when it
  * carries no SQLSTATE and is therefore not the database's verdict on anything.
  *
@@ -353,14 +598,53 @@ function asUnreadable(error: unknown, database: string): unknown {
   return new AppError("provisioning.state_unreadable", { database, sqlState });
 }
 
-/** A flag's value, or the answer to a question. An empty flag (`--database=`) counts as absent. */
+/**
+ * A flag's value, or the answer to a question. An empty OR whitespace-only flag (`--database=`,
+ * `--database='  '`) counts as absent and falls through to the prompt.
+ *
+ * The flag value is trimmed, so flag and prompt behave IDENTICALLY — the prompt already trims
+ * (`.trim()` below). Without this, a non-interactive `--tax-id " B12345678 "` reached
+ * `obligadoTenantId` verbatim and hashed into a different, permanent, unmergeable obligado than the
+ * trimmed form an interactive operator would have produced — the same operator-input footgun as the
+ * country-case normalisation (`assertCountry`).
+ */
 async function resolveOption(
   value: string | undefined,
   question: string,
   deps: CliDeps,
 ): Promise<string> {
-  if (typeof value === "string" && value !== "") return value;
+  const trimmed = value?.trim();
+  if (trimmed !== undefined && trimmed !== "") return trimmed;
   return (await deps.io.prompt(question)).trim();
+}
+
+/**
+ * The invoice locales: every `--locale` supplied (empties dropped), or, when none was, one prompt
+ * per locale until a blank answer ends the list. `planVenue` enforces the one-or-two cardinality the
+ * schema requires, so an empty list here is not special-cased — it reaches `planVenue` and is
+ * refused there with `provisioning.invalid_locales`, in the same place a `--locale=x --locale=y
+ * --locale=z` over-count is.
+ */
+async function resolveLocales(supplied: string[] | undefined, deps: CliDeps): Promise<string[]> {
+  // Each flag locale is trimmed and empties dropped, matching the prompted path below (which
+  // `.trim()`s every answer) — so `--locale " es-ES "` reaches the plan as `es-ES`.
+  const fromFlags = (supplied ?? [])
+    .map((locale) => locale.trim())
+    .filter((locale) => locale !== "");
+  if (fromFlags.length > 0) return fromFlags;
+  const locales: string[] = [];
+  for (;;) {
+    const answer = (
+      await deps.io.prompt(
+        locales.length === 0
+          ? "invoice locale (e.g. es-ES): "
+          : "another invoice locale (blank to finish): ",
+      )
+    ).trim();
+    if (answer === "") break;
+    locales.push(answer);
+  }
+  return locales;
 }
 
 /**
@@ -445,6 +729,26 @@ function assertEnvironment(environment: string): DeploymentEnvironment {
     });
   }
   return environment;
+}
+
+/** The shape of an ISO-3166-1 alpha-2 country code — two ASCII letters. Not a membership check
+ * (there is no list here): it rejects the typo an operator makes, `ESP` or `E1`, before the derived
+ * tenant id (tenant-id.ts) is built from it. The regex accepts either case, but the value is
+ * UPPER-CASED before it is returned, and that is load-bearing: `obligadoTenantId(country, taxId)`
+ * hashes `country` verbatim and `(country, tax_id)` is a case-sensitive unique index, so `es` and
+ * `ES` would otherwise derive DIFFERENT tenant ids and mint two permanent, unmergeable obligados —
+ * a re-run meant to add a shop would silently start a second SIF chain instead of reusing the first.
+ * Upper-casing collapses them to the one obligado (ISO-3166 alpha-2 is upper-case by convention),
+ * which is what makes a D8 re-run reuse work; there is no data to preserve either way (pre-production,
+ * no backfill). The returned value flows into `VenueRequest.country`, so both the derived id and the
+ * `tenants` row carry the normalised code. `value` is echoed: it is operator-typed configuration,
+ * never a secret. */
+const COUNTRY = /^[A-Za-z]{2}$/;
+function assertCountry(value: string): string {
+  if (!COUNTRY.test(value)) {
+    throw new AppError("provisioning.invalid_country", { value });
+  }
+  return value.toUpperCase();
 }
 
 /**

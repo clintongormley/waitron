@@ -43,7 +43,7 @@ const SETTLED = new Date("2026-07-22T10:00:00Z");
 // working_order chain under them) accumulate for the life of the suite, same as
 // packages/core/src/record-sale.test.ts's shared PGlite instance. Each test therefore needs its
 // own NIF, or the second call to seedWorkingOrder's default "B00000000" collides with the first
-// on tenants_nif_key. `freshNif` is shared from ../test/seed.js.
+// on tenants_country_tax_id_key. `freshNif` is shared from ../test/seed.js.
 
 async function seedTenant() {
   return seedWorkingOrder(pg.db, freshNif());

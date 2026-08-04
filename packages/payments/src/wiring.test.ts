@@ -42,7 +42,7 @@ const pg = usePgliteDb({
 
 // Each test seeds a FRESH tenant (its own till, node, series and working order), so nothing is
 // truncated between tests. Distinct NIFs keep those tenants collision-free against
-// `tenants_nif_key`, and each fresh node keeps the fake's `fake_node_registrations` primary key
+// `tenants_country_tax_id_key`, and each fresh node keeps the fake's `fake_node_registrations` primary key
 // collision-free — the same per-test-fresh-tenant convention `fake-provider.test.ts` uses.
 // `freshNif` is shared from ../test/seed.js.
 

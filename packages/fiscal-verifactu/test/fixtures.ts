@@ -76,8 +76,8 @@ export const TENANT_B = {
  */
 export async function seedTenantTillSif(db: Database): Promise<void> {
   await db.execute(sql`
-    insert into tenants (id, nif, legal_name)
-    values (${TENANT_A.id}, '89890001K', 'Waitron SL')
+    insert into tenants (id, country, tax_id, legal_name)
+    values (${TENANT_A.id}, 'ES', '89890001K', 'Waitron SL')
   `);
   await db.execute(sql`
     insert into locations (id, tenant_id, name, invoice_locales, operation_description)
@@ -128,9 +128,9 @@ export async function seedTenantTillSif(db: Database): Promise<void> {
  */
 export async function seedTenants(db: Database): Promise<void> {
   await db.execute(sql`
-    insert into tenants (id, nif, legal_name) values
-      (${TENANT_A.id}, '89890001K', 'Waitron SL'),
-      (${TENANT_B.id}, '12345678Z', 'Otro Obligado SL')
+    insert into tenants (id, country, tax_id, legal_name) values
+      (${TENANT_A.id}, 'ES', '89890001K', 'Waitron SL'),
+      (${TENANT_B.id}, 'ES', '12345678Z', 'Otro Obligado SL')
   `);
   await db.execute(sql`
     insert into locations (id, tenant_id, name, invoice_locales, operation_description) values
@@ -239,7 +239,7 @@ export interface SeededTillWithSif {
 
 // Module-scope, not per-call: every test file that imports `seedTenantWithSif` shares this
 // counter across its whole run, which is what keeps each call's NIF collision-free against
-// `tenants_nif_key` — the identical convention `./src/testing/seed.ts`'s own `freshNif` and
+// `tenants_country_tax_id_key` — the identical convention `./src/testing/seed.ts`'s own `freshNif` and
 // `packages/core/test/fixtures.ts`'s `freshNif` already use.
 let nifSequence = 0;
 
@@ -291,7 +291,7 @@ export async function seedTenantWithSif(db: Database): Promise<SeededTillWithSif
   const nif = freshNif();
   return db.transaction(async (tx) => {
     const { rows } = await tx.execute<{ id: string }>(sql`
-      insert into tenants (nif, legal_name) values (${nif}, 'Waitron SL') returning id
+      insert into tenants (country, tax_id, legal_name) values ('ES', ${nif}, 'Waitron SL') returning id
     `);
     const tenant = tenantId(rows[0]!.id);
     const { tillId, nodeId, seriesId } = await insertLocationTillSeries(tx, tenant);

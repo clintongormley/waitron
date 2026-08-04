@@ -23,6 +23,14 @@
 -- repo on 2026-08-03, no `insert`/`update` of `nodes` under `asAppUser`/`withTenant` exists. NO
 -- DELETE either, the same rule 0001 states for `tills` (a node with sales behind it must not be
 -- removable), so SELECT is the whole grant.
+--
+-- 2026-08-04 note: the 2026-08-03 enumeration above is no longer exhaustive. `applyVenue`
+-- (@waitron/provisioning, feat/locations-provisioning) now runs `insert into nodes …` under
+-- `withTenant` (venue-apply.ts) — a node INSERT that the grep's "no … under `withTenant`" clause did
+-- not anticipate. The SELECT-only `app_user` grant below is UNAFFECTED: `applyVenue`'s `deps.db` is
+-- the owner-admin connection that owns the tables (Task C1), so that insert runs as the table OWNER,
+-- not as `app_user`. The grant turns on the ROLE the write runs as, not on whether `withTenant` wraps
+-- it, and no app-role path writes a node.
 ALTER TABLE "nodes" FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
 CREATE POLICY "nodes_tenant_isolation" ON "nodes"

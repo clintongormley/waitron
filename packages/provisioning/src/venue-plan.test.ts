@@ -1,0 +1,179 @@
+import { describe, expect, it } from "vitest";
+import { isAppError } from "@waitron/shared";
+import { obligadoTenantId } from "./tenant-id.js";
+import { describeVenueAction, planVenue, type VenueRequest } from "./venue-plan.js";
+
+function request(overrides: Partial<VenueRequest> = {}): VenueRequest {
+  return {
+    country: "ES",
+    taxId: "B12345678",
+    legalName: "Deli SL",
+    location: {
+      name: "Mostrador",
+      fiscalTerritory: "ES-common",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "venta en establecimiento",
+      addressLine1: "Calle Mayor 1",
+      addressLine2: null,
+      postalCode: "28013",
+      city: "Madrid",
+      province: "Madrid",
+      timeZone: "Europe/Madrid",
+      dayCutover: "06:00:00",
+    },
+    tillName: "Caja 1",
+    seriesCode: "A",
+    rectificativeSeriesCode: "R",
+    ...overrides,
+  };
+}
+
+describe("planVenue", () => {
+  it("emits ensure-tenant → location → till → node → register-sif → two series, in order", () => {
+    const actions = planVenue(request());
+    expect(actions.map((a) => a.kind)).toEqual([
+      "ensure-tenant",
+      "create-location",
+      "create-till",
+      "create-node",
+      "register-sif",
+      "create-series",
+      "create-series",
+    ]);
+  });
+
+  it("derives the deterministic tenant id and stamps the resolved modules on the node", () => {
+    const actions = planVenue(request());
+    const tenant = actions.find((a) => a.kind === "ensure-tenant");
+    const node = actions.find((a) => a.kind === "create-node");
+    expect(tenant).toMatchObject({
+      tenantId: obligadoTenantId("ES", "B12345678"),
+      country: "ES",
+      taxId: "B12345678",
+    });
+    expect(node).toMatchObject({ filingModule: "verifactu", taxModule: "iva" });
+  });
+
+  it("emits a standard series and a rectificative series with the requested codes", () => {
+    const series = planVenue(request()).filter((a) => a.kind === "create-series");
+    expect(series).toEqual([
+      { kind: "create-series", code: "A", purpose: "standard" },
+      { kind: "create-series", code: "R", purpose: "rectificative" },
+    ]);
+  });
+
+  it("REFUSES an unimplemented territory (spec D4 input half) before emitting anything", () => {
+    try {
+      planVenue(request({ location: { ...request().location, fiscalTerritory: "ES-PV-bizkaia" } }));
+      expect.unreachable("should have refused");
+    } catch (error) {
+      expect(isAppError(error) && error.code).toBe("fiscal.regime_not_implemented");
+    }
+  });
+
+  it("refuses fewer than one invoice locale, echoing the count", () => {
+    try {
+      planVenue(request({ location: { ...request().location, invoiceLocales: [] } }));
+      expect.unreachable("should have refused an empty locale list");
+    } catch (error) {
+      expect(isAppError(error)).toBe(true);
+      if (isAppError(error)) {
+        expect(error.code).toBe("provisioning.invalid_locales");
+        expect(error.params).toEqual({ count: 0 });
+      }
+    }
+  });
+
+  it("refuses more than two invoice locales, echoing the count", () => {
+    try {
+      planVenue(request({ location: { ...request().location, invoiceLocales: ["a", "b", "c"] } }));
+      expect.unreachable("should have refused three locales");
+    } catch (error) {
+      expect(isAppError(error)).toBe(true);
+      if (isAppError(error)) {
+        expect(error.code).toBe("provisioning.invalid_locales");
+        expect(error.params).toEqual({ count: 3 });
+      }
+    }
+  });
+
+  it("REFUSES equal standard and rectificative series codes before emitting anything", () => {
+    // Equal codes collide on the series natural key (tenant, node, code), so ON CONFLICT would
+    // silently drop the second and leave the venue with ONE series and no way to issue corrections.
+    // Rejected in the pure planner, like the other D4 input refusals.
+    try {
+      planVenue(request({ seriesCode: "A", rectificativeSeriesCode: "A" }));
+      expect.unreachable("should have refused equal series codes");
+    } catch (error) {
+      expect(isAppError(error) && error.code).toBe("provisioning.duplicate_series_code");
+    }
+  });
+
+  it("REFUSES a fiscal_territory that does not belong to the tenant's country", () => {
+    // country=PT + fiscalTerritory=ES-common is incoherent: ES-common is Spain/Veri*Factu and
+    // applyVenue writes tax_id into registro_sif.nif (a Spanish-NIF field), so a non-ES country would
+    // file under a non-NIF identity → mis-filing under the wrong country, unrecoverable in a
+    // hash-chained record. Spec §8 assumes a location is in the tenant's country; refused in the pure
+    // planner before any admin connection is spent, echoing both operator-typed values.
+    try {
+      planVenue(request({ country: "PT" }));
+      expect.unreachable("should have refused an ES territory under a PT country");
+    } catch (error) {
+      expect(isAppError(error)).toBe(true);
+      if (isAppError(error)) {
+        expect(error.code).toBe("provisioning.territory_country_mismatch");
+        expect(error.params).toEqual({ country: "PT", fiscalTerritory: "ES-common" });
+      }
+    }
+  });
+
+  it("still fails an UNIMPLEMENTED territory before the country/territory check (most specific wins)", () => {
+    // FR-common is BOTH unimplemented AND country-mismatched under PT. resolveFiscalModules runs
+    // before the country check, so the more specific fiscal.regime_not_implemented wins — proving the
+    // ordering, not territory_country_mismatch.
+    try {
+      planVenue(
+        request({
+          country: "PT",
+          location: { ...request().location, fiscalTerritory: "FR-common" },
+        }),
+      );
+      expect.unreachable("should have refused an unimplemented territory");
+    } catch (error) {
+      expect(isAppError(error) && error.code).toBe("fiscal.regime_not_implemented");
+    }
+  });
+
+  it("accepts a country in a different case than the territory prefix (ES matches es-common)", () => {
+    // The check is case-insensitive on the country-prefixed convention, so a lowercase country still
+    // matches its territory prefix. This never mints two obligados (the CLI upper-cases country first),
+    // but planVenue must not refuse the coherent combination on case alone.
+    const actions = planVenue(
+      request({ country: "es", location: { ...request().location, fiscalTerritory: "ES-common" } }),
+    );
+    expect(actions.map((a) => a.kind)).toEqual([
+      "ensure-tenant",
+      "create-location",
+      "create-till",
+      "create-node",
+      "register-sif",
+      "create-series",
+      "create-series",
+    ]);
+  });
+});
+
+describe("describeVenueAction", () => {
+  it("renders each planned action as a line an operator can check", () => {
+    const lines = planVenue(request()).map((action) => describeVenueAction(action));
+    expect(lines).toEqual([
+      "ensure tenant ES/B12345678 (Deli SL)",
+      "create location Mostrador in ES-common (es-ES)",
+      "create till Caja 1",
+      "create node Mostrador filing=verifactu tax=iva",
+      "register the node as a SIF (id_sistema W1)",
+      "create standard series A",
+      "create rectificative series R",
+    ]);
+  });
+});

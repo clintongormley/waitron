@@ -150,6 +150,113 @@ declare module "@waitron/shared" {
      * operator-typed configuration, never a secret, and a refusal that withheld it could not be
      * acted on. */
     "provisioning.invalid_identifier": { kind: "database" | "role"; value: string };
+    /** The `venue --country` value is not two ASCII letters — the SHAPE of an ISO-3166-1 alpha-2
+     * code such as `ES`, not a membership check against a country list. Refused in the CLI while
+     * resolving options, before the admin credential is asked for (`cli.ts`'s `assertCountry`), so a
+     * typo like `ESP` costs no connection — the same "validate before spending the credential"
+     * ordering the database name and `planVenue` follow.
+     *
+     * `provisioning.*` and not a `location.*`/`tenant.*` prefix: it is a refusal of a provisioning
+     * INPUT — standing a venue up — caught before any row exists to be about, the same activity the
+     * header describes. `value` IS echoed, the same format-check family as
+     * `provisioning.invalid_identifier` above: an operator's typo, never a secret. */
+    "provisioning.invalid_country": { value: string };
+    /** A venue was requested against a database with no environment stamp. `venue` reads the stamp
+     * with `readDeploymentEnvironment` (`packages/db`) on the target BEFORE it applies anything; a
+     * `null` result means the database was never stamped by `instance`, so there is no environment to
+     * file its sales under. Refused here rather than stamped — stamping is `instance`'s job, and one
+     * database per environment is a fiscal invariant a stamp cannot take back.
+     *
+     * `provisioning.*`: a refusal of standing a venue up, the same activity the header describes.
+     * `database` is operator-typed configuration and never a secret. */
+    "provisioning.database_unstamped": { database: string };
+    /** `applyVenue` hit a unique-key violation (SQLSTATE 23505, detected by `isUniqueViolation`
+     * from `packages/db`, which walks the `cause` chain). `applyVenue` guards the natural keys it
+     * knows — the obligado `(country, tax_id)` and each series `(tenant_id, node_id, code)` — with
+     * `ON CONFLICT DO NOTHING`, so this is the residual case those clauses do not absorb: most
+     * plausibly a second `venue` run racing between this run's plan and its apply. Named here rather
+     * than left to reach the operator as `unexpected failure` (`bin.ts`'s catch-all).
+     *
+     * `database` only, and never the driver's own error: a `DrizzleQueryError` can quote the failing
+     * statement back in its message, and this file's header forbids a param that could carry one.
+     * `database` is operator-typed configuration and never a secret. */
+    "provisioning.venue_conflict": { database: string };
+    /** A venue request named a number of invoice locales the schema will not accept: the
+     * `invoice_locales` list must hold one or two entries. This is the same rule the DB CHECK
+     * `locations_invoice_locales_len` enforces — `cardinality(invoice_locales) between 1 and 2` on
+     * `locations` (`packages/db/src/schema/tenants.ts`) — refused in the pure planner (`planVenue`)
+     * so the operator is not charged an admin connection before the request is even shaped right.
+     *
+     * `provisioning.*` and not a `location.*` or `tenant.*` prefix: this is a refusal OF STANDING A
+     * VENUE UP, the same activity the header describes, caught before any location row exists to be
+     * about. The DB CHECK is the general fact about a `locations` row; this is the CLI refusing an
+     * input it can see is out of range without a database.
+     *
+     * `count` IS echoed — the length the operator supplied, operator-typed configuration and never a
+     * secret, in the format-check family with `provisioning.invalid_identifier` above: a refusal
+     * that withheld it could not be acted on. */
+    "provisioning.invalid_locales": { count: number };
+    /** A venue request gave its standard and rectificative series the SAME code. The two series
+     * share the natural key `(tenant_id, node_id, code)`, so a venue built from such a request would
+     * insert one series and silently drop the other on `ON CONFLICT DO NOTHING` — leaving a venue
+     * that can ring sales but cannot issue a rectificative invoice (a correction). Refused in the
+     * pure planner (`planVenue`), like the locale and territory refusals, so the operator is not
+     * charged an admin connection before the request is even shaped right.
+     *
+     * `provisioning.*` and not a `series.*` prefix: this is a refusal OF STANDING A VENUE UP — the
+     * same activity the header describes — caught before any series row exists to be about.
+     * `series.*` (`packages/db/src/errors.ts`) is about a series that DOES exist; this is the CLI
+     * refusing an input it can see is self-contradictory without a database.
+     *
+     * `code` IS echoed — the duplicated code the operator supplied, operator-typed configuration and
+     * never a secret, in the format-check family with `provisioning.invalid_locales` and
+     * `provisioning.invalid_identifier` above: a refusal that withheld it could not be acted on. */
+    "provisioning.duplicate_series_code": { code: string };
+    /** A venue's `fiscal_territory` names a country the tenant is NOT in. A location's territory must
+     * belong to the tenant's `country`: the fiscal territories are country-prefixed (`ES-common`,
+     * `ES-PV-bizkaia`, …), and the only implemented one, `ES-common` (Spain / Veri*Factu), therefore
+     * requires `country` `ES`. The combination is load-bearing because `applyVenue` writes the
+     * tenant's `tax_id` into `registro_sif.nif` — a Spanish-NIF field — so a request like
+     * `country=PT` + `fiscalTerritory=ES-common` would stand up a venue whose SIF is stamped with a
+     * non-NIF identity and file its sales under the wrong country, which a hash-chained fiscal record
+     * cannot take back. Spec §8 assumes a location is in the tenant's country; this refuses the
+     * incoherent request rather than assuming it.
+     *
+     * Refused in the pure planner (`planVenue`), AFTER `resolveFiscalModules` so an UNIMPLEMENTED
+     * territory still fails first with `fiscal.regime_not_implemented` (the more specific error), and
+     * before any admin connection is spent — the same D4 "validate before spending the credential"
+     * ordering the locale and duplicate-series-code refusals follow. The check is case-insensitive on
+     * the country-prefixed convention, so `es`/`ES` both match `ES-common`.
+     *
+     * `provisioning.*` and not a `location.*`/`tenant.*` prefix: this is a refusal OF STANDING A VENUE
+     * UP — the same activity the header describes — caught before any location or tenant row exists to
+     * be about. Both params ARE echoed: `country` and `fiscalTerritory` are operator-typed
+     * configuration, the same format/coherence family as `provisioning.invalid_country` and
+     * `provisioning.duplicate_series_code` above — neither is a secret, and a refusal that withheld
+     * them could not be acted on. */
+    "provisioning.territory_country_mismatch": { country: string; fiscalTerritory: string };
+    /** Waitron's own AEAT software identifier — `WAITRON_ID_SISTEMA`, a product constant rather
+     * than operator input — is empty or longer than its ≤ 2-char limit (FAQ §4). Thrown by
+     * `assertUsableIdSistema` (`fiscal-modules.ts`), which `planVenue` calls before it builds the
+     * `register-sif` action, so a wrong value is a programming error caught on the production path
+     * before it can reach `registro_sif.id_sistema_informatico` and, through that, every registro a
+     * node files, where it could only be superseded by re-registration, never corrected.
+     *
+     * `provisioning.*`, and the choice is forced as much as reasoned: `apps/server/src/errors.ts`
+     * already registers `sif.id_sistema_invalid` with this exact shape, but `apps/server` cannot be
+     * imported from a package, so that declaration is not in scope for `@waitron/provisioning`'s
+     * type-checker — `throw new AppError("sif.id_sistema_invalid", …)` here fails `tsc` with
+     * `error TS2345: Argument of type '"sif.id_sistema_invalid"' is not assignable to parameter of
+     * type 'keyof ErrorParams'` (measured on this tree). It is not a NODE-provisioning code in the
+     * sense the header above warns against: it validates Waitron's own global product constant, not
+     * any one node's SIF row. Converging the two length rules onto a single code is a noted
+     * follow-up (see the doc comment on `WAITRON_ID_SISTEMA`).
+     *
+     * `value` and `maxLength` mirror `sif.id_sistema_invalid` exactly so that follow-up changes only
+     * the prefix. `value` IS echoed — the same format-check family as
+     * `provisioning.invalid_identifier` above, `shared.invalid_id` and `server.config_invalid`: a
+     * product id or an operator's typo, never a secret. */
+    "provisioning.id_sistema_invalid": { value: string; maxLength: number };
     /** The CSPRNG returned the wrong number of bytes. `byteLength` is a size, never material. */
     "provisioning.key_generation_failed": { byteLength: number };
     /** A role this tool would use already exists carrying SUPERUSER or BYPASSRLS. Refused rather

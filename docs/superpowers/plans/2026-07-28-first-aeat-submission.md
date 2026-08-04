@@ -34,6 +34,16 @@
 > Two things it does **not** change: the key ring must still exist before the host boots, and there
 > is still no `tenant` command, so `bootstrap-tenant.sql` remains the way to create the deli's
 > tenant. `waitron-provision keyring` is now the way to generate the key ring.
+>
+> **2026-08-04 note — `bootstrap-tenant.sql` has been retired.** The `2026-07-30 note` above is
+> itself now superseded: `apps/server/sql/bootstrap-tenant.sql` was deleted (Task D2,
+> `feat/locations-provisioning`) and `waitron-provision venue` replaces it — it creates the tenant,
+> location, till, node (registered as a SIF) and invoice series in one transaction, against a
+> stamped, migrated database, as the owner-admin. See
+> [`packages/provisioning/README.md`](../../../packages/provisioning/README.md) and
+> [`apps/server/README.md`](../../../apps/server/README.md#provisioning-a-venue). Every step below
+> that creates or runs `bootstrap-tenant.sql` records what was true on 2026-07-28 and is left
+> unchanged; run `waitron-provision venue` in its place.
 
 **Goal:** Get one real sale from the deli's till to the Agencia Tributaria's pre-production environment, using the real certificate, and read what comes back.
 

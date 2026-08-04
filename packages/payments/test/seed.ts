@@ -16,7 +16,7 @@ export interface SeededForSale extends Seeded {
 
 // Each of this package's test files runs against its own isolated PGlite instance, and within a
 // file tenants accumulate for the life of the suite (nothing truncates `tenants`), so every test
-// that seeds a tenant needs its own NIF or collides with a prior one on `tenants_nif_key`. A
+// that seeds a tenant needs its own NIF or collides with a prior one on `tenants_country_tax_id_key`. A
 // single shared counter is enough — the per-file base-offset each test file used to carry bought
 // nothing, since the DBs never see each other's rows.
 let nifCounter = 0;
@@ -33,7 +33,7 @@ export function freshNif(): string {
  * RLS is bypassed, so this is pure setup. */
 export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise<Seeded> {
   const t = await db.execute<{ id: string }>(sql`
-    insert into tenants (nif, legal_name) values (${nif}, 'Test SL') returning id`);
+    insert into tenants (country, tax_id, legal_name) values ('ES', ${nif}, 'Test SL') returning id`);
   const tenantId = t.rows[0].id;
   const l = await db.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)

@@ -67,7 +67,7 @@ reprioritisation rather than assumed.
 | **Close Q13 and Q15 on primary source** | **Done** (#37). Q13 (tips) and Q15's core CLOSED on primary/official source ([findings](compliance/verifactu-findings.md) §§11–12); Q14 (precuenta) stays open — see the advisor gap below |
 | **Consolidate the session-memory notes** | Not started. They predate this file and now overlap it — see below |
 | **Reporting — daily close** (sub-project 8, first slice) | **Merged** (#56). Read-only `@waitron/reporting`: `computeDailyClose(tx, input)` → a per-`(tenant, node, business-day)` close — a VAT summary (base + tax per rate, corrections netted) anchored on **issuance**, and an operational cash-up (by till + tender method) anchored on **settlement**, plus record counts. Derived, no new tables/migration; DST-aware business-day bucketing with a configurable cutover; headless (a till/UI consumes it later). The F3-canje VAT exclusion is confirmed on primary source (FAQ v1.3 §27 — *modelo 303* counts R1–R5, not F3). [design](superpowers/specs/2026-08-04-daily-close-reporting-design.md), [plan](superpowers/plans/2026-08-04-daily-close-reporting.md). Two follow-ups under *Debt* |
-| **Locations — provision a sellable venue** (sub-project 6) | **In flight.** Spec + reviewed 11-task plan committed on `feat/locations-provisioning`; implementation started (this session). Reshapes fiscal identity to country/territory-driven (`tenants.nif` → `country` + `tax_id`; `locations` gains `fiscal_territory` + `time_zone` + `day_cutover`), a territory→modules resolver (Veri\*Factu/común only, others refused), an internal SIF-registration step, and a `waitron-provision venue` CLI that retires the stale `bootstrap-tenant.sql`. [design](superpowers/specs/2026-08-04-locations-provisioning-design.md), [plan](superpowers/plans/2026-08-04-locations-provisioning.md) |
+| **Locations — provision a sellable venue** (sub-project 6) | **Landed on `feat/locations-provisioning`** (2026-08-04; awaiting the final whole-branch review + merge, so no PR number yet — this row records the implemented state). Reshapes fiscal identity to country/territory-driven: `tenants.nif` → `country` (ISO-3166 alpha-2) + `tax_id`, unique on `(country, tax_id)`; `locations` gain `fiscal_territory` + address + `time_zone` (IANA) + `day_cutover`; `nodes` record the resolved `filing_module` + `tax_module`. Adds `resolveFiscalModules` (`"ES-common"` → Veri\*Factu + IVA, **every other territory refused** — new `fiscal.regime_not_implemented`, fired both as a provisioning input refusal and as a runtime hard-error, defence in depth), a deterministic `obligadoTenantId(country, tax_id)` (so insert-and-catch-unique reuse works under RLS without a forbidden NIF lookup), `planVenue` (pure planner) / `applyVenue` (one transaction; idempotent for the obligado via `ON CONFLICT DO NOTHING`, but each run otherwise ADDS a shop — location/till/node/SIF at installation #2/fresh chain), and the `waitron-provision venue` CLI. Retires and **deletes** the stale `apps/server/sql/bootstrap-tenant.sql`. A venue is now provisionable such that `recordSale` can immediately chain a sale. [design](superpowers/specs/2026-08-04-locations-provisioning-design.md), [plan](superpowers/plans/2026-08-04-locations-provisioning.md) |
 
 ---
 
@@ -97,9 +97,10 @@ and [2026-08-03-invoice-first-settlement.md](superpowers/plans/2026-08-03-invoic
 **Reassessed 2026-08-04 — reporting AND the till track, in parallel.** With the fiscal sequence
 complete, the owner chose to run both directions at once: **reporting** (sub-project 8) and the **till
 track** (Locations 6 → Identity 5 → Counter POS 7), starting with Locations as the foundational
-unblocker (nothing can provision a sellable venue today). Prioritisation stayed by soundness, not the
-calendar. Reporting's first slice — the daily close — **landed as #56**; Locations 6 is in flight (spec
-+ plan committed, implementation started). See *Now* and *Not started* for each.
+unblocker (nothing could provision a sellable venue then). Prioritisation stayed by soundness, not the
+calendar. Reporting's first slice — the daily close — **landed as #56**; **Locations 6 has now landed**
+on `feat/locations-provisioning` (2026-08-04, awaiting the final review + merge), so a sellable venue
+can now be provisioned end-to-end. See *Now* and *Not started* for each.
 
 ---
 
@@ -167,11 +168,14 @@ Also left open by that design:
   only through the guarded chain-append path). Scope was **rekey + wire one node per venue**;
   active-active, failover, two concurrent SIFs + disjoint-series, and the submitter role stay out (the
   follow-ups above).
-  - **Deferred follow-up — production node-provisioning is unwired.** `apps/server/sql/bootstrap-tenant.sql`
-    still creates a till, not a node, and a first-class `provision node` CLI is unbuilt (design §8/§11):
-    the write path takes `node_id` from config, and tests mint nodes via `seedNode`, but nothing
-    provisions a production node yet — so the write path is not end-to-end runnable in production. Not
-    blocking (pre-production), but needed before a real venue trades.
+  - **CLOSED (2026-08-04) by Locations sub-project 6 — production node-provisioning is now wired.** The
+    earlier gap read "`apps/server/sql/bootstrap-tenant.sql` still creates a till, not a node, and a
+    first-class `provision node` CLI is unbuilt … nothing provisions a production node yet." Resolved:
+    `waitron-provision venue` now `insert into nodes …` under a location and registers its SIF
+    (`applyVenue` → `registerSif`) as part of standing a venue up, and `bootstrap-tenant.sql` was
+    **deleted**. `apps/server/src/provision-till.ts` (`provisionNode`) remains the standalone
+    registration path for a reimaged or bare node. The file is still named `provision-till.ts`; a
+    first-class `provision node` subcommand rename stays a nicety (see the follow-ups below). See *Now*.
   - **Deferred follow-up — `CLAUDE.md` §5's "nothing blocks a sale" rewrite** stays open (see the bullet
     above): this slice changed no sale-blocking behaviour, so the rewrite lands with the server-as-SIF
     *behaviour* (failover), not this schema slice.
@@ -266,13 +270,14 @@ not payment method); a short payment agreed as payment-in-full before the factur
 
 Nothing below has any code, **except: sub-project 16 (workforce) — *registro de jornada* floor (#47),
 D2 scheduling (#50), only D3 remains; sub-project 8 (reporting) — the daily-close first slice landed
-(#56); and sub-project 6 (Locations) — spec + plan committed and implementation in flight.**
+(#56); and sub-project 6 (Locations) — the provision-a-sellable-venue slice landed on
+`feat/locations-provisioning` (awaiting merge).**
 
 | Sub-project | Note |
 | --- | --- |
 | **7 — Counter POS UI** | The till. Also owns the working-order amendment log (art. 29.2.j LGT), deferred here deliberately: nothing writes working orders yet, and a log with no producer cannot be shown to work |
 | **5 — Identity** | Users, roles, permissions. The refund/void role gate waits on it |
-| **6 — Locations** | **In flight** — spec + reviewed 11-task plan on `feat/locations-provisioning`, implementation started (see *Now*). The foundational till-track unblocker: no production path provisions a node today, and `bootstrap-tenant.sql` is stale |
+| **6 — Locations** | **Provision-a-sellable-venue slice landed** on `feat/locations-provisioning` (2026-08-04, awaiting merge; see *Now*) — the foundational till-track unblocker. Country/territory-driven fiscal identity, `resolveFiscalModules` (común → Veri\*Factu + IVA, others refused), `planVenue` / `applyVenue` and the `waitron-provision venue` CLI stand up tenant → location → till → node → SIF → series so `recordSale` can chain a sale; the stale `bootstrap-tenant.sql` was **deleted**. Remaining sub-project 6 scope (multiple locations, editing/deactivation, the #33 SIF-topology deferrals) is under *Debt and odd jobs* → **Locations follow-ups** |
 | **8 — Reporting** | **Daily-close first slice DONE (#56)** — `@waitron/reporting`'s `computeDailyClose` (VAT summary + operational cash-up, two anchors). Unstarted next slices: a **frozen/signed *cierre Z*** (numbered, immutable, with counted-cash / opening float / *descuadre* — the derived close deliberately leaves a clean seam for it), date **ranges** + the **monthly VAT return** (*modelo 303*) aggregation, and the reporting **UI** (belongs to the till, sub-project 7) |
 | **16 — Workforce** | *Registro de jornada* legal floor **DONE (#47)**; **D2 scheduling DONE (#50)** — `convenio_config` surface (overtime de-hard-coded, single-sourced), shifts + `roster_versions` + `publishRoster`, absences/availability/shift_templates/shift_swaps, an **advisory** guardrail engine (`validateRoster` → `RosterBreach[]`; publish surfaces breaches but proceeds — owner chose warn+override) + a planned-vs-actual read model, and supersede-on-republish (partial unique index, one published roster per `(location, period)`). The overtime *rule* the both-model projection computes stays convenio-driven — an **asesor-laboral** call, not code. Remaining: **D3 payroll export** (integrate-not-build), plus the workforce follow-ups under *Debt and odd jobs*. Deferred edges from the floor: the registro export doesn't yet surface overtime (belongs to the payslip/D3); the correction period-fetch is a ±1-day window (a >1-day-relocation correction is out of the floor's scope, chained but maybe missed by the period fetch). A post-#47 `/finish-branch` review (landed as #52) corrected four floor defects: the registro export rendered UTC instead of local wall-clock; the tamper chain omitted a correction's reason/actor and the capturing till; correction precedence tie-broke on the unhashed `ingest_seq` (a floor-bypasser could reorder corrections undetected) — now on the hashed `sequence_no`; and a `clockIn`/`clockOut` TOCTOU (an unlocked state read before the chain-head lock let two concurrent same-person clock-ins append a double-`in` that undercounts worked time) — now serialized per person with a `persons` row lock proven by a real-PG concurrency test |
 | **18 — Menu and allergens** | Allergen declaration is a **launch-day legal duty** (EU 1169/2011, RD 126/2015) |
@@ -295,6 +300,36 @@ putting the tip on `tenders`).
 
 Carried from finished work. None of it blocks anything; all of it makes later work cheaper.
 
+- **Locations follow-ups (sub-project 6, landed on `feat/locations-provisioning` 2026-08-04). None
+  blocking; all deferred by the slice's YAGNI boundary (design §8) or inherited from #33.**
+  - **The #33 SIF-topology deferrals stand.** The slice is single-node-per-location, one `venue`
+    invocation per shop. Still deferred: **active-active, failover, two concurrent SIFs + disjoint
+    series, and the relocatable submitter**; **update / rename / deactivate** of any entity (tenant,
+    location, till, node, series — the flow only inserts-and-reuses); and **multiple locations created in
+    one invocation**.
+  - **A full IGIC/IPSI tax module is unbuilt.** común is IVA, so only `{ filing: "verifactu", tax: "iva" }`
+    is wired; `resolveFiscalModules` refuses every other territory (`fiscal.regime_not_implemented`) and
+    the `nodes.tax_module` column + the `tax` seam are there for a later module, but no IGIC/IPSI tax
+    computation exists.
+  - **Cross-country establishments are out of scope.** The slice assumes a location sits in the tenant's
+    country; a location registered in a different country than the tenant (design §8) is unbuilt.
+  - **`WAITRON_ID_SISTEMA = "W1"` is a PLACEHOLDER** (`packages/provisioning/src/fiscal-modules.ts:46`).
+    It is Waitron's own AEAT-registered software identifier (≤ 2 chars, FAQ §4) and reaches every filed
+    registro via `registro_sif.id_sistema_informatico`; the real registered value **must be set before
+    any live filing**. `"W1"` compiles and is length-valid, so nothing fails until a real filing — it
+    will not surface on its own.
+  - **The `id_sistema` length rule and its error code are duplicated across two packages — converge
+    before drift.** The ≤ 2-char check lives in three places: `packages/verifactu`'s `validate` rule
+    `ID_SISTEMA_LENGTH` (no production caller), `apps/server/src/provision-till.ts`'s
+    `ID_SISTEMA_MAX_LENGTH = 2` + `assertUsableIdSistema` (throwing `sif.id_sistema_invalid`), and
+    `@waitron/provisioning`'s `assertUsableIdSistema` (throwing `provisioning.id_sistema_invalid`). The
+    two error codes are a **deliberate** duplication today — `apps/server` cannot import
+    `@waitron/provisioning`'s registry, so it re-declares the code with the identical
+    `{ value, maxLength }` shape (`packages/provisioning/src/errors.ts` documents why). Now that both the
+    standalone `provisionNode` path (`provision-till.ts`) and the `venue` CLI register a node's SIF, the
+    two length rules and the two codes should converge onto one home — folded in when `provision-till.ts`
+    is renamed to the deferred first-class `provision node` subcommand. Non-blocking, but error codes are
+    **never renamed once shipped** (`CLAUDE.md` §3), so settle it before a real filing exists.
 - **Reporting follow-ups (#56), both surfaced by the finish-branch review, neither blocking.**
   (1) **Lift `percentOf` into `@waitron/shared`.** `@waitron/reporting`'s local `taxOf` is now the third
   copy of `divideDecimal(multiplyDecimal(base, rate), "100", MONEY_SCALE)` (the others in

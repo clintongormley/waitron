@@ -42,7 +42,7 @@ interface Bootstrapped {
   nif: string;
 }
 
-// Tenants accumulate for the life of this suite and `tenants_nif_key` is unique, so each seeded
+// Tenants accumulate for the life of this suite and `tenants_country_tax_id_key` is unique, so each seeded
 // tenant needs its own NIF. A local counter rather than `@waitron/db`'s `freshNif`: this fixture
 // writes the deli's *shape* of row, and mixing two generators against one database is the exact
 // collision that helper's own comment warns about.
@@ -53,22 +53,24 @@ function nextNif(): string {
 }
 
 /**
- * Exactly what `sql/bootstrap-tenant.sql` leaves behind: tenant → location → till → node →
+ * The pre-SIF state `provisionNode` has to register against: tenant → location → till → node →
  * node-keyed series, and NO SIF registration (node-id rekey, 2026-08-03: the SIF is the node, #33,
- * so a node is what `provisionNode` registers; the series is now keyed by node).
+ * so a node is what `provisionNode` registers; the series is now keyed by node). `waitron-provision
+ * venue` registers the SIF as it stands a venue up, so this bare-node shape is now what a REIMAGED
+ * node (or one registered standalone) looks like before `provisionNode` runs.
  *
  * Written out rather than reusing `@waitron/fiscal-verifactu`'s fixtures, both of which were
  * considered: `seedTill` registers a SIF, which is the state this suite must start *without*, and
  * `seedNodesForSifContention` — the repo's only bare-node fixture — is named and documented for one
  * unrelated test ("Exists for exactly one test") and seeds a different locale and series code.
  * Borrowing it would mean either a misleading call site here or a rename reaching into
- * `chain.concurrency.test.ts`. The bootstrap SQL's own output is what this module has to provision,
- * so it is what the fixture reproduces.
+ * `chain.concurrency.test.ts`. The pre-SIF node state is what this module has to provision, so it is
+ * what the fixture reproduces.
  */
 async function bootstrapTenant(): Promise<Bootstrapped> {
   const nif = nextNif();
   const tenant = await suite.db.execute<{ id: string }>(sql`
-    insert into tenants (nif, legal_name) values (${nif}, 'Deli SL') returning id`);
+    insert into tenants (country, tax_id, legal_name) values ('ES', ${nif}, 'Deli SL') returning id`);
   const tenantId = brandTenantId(tenant.rows[0]!.id);
 
   const location = await suite.db.execute<{ id: string }>(sql`
@@ -91,7 +93,7 @@ async function bootstrapTenant(): Promise<Bootstrapped> {
   return { tenantId, tillId, nodeId, nif };
 }
 
-describe("provisioning a node that bootstrap-tenant.sql created", () => {
+describe("provisioning a node that has no SIF registration yet", () => {
   it("registers it under the tenant's own NIF, which is never an argument", async () => {
     const { tenantId, nodeId, nif } = await bootstrapTenant();
 

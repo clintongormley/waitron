@@ -1,19 +1,30 @@
 import { sql } from "drizzle-orm";
-import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  check,
+  index,
+  pgTable,
+  text,
+  time,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 /**
- * The obligado tributario. One row per NIF — the NIF is the identity AEAT
- * knows, so it is unique globally rather than per anything.
+ * The obligado tributario. Fiscal identity is country + tax_id, regime-agnostic: for a Spanish
+ * tenant `tax_id` IS the NIF, and the Veri*Factu backend reads `tax_id` where it once read `nif`
+ * (a NIF cannot be asked for before the country is known — spec D2). Unique on (country, tax_id).
  */
 export const tenants = pgTable(
   "tenants",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    nif: text("nif").notNull(),
+    country: text("country").notNull(),
+    taxId: text("tax_id").notNull(),
     legalName: text("legal_name").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("tenants_nif_key").on(t.nif)],
+  (t) => [uniqueIndex("tenants_country_tax_id_key").on(t.country, t.taxId)],
 ).enableRLS();
 
 /**
@@ -34,6 +45,17 @@ export const tenants = pgTable(
  * `primary_locale`/`secondary_locale` pair encodes order but cannot grow past
  * two, and the cap belongs in a constraint that can be relaxed, not in the
  * column layout.
+ *
+ * The fiscal/address/time columns carry `DEFAULT`s (or are nullable) so the
+ * reshape does not ripple to the ~28 existing location inserts, which never
+ * read these columns. The `venue` command sets all of them explicitly, and no
+ * runtime path reads a location's `fiscal_territory` to choose a regime — the
+ * node's `filing_module` carries that (Task A3) — so a defaulted value on a
+ * fixture is inert. `day_cutover`/`time_zone` are the inputs `computeDailyClose`
+ * consumes (spec D9): `@waitron/reporting`'s `computeDailyClose` already takes
+ * them as `DailyCloseInput` fields (`packages/reporting/src/daily-close.ts:14`,
+ * landed #56). These columns are the source a caller will read them from — the
+ * columns land now, that wiring is future.
  */
 export const locations = pgTable(
   "locations",
@@ -45,6 +67,14 @@ export const locations = pgTable(
     name: text("name").notNull(),
     invoiceLocales: text("invoice_locales").array().notNull(),
     operationDescription: text("operation_description").notNull(),
+    fiscalTerritory: text("fiscal_territory").notNull().default("ES-common"),
+    addressLine1: text("address_line1"),
+    addressLine2: text("address_line2"),
+    postalCode: text("postal_code"),
+    city: text("city"),
+    province: text("province"),
+    timeZone: text("time_zone").notNull().default("Europe/Madrid"),
+    dayCutover: time("day_cutover").notNull().default("06:00:00"),
   },
   (t) => [
     // cardinality(), NOT array_length(). array_length('{}', 1) is NULL, a CHECK
