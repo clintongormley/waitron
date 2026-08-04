@@ -76,6 +76,15 @@ async function personCount(): Promise<number> {
   return rows.rows[0]!.n;
 }
 
+// The mutable columns the staff-admin API writes, read as the superuser owner (RLS bypassed on
+// PGlite). A gate that rejects BEFORE its write leaves every one of these unchanged.
+async function personRow(id: string): Promise<{ role: string; status: string; pin_hash: string }> {
+  const rows = await suite.db.execute<{ role: string; status: string; pin_hash: string }>(
+    sql`select role, status, pin_hash from persons where id = ${id}`,
+  );
+  return rows.rows[0]!;
+}
+
 describe("createPerson", () => {
   it("creates an active person of the given role whose PIN opens a session (admin actor)", async () => {
     const tillId = await seedTill(suite.db);
@@ -182,6 +191,25 @@ describe("setRole", () => {
       viaOverride: false,
     });
   });
+
+  it("throws authorization.not_permitted for a staff actor, leaving the role unchanged", async () => {
+    const tillId = await seedTill(suite.db);
+    const staffActorId = await seedPerson(suite.db, "staff");
+    const staffSessionId = await openSession(tillId, staffActorId);
+    const targetId = await seedPerson(suite.db, "staff");
+
+    // A genuine staff session (authenticates fine) but no person.manage — the escalation attempt is
+    // staff→manager, so if the gate were absent the role would flip.
+    const code = await codeOf(() =>
+      run((tx) =>
+        setRole(tx, { actorSessionId: staffSessionId, personId: targetId, role: "manager" }),
+      ),
+    );
+    expect(code).toBe("authorization.not_permitted");
+
+    // authorize() runs before the UPDATE, so a denied actor changes no role.
+    expect((await personRow(targetId)).role).toBe("staff");
+  });
 });
 
 describe("resetPin", () => {
@@ -206,16 +234,39 @@ describe("resetPin", () => {
     expect(oldPin).toBe("pin.invalid");
   });
 
-  it("throws pin.too_short for a PIN below MIN_PIN_LENGTH (admin actor)", async () => {
+  it("throws pin.too_short for a PIN below MIN_PIN_LENGTH, leaving the hash unchanged (admin actor)", async () => {
     const tillId = await seedTill(suite.db);
     const adminId = await seedPerson(suite.db, "admin");
     const adminSessionId = await openSession(tillId, adminId);
     const targetId = await seedPerson(suite.db, "staff");
+    const before = (await personRow(targetId)).pin_hash;
 
     const code = await codeOf(() =>
       run((tx) => resetPin(tx, { actorSessionId: adminSessionId, personId: targetId, pin: "1" })),
     );
     expect(code).toBe("pin.too_short");
+
+    // The actor IS permitted; the length gate rejects before the UPDATE, so the stored hash is intact.
+    expect((await personRow(targetId)).pin_hash).toBe(before);
+  });
+
+  it("throws authorization.not_permitted for a staff actor, leaving the hash unchanged", async () => {
+    const tillId = await seedTill(suite.db);
+    const staffActorId = await seedPerson(suite.db, "staff");
+    const staffSessionId = await openSession(tillId, staffActorId);
+    const targetId = await seedPerson(suite.db, "staff");
+    const before = (await personRow(targetId)).pin_hash;
+
+    // A genuine staff session, no person.manage: an account-takeover attempt (rewrite the target's
+    // PIN) must be rejected before the UPDATE.
+    const code = await codeOf(() =>
+      run((tx) =>
+        resetPin(tx, { actorSessionId: staffSessionId, personId: targetId, pin: "9999" }),
+      ),
+    );
+    expect(code).toBe("authorization.not_permitted");
+
+    expect((await personRow(targetId)).pin_hash).toBe(before);
   });
 });
 
@@ -240,6 +291,38 @@ describe("suspendPerson / reactivatePerson", () => {
       loginWithPin(tx, { tenantId, tillId, personId: targetId, pin: "1234" }),
     );
     expect(session).toEqual({ id: expect.any(String), tenantId, personId: targetId, tillId });
+  });
+
+  it("suspendPerson throws authorization.not_permitted for a staff actor, leaving status active", async () => {
+    const tillId = await seedTill(suite.db);
+    const staffActorId = await seedPerson(suite.db, "staff");
+    const staffSessionId = await openSession(tillId, staffActorId);
+    const targetId = await seedPerson(suite.db, "staff"); // active
+
+    // A genuine staff session, no person.manage: a lockout attempt (suspend a colleague) must be
+    // rejected before the UPDATE, so the target stays active.
+    const code = await codeOf(() =>
+      run((tx) => suspendPerson(tx, { actorSessionId: staffSessionId, personId: targetId })),
+    );
+    expect(code).toBe("authorization.not_permitted");
+
+    expect((await personRow(targetId)).status).toBe("active");
+  });
+
+  it("reactivatePerson throws authorization.not_permitted for a staff actor, leaving status suspended", async () => {
+    const tillId = await seedTill(suite.db);
+    const staffActorId = await seedPerson(suite.db, "staff");
+    const staffSessionId = await openSession(tillId, staffActorId);
+    // A SUSPENDED target so reactivate would be a real change (active would hide a missing gate).
+    const targetId = await seedPerson(suite.db, "staff", "suspended");
+
+    const code = await codeOf(() =>
+      run((tx) => reactivatePerson(tx, { actorSessionId: staffSessionId, personId: targetId })),
+    );
+    expect(code).toBe("authorization.not_permitted");
+
+    // The gate rejects before the UPDATE, so an unauthorised actor cannot un-suspend anyone.
+    expect((await personRow(targetId)).status).toBe("suspended");
   });
 });
 
