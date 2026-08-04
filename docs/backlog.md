@@ -66,6 +66,8 @@ reprioritisation rather than assumed.
 | **App-level cross-server sync** — design | **Designed** (this session). Application **outbox** (`sync_log` + generic capture trigger, apply as the app role under `withTenant`) — one reusable mechanism, no new DB privilege. Decisions settled with the owner: explicit `server_id` on the commercial tables too, **true active-active** for the deli, and a **payments fast lane**. Built later (the `server_id`/node rekey it waited on **landed as #54**; still needs the feature schemas to settle); 9 container gates first. Spec: [2026-08-02-app-level-sync-design.md](superpowers/specs/2026-08-02-app-level-sync-design.md) |
 | **Close Q13 and Q15 on primary source** | **Done** (#37). Q13 (tips) and Q15's core CLOSED on primary/official source ([findings](compliance/verifactu-findings.md) §§11–12); Q14 (precuenta) stays open — see the advisor gap below |
 | **Consolidate the session-memory notes** | Not started. They predate this file and now overlap it — see below |
+| **Reporting — daily close** (sub-project 8, first slice) | **Merged** (#56). Read-only `@waitron/reporting`: `computeDailyClose(tx, input)` → a per-`(tenant, node, business-day)` close — a VAT summary (base + tax per rate, corrections netted) anchored on **issuance**, and an operational cash-up (by till + tender method) anchored on **settlement**, plus record counts. Derived, no new tables/migration; DST-aware business-day bucketing with a configurable cutover; headless (a till/UI consumes it later). The F3-canje VAT exclusion is confirmed on primary source (FAQ v1.3 §27 — *modelo 303* counts R1–R5, not F3). [design](superpowers/specs/2026-08-04-daily-close-reporting-design.md), [plan](superpowers/plans/2026-08-04-daily-close-reporting.md). Two follow-ups under *Debt* |
+| **Locations — provision a sellable venue** (sub-project 6) | **In flight.** Spec + reviewed 11-task plan committed on `feat/locations-provisioning`; implementation started (this session). Reshapes fiscal identity to country/territory-driven (`tenants.nif` → `country` + `tax_id`; `locations` gains `fiscal_territory` + `time_zone` + `day_cutover`), a territory→modules resolver (Veri\*Factu/común only, others refused), an internal SIF-registration step, and a `waitron-provision venue` CLI that retires the stale `bootstrap-tenant.sql`. [design](superpowers/specs/2026-08-04-locations-provisioning-design.md), [plan](superpowers/plans/2026-08-04-locations-provisioning.md) |
 
 ---
 
@@ -92,9 +94,12 @@ carries its own design and plan:
 [2026-08-03-invoice-first-settlement-design.md](superpowers/specs/2026-08-03-invoice-first-settlement-design.md)
 and [2026-08-03-invoice-first-settlement.md](superpowers/plans/2026-08-03-invoice-first-settlement.md).
 
-**Then reassess — now live.** With piece 4 landed the fiscal sequence is complete, and the open
-question is whether to keep going fiscal (reporting, daily close) or turn to the till. It is
-deliberately not answered here.
+**Reassessed 2026-08-04 — reporting AND the till track, in parallel.** With the fiscal sequence
+complete, the owner chose to run both directions at once: **reporting** (sub-project 8) and the **till
+track** (Locations 6 → Identity 5 → Counter POS 7), starting with Locations as the foundational
+unblocker (nothing can provision a sellable venue today). Prioritisation stayed by soundness, not the
+calendar. Reporting's first slice — the daily close — **landed as #56**; Locations 6 is in flight (spec
++ plan committed, implementation started). See *Now* and *Not started* for each.
 
 ---
 
@@ -259,15 +264,16 @@ not payment method); a short payment agreed as payment-in-full before the factur
 
 ## Not started
 
-Nothing below has any code, **except sub-project 16 (workforce), whose *registro de jornada* legal
-floor landed as #47 and whose D2 scheduling landed as #50** — only its D3 (below) remains unstarted.
+Nothing below has any code, **except: sub-project 16 (workforce) — *registro de jornada* floor (#47),
+D2 scheduling (#50), only D3 remains; sub-project 8 (reporting) — the daily-close first slice landed
+(#56); and sub-project 6 (Locations) — spec + plan committed and implementation in flight.**
 
 | Sub-project | Note |
 | --- | --- |
 | **7 — Counter POS UI** | The till. Also owns the working-order amendment log (art. 29.2.j LGT), deferred here deliberately: nothing writes working orders yet, and a log with no producer cannot be shown to work |
 | **5 — Identity** | Users, roles, permissions. The refund/void role gate waits on it |
-| **6 — Locations** | Venue and till registration, series assignment |
-| **8 — Reporting** | Daily close, VAT summary |
+| **6 — Locations** | **In flight** — spec + reviewed 11-task plan on `feat/locations-provisioning`, implementation started (see *Now*). The foundational till-track unblocker: no production path provisions a node today, and `bootstrap-tenant.sql` is stale |
+| **8 — Reporting** | **Daily-close first slice DONE (#56)** — `@waitron/reporting`'s `computeDailyClose` (VAT summary + operational cash-up, two anchors). Unstarted next slices: a **frozen/signed *cierre Z*** (numbered, immutable, with counted-cash / opening float / *descuadre* — the derived close deliberately leaves a clean seam for it), date **ranges** + the **monthly VAT return** (*modelo 303*) aggregation, and the reporting **UI** (belongs to the till, sub-project 7) |
 | **16 — Workforce** | *Registro de jornada* legal floor **DONE (#47)**; **D2 scheduling DONE (#50)** — `convenio_config` surface (overtime de-hard-coded, single-sourced), shifts + `roster_versions` + `publishRoster`, absences/availability/shift_templates/shift_swaps, an **advisory** guardrail engine (`validateRoster` → `RosterBreach[]`; publish surfaces breaches but proceeds — owner chose warn+override) + a planned-vs-actual read model, and supersede-on-republish (partial unique index, one published roster per `(location, period)`). The overtime *rule* the both-model projection computes stays convenio-driven — an **asesor-laboral** call, not code. Remaining: **D3 payroll export** (integrate-not-build), plus the workforce follow-ups under *Debt and odd jobs*. Deferred edges from the floor: the registro export doesn't yet surface overtime (belongs to the payslip/D3); the correction period-fetch is a ±1-day window (a >1-day-relocation correction is out of the floor's scope, chained but maybe missed by the period fetch). A post-#47 `/finish-branch` review (landed as #52) corrected four floor defects: the registro export rendered UTC instead of local wall-clock; the tamper chain omitted a correction's reason/actor and the capturing till; correction precedence tie-broke on the unhashed `ingest_seq` (a floor-bypasser could reorder corrections undetected) — now on the hashed `sequence_no`; and a `clockIn`/`clockOut` TOCTOU (an unlocked state read before the chain-head lock let two concurrent same-person clock-ins append a double-`in` that undercounts worked time) — now serialized per person with a `persons` row lock proven by a real-PG concurrency test |
 | **18 — Menu and allergens** | Allergen declaration is a **launch-day legal duty** (EU 1169/2011, RD 126/2015) |
 | 10-15, 17, 19, 20 | Tabs, floor plan, KDS, tip payroll, bookings, online ordering, accounting export, opening hours, procurement |
@@ -289,6 +295,18 @@ putting the tip on `tenders`).
 
 Carried from finished work. None of it blocks anything; all of it makes later work cheaper.
 
+- **Reporting follow-ups (#56), both surfaced by the finish-branch review, neither blocking.**
+  (1) **Lift `percentOf` into `@waitron/shared`.** `@waitron/reporting`'s local `taxOf` is now the third
+  copy of `divideDecimal(multiplyDecimal(base, rate), "100", MONEY_SCALE)` (the others in
+  `packages/core/src/vat.ts` and `apps/server/scripts/record-one-sale.ts`). The clean fix is a
+  cross-package hoist (touches `core` + `shared`), so it wants its own small PR rather than riding in on
+  the reporting feature — kept a local copy deliberately to keep that PR self-contained. (2) **A sargable
+  business-day filter.** `businessDayClause` wraps the column in `(col AT TIME ZONE tz - cutover)::date`,
+  which cannot use the `(tenant_id, issued_at)` index, so the aggregates scan the tenant slice. The
+  rewrite to half-open UTC bounds (`col >= start AND col < end`) is index-usable, but has a DST subtlety
+  (`start + interval '1 day'` is wrong on a transition day — compute `end` from the next day's local
+  cutover) and only the VAT query has a matching index anyway (cash-up/voids would also need new
+  indexes). **Gated on scale**, consistent with the 'sargable reconcile period filter' entry below.
 - **The pre-push hook is scoped now, and its DECISIONS are tested — most of the shell still is not.**
   The hook maps the push's changed paths onto workspace packages and runs `typecheck` and
   `test:coverage` against those packages and their dependents, skipping those two, **`lint`** and
