@@ -1215,6 +1215,58 @@ describe("runCli venue", () => {
     expect(h.closes()).toBe(1);
   });
 
+  it("turns a refused CONNECT to the target into a structured code, applying nothing", async () => {
+    // Mirrors `instance`'s "reports a refused CONNECT". `venue` opens ONE connection — the target,
+    // via `withVenueState` — so a SQLSTATE-bearing connect failure (the target database absent,
+    // 3D000, or the admin URI lacking privilege on it) is the refused-CONNECT case. Before this fix
+    // it reached the operator as a raw `unexpected failure`; now it is `provisioning.state_unreadable`
+    // naming the database, exactly as `instance`/`status`. The stamp read and the apply never run.
+    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    h.connect.mockRejectedValue(
+      Object.assign(new Error('database "waitron_demo" does not exist'), { code: "3D000" }),
+    );
+    const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
+    expect(code).toBe(1);
+    const printed = h.lines.join("\n");
+    expect(printed).toContain(
+      'provisioning.state_unreadable {"database":"waitron_demo","sqlState":"3D000"}',
+    );
+    expect(h.readEnvironment).not.toHaveBeenCalled();
+    expect(h.applyVenue).not.toHaveBeenCalled();
+    // No secret and no SQLSTATE-less raw driver text leaked into the operator's terminal.
+    expect(printed).not.toContain("adminsecret");
+    expect(printed).not.toContain(ADMIN_URI);
+    // Nothing was opened, so nothing was closed.
+    expect(h.closes()).toBe(0);
+  });
+
+  it("turns a refused stamp READ into a structured code, applying nothing", async () => {
+    // Mirrors `instance`'s "turns a read that the database refused into a structured code": an admin
+    // that did not create the target holds no privilege on its tables, so the deployment-stamp read
+    // fails 42501. A fact about the database, mapped to `provisioning.state_unreadable` — not the raw
+    // `unexpected failure` it surfaced as before this fix. The apply must NOT run.
+    const h = harness({
+      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
+      readEnvironment: () =>
+        Promise.reject(
+          Object.assign(new Error("permission denied for table deployment"), { code: "42501" }),
+        ),
+    });
+    const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
+    expect(code).toBe(1);
+    const printed = h.lines.join("\n");
+    expect(printed).toContain(
+      'provisioning.state_unreadable {"database":"waitron_demo","sqlState":"42501"}',
+    );
+    expect(h.readEnvironment).toHaveBeenCalledTimes(1);
+    expect(h.applyVenue).not.toHaveBeenCalled();
+    // The target connection WAS opened for the read, so it is still closed on the way out.
+    expect(h.closes()).toBe(1);
+    // No secret and no raw driver text leaked.
+    expect(printed).not.toContain("adminsecret");
+    expect(printed).not.toContain(ADMIN_URI);
+  });
+
   it("prompts for every omitted option, in order, reading the admin URI from the env", async () => {
     const h = harness({
       answers: [

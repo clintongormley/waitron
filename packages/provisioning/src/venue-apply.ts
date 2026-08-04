@@ -95,24 +95,37 @@ export async function applyVenue(
           break;
         }
         case "create-till":
+          // planVenue always emits create-location first, so `locationId` is set here. A malformed
+          // or future-planner plan that runs create-till early would insert an EMPTY location_id — a
+          // low-signal 22P02 (invalid uuid). Refuse it as a plan-integrity error instead. A plain
+          // Error, NOT an operator-facing AppError code: this is a programming/plan bug, not input.
+          if (locationId === "") throw new Error("applyVenue: create-till before create-location");
           tillId = randomUUID();
           await tx.execute(sql`
             insert into tills (id, tenant_id, location_id, name)
             values (${tillId}, ${tenantId}, ${locationId}, ${action.name})`);
           break;
         case "create-node":
+          // As create-till: create-node before create-location would insert an empty location_id.
+          if (locationId === "") throw new Error("applyVenue: create-node before create-location");
           nodeId = randomUUID();
           await tx.execute(sql`
             insert into nodes (id, tenant_id, location_id, name, filing_module, tax_module)
             values (${nodeId}, ${tenantId}, ${locationId}, ${action.name}, ${action.filingModule}, ${action.taxModule})`);
           break;
         case "register-sif":
+          // register-sif before create-node would register a SIF against an EMPTY node id — fiscally
+          // load-bearing (spec D5: a fresh node starts a new chain), so refuse it as a plan-integrity
+          // error rather than let it reach `registerSif`.
+          if (nodeId === "") throw new Error("applyVenue: register-sif before create-node");
           // registerSif takes nif as a param, so read it here from the tenant we just ensured
           // (never an argument, mirroring provisionNode's obligadoNif: an operator-supplied NIF
           // would file a real tenant's sales under someone else's).
           sif = await registerSifForNode(tx, tenantId, nodeId, action.idSistemaInformatico);
           break;
         case "create-series": {
+          // As register-sif: create-series before create-node would insert an empty node_id.
+          if (nodeId === "") throw new Error("applyVenue: create-series before create-node");
           const seriesId = randomUUID();
           const inserted = await tx.execute<{ id: string }>(sql`
             insert into invoice_series (id, tenant_id, node_id, code, purpose)

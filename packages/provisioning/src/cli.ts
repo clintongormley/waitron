@@ -416,7 +416,17 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     const adminUri = await resolveAdminUri(deps);
 
     return await withVenueState(adminUri, database, deps, async (target) => {
-      const environment = await deps.readEnvironment(target);
+      let environment: DeploymentEnvironment | null;
+      try {
+        // The SQLSTATE-bearing STATE READ: reading the deployment stamp as an admin that may lack
+        // privilege on the target's tables fails 42501, exactly as `instance`/`status` read theirs.
+        // Classified via `asUnreadable`, like the connect in `withVenueState`; the venue APPLY below
+        // keeps its own mapping (`venue_conflict`/propagate), so an apply fault is never dressed as a
+        // read one. Only this stamp read is wrapped, NOT `applyVenue`.
+        environment = await deps.readEnvironment(target);
+      } catch (error) {
+        throw asUnreadable(error, database);
+      }
       if (environment === null) {
         // A venue cannot be filed against a database with no environment stamp — stamping is
         // `instance`'s job, and one database per environment is a fiscal invariant. Refused, not
@@ -539,13 +549,18 @@ async function withState(
  * connection to manage — no cluster-admin handle, no second read, no target that may not exist yet.
  * That is why this is a thinner helper than `withState` rather than a reuse of it.
  *
- * A failure from `deps.connect` or from `body` propagates untouched. Unlike `instance`'s
- * `withState`, this helper does NOT wrap the connect in `asUnreadable`, so a SQLSTATE-bearing connect
- * failure (the target database is absent, or the admin URI lacks privilege on it) surfaces through
- * the caller's outer `try/catch` as an unexpected error rather than a structured
- * `provisioning.state_unreadable`. That outer `try/catch` still maps a thrown `AppError` and rethrows
- * the rest (a broken socket or a bug). Giving `venue` the same `state_unreadable` mapping would make
- * the two contracts match; today they do not, and this comment says so rather than claiming they do.
+ * The CONNECT is classified exactly as `instance`'s `withState` classifies its own: a
+ * SQLSTATE-bearing failure — the target database absent, or the admin URI lacking privilege on it —
+ * becomes `provisioning.state_unreadable` naming the database (via `asUnreadable`), while a failure
+ * with NO SQLSTATE (a broken socket, a bug) is rethrown untouched. The other SQLSTATE-bearing STATE
+ * READ, the deployment-stamp read (`deps.readEnvironment`), is wrapped the same way in `venue()`'s
+ * body — so `venue` now gives connect and state-read the same `state_unreadable` contract `instance`
+ * does. The two contracts match, for connect and for the stamp read.
+ *
+ * What is deliberately NOT classified is the venue APPLY: `applyVenue`'s own failures keep their
+ * mapping in `venue()` (a unique violation → `provisioning.venue_conflict`, anything else rethrown).
+ * A genuine insert error is not a fact about whether the database was readable, and labelling it
+ * `state_unreadable` would be wrong — the §1 defect class this repository guards against.
  */
 async function withVenueState(
   adminUri: string,
@@ -553,7 +568,15 @@ async function withVenueState(
   deps: CliDeps,
   body: (target: Database) => Promise<number>,
 ): Promise<number> {
-  const target = await deps.connect(withDatabase(adminUri, database));
+  let target: Database;
+  try {
+    target = await deps.connect(withDatabase(adminUri, database));
+  } catch (error) {
+    // A SQLSTATE-bearing connect failure is the database's verdict (absent, or no privilege on it);
+    // `asUnreadable` maps it to `provisioning.state_unreadable` and returns a broken socket untouched,
+    // mirroring `withState`'s connect (its own `catch` above).
+    throw asUnreadable(error, database);
+  }
   try {
     return await body(target);
   } finally {

@@ -134,4 +134,77 @@ describe("applyVenue", () => {
       select count(*)::int as n from invoice_series where node_id = ${result.nodeId}`);
     expect(series.rows[0]?.n).toBe(1); // only one series row exists
   });
+
+  describe("guards a malformed plan whose actions arrive out of order", () => {
+    // planVenue always emits create-location before create-till/create-node, and create-node before
+    // register-sif/create-series, so these orderings are unreachable from it. A hand-built (or a
+    // future-planner) plan that runs a step early would otherwise hit the DB with an EMPTY uuid — a
+    // low-signal 22P02 — or register a SIF against an empty node id (fiscally load-bearing). Each
+    // guard turns that into a clear plan-integrity Error BEFORE any such write, not an operator-facing
+    // AppError: a malformed plan is a programming bug, not operator input.
+    const taxId = "B33333333";
+    const tenantId = obligadoTenantId("ES", taxId);
+    const ensure: VenueAction = {
+      kind: "ensure-tenant",
+      tenantId,
+      country: "ES",
+      taxId,
+      legalName: "Deli SL",
+    };
+    const createLocation: VenueAction = {
+      kind: "create-location",
+      name: "Mostrador",
+      fiscalTerritory: "ES-common",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "venta en establecimiento",
+      addressLine1: "Calle Mayor 1",
+      addressLine2: null,
+      postalCode: "28013",
+      city: "Madrid",
+      province: "Madrid",
+      timeZone: "Europe/Madrid",
+      dayCutover: "06:00:00",
+    };
+
+    it.each([
+      {
+        name: "create-till before create-location",
+        plan: [ensure, { kind: "create-till", name: "Caja 1" } as VenueAction],
+        message: "applyVenue: create-till before create-location",
+      },
+      {
+        name: "create-node before create-location",
+        plan: [
+          ensure,
+          {
+            kind: "create-node",
+            name: "Mostrador",
+            filingModule: "verifactu",
+            taxModule: "iva",
+          } as VenueAction,
+        ],
+        message: "applyVenue: create-node before create-location",
+      },
+      {
+        name: "register-sif before create-node",
+        plan: [
+          ensure,
+          createLocation,
+          { kind: "register-sif", idSistemaInformatico: "W1" } as VenueAction,
+        ],
+        message: "applyVenue: register-sif before create-node",
+      },
+      {
+        name: "create-series before create-node",
+        plan: [
+          ensure,
+          createLocation,
+          { kind: "create-series", code: "A", purpose: "standard" } as VenueAction,
+        ],
+        message: "applyVenue: create-series before create-node",
+      },
+    ])("throws a clear error for $name, not a raw SQL error", async ({ plan, message }) => {
+      await expect(applyVenue(plan, { db: suite.db })).rejects.toThrow(message);
+    });
+  });
 });
