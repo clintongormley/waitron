@@ -9,7 +9,10 @@ import type { CloseCounts, DailyCloseInput } from "./types.js";
  * as the VAT half). `voids` counts void EVENTS whose voided_at falls in the day, for this node's
  * sales. Belt-and-suspenders tenant/node predicates over RLS.
  */
-export async function computeCloseCounts(tx: Transaction, input: DailyCloseInput): Promise<CloseCounts> {
+export async function computeCloseCounts(
+  tx: Transaction,
+  input: DailyCloseInput,
+): Promise<CloseCounts> {
   const issued = await tx.execute<{ sales: number; corrections: number }>(sql`
     select
       count(*) filter (where s.corrects_sale_id is null)::int as sales,

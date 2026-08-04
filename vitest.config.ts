@@ -5,7 +5,7 @@ import { defineConfig } from "vitest/config";
 //
 //   the two CLASSIFIERS (`scripts/changed-*.mjs`) that decide what CI and the pre-push hook run;
 //   the two repo-wide GUARDS (`scripts/*.test.ts`), which read `packages/` and `apps/` whole —
-//   guarded-teardowns scans every `*.test.ts` under both, english-only scans the eight generic
+//   guarded-teardowns scans every `*.test.ts` under both, english-only scans the nine generic
 //   packages' `src/`;
 //   `scripts/check-signoff.test.mjs`, which covers the sign-off predicate both gates share and
 //   runs licence.yml's `dco` step extracted from the workflow file.

@@ -51,7 +51,11 @@ export async function seedVenue(db: Database): Promise<SeededVenue> {
   return { tenantId, locationId, tillId, nodeId, seriesId };
 }
 
-export async function seedTill(db: Database, tenantId: TenantId, locationId: string): Promise<TillId> {
+export async function seedTill(
+  db: Database,
+  tenantId: TenantId,
+  locationId: string,
+): Promise<TillId> {
   const till = await db.execute<{ id: string }>(
     sql`insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Till 2') returning id`,
   );

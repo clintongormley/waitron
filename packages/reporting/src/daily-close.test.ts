@@ -39,8 +39,17 @@ describe("computeDailyClose", () => {
     // Issued 2026-08-04 noon local; settled 2026-08-05 noon local.
     const issued = new Date("2026-08-04T10:00:00Z").toISOString();
     const settled = new Date("2026-08-05T10:00:00Z").toISOString();
-    const saleId = await seedSale(suite.db, venue, { invoiceNumber: 1, issuedAt: issued, total: "121.00", lines: [{ vatRate: "21.00", lineTotal: "100.00" }] });
-    await seedTender(suite.db, { tenantId: venue.tenantId, saleId }, { method: "card", amount: "121.00", settledAt: settled });
+    const saleId = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: issued,
+      total: "121.00",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+    });
+    await seedTender(
+      suite.db,
+      { tenantId: venue.tenantId, saleId },
+      { method: "card", amount: "121.00", settledAt: settled },
+    );
 
     const day4 = await run(input({ businessDay: "2026-08-04" }));
     expect(day4.vat.byRate).toEqual([{ rate: "21.00", base: "100.00", tax: "21.00" }]);
@@ -54,8 +63,17 @@ describe("computeDailyClose", () => {
 
   it("assembles all three sections and echoes the request identity", async () => {
     const issued = new Date("2026-08-04T10:00:00Z").toISOString();
-    const saleId = await seedSale(suite.db, venue, { invoiceNumber: 1, issuedAt: issued, total: "121.00", lines: [{ vatRate: "21.00", lineTotal: "100.00" }] });
-    await seedTender(suite.db, { tenantId: venue.tenantId, saleId }, { method: "cash", amount: "121.00", tipAmount: "0.00", settledAt: issued });
+    const saleId = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: issued,
+      total: "121.00",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+    });
+    await seedTender(
+      suite.db,
+      { tenantId: venue.tenantId, saleId },
+      { method: "cash", amount: "121.00", tipAmount: "0.00", settledAt: issued },
+    );
     const close = await run(input());
     expect(close).toMatchObject({
       tenantId: venue.tenantId,
@@ -72,7 +90,12 @@ describe("computeDailyClose", () => {
     // Our tenant: nothing. A DIFFERENT tenant with a sale on the same day/node-of-its-own.
     const other = await seedVenue(suite.db);
     const issued = new Date("2026-08-04T10:00:00Z").toISOString();
-    await seedSale(suite.db, other, { invoiceNumber: 1, issuedAt: issued, total: "121.00", lines: [{ vatRate: "21.00", lineTotal: "100.00" }] });
+    await seedSale(suite.db, other, {
+      invoiceNumber: 1,
+      issuedAt: issued,
+      total: "121.00",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+    });
     const close = await run(input());
     expect(close.vat.byRate).toEqual([]);
     expect(close.counts).toEqual({ sales: 0, corrections: 0, voids: 0 });
@@ -81,7 +104,12 @@ describe("computeDailyClose", () => {
   it("handles the spring-forward DST day without shifting the bucket", async () => {
     // 2026-03-29 is the EU spring-forward (02:00→03:00). A 12:00-local sale is unambiguous.
     const issued = new Date("2026-03-29T10:00:00Z").toISOString(); // 12:00 CEST after the jump
-    await seedSale(suite.db, venue, { invoiceNumber: 1, issuedAt: issued, total: "121.00", lines: [{ vatRate: "21.00", lineTotal: "100.00" }] });
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: issued,
+      total: "121.00",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+    });
     const close = await run(input({ businessDay: "2026-03-29" }));
     expect(close.vat.byRate).toEqual([{ rate: "21.00", base: "100.00", tax: "21.00" }]);
   });

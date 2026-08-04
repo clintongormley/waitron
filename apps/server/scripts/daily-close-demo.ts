@@ -34,13 +34,7 @@ import { recordCorrection, recordSale, settleSale } from "@waitron/core";
 import type { RecordCorrectionInput, RecordSaleInput } from "@waitron/core";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { TrustedClock } from "@waitron/fiscal";
-import {
-  CORE_MIGRATIONS,
-  asAppUser,
-  createPgliteDb,
-  runMigrations,
-  withTenant,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, createPgliteDb, runMigrations, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import {
   nodeId as brandNodeId,

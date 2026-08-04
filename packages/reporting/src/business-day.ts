@@ -25,7 +25,9 @@ export function validateTimeZone(tz: string): void {
     throw new Error(`reporting: invalid IANA time zone: ${JSON.stringify(tz)}`);
   }
   if (/^[+-]/.test(resolved)) {
-    throw new Error(`reporting: invalid IANA time zone (numeric offset, not a named zone): ${JSON.stringify(tz)}`);
+    throw new Error(
+      `reporting: invalid IANA time zone (numeric offset, not a named zone): ${JSON.stringify(tz)}`,
+    );
   }
 }
 
@@ -37,7 +39,9 @@ export function validateCutover(cutover: string): void {
 
 export function validateBusinessDay(day: string): void {
   if (!DATE_RE.test(day)) {
-    throw new Error(`reporting: invalid business day, expected "YYYY-MM-DD": ${JSON.stringify(day)}`);
+    throw new Error(
+      `reporting: invalid business day, expected "YYYY-MM-DD": ${JSON.stringify(day)}`,
+    );
   }
 }
 

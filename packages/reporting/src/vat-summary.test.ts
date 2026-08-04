@@ -65,7 +65,7 @@ describe("computeVatSummary", () => {
     expect(vat).toMatchObject({ baseTotal: "200.00", taxTotal: "31.00", grossTotal: "231.00" });
   });
 
-  it("nets a rectificativa's negative lines into the rate", async () => {
+  it("nets a correction's negative lines into the rate", async () => {
     const original = await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: noonUtc,
@@ -143,7 +143,12 @@ describe("computeVatSummary", () => {
   });
 
   it("returns zeros for an empty day", async () => {
-    expect(await run()).toEqual({ byRate: [], baseTotal: "0.00", taxTotal: "0.00", grossTotal: "0.00" });
+    expect(await run()).toEqual({
+      byRate: [],
+      baseTotal: "0.00",
+      taxTotal: "0.00",
+      grossTotal: "0.00",
+    });
   });
 
   it("excludes another node's sales", async () => {

@@ -31,7 +31,12 @@ function run(overrides: Partial<DailyCloseInput> = {}): Promise<CashUp> {
 // Helper: a settled sale with tenders. Returns nothing; each test seeds its own.
 async function saleWithTenders(
   inv: number,
-  tenderRows: Array<{ method: TenderMethod; amount: string; tipAmount?: string; settledAt: string }>,
+  tenderRows: Array<{
+    method: TenderMethod;
+    amount: string;
+    tipAmount?: string;
+    settledAt: string;
+  }>,
 ): Promise<void> {
   const saleId = await seedSale(suite.db, venue, {
     invoiceNumber: inv,
@@ -64,9 +69,18 @@ describe("computeCashUp", () => {
     const s2 = await seedSale(
       suite.db,
       { ...venue, tillId: till2 },
-      { invoiceNumber: 2, issuedAt: settledNoon, total: "40.00", lines: [{ vatRate: "10.00", lineTotal: "36.36" }] },
+      {
+        invoiceNumber: 2,
+        issuedAt: settledNoon,
+        total: "40.00",
+        lines: [{ vatRate: "10.00", lineTotal: "36.36" }],
+      },
     );
-    await seedTender(suite.db, { tenantId: venue.tenantId, saleId: s2 }, { method: "card", amount: "40.00", settledAt: settledNoon });
+    await seedTender(
+      suite.db,
+      { tenantId: venue.tenantId, saleId: s2 },
+      { method: "card", amount: "40.00", settledAt: settledNoon },
+    );
     const cash = await run();
     expect(cash.byTill.map((t) => t.tillId).sort()).toEqual([venue.tillId, till2].sort());
     expect(cash).toMatchObject({ tenderTotal: "70.00", tipTotal: "0.00" });
@@ -74,7 +88,11 @@ describe("computeCashUp", () => {
 
   it("buckets by settlement day + cutover: a 01:30-local tender belongs to the prior day", async () => {
     await saleWithTenders(1, [
-      { method: "cash", amount: "10.00", settledAt: new Date("2026-08-03T23:30:00Z").toISOString() },
+      {
+        method: "cash",
+        amount: "10.00",
+        settledAt: new Date("2026-08-03T23:30:00Z").toISOString(),
+      },
     ]);
     expect((await run({ businessDay: "2026-08-04" })).byTill).toEqual([]);
     expect((await run({ businessDay: "2026-08-03" })).byTill).toHaveLength(1);
@@ -92,7 +110,11 @@ describe("computeCashUp", () => {
       total: "10.00",
       lines: [{ vatRate: "21.00", lineTotal: "8.26" }],
     });
-    await seedTender(suite.db, { tenantId: other.tenantId, saleId: s }, { method: "cash", amount: "10.00", settledAt: settledNoon });
+    await seedTender(
+      suite.db,
+      { tenantId: other.tenantId, saleId: s },
+      { method: "cash", amount: "10.00", settledAt: settledNoon },
+    );
     expect((await run()).byTill).toEqual([]);
   });
 });

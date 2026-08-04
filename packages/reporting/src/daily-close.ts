@@ -11,7 +11,10 @@ import type { DailyClose, DailyCloseInput } from "./types.js";
  * immutable commercial records — recomputes identically once the day has passed (design §6). Inputs
  * are validated up front so a bad timezone/cutover fails before any query runs.
  */
-export async function computeDailyClose(tx: Transaction, input: DailyCloseInput): Promise<DailyClose> {
+export async function computeDailyClose(
+  tx: Transaction,
+  input: DailyCloseInput,
+): Promise<DailyClose> {
   validateTimeZone(input.timeZone);
   validateCutover(input.dayCutover);
   validateBusinessDay(input.businessDay);

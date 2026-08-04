@@ -30,7 +30,10 @@ function taxOf(base: Decimal, ratePercent: Decimal): Decimal {
  * excluded. The explicit tenant/node predicates are belt-and-suspenders over RLS (mirrors
  * listOutstandingSales).
  */
-export async function computeVatSummary(tx: Transaction, input: DailyCloseInput): Promise<VatSummary> {
+export async function computeVatSummary(
+  tx: Transaction,
+  input: DailyCloseInput,
+): Promise<VatSummary> {
   const { rows } = await tx.execute<{ rate: string; base: string }>(sql`
     select
       sl.vat_rate::text as rate,

@@ -3,7 +3,13 @@ import type { Transaction } from "@waitron/db";
 import { addDecimal, decimal, tillId as brandTillId } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { businessDayClause } from "./business-day.js";
-import type { CashUp, DailyCloseInput, TenderMethod, TenderMethodLine, TillCashUp } from "./types.js";
+import type {
+  CashUp,
+  DailyCloseInput,
+  TenderMethod,
+  TenderMethodLine,
+  TillCashUp,
+} from "./types.js";
 
 /**
  * Operational cash-up for one (tenant, node) over one business day, anchored on settlement. Reads
@@ -12,7 +18,12 @@ import type { CashUp, DailyCloseInput, TenderMethod, TenderMethodLine, TillCashU
  * always positive). Belt-and-suspenders tenant/node predicates over RLS.
  */
 export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Promise<CashUp> {
-  const { rows } = await tx.execute<{ till_id: string; method: TenderMethod; amount: string; tip: string }>(sql`
+  const { rows } = await tx.execute<{
+    till_id: string;
+    method: TenderMethod;
+    amount: string;
+    tip: string;
+  }>(sql`
     select
       s.till_id::text as till_id,
       t.method as method,
@@ -33,7 +44,11 @@ export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Pr
   let tenderTotal = decimal("0.00");
   let tipTotal = decimal("0.00");
   for (const r of rows) {
-    const line: TenderMethodLine = { method: r.method, amount: decimal(r.amount), tip: decimal(r.tip) };
+    const line: TenderMethodLine = {
+      method: r.method,
+      amount: decimal(r.amount),
+      tip: decimal(r.tip),
+    };
     const existing = tills.get(r.till_id);
     if (existing === undefined) tills.set(r.till_id, [line]);
     else existing.push(line);
@@ -43,7 +58,8 @@ export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Pr
 
   const byTill: TillCashUp[] = [...tills.entries()].map(([tid, byMethod]) => {
     let cashTakings: Decimal = decimal("0.00");
-    for (const m of byMethod) if (m.method === "cash") cashTakings = addDecimal(cashTakings, m.amount);
+    for (const m of byMethod)
+      if (m.method === "cash") cashTakings = addDecimal(cashTakings, m.amount);
     return { tillId: brandTillId(tid), byMethod, cashTakings };
   });
 
