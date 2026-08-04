@@ -1,7 +1,9 @@
 # Verifactu — verified findings
 
 Research date: **2026-07-18**. Sources are AEAT and BOE primary texts unless noted.
-Companion document: [asesor-questions.md](asesor-questions.md) — the unresolved items.
+Companion documents: [asesor-questions.md](asesor-questions.md) — the unresolved items;
+[verifactu-faq-notes.md](verifactu-faq-notes.md) — indexed receipts from AEAT's developer FAQ (v1.3,
+4-Dec-2025), with the source PDF pinned in `sources/`.
 
 Everything here was checked against primary sources and adversarially verified. Where a
 claim did not survive verification, or was not checked at all, it says so. **Do not treat
