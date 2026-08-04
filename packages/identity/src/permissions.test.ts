@@ -15,6 +15,10 @@ describe("roleHasPermission", () => {
   it("adds staff management for a manager", () => {
     expect(roleHasPermission("manager", "person.manage")).toBe(true);
     expect(roleHasPermission("manager", "sale.void")).toBe(true);
+    // The manager set is SUPERVISOR ∪ {person.manage} = the whole catalog, so pin every row: a
+    // regressed MANAGER that dropped the ...SUPERVISOR spread would otherwise pass on the two
+    // specific assertions above while silently losing sale.refund/discount/rectify.
+    for (const p of PERMISSIONS) expect(roleHasPermission("manager", p)).toBe(true);
   });
   it("gives an admin every permission", () => {
     for (const p of PERMISSIONS) expect(roleHasPermission("admin", p)).toBe(true);
