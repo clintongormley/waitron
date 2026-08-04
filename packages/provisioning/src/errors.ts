@@ -150,6 +150,37 @@ declare module "@waitron/shared" {
      * operator-typed configuration, never a secret, and a refusal that withheld it could not be
      * acted on. */
     "provisioning.invalid_identifier": { kind: "database" | "role"; value: string };
+    /** The `venue --country` value is not two ASCII letters — the SHAPE of an ISO-3166-1 alpha-2
+     * code such as `ES`, not a membership check against a country list. Refused in the CLI while
+     * resolving options, before the admin credential is asked for (`cli.ts`'s `assertCountry`), so a
+     * typo like `ESP` costs no connection — the same "validate before spending the credential"
+     * ordering the database name and `planVenue` follow.
+     *
+     * `provisioning.*` and not a `location.*`/`tenant.*` prefix: it is a refusal of a provisioning
+     * INPUT — standing a venue up — caught before any row exists to be about, the same activity the
+     * header describes. `value` IS echoed, the same format-check family as
+     * `provisioning.invalid_identifier` above: an operator's typo, never a secret. */
+    "provisioning.invalid_country": { value: string };
+    /** A venue was requested against a database with no environment stamp. `venue` reads the stamp
+     * with `readDeploymentEnvironment` (`packages/db`) on the target BEFORE it applies anything; a
+     * `null` result means the database was never stamped by `instance`, so there is no environment to
+     * file its sales under. Refused here rather than stamped — stamping is `instance`'s job, and one
+     * database per environment is a fiscal invariant a stamp cannot take back.
+     *
+     * `provisioning.*`: a refusal of standing a venue up, the same activity the header describes.
+     * `database` is operator-typed configuration and never a secret. */
+    "provisioning.database_unstamped": { database: string };
+    /** `applyVenue` hit a unique-key violation (SQLSTATE 23505, detected by `isUniqueViolation`
+     * from `packages/db`, which walks the `cause` chain). `applyVenue` guards the natural keys it
+     * knows — the obligado `(country, tax_id)` and each series `(tenant_id, node_id, code)` — with
+     * `ON CONFLICT DO NOTHING`, so this is the residual case those clauses do not absorb: most
+     * plausibly a second `venue` run racing between this run's plan and its apply. Named here rather
+     * than left to reach the operator as `unexpected failure` (`bin.ts`'s catch-all).
+     *
+     * `database` only, and never the driver's own error: a `DrizzleQueryError` can quote the failing
+     * statement back in its message, and this file's header forbids a param that could carry one.
+     * `database` is operator-typed configuration and never a secret. */
+    "provisioning.venue_conflict": { database: string };
     /** A venue request named a number of invoice locales the schema will not accept: the
      * `invoice_locales` list must hold one or two entries. This is the same rule the DB CHECK
      * `locations_invoice_locales_len` enforces — `cardinality(invoice_locales) between 1 and 2` on

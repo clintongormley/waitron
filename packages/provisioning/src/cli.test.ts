@@ -1,13 +1,69 @@
 import { describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
-import type { Database } from "@waitron/db";
+import type { Database, DeploymentEnvironment } from "@waitron/db";
 import { manifestSets } from "@waitron/migrations";
 import { runCli } from "./cli.js";
 import type { CliDeps } from "./cli.js";
 import type { InstanceState, RoleFacts } from "./instance-state.js";
+import type { VenueAction } from "./venue-plan.js";
+import type { VenueApplyDeps, VenueResult } from "./venue-apply.js";
 
 const DATABASE = "waitron_demo";
 const ADMIN_URI = "postgres://admin:adminsecret@db.example:5432/postgres";
+
+/** What the injected `applyVenue` hands back — the ids `venue` prints in its result summary. The
+ * `sif` is trimmed to the two fields the summary reads (`id`, `numeroInstalacion`); the rest of
+ * `SifRegistration` is irrelevant to what this CLI does with the result. */
+const VENUE_RESULT = {
+  tenantId: "11111111-1111-1111-1111-111111111111",
+  locationId: "22222222-2222-2222-2222-222222222222",
+  tillId: "33333333-3333-3333-3333-333333333333",
+  nodeId: "44444444-4444-4444-4444-444444444444",
+  sif: { id: "55555555-5555-5555-5555-555555555555", numeroInstalacion: 1 },
+  seriesIds: ["66666666-6666-6666-6666-666666666666", "77777777-7777-7777-7777-777777777777"],
+} as unknown as VenueResult;
+
+/** Every venue option supplied, so a run reaches the apply with no prompt. `--territory ES-common`
+ * is the one implemented set (fiscal-modules.ts); tests that need a refusal swap it out. */
+const VENUE_ARGS = [
+  "venue",
+  "--database",
+  DATABASE,
+  "--country",
+  "ES",
+  "--tax-id",
+  "B12345678",
+  "--legal-name",
+  "Acme SL",
+  "--location-name",
+  "Centro",
+  "--territory",
+  "ES-common",
+  "--locale",
+  "es-ES",
+  "--operation-description",
+  "Restaurante",
+  "--address-line1",
+  "Calle Mayor 1",
+  "--address-line2",
+  "Piso 2",
+  "--postal-code",
+  "28001",
+  "--city",
+  "Madrid",
+  "--province",
+  "Madrid",
+  "--time-zone",
+  "Europe/Madrid",
+  "--day-cutover",
+  "06:00",
+  "--till-name",
+  "Barra 1",
+  "--series-code",
+  "A",
+  "--rectificative-code",
+  "R",
+];
 
 function facts(overrides: Partial<RoleFacts> = {}): RoleFacts {
   return {
@@ -51,6 +107,8 @@ interface Harness {
   cleared: () => number;
   apply: ReturnType<typeof vi.fn>;
   readState: ReturnType<typeof vi.fn>;
+  applyVenue: ReturnType<typeof vi.fn>;
+  readEnvironment: ReturnType<typeof vi.fn>;
   connect: ReturnType<typeof vi.fn>;
   closes: () => number;
 }
@@ -63,6 +121,8 @@ function harness(
     state?: InstanceState;
     apply?: CliDeps["apply"];
     readState?: () => Promise<InstanceState>;
+    applyVenue?: CliDeps["applyVenue"];
+    readEnvironment?: () => Promise<DeploymentEnvironment | null>;
   } = {},
 ): Harness {
   const lines: string[] = [];
@@ -77,6 +137,12 @@ function harness(
   const connect = vi.fn(async () => db);
   const readState = vi.fn(options.readState ?? (async () => options.state ?? BLANK));
   const apply = vi.fn(options.apply ?? (async () => {}));
+  // The two venue seams, injected exactly like `readState`/`apply`: their real implementations need
+  // a live target database and what `venue` DECIDES — what it prompts, prints, refuses — does not.
+  const applyVenue = vi.fn(options.applyVenue ?? (async () => VENUE_RESULT));
+  const readEnvironment = vi.fn(
+    options.readEnvironment ?? (async () => "preproduction" as DeploymentEnvironment),
+  );
 
   return {
     lines,
@@ -86,6 +152,8 @@ function harness(
     closes: () => closes,
     apply,
     readState,
+    applyVenue,
+    readEnvironment,
     connect,
     deps: {
       io: {
@@ -106,6 +174,8 @@ function harness(
       migrationsRoot: null,
       readState: readState as unknown as CliDeps["readState"],
       apply: apply as unknown as CliDeps["apply"],
+      applyVenue: applyVenue as unknown as CliDeps["applyVenue"],
+      readEnvironment: readEnvironment as unknown as CliDeps["readEnvironment"],
     },
   };
 }
@@ -142,7 +212,7 @@ describe("runCli", () => {
     // its argv entirely, so `keyring --password hunter2` printed the key ring and exited 0 while
     // USAGE and README both promised such a flag was a parse error.
     for (const flag of ["--password", "--key", "--admin-password"]) {
-      for (const command of ["keyring", "instance", "status"]) {
+      for (const command of ["keyring", "instance", "status", "venue"]) {
         expect(await runCli([command, flag, "hunter2"], harness().deps)).toBe(2);
         expect(await runCli([command, `${flag}=hunter2`], harness().deps)).toBe(2);
       }
@@ -154,7 +224,7 @@ describe("runCli", () => {
     // WAITRON_ADMIN_DATABASE_URL or an echo-off prompt and from nowhere else. Pinned separately
     // from the loop above because `--admin-url` is the one an operator is most likely to try:
     // earlier drafts of this tool's own usage text advertised it.
-    for (const command of ["keyring", "instance", "status"]) {
+    for (const command of ["keyring", "instance", "status", "venue"]) {
       const h = harness();
       expect(await runCli([command, "--admin-url", ADMIN_URI], h.deps)).toBe(2);
       expect(h.connect).not.toHaveBeenCalled();
@@ -924,6 +994,227 @@ describe("runCli status", () => {
     const code = await runCli(["status", "--database", "Waitron Prod"], h.deps);
     expect(code).toBe(1);
     expect(h.lines.join("\n")).toContain("provisioning.invalid_identifier");
+  });
+});
+
+describe("runCli venue", () => {
+  it("reads the stamp, applies the planned actions against the target, and exits 0", async () => {
+    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
+    expect(code).toBe(0);
+
+    // The environment stamp is READ before anything is applied — an unstamped database is refused
+    // (see the next test), and the plan summary names the environment it read.
+    expect(h.readEnvironment).toHaveBeenCalledTimes(1);
+
+    // Applied ONCE, with the plan `planVenue` produced, against the TARGET connection (the
+    // owner-admin that owns the tables, Task C1) — never the instance apply path.
+    expect(h.applyVenue).toHaveBeenCalledTimes(1);
+    expect(h.apply).not.toHaveBeenCalled();
+    const [actions, applyDeps] = h.applyVenue.mock.calls[0] as [VenueAction[], VenueApplyDeps];
+    expect(actions.map((action) => action.kind)).toEqual([
+      "ensure-tenant",
+      "create-location",
+      "create-till",
+      "create-node",
+      "register-sif",
+      "create-series",
+      "create-series",
+    ]);
+
+    // `withVenueState` re-points the admin URI at the target database and hands THAT connection to
+    // the apply — not the admin's own database, where every insert would land under the wrong RLS
+    // scope, and not a second dial of it.
+    expect(h.connect).toHaveBeenCalledTimes(1);
+    expect(h.connect).toHaveBeenCalledWith(
+      "postgres://admin:adminsecret@db.example:5432/waitron_demo",
+    );
+    expect(applyDeps.db).toBe(await h.connect.mock.results[0].value);
+
+    const printed = h.lines.join("\n");
+    expect(printed).toContain("Plan for a venue in waitron_demo (preproduction):");
+    // The cluster the operator is about to write to — host, port, user; never the password.
+    expect(printed).toContain("Cluster: admin@db.example:5432");
+    expect(printed).toContain("ensure tenant ES/B12345678");
+    expect(printed).toContain("create location Centro in ES-common");
+    // The result summary names the node and the SIF the apply returned.
+    expect(printed).toContain(`node:     ${VENUE_RESULT.nodeId}`);
+    expect(printed).toContain(`SIF:      ${VENUE_RESULT.sif.id} (installation 1)`);
+
+    // No secret anywhere: the admin password is never echoed and venue mints no connection strings.
+    expect(printed).not.toContain("adminsecret");
+    expect(printed).not.toContain(ADMIN_URI);
+    expect(printedUris(h.lines)).toEqual([]);
+    // The target connection was closed, whichever way the run ended.
+    expect(h.closes()).toBe(1);
+  });
+
+  it("refuses an unimplemented territory and applies nothing", async () => {
+    const args = VENUE_ARGS.map((arg) => (arg === "ES-common" ? "ES-PV-bizkaia" : arg));
+    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const code = await runCli([...args, "--yes"], h.deps);
+    expect(code).toBe(1);
+    expect(h.lines).toContainEqual(expect.stringContaining("fiscal.regime_not_implemented"));
+    expect(h.applyVenue).not.toHaveBeenCalled();
+    // Refused by the PURE planner, before the admin credential is asked for or any connection is
+    // opened (venue-plan.ts / errors.ts: "no admin connection is spent on a malformed request").
+    expect(h.connect).not.toHaveBeenCalled();
+  });
+
+  it("refuses an unstamped database before applying", async () => {
+    const h = harness({
+      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
+      readEnvironment: async () => null,
+    });
+    const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
+    expect(code).toBe(1);
+    expect(h.lines.join("\n")).toContain(
+      'provisioning.database_unstamped {"database":"waitron_demo"}',
+    );
+    // The stamp was read — that is how the emptiness was learnt — and nothing was applied.
+    expect(h.readEnvironment).toHaveBeenCalledTimes(1);
+    expect(h.applyVenue).not.toHaveBeenCalled();
+    expect(h.closes()).toBe(1);
+  });
+
+  it("refuses a country that is not two ASCII letters, before connecting", async () => {
+    const args = VENUE_ARGS.map((arg) => (arg === "ES" ? "ESP" : arg));
+    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const code = await runCli([...args, "--yes"], h.deps);
+    expect(code).toBe(1);
+    expect(h.lines.join("\n")).toContain('provisioning.invalid_country {"value":"ESP"}');
+    expect(h.connect).not.toHaveBeenCalled();
+    expect(h.applyVenue).not.toHaveBeenCalled();
+  });
+
+  it("refuses a database name outside the identifier rule before connecting", async () => {
+    const args = VENUE_ARGS.map((arg) => (arg === DATABASE ? "Waitron Prod" : arg));
+    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const code = await runCli([...args, "--yes"], h.deps);
+    expect(code).toBe(1);
+    expect(h.lines.join("\n")).toContain("provisioning.invalid_identifier");
+    expect(h.connect).not.toHaveBeenCalled();
+  });
+
+  it("applies when the operator confirms with y", async () => {
+    const h = harness({ answers: ["y"], env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    expect(await runCli(VENUE_ARGS, h.deps)).toBe(0);
+    expect(h.applyVenue).toHaveBeenCalledTimes(1);
+    // Without --yes, the plan confirmation IS asked.
+    expect(h.asked.join(" ")).toMatch(/Apply this plan/i);
+  });
+
+  it("accepts a spelt-out 'yes' as confirmation too", async () => {
+    const h = harness({ answers: ["yes"], env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    expect(await runCli(VENUE_ARGS, h.deps)).toBe(0);
+    expect(h.applyVenue).toHaveBeenCalledTimes(1);
+  });
+
+  it("applies NOTHING when the operator declines", async () => {
+    const h = harness({ answers: ["n"], env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const code = await runCli(VENUE_ARGS, h.deps);
+    expect(code).toBe(1);
+    expect(h.applyVenue).not.toHaveBeenCalled();
+    const printed = h.lines.join("\n");
+    expect(printed).toContain("Nothing was applied.");
+    // The plan was still shown before the decline, and the connection closed.
+    expect(printed).toContain("Plan for a venue in waitron_demo");
+    expect(h.closes()).toBe(1);
+  });
+
+  it("maps a concurrent unique-violation from the apply to provisioning.venue_conflict", async () => {
+    const h = harness({
+      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
+      applyVenue: () => Promise.reject(Object.assign(new Error("dup"), { code: "23505" })),
+    });
+    const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
+    expect(code).toBe(1);
+    expect(h.lines.join("\n")).toContain('provisioning.venue_conflict {"database":"waitron_demo"}');
+    // The driver's own message can quote the failing statement; it is never printed.
+    expect(h.lines.join("\n")).not.toContain("dup");
+    expect(h.closes()).toBe(1);
+  });
+
+  it("lets an unrecognised failure from the apply escape to bin.ts", async () => {
+    // Anything that is not a unique violation is rethrown untouched — a database fault or a bug is
+    // not something this file understood, mirroring the instance path.
+    const h = harness({
+      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
+      applyVenue: () => Promise.reject(new TypeError("undefined is not a function")),
+    });
+    await expect(runCli([...VENUE_ARGS, "--yes"], h.deps)).rejects.toThrow(
+      "undefined is not a function",
+    );
+    expect(h.closes()).toBe(1);
+  });
+
+  it("prompts for every omitted option, in order, reading the admin URI from the env", async () => {
+    const h = harness({
+      answers: [
+        DATABASE,
+        "ES",
+        "B12345678",
+        "Acme SL",
+        "Centro",
+        "ES-common",
+        "es-ES", // first invoice locale
+        "ca-ES", // a second one
+        "", // blank ends the locale loop
+        "Restaurante",
+        "Calle Mayor 1",
+        "", // address line 2 is optional — blank means none
+        "28001",
+        "Madrid",
+        "Madrid",
+        "Europe/Madrid",
+        "06:00",
+        "Barra 1",
+        "A",
+        "R",
+      ],
+      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
+    });
+    // `--yes` so the confirmation prompt does not appear amid the option prompts.
+    const code = await runCli(["venue", "--yes"], h.deps);
+    expect(code).toBe(0);
+    expect(h.applyVenue).toHaveBeenCalledTimes(1);
+
+    // The exact question sequence — proving both order and wording. The two invoice-locale entries
+    // exercise the repeat-until-blank loop, and the admin URI came from the env (echo-off prompt
+    // never fired).
+    expect(h.asked).toEqual([
+      "database name: ",
+      "country (ISO-3166 alpha-2, e.g. ES): ",
+      "tax id (NIF): ",
+      "legal name: ",
+      "location name: ",
+      "fiscal territory (e.g. ES-common): ",
+      "invoice locale (e.g. es-ES): ",
+      "another invoice locale (blank to finish): ",
+      "another invoice locale (blank to finish): ",
+      "operation description: ",
+      "address line 1: ",
+      "address line 2 (blank if none): ",
+      "postal code: ",
+      "city: ",
+      "province: ",
+      "time zone (e.g. Europe/Madrid): ",
+      "day cutover (HH:MM): ",
+      "till name: ",
+      "series code: ",
+      "rectificative series code: ",
+    ]);
+    expect(h.askedSecretly).toEqual([]);
+
+    // The two locales prompted for reach the plan.
+    const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
+    const location = actions.find((action) => action.kind === "create-location");
+    expect(location?.kind === "create-location" && location.invoiceLocales).toEqual([
+      "es-ES",
+      "ca-ES",
+    ]);
+    // The optional address line 2 was left blank, so it is null in the plan.
+    expect(location?.kind === "create-location" && location.addressLine2).toBeNull();
   });
 });
 

@@ -4,11 +4,12 @@ import { existsSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
-import { createPostgresDb } from "@waitron/db";
+import { createPostgresDb, readDeploymentEnvironment } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
 import { formatAppError, runCli } from "./cli.js";
 import { applyInstance } from "./instance-apply.js";
 import { readInstanceState } from "./instance-state.js";
+import { applyVenue } from "./venue-apply.js";
 
 /**
  * Where the migration SQL lives.
@@ -58,6 +59,8 @@ async function main(): Promise<number> {
       migrationsRoot: existsSync(BUNDLED_MIGRATIONS) ? BUNDLED_MIGRATIONS : null,
       readState: readInstanceState,
       apply: applyInstance,
+      applyVenue,
+      readEnvironment: readDeploymentEnvironment,
     });
   } catch (error) {
     // `runCli` (cli.ts) resolves with a number for every EXPECTED failure — a bad database name, an
