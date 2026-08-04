@@ -155,6 +155,13 @@
       "when": 1785765680648,
       "tag": "0021_sale_settlement_correction_aware",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1785854321828,
+      "tag": "0022_locations_provisioning_reshape",
+      "breakpoints": true
     }
   ]
 }

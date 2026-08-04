@@ -91,7 +91,7 @@ interface Venue {
  */
 async function seedVenue(db: Database): Promise<Venue> {
   const t = await db.execute<{ id: string }>(
-    sql`insert into tenants (nif, legal_name) values ('50000000K', 'Deli Demo SL') returning id`,
+    sql`insert into tenants (country, tax_id, legal_name) values ('ES', '50000000K', 'Deli Demo SL') returning id`,
   );
   const tenantId = brandTenantId(t.rows[0]!.id);
   const loc = await db.execute<{ id: string }>(sql`

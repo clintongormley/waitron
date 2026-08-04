@@ -47,7 +47,7 @@ describeEachTarget("seedTenant", (target) => {
     await seedTenant(db);
     await seedTenant(db);
     const result = await db.execute<{ n: number }>(
-      sql`select count(distinct nif)::int as n from tenants`,
+      sql`select count(distinct tax_id)::int as n from tenants`,
     );
     expect((result.rows[0] as { n: number }).n).toBe(3);
   });

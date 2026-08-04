@@ -42,7 +42,7 @@ interface Bootstrapped {
   nif: string;
 }
 
-// Tenants accumulate for the life of this suite and `tenants_nif_key` is unique, so each seeded
+// Tenants accumulate for the life of this suite and `tenants_country_tax_id_key` is unique, so each seeded
 // tenant needs its own NIF. A local counter rather than `@waitron/db`'s `freshNif`: this fixture
 // writes the deli's *shape* of row, and mixing two generators against one database is the exact
 // collision that helper's own comment warns about.
@@ -68,7 +68,7 @@ function nextNif(): string {
 async function bootstrapTenant(): Promise<Bootstrapped> {
   const nif = nextNif();
   const tenant = await suite.db.execute<{ id: string }>(sql`
-    insert into tenants (nif, legal_name) values (${nif}, 'Deli SL') returning id`);
+    insert into tenants (country, tax_id, legal_name) values ('ES', ${nif}, 'Deli SL') returning id`);
   const tenantId = brandTenantId(tenant.rows[0]!.id);
 
   const location = await suite.db.execute<{ id: string }>(sql`

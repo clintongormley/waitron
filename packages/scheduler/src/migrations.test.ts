@@ -15,7 +15,7 @@ const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS],
   setup: async (db) => {
     const seeded = await db.execute<{ id: string }>(sql`
-      insert into tenants (nif, legal_name) values ('B00000001', 'Scheduler Test Tenant')
+      insert into tenants (country, tax_id, legal_name) values ('ES', 'B00000001', 'Scheduler Test Tenant')
       returning id`);
     tenantId = seeded.rows[0].id;
   },

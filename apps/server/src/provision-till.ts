@@ -55,7 +55,9 @@ function assertUsableIdSistema(value: string): void {
 }
 
 /**
- * The obligado tributario's NIF, read from the tenant that owns the till.
+ * The obligado tributario's NIF, read from the tenant that owns the till. Since the country + tax_id
+ * reshape it is read from `tenants.tax_id` (the column that used to be `nif`); for an ES tenant that
+ * column IS the NIF, so the value and this function's meaning are unchanged.
  *
  * NOT an argument, unlike every fixture that calls `registerSif` (those mint the tenant in the same
  * breath and already hold its NIF). It is written to `registro_sif.nif`, from where it reaches
@@ -71,11 +73,14 @@ function assertUsableIdSistema(value: string): void {
  * for the function itself — see the follow-up recorded in the plan.
  */
 async function obligadoNif(tx: Transaction, tenantId: TenantId): Promise<string> {
-  const [row] = await tx.select({ nif: tenants.nif }).from(tenants).where(eq(tenants.id, tenantId));
+  const [row] = await tx
+    .select({ taxId: tenants.taxId })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId));
   if (row === undefined) {
     throw new AppError("tenant.not_found", { id: tenantId });
   }
-  return row.nif;
+  return row.taxId;
 }
 
 /**

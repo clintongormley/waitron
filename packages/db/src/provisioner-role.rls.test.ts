@@ -60,7 +60,7 @@ describe("tenant_provisioner", () => {
         // the manoeuvre the spec's §2 proves — there is no circularity, and no superuser.
         await tx.execute(sql`select set_config('app.tenant_id', ${id}, true)`);
         await tx.execute(
-          sql`insert into tenants (id, nif, legal_name) values (${id}, 'B99999999', 'Provisioned SL')`,
+          sql`insert into tenants (id, country, tax_id, legal_name) values (${id}, 'ES', 'B99999999', 'Provisioned SL')`,
         );
       });
       const rows = await db.execute<{ count: string }>(
@@ -99,7 +99,7 @@ describe("tenant_provisioner", () => {
         // INSERT on tenants is the bucket's OWN grant (0011). This much would pass without the
         // membership.
         await tx.execute(
-          sql`insert into tenants (id, nif, legal_name) values (${id}, 'B77777777', 'Inherited SL')`,
+          sql`insert into tenants (id, country, tax_id, legal_name) values (${id}, 'ES', 'B77777777', 'Inherited SL')`,
         );
         // These two are app_user's, reached only through the membership: 0001 grants app_user
         // SELECT on tenants and INSERT on locations, and 0011 grants the bucket neither. Read
@@ -130,7 +130,7 @@ describe("tenant_provisioner", () => {
         db.transaction(async (tx) => {
           await tx.execute(sql`select set_config('app.tenant_id', ${id}, true)`);
           await tx.execute(
-            sql`insert into tenants (id, nif, legal_name) values (${id}, 'B88888888', 'Refused SL')`,
+            sql`insert into tenants (id, country, tax_id, legal_name) values (${id}, 'ES', 'B88888888', 'Refused SL')`,
           );
         }),
       );

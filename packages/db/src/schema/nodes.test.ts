@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { describeEachTarget } from "../testing/harness.js";
@@ -31,8 +31,8 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
 /** Seeds as owner, deliberately: RLS has nothing to say about the fixture. */
 async function seed(db: Database): Promise<void> {
   await db.insert(tenants).values([
-    { id: TENANT_A, nif: "B00000000", legalName: "Fixture Tenant A" },
-    { id: TENANT_B, nif: "B11111111", legalName: "Fixture Tenant B" },
+    { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
+    { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
   ]);
   await db.insert(locations).values([
     {
@@ -192,5 +192,23 @@ describeEachTarget("nodes schema", (target) => {
       }),
     );
     expect(pgErrorCode(error)).toBe("42501");
+  });
+
+  describe("tenants fiscal identity is country + tax_id", () => {
+    it("has country and tax_id, not nif, and a (country, tax_id) unique index", async () => {
+      const cols = await db.execute<{ column_name: string }>(sql`
+        select column_name from information_schema.columns
+        where table_name = 'tenants' order by column_name`);
+      const names = cols.rows.map((r) => r.column_name);
+      expect(names).toContain("country");
+      expect(names).toContain("tax_id");
+      expect(names).not.toContain("nif");
+
+      const idx = await db.execute<{ indexname: string }>(sql`
+        select indexname from pg_indexes where tablename = 'tenants'`);
+      const indexes = idx.rows.map((r) => r.indexname);
+      expect(indexes).toContain("tenants_country_tax_id_key");
+      expect(indexes).not.toContain("tenants_nif_key");
+    });
   });
 });

@@ -2,18 +2,20 @@ import { sql } from "drizzle-orm";
 import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 /**
- * The obligado tributario. One row per NIF — the NIF is the identity AEAT
- * knows, so it is unique globally rather than per anything.
+ * The obligado tributario. Fiscal identity is country + tax_id, regime-agnostic: for a Spanish
+ * tenant `tax_id` IS the NIF, and the Veri*Factu backend reads `tax_id` where it once read `nif`
+ * (a NIF cannot be asked for before the country is known — spec D2). Unique on (country, tax_id).
  */
 export const tenants = pgTable(
   "tenants",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    nif: text("nif").notNull(),
+    country: text("country").notNull(),
+    taxId: text("tax_id").notNull(),
     legalName: text("legal_name").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("tenants_nif_key").on(t.nif)],
+  (t) => [uniqueIndex("tenants_country_tax_id_key").on(t.country, t.taxId)],
 ).enableRLS();
 
 /**

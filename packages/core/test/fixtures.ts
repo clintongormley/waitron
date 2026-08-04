@@ -20,7 +20,7 @@ export interface SeededTenant {
 }
 
 // Module-scope, not per-call: every test in record-sale.test.ts shares this counter across the
-// whole run, which is what keeps each call's NIF collision-free against `tenants_nif_key` — the
+// whole run, which is what keeps each call's NIF collision-free against `tenants_country_tax_id_key` — the
 // same convention packages/fiscal-verifactu/test/fixtures.ts's own `freshNif` uses.
 let nifSequence = 0;
 
@@ -53,7 +53,7 @@ export async function seedTenant(
     tenantId = overrides.tenantId;
   } else {
     const { rows } = await db.execute<{ id: string }>(sql`
-      insert into tenants (nif, legal_name) values (${freshNif()}, 'Waitron SL') returning id
+      insert into tenants (country, tax_id, legal_name) values ('ES', ${freshNif()}, 'Waitron SL') returning id
     `);
     tenantId = brandTenantId(rows[0]!.id);
   }

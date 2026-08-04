@@ -59,8 +59,8 @@ describeEachTarget("tenant isolation", (target) => {
     // action and RLS must not be able to prevent it. Two tenants, because a
     // single-tenant fixture cannot distinguish RLS from an absent predicate.
     await db.insert(tenants).values([
-      { id: tenantA, nif: "B12345674", legalName: "Bar Alfa SL" },
-      { id: tenantB, nif: "B87654328", legalName: "Bar Beta SL" },
+      { id: tenantA, country: "ES", taxId: "B12345674", legalName: "Bar Alfa SL" },
+      { id: tenantB, country: "ES", taxId: "B87654328", legalName: "Bar Beta SL" },
     ]);
     await db.insert(locations).values([
       {
@@ -256,7 +256,9 @@ describeEachTarget("invoice_locales", (target) => {
 
   beforeEach(async () => {
     db = await target.create();
-    await db.insert(tenants).values({ id: tenantId, nif: "B44444447", legalName: "Bar Gamma SL" });
+    await db
+      .insert(tenants)
+      .values({ id: tenantId, country: "ES", taxId: "B44444447", legalName: "Bar Gamma SL" });
   });
 
   afterEach(async () => {

@@ -25,7 +25,7 @@ beforeEach(async () => {
 
 // beforeEach truncates payments/payment_refunds only — tenants (and the location/till/
 // working_order chain under them) accumulate for the life of the suite. Each test needs its own
-// NIF, or a later seedWorkingOrder's default "B00000000" collides on tenants_nif_key. `freshNif`
+// NIF, or a later seedWorkingOrder's default "B00000000" collides on tenants_country_tax_id_key. `freshNif`
 // is shared from ../../test/seed.js.
 
 async function seedTenant(): Promise<Seeded> {

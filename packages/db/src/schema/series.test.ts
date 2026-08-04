@@ -40,8 +40,8 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
 /** Seeds as owner, deliberately: RLS has nothing to say about the fixture. */
 async function seed(db: Database): Promise<void> {
   await db.insert(tenants).values([
-    { id: TENANT_A, nif: "B00000000", legalName: "Fixture Tenant A" },
-    { id: TENANT_B, nif: "B11111111", legalName: "Fixture Tenant B" },
+    { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
+    { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
   ]);
   await db.insert(locations).values([
     {

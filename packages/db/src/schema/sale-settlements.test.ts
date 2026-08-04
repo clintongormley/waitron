@@ -131,7 +131,7 @@ let nodeA = "";
 async function seed(db: Database): Promise<void> {
   await db
     .insert(tenants)
-    .values({ id: TENANT_A, nif: "B00000000", legalName: "Fixture Tenant A" });
+    .values({ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" });
   await db.insert(locations).values({
     id: LOCATION_A,
     tenantId: TENANT_A,

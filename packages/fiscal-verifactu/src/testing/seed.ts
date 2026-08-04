@@ -38,13 +38,13 @@ export interface SeededTill {
 
 // Module-scope, not per-call: every test file that imports seedTill shares this counter across its
 // WHOLE run, which is exactly what makes each call's nif collision-free against
-// tenants_nif_key — including across the many beforeEach calls a concurrency suite fires.
+// tenants_country_tax_id_key — including across the many beforeEach calls a concurrency suite fires.
 let nifSequence = 0;
 
 /**
- * A fresh, plausible-looking NIF, unique for the lifetime of the test process. `tenants.nif`
+ * A fresh, plausible-looking NIF, unique for the lifetime of the test process. `tenants.tax_id`
  * carries no format CHECK (packages/db/src/schema/tenants.ts), so nothing validates the checksum
- * digit — this exists purely to dodge `tenants_nif_key`, never to look up a real obligado.
+ * digit — this exists purely to dodge `tenants_country_tax_id_key`, never to look up a real obligado.
  */
 function freshNif(): string {
   nifSequence += 1;
@@ -53,7 +53,7 @@ function freshNif(): string {
 
 async function insertTenant(tx: Transaction, nif: string): Promise<TenantId> {
   const { rows } = await tx.execute<{ id: string }>(sql`
-    insert into tenants (nif, legal_name) values (${nif}, ${"Waitron SL"}) returning id
+    insert into tenants (country, tax_id, legal_name) values ('ES', ${nif}, ${"Waitron SL"}) returning id
   `);
   const row = rows[0];
   if (row === undefined) throw new Error("seedTill: tenant insert returned no row");
