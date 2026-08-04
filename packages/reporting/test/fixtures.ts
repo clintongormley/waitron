@@ -1,14 +1,14 @@
 import { sql } from "drizzle-orm";
 import {
-  nodeId as brandNodeId,
+  locationId as brandLocationId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { saleLines, saleSubstitutions, saleVoids, sales, tenders } from "@waitron/db";
 import type { Database } from "@waitron/db";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import type { TenderMethod } from "../src/types.js";
 
 export interface SeededVenue {
@@ -19,19 +19,10 @@ export interface SeededVenue {
   seriesId: SeriesId;
 }
 
-// Off every other generator's base (see packages/db/src/testing/seed.ts's note) to avoid a
-// tenants_nif_key collision if a suite ever seeds through two generators.
-let nifCounter = 0;
-function freshNif(): string {
-  nifCounter += 1;
-  return `${String(50_000_000 + nifCounter).padStart(8, "0")}K`;
-}
-
+// Tenant + node use @waitron/db's own exported seeders (they own the NIF counter and the
+// tenants/nodes inserts); this file only adds the location/till/series that db has no seeder for.
 export async function seedVenue(db: Database): Promise<SeededVenue> {
-  const t = await db.execute<{ id: string }>(
-    sql`insert into tenants (nif, legal_name) values (${freshNif()}, 'Test SL') returning id`,
-  );
-  const tenantId = brandTenantId(t.rows[0]!.id);
+  const tenantId = await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
     values (${tenantId}, 'Main', array['es-ES'], 'Test op') returning id`);
@@ -40,10 +31,7 @@ export async function seedVenue(db: Database): Promise<SeededVenue> {
     sql`insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Till 1') returning id`,
   );
   const tillId = brandTillId(till.rows[0]!.id);
-  const node = await db.execute<{ id: string }>(
-    sql`insert into nodes (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Node 1') returning id`,
-  );
-  const nodeId = brandNodeId(node.rows[0]!.id);
+  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
   const series = await db.execute<{ id: string }>(
     sql`insert into invoice_series (tenant_id, node_id, code) values (${tenantId}, ${nodeId}, 'A') returning id`,
   );

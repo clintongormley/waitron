@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { businessDayClause } from "./business-day.js";
+import { activeSalesClause, businessDayClause } from "./business-day.js";
 import type { CloseCounts, DailyCloseInput } from "./types.js";
 
 /**
@@ -21,8 +21,7 @@ export async function computeCloseCounts(
     where s.tenant_id = ${input.tenantId}
       and s.node_id = ${input.nodeId}
       and ${businessDayClause(sql`s.issued_at`, input)}
-      and not exists (select 1 from sale_voids sv where sv.sale_id = s.id and sv.tenant_id = ${input.tenantId})
-      and not exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = s.id and sub.tenant_id = ${input.tenantId})
+      and ${activeSalesClause(input)}
   `);
 
   const voided = await tx.execute<{ voids: number }>(sql`

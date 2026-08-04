@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { addDecimal, decimal, tillId as brandTillId } from "@waitron/shared";
-import type { Decimal } from "@waitron/shared";
 import { businessDayClause } from "./business-day.js";
 import type {
   CashUp,
@@ -57,9 +56,8 @@ export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Pr
   }
 
   const byTill: TillCashUp[] = [...tills.entries()].map(([tid, byMethod]) => {
-    let cashTakings: Decimal = decimal("0.00");
-    for (const m of byMethod)
-      if (m.method === "cash") cashTakings = addDecimal(cashTakings, m.amount);
+    // The query groups by (till, method), so a till has at most one cash line.
+    const cashTakings = byMethod.find((m) => m.method === "cash")?.amount ?? decimal("0.00");
     return { tillId: brandTillId(tid), byMethod, cashTakings };
   });
 

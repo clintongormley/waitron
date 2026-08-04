@@ -9,7 +9,7 @@ import {
   multiplyDecimal,
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
-import { businessDayClause } from "./business-day.js";
+import { activeSalesClause, businessDayClause } from "./business-day.js";
 import type { DailyCloseInput, VatSummary } from "./types.js";
 
 /**
@@ -43,8 +43,7 @@ export async function computeVatSummary(
     where s.tenant_id = ${input.tenantId}
       and s.node_id = ${input.nodeId}
       and ${businessDayClause(sql`s.issued_at`, input)}
-      and not exists (select 1 from sale_voids sv where sv.sale_id = s.id and sv.tenant_id = ${input.tenantId})
-      and not exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = s.id and sub.tenant_id = ${input.tenantId})
+      and ${activeSalesClause(input)}
     group by s.id, sl.vat_rate
   `);
 
@@ -67,9 +66,10 @@ export async function computeVatSummary(
     taxTotal = addDecimal(taxTotal, tax);
   }
 
+  // The map values are already exactly VatRateLine; return them sorted, no rebuild.
   const lines = [...byRate.values()].sort((a, b) => compareDecimal(a.rate, b.rate));
   return {
-    byRate: lines.map((l) => ({ rate: l.rate, base: l.base, tax: l.tax })),
+    byRate: lines,
     baseTotal,
     taxTotal,
     grossTotal: addDecimal(baseTotal, taxTotal),

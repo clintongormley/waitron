@@ -54,3 +54,15 @@ export function validateBusinessDay(day: string): void {
 export function businessDayClause(column: SQL, input: DailyCloseInput): SQL {
   return sql`(${column} at time zone ${input.timeZone} - ${input.dayCutover}::interval)::date = ${input.businessDay}::date`;
 }
+
+/**
+ * Excludes the sales a fiscal aggregate must not count: voided sales (annulled) and F3-canje
+ * substitutes (their VAT already lives in the substituted F2 tickets — design §4, confirmed against
+ * *modelo 303* in the AEAT FAQ). Assumes the outer query aliases `sales` as `s`. Shared by the VAT
+ * summary and the record counts so the two cannot drift on which sales are "active". No leading
+ * `and` — the caller writes `and ${activeSalesClause(input)}`.
+ */
+export function activeSalesClause(input: DailyCloseInput): SQL {
+  return sql`not exists (select 1 from sale_voids sv where sv.sale_id = s.id and sv.tenant_id = ${input.tenantId})
+      and not exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = s.id and sub.tenant_id = ${input.tenantId})`;
+}
