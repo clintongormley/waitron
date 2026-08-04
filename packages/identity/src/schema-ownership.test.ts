@@ -6,22 +6,13 @@ import { PgTable } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 import * as schema from "./schema/index.js";
 
-/** Exactly the tables this package owns. Adding a table means editing this line, deliberately. */
-const OWNED = [
-  "employments",
-  "time_entries",
-  "workforce_chains",
-  "roster_versions",
-  "shifts",
-  "absences",
-  "availability",
-  "shift_templates",
-  "shift_swaps",
-];
+/** Exactly the tables this package owns. Adding a table means editing this line, deliberately.
+ * Task 4 adds "sessions". */
+const OWNED = ["persons"];
 
 /** Every core table this package's schema files import to declare foreign keys. None of these may
  * ever appear in this package's generated SQL. */
-const CORE = ["tenants", "locations", "tills"];
+const CORE = ["tenants"];
 
 const drizzleDir = fileURLToPath(new URL("../drizzle", import.meta.url));
 
@@ -33,7 +24,7 @@ function generatedSql(): string {
     .toLowerCase();
 }
 
-describe("the workforce schema entrypoint owns exactly its own tables", () => {
+describe("the identity schema entrypoint owns exactly its own tables", () => {
   it("exports no table this package does not own", () => {
     const exported = Object.values(schema)
       .filter((v) => is(v, PgTable))

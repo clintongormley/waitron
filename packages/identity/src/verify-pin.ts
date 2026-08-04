@@ -3,9 +3,8 @@ import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 // PIN hashing with scrypt from node:crypto — no native dependency, a real password KDF (salted,
 // memory-hard), and the same "reach for node:crypto, not a new package" posture the credentials
 // vault takes with AES-256-GCM. bcrypt/argon2 would each add a native module for what a PIN verify
-// does not need. Slice 1 stores the hash on `persons.pin_hash`. No caller is wired up yet — the
-// Slice-2 clock-in path (`ClockEventInput`, ./clocking.ts) takes no PIN and never calls
-// `verifyPin`; the PIN-login/clock-with-PIN consumer that will is a later slice.
+// does not need. packages/identity stores the hash on `persons.pin_hash`; the PIN-login consumer
+// that calls `verifyPin` is `./login.ts` (a later task).
 
 /** 16 random bytes, fresh per hash: without a per-hash salt two identical PINs would share a
  * `pin_hash`, a visible equality an operator with SELECT could read. */
@@ -30,7 +29,7 @@ export function hashPin(pin: string): string {
 /**
  * Verifies a PIN against a stored hash. Fails CLOSED on anything it does not understand — a
  * malformed value, an unknown algorithm tag, or a derived key of the wrong length — rather than
- * throwing, so a hand-edited or corrupt row rejects the PIN instead of crashing the clock-in path.
+ * throwing, so a hand-edited or corrupt row rejects the PIN instead of crashing the login path.
  */
 export function verifyPin(pin: string, stored: string): boolean {
   const parts = stored.split("$");

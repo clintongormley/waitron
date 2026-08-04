@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { appendToChain, isUniqueViolation, lockChainHead, type TimeEntryAppend } from "./chain.js";
 import { verifyChain, type VerifiableEntry } from "./chain-hash.js";
+import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 
@@ -15,7 +16,9 @@ import { seedLocation, seedPerson } from "../test/fixtures.js";
 // PGlite serialises every query onto one backend, so it cannot test contention, see
 // chain.pglite-cannot-test-contention.test.ts). PGlite's superuser connection bypasses RLS, so no
 // withTenant/asAppUser is needed here.
-const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS] });
+const pg = usePgliteDb({
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
+});
 
 let tenantId: string;
 let personId: string;

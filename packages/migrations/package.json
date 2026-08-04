@@ -27,6 +27,7 @@
     "@vitest/coverage-v8": "^3.0.0",
     "@waitron/credentials": "workspace:*",
     "@waitron/fiscal-verifactu": "workspace:*",
+    "@waitron/identity": "workspace:*",
     "@waitron/payments": "workspace:*",
     "@waitron/scheduler": "workspace:*",
     "@waitron/workforce": "workspace:*",

@@ -14,6 +14,7 @@ export default defineConfig({
         ...coverageConfigDefaults.exclude,
         "drizzle.config.ts",
         "drizzle/**",
+        "src/testing/**",
         "src/index.ts",
         "src/schema/index.ts",
       ],

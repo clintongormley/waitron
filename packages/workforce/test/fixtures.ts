@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
+import { hashPin } from "@waitron/identity";
 import { appendToChain } from "../src/chain.js";
-import { hashPin } from "../src/verify-pin.js";
 import type { WorkforceEntryKind } from "../src/projection.js";
 import type { WorkTimeRuleset } from "../src/ruleset.js";
 

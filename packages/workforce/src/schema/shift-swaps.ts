@@ -1,6 +1,6 @@
 import { foreignKey, index, pgEnum, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
 import { tenants } from "@waitron/db";
-import { persons } from "./persons.js";
+import { persons } from "@waitron/identity";
 import { shifts } from "./shifts.js";
 
 /**
@@ -24,7 +24,7 @@ export type ShiftSwapStatus = (typeof shiftSwapStatus.enumValues)[number];
  * A request to swap shifts between two people — person A (the requester) offers their `from_shift` to
  * person B (`to_person`), optionally taking B's `to_shift` in return. PLANNING data, ordinary mutable
  * rows: the app role holds SELECT, INSERT, UPDATE and DELETE
- * (drizzle/0010_scheduling_planning_rls.sql), no append-only trigger and no chain (design 2026-07-22
+ * (drizzle/0008_scheduling_planning_rls.sql), no append-only trigger and no chain (design 2026-07-22
  * §2.1 / plan §2.1).
  *
  * `from_shift_id` cascades on delete — a swap is meaningless once the offered shift is gone, so

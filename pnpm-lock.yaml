@@ -400,6 +400,9 @@ importers:
       '@waitron/fiscal-verifactu':
         specifier: workspace:*
         version: link:../fiscal-verifactu
+      '@waitron/identity':
+        specifier: workspace:*
+        version: link:../identity
       '@waitron/payments':
         specifier: workspace:*
         version: link:../payments
@@ -689,6 +692,9 @@ importers:
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
+      '@waitron/identity':
+        specifier: workspace:*
+        version: link:../identity
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
@@ -720,6 +726,9 @@ importers:
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
+      '@waitron/identity':
+        specifier: workspace:*
+        version: link:../identity
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared

@@ -1,6 +1,5 @@
 // The entire public surface of @waitron/workforce. Re-exports only — no logic here.
 export { WORKFORCE_MIGRATIONS } from "./migrations.js";
-export { persons, personStatus, workforceRole } from "./schema/persons.js";
 export { employments } from "./schema/employments.js";
 export {
   timeEntries,
@@ -25,7 +24,6 @@ export { appendToChain, isUniqueViolation, lockChainHead } from "./chain.js";
 export type { ChainHead, TimeEntryAppend } from "./chain.js";
 export { computeEntryHash, verifyChain } from "./chain-hash.js";
 export type { ChainVerification, EntryHashInput, VerifiableEntry } from "./chain-hash.js";
-export { hashPin, verifyPin } from "./verify-pin.js";
 export { WorkforceBackend } from "./clocking.js";
 export type {
   ClockEventInput,

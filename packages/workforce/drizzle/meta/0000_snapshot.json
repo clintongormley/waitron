@@ -1,11 +1,11 @@
 {
-  "id": "b6d077f9-8f7f-4ecf-b484-01ffbdd99fa4",
+  "id": "2cd4ae69-a487-41de-8f0f-b6415e35b7ce",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.persons": {
-      "name": "persons",
+    "public.employments": {
+      "name": "employments",
       "schema": "",
       "columns": {
         "id": {
@@ -21,33 +21,41 @@
           "primaryKey": false,
           "notNull": true
         },
-        "display_name": {
-          "name": "display_name",
+        "person_id": {
+          "name": "person_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "contracted_minutes_per_week": {
+          "name": "contracted_minutes_per_week",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "contract_type": {
+          "name": "contract_type",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "pin_hash": {
-          "name": "pin_hash",
-          "type": "text",
+        "start_date": {
+          "name": "start_date",
+          "type": "date",
           "primaryKey": false,
           "notNull": true
         },
-        "role": {
-          "name": "role",
-          "type": "workforce_role",
-          "typeSchema": "public",
+        "end_date": {
+          "name": "end_date",
+          "type": "date",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'staff'"
+          "notNull": false
         },
-        "status": {
-          "name": "status",
-          "type": "person_status",
-          "typeSchema": "public",
+        "pay_rate": {
+          "name": "pay_rate",
+          "type": "numeric(12, 2)",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'active'"
+          "notNull": true
         },
         "created_at": {
           "name": "created_at",
@@ -58,8 +66,8 @@
         }
       },
       "indexes": {
-        "persons_tenant_id_idx": {
-          "name": "persons_tenant_id_idx",
+        "employments_tenant_id_idx": {
+          "name": "employments_tenant_id_idx",
           "columns": [
             {
               "expression": "tenant_id",
@@ -72,15 +80,49 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "employments_tenant_person_idx": {
+          "name": "employments_tenant_person_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "person_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
-        "persons_tenant_fk": {
-          "name": "persons_tenant_fk",
-          "tableFrom": "persons",
+        "employments_tenant_fk": {
+          "name": "employments_tenant_fk",
+          "tableFrom": "employments",
           "tableTo": "tenants",
           "columnsFrom": [
             "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "employments_person_fk": {
+          "name": "employments_person_fk",
+          "tableFrom": "employments",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
           ],
           "columnsTo": [
             "id"
@@ -93,35 +135,227 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "persons_display_name_ck": {
-          "name": "persons_display_name_ck",
-          "value": "length(\"persons\".\"display_name\") > 0"
+        "employments_contracted_minutes_ck": {
+          "name": "employments_contracted_minutes_ck",
+          "value": "\"employments\".\"contracted_minutes_per_week\" >= 0"
         },
-        "persons_pin_hash_ck": {
-          "name": "persons_pin_hash_ck",
-          "value": "length(\"persons\".\"pin_hash\") > 0"
+        "employments_dates_ck": {
+          "name": "employments_dates_ck",
+          "value": "\"employments\".\"end_date\" is null or \"employments\".\"end_date\" >= \"employments\".\"start_date\""
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.time_entries": {
+      "name": "time_entries",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entry_kind": {
+          "name": "entry_kind",
+          "type": "workforce_entry_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_at": {
+          "name": "event_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_offset_minutes": {
+          "name": "event_offset_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "captured_by_till_id": {
+          "name": "captured_by_till_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recorded_by_person_id": {
+          "name": "recorded_by_person_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ingest_seq": {
+          "name": "ingest_seq",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "time_entries_ingest_seq_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        }
+      },
+      "indexes": {
+        "time_entries_tenant_id_idx": {
+          "name": "time_entries_tenant_id_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "time_entries_tenant_person_event_idx": {
+          "name": "time_entries_tenant_person_event_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "person_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "event_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "time_entries_tenant_fk": {
+          "name": "time_entries_tenant_fk",
+          "tableFrom": "time_entries",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "time_entries_person_fk": {
+          "name": "time_entries_person_fk",
+          "tableFrom": "time_entries",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "time_entries_location_fk": {
+          "name": "time_entries_location_fk",
+          "tableFrom": "time_entries",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "time_entries_captured_by_till_fk": {
+          "name": "time_entries_captured_by_till_fk",
+          "tableFrom": "time_entries",
+          "tableTo": "tills",
+          "columnsFrom": [
+            "captured_by_till_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "time_entries_recorded_by_person_fk": {
+          "name": "time_entries_recorded_by_person_fk",
+          "tableFrom": "time_entries",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "recorded_by_person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "time_entries_event_offset_ck": {
+          "name": "time_entries_event_offset_ck",
+          "value": "\"time_entries\".\"event_offset_minutes\" between -840 and 840"
         }
       },
       "isRLSEnabled": true
     }
   },
   "enums": {
-    "public.person_status": {
-      "name": "person_status",
+    "public.workforce_entry_kind": {
+      "name": "workforce_entry_kind",
       "schema": "public",
       "values": [
-        "active",
-        "suspended"
-      ]
-    },
-    "public.workforce_role": {
-      "name": "workforce_role",
-      "schema": "public",
-      "values": [
-        "staff",
-        "supervisor",
-        "manager",
-        "admin"
+        "in",
+        "out",
+        "break_start",
+        "break_end"
       ]
     }
   },

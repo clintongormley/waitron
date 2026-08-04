@@ -6,6 +6,7 @@ import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { acceptSwap, requestSwap } from "./shift-swaps.js";
+import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { insertDraftShift, insertShiftSwap, seedLocation, seedPerson } from "../test/fixtures.js";
 
@@ -18,7 +19,7 @@ let tenantId: string;
 let locationId: string;
 
 const suite = usePgliteDb({
-  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     tenantId = await seedTenant(db);
     locationId = await seedLocation(db, tenantId);

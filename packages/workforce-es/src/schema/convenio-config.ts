@@ -36,7 +36,7 @@ export const overtimeModel = pgEnum("overtime_model", ["daily_accrual", "period_
  * never an invented number), and the guardrail limits default to the ET statute, which a convenio
  * may only tighten.
  *
- * MUTABLE (the persons/employments shape, `drizzle/0001_workforce_rls.sql`): FORCE ROW LEVEL
+ * MUTABLE (the persons shape, @waitron/identity's `drizzle/0001_identity_rls.sql`): FORCE ROW LEVEL
  * SECURITY + tenant policy + `GRANT SELECT, INSERT, UPDATE`. This is configuration an admin edits,
  * not the immutable registro — it carries no append-only trigger and no chain.
  */

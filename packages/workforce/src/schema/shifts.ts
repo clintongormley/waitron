@@ -10,13 +10,13 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { locations, tenants } from "@waitron/db";
-import { persons } from "./persons.js";
+import { persons } from "@waitron/identity";
 import { rosterVersions } from "./roster-versions.js";
 
 /**
  * A planned shift — what a person is INTENDED to work, at a location, over an interval. PLANNING
  * data, the inverse of `time_entries` (what ACTUALLY happened): ordinary mutable rows, so the app
- * role holds SELECT, INSERT, UPDATE and DELETE (drizzle/0008_scheduling_rls.sql) — a shift is moved,
+ * role holds SELECT, INSERT, UPDATE and DELETE (drizzle/0006_scheduling_rls.sql) — a shift is moved,
  * re-roled, or discarded freely, with no append-only trigger and no hash chain. The planned↔actual
  * link is a READ MODEL by person + local date (design 2026-07-22 §4 "the planned-vs-actual seam",
  * plan §2.1), not an FK: a

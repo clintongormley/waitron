@@ -298,7 +298,8 @@ export class WorkforceBackend {
    *
    * `SELECT … FOR NO KEY UPDATE` on the actual person row, NOT `pg_advisory_xact_lock`: it is
    * collision-free (no key hashing), self-documenting, and RLS-respecting — the app role holds UPDATE
-   * on `persons` (drizzle/0001_workforce_rls.sql; persons.rls.test.ts pins that grant), which is the
+   * on `persons` (@waitron/identity's drizzle/0001_identity_rls.sql; that package's persons.rls.test.ts
+   * pins that grant), which is the
    * privilege the `FOR …` row-lock clauses require, so it is permitted for the non-superuser
    * deployment role (exercised as that role in clocking.concurrency.test.ts). A person id that does
    * not exist locks nothing, which is harmless: `currentState` then reports `out` exactly as before

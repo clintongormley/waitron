@@ -1,6 +1,6 @@
 {
-  "id": "2cd4ae69-a487-41de-8f0f-b6415e35b7ce",
-  "prevId": "27612e0b-6f66-4b47-b44f-635f3bdb8c4c",
+  "id": "6c092ccf-130a-4cd3-9e99-19da45a97d34",
+  "prevId": "8f319639-bc41-4a3f-9df4-763965c09c8d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -146,106 +146,6 @@
       },
       "isRLSEnabled": true
     },
-    "public.persons": {
-      "name": "persons",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "display_name": {
-          "name": "display_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "pin_hash": {
-          "name": "pin_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "role": {
-          "name": "role",
-          "type": "workforce_role",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'staff'"
-        },
-        "status": {
-          "name": "status",
-          "type": "person_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'active'"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "persons_tenant_id_idx": {
-          "name": "persons_tenant_id_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "persons_tenant_fk": {
-          "name": "persons_tenant_fk",
-          "tableFrom": "persons",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "persons_display_name_ck": {
-          "name": "persons_display_name_ck",
-          "value": "length(\"persons\".\"display_name\") > 0"
-        },
-        "persons_pin_hash_ck": {
-          "name": "persons_pin_hash_ck",
-          "value": "length(\"persons\".\"pin_hash\") > 0"
-        }
-      },
-      "isRLSEnabled": true
-    },
     "public.time_entries": {
       "name": "time_entries",
       "schema": "",
@@ -322,6 +222,31 @@
             "cache": "1",
             "cycle": false
           }
+        },
+        "corrects_entry_id": {
+          "name": "corrects_entry_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "correction_reason": {
+          "name": "correction_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "correction_status": {
+          "name": "correction_status",
+          "type": "workforce_correction_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "correction_actor_id": {
+          "name": "correction_actor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -357,6 +282,21 @@
             },
             {
               "expression": "event_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "time_entries_corrects_entry_idx": {
+          "name": "time_entries_corrects_entry_idx",
+          "columns": [
+            {
+              "expression": "corrects_entry_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -433,6 +373,32 @@
           ],
           "onDelete": "restrict",
           "onUpdate": "no action"
+        },
+        "time_entries_corrects_entry_fk": {
+          "name": "time_entries_corrects_entry_fk",
+          "tableFrom": "time_entries",
+          "tableTo": "time_entries",
+          "columnsFrom": [
+            "corrects_entry_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "time_entries_correction_actor_fk": {
+          "name": "time_entries_correction_actor_fk",
+          "tableFrom": "time_entries",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "correction_actor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -442,18 +408,22 @@
         "time_entries_event_offset_ck": {
           "name": "time_entries_event_offset_ck",
           "value": "\"time_entries\".\"event_offset_minutes\" between -840 and 840"
+        },
+        "time_entries_correction_shape_ck": {
+          "name": "time_entries_correction_shape_ck",
+          "value": "(\"time_entries\".\"corrects_entry_id\" is null and \"time_entries\".\"correction_reason\" is null\n             and \"time_entries\".\"correction_status\" is null and \"time_entries\".\"correction_actor_id\" is null)\n          or (\"time_entries\".\"corrects_entry_id\" is not null and \"time_entries\".\"correction_reason\" is not null\n             and \"time_entries\".\"correction_status\" is not null and \"time_entries\".\"correction_actor_id\" is not null)"
         }
       },
       "isRLSEnabled": true
     }
   },
   "enums": {
-    "public.person_status": {
-      "name": "person_status",
+    "public.workforce_correction_status": {
+      "name": "workforce_correction_status",
       "schema": "public",
       "values": [
-        "active",
-        "suspended"
+        "requested",
+        "approved"
       ]
     },
     "public.workforce_entry_kind": {
@@ -463,17 +433,8 @@
         "in",
         "out",
         "break_start",
-        "break_end"
-      ]
-    },
-    "public.workforce_role": {
-      "name": "workforce_role",
-      "schema": "public",
-      "values": [
-        "staff",
-        "supervisor",
-        "manager",
-        "admin"
+        "break_end",
+        "correction"
       ]
     }
   },
