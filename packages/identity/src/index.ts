@@ -3,6 +3,7 @@ export { IDENTITY_MIGRATIONS } from "./migrations.js";
 export { PERMISSIONS, roleHasPermission } from "./permissions.js";
 export type { Permission, PersonRoleValue } from "./permissions.js";
 export { persons, personStatus, personRole } from "./schema/persons.js";
+export { sessions } from "./schema/sessions.js";
 export { hashPin, verifyPin } from "./verify-pin.js";
 
 // Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable

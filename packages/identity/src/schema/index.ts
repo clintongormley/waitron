@@ -3,3 +3,4 @@
 // foreign key; `tenants` must NEVER be re-exported here or it lands in this package's snapshot as a
 // duplicate CREATE TABLE. schema-ownership.test.ts enforces this.
 export { persons, personStatus, personRole } from "./persons.js";
+export { sessions } from "./sessions.js";

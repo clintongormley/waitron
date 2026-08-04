@@ -6,13 +6,13 @@ import { PgTable } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 import * as schema from "./schema/index.js";
 
-/** Exactly the tables this package owns. Adding a table means editing this line, deliberately.
- * Task 4 adds "sessions". */
-const OWNED = ["persons"];
+/** Exactly the tables this package owns. Adding a table means editing this line, deliberately. */
+const OWNED = ["persons", "sessions"];
 
 /** Every core table this package's schema files import to declare foreign keys. None of these may
- * ever appear in this package's generated SQL. */
-const CORE = ["tenants"];
+ * ever appear in this package's generated SQL. sessions imports `tills` (which pulls in `locations`
+ * transitively); only the tables named here as FK targets are asserted absent. */
+const CORE = ["tenants", "tills"];
 
 const drizzleDir = fileURLToPath(new URL("../drizzle", import.meta.url));
 

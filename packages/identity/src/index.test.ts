@@ -32,3 +32,26 @@ describe("persons constraint declarations (forces the lazy extraConfig callback)
     expect(checkNames).toContain("persons_pin_hash_ck");
   });
 });
+
+/**
+ * Same mechanism for sessions — its FK/index block is in the lazy extraConfig callback, so this both
+ * forces it to run and pins the names the generated migration (0002_sessions.sql) and the RLS policy
+ * (0003_sessions_rls.sql) reference. sessions keys to the TILL, not the node: the three FKs are to
+ * tenants, persons and tills.
+ */
+describe("sessions constraint declarations (forces the lazy extraConfig callback)", () => {
+  it("declares sessions' primary key, its three foreign keys, and its tenant/open indexes", () => {
+    const config = getTableConfig(api.sessions);
+
+    expect(config.columns.find((c) => c.name === "id")?.primary).toBe(true);
+
+    const fkNames = config.foreignKeys.map((fk) => fk.getName());
+    expect(fkNames).toContain("sessions_tenant_fk");
+    expect(fkNames).toContain("sessions_person_fk");
+    expect(fkNames).toContain("sessions_till_fk");
+
+    const indexNames = config.indexes.map((i) => i.config.name);
+    expect(indexNames).toContain("sessions_tenant_id_idx");
+    expect(indexNames).toContain("sessions_open_idx");
+  });
+});
