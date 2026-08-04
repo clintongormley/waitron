@@ -1107,6 +1107,53 @@ describe("runCli venue", () => {
     });
   });
 
+  it("trims a flag-provided --tax-id so surrounding whitespace derives the SAME obligado", async () => {
+    // The load-bearing one: prompted values are trimmed (`(await io.prompt(...)).trim()`) but flag
+    // values were not, so `--tax-id " B12345678 "` used to reach `obligadoTenantId` verbatim and
+    // hash into a DIFFERENT tenant id than the trimmed form — a permanent, unmergeable second
+    // obligado from nothing but a stray space, the same footgun class as the country-case bug. The
+    // derived id and the stored tax_id must both match the trimmed identity.
+    const args = VENUE_ARGS.map((arg) => (arg === "B12345678" ? " B12345678 " : arg));
+    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const code = await runCli([...args, "--yes"], h.deps);
+    expect(code).toBe(0);
+
+    const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
+    const ensureTenant = actions.find((action) => action.kind === "ensure-tenant");
+    expect(ensureTenant).toMatchObject({
+      kind: "ensure-tenant",
+      taxId: "B12345678",
+      tenantId: obligadoTenantId("ES", "B12345678"),
+    });
+  });
+
+  it("treats a whitespace-only flag as absent and prompts for it, matching a bare flag", async () => {
+    // `resolveOption`'s docstring says an empty flag counts as absent; a whitespace-only flag must
+    // too, so flag and prompt behave identically. `--legal-name "   "` therefore falls through to
+    // the prompt rather than being accepted verbatim.
+    const args = VENUE_ARGS.map((arg) => (arg === "Acme SL" ? "   " : arg));
+    const h = harness({ answers: ["Acme SL"], env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const code = await runCli([...args, "--yes"], h.deps);
+    expect(code).toBe(0);
+    // The prompt for the legal name fired — the whitespace flag did not stand in for it.
+    expect(h.asked).toContain("legal name: ");
+    const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
+    const ensureTenant = actions.find((action) => action.kind === "ensure-tenant");
+    expect(ensureTenant).toMatchObject({ kind: "ensure-tenant", legalName: "Acme SL" });
+  });
+
+  it("trims a flag-provided --locale, matching the prompted path", async () => {
+    // `resolveLocales`' prompted path trims each answer; the flag path did not, so `--locale
+    // " es-ES "` used to reach the plan with the surrounding whitespace intact.
+    const args = VENUE_ARGS.map((arg) => (arg === "es-ES" ? " es-ES " : arg));
+    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const code = await runCli([...args, "--yes"], h.deps);
+    expect(code).toBe(0);
+    const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
+    const location = actions.find((action) => action.kind === "create-location");
+    expect(location?.kind === "create-location" && location.invoiceLocales).toEqual(["es-ES"]);
+  });
+
   it("refuses a database name outside the identifier rule before connecting", async () => {
     const args = VENUE_ARGS.map((arg) => (arg === DATABASE ? "Waitron Prod" : arg));
     const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });

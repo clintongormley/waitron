@@ -575,13 +575,23 @@ function asUnreadable(error: unknown, database: string): unknown {
   return new AppError("provisioning.state_unreadable", { database, sqlState });
 }
 
-/** A flag's value, or the answer to a question. An empty flag (`--database=`) counts as absent. */
+/**
+ * A flag's value, or the answer to a question. An empty OR whitespace-only flag (`--database=`,
+ * `--database='  '`) counts as absent and falls through to the prompt.
+ *
+ * The flag value is trimmed, so flag and prompt behave IDENTICALLY — the prompt already trims
+ * (`.trim()` below). Without this, a non-interactive `--tax-id " B12345678 "` reached
+ * `obligadoTenantId` verbatim and hashed into a different, permanent, unmergeable obligado than the
+ * trimmed form an interactive operator would have produced — the same operator-input footgun as the
+ * country-case normalisation (`assertCountry`).
+ */
 async function resolveOption(
   value: string | undefined,
   question: string,
   deps: CliDeps,
 ): Promise<string> {
-  if (typeof value === "string" && value !== "") return value;
+  const trimmed = value?.trim();
+  if (trimmed !== undefined && trimmed !== "") return trimmed;
   return (await deps.io.prompt(question)).trim();
 }
 
@@ -593,7 +603,11 @@ async function resolveOption(
  * --locale=z` over-count is.
  */
 async function resolveLocales(supplied: string[] | undefined, deps: CliDeps): Promise<string[]> {
-  const fromFlags = (supplied ?? []).filter((locale) => locale !== "");
+  // Each flag locale is trimmed and empties dropped, matching the prompted path below (which
+  // `.trim()`s every answer) — so `--locale " es-ES "` reaches the plan as `es-ES`.
+  const fromFlags = (supplied ?? [])
+    .map((locale) => locale.trim())
+    .filter((locale) => locale !== "");
   if (fromFlags.length > 0) return fromFlags;
   const locales: string[] = [];
   for (;;) {
