@@ -78,9 +78,11 @@ export async function computeDailyClose(
 ): Promise<DailyClose>;
 ```
 
-`timeZone` and `dayCutover` are validated in TS (IANA-parseable; `dayCutover` matches
-`^([01]\d|2[0-3]):[0-5]\d$`); invalid input throws a clean `AppError` (a new `reporting.*` code — named
-for the domain concept, per the error-code convention) rather than silently defaulting.
+`timeZone`, `dayCutover` and `businessDay` are validated in TS (IANA-parseable; `dayCutover` matches
+`^([01]\d|2[0-3]):[0-5]\d$`; `businessDay` a real `YYYY-MM-DD` calendar date); invalid input throws a
+plain `Error` rather than silently defaulting. (Implementation refinement, see the plan's Refinement 1:
+a caller precondition like this is a plain `Error`, **not** a registered error code — a `reporting.*`
+code would in any case be forbidden, since it names the throwing package, not a domain concept.)
 
 ## 3. The result
 

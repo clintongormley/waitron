@@ -31,4 +31,10 @@ describe("validateBusinessDay", () => {
   it.each(["2026-8-4", "04-08-2026", "2026/08/04", "garbage"])("rejects %s", (bad) => {
     expect(() => validateBusinessDay(bad)).toThrow(/business day/i);
   });
+  it.each(["2026-13-45", "2026-02-30", "2026-00-10", "2026-06-31"])(
+    "rejects the well-formed but impossible date %s",
+    (bad) => {
+      expect(() => validateBusinessDay(bad)).toThrow(/not a real calendar date/i);
+    },
+  );
 });

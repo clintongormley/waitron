@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedSale, seedSubstitution, seedVenue, seedVoid } from "../test/fixtures.js";
+import {
+  seedNodeAndSeries,
+  seedSale,
+  seedSubstitution,
+  seedVenue,
+  seedVoid,
+} from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { computeVatSummary } from "./vat-summary.js";
 import type { DailyCloseInput } from "./types.js";
@@ -116,16 +122,22 @@ describe("computeVatSummary", () => {
     expect((await run()).byRate).toEqual([{ rate: "21.00", base: "100.00", tax: "21.00" }]);
   });
 
-  it("rounds tax per invoice, not on the summed base", async () => {
-    // A base that rounds up asserts the per-invoice contract directly: 0.05 at 21% = 0.0105 → 0.01.
-    await seedSale(suite.db, venue, {
-      invoiceNumber: 1,
-      issuedAt: noonUtc,
-      total: "0.06",
-      lines: [{ vatRate: "21.00", lineTotal: "0.05" }],
-    });
+  it("rounds tax PER INVOICE, not on the summed base", async () => {
+    // Two invoices, same rate, at a rounding boundary where the two groupings DISAGREE:
+    //   per invoice: 0.03 * 21% = 0.0063 → 0.01 each → 0.02 total
+    //   summed base: 0.06 * 21% = 0.0126 → 0.01 total
+    // Asserting 0.02 fails if the query grouped by rate only rather than by (sale, rate) — the
+    // load-bearing per-invoice rounding of design §4/§D6. A single-invoice case cannot tell them apart.
+    for (const invoiceNumber of [1, 2]) {
+      await seedSale(suite.db, venue, {
+        invoiceNumber,
+        issuedAt: noonUtc,
+        total: "0.04",
+        lines: [{ vatRate: "21.00", lineTotal: "0.03" }],
+      });
+    }
     const vat = await run();
-    expect(vat.byRate).toEqual([{ rate: "21.00", base: "0.05", tax: "0.01" }]);
+    expect(vat.byRate).toEqual([{ rate: "21.00", base: "0.06", tax: "0.02" }]);
   });
 
   it("buckets by issuance and the cutover: 01:30 local belongs to the prior business day", async () => {
@@ -151,14 +163,38 @@ describe("computeVatSummary", () => {
     });
   });
 
-  it("excludes another node's sales", async () => {
-    const other = await seedVenue(suite.db); // different tenant+node
+  it("excludes another tenant's sales (RLS + the tenant predicate)", async () => {
+    const other = await seedVenue(suite.db); // a different tenant entirely
     await seedSale(suite.db, other, {
       invoiceNumber: 1,
       issuedAt: noonUtc,
       total: "121.00",
       lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
     });
-    expect((await run()).byRate).toEqual([]); // our node has nothing
+    expect((await run()).byRate).toEqual([]); // our tenant has nothing
+  });
+
+  it("excludes another node in the SAME tenant (the node predicate, which RLS does not enforce)", async () => {
+    // RLS scopes by tenant only, so a second node under our own tenant is NOT hidden — only
+    // `s.node_id = ${input.nodeId}` excludes it. Dropping that predicate would count 300.00, not 100.00.
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "121.00",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+    });
+    const nodeB = await seedNodeAndSeries(suite.db, venue);
+    await seedSale(
+      suite.db,
+      { ...venue, nodeId: nodeB.nodeId, seriesId: nodeB.seriesId },
+      {
+        invoiceNumber: 1,
+        issuedAt: noonUtc,
+        total: "242.00",
+        lines: [{ vatRate: "21.00", lineTotal: "200.00" }],
+      },
+    );
+    // Close runs for the venue's node A — only its 100.00, never node B's 200.00.
+    expect((await run()).byRate).toEqual([{ rate: "21.00", base: "100.00", tax: "21.00" }]);
   });
 });

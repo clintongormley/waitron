@@ -43,6 +43,16 @@ export function validateBusinessDay(day: string): void {
       `reporting: invalid business day, expected "YYYY-MM-DD": ${JSON.stringify(day)}`,
     );
   }
+  // Reject a well-formed but impossible date ("2026-13-45", "2026-02-30") up front, rather than
+  // letting it reach `${businessDay}::date` in SQL and surface as a raw Postgres range error.
+  // `Date.UTC` normalises overflow (2026-13-45 → 2027-02-14), so a round-trip mismatch = not a real day.
+  const [y, m, d] = day.split("-").map(Number) as [number, number, number];
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) {
+    throw new Error(
+      `reporting: invalid business day (not a real calendar date): ${JSON.stringify(day)}`,
+    );
+  }
 }
 
 /**

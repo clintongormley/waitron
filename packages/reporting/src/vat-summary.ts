@@ -15,9 +15,11 @@ import type { DailyCloseInput, VatSummary } from "./types.js";
 /**
  * `ratePercent`% of `base` (the VAT tax amount — the fiscal *cuota*), exact, half away from zero at
  * money scale. Identical composition to `@waitron/core`'s `percentOf` (packages/core/src/vat.ts) —
- * kept local so reporting depends only on db + shared, not the write layer. The rounding is shared's
- * `divideDecimal`, so this cannot diverge from what `buildVatBreakdown` filed per invoice. Named in
- * English (not `cuotaOf`) so this generic package stays inside the english-only guard.
+ * kept local so reporting depends only on db + shared, not the write layer. It reuses the same rounding
+ * primitive (`divideDecimal`) as `buildVatBreakdown`, and this aggregate applies it at the per-`(invoice,
+ * rate)` grain (the `group by s.id, sl.vat_rate` below, §4), so the daily VAT matches the sum of the
+ * filed per-invoice cuotas. Named in English (not `cuotaOf`) so this generic package stays inside the
+ * english-only guard.
  */
 function taxOf(base: Decimal, ratePercent: Decimal): Decimal {
   return divideDecimal(multiplyDecimal(base, ratePercent), "100" as Decimal, MONEY_SCALE);

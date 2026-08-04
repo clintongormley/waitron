@@ -39,6 +39,23 @@ export async function seedVenue(db: Database): Promise<SeededVenue> {
   return { tenantId, locationId, tillId, nodeId, seriesId };
 }
 
+/**
+ * A SECOND node (with its own series) under an existing venue's tenant+location — for tests that need
+ * two nodes in ONE tenant, which `seedVenue` (always a fresh tenant) cannot express. This is what
+ * proves the `node_id` predicate, since RLS scopes by tenant only.
+ */
+export async function seedNodeAndSeries(
+  db: Database,
+  venue: { tenantId: TenantId; locationId: string },
+  seriesCode = "B",
+): Promise<{ nodeId: NodeId; seriesId: SeriesId }> {
+  const nodeId = await seedNode(db, venue.tenantId, brandLocationId(venue.locationId));
+  const series = await db.execute<{ id: string }>(
+    sql`insert into invoice_series (tenant_id, node_id, code) values (${venue.tenantId}, ${nodeId}, ${seriesCode}) returning id`,
+  );
+  return { nodeId, seriesId: brandSeriesId(series.rows[0]!.id) };
+}
+
 export async function seedTill(
   db: Database,
   tenantId: TenantId,
