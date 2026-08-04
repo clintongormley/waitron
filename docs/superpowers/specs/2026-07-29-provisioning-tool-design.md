@@ -6,6 +6,13 @@
 should land first so `instance` can write the stamp, and `tenant` can validate a Stripe credential
 against it, rather than bolting either on later.
 
+> **2026-08-04 note:** this design predates `waitron-provision venue`. Where it describes running
+> `bootstrap-tenant.sql` — §1's hand-execution walkthrough, and "Keeping `bootstrap-tenant.sql` as
+> the mechanism" under the alternatives (§ below) — that file has since been retired (Task D2,
+> `feat/locations-provisioning`) and `venue` replaces it, with its own tests. See
+> [`2026-08-04-locations-provisioning-design.md`](./2026-08-04-locations-provisioning-design.md). The
+> text below records what was true when written.
+
 ## 1. The problem
 
 Standing up a Waitron deployment currently means executing a plan document by hand: create a

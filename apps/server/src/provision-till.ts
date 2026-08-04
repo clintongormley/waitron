@@ -1,13 +1,16 @@
-// Registers a NODE as a Veri*Factu SIF — the one provisioning step between
-// `sql/bootstrap-tenant.sql` and a node that can actually sell (node-id rekey, 2026-08-03: the SIF
+// Registers a NODE as a Veri*Factu SIF, so it can actually sell (node-id rekey, 2026-08-03: the SIF
 // is the compute node, #33, so provisioning registers a node, not a till). The file name is kept
 // `provision-till.ts`; a first-class `provision node` CLI rename is the deferred follow-up the
 // node-rekey design (§8/§10) leaves out of scope.
 //
+// `waitron-provision venue` now registers a node's SIF as part of standing a venue up (2026-08-04,
+// retiring `sql/bootstrap-tenant.sql`), so this module is the STANDALONE registration path — a node
+// with no `registro_sif` row, or a reimaged node getting a fresh chain.
+//
 // `VerifactuBackend.recordSale` reads the node's identity through `currentSif`, which throws
-// `sif.not_registered` when no live `registro_sif` row exists, so a node created by the bootstrap
-// SQL cannot record anything until this runs. `registerSif` has existed and been exported since the
-// chain was built; until this module there was no production caller anywhere, only tests.
+// `sif.not_registered` when no live `registro_sif` row exists, so a node with no SIF cannot record
+// anything until this runs. `registerSif` has existed and been exported since the chain was built;
+// until this module there was no production caller anywhere, only tests.
 //
 // This lives in `src/`, not beside its CLI in `scripts/`, because `vitest.config.ts` excludes
 // `scripts/**` from coverage as build tooling and provisioning a node is behaviour this host owns.

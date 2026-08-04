@@ -29,16 +29,20 @@ own location. Running `dist/bin.js` without that copy step does not fail silentl
 Running from source (`vitest`, `tsx`) needs no copy step — `bin.ts` detects that `dist/drizzle` is
 absent and lets `@waitron/migrations` resolve each set from `packages/migrations` instead.
 
-## The three commands
+## The four commands
 
-| Command    | What it needs                                        | How often           |
-| ---------- | ---------------------------------------------------- | ------------------- |
-| `keyring`  | nothing at all — no database, no connection string   | once per deployment |
-| `instance` | an admin connection with `CREATEDB` and `CREATEROLE` | once per deployment |
-| `status`   | the same admin connection; reads only                | any time            |
+| Command    | What it needs                                              | How often           |
+| ---------- | ---------------------------------------------------------- | ------------------- |
+| `keyring`  | nothing at all — no database, no connection string         | once per deployment |
+| `instance` | an admin connection with `CREATEDB` and `CREATEROLE`       | once per deployment |
+| `status`   | the same admin connection; reads only                      | any time            |
+| `venue`    | the owner-admin connection to a stamped, migrated database | once per venue      |
 
-There is no `tenant` command yet. Creating a tenant, a location, a till and a series is still
-`apps/server/sql/bootstrap-tenant.sql` plus `register-till`, per spec §4 and §6.
+`venue` creates a tenant, a location, a till, a node registered as a SIF, and its standard and
+rectificative invoice series — replacing the retired `apps/server/sql/bootstrap-tenant.sql` (removed
+2026-08-04, spec [`2026-08-04-locations-provisioning-design.md`](../../docs/superpowers/specs/2026-08-04-locations-provisioning-design.md)).
+`register-till` (`apps/server`) remains the standalone SIF-registration path — a reimaged node
+getting a fresh chain, or a node that otherwise has no `registro_sif` row.
 
 ```text
 usage: waitron-provision <command> [options]
@@ -46,6 +50,12 @@ usage: waitron-provision <command> [options]
   keyring                                            generate the credential key ring
   instance [--database <name>] [--environment <env>] [--yes]
   status   [--database <name>]
+  venue    [--database <name>] [--country <cc>] [--tax-id <nif>] [--legal-name <name>]
+           [--location-name <name>] [--territory <t>] [--locale <l>]...
+           [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]
+           [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]
+           [--day-cutover <HH:MM>] [--till-name <name>] [--series-code <code>]
+           [--rectificative-code <code>] [--yes]
 ```
 
 Every option is prompted for when omitted, so a bare `waitron-provision instance` is a complete
@@ -183,6 +193,33 @@ rather than only when a journal is missing. The host does the same at its next b
 claim.
 
 It is also the tool to reach for after a failed `instance`: it names which roles exist.
+
+### `venue`
+
+Stands a sellable venue up in one transaction: a tenant, a location, a till, a node registered as a
+Veri\*Factu SIF, and a standard plus a rectificative invoice series. It replaced the retired
+`apps/server/sql/bootstrap-tenant.sql`.
+
+Unlike `instance`, which talks to the cluster admin, `venue` connects to the **target database as the
+owner-admin** — the role that created the tables when it ran `instance` — over the same
+`WAITRON_ADMIN_DATABASE_URL`. `applyVenue` inserts under RLS as the table owner, so there is no
+second role and no grant to widen. The database must already be **stamped and migrated**: a venue
+against an unstamped database is refused (`provisioning.database_unstamped`), because stamping is
+`instance`'s job and one database per environment is a fiscal invariant.
+
+It reads what would be created, prints the plan headed by `Cluster: <user>@<host>:<port>`, asks for
+confirmation (`--yes` skips it), applies, then prints the new `tenant`, `node` and `SIF` ids (with the
+SIF's installation number). The SIF's `id_sistema_informatico` is **not** an option — it is the
+`WAITRON_ID_SISTEMA` product constant (`W1`), which identifies Waitron's software, not the venue.
+
+`--territory` currently accepts only `ES-common` (common-territory Spain, Veri\*Factu with IVA); any
+other value is refused with `fiscal.regime_not_implemented`. The pure `planVenue` also refuses a
+`--locale` count outside one-or-two (`provisioning.invalid_locales`) and equal standard and
+rectificative series codes (`provisioning.duplicate_series_code`) before any admin connection is
+opened; a concurrent run that races a conflicting row is caught as `provisioning.venue_conflict`.
+
+A worked invocation with the full option set is in
+[`apps/server/README.md`](../../apps/server/README.md#provisioning-a-venue).
 
 ## Secrets
 

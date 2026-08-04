@@ -128,8 +128,13 @@ recipe below, not the same set: it also makes `waitron_migrator` a member of `ap
 empty-database recipe deliberately omits (see the note under the SQL — that membership is only
 needed when the same role is also `DATABASE_URL`), and it creates `waitron_app` and
 `waitron_provisioner`, which this recipe is not about at all.
-The SQL below stays as the documented manual fallback, the same way
-`apps/server/sql/bootstrap-tenant.sql` stays as the manual path for creating a tenant.
+The SQL below stays as the documented manual fallback for the roles `instance` creates. Creating the
+business rows on top of them — a tenant, a location, a till, a node registered as a SIF, and its
+invoice series — is `waitron-provision venue` (see ["Provisioning a venue"](#provisioning-a-venue)
+below). That command replaced `apps/server/sql/bootstrap-tenant.sql`, which was **retired on
+2026-08-04** rather than kept as a fallback: it inserted `invoice_series.till_id` (dropped by
+migration `0018`, now `node_id NOT NULL`) so it could no longer run, and it created no node so it
+could not produce a sellable venue.
 
 This case is no longer exercised only by hand. `packages/provisioning/src/instance-apply.rls.test.ts`
 runs the whole sequence against a real `postgres:18-alpine` container **as a role holding exactly
@@ -237,23 +242,60 @@ already-migrated grants above already give `waitron_migrator`: `to_regclass` (ch
 covered by the blanket `grant select on all tables in schema public` — there is no separate grant to
 add for this table.
 
-**What actually writes the stamp.** Two things now do, and this paragraph said "one" until
-`packages/provisioning` landed:
+**What actually writes the stamp.** `waitron-provision instance` does, as the last action of its
+plan: it calls the programmatic `stampDeployment` (`@waitron/db`).
+`packages/provisioning/src/instance-apply.rls.test.ts` asserts the stamp is present after a real run
+against a container, so this is an automated provisioning path that runs it against a real database.
+Nothing else writes it in an automated path — in particular `waitron-provision venue` **refuses** a
+database that carries no stamp (`provisioning.database_unstamped`) rather than stamping one itself,
+because stamping is `instance`'s job and one database per environment is a fiscal invariant. (The
+retired `apps/server/sql/bootstrap-tenant.sql` used to write the stamp too, via an
+`insert into deployment (id, environment) values (1, :'environment') on conflict (id) do nothing`; it
+was removed on 2026-08-04.)
 
-- `waitron-provision instance` calls the programmatic `stampDeployment` (`@waitron/db`) as the last
-  action of its plan. `packages/provisioning/src/instance-apply.rls.test.ts` asserts the stamp is
-  present after a real run against a container, so this is an automated provisioning path that runs
-  it against a real database — which is exactly what this paragraph previously said did not exist.
-- `apps/server/sql/bootstrap-tenant.sql`, the manual fallback: its
-  `insert into deployment (id, environment) values (1, :'environment') on conflict (id) do nothing`
-  takes `environment` as one more `-v` argument alongside `nif`/`legal_name`/etc. (see that file's
-  own usage comment).
+Concretely, a database is stamped if and only if someone ran `waitron-provision instance` (or called
+`stampDeployment` by hand). Every database that predates this feature, and every database provisioned
+without doing so — including any set up before this note was written — has never been stamped: it
+reads `deployment` as `null` and **boots normally, with this check inert**, exactly as if the check
+did not exist. Only a database stamped for the OTHER environment refuses.
 
-Concretely, a database is stamped if and only if someone ran one of those two (or called
-`stampDeployment` by hand). Every database that predates this feature, and every database
-provisioned WITHOUT either — including any bootstrapped before this note was written — has never
-been stamped: it reads `deployment` as `null` and **boots normally, with this check inert**, exactly
-as if the check did not exist. Only a database stamped for the OTHER environment refuses.
+## Provisioning a venue
+
+`waitron-provision venue` creates the business rows a sellable venue needs — a tenant, a location, a
+till, a node registered as a Veri\*Factu SIF, and a standard plus a rectificative invoice series — in
+one transaction. It replaced the retired `apps/server/sql/bootstrap-tenant.sql` (see "What actually
+writes the stamp" above for why that file was removed).
+
+It runs **against a database `instance` has already migrated and stamped**. A venue cannot be filed
+against an unstamped database — it is refused with `provisioning.database_unstamped`, because one
+database per environment is a fiscal invariant and stamping is `instance`'s job. It connects to that
+target database as the **owner-admin** (the role that created the tables when it ran `instance`) over
+`WAITRON_ADMIN_DATABASE_URL`, the same admin connection string `instance` reads; there is no separate
+role and no grant to widen, because `applyVenue` inserts under RLS as the table owner.
+
+```bash
+pnpm --filter @waitron/provisioning build   # once — produces dist/bin.js and copies the migrations
+WAITRON_ADMIN_DATABASE_URL=postgres://owner_admin:secret@host:5432/waitron \
+  node packages/provisioning/dist/bin.js venue \
+    --database waitron \
+    --country ES --tax-id B12345678 --legal-name 'Deli SL' \
+    --location-name Mostrador --territory ES-common --locale es-ES \
+    --operation-description 'Venta en establecimiento' \
+    --address-line1 'Calle Mayor 1' --postal-code 28001 --city Madrid --province Madrid \
+    --time-zone Europe/Madrid --day-cutover 06:00 \
+    --till-name 'Caja 1' --series-code A --rectificative-code R \
+    --yes
+```
+
+Every option is prompted for when omitted, so a bare `venue` is a complete interactive session;
+`--yes` skips the confirmation for a non-interactive run. `--territory` currently accepts only
+`ES-common` (common-territory Spain, filing under Veri\*Factu with IVA); any other territory is
+refused with `fiscal.regime_not_implemented`. The SIF's `id_sistema_informatico` is **not** an
+option — it is the `WAITRON_ID_SISTEMA` product constant (`W1`), because it identifies Waitron's
+software, not the venue. The admin connection string is read only from `WAITRON_ADMIN_DATABASE_URL`
+or an echo-off prompt, never from `argv`, so it stays out of `ps` and shell history. See
+[`packages/provisioning/README.md`](../../packages/provisioning/README.md) for the full option list,
+what the command prints, and what it refuses.
 
 ## Environment variables
 

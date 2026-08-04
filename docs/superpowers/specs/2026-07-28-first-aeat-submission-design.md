@@ -2,6 +2,12 @@
 
 **Date:** 2026-07-28 · **Main at design time:** `c41dc8e` (the `@waitron/db` exports map landed, PR #2)
 
+> **2026-08-04 note:** where this design has the deli's rows created by `bootstrap-tenant.sql`
+> (§ "The deli's rows…"), that file has since been retired (Task D2, `feat/locations-provisioning`)
+> and `waitron-provision venue` replaces it — see
+> [`2026-08-04-locations-provisioning-design.md`](./2026-08-04-locations-provisioning-design.md). The
+> text below records what was true when written.
+
 The qualified certificate exists. Every handoff since the fiscal drain landed has named it as the
 critical path — "*that is the real critical path, and no code shortens it*" — and it is now the one
 thing that has changed without a line being written.

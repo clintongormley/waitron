@@ -2371,6 +2371,11 @@ test" admission with a pointer to `packages/provisioning`, keeping the SQL as th
 fallback. Do **not** delete the recipe: `bootstrap-tenant.sql` stays as the manual path (spec §8),
 and so should this.
 
+> **2026-08-04 note:** the "do not delete `bootstrap-tenant.sql`" instruction above has since been
+> reversed. `bootstrap-tenant.sql` was retired (Task D2, `feat/locations-provisioning`) and
+> `waitron-provision venue` replaces it; the empty-database ROLE recipe in `apps/server/README.md`
+> that this step is about does still stay as the documented manual fallback.
+
 - [ ] **Step 8: Run everything**
 
 ```bash
