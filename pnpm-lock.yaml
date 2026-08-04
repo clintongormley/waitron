@@ -326,6 +326,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^3.0.0
         version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      '@waitron/identity':
+        specifier: workspace:*
+        version: link:../identity
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10

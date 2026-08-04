@@ -6,6 +6,7 @@ import type { TenantId } from "@waitron/shared";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { VerifactuBackend } from "./backend.js";
 import { backoffMs } from "./drain.js";
@@ -20,7 +21,9 @@ import {
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
-const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
+// IDENTITY_MIGRATIONS between core and fiscal (manifest order core → identity → fiscal): recordVoid
+// now calls `authorize`, which reads identity's persons/sessions.
+const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, FISCAL_MIGRATIONS] });
 
 describe("drain — happy path", () => {
   let seeded: SeededDrain;
@@ -82,6 +85,14 @@ describe("drain — happy path", () => {
 describe("drain — happy path, an anulación row", () => {
   it("submits a voided sale's anulación through the same accept-and-persist path as an alta", async () => {
     const { tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenantWithSif(pg.db);
+    // recordVoid now requires `sale.void`: seed a manager and open its session to authorize the void.
+    const { rows: mgr } = await pg.db.execute<{ id: string }>(
+      sql`insert into persons (tenant_id, display_name, pin_hash, role)
+          values (${tenantId}, 'P', ${hashPin("1234")}, 'manager') returning id`,
+    );
+    const voidSession = await withTenant(pg.db, tenantId, (tx) =>
+      loginWithPin(tx, { tenantId, tillId, personId: mgr[0]!.id, pin: "1234" }),
+    );
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const backend = new VerifactuBackend({
       deploymentEnvironment: "production",
@@ -100,7 +111,7 @@ describe("drain — happy path, an anulación row", () => {
     });
     await withTenant(pg.db, tenantId, async (tx) => {
       await asAppUser(tx);
-      await recordVoid(tx, backend, sale.saleId, "staff error");
+      await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
     });
 
     // Both envíos (the alta's and the anulación's) were inserted with the column's own

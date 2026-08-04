@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 /**
  * Task 3's English-only guard (packages/db/src/english-only.ts) scans `GENERIC_PACKAGES`
  * ("db", "core", "fiscal", "shared", "payments", "scheduler", "credentials", "workforce",
- * "reporting") and explicitly names this package — alongside packages/verifactu — in
+ * "reporting", "identity") and explicitly names this package — alongside packages/verifactu — in
  * `EXEMPT_PACKAGES`.
  *
  * Its constants are read here as SOURCE TEXT rather than imported from `@waitron/db`, and that is
@@ -28,7 +28,7 @@ const englishOnlySource = readFileSync(
 describe("the English-only vocabulary guard is scoped out of this package", () => {
   it("does not scan fiscal-verifactu", () => {
     expect(englishOnlySource).toMatch(
-      /GENERIC_PACKAGES\s*=\s*\[\s*"db",\s*"core",\s*"fiscal",\s*"shared",\s*"payments",\s*"scheduler",\s*"credentials",\s*"workforce",\s*"reporting",?\s*\]/,
+      /GENERIC_PACKAGES\s*=\s*\[\s*"db",\s*"core",\s*"fiscal",\s*"shared",\s*"payments",\s*"scheduler",\s*"credentials",\s*"workforce",\s*"reporting",\s*"identity",?\s*\]/,
     );
   });
 

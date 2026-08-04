@@ -4,6 +4,7 @@ import { recordSale, recordVoid } from "@waitron/core";
 import { computeHuella } from "@waitron/verifactu";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
 import type { NodeId, SaleId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
@@ -21,6 +22,9 @@ let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 let workingOrderId: WorkingOrderId;
+// recordVoid now requires `sale.void`; this is a manager shift session that authorizes every void
+// in this suite (only the void's authorization matters here, not who rang the sale).
+let voidSessionId: string;
 
 /**
  * The end-to-end counterpart to `./write-path.e2e.test.ts`, for the same reason that file exists:
@@ -34,10 +38,22 @@ let workingOrderId: WorkingOrderId;
  * own huella recomputable from its own stored columns, its own pending sidecar row, and it advances
  * the REAL chain head — none of which a fake backend's own bookkeeping tables can demonstrate.
  */
-const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
+// IDENTITY_MIGRATIONS between core and fiscal (manifest order core → identity → fiscal): recordVoid
+// now calls `authorize`, which reads identity's persons/sessions.
+const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, FISCAL_MIGRATIONS] });
 
 beforeEach(async () => {
   ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenantWithSif(pg.db));
+  // Seed a manager (holds `sale.void`) as the superuser owner and open its session — the void path
+  // under test now needs an authorizer, mirroring packages/core/src/record-correction.test.ts.
+  const { rows } = await pg.db.execute<{ id: string }>(
+    sql`insert into persons (tenant_id, display_name, pin_hash, role)
+        values (${tenantId}, 'P', ${hashPin("1234")}, 'manager') returning id`,
+  );
+  const session = await withTenant(pg.db, tenantId, (tx) =>
+    loginWithPin(tx, { tenantId, tillId, personId: rows[0]!.id, pin: "1234" }),
+  );
+  voidSessionId = session.id;
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -60,7 +76,7 @@ async function sell() {
 async function voidSale(saleId: SaleId, reason = "staff error") {
   return withTenant(pg.db, tenantId, async (tx) => {
     await asAppUser(tx);
-    return recordVoid(tx, backend, saleId, reason);
+    return recordVoid(tx, backend, saleId, reason, { sessionId: voidSessionId });
   });
 }
 
