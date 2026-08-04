@@ -5,9 +5,9 @@ import { createHash } from "node:crypto";
  * finds the obligado it created before. Under FORCE ROW LEVEL SECURITY a provisioning connection
  * cannot look a tenant up by (country, tax_id) before it knows which tenant scope to adopt
  * (0011_provisioner_role.sql:117-123), so the id is DERIVED from (country, tax_id) instead — the
- * provisioner picks it, sets app.tenant_id to it, and inserts under that scope (spec D8, mirroring
- * the technique the retired bootstrap-tenant.sql used: "pick the uuid, set the GUC, insert with an
- * explicit id").
+ * provisioner picks it, sets app.tenant_id to it, and inserts under that scope (spec D8) — the same
+ * pick-the-uuid / set-the-GUC / insert-with-an-explicit-id technique `venue-apply.ts` uses under
+ * `withTenant`.
  */
 const OBLIGADO_NAMESPACE = "6f9c1e2a-3b4d-4e6f-8a9b-0c1d2e3f4a5b";
 
