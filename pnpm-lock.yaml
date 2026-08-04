@@ -489,6 +489,12 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^3.0.0
         version: 3.2.7(@vitest/browser@3.2.7)(vitest@3.2.7)
+      '@waitron/core':
+        specifier: workspace:*
+        version: link:../core
+      '@waitron/verifactu':
+        specifier: workspace:*
+        version: link:../verifactu
       esbuild:
         specifier: ^0.25.0
         version: 0.25.12

@@ -6,7 +6,33 @@ import { planInstance } from "./instance-plan.js";
 import { readInstanceState } from "./instance-state.js";
 import { sqlStateOf } from "./sql-state.js";
 import { obligadoTenantId } from "./tenant-id.js";
+import { applyVenue } from "./venue-apply.js";
+import { planVenue, type VenueRequest } from "./venue-plan.js";
 import { roleUrl, startBarePostgres, type RealPostgres } from "./testing/postgres.js";
+
+function venueRequest(taxId: string): VenueRequest {
+  return {
+    country: "ES",
+    taxId,
+    legalName: "Deli SL",
+    location: {
+      name: "Mostrador",
+      fiscalTerritory: "ES-common",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "venta en establecimiento",
+      addressLine1: "Calle Mayor 1",
+      addressLine2: null,
+      postalCode: "28013",
+      city: "Madrid",
+      province: "Madrid",
+      timeZone: "Europe/Madrid",
+      dayCutover: "06:00:00",
+    },
+    tillName: "Caja 1",
+    seriesCode: "A",
+    rectificativeSeriesCode: "R",
+  };
+}
 
 const DATABASE = "waitron_venue_priv_suite";
 const FIXED_PW = "fixedpw"; // every role instance creates gets this, so we can connect as any of them
@@ -103,5 +129,45 @@ describe("who may INSERT a node under FORCE RLS", () => {
       sqlState = sqlStateOf(error);
     }
     expect(sqlState).toBe("42501"); // permission denied for table nodes
+  });
+
+  it("the REAL applyVenue provisions a complete sellable venue over the owner connection, end-to-end under FORCE RLS", async () => {
+    // The one place the whole flow runs as the non-superuser OWNER against a migrated + stamped
+    // real database — closing the gap PGlite (a superuser that bypasses RLS) cannot. A fresh
+    // obligado, distinct from this suite's B00000000 seed, so ensure-tenant creates rather than
+    // reuses.
+    const result = await applyVenue(planVenue(venueRequest("B12345678")), { db: owner });
+    expect(result.sif.numeroInstalacion).toBeGreaterThanOrEqual(1);
+
+    // FORCE RLS is REAL for the owner here, and reading back must happen INSIDE the tenant scope:
+    // the USING policy `tenant_id = current_tenant_id()` hides every row from a session with no GUC
+    // set, so an unscoped `owner.execute(...)` count returns 0 for rows that were in fact written
+    // (measured in this task's first container run: all four counts came back 0 against a venue
+    // `applyVenue` had just committed). The PGlite unit test does NOT catch this — its superuser
+    // connection bypasses RLS, so the same raw SELECT sees the rows. This scoped read-back is the
+    // gap that test cannot close.
+    const { counts, node, sif } = await withTenant(owner, result.tenantId, async (tx) => {
+      const counts = await tx.execute<{
+        tenants: number;
+        nodes: number;
+        series: number;
+        sif: number;
+      }>(sql`
+        select
+          (select count(*) from tenants where id = ${result.tenantId})::int as tenants,
+          (select count(*) from nodes where id = ${result.nodeId})::int as nodes,
+          (select count(*) from invoice_series where node_id = ${result.nodeId})::int as series,
+          (select count(*) from registro_sif where node_id = ${result.nodeId} and revocado_en is null)::int as sif`);
+      const node = await tx.execute<{ filing_module: string; tax_module: string }>(sql`
+        select filing_module, tax_module from nodes where id = ${result.nodeId}`);
+      const sif = await tx.execute<{ nif: string }>(sql`
+        select nif from registro_sif where id = ${result.sif.id}`);
+      return { counts, node, sif };
+    });
+
+    expect(counts.rows[0]).toEqual({ tenants: 1, nodes: 1, series: 2, sif: 1 });
+    expect(node.rows[0]).toEqual({ filing_module: "verifactu", tax_module: "iva" });
+    // The SIF's nif came from the tenant's tax_id, read inside the transaction — never an argument.
+    expect(sif.rows[0]?.nif).toBe("B12345678");
   });
 });

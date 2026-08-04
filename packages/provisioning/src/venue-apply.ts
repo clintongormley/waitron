@@ -1,0 +1,140 @@
+import { randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
+import { withTenant, type Database, type Transaction } from "@waitron/db";
+import { registerSif, type SifRegistration } from "@waitron/fiscal-verifactu";
+import { nodeId as brandNodeId, tenantId as brandTenantId } from "@waitron/shared";
+import type { VenueAction } from "./venue-plan.js";
+
+export interface VenueApplyDeps {
+  /** The OWNER connection to the TARGET database — the admin that ran `instance` and so owns the
+   * tables. Task C1's container test proved the owner INSERTs a node under the tenant GUC while a
+   * SELECT-only login role cannot, so this runs the whole flow as one role with no grant widened. */
+  db: Database;
+}
+
+export interface VenueResult {
+  tenantId: string;
+  locationId: string;
+  tillId: string;
+  nodeId: string;
+  sif: SifRegistration;
+  seriesIds: string[];
+}
+
+/**
+ * Runs one plan as ONE transaction under `withTenant`, mirroring provisionNode (NOT applyInstance:
+ * there is no cluster DDL here, and a single transaction is what a partial venue must never be).
+ * The tenant scope is adopted from the ensure-tenant action's deterministic id, so every WITH CHECK
+ * (`tenant_id = current_tenant_id()`) is satisfied by the row this run inserts.
+ *
+ * Idempotency is `ON CONFLICT DO NOTHING` on the natural keys — the transaction-safe form of spec
+ * D8's "insert, treat conflict as already-present" (a bare 23505 catch would poison the
+ * transaction). It applies only where a natural key exists: the tenant (country, tax_id) and the
+ * series (tenant, node, code). Location/till/node have no business key — a tenant legitimately has
+ * many shops — so a re-run ADDS a shop; it never resumes a half-built one, and never re-registers
+ * an existing node's SIF (the fiscally load-bearing guard, spec D5): each run creates a FRESH node,
+ * so `registerSif` mints a new installation number and starts a new chain rather than forking one.
+ */
+export async function applyVenue(
+  actions: readonly VenueAction[],
+  deps: VenueApplyDeps,
+): Promise<VenueResult> {
+  const ensure = actions.find((a) => a.kind === "ensure-tenant");
+  if (ensure === undefined || ensure.kind !== "ensure-tenant") {
+    throw new Error("applyVenue: plan is missing ensure-tenant");
+  }
+  const tenantId = ensure.tenantId;
+
+  return withTenant(deps.db, tenantId, async (tx) => {
+    let locationId = "";
+    let tillId = "";
+    let nodeId = "";
+    let sif: SifRegistration | undefined;
+    const seriesIds: string[] = [];
+
+    for (const action of actions) {
+      switch (action.kind) {
+        case "ensure-tenant":
+          // Deterministic id + explicit id satisfies WITH CHECK (id = current_tenant_id()); DO
+          // NOTHING reuses an existing obligado (spec D8). No tax_id lookup — RLS forbids it.
+          await tx.execute(sql`
+            insert into tenants (id, country, tax_id, legal_name)
+            values (${action.tenantId}, ${action.country}, ${action.taxId}, ${action.legalName})
+            on conflict (country, tax_id) do nothing`);
+          break;
+        case "create-location": {
+          locationId = randomUUID();
+          // `invoice_locales` is `text[]`. A JS array interpolated straight into a `sql` template
+          // (`${action.invoiceLocales}`, as the brief drafted) is expanded by Drizzle into a
+          // value LIST — `values (…, ($4), …)` binding `$4 = 'es-ES'` — which Postgres rejects
+          // with `22P02 malformed array literal` (observed in this task's first green run). Build
+          // the array explicitly instead, each element its OWN bound param (`array[$n, …]::text[]`)
+          // so nothing is string-concatenated. Mirrors instance-apply.ts's `::text[]` casts.
+          const invoiceLocales = sql`array[${sql.join(
+            action.invoiceLocales.map((locale) => sql`${locale}`),
+            sql`, `,
+          )}]::text[]`;
+          await tx.execute(sql`
+            insert into locations
+              (id, tenant_id, name, invoice_locales, operation_description, fiscal_territory,
+               address_line1, address_line2, postal_code, city, province, time_zone, day_cutover)
+            values (${locationId}, ${tenantId}, ${action.name}, ${invoiceLocales},
+               ${action.operationDescription}, ${action.fiscalTerritory}, ${action.addressLine1},
+               ${action.addressLine2}, ${action.postalCode}, ${action.city}, ${action.province},
+               ${action.timeZone}, ${action.dayCutover})`);
+          break;
+        }
+        case "create-till":
+          tillId = randomUUID();
+          await tx.execute(sql`
+            insert into tills (id, tenant_id, location_id, name)
+            values (${tillId}, ${tenantId}, ${locationId}, ${action.name})`);
+          break;
+        case "create-node":
+          nodeId = randomUUID();
+          await tx.execute(sql`
+            insert into nodes (id, tenant_id, location_id, name, filing_module, tax_module)
+            values (${nodeId}, ${tenantId}, ${locationId}, ${action.name}, ${action.filingModule}, ${action.taxModule})`);
+          break;
+        case "register-sif":
+          // registerSif takes nif as a param, so read it here from the tenant we just ensured
+          // (never an argument, mirroring provisionNode's obligadoNif: an operator-supplied NIF
+          // would file a real tenant's sales under someone else's).
+          sif = await registerSifForNode(tx, tenantId, nodeId, action.idSistemaInformatico);
+          break;
+        case "create-series": {
+          const seriesId = randomUUID();
+          await tx.execute(sql`
+            insert into invoice_series (id, tenant_id, node_id, code, purpose)
+            values (${seriesId}, ${tenantId}, ${nodeId}, ${action.code}, ${action.purpose})
+            on conflict (tenant_id, node_id, code) do nothing`);
+          seriesIds.push(seriesId);
+          break;
+        }
+      }
+    }
+
+    if (sif === undefined) throw new Error("applyVenue: register-sif never ran");
+    return { tenantId, locationId, tillId, nodeId, sif, seriesIds };
+  });
+}
+
+/** Reads the obligado's tax_id (the NIF) from the tenant row and registers the node as its SIF. */
+async function registerSifForNode(
+  tx: Transaction,
+  tenantId: string,
+  nodeId: string,
+  idSistemaInformatico: string,
+): Promise<SifRegistration> {
+  const rows = await tx.execute<{ tax_id: string }>(
+    sql`select tax_id from tenants where id = ${tenantId}`,
+  );
+  const nif = rows.rows[0]?.tax_id;
+  if (nif === undefined) throw new Error("applyVenue: tenant vanished before SIF registration");
+  return registerSif(tx, {
+    tenantId: brandTenantId(tenantId),
+    nodeId: brandNodeId(nodeId),
+    nif,
+    idSistemaInformatico,
+  });
+}
