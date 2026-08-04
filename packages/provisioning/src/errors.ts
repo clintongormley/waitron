@@ -212,6 +212,29 @@ declare module "@waitron/shared" {
      * never a secret, in the format-check family with `provisioning.invalid_locales` and
      * `provisioning.invalid_identifier` above: a refusal that withheld it could not be acted on. */
     "provisioning.duplicate_series_code": { code: string };
+    /** A venue's `fiscal_territory` names a country the tenant is NOT in. A location's territory must
+     * belong to the tenant's `country`: the fiscal territories are country-prefixed (`ES-common`,
+     * `ES-PV-bizkaia`, …), and the only implemented one, `ES-common` (Spain / Veri*Factu), therefore
+     * requires `country` `ES`. The combination is load-bearing because `applyVenue` writes the
+     * tenant's `tax_id` into `registro_sif.nif` — a Spanish-NIF field — so a request like
+     * `country=PT` + `fiscalTerritory=ES-common` would stand up a venue whose SIF is stamped with a
+     * non-NIF identity and file its sales under the wrong country, which a hash-chained fiscal record
+     * cannot take back. Spec §8 assumes a location is in the tenant's country; this refuses the
+     * incoherent request rather than assuming it.
+     *
+     * Refused in the pure planner (`planVenue`), AFTER `resolveFiscalModules` so an UNIMPLEMENTED
+     * territory still fails first with `fiscal.regime_not_implemented` (the more specific error), and
+     * before any admin connection is spent — the same D4 "validate before spending the credential"
+     * ordering the locale and duplicate-series-code refusals follow. The check is case-insensitive on
+     * the country-prefixed convention, so `es`/`ES` both match `ES-common`.
+     *
+     * `provisioning.*` and not a `location.*`/`tenant.*` prefix: this is a refusal OF STANDING A VENUE
+     * UP — the same activity the header describes — caught before any location or tenant row exists to
+     * be about. Both params ARE echoed: `country` and `fiscalTerritory` are operator-typed
+     * configuration, the same format/coherence family as `provisioning.invalid_country` and
+     * `provisioning.duplicate_series_code` above — neither is a secret, and a refusal that withheld
+     * them could not be acted on. */
+    "provisioning.territory_country_mismatch": { country: string; fiscalTerritory: string };
     /** Waitron's own AEAT software identifier — `WAITRON_ID_SISTEMA`, a product constant rather
      * than operator input — is empty or longer than its ≤ 2-char limit (FAQ §4). Thrown by
      * `assertUsableIdSistema` (`fiscal-modules.ts`), which `planVenue` calls before it builds the

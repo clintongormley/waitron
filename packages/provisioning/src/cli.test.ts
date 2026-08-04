@@ -1062,6 +1062,22 @@ describe("runCli venue", () => {
     expect(h.connect).not.toHaveBeenCalled();
   });
 
+  it("refuses a territory that does not belong to the country, before connecting", async () => {
+    // country=PT + territory=ES-common is incoherent: ES-common is Spain/Veri*Factu and the SIF's nif
+    // comes from the tenant's tax_id, so a non-ES country would file under a non-NIF identity. Like
+    // the unimplemented-territory refusal above, it is caught by the PURE planner before the admin
+    // credential is asked for — so no connection is opened and nothing is applied.
+    const args = VENUE_ARGS.map((arg) => (arg === "ES" ? "PT" : arg));
+    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const code = await runCli([...args, "--yes"], h.deps);
+    expect(code).toBe(1);
+    expect(h.lines.join("\n")).toContain(
+      'provisioning.territory_country_mismatch {"country":"PT","fiscalTerritory":"ES-common"}',
+    );
+    expect(h.applyVenue).not.toHaveBeenCalled();
+    expect(h.connect).not.toHaveBeenCalled();
+  });
+
   it("refuses an unstamped database before applying", async () => {
     const h = harness({
       env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },

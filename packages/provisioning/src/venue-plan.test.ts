@@ -108,6 +108,59 @@ describe("planVenue", () => {
       expect(isAppError(error) && error.code).toBe("provisioning.duplicate_series_code");
     }
   });
+
+  it("REFUSES a fiscal_territory that does not belong to the tenant's country", () => {
+    // country=PT + fiscalTerritory=ES-common is incoherent: ES-common is Spain/Veri*Factu and
+    // applyVenue writes tax_id into registro_sif.nif (a Spanish-NIF field), so a non-ES country would
+    // file under a non-NIF identity → mis-filing under the wrong country, unrecoverable in a
+    // hash-chained record. Spec §8 assumes a location is in the tenant's country; refused in the pure
+    // planner before any admin connection is spent, echoing both operator-typed values.
+    try {
+      planVenue(request({ country: "PT" }));
+      expect.unreachable("should have refused an ES territory under a PT country");
+    } catch (error) {
+      expect(isAppError(error)).toBe(true);
+      if (isAppError(error)) {
+        expect(error.code).toBe("provisioning.territory_country_mismatch");
+        expect(error.params).toEqual({ country: "PT", fiscalTerritory: "ES-common" });
+      }
+    }
+  });
+
+  it("still fails an UNIMPLEMENTED territory before the country/territory check (most specific wins)", () => {
+    // FR-common is BOTH unimplemented AND country-mismatched under PT. resolveFiscalModules runs
+    // before the country check, so the more specific fiscal.regime_not_implemented wins — proving the
+    // ordering, not territory_country_mismatch.
+    try {
+      planVenue(
+        request({
+          country: "PT",
+          location: { ...request().location, fiscalTerritory: "FR-common" },
+        }),
+      );
+      expect.unreachable("should have refused an unimplemented territory");
+    } catch (error) {
+      expect(isAppError(error) && error.code).toBe("fiscal.regime_not_implemented");
+    }
+  });
+
+  it("accepts a country in a different case than the territory prefix (ES matches es-common)", () => {
+    // The check is case-insensitive on the country-prefixed convention, so a lowercase country still
+    // matches its territory prefix. This never mints two obligados (the CLI upper-cases country first),
+    // but planVenue must not refuse the coherent combination on case alone.
+    const actions = planVenue(
+      request({ country: "es", location: { ...request().location, fiscalTerritory: "ES-common" } }),
+    );
+    expect(actions.map((a) => a.kind)).toEqual([
+      "ensure-tenant",
+      "create-location",
+      "create-till",
+      "create-node",
+      "register-sif",
+      "create-series",
+      "create-series",
+    ]);
+  });
 });
 
 describe("describeVenueAction", () => {

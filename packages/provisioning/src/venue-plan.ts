@@ -73,6 +73,21 @@ export function planVenue(request: VenueRequest): VenueAction[] {
     throw new AppError("provisioning.duplicate_series_code", { code: request.seriesCode });
   }
   const modules = resolveFiscalModules(request.location.fiscalTerritory); // throws for unimplemented
+  // The territory must belong to the tenant's country. Fiscal territories are country-prefixed
+  // (`ES-common`, `ES-PV-bizkaia`, …), and applyVenue writes tax_id into `registro_sif.nif` (a
+  // Spanish-NIF field), so `country=PT` + `ES-common` would file under a non-NIF identity — a
+  // mis-filing under the wrong country that a hash-chained record cannot take back (spec §8). Checked
+  // AFTER resolveFiscalModules so an unimplemented territory fails first with the more specific
+  // `fiscal.regime_not_implemented`; refused here, in the pure planner, so no admin connection is
+  // spent (spec D4). Case-insensitive on the prefix, so `es`/`ES` both match `ES-common`.
+  if (
+    !request.location.fiscalTerritory.toUpperCase().startsWith(`${request.country.toUpperCase()}-`)
+  ) {
+    throw new AppError("provisioning.territory_country_mismatch", {
+      country: request.country,
+      fiscalTerritory: request.location.fiscalTerritory,
+    });
+  }
   const tenantId = obligadoTenantId(request.country, request.taxId);
 
   // Defence-in-depth on an unrecoverable fiscal field. WAITRON_ID_SISTEMA is carried by the
