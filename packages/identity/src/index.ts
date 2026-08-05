@@ -12,11 +12,13 @@ export {
   MIN_PIN_LENGTH,
   assertPinLength,
   createPerson,
+  listActiveStaff,
   reactivatePerson,
   resetPin,
   setRole,
   suspendPerson,
 } from "./staff.js";
+export type { StaffListEntry } from "./staff.js";
 export { hashPin, verifyPin } from "./verify-pin.js";
 
 // Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable

@@ -10,6 +10,7 @@ import { loginWithPin } from "./login.js";
 import {
   MIN_PIN_LENGTH,
   createPerson,
+  listActiveStaff,
   reactivatePerson,
   resetPin,
   setRole,
@@ -286,6 +287,59 @@ describe("suspendPerson / reactivatePerson", () => {
 
     // The gate rejects before the UPDATE, so an unauthorised actor cannot un-suspend anyone.
     expect((await personRow(targetId)).status).toBe("suspended");
+  });
+});
+
+describe("listActiveStaff", () => {
+  it("returns active persons' id + name, sorted, no secrets", async () => {
+    const tillId = await seedTill(suite.db, tenantId);
+    const adminId = await seedPerson(suite.db, tenantId, "admin");
+    const adminSessionId = await openSession(suite.db, tenantId, tillId, adminId);
+
+    // Insert Zoe BEFORE Ana so an Ana-first result proves the orderBy(displayName), not insertion
+    // order. "Gone" is created then suspended: it must NOT appear.
+    const zoe = await run((tx) =>
+      createPerson(tx, {
+        tenantId,
+        actorSessionId: adminSessionId,
+        displayName: "Zoe",
+        role: "staff",
+        pin: "4444",
+      }),
+    );
+    const ana = await run((tx) =>
+      createPerson(tx, {
+        tenantId,
+        actorSessionId: adminSessionId,
+        displayName: "Ana",
+        role: "supervisor",
+        pin: "5555",
+      }),
+    );
+    const gone = await run((tx) =>
+      createPerson(tx, {
+        tenantId,
+        actorSessionId: adminSessionId,
+        displayName: "Gone",
+        role: "staff",
+        pin: "6666",
+      }),
+    );
+    await run((tx) => suspendPerson(tx, { actorSessionId: adminSessionId, personId: gone.id }));
+
+    const staff = await run((tx) => listActiveStaff(tx));
+
+    // This file shares one PGlite db + tenant across every describe block, and on PGlite the
+    // connection is superuser so RLS is bypassed (file header; CLAUDE.md §4) — the roster therefore
+    // also carries persons the other suites seeded. Restrict to the cohort THIS test created, the way
+    // the sibling suites read specific rows by id, so the assertion is order-independent.
+    const mine = new Set([zoe.id, ana.id, gone.id]);
+    const cohort = staff.filter((s) => mine.has(s.personId));
+
+    // Active only, name-sorted: Ana before Zoe though Zoe was inserted first; suspended "Gone" gone.
+    expect(cohort.map((s) => s.displayName)).toEqual(["Ana", "Zoe"]);
+    // Only id + name reach the pre-login lock screen: no pinHash, no role, no status.
+    expect(Object.keys(cohort[0]!)).toEqual(["personId", "displayName"]);
   });
 });
 
