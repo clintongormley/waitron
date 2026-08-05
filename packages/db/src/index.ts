@@ -25,6 +25,7 @@ export { readDeploymentEnvironment, stampDeployment } from "./deployment.js";
 export type { DeploymentEnvironment } from "./deployment.js";
 export * from "./schema/deployment.js";
 export { allocateInvoiceNumber } from "./allocate-number.js";
+export { allocateOrderNumber } from "./allocate-order-number.js";
 export { withTenant } from "./tenancy.js";
 export { isUniqueViolation } from "./unique-violation.js";
 export { CORE_MIGRATIONS } from "./migrations.js";
