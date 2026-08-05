@@ -189,5 +189,30 @@ declare module "@waitron/shared" {
      * not an error (design §4).
      */
     "payment.webhook_unresolved": { provider: string; externalRef: string };
+    /**
+     * A basket line named a product the till cannot sell at its location — it is not in the
+     * location's assigned catalogue, is deactivated, or belongs to another tenant (RLS hides it, so
+     * "not sellable here" and "another tenant's product" read identically, the same fail-closed shape
+     * `sale.series_not_found` uses). `productId` is a uuid the caller already holds, not a secret, so
+     * echoing it is what makes the error actionable.
+     *
+     * `sale.*`, not `server.*`: it is a fact about the SALE the till is ringing, not about the
+     * process (`tenant.not_found`'s note above gives the rule). Registered here by the same
+     * `declare module` this file uses for its other codes; `@waitron/core` owns the rest of the
+     * `sale.*` family, and this adds to it by declaration merging rather than colliding with it.
+     */
+    "sale.unknown_product": { productId: string };
+    /**
+     * The till was asked to ring a sale with no lines. A sale must have at least one line to price
+     * and to file, so this is refused before any catalogue read or fiscal write. No params: there is
+     * nothing to carry beyond the code itself.
+     */
+    "sale.empty_basket": Record<string, never>;
+    /**
+     * A tender method this till does not support. Slice 1 of the counter POS is cash-only, so
+     * anything but `"cash"` is refused before touching the database. `method` echoes the request so a
+     * translator can name what was attempted; it is caller-supplied text, never a secret.
+     */
+    "sale.unsupported_tender": { method: string };
   }
 }
