@@ -20,6 +20,7 @@ export const en = {
   "action.confirm_payment": "Confirm payment",
   "action.new_sale": "New sale",
   "action.logout": "Log out",
+  "action.remove": "Remove",
   // Tenders
   "tender.cash": "Cash",
   // Money labels
@@ -48,6 +49,7 @@ export const es: Record<StringKey, string> = {
   "action.confirm_payment": "Confirmar cobro",
   "action.new_sale": "Nueva venta",
   "action.logout": "Cerrar sesión",
+  "action.remove": "Quitar",
   "tender.cash": "Efectivo",
   "label.change": "Cambio",
   "label.total": "Total",

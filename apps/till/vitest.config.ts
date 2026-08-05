@@ -22,6 +22,12 @@ const emulateColorScheme: BrowserCommand<[colorScheme: ColorScheme]> = async (
 };
 
 export default defineConfig({
+  // axe-core is imported only by the a11y suites (via src/widgets/test-helpers.ts), so Vite
+  // discovers it mid-run and re-optimises — which reloads the in-flight test file and prints a
+  // "Vite unexpectedly reloaded a test" warning that can flake CI. Pre-bundling it up front
+  // removes the mid-run discovery. (packages/ui gets away without this because many of its test
+  // files import axe from the first file on, so the optimisation settles before any assertion.)
+  optimizeDeps: { include: ["axe-core"] },
   test: {
     globals: true,
     // A crashed Stryker run leaves .stryker-tmp holding mutated copies of the
@@ -46,8 +52,10 @@ export default defineConfig({
       // the report. Spread the defaults (test files, *.d.ts, config files) and add this
       // app's own non-source surface: src/main.ts is the browser entry point that wires
       // the app together at startup (tokens, icons, the placeholder render) and is
-      // exercised only in a real browser, not under the test runner.
-      exclude: [...coverageConfigDefaults.exclude, "src/main.ts"],
+      // exercised only in a real browser, not under the test runner; and
+      // src/widgets/test-helpers.ts is test-only mount/cleanup/axe support, mirroring
+      // packages/ui's exclusion of its src/test-helpers.ts and a11y-helpers.ts.
+      exclude: [...coverageConfigDefaults.exclude, "src/main.ts", "src/widgets/test-helpers.ts"],
       // Thresholds match packages/ui — the workspace's other browser (Chromium/Playwright)
       // package — rather than the 98/98/98/95 the pure-Node packages carry. A browser app
       // is a small number of files where per-percent swings are coarse, so functions and
