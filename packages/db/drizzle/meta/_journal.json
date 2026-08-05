@@ -197,6 +197,13 @@
       "when": 1785916914450,
       "tag": "0027_light_smiling_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1785925176786,
+      "tag": "0028_dapper_tiger_shark",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { TenantId } from "@waitron/shared";
 import { priceBasket } from "./pricing.js";
@@ -41,9 +42,16 @@ describe("catalogue operations", () => {
     locationId = venue.locationId;
   });
 
-  it("creates and lists catalogues", async () => {
-    await withTenant(fx.db, tenantId, async (tx) => {
+  // Every test body runs as app_user inside the current tenant's context. `tenantId` is refreshed
+  // per test in beforeEach; this reads it at call time, so the one definition serves every test.
+  const asTenant = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
+    withTenant(fx.db, tenantId, async (tx) => {
       await asAppUser(tx);
+      return fn(tx);
+    });
+
+  it("creates and lists catalogues", async () => {
+    await asTenant(async (tx) => {
       const deli = await createCatalogue(tx, { name: "Deli" });
       const stall = await createCatalogue(tx, { name: "Drinks stall" });
       expect(deli.active).toBe(true);
@@ -55,8 +63,7 @@ describe("catalogue operations", () => {
   });
 
   it("creates and lists categories", async () => {
-    await withTenant(fx.db, tenantId, async (tx) => {
-      await asAppUser(tx);
+    await asTenant(async (tx) => {
       const food = await createCategory(tx, { name: "Food" });
       const drinks = await createCategory(tx, { name: "Drinks" });
       const cats = await listCategories(tx);
@@ -66,8 +73,7 @@ describe("catalogue operations", () => {
   });
 
   it("creates and lists a catalogue's products", async () => {
-    await withTenant(fx.db, tenantId, async (tx) => {
-      await asAppUser(tx);
+    await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });
       const other = await createCatalogue(tx, { name: "Other" });
       const ham = await createProduct(tx, {
@@ -107,8 +113,7 @@ describe("catalogue operations", () => {
   });
 
   it("updates a product's price and description", async () => {
-    await withTenant(fx.db, tenantId, async (tx) => {
-      await asAppUser(tx);
+    await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });
       const water = await createProduct(tx, {
         catalogueId: cat.id,
@@ -129,8 +134,7 @@ describe("catalogue operations", () => {
   });
 
   it("renames a catalogue", async () => {
-    await withTenant(fx.db, tenantId, async (tx) => {
-      await asAppUser(tx);
+    await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });
       await renameCatalogue(tx, cat.id, "Delicatessen");
       const [seen] = await listCatalogues(tx);
@@ -139,8 +143,7 @@ describe("catalogue operations", () => {
   });
 
   it("renames a category", async () => {
-    await withTenant(fx.db, tenantId, async (tx) => {
-      await asAppUser(tx);
+    await asTenant(async (tx) => {
       const food = await createCategory(tx, { name: "Food" });
       await renameCategory(tx, food.id, "Fresh food");
       const [seen] = await listCategories(tx);
@@ -149,8 +152,7 @@ describe("catalogue operations", () => {
   });
 
   it("lists a location's catalogue's active products only, with the category name resolved", async () => {
-    await withTenant(fx.db, tenantId, async (tx) => {
-      await asAppUser(tx);
+    await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });
       const food = await createCategory(tx, { name: "Food" });
       const p1 = await createProduct(tx, {
@@ -181,8 +183,7 @@ describe("catalogue operations", () => {
   });
 
   it("returns null category for an available product with no category", async () => {
-    await withTenant(fx.db, tenantId, async (tx) => {
-      await asAppUser(tx);
+    await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });
       await createProduct(tx, {
         catalogueId: cat.id,
@@ -199,15 +200,13 @@ describe("catalogue operations", () => {
   });
 
   it("returns [] for a location with no catalogue assigned", async () => {
-    await withTenant(fx.db, tenantId, async (tx) => {
-      await asAppUser(tx);
+    await asTenant(async (tx) => {
       expect(await listAvailableProducts(tx, locationId)).toEqual([]);
     });
   });
 
   it("hides every product of a deactivated catalogue", async () => {
-    await withTenant(fx.db, tenantId, async (tx) => {
-      await asAppUser(tx);
+    await asTenant(async (tx) => {
       const fixture = await seedCatalogueFixture(tx, { locationId });
       expect((await listAvailableProducts(tx, locationId)).length).toBe(2);
       await deactivateCatalogue(tx, fixture.catalogueId);
@@ -216,8 +215,7 @@ describe("catalogue operations", () => {
   });
 
   it("returns products from a seeded catalogue that priceBasket can consume directly", async () => {
-    await withTenant(fx.db, tenantId, async (tx) => {
-      await asAppUser(tx);
+    await asTenant(async (tx) => {
       await seedCatalogueFixture(tx, { locationId });
       const available = await listAvailableProducts(tx, locationId);
       expect(available.map((p) => p.category).sort()).toEqual(["Drinks", "Food"]);

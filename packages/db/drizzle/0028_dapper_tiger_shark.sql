@@ -1,0 +1,1 @@
+ALTER TABLE "locations" ADD CONSTRAINT "locations_catalogue_id_catalogues_id_fk" FOREIGN KEY ("catalogue_id") REFERENCES "public"."catalogues"("id") ON DELETE no action ON UPDATE no action;
