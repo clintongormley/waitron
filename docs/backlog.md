@@ -364,9 +364,14 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     permission can be added **beside** the old code, not in place of it.
   - **Branded `PersonId` / `SessionId` in `@waitron/shared`.** This slice uses plain `string` for both;
     branding them is optional consistency with the repo's other branded ids.
-  - **`esbuild` is a dead devDependency in `packages/identity`.** It is listed
-    (`packages/identity/package.json:27`) but the package has no build step and no source imports it —
-    drop it.
+  - **`seed-admin` provisioning edges (surfaced by the finish-branch reviews; both non-blocking).**
+    (1) A tenant whose sole seeded admin is later **suspended** cannot be re-seeded by re-running
+    `waitron-provision venue` — the `where not exists (… role='admin')` idempotency counts a suspended
+    admin as present, and no active session could `person.manage` to reactivate it, so recovery is a
+    privileged DB action. Inherent to suspend-not-delete + one-seeded-admin. (2) Two concurrent
+    `applyVenue` runs for the same tenant could each pass `where not exists` under READ COMMITTED and
+    insert two admins (no unique constraint enforces one) — realistic risk ~nil (provisioning is a
+    serial operator CLI action), consequence a spare non-fiscal admin row.
 - **The stale-hardcoded-list class (two instances fixed on `feat/identity`).** A cross-package test
   that pins a repo-wide manifest/scope list goes stale the moment a member is added, and scoped CI
   hides it because the changing task's scope never runs the pinning package. Adding `identity` to

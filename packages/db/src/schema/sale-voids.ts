@@ -42,8 +42,11 @@ export const saleVoids = pgTable(
     // this column is populated by the application (never `defaultNow()`), so
     // the same "nothing formatted is ever stored" discipline applies here too.
     voidedAt: timestamp("voided_at", { withTimezone: true, mode: "string" }).notNull(),
-    /** The seam for sub-project 5 (role-gated voiding). Nullable until roles
-     * exist; never read by `recordVoid` itself. */
+    /** The person who authorised the void. Sub-project 5 has landed
+     * (2026-08-05): `recordVoid` now sets this at INSERT from the `authorize()`
+     * result (append-only table — supplied on the insert `recordVoid` already
+     * makes, never a later UPDATE). Nullable, no FK, per the house seam pattern;
+     * pre-production means no backfill. */
     voidedBy: uuid("voided_by"),
   },
   (t) => [
