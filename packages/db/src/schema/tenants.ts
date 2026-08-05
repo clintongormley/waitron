@@ -75,6 +75,12 @@ export const locations = pgTable(
     province: text("province"),
     timeZone: text("time_zone").notNull().default("Europe/Madrid"),
     dayCutover: time("day_cutover").notNull().default("06:00:00"),
+    // Which catalogue (menu) this venue sells from. A BARE nullable uuid with NO `.references()`
+    // deliberately: a real FK would make `catalogue.ts` (which imports `tenants` for its own
+    // tenant FK) and this file import each other — an import cycle. Tenant-scoped integrity is
+    // enforced by RLS and the application layer instead, the same shape the design records. Bare,
+    // so there is no reference thunk for v8 to track.
+    catalogueId: uuid("catalogue_id"),
   },
   (t) => [
     // cardinality(), NOT array_length(). array_length('{}', 1) is NULL, a CHECK

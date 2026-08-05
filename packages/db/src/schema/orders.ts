@@ -8,6 +8,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  text,
   timestamp,
   unique,
   uuid,
@@ -101,6 +102,10 @@ export const workingOrderLines = pgTable(
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
     vatRate: numeric("vat_rate", { precision: 5, scale: 2 }).notNull(),
     lineTotal: numeric("line_total", { precision: 12, scale: 2 }).notNull(),
+    // Snapshotted analytics label (architecture §6), NOT a category_id or a catalogue FK — the
+    // value is frozen onto the line so a stale catalogue is a freshness problem, never a
+    // correctness one, exactly as `descriptions` above is snapshotted rather than referenced.
+    category: text("category"),
   },
   (t) => [
     // Composite FK: a line cannot point at an order belonging to another

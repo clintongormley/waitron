@@ -197,6 +197,10 @@ export const saleLines = pgTable(
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
     vatRate: numeric("vat_rate", { precision: 5, scale: 2 }).notNull(),
     lineTotal: numeric("line_total", { precision: 12, scale: 2 }).notNull(),
+    // Snapshotted analytics label (architecture §6), NOT a category_id or a catalogue FK — the
+    // value is frozen onto the line at sale time so a roll-up sums one canonical bucket and a later
+    // taxonomy edit can never reach back into a completed record.
+    category: text("category"),
   },
   (t) => [
     // Composite FK: a line cannot point at a sale belonging to another tenant,
