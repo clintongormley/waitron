@@ -811,19 +811,122 @@ is ever issued in anger.
 
 ---
 
+## 14. Factura simplificada content — per-item VAT is not required; the ticket needs the date, per-rate base, QR and legend (added 2026-08-05)
+
+**Why this was checked.** Designing the Counter POS ticket (sub-project 7, slice 1) raised a concrete
+question: must a simplified ticket show a VAT rate **per line item**? The repo had settled the *series*
+rules (§10) and the SIF's technical duties, but never the *content* of a factura simplificada — a
+different regulation (RD 1619/2012 art. 7) than the SIF's Orden HAC/1177/2024 art. 7 the repo usually
+cites. Answered on primary source (BOE), not memory.
+
+**Bottom line: per-item VAT is NOT required.** The VAT obligation is at the invoice / rate-group level,
+never per line. A ticket must show the **tipo(s) impositivo(s) aplicado(s)** and, **only when it mixes
+rates**, the **base imponible split per rate**. The **cuota** is not required for an ordinary retail
+sale. So a per-rate summary block is exactly right; a rate against every item is surplus.
+
+**RD 1619/2012 art. 7.1 — mandatory content of a factura simplificada** (BOE-A-2012-14696, consolidated,
+apartado 5 añadido por RD 1007/2023, en vigor desde 07/12/2023):
+
+> «Sin perjuicio de los datos o requisitos que puedan resultar obligatorios a otros efectos […] las
+> facturas simplificadas y sus copias contendrán los siguientes datos o requisitos:
+> **a)** Número y, en su caso, serie. […] Cuando el empresario o profesional expida facturas conforme a
+> este artículo y al artículo 6 […] en un mismo año natural, será obligatoria la expedición mediante
+> series separadas de unas y otras.
+> **b)** La fecha de su expedición.
+> **c)** La fecha en que se hayan efectuado las operaciones que se documenten o […] el pago anticipado,
+> siempre que se trate de una fecha distinta a la de expedición de la factura.
+> **d)** Número de Identificación Fiscal, así como el nombre y apellidos, razón o denominación social
+> completa del obligado a su expedición.
+> **e)** La identificación del tipo de bienes entregados o de servicios prestados.
+> **f)** Tipo impositivo aplicado y, opcionalmente, también la expresión «IVA incluido».
+> Asimismo, cuando una misma factura comprenda operaciones sujetas a diferentes tipos impositivos […]
+> deberá especificarse por separado, además, la parte de base imponible correspondiente a cada una de
+> las operaciones.
+> **g)** Contraprestación total.
+> **h)** En caso de facturas rectificativas, la referencia expresa e inequívoca de la factura rectificada
+> […]
+> **i)** En los supuestos a que se refieren las letras j) a p) del artículo 6.1 […] deberá hacerse
+> constar las menciones referidas en las mismas.»
+
+Key reading of **f)**: the default obligation is the **tipo impositivo** only; «IVA incluido» is
+expressly *optional*; and the multi-rate clause demands the **base imponible per rate — not the cuota,
+and not per item**.
+
+**When the cuota must appear separately — art. 7.2** (only for a business recipient who asks, to deduct
+under art. 97.Uno LIVA; art. 7.3 extends it to a non-business recipient needing it for a tax right —
+neither applies to a walk-up cash sale):
+
+> «A efectos de lo dispuesto en el artículo 97.Uno de la Ley del Impuesto, cuando el destinatario de la
+> operación sea un empresario o profesional y así lo exija, el expedidor de la factura simplificada
+> deberá hacer constar, además, los siguientes datos: a) Número de Identificación Fiscal […] así como el
+> domicilio del destinatario […]; b) La cuota tributaria que, en su caso, se repercuta, que deberá
+> consignarse por separado.»
+
+**Veri\*Factu additions — QR + legend. Orden HAC/1177/2024 art. 20** (BOE-A-2024-22138):
+
+> «**Artículo 20. Representación gráfica a incluir en la factura.** 1. Una factura, tanto si está impresa
+> en soporte papel como si se trata de la imagen de la misma en soporte digital, incluirá los siguientes
+> elementos […]: a) Un código «QR», que deberá cumplir con las especificaciones del artículo 21. b) En
+> caso de facturas expedidas por «Sistemas de emisión de facturas verificables» o «VERI\*FACTU», según
+> los artículos 15 y 16 del Reglamento, la frase «Factura verificable en la sede electrónica de la AEAT»
+> o «VERI\*FACTU», que deberá tener un tipo de letra y tamaño bien visibles […].»
+
+**Orden art. 21 — QR spec + content:**
+
+> «1. El código «QR» deberá tener un tamaño entre 30x30 y 40x40 milímetros y seguir las especificaciones
+> de la norma ISO/IEC 18004. Para la generación del código «QR» se empleará el nivel M (medio) de
+> corrección de errores. […] 2. El contenido del código «QR» será el siguiente: a) «URL» del servicio de
+> cotejo o remisión […] b) Información de la factura que formará parte de la «URL»: 1.º NIF del obligado
+> a expedir la factura. 2.º Número de serie y número de la factura expedida. 3.º Fecha de expedición de
+> la factura. 4.º Importe total de la factura.»
+
+For simplified invoices this is reached via **RD 1619/2012 art. 7.5** (added by RD 1007/2023), which
+requires such tickets to include «lo contenido en el apartado 5 del artículo 6» — i.e. the QR (art.
+6.5.a) and the legend (art. 6.5.b, «únicamente en aquellos casos en los que el sistema informático
+realice la remisión de todos los registros de facturación a la AEAT» = Veri\*Factu mode).
+
+- **QR:** required on **every** invoice (full or simplified, paper or digital image) from an RRSIF
+  system — not conditional on Veri\*Factu mode.
+- **Legend:** «Factura verificable en la sede electrónica de la AEAT» **o** «VERI\*FACTU» — alternatives;
+  either satisfies. Required only in Veri\*Factu mode.
+
+**Designation.** The document need **not** be captioned "factura simplificada" — the law distinguishes
+ticket-vs-full-invoice by **separate numbering series** (art. 7.1.a), not a printed label.
+
+**Consequences for the till ticket** (`2026-08-05-counter-pos-walkup-sale-design.md` §7):
+
+- **Required, non-removable:** número+serie, **fecha de expedición**, issuer NIF+name, goods
+  identification, tipo(s) + **base imponible per rate**, contraprestación total, QR, VERI\*FACTU legend.
+- **Allowed extras (harmless):** the **cuota** per rate, issuer address/phone/email, thank-you message,
+  logo, and the operational efectivo/cambio lines. A simplified ticket needs only the issuer NIF+name —
+  **no domicilio** (unlike a full factura, art. 6.1.d).
+- The first ticket mock **omitted the fecha de expedición** — a real gap (art. 7.1.b, unconditional and
+  also encoded in the QR per art. 21.2.b.3º, but it must *also* be printed on the face) — corrected in
+  the design.
+
+**Provenance caveat (§1).** art. 7.1, 7.2 and Orden arts. 20–21 were read as clean verbatim text from
+the BOE consolidated pages (high confidence). The RD 1007/2023 art. 6.5 / 15 / 16 wording came back
+lightly compressed by the fetch layer; its substance is independently corroborated verbatim by Orden
+art. 20 and by RD 1619/2012 art. 7.5→6.5, but pin RD 1007/2023 art. 6.5 character-exact with a confirming
+fetch before quoting it in a code comment. A first paraphrasing pass on the art. 7 page dropped
+qualifiers (the base-imponible multi-rate clause) and mis-stated 7.2 — **only the block-quoted Spanish
+above is citable.**
+
+---
+
 ## Sources
 
 | Source | Type |
 | --- | --- |
 | BOE-A-2023-24840 — RD 1007/2023 (RRSIF), arts. 8, 12, 14, 15, 16 | primary |
-| BOE-A-2024-22138 — Orden HAC/1177/2024, arts. 2, 7, 13, 16 | primary |
+| BOE-A-2024-22138 — Orden HAC/1177/2024, arts. 2, 7, 13, 16, 20, 21 | primary |
 | AEAT sede FAQs — sistemas-verifactu, trazabilidad, capacidad-remisión, huella-hash | primary |
 | AEAT `FAQs-Desarrolladores.pdf` v1.3 (4 Dec 2025) | primary |
 | AEAT `Validaciones_Errores_Veri-Factu.pdf` v1.2.2 (changelog to 08/04/2026) | primary |
 | AEAT `Veri-Factu_Descripcion_SWeb.pdf` v1.0.3 | primary |
 | LGT art. 201 bis (introduced by Ley 11/2021) | primary |
 | LGT art. 29.2.j) (Ley 58/2003) — quoted in the developer FAQ, §8 above | primary |
-| BOE-A-2012-14696 — RD 1619/2012 (ROF), arts. 2, 9, 11, 18 | primary |
+| BOE-A-2012-14696 — RD 1619/2012 (ROF), arts. 2, 6.5, 7 (7.1/7.2/7.5), 9, 11, 18 | primary |
 | BOE-A-1992-28740 — LIVA (Ley 37/1992), arts. 78.Tres.2º (base imponible), 80.Uno.2º / 80.Cuatro (modificación) | primary — art. 78.Tres.2º via AEAT Manual práctico IVA 2025 (official); art. 80 via secondary summary, NOT read at source (§12) |
 | DGT consulta general **2174-03** (11 dic 2003) — propinas de restaurante fuera de la base imponible del IVA | primary (DGT) — read via legal-database reproduction; PETETE unreachable by tool (TLS), §11 |
 | DGT consultas vinculantes **V3095-17** (29 nov 2017), **V1808-22** (29 jul 2022) — propinas/donativos fuera de la base imponible; propina cobrada por la empresa = ingreso IS + rendimiento del trabajo | primary (DGT) — read via legal-database reproduction; PETETE unreachable by tool (TLS), §11 |
