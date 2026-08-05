@@ -22,6 +22,8 @@ export const en = {
   "action.logout": "Log out",
   "action.remove": "Remove",
   "action.add": "Add",
+  "action.login": "Log in",
+  "action.back": "Back",
   // Tenders
   "tender.cash": "Cash",
   // Numeric keypad (accessible names for the non-alphanumeric keys)
@@ -37,10 +39,15 @@ export const en = {
   // Login / operator selection
   "login.enter_pin": "Enter PIN",
   "login.pick_operator": "Choose your name",
+  "login.loading": "Loading…",
+  "login.no_staff": "No staff available",
+  "login.load_failed": "Could not load staff, try again",
+  "login.error": "Could not log in, try again",
   // Weight entry (priced-by-weight products)
   "weigh.prompt": "Enter weight (kg)",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
+  "person.suspended": "Account suspended, ask a manager",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -55,6 +62,8 @@ export const es: Record<StringKey, string> = {
   "action.logout": "Cerrar sesión",
   "action.remove": "Quitar",
   "action.add": "Añadir",
+  "action.login": "Entrar",
+  "action.back": "Atrás",
   "tender.cash": "Efectivo",
   "pad.decimal": "Punto decimal",
   "pad.backspace": "Borrar",
@@ -65,8 +74,13 @@ export const es: Record<StringKey, string> = {
   "basket.empty": "La cesta está vacía",
   "login.enter_pin": "Introduce el PIN",
   "login.pick_operator": "Elige tu nombre",
+  "login.loading": "Cargando…",
+  "login.no_staff": "No hay personal disponible",
+  "login.load_failed": "No se pudo cargar el personal, inténtalo de nuevo",
+  "login.error": "No se pudo iniciar sesión, inténtalo de nuevo",
   "weigh.prompt": "Introduce el peso (kg)",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
+  "person.suspended": "Cuenta suspendida, avisa a un responsable",
 };
 
 // Locale → catalogue. `en` is included as its own catalogue so an explicit
