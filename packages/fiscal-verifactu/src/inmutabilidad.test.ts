@@ -9,13 +9,18 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
 
+// IDENTITY_MIGRATIONS is applied between core and fiscal (manifest order: core, identity, …,
+// fiscal) so this tenant_id-keyed RLS scan also covers identity's `persons` and `sessions` — the
+// ONLY catalog guard that a missing FORCE ROW LEVEL SECURITY there would trip. A behavioural RLS
+// test cannot: the harness owns the tables as superuser, which FORCE does not constrain.
 const pg = usePgliteDb({
-  migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS],
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, FISCAL_MIGRATIONS],
   setup: seedTenantTillSif,
 });
 
@@ -179,7 +184,7 @@ describe("row-level security on every tenant-scoped table in this package", () =
     return result.rows;
   }
 
-  it("requires ENABLE and FORCE on every tenant_id-bearing table this package created", async () => {
+  it("requires ENABLE and FORCE on every tenant_id-bearing table this package (and identity) created", async () => {
     const tables = await tenantScopedTables(pg.db);
     const names = tables.map((t) => t.relname);
 
@@ -195,6 +200,13 @@ describe("row-level security on every tenant-scoped table in this package", () =
     expect(names).toContain("envio_flujo");
     expect(names).toContain("acks");
     expect(names).not.toContain("contadores_instalacion");
+
+    // identity's tenant-scoped tables, wired in above (IDENTITY_MIGRATIONS) so the FORCE-RLS scan
+    // covers them too. Asserting they are DISCOVERED keeps the coverage honest: if identity's
+    // migrations stopped creating them, the nonCompliant check below would go vacuously green here
+    // rather than red, and the missing-FORCE guard would silently stop covering identity.
+    expect(names).toContain("persons");
+    expect(names).toContain("sessions");
 
     // Reported as formatted lines rather than a bare boolean: a failure needs to say WHICH table
     // is missing WHICH flag, or the next person deletes the test instead of fixing the migration.

@@ -9,8 +9,11 @@
 -- exercises: with the owner a superuser in the test harness, removing this line leaves the sessions
 -- RLS suite green (checked by deletion, 2026-08-05). It is required by the house rule for every
 -- tenant_id table and is here for the deployment that connects as the NON-superuser migration owner,
--- which is the only case FORCE isolates. No catalog guard covers it for identity: fiscal-verifactu's
--- `inmutabilidad` scan migrates [core, fiscal] only (inmutabilidad.test.ts:16-18), not identity.
+-- which is the only case FORCE isolates. The catalog guard that DOES cover it is fiscal-verifactu's
+-- `inmutabilidad` scan: it now applies IDENTITY_MIGRATIONS ([core, identity, fiscal],
+-- inmutabilidad.test.ts) and asserts relforcerowsecurity on every tenant_id table, `sessions`
+-- included — the metadata check the behavioural suite above cannot make. Proven by deletion
+-- (2026-08-05): dropping this line makes that scan report `sessions: relforcerowsecurity=false`.
 
 --> statement-breakpoint
 ALTER TABLE "sessions" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
