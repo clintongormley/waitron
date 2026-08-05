@@ -13,7 +13,7 @@ import {
   tills,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError, addDecimal, decimal } from "@waitron/shared";
+import { AppError, addDecimal, compareDecimal, decimal, sumDecimals } from "@waitron/shared";
 import type {
   Decimal,
   NodeId,
@@ -48,6 +48,9 @@ export interface RecordSaleLine {
    * multiplication, because this is already the base rather than a customer-facing gross price
    * that would need reversing out of. */
   lineTotal: string;
+  /** Snapshotted analytics label, copied onto `sale_lines.category` at insert; never a catalogue
+   * reference. Optional: when absent the line inserts `null`, exactly as before this field existed. */
+  category?: string | null;
 }
 
 export interface RecordSaleTender {
@@ -82,6 +85,12 @@ export interface RecordSaleInput {
    * `lines` would risk it silently disagreeing with what was actually charged. */
   total: string;
   lines: RecordSaleLine[];
+  /** The caller-supplied VAT desglose — e.g. `@waitron/catalogue`'s gross-inclusive
+   * difference-method breakdown (cuota = gross − base). When absent, `buildVatBreakdown(lines)`
+   * derives it as before, so existing callers are unaffected. When present it is filed VERBATIM as
+   * the fiscal record's breakdown and asserted to agree with `total` at the top of `recordSale`
+   * (`sale.total_mismatch`) — a defence for an unrepairable record (§5), never a re-derivation. */
+  vatBreakdown?: VatBreakdownLine[];
   /**
    * Which backend recorded this sale — for the `sales.fiscal_backend` column. Supplied by the
    * caller rather than read off `backend`'s own return value, because it must be known BEFORE
@@ -147,6 +156,20 @@ export async function recordSale(
   backend: FiscalBackend,
   input: RecordSaleInput,
 ): Promise<{ saleId: SaleId; fiscal: FiscalRecordRef }> {
+  // A caller-supplied breakdown is filed VERBATIM as the fiscal record's desglose (below), so it
+  // must reconcile with the total it is filed against BEFORE anything is written — a breakdown that
+  // disagrees would chain a self-inconsistent, unrepairable record (§5). Value comparison, never
+  // lexical, so "7.97" reconciles regardless of scale. Only the supplied path can trip this: the
+  // derived path (`buildVatBreakdown(input.lines)`) cannot disagree with itself, so no existing
+  // caller reaches it. Placed at the very top, before `checkIntegrity` — this is a caller-precondition
+  // failure, not a fiscal condition, and no state should exist by the time it throws.
+  if (input.vatBreakdown !== undefined) {
+    const breakdownTotal = sumDecimals(input.vatBreakdown.flatMap((g) => [g.base, g.tax]));
+    if (compareDecimal(breakdownTotal, decimal(input.total)) !== 0) {
+      throw new AppError("sale.total_mismatch", { declaredTotal: input.total, breakdownTotal });
+    }
+  }
+
   // Steps 1 and 2, one call and deliberately so. A real backend's `checkIntegrity` takes the
   // (tenant, node) chain-head row lock as its own first statement and holds it until commit, so
   // art. 7.i verification runs against exactly the state this transaction is about to extend
@@ -293,6 +316,7 @@ export async function recordSale(
       unitPrice: line.unitPrice,
       vatRate: line.vatRate,
       lineTotal: line.lineTotal,
+      category: line.category ?? null,
     })),
   );
 
@@ -343,7 +367,9 @@ export async function recordSale(
     offsetMinutes: now.offsetMinutes,
     descriptionOfOperation: location.operationDescription,
     total: decimal(input.total),
-    vatBreakdown: buildVatBreakdown(input.lines),
+    // Supplied verbatim when the caller computed its own desglose (asserted to reconcile with
+    // `total` at the top of this function); otherwise derived from `lines` exactly as before.
+    vatBreakdown: input.vatBreakdown ?? buildVatBreakdown(input.lines),
     // Null for a simplified invoice, which is the ordinary case at a till (spec's own framing on
     // `FiscalBackend.recordSale`'s `SaleForFiscalRecord.counterparty`). This task does not wire
     // up a recipient-identified (B2B) sale at all; a future task that does supplies a real

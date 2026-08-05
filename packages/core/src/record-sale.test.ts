@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { AppError, seriesId as brandSeriesId } from "@waitron/shared";
+import { AppError, seriesId as brandSeriesId, decimal } from "@waitron/shared";
 import type { NodeId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
 // **Deviation from the brief.** The brief imports `FakeFiscalBackend` from `@waitron/fiscal/testing`
 // — a subpath that does not exist (no `packages/fiscal/testing` folder, no `exports` map, and
@@ -10,7 +10,12 @@ import type { NodeId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitro
 // '@waitron/fiscal/src/testing/fake-backend.js' in test files only". Used that path, verbatim, per
 // the already-committed source rather than the brief's paraphrase of it.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
-import type { FiscalBackend, IntegrityIssue, TrustedClock } from "@waitron/fiscal";
+import type {
+  FiscalBackend,
+  IntegrityIssue,
+  TrustedClock,
+  VatBreakdownLine,
+} from "@waitron/fiscal";
 import {
   CORE_MIGRATIONS,
   asAppUser,
@@ -176,6 +181,22 @@ async function countRows(table: string): Promise<number> {
     sql`select count(*)::int as n from ${sql.raw(table)} where tenant_id = ${tenantId}`,
   );
   return result.rows[0]!.n;
+}
+
+/**
+ * A thin `execute` wrapper returning the raw rows, for the `sale_lines.category` assertion. Scoped
+ * by the CALLER's own `where` (in practice `sale_id = ${saleId}`) rather than an unscoped `limit 1`
+ * — this suite shares ONE PGlite instance across the whole file and seeds a fresh tenant per test
+ * (see `countRows`'s own note), so an unscoped read would pick up rows an earlier test committed.
+ */
+async function rows<T extends Record<string, unknown>>(
+  query: ReturnType<typeof sql>,
+): Promise<T[]> {
+  const result = await suite.db.execute<T>(query);
+  // `execute`'s row type is `Assume<T, Record<string, unknown>>`, structurally identical to `T`
+  // here but not provably equal to a fresh `T` for tsc — the same reason `countRows` above passes a
+  // concrete literal to `execute` rather than a type parameter. Cast at this single boundary.
+  return result.rows as T[];
 }
 
 /**
@@ -777,5 +798,165 @@ describe("recordSale — series validation", () => {
       code: "sale.series_wrong_purpose",
       params: { seriesId: rectSeriesId, expected: "standard", actual: "rectificative" },
     });
+  });
+});
+
+describe("recordSale — caller-supplied vatBreakdown and line category", () => {
+  /**
+   * Captures the `vatBreakdown` that actually reaches `FiscalBackend.recordSale`.
+   *
+   * **Deviation from the brief.** The brief asserts on `backend.lastSale!.vatBreakdown`, but the
+   * real `FakeFiscalBackend` (`@waitron/fiscal/src/testing/fake-backend.js`) has no `lastSale`
+   * affordance and does not persist `vatBreakdown` at all — its `fake_fiscal_records` table carries
+   * no such column, and the suite's existing "groups two lines…" test already records that the fake
+   * cannot assert on the breakdown's shape. Observed instead through this file's own `wrapBackend`
+   * override, capturing the `SaleForFiscalRecord` argument as it passes through — the same
+   * method-override mechanism the "order of operations" tests already use.
+   */
+  function captureBreakdown(): {
+    backend: FiscalBackend;
+    captured: () => readonly VatBreakdownLine[] | undefined;
+  } {
+    const fake = new FakeFiscalBackend(suite.db);
+    let seen: readonly VatBreakdownLine[] | undefined;
+    const backend = wrapBackend(fake, {
+      recordSale: (tx, sale) => {
+        seen = sale.vatBreakdown;
+        return fake.recordSale(tx, sale);
+      },
+    });
+    return { backend, captured: () => seen };
+  }
+
+  it("passes a supplied vatBreakdown to the backend verbatim", async () => {
+    // The whole point of the catalogue slice: a caller (catalogue pricing's gross-inclusive
+    // difference method) hands recordSale the desglose it computed, and recordSale files it as-is
+    // rather than re-deriving one from `lines`. The supplied entry (base 7.25 + tax 0.72 = 7.97) is
+    // deliberately NOT what `buildVatBreakdown` would derive from the single 7.25 line at 10%
+    // (which would compute tax 0.73 = percentOf(7.25, 10.00)), so a code path that ignored the
+    // supplied value and derived its own could not produce this by coincidence.
+    const breakdown: VatBreakdownLine[] = [
+      { rate: decimal("10.00"), base: decimal("7.25"), tax: decimal("0.72") },
+    ];
+    const { backend, captured } = captureBreakdown();
+    await run(backend, {
+      total: "7.97",
+      vatBreakdown: breakdown,
+      lines: [
+        {
+          lineNo: 1,
+          descriptions: { en: "x" },
+          quantity: "0.320",
+          unitPrice: "22.64",
+          vatRate: "10.00",
+          lineTotal: "7.25",
+          category: "Food",
+        },
+      ],
+      // total 7.97 ≠ the fixture's default €14.41, so its default tenders would fail settleSale's
+      // coverage identity. Deferred keeps this test on the fiscal-record path it is about.
+      settlement: { kind: "deferred" },
+    });
+    expect(captured()).toEqual(breakdown); // NOT buildVatBreakdown's derivation
+  });
+
+  it("derives the breakdown when none is supplied (legacy path unchanged)", async () => {
+    // The additive guarantee: with no `vatBreakdown`, recordSale runs `buildVatBreakdown(lines)`
+    // exactly as before — one 10.00 line at 10% derives base 10.00, tax 1.00.
+    const { backend, captured } = captureBreakdown();
+    await run(backend, {
+      total: "11.00",
+      lines: [
+        {
+          lineNo: 1,
+          descriptions: { en: "x" },
+          quantity: "1",
+          unitPrice: "10.00",
+          vatRate: "10.00",
+          lineTotal: "10.00",
+        },
+      ],
+      settlement: { kind: "deferred" },
+    });
+    expect(captured()).toEqual([
+      { rate: decimal("10.00"), base: decimal("10.00"), tax: decimal("1.00") },
+    ]);
+  });
+
+  it("throws sale.total_mismatch when a supplied breakdown disagrees with total", async () => {
+    // The defence for an unrepairable record: a supplied desglose summing to 7.97 filed against a
+    // declared total of 8.00 would chain a self-inconsistent record. Compared by value, so it fires
+    // on the magnitude, not on scale. Refused at the very top of recordSale, before anything is
+    // written.
+    const breakdown: VatBreakdownLine[] = [
+      { rate: decimal("10.00"), base: decimal("7.25"), tax: decimal("0.72") }, // sums to 7.97
+    ];
+    await expect(
+      run(new FakeFiscalBackend(suite.db), {
+        total: "8.00",
+        vatBreakdown: breakdown,
+        lines: [
+          {
+            lineNo: 1,
+            descriptions: { en: "x" },
+            quantity: "1",
+            unitPrice: "7.25",
+            vatRate: "10.00",
+            lineTotal: "7.25",
+          },
+        ],
+        settlement: { kind: "deferred" },
+      }),
+    ).rejects.toMatchObject({
+      code: "sale.total_mismatch",
+      params: { declaredTotal: "8.00", breakdownTotal: "7.97" },
+    });
+    // Nothing written — the throw precedes every insert.
+    expect(await countRows("sales")).toBe(0);
+  });
+
+  it("snapshots the line category onto sale_lines", async () => {
+    const { saleId } = await run(new FakeFiscalBackend(suite.db), {
+      total: "1.50",
+      lines: [
+        {
+          lineNo: 1,
+          descriptions: { en: "Water" },
+          quantity: "1",
+          unitPrice: "1.50",
+          vatRate: "21.00",
+          lineTotal: "1.50",
+          category: "Drinks",
+        },
+      ],
+      settlement: { kind: "deferred" },
+    });
+    const [row] = await rows<{ category: string | null }>(
+      sql`select category from sale_lines where sale_id = ${saleId}`,
+    );
+    expect(row!.category).toBe("Drinks");
+  });
+
+  it("leaves sale_lines.category NULL when a line omits it (additive, no behaviour change)", async () => {
+    // The other branch of `line.category ?? null`: an existing caller that never sets `category`
+    // inserts NULL, exactly as before this field existed.
+    const { saleId } = await run(new FakeFiscalBackend(suite.db), {
+      total: "1.50",
+      lines: [
+        {
+          lineNo: 1,
+          descriptions: { en: "Water" },
+          quantity: "1",
+          unitPrice: "1.50",
+          vatRate: "21.00",
+          lineTotal: "1.50",
+        },
+      ],
+      settlement: { kind: "deferred" },
+    });
+    const [row] = await rows<{ category: string | null }>(
+      sql`select category from sale_lines where sale_id = ${saleId}`,
+    );
+    expect(row!.category).toBeNull();
   });
 });
