@@ -21,8 +21,12 @@ export const en = {
   "action.new_sale": "New sale",
   "action.logout": "Log out",
   "action.remove": "Remove",
+  "action.add": "Add",
   // Tenders
   "tender.cash": "Cash",
+  // Numeric keypad (accessible names for the non-alphanumeric keys)
+  "pad.decimal": "Decimal point",
+  "pad.backspace": "Backspace",
   // Money labels
   "label.change": "Change",
   "label.total": "Total",
@@ -50,7 +54,10 @@ export const es: Record<StringKey, string> = {
   "action.new_sale": "Nueva venta",
   "action.logout": "Cerrar sesión",
   "action.remove": "Quitar",
+  "action.add": "Añadir",
   "tender.cash": "Efectivo",
+  "pad.decimal": "Punto decimal",
+  "pad.backspace": "Borrar",
   "label.change": "Cambio",
   "label.total": "Total",
   "label.tendered": "Entregado",
