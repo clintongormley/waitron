@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
@@ -7,7 +6,6 @@ import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalRecordRef, SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
-import { workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -131,7 +129,6 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
         tillId,
         nodeId,
         seriesId,
-        workingOrderId: brandWorkingOrderId(randomUUID()),
         locale: "en",
         invoiceLocales: ["en"],
         clock,

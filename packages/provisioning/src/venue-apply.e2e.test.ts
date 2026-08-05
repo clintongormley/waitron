@@ -12,7 +12,6 @@ import {
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
   tillId as brandTillId,
-  workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
 import { planVenue, type VenueRequest } from "./venue-plan.js";
@@ -91,8 +90,6 @@ function saleInput(ids: {
     tillId: brandTillId(ids.tillId),
     nodeId: brandNodeId(ids.nodeId),
     seriesId: brandSeriesId(ids.seriesId),
-    // Never persisted or joined against — audit context only, so a fabricated id suffices.
-    workingOrderId: brandWorkingOrderId(crypto.randomUUID()),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     total: "14.41",
