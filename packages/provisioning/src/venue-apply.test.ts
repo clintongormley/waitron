@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { FISCAL_MIGRATIONS } from "@waitron/fiscal-verifactu";
+import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { planVenue, type VenueAction, type VenueRequest } from "./venue-plan.js";
 import { obligadoTenantId } from "./tenant-id.js";
@@ -12,7 +13,12 @@ import { applyVenue } from "./venue-apply.js";
 // privilege behaviour under FORCE RLS as the non-superuser owner is proven separately by C1's
 // container test (`venue-apply.node-privilege.rls.test.ts`) and by the container end-to-end that
 // runs the real `applyVenue` over the owner connection.
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
+//
+// IDENTITY_MIGRATIONS between core and fiscal (manifest order core → identity → fiscal): applyVenue
+// now seeds an admin `persons` row, and persons carries a foreign key onto `tenants`.
+const suite = usePgliteDb({
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, FISCAL_MIGRATIONS],
+});
 
 function request(taxId = "B12345678"): VenueRequest {
   return {
@@ -35,6 +41,7 @@ function request(taxId = "B12345678"): VenueRequest {
     tillName: "Caja 1",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
+    admin: { displayName: "Owner", pinHash: "scrypt$00$00" },
   };
 }
 
@@ -71,6 +78,27 @@ describe("applyVenue", () => {
     expect(sif.rows[0]?.nif).toBe("B12345678");
   });
 
+  it("seeds exactly one admin person carrying the display name, role, and pin hash", async () => {
+    // A freshly provisioned venue must have someone who can log in and authorize privileged actions.
+    // A distinct obligado so the person count is this run's alone (the suite shares one database).
+    const seedRequest = request("B55555555");
+    seedRequest.admin = { displayName: "Alicia", pinHash: "scrypt$abc$def" };
+    const result = await applyVenue(planVenue(seedRequest), { db: suite.db });
+
+    const people = await suite.db.execute<{
+      display_name: string;
+      role: string;
+      pin_hash: string;
+    }>(sql`
+      select display_name, role, pin_hash from persons where tenant_id = ${result.tenantId}`);
+    expect(people.rows).toHaveLength(1);
+    expect(people.rows[0]).toEqual({
+      display_name: "Alicia",
+      role: "admin",
+      pin_hash: "scrypt$abc$def",
+    });
+  });
+
   it("reuses the obligado on a re-run rather than duplicating it (idempotent tenant, spec D8)", async () => {
     const first = await applyVenue(planVenue(request("B99999999")), { db: suite.db });
     const second = await applyVenue(planVenue(request("B99999999")), { db: suite.db });
@@ -79,6 +107,22 @@ describe("applyVenue", () => {
     const tenants = await suite.db.execute<{ n: number }>(sql`
       select count(*)::int as n from tenants where country = 'ES' and tax_id = 'B99999999'`);
     expect(tenants.rows[0]?.n).toBe(1); // exactly one obligado, not two
+  });
+
+  it("seeds the admin only once across re-runs — the D8 second-shop path adds no duplicate", async () => {
+    // create-location/create-till/create-node deliberately ADD a shop on a re-run (a tenant has many
+    // shops), but the admin belongs to the TENANT, not a shop. A plain `insert into persons` would
+    // add a second role='admin' person every run; the conditional seed (insert-where-not-exists)
+    // makes the re-run a no-op, mirroring ensure-tenant. Proven by DELETION: revert seed-admin to a
+    // plain insert and this assertion reads 2.
+    const first = await applyVenue(planVenue(request("B77777777")), { db: suite.db });
+    await applyVenue(planVenue(request("B77777777")), { db: suite.db });
+    expect(first.tenantId).toBe(obligadoTenantId("ES", "B77777777"));
+
+    const admins = await suite.db.execute<{ n: number }>(sql`
+      select count(*)::int as n from persons
+      where tenant_id = ${first.tenantId} and role = 'admin'`);
+    expect(admins.rows[0]?.n).toBe(1); // exactly one admin, not one per run
   });
 
   it("mints a distinct installation number per node under one obligado", async () => {

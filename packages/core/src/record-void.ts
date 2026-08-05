@@ -9,6 +9,7 @@ import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { NodeId, SaleId, TenantId, TillId } from "@waitron/shared";
 import type { FiscalBackend, FiscalRecordRef } from "@waitron/fiscal";
+import { authorize, type AuthzInput } from "@waitron/identity";
 import { recordIncident } from "./incidents.js";
 
 /**
@@ -21,17 +22,21 @@ import { recordIncident } from "./incidents.js";
  * the next `secuencia` in generation order — not a reset, and not the position of the alta it
  * annuls (`FiscalBackend.recordVoid`'s own doc comment, `packages/fiscal/src/backend.ts`).
  *
- * Deliberately takes no actor argument and performs no authorisation check. Voiding is gated by
- * roles, and roles are sub-project 5 — a half-built check here would look like security while
- * enforcing nothing, and every reviewer after today would assume the question was settled. The
- * seam is the nullable `sale_voids.voided_by` column and the call site (a till screen the role
- * system will guard), and no further than that.
+ * The gate is INTRINSIC: this call itself demands `sale.void`, so a void cannot be performed
+ * without a credential `authorize` accepts — either the session operator's own role holds the
+ * permission, or a supervisor `override` (a second person's PIN) supplies it. `authorize` returns
+ * the authorizing person, which is written to `sale_voids.voided_by` at insert. That column is on an
+ * append-only table with no UPDATE grant, so the authorizer MUST be supplied here, at the append, and
+ * can never be back-filled. `authorize` runs AFTER the sale-exists lookup (so a cross-tenant or
+ * missing sale still returns `sale.not_found`, never an authz leak) and BEFORE any chain work, so a
+ * rejected void consumes none.
  */
 export async function recordVoid(
   tx: Transaction,
   backend: FiscalBackend,
   saleId: SaleId,
   reason: string,
+  authz: AuthzInput,
 ): Promise<{ fiscal: FiscalRecordRef }> {
   const [sale] = await tx
     .select({ tenantId: sales.tenantId, tillId: sales.tillId, nodeId: sales.nodeId })
@@ -46,6 +51,15 @@ export async function recordVoid(
     // extend to it.
     throw new AppError("sale.not_found", { saleId });
   }
+
+  // The gate. Placed after the sale is confirmed to exist (so a cross-tenant or missing sale still
+  // returns sale.not_found above, not an authz leak) and before any chain work below, so a rejected
+  // void consumes none. `authorization.authorizedBy` is the person to record on the append.
+  const authorization = await authorize(tx, {
+    sessionId: authz.sessionId,
+    permission: "sale.void",
+    override: authz.override,
+  });
 
   // Art. 7.i, exactly as for an alta (spec §4 steps 1-2 in `./record-sale.ts`): the duty is
   // "before generating each new record", not "before each sale", and an anulación is a registro de
@@ -113,6 +127,9 @@ export async function recordVoid(
       saleId,
       reason,
       voidedAt: now.toISOString(),
+      // The seam, now filled: recorded at INSERT because `sale_voids` is append-only (no UPDATE
+      // grant), so there is no later moment to attribute the void.
+      voidedBy: authorization.authorizedBy,
     });
   } catch (error) {
     if (isUniqueViolation(error)) {

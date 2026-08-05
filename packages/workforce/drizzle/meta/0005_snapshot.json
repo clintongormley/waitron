@@ -1,6 +1,6 @@
 {
-  "id": "ae8bad87-1c25-45c8-a572-88ec21bcb952",
-  "prevId": "6c092ccf-130a-4cd3-9e99-19da45a97d34",
+  "id": "132ff455-e19c-42a2-9fca-4e87ca9e6227",
+  "prevId": "68aa0128-9333-479a-8443-d0489b6e2b89",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -146,8 +146,8 @@
       },
       "isRLSEnabled": true
     },
-    "public.persons": {
-      "name": "persons",
+    "public.roster_versions": {
+      "name": "roster_versions",
       "schema": "",
       "columns": {
         "id": {
@@ -163,33 +163,43 @@
           "primaryKey": false,
           "notNull": true
         },
-        "display_name": {
-          "name": "display_name",
-          "type": "text",
+        "location_id": {
+          "name": "location_id",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "pin_hash": {
-          "name": "pin_hash",
-          "type": "text",
+        "period_start": {
+          "name": "period_start",
+          "type": "date",
           "primaryKey": false,
           "notNull": true
         },
-        "role": {
-          "name": "role",
-          "type": "workforce_role",
-          "typeSchema": "public",
+        "period_end": {
+          "name": "period_end",
+          "type": "date",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'staff'"
+          "notNull": true
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "published_by_person_id": {
+          "name": "published_by_person_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "status": {
           "name": "status",
-          "type": "person_status",
+          "type": "roster_version_status",
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
-          "default": "'active'"
+          "default": "'draft'"
         },
         "created_at": {
           "name": "created_at",
@@ -200,8 +210,8 @@
         }
       },
       "indexes": {
-        "persons_tenant_id_idx": {
-          "name": "persons_tenant_id_idx",
+        "roster_versions_tenant_id_idx": {
+          "name": "roster_versions_tenant_id_idx",
           "columns": [
             {
               "expression": "tenant_id",
@@ -214,15 +224,62 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "roster_versions_tenant_location_idx": {
+          "name": "roster_versions_tenant_location_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "location_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
-        "persons_tenant_fk": {
-          "name": "persons_tenant_fk",
-          "tableFrom": "persons",
+        "roster_versions_tenant_fk": {
+          "name": "roster_versions_tenant_fk",
+          "tableFrom": "roster_versions",
           "tableTo": "tenants",
           "columnsFrom": [
             "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "roster_versions_location_fk": {
+          "name": "roster_versions_location_fk",
+          "tableFrom": "roster_versions",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "roster_versions_published_by_person_fk": {
+          "name": "roster_versions_published_by_person_fk",
+          "tableFrom": "roster_versions",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "published_by_person_id"
           ],
           "columnsTo": [
             "id"
@@ -235,13 +292,218 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "persons_display_name_ck": {
-          "name": "persons_display_name_ck",
-          "value": "length(\"persons\".\"display_name\") > 0"
+        "roster_versions_period_ck": {
+          "name": "roster_versions_period_ck",
+          "value": "\"roster_versions\".\"period_end\" >= \"roster_versions\".\"period_start\""
         },
-        "persons_pin_hash_ck": {
-          "name": "persons_pin_hash_ck",
-          "value": "length(\"persons\".\"pin_hash\") > 0"
+        "roster_versions_publish_shape_ck": {
+          "name": "roster_versions_publish_shape_ck",
+          "value": "(\"roster_versions\".\"status\" = 'draft') = (\"roster_versions\".\"published_at\" is null)"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.shifts": {
+      "name": "shifts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "starts_at": {
+          "name": "starts_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "starts_offset_minutes": {
+          "name": "starts_offset_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ends_at": {
+          "name": "ends_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ends_offset_minutes": {
+          "name": "ends_offset_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "roster_version_id": {
+          "name": "roster_version_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "shifts_tenant_id_idx": {
+          "name": "shifts_tenant_id_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "shifts_tenant_person_starts_idx": {
+          "name": "shifts_tenant_person_starts_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "person_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "starts_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "shifts_roster_version_idx": {
+          "name": "shifts_roster_version_idx",
+          "columns": [
+            {
+              "expression": "roster_version_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "shifts_tenant_fk": {
+          "name": "shifts_tenant_fk",
+          "tableFrom": "shifts",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "shifts_person_fk": {
+          "name": "shifts_person_fk",
+          "tableFrom": "shifts",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "shifts_location_fk": {
+          "name": "shifts_location_fk",
+          "tableFrom": "shifts",
+          "tableTo": "locations",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "shifts_roster_version_fk": {
+          "name": "shifts_roster_version_fk",
+          "tableFrom": "shifts",
+          "tableTo": "roster_versions",
+          "columnsFrom": [
+            "roster_version_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "shifts_starts_offset_ck": {
+          "name": "shifts_starts_offset_ck",
+          "value": "\"shifts\".\"starts_offset_minutes\" between -840 and 840"
+        },
+        "shifts_ends_offset_ck": {
+          "name": "shifts_ends_offset_ck",
+          "value": "\"shifts\".\"ends_offset_minutes\" between -840 and 840"
+        },
+        "shifts_interval_ck": {
+          "name": "shifts_interval_ck",
+          "value": "\"shifts\".\"ends_at\" > \"shifts\".\"starts_at\""
         }
       },
       "isRLSEnabled": true
@@ -689,12 +951,13 @@
     }
   },
   "enums": {
-    "public.person_status": {
-      "name": "person_status",
+    "public.roster_version_status": {
+      "name": "roster_version_status",
       "schema": "public",
       "values": [
-        "active",
-        "suspended"
+        "draft",
+        "published",
+        "superseded"
       ]
     },
     "public.workforce_correction_status": {
@@ -714,16 +977,6 @@
         "break_start",
         "break_end",
         "correction"
-      ]
-    },
-    "public.workforce_role": {
-      "name": "workforce_role",
-      "schema": "public",
-      "values": [
-        "staff",
-        "supervisor",
-        "manager",
-        "admin"
       ]
     }
   },

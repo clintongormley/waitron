@@ -6,6 +6,7 @@ import {
   type Database,
   type DeploymentEnvironment,
 } from "@waitron/db";
+import { assertPinLength, hashPin } from "@waitron/identity";
 import { assertIdentifier } from "./identifiers.js";
 import { applyInstance, withDatabase, type TargetConnection } from "./instance-apply.js";
 import { describeAction, planInstance, type InstanceAction } from "./instance-plan.js";
@@ -60,6 +61,13 @@ const ENVIRONMENTS: DeploymentEnvironment[] = ["production", "preproduction"];
  * refuses an empty one and the error that reports it cannot drift apart. */
 const ADMIN_URI_VARIABLE = "WAITRON_ADMIN_DATABASE_URL";
 
+/** The env var the admin PIN is read from. A login PIN is a secret, so — exactly like the admin
+ * connection string above — it is NEVER an argv flag (`argv` is world-readable in `ps` and lands in
+ * shell history): it comes from this variable or an echo-off prompt, and from nowhere else. `parse`
+ * declares no `--admin-pin`, so `strict: true` turns one into a parse error rather than a silent
+ * acceptance, the same defence `ADMIN_URI_VARIABLE` relies on. */
+const ADMIN_PIN_VARIABLE = "WAITRON_ADMIN_PIN";
+
 const USAGE = [
   "usage: waitron-provision <command> [options]",
   "",
@@ -71,7 +79,7 @@ const USAGE = [
   "           [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]",
   "           [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]",
   "           [--day-cutover <HH:MM>] [--till-name <name>] [--series-code <code>]",
-  "           [--rectificative-code <code>] [--yes]",
+  "           [--rectificative-code <code>] [--admin-name <name>] [--yes]",
   "",
   `  <env> is one of: ${ENVIRONMENTS.join(", ")}`,
   "",
@@ -82,6 +90,10 @@ const USAGE = [
   "WAITRON_ADMIN_DATABASE_URL or from an echo-off prompt — and from nowhere else.",
   "It must be a URL: postgres://user:pass@host:port/database. A libpq keyword/value",
   "string or a bare socket path is refused — see README.md, 'Secrets'.",
+  "",
+  "The admin PIN (venue) is NOT an option either, for the same reason: a login PIN is",
+  "a secret, so it is read from WAITRON_ADMIN_PIN or from an echo-off prompt — and from",
+  "nowhere else. The admin display name (--admin-name) is not a secret and stays a flag.",
   "",
   "There is no `tenant` yet: see docs/superpowers/specs/2026-07-29-provisioning-tool-design.md.",
 ].join("\n");
@@ -330,6 +342,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       "till-name": { type: "string" },
       "series-code": { type: "string" },
       "rectificative-code": { type: "string" },
+      "admin-name": { type: "string" },
       yes: { type: "boolean" },
     }));
   } catch {
@@ -386,7 +399,19 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       "rectificative series code: ",
       deps,
     );
-
+    // The admin's DISPLAY NAME is not a secret, so it is a normal flag-or-prompt field.
+    const adminName = await resolveOption(values["admin-name"], "admin name: ", deps);
+    // The PIN is a SECRET, resolved exactly as the admin connection string is: from WAITRON_ADMIN_PIN
+    // or an echo-OFF prompt, NEVER from argv (`readAdminPin`). Then it is checked against the same
+    // floor `createPerson` enforces, through the SAME `assertPinLength` — this seeds the
+    // MOST-privileged account (`role='admin'`) and `hashPin` itself validates nothing, so without
+    // this an operator could seed an admin with an empty PIN. `pin.too_short` carries only `{ min }`,
+    // never the PIN.
+    const adminPin = await readAdminPin(deps);
+    assertPinLength(adminPin);
+    // Hashed HERE, at the CLI boundary, so only `pinHash` ever flows through
+    // `VenueRequest`/`VenueAction`/`applyVenue`: the plaintext PIN never enters the plan, is never an
+    // error param, and is never printed (§ SECRET DISCIPLINE).
     const request: VenueRequest = {
       country,
       taxId,
@@ -407,6 +432,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       tillName,
       seriesCode,
       rectificativeSeriesCode,
+      admin: { displayName: adminName, pinHash: hashPin(adminPin) },
     };
     // Pure, and the last thing that can refuse the request without touching a database: an
     // unimplemented territory (`fiscal.regime_not_implemented`), a bad locale count, equal series
@@ -692,6 +718,23 @@ async function readAdminUri(deps: CliDeps): Promise<string> {
     throw new AppError("provisioning.admin_uri_missing", { variable: ADMIN_URI_VARIABLE });
   }
   return answer;
+}
+
+/**
+ * The admin PIN, from WAITRON_ADMIN_PIN or an echo-off prompt — and from nowhere else, for the same
+ * reason `readAdminUri` refuses a flag: a PIN is a login secret, `argv` is world-readable in `ps` and
+ * lands in shell history. Structurally mirrors `readAdminUri` (env via the injected `deps.env`, else
+ * `deps.io.promptSecret`) so it stays testable with no tty.
+ *
+ * Deliberately NOT trimmed, unlike `readAdminUri`: a PIN is opaque and every character it carries is
+ * significant, and the caller checks its length against `MIN_PIN_LENGTH` exactly as `createPerson`
+ * does — so an empty answer (Ctrl+D, exhausted stdin) is rejected there as `pin.too_short` rather
+ * than here, and no separate "missing" code is needed.
+ */
+async function readAdminPin(deps: CliDeps): Promise<string> {
+  const fromEnv = deps.env[ADMIN_PIN_VARIABLE];
+  if (typeof fromEnv === "string" && fromEnv !== "") return fromEnv;
+  return deps.io.promptSecret("admin PIN (not shown): ");
 }
 
 /**

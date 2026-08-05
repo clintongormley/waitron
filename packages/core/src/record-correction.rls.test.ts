@@ -96,6 +96,13 @@ function correctionInput(
     ],
     fiscalBackend: "fake",
     clock: steadyClock,
+    // Required by the type, but never reached: both tests in this suite reject at the sale-existence
+    // or series guard, which run BEFORE `authorize` (record-correction.ts places the `sale.rectify`
+    // gate after those guards). A well-formed but never-opened session id — if the gate WERE reached
+    // it would raise `session.not_open`, not the `sale.*` code these tests assert, so a placement
+    // regression would fail them loudly. The suite still migrates IDENTITY_MIGRATIONS so those tables
+    // exist for that path.
+    authz: { sessionId: "00000000-0000-4000-8000-000000000000" },
   };
 }
 

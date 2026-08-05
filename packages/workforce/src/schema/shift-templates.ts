@@ -15,7 +15,7 @@ import { locations, tenants } from "@waitron/db";
 /**
  * A reusable shift SHAPE at a location — "Monday bar, 18:00–02:00" — from which concrete `shifts` are
  * generated. PLANNING data, ordinary mutable rows: the app role holds SELECT, INSERT, UPDATE and
- * DELETE (drizzle/0010_scheduling_planning_rls.sql), no append-only trigger and no chain (design
+ * DELETE (drizzle/0008_scheduling_planning_rls.sql), no append-only trigger and no chain (design
  * 2026-07-22 §2.1 / plan §2.1). A template names no person — it is a slot on a weekday, not a rostered
  * shift.
  *

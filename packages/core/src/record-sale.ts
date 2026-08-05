@@ -101,6 +101,9 @@ export interface RecordSaleInput {
    * `tenants` column.
    */
   settlement: { kind: "immediate"; tenders: RecordSaleTender[] } | { kind: "deferred" };
+  /** The operator who rang this sale, for attribution (design §7). Optional: the till (#7) supplies
+   * it from the open session; enforcement ("must be logged in") is a #7 concern. */
+  operatorId?: string;
 }
 
 /**
@@ -252,6 +255,7 @@ export async function recordSale(
       invoiceLocales: input.invoiceLocales,
       fiscalBackend: input.fiscalBackend,
       fiscalState: "recorded",
+      operatorId: input.operatorId ?? null,
     })
     .returning({ id: sales.id });
 

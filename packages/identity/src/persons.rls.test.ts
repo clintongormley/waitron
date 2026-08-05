@@ -9,10 +9,10 @@ import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 
 // A non-superuser LOGIN role inheriting app_user's grants. Being non-superuser is what makes RLS
 // apply at all — a superuser bypasses FORCE ROW LEVEL SECURITY, which is why PGlite cannot prove any
-// of this. persons grants app_user exactly SELECT, INSERT, UPDATE (drizzle/0001_workforce_rls.sql):
+// of this. persons grants app_user exactly SELECT, INSERT, UPDATE (drizzle/0001_identity_rls.sql):
 // a missing SELECT/INSERT/UPDATE grant, or a DELETE grant that should not be there, is invisible
 // under PGlite.
-const PROBE_ROLE = "workforce_rls_probe";
+const PROBE_ROLE = "identity_rls_probe";
 const PROBE_PASSWORD = "probe";
 
 const PIN = hashPin("1234");
@@ -45,7 +45,7 @@ describe("persons under real row-level security", () => {
   it("updates its own tenant's person as a non-superuser app_user member", async () => {
     // The mutable half of the grant. persons carries no append-only trigger — a person is retired by
     // flipping status, not deleted — so UPDATE must succeed as the probe role. Removing UPDATE from
-    // 0001_workforce_rls.sql's GRANT fails this with 42501 (permission denied for table persons).
+    // 0001_identity_rls.sql's GRANT fails this with 42501 (permission denied for table persons).
     const tenantId = await seedTenant(suite.admin);
     const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
@@ -119,9 +119,9 @@ describe("persons under real row-level security", () => {
   });
 
   it("refuses to delete a person — DELETE was never granted to the app role", async () => {
-    // persons is mutable but never deleted: a person is retired via status, and the time history
-    // Slice 2 will hang off this row must not lose its referent. The grant is exactly
-    // SELECT, INSERT, UPDATE, so a DELETE fails with 42501. Adding DELETE to 0001_workforce_rls.sql's
+    // persons is mutable but never deleted: a person is retired via status, and the workforce time
+    // history that references this row must not lose its referent. The grant is exactly
+    // SELECT, INSERT, UPDATE, so a DELETE fails with 42501. Adding DELETE to 0001_identity_rls.sql's
     // GRANT turns this green — this is the test that would catch that.
     const tenantId = await seedTenant(suite.admin);
     const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);

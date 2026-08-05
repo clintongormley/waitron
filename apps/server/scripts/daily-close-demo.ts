@@ -36,6 +36,7 @@ import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import { CORE_MIGRATIONS, asAppUser, createPgliteDb, runMigrations, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
+import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
 import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
@@ -82,6 +83,9 @@ interface Venue {
   nodeId: NodeId;
   seriesId: SeriesId;
   rectificativeSeriesId: SeriesId;
+  // The person who authorises the rectificativa. `recordCorrection` now gates on `sale.rectify`
+  // (Task 10); a supervisor holds it. Task 13's venue-seed comes later, so this demo seeds its own.
+  authorizerId: string;
 }
 
 /**
@@ -114,13 +118,22 @@ async function seedVenue(db: Database): Promise<Venue> {
     insert into invoice_series (tenant_id, node_id, code, purpose)
     values (${tenantId}, ${nodeId}, 'R', 'rectificative') returning id`);
   const rectificativeSeriesId = brandSeriesId(rSeries.rows[0]!.id);
-  return { tenantId, tillId, nodeId, seriesId, rectificativeSeriesId };
+  // A supervisor (holds `sale.rectify`), whose PIN is "1234", inserted as the PGlite superuser like
+  // everything else here — the authorizer the rectificativa's gate requires.
+  const person = await db.execute<{ id: string }>(sql`
+    insert into persons (tenant_id, display_name, pin_hash, role)
+    values (${tenantId}, 'Supervisora', ${hashPin("1234")}, 'supervisor') returning id`);
+  const authorizerId = person.rows[0]!.id;
+  return { tenantId, tillId, nodeId, seriesId, rectificativeSeriesId, authorizerId };
 }
 
 async function main(): Promise<void> {
   const db = await createPgliteDb();
   try {
     await runMigrations(db, CORE_MIGRATIONS);
+    // IDENTITY_MIGRATIONS after CORE: identity's `persons`/`sessions` carry a foreign key onto
+    // core's `tenants`/`tills`. recordCorrection's `sale.rectify` gate reads both.
+    await runMigrations(db, IDENTITY_MIGRATIONS);
     await FakeFiscalBackend.install(db);
     const venue = await seedVenue(db);
     const backend = new FakeFiscalBackend(db);
@@ -205,7 +218,20 @@ async function main(): Promise<void> {
       });
     });
 
-    // A rectificativa correcting Sale A by −5.00 base @ 21% (total −6.05).
+    // Open the supervisor's shift session — the authorizer the rectificativa's `sale.rectify` gate
+    // requires — exactly as a till would at the start of a shift.
+    const authorizerSession = await withTenant(db, venue.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return loginWithPin(tx, {
+        tenantId: venue.tenantId,
+        tillId: venue.tillId,
+        personId: venue.authorizerId,
+        pin: "1234",
+      });
+    });
+
+    // A rectificativa correcting Sale A by −5.00 base @ 21% (total −6.05), authorised by the
+    // supervisor session opened above.
     const correctionInput: RecordCorrectionInput = {
       tenantId: venue.tenantId,
       tillId: venue.tillId,
@@ -225,6 +251,7 @@ async function main(): Promise<void> {
       ],
       fiscalBackend: "fake",
       clock,
+      authz: { sessionId: authorizerSession.id },
     };
     await withTenant(db, venue.tenantId, async (tx) => {
       await asAppUser(tx);

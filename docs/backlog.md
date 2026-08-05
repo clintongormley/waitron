@@ -270,13 +270,14 @@ not payment method); a short payment agreed as payment-in-full before the factur
 
 Nothing below has any code, **except: sub-project 16 (workforce) — *registro de jornada* floor (#47),
 D2 scheduling (#50), only D3 remains; sub-project 8 (reporting) — the daily-close first slice landed
-(#56); and sub-project 6 (Locations) — the provision-a-sellable-venue slice merged
-as #57 (2026-08-04).**
+(#56); sub-project 6 (Locations) — the provision-a-sellable-venue slice merged
+as #57 (2026-08-04); and sub-project 5 (Identity) — the headless first slice on `feat/identity`
+(persons + sessions, PIN login, `authorize()`, staff API, void/refund authorization).**
 
 | Sub-project | Note |
 | --- | --- |
 | **7 — Counter POS UI** | The till. Also owns the working-order amendment log (art. 29.2.j LGT), deferred here deliberately: nothing writes working orders yet, and a log with no producer cannot be shown to work |
-| **5 — Identity** | Users, roles, permissions. The refund/void role gate waits on it |
+| **5 — Identity** | **Headless first slice built (`feat/identity`).** `@waitron/identity` owns `persons` + `sessions` (FORCE-RLS tenant isolation, now also scanned by fiscal-verifactu's `inmutabilidad` guard), salted-PIN hashing, a role/permission catalog, `authorize()` (operator session + supervisor `{personId, pin}` override), `loginWithPin` / `endSession`, and a `person.manage`-gated staff API. `recordVoid` / `recordCorrection` now require `sale.void` / `sale.rectify` authorization; `sales.authorized_by` / `sales.operator_id` + `payment_refunds.authorized_by` seams and a `waitron-provision venue` admin seed are in place. Remaining sub-project 5 scope (mid-shift-suspension enforcement, the discount gate, till-refund enforcement, the workforce-gate consolidation, branded ids) is under *Debt and odd jobs* → **Identity follow-ups**. The human-facing call sites (must-be-logged-in to ring, till refunds must be authorized) land with the counter POS (#7) |
 | **6 — Locations** | **Provision-a-sellable-venue slice merged (#57)** (2026-08-04; see *Now*) — the foundational till-track unblocker. Country/territory-driven fiscal identity, `resolveFiscalModules` (común → Veri\*Factu + IVA, others refused), `planVenue` / `applyVenue` and the `waitron-provision venue` CLI stand up tenant → location → till → node → SIF → series so `recordSale` can chain a sale; the stale `bootstrap-tenant.sql` was **deleted**. Remaining sub-project 6 scope (multiple locations, editing/deactivation, the #33 SIF-topology deferrals) is under *Debt and odd jobs* → **Locations follow-ups** |
 | **8 — Reporting** | **Daily-close first slice DONE (#56)** — `@waitron/reporting`'s `computeDailyClose` (VAT summary + operational cash-up, two anchors). Unstarted next slices: a **frozen/signed *cierre Z*** (numbered, immutable, with counted-cash / opening float / *descuadre* — the derived close deliberately leaves a clean seam for it), date **ranges** + the **monthly VAT return** (*modelo 303*) aggregation, and the reporting **UI** (belongs to the till, sub-project 7) |
 | **16 — Workforce** | *Registro de jornada* legal floor **DONE (#47)**; **D2 scheduling DONE (#50)** — `convenio_config` surface (overtime de-hard-coded, single-sourced), shifts + `roster_versions` + `publishRoster`, absences/availability/shift_templates/shift_swaps, an **advisory** guardrail engine (`validateRoster` → `RosterBreach[]`; publish surfaces breaches but proceeds — owner chose warn+override) + a planned-vs-actual read model, and supersede-on-republish (partial unique index, one published roster per `(location, period)`). The overtime *rule* the both-model projection computes stays convenio-driven — an **asesor-laboral** call, not code. Remaining: **D3 payroll export** (integrate-not-build), plus the workforce follow-ups under *Debt and odd jobs*. Deferred edges from the floor: the registro export doesn't yet surface overtime (belongs to the payslip/D3); the correction period-fetch is a ±1-day window (a >1-day-relocation correction is out of the floor's scope, chained but maybe missed by the period fetch). A post-#47 `/finish-branch` review (landed as #52) corrected four floor defects: the registro export rendered UTC instead of local wall-clock; the tamper chain omitted a correction's reason/actor and the capturing till; correction precedence tie-broke on the unhashed `ingest_seq` (a floor-bypasser could reorder corrections undetected) — now on the hashed `sequence_no`; and a `clockIn`/`clockOut` TOCTOU (an unlocked state read before the chain-head lock let two concurrent same-person clock-ins append a double-`in` that undercounts worked time) — now serialized per person with a `persons` row lock proven by a real-PG concurrency test |
@@ -340,6 +341,45 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     would dedup it, deferred to avoid churning the pre-existing, separately-tested `instance` command.
     (3) The identical `VenueRequest` is hand-built across four `packages/provisioning/src/*.test.ts`
     files — a shared `venueRequest()` builder in `packages/provisioning/src/testing/` would dedup it.
+- **Identity follow-ups (sub-project 5, headless first slice on `feat/identity`). None blocking;
+  all deferred by the slice's headless boundary (spec §13) or surfaced by its reviews.**
+  - **Mid-shift operator suspension is not enforced on the operator path.** `authorize()`'s
+    operator-holds branch (`packages/identity/src/authorize.ts:39-49`) grants on the session
+    person's **role alone** and never re-reads `persons.status`, so a manager suspended mid-shift
+    while holding an OPEN session can still self-authorize voids/refunds. Spec-faithful (§13 defers
+    session lifecycle to #7; suspension today means "refuse login", enforced on `loginWithPin` and on
+    the override path — `authorize.ts:60`) and not exploitable in the headless slice, which has no
+    long-lived till sessions yet. Revisit with #7's session-lifecycle / mid-shift-revocation policy.
+  - **PIN-only supervisor override** (type a PIN, resolve the person) is a #7 UX nicety. The override
+    currently takes `{ personId, pin }` because a salted PIN cannot be uniquely looked up by value.
+  - **The discount gate** has no write path yet: `sale.discount` is in the permission catalog
+    (`packages/identity/src/permissions.ts:10`) but nothing applies a discount until #7 builds
+    sale-entry. It attaches when that call site exists.
+  - **Enforcement of `sales.operator_id` / `payment_refunds.authorized_by`** (must-be-logged-in to
+    ring; till refunds must be authorized) is seams only — the columns and the optional attribution
+    exist, but no human call site gates on them yet. Lands with #7's call sites.
+  - **Consolidate workforce's `approveCorrection` gate onto `authorize()`.** It still throws the
+    shipped `correction.not_permitted` code (`packages/workforce/src/clocking.ts:255`) — **never
+    renamed once shipped** (`CLAUDE.md` §3) — so fold it in only when a `workforce.correction.approve`
+    permission can be added **beside** the old code, not in place of it.
+  - **Branded `PersonId` / `SessionId` in `@waitron/shared`.** This slice uses plain `string` for both;
+    branding them is optional consistency with the repo's other branded ids.
+  - **`seed-admin` provisioning edges (surfaced by the finish-branch reviews; both non-blocking).**
+    (1) A tenant whose sole seeded admin is later **suspended** cannot be re-seeded by re-running
+    `waitron-provision venue` — the `where not exists (… role='admin')` idempotency counts a suspended
+    admin as present, and no active session could `person.manage` to reactivate it, so recovery is a
+    privileged DB action. Inherent to suspend-not-delete + one-seeded-admin. (2) Two concurrent
+    `applyVenue` runs for the same tenant could each pass `where not exists` under READ COMMITTED and
+    insert two admins (no unique constraint enforces one) — realistic risk ~nil (provisioning is a
+    serial operator CLI action), consequence a spare non-fiscal admin row.
+- **The stale-hardcoded-list class (two instances fixed on `feat/identity`).** A cross-package test
+  that pins a repo-wide manifest/scope list goes stale the moment a member is added, and scoped CI
+  hides it because the changing task's scope never runs the pinning package. Adding `identity` to
+  `packages/migrations/migrations.manifest.json` and to `english-only.ts`'s `GENERIC_PACKAGES` left
+  `packages/fiscal-verifactu/src/vocabulary-scope.test.ts` (pins `GENERIC_PACKAGES`) and
+  `packages/provisioning/src/instance-apply.rls.test.ts` (pins the manifest's `migratedSets`) red;
+  both were fixed on this branch. See the receipted `CLAUDE.md` §2 entry. When you add a member to a
+  repo-wide list, grep every package for a test that pins it and run the WHOLE workspace's suites.
 - **Reporting follow-ups (#56), both surfaced by the finish-branch review, neither blocking.**
   (1) **Lift `percentOf` into `@waitron/shared`.** `@waitron/reporting`'s local `taxOf` is now the third
   copy of `divideDecimal(multiplyDecimal(base, rate), "100", MONEY_SCALE)` (the others in

@@ -1,9 +1,310 @@
 {
-  "id": "f1065c51-991c-4e77-b40c-f382e11063c8",
-  "prevId": "132ff455-e19c-42a2-9fca-4e87ca9e6227",
+  "id": "3be81958-ba20-4eba-9f8a-fcbc354a49ca",
+  "prevId": "211818c0-5598-4e6e-b45c-dca83c5d81e4",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
+    "public.absences": {
+      "name": "absences",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "absence_kind": {
+          "name": "absence_kind",
+          "type": "absence_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "starts_on": {
+          "name": "starts_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ends_on": {
+          "name": "ends_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "absence_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'requested'"
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "absences_tenant_id_idx": {
+          "name": "absences_tenant_id_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "absences_tenant_person_idx": {
+          "name": "absences_tenant_person_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "person_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "starts_on",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "absences_tenant_fk": {
+          "name": "absences_tenant_fk",
+          "tableFrom": "absences",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "tableTo": "tenants",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        },
+        "absences_person_fk": {
+          "name": "absences_person_fk",
+          "tableFrom": "absences",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "tableTo": "persons",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "absences_range_ck": {
+          "name": "absences_range_ck",
+          "value": "\"absences\".\"ends_on\" >= \"absences\".\"starts_on\""
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.availability": {
+      "name": "availability",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "weekday": {
+          "name": "weekday",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "available_from_minute": {
+          "name": "available_from_minute",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "available_to_minute": {
+          "name": "available_to_minute",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "effective_from": {
+          "name": "effective_from",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "effective_to": {
+          "name": "effective_to",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "availability_tenant_id_idx": {
+          "name": "availability_tenant_id_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "availability_tenant_person_idx": {
+          "name": "availability_tenant_person_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "person_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "availability_tenant_fk": {
+          "name": "availability_tenant_fk",
+          "tableFrom": "availability",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "tableTo": "tenants",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        },
+        "availability_person_fk": {
+          "name": "availability_person_fk",
+          "tableFrom": "availability",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "tableTo": "persons",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "availability_weekday_ck": {
+          "name": "availability_weekday_ck",
+          "value": "\"availability\".\"weekday\" between 0 and 6"
+        },
+        "availability_from_minute_ck": {
+          "name": "availability_from_minute_ck",
+          "value": "\"availability\".\"available_from_minute\" between 0 and 1440"
+        },
+        "availability_to_minute_ck": {
+          "name": "availability_to_minute_ck",
+          "value": "\"availability\".\"available_to_minute\" between 0 and 1440"
+        },
+        "availability_window_ck": {
+          "name": "availability_window_ck",
+          "value": "\"availability\".\"available_to_minute\" > \"availability\".\"available_from_minute\""
+        },
+        "availability_effective_ck": {
+          "name": "availability_effective_ck",
+          "value": "\"availability\".\"effective_to\" is null or \"availability\".\"effective_to\" >= \"availability\".\"effective_from\""
+        }
+      },
+      "isRLSEnabled": true
+    },
     "public.employments": {
       "name": "employments",
       "schema": "",
@@ -142,106 +443,6 @@
         "employments_dates_ck": {
           "name": "employments_dates_ck",
           "value": "\"employments\".\"end_date\" is null or \"employments\".\"end_date\" >= \"employments\".\"start_date\""
-        }
-      },
-      "isRLSEnabled": true
-    },
-    "public.persons": {
-      "name": "persons",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "display_name": {
-          "name": "display_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "pin_hash": {
-          "name": "pin_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "role": {
-          "name": "role",
-          "type": "workforce_role",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'staff'"
-        },
-        "status": {
-          "name": "status",
-          "type": "person_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'active'"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "persons_tenant_id_idx": {
-          "name": "persons_tenant_id_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
-        }
-      },
-      "foreignKeys": {
-        "persons_tenant_fk": {
-          "name": "persons_tenant_fk",
-          "tableFrom": "persons",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "tableTo": "tenants",
-          "columnsTo": [
-            "id"
-          ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "persons_display_name_ck": {
-          "name": "persons_display_name_ck",
-          "value": "length(\"persons\".\"display_name\") > 0"
-        },
-        "persons_pin_hash_ck": {
-          "name": "persons_pin_hash_ck",
-          "value": "length(\"persons\".\"pin_hash\") > 0"
         }
       },
       "isRLSEnabled": true
@@ -399,6 +600,324 @@
         "roster_versions_publish_shape_ck": {
           "name": "roster_versions_publish_shape_ck",
           "value": "(\"roster_versions\".\"status\" = 'draft') = (\"roster_versions\".\"published_at\" is null)"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "public.shift_swaps": {
+      "name": "shift_swaps",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "requested_by_person_id": {
+          "name": "requested_by_person_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "from_shift_id": {
+          "name": "from_shift_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "to_person_id": {
+          "name": "to_person_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "to_shift_id": {
+          "name": "to_shift_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "shift_swap_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'requested'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "shift_swaps_tenant_id_idx": {
+          "name": "shift_swaps_tenant_id_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "shift_swaps_tenant_from_shift_idx": {
+          "name": "shift_swaps_tenant_from_shift_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "from_shift_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "shift_swaps_tenant_fk": {
+          "name": "shift_swaps_tenant_fk",
+          "tableFrom": "shift_swaps",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "tableTo": "tenants",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        },
+        "shift_swaps_requested_by_person_fk": {
+          "name": "shift_swaps_requested_by_person_fk",
+          "tableFrom": "shift_swaps",
+          "columnsFrom": [
+            "requested_by_person_id"
+          ],
+          "tableTo": "persons",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        },
+        "shift_swaps_to_person_fk": {
+          "name": "shift_swaps_to_person_fk",
+          "tableFrom": "shift_swaps",
+          "columnsFrom": [
+            "to_person_id"
+          ],
+          "tableTo": "persons",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        },
+        "shift_swaps_from_shift_fk": {
+          "name": "shift_swaps_from_shift_fk",
+          "tableFrom": "shift_swaps",
+          "columnsFrom": [
+            "from_shift_id"
+          ],
+          "tableTo": "shifts",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        },
+        "shift_swaps_to_shift_fk": {
+          "name": "shift_swaps_to_shift_fk",
+          "tableFrom": "shift_swaps",
+          "columnsFrom": [
+            "to_shift_id"
+          ],
+          "tableTo": "shifts",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "set null"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.shift_templates": {
+      "name": "shift_templates",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "weekday": {
+          "name": "weekday",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "starts_minute": {
+          "name": "starts_minute",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ends_minute": {
+          "name": "ends_minute",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "shift_templates_tenant_id_idx": {
+          "name": "shift_templates_tenant_id_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "shift_templates_tenant_location_idx": {
+          "name": "shift_templates_tenant_location_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "location_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "shift_templates_tenant_fk": {
+          "name": "shift_templates_tenant_fk",
+          "tableFrom": "shift_templates",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "tableTo": "tenants",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        },
+        "shift_templates_location_fk": {
+          "name": "shift_templates_location_fk",
+          "tableFrom": "shift_templates",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "tableTo": "locations",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "shift_templates_label_ck": {
+          "name": "shift_templates_label_ck",
+          "value": "length(\"shift_templates\".\"label\") > 0"
+        },
+        "shift_templates_weekday_ck": {
+          "name": "shift_templates_weekday_ck",
+          "value": "\"shift_templates\".\"weekday\" between 0 and 6"
+        },
+        "shift_templates_starts_minute_ck": {
+          "name": "shift_templates_starts_minute_ck",
+          "value": "\"shift_templates\".\"starts_minute\" between 0 and 1440"
+        },
+        "shift_templates_ends_minute_ck": {
+          "name": "shift_templates_ends_minute_ck",
+          "value": "\"shift_templates\".\"ends_minute\" between 0 and 1440"
         }
       },
       "isRLSEnabled": true
@@ -1051,12 +1570,23 @@
     }
   },
   "enums": {
-    "public.person_status": {
-      "name": "person_status",
+    "public.absence_kind": {
+      "name": "absence_kind",
       "schema": "public",
       "values": [
-        "active",
-        "suspended"
+        "holiday",
+        "sick_leave",
+        "leave",
+        "unpaid"
+      ]
+    },
+    "public.absence_status": {
+      "name": "absence_status",
+      "schema": "public",
+      "values": [
+        "requested",
+        "approved",
+        "rejected"
       ]
     },
     "public.roster_version_status": {
@@ -1066,6 +1596,16 @@
         "draft",
         "published",
         "superseded"
+      ]
+    },
+    "public.shift_swap_status": {
+      "name": "shift_swap_status",
+      "schema": "public",
+      "values": [
+        "requested",
+        "accepted",
+        "approved",
+        "rejected"
       ]
     },
     "public.workforce_correction_status": {
@@ -1085,16 +1625,6 @@
         "break_start",
         "break_end",
         "correction"
-      ]
-    },
-    "public.workforce_role": {
-      "name": "workforce_role",
-      "schema": "public",
-      "values": [
-        "staff",
-        "supervisor",
-        "manager",
-        "admin"
       ]
     }
   },

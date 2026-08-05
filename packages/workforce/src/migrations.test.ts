@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, captureError, pgErrorCode, pgErrorMessage } from "@waitron/db";
+import { IDENTITY_MIGRATIONS, hashPin } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
-import { hashPin } from "./verify-pin.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
@@ -20,9 +20,10 @@ import {
 let tenantId: string;
 
 const suite = usePgliteDb({
-  // Core first — the tenants foreign key. Ordering across packages is the runtime's job and
-  // nothing enforces it, so it is explicit here.
-  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
+  // Core first (the tenants FK), then identity (persons — employments/time_entries FK it), then
+  // workforce. Ordering across packages is the runtime's job and nothing enforces it, so it is
+  // explicit here.
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     tenantId = await seedTenant(db);
   },
@@ -30,12 +31,15 @@ const suite = usePgliteDb({
 
 const PIN = hashPin("1234");
 
-describe("the workforce migration set", () => {
+// persons is created by the IDENTITY migration set (relocated out of workforce), which this suite
+// layers under WORKFORCE because employments/time_entries FK it. These integration checks prove the
+// combined [core, identity, workforce] stack lands persons correctly under workforce.
+describe("persons, from the identity migration set layered under workforce", () => {
   it("creates persons with row-level security both enabled and forced", async () => {
-    // relforcerowsecurity is the load-bearing half: ENABLE alone (drizzle's .enableRLS(), migration
-    // 0000) leaves the table owner and every superuser exempt, so the tenant policy would not bind
-    // the deployment role. FORCE comes from the hand-written 0001 — deleting its FORCE line drops
-    // relforcerowsecurity to false and fails this.
+    // relforcerowsecurity is the load-bearing half: ENABLE alone (drizzle's .enableRLS(), identity
+    // migration 0000_identity) leaves the table owner and every superuser exempt, so the tenant
+    // policy would not bind the deployment role. FORCE comes from identity's hand-written
+    // 0001_identity_rls — deleting its FORCE line drops relforcerowsecurity to false and fails this.
     const result = await suite.db.execute<{
       relrowsecurity: boolean;
       relforcerowsecurity: boolean;
@@ -53,7 +57,7 @@ describe("the workforce migration set", () => {
     expect(rows.rows[0]).toEqual({ role: "staff", status: "active" });
   });
 
-  it("accepts every workforce_role value", async () => {
+  it("accepts every person_role value", async () => {
     for (const role of ["staff", "supervisor", "manager", "admin"]) {
       await suite.db.execute(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
@@ -226,7 +230,7 @@ describe("the D1b correction columns", () => {
   }
 
   it("accepts a fully-populated correction row (the ADD VALUE 'correction' landed)", async () => {
-    // Proves migration 0004's `ALTER TYPE ... ADD VALUE 'correction'` applied: an entry_kind the
+    // Proves migration 0002's `ALTER TYPE ... ADD VALUE 'correction'` applied: an entry_kind the
     // enum did not carry before is now insertable, with all four correction columns set.
     const { personId, locationId, entryId } = await seedBaseEntry();
     await suite.db.execute(sql`
@@ -355,10 +359,10 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
   });
 
   it("rejects a second published version for the same (tenant, location, period) via the partial unique index", async () => {
-    // roster_versions_published_period_uq (migration 0011): at most one PUBLISHED version per (tenant,
+    // roster_versions_published_period_uq (migration 0009): at most one PUBLISHED version per (tenant,
     // location, exact period). Insert one published row directly (with a stamp so publish-shape passes),
     // then a second identical-period published row is rejected 23505. Prove by deletion: drop the
-    // CREATE UNIQUE INDEX from 0011 and the second insert succeeds (two published rows coexist).
+    // CREATE UNIQUE INDEX from 0009 and the second insert succeeds (two published rows coexist).
     const { locationId } = await seedPersonAndLocation();
     await suite.db.execute(sql`
       insert into roster_versions (tenant_id, location_id, period_start, period_end, status, published_at)

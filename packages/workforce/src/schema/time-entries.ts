@@ -14,7 +14,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { locations, tenants, tills } from "@waitron/db";
-import { persons } from "./persons.js";
+import { persons } from "@waitron/identity";
 
 /**
  * The kind of clock event. Slice 2 recorded the four capture kinds of a shift; `correction` (design
@@ -47,7 +47,7 @@ export const workforceCorrectionStatus = pgEnum("workforce_correction_status", [
  *
  * IMMUTABLE, unlike `persons`/`employments`: the app role holds only SELECT, INSERT, and
  * UPDATE/DELETE/TRUNCATE are revoked and backstopped by triggers
- * (drizzle/0003_workforce_d1a_rls.sql). A clock event is never rewritten or deleted; a mistake is
+ * (drizzle/0001_workforce_d1a_rls.sql). A clock event is never rewritten or deleted; a mistake is
  * corrected by APPENDING a correction row (Slice 3), never by editing history. This is the same
  * role-revocation floor `registros_facturacion` carries, and the reason the record lives in Postgres
  * (which has a privilege system) rather than SQLite (which does not).
@@ -98,7 +98,7 @@ export const timeEntries = pgTable(
     // Slice 4 — the tamper-evidence hash chain (design §5). Assigned by `appendToChain`
     // (../chain.ts) under a row lock on `workforce_chains`, never by the device: one chain per
     // (tenant, location), single active writer. IMMUTABLE like the rest of the row — the existing
-    // REVOKE + `reject_mutation` trigger (drizzle/0003_workforce_d1a_rls.sql) already covers these
+    // REVOKE + `reject_mutation` trigger (drizzle/0001_workforce_d1a_rls.sql) already covers these
     // new columns, since they are written once at INSERT and the app holds no UPDATE.
     /** This entry's own hash — `computeEntryHash(content ‖ prev_entry_hash)`, uppercase hex. */
     entryHash: text("entry_hash").notNull(),

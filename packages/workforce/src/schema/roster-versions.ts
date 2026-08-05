@@ -11,7 +11,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { locations, tenants } from "@waitron/db";
-import { persons } from "./persons.js";
+import { persons } from "@waitron/identity";
 
 /**
  * A roster version's lifecycle. A `draft` is edited freely; publishing flips it to `published` and
@@ -25,7 +25,7 @@ import { persons } from "./persons.js";
  * GENERIC package the english-only guard scans; the Spanish `borrador`/`publicado` rendering, if ever
  * needed, belongs to packages/workforce-es.
  *
- * A pgEnum rather than a text CHECK, matching persons' `personStatus`/`workforceRole` precedent: the
+ * A pgEnum rather than a text CHECK, matching @waitron/identity's `personStatus`/`personRole` precedent: the
  * three values are settled, and one declaration yields both the TypeScript union and the DB
  * constraint.
  */
@@ -39,7 +39,7 @@ export const rosterVersionStatus = pgEnum("roster_version_status", [
  * A published (or draft) snapshot of a location's schedule for a date period — PLANNING data, NOT the
  * legal record. Unlike `time_entries` (the immutable registro de jornada), a roster version is
  * ordinary mutable data: the app role holds SELECT, INSERT, UPDATE and DELETE
- * (drizzle/0008_scheduling_rls.sql) — a draft is edited or discarded, a published version can be
+ * (drizzle/0006_scheduling_rls.sql) — a draft is edited or discarded, a published version can be
  * re-stamped or removed. No append-only trigger and no hash chain: no Spanish statute requires a
  * *schedule* to be tamper-evident — that obligation (art. 34.9) is on the record of hours WORKED,
  * which `time_entries` satisfies alone (design 2026-07-22 §2.1 / plan

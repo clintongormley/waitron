@@ -11,7 +11,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { tenants } from "@waitron/db";
-import { persons } from "./persons.js";
+import { persons } from "@waitron/identity";
 
 /**
  * The KIND of absence, in ENGLISH — this is a GENERIC package the english-only guard scans, and the
@@ -19,7 +19,7 @@ import { persons } from "./persons.js";
  * these labels (`holiday`→vacaciones, `sick_leave`→baja, `leave`→permiso) belongs to
  * packages/workforce-es, over this English enum; it is a later slice's job and is not built here.
  *
- * A pgEnum rather than a text CHECK, matching persons' `personStatus`/`workforceRole` and
+ * A pgEnum rather than a text CHECK, matching @waitron/identity's `personStatus`/`personRole` and
  * roster_versions' `rosterVersionStatus` precedent: the four kinds are settled, and one declaration
  * yields both the TypeScript union and the DB constraint.
  */
@@ -39,7 +39,7 @@ export type AbsenceStatus = (typeof absenceStatus.enumValues)[number];
 /**
  * A person's planned absence over a date range — a holiday, sick leave, or other leave. PLANNING
  * data, NOT the legal record (the inverse of `time_entries`): ordinary mutable rows, so the app role
- * holds SELECT, INSERT, UPDATE and DELETE (drizzle/0010_scheduling_planning_rls.sql). No append-only
+ * holds SELECT, INSERT, UPDATE and DELETE (drizzle/0008_scheduling_planning_rls.sql). No append-only
  * trigger and no hash chain — no Spanish statute requires an absence schedule to be tamper-evident
  * (design 2026-07-22 §2.1 / plan 2026-08-02-workforce-d2-scheduling §2.1).
  *

@@ -300,6 +300,18 @@ scripts/changed-packages.mjs runnable test:coverage` exits **0** with
   (Named rather than counted: an earlier version said "the two traps above" and stopped being true
   the moment a bullet was inserted between them.)
 
+- **A hardcoded cross-package list goes stale when a manifest or scope changes, and scoped CI hides
+  it.** Adding `identity` to `migrations.manifest.json` and to `packages/db/src/english-only.ts`'s
+  `GENERIC_PACKAGES` (both on `feat/identity`) left two tests asserting the OLD list red —
+  `packages/fiscal-verifactu/src/vocabulary-scope.test.ts` (pins `GENERIC_PACKAGES`) and
+  `packages/provisioning/src/instance-apply.rls.test.ts` (pins the manifest's `migratedSets`).
+  Neither package was in the changing task's scope, so its scoped `test:coverage` never ran them;
+  both went red only when a LATER, unrelated task happened to run those packages — costing a fix
+  round each, in the wrong task. `pnpm typecheck` catches a compile break but NOT a stale hardcoded
+  array. When you add a member to a repo-wide list (the migration manifest, `GENERIC_PACKAGES`,
+  `OWN_SHARD_PACKAGES`), grep every package for a test that pins that list and run the WHOLE
+  workspace's suites, not just the changed package's.
+
 - **The pre-push log file can be days stale — reproduce, do not read it.** A rejected push pointed
   at `/tmp/waitron-root-test-run.log`; that file was two days old and named
   `apps/server/src/migrations.test.ts`, which the branch being pushed had deleted. The real cause was

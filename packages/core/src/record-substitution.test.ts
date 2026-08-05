@@ -19,6 +19,7 @@ import {
   withTenant,
 } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
 import { recordSubstitution } from "./record-substitution.js";
 import type { RecordSubstitutionInput } from "./record-substitution.js";
 import { recordSale } from "./record-sale.js";
@@ -31,6 +32,9 @@ let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId; // the ordinary (purpose='standard') series — the F3 reuses it (owner decision)
 let workingOrderId: WorkingOrderId;
+// A manager shift session authorizes the ONE precondition void this suite performs — recordVoid now
+// requires `sale.void`, and only the void's authorization matters here, not the substitution's caller.
+let voidSessionId: string;
 
 // PGlite for everything in this file: the guards here are pure logic (an empty list, a duplicate id,
 // an unknown/voided/already-substituted ticket, a wrong-node series) that a superuser backend
@@ -38,7 +42,8 @@ let workingOrderId: WorkingOrderId;
 // genuinely need RLS and live in record-substitution.rls.test.ts (real Postgres), per the plan's §6
 // target split — the same split record-correction.test.ts / .rls.test.ts already use.
 const suite = usePgliteDb({
-  migrations: [CORE_MIGRATIONS],
+  // IDENTITY_MIGRATIONS after CORE: recordVoid now calls `authorize`, which reads persons/sessions.
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   // FakeFiscalBackend.recordSale/recordSubstitution/checkIntegrity read and write
   // fake_node_registrations/fake_fiscal_records, and nothing else creates those tables.
   setup: (db) => FakeFiscalBackend.install(db),
@@ -47,6 +52,16 @@ const suite = usePgliteDb({
 
 beforeEach(async () => {
   ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenant(suite.db));
+  // Seed a manager (holds `sale.void`) as the superuser owner and open its session — the precondition
+  // void below needs an authorizer, exactly as the record-void suite arranges.
+  const { rows } = await suite.db.execute<{ id: string }>(
+    sql`insert into persons (tenant_id, display_name, pin_hash, role)
+        values (${tenantId}, 'P', ${hashPin("1234")}, 'manager') returning id`,
+  );
+  const session = await withTenant(suite.db, tenantId, (tx) =>
+    loginWithPin(tx, { tenantId, tillId, personId: rows[0]!.id, pin: "1234" }),
+  );
+  voidSessionId = session.id;
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -229,7 +244,7 @@ describe("recordSubstitution — the substituted tickets (input guards)", () => 
     const { saleId } = await sellTicket(backend);
     await withTenant(suite.db, tenantId, async (tx) => {
       await asAppUser(tx);
-      await recordVoid(tx, backend, saleId, "Wrong table");
+      await recordVoid(tx, backend, saleId, "Wrong table", { sessionId: voidSessionId });
     });
     await expect(substitute(backend, [saleId])).rejects.toMatchObject({
       code: "sale.voided",

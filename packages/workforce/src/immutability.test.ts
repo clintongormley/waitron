@@ -97,7 +97,7 @@ describe("time_entries is immutable, as the app role", () => {
     // The deliverable's "confirm, don't re-add DDL": the append-only trigger and the REVOKE already
     // cover the whole row, so the new entry_hash/prev_entry_hash/sequence_no/is_first_entry columns
     // inherit immutability with no extra DDL. Grant UPDATE (rolled back), then watch the trigger
-    // still reject a rewrite of entry_hash. Deleting the trigger from 0003 fails this.
+    // still reject a rewrite of entry_hash. Deleting the trigger from 0001 fails this.
     await withTenant(suite.admin, ctx.tenantId, async (tx) => {
       await tx.execute(sql`grant update on time_entries to app_user`);
       await tx.execute(sql`set local role app_user`);
@@ -135,8 +135,8 @@ describe("time_entries is immutable, as the app role", () => {
 describe("row-level security is enabled AND forced on the new tenant-scoped tables", () => {
   it("has relrowsecurity and relforcerowsecurity on employments, time_entries and workforce_chains", async () => {
     // ENABLE alone (drizzle's .enableRLS()) leaves the owner and every superuser exempt; FORCE (the
-    // hand-written 0003/0006) is what binds the deployment role. Deleting any FORCE line drops
-    // relforcerowsecurity to false and fails this. workforce_chains (Slice 4) is forced by 0006.
+    // hand-written 0001/0004) is what binds the deployment role. Deleting any FORCE line drops
+    // relforcerowsecurity to false and fails this. workforce_chains (Slice 4) is forced by 0004.
     const result = await suite.admin.execute<{
       relname: string;
       relrowsecurity: boolean;

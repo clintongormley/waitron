@@ -130,6 +130,17 @@ export const sales = pgTable(
     counterpartyTaxId: text("counterparty_tax_id"),
     counterpartyLegalName: text("counterparty_legal_name"),
     counterpartyCountryCode: text("counterparty_country_code"),
+    // The person who AUTHORISED this row's creation, recorded on privileged writes and NULL on an
+    // ordinary sale. Set by recordCorrection (sale.rectify) at insert (Task 10). Plain uuid, no FK —
+    // the same shape as sale_voids.voided_by — NULLABLE with no backfill (pre-production, no deployed
+    // data), and immutable/write-once at insert like every other column here (the app role has no
+    // UPDATE on this table at all).
+    authorizedBy: uuid("authorized_by"),
+    // The operator who rang this sale (attribution), from their open session — set by recordSale at
+    // insert (Task 11), NULL until the till (#7) supplies it. Plain uuid, no FK; NULLABLE with no
+    // backfill (pre-production), write-once at insert and immutable table-wide like every other
+    // column here.
+    operatorId: uuid("operator_id"),
   },
   (t) => [
     unique("sales_series_invoice_number_key").on(t.tenantId, t.seriesId, t.invoiceNumber),

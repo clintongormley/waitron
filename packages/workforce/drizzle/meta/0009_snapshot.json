@@ -1,6 +1,6 @@
 {
-  "id": "211818c0-5598-4e6e-b45c-dca83c5d81e4",
-  "prevId": "f1065c51-991c-4e77-b40c-f382e11063c8",
+  "id": "44d3d149-1e40-40e9-828c-3ee249aab241",
+  "prevId": "3be81958-ba20-4eba-9f8a-fcbc354a49ca",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -447,106 +447,6 @@
       },
       "isRLSEnabled": true
     },
-    "public.persons": {
-      "name": "persons",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "display_name": {
-          "name": "display_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "pin_hash": {
-          "name": "pin_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "role": {
-          "name": "role",
-          "type": "workforce_role",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'staff'"
-        },
-        "status": {
-          "name": "status",
-          "type": "person_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'active'"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "persons_tenant_id_idx": {
-          "name": "persons_tenant_id_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "persons_tenant_fk": {
-          "name": "persons_tenant_fk",
-          "tableFrom": "persons",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "persons_display_name_ck": {
-          "name": "persons_display_name_ck",
-          "value": "length(\"persons\".\"display_name\") > 0"
-        },
-        "persons_pin_hash_ck": {
-          "name": "persons_pin_hash_ck",
-          "value": "length(\"persons\".\"pin_hash\") > 0"
-        }
-      },
-      "isRLSEnabled": true
-    },
     "public.roster_versions": {
       "name": "roster_versions",
       "schema": "",
@@ -643,6 +543,40 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "roster_versions_published_period_uq": {
+          "name": "roster_versions_published_period_uq",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "location_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "period_start",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "period_end",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"roster_versions\".\"status\" = 'published'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1689,14 +1623,6 @@
         "rejected"
       ]
     },
-    "public.person_status": {
-      "name": "person_status",
-      "schema": "public",
-      "values": [
-        "active",
-        "suspended"
-      ]
-    },
     "public.roster_version_status": {
       "name": "roster_version_status",
       "schema": "public",
@@ -1733,16 +1659,6 @@
         "break_start",
         "break_end",
         "correction"
-      ]
-    },
-    "public.workforce_role": {
-      "name": "workforce_role",
-      "schema": "public",
-      "values": [
-        "staff",
-        "supervisor",
-        "manager",
-        "admin"
       ]
     }
   },

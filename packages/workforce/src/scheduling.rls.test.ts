@@ -15,7 +15,7 @@ import {
 
 // A non-superuser LOGIN role inheriting app_user's grants. Being non-superuser is what makes RLS
 // apply at all — a superuser bypasses FORCE ROW LEVEL SECURITY, which is why PGlite cannot prove any
-// of this. shifts and roster_versions grant SELECT, INSERT, UPDATE, DELETE (drizzle 0008): they are
+// of this. shifts and roster_versions grant SELECT, INSERT, UPDATE, DELETE (drizzle 0006): they are
 // PLANNING data, discardable, the inverse of time_entries' append-only floor.
 const PROBE_ROLE = "workforce_rls_probe";
 const PROBE_PASSWORD = "probe";
@@ -30,7 +30,7 @@ class RollbackSignal extends Error {}
 describe("shifts under real row-level security (planning data, fully mutable)", () => {
   it("writes, reads, updates and DELETES its own tenant's draft shift as a non-superuser app_user member", async () => {
     // The whole mutability grant in one test: SELECT, INSERT, UPDATE and — unlike persons/employments
-    // — DELETE. A draft shift is discardable planning data, so removing DELETE from 0008's GRANT would
+    // — DELETE. A draft shift is discardable planning data, so removing DELETE from 0006's GRANT would
     // fail the delete step here with 42501. This is the positive half of the mutability boundary.
     const tenantId = await seedTenant(suite.admin);
     const personId = await seedPerson(suite.admin, tenantId);
@@ -41,7 +41,7 @@ describe("shifts under real row-level security (planning data, fully mutable)", 
         insertDraftShift(tx, { tenantId, personId, locationId }),
       );
 
-      // UPDATE — a shift is moved / re-roled freely (planning data). Removing UPDATE from 0008 fails
+      // UPDATE — a shift is moved / re-roled freely (planning data). Removing UPDATE from 0006 fails
       // this with 42501.
       await withTenant(probe, tenantId, (tx) =>
         tx.execute(sql`update shifts set role = 'kitchen' where id = ${shiftId}`),
@@ -51,7 +51,7 @@ describe("shifts under real row-level security (planning data, fully mutable)", 
       );
       expect(afterUpdate.rows).toEqual([{ role: "kitchen" }]);
 
-      // DELETE — a draft roster is thrown away. Removing DELETE from 0008 fails this with 42501.
+      // DELETE — a draft roster is thrown away. Removing DELETE from 0006 fails this with 42501.
       await withTenant(probe, tenantId, (tx) =>
         tx.execute(sql`delete from shifts where id = ${shiftId}`),
       );
@@ -125,7 +125,7 @@ describe("roster_versions under real row-level security (planning data, fully mu
       );
       // A plain mutable field on a still-draft version — extend the period. (Not `status`: flipping
       // it without stamping `published_at` trips roster_versions_publish_shape_ck; that invariant is
-      // exercised in scheduling.test.ts.) Removing UPDATE from 0008 fails this with 42501.
+      // exercised in scheduling.test.ts.) Removing UPDATE from 0006 fails this with 42501.
       await withTenant(probe, tenantId, (tx) =>
         tx.execute(
           sql`update roster_versions set period_end = '2026-01-12' where id = ${versionId}`,
@@ -176,8 +176,8 @@ describe("roster_versions under real row-level security (planning data, fully mu
 
 describe("row-level security is enabled AND forced on the scheduling tables", () => {
   it("has relrowsecurity and relforcerowsecurity on shifts and roster_versions", async () => {
-    // ENABLE alone (drizzle's .enableRLS(), migration 0007) leaves the owner and every superuser
-    // exempt; FORCE (the hand-written 0008) is what binds the deployment role. Deleting either FORCE
+    // ENABLE alone (drizzle's .enableRLS(), migration 0005) leaves the owner and every superuser
+    // exempt; FORCE (the hand-written 0006) is what binds the deployment role. Deleting either FORCE
     // line drops relforcerowsecurity to false and fails this.
     const result = await suite.admin.execute<{
       relname: string;

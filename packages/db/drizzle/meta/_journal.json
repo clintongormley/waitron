@@ -176,6 +176,13 @@
       "when": 1785856430493,
       "tag": "0024_nodes_modules",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1785887552126,
+      "tag": "0025_dizzy_gateway",
+      "breakpoints": true
     }
   ]
 }

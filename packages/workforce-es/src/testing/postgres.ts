@@ -4,6 +4,7 @@ import {
   startMigratedPostgres,
   type RealPostgres,
 } from "@waitron/db/testing/postgres.js";
+import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS } from "../migrations.js";
 
@@ -18,13 +19,13 @@ export type { RealPostgres };
 export const CONTAINER_SETUP_TIMEOUT_MS = 180_000;
 
 /**
- * Starts a real PostgreSQL server and runs the three migration sets against it, core first — ordering
+ * Starts a real PostgreSQL server and runs the four migration sets against it, core first — ordering
  * across packages is the runtime's responsibility and nothing enforces it, so it is explicit here.
  * The `convenio_config` table's FKs reach only core (tenants/locations), and the sole real-PG suite,
  * `convenio-config.rls.test.ts`, seeds only a tenant and a location — never a workforce row. The
- * workforce set is applied because the workforce-es PACKAGE depends on `@waitron/workforce` (this file
- * and `convenio.ts` import from it), so the helper migrates workforce-es's full package stack rather
- * than a core-plus-`convenio_config` subset.
+ * identity + workforce sets are applied because the workforce-es PACKAGE depends on `@waitron/workforce`
+ * (this file and `convenio.ts` import from it) and workforce's own FKs target identity's `persons`, so
+ * the helper migrates workforce-es's full package stack rather than a core-plus-`convenio_config` subset.
  */
 export function startRealPostgres(): Promise<RealPostgres> {
   return startMigratedPostgres({
@@ -33,6 +34,11 @@ export function startRealPostgres(): Promise<RealPostgres> {
       "runs every connection as a superuser, which bypasses FORCE ROW LEVEL SECURITY and cannot " +
       "prove tenant isolation or the app role's exact privilege set.",
     migrate: (uri) =>
-      runMigrationSets(uri, [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS]),
+      runMigrationSets(uri, [
+        CORE_MIGRATIONS,
+        IDENTITY_MIGRATIONS,
+        WORKFORCE_MIGRATIONS,
+        WORKFORCE_ES_MIGRATIONS,
+      ]),
   });
 }

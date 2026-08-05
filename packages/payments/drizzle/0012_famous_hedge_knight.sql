@@ -1,0 +1,1 @@
+ALTER TABLE "payment_refunds" ADD COLUMN "authorized_by" uuid;

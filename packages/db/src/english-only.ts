@@ -15,6 +15,7 @@ export const GENERIC_PACKAGES = [
   "credentials",
   "workforce",
   "reporting",
+  "identity",
 ] as const;
 
 /** Spanish by design: `verifactu`/`fiscal-verifactu` mirror AEAT's spec, XML and conformance
@@ -219,7 +220,7 @@ export const SPANISH_WORDS = new Set([
   // it before the first Spanish labour name can land (packages/workforce-es and the Slice 2/3
   // tables), the same "in place before the package" posture `sourceFilesIn` documents below.
   // Verified not to collide with any existing generic-package identifier by running the guard over
-  // all nine generics with this list in place; a firing check lives in scripts/english-only.test.ts.
+  // all ten generics with this list in place; a firing check lives in scripts/english-only.test.ts.
   "jornada",
   "jornadas",
   "empleado",

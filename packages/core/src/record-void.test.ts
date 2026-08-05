@@ -21,6 +21,8 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
+import type { AuthzInput } from "@waitron/identity";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { recordVoid } from "./record-void.js";
@@ -31,9 +33,19 @@ let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 let workingOrderId: WorkingOrderId;
+// The people and the open shift session the void gate now consults. `managerId` holds `sale.void`
+// on its own role, so `managerSessionId` is the default authorizer every green-path void uses;
+// `staffId` holds nothing, and `supervisorId` is the second person whose PIN unlocks an override.
+let managerId: string;
+let supervisorId: string;
+let managerSessionId: string;
+let staffSessionId: string;
 
 const suite = usePgliteDb({
-  migrations: [CORE_MIGRATIONS],
+  // IDENTITY_MIGRATIONS after CORE_MIGRATIONS: identity's `persons`/`sessions` carry a foreign key
+  // onto `tenants`/`tills`, which the core set creates, so the order is load-bearing (identity's
+  // own migrations descriptor says as much). recordVoid now calls `authorize`, which reads both.
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   // FakeFiscalBackend.recordSale/recordVoid/registerNode/checkIntegrity read and write
   // fake_node_registrations/fake_fiscal_records, and nothing else creates those tables — see
   // record-sale.test.ts's identical setup for the same requirement.
@@ -43,7 +55,36 @@ const suite = usePgliteDb({
 
 beforeEach(async () => {
   ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenant(suite.db));
+  // A manager (holds `sale.void`), a supervisor (holds it too — the override authorizer), and a
+  // staff member (holds nothing). Seeded as the superuser owner exactly like `seedTenant` above:
+  // PGlite bypasses RLS for the seeding connection, so no `app.tenant_id` is needed here.
+  managerId = await seedPerson("manager");
+  supervisorId = await seedPerson("supervisor");
+  const staffId = await seedPerson("staff");
+  // Two open shift sessions, opened through `loginWithPin` exactly as a till would at the start of a
+  // shift — the manager's is the default authorizer for green-path voids; the staff one is what the
+  // gate must reject unless a supervisor override rides along.
+  managerSessionId = await openSession(managerId);
+  staffSessionId = await openSession(staffId);
 });
+
+/** A person of `role` whose PIN is "1234", inserted as the superuser owner (RLS bypassed on PGlite),
+ * the same shape identity's own suites seed. */
+async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): Promise<string> {
+  const { rows } = await suite.db.execute<{ id: string }>(
+    sql`insert into persons (tenant_id, display_name, pin_hash, role)
+        values (${tenantId}, 'P', ${hashPin("1234")}, ${role}) returning id`,
+  );
+  return rows[0]!.id;
+}
+
+/** Opens a shift session for `personId` at this tenant's till and returns its id. */
+async function openSession(personId: string): Promise<string> {
+  const session = await withTenant(suite.db, tenantId, (tx) =>
+    loginWithPin(tx, { tenantId, tillId, personId, pin: "1234" }),
+  );
+  return session.id;
+}
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
 
@@ -120,10 +161,15 @@ async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> 
   });
 }
 
-async function voidSale(backend: FiscalBackend, saleId: SaleId, reason = "Wrong table") {
+async function voidSale(
+  backend: FiscalBackend,
+  saleId: SaleId,
+  reason = "Wrong table",
+  authz: AuthzInput = { sessionId: managerSessionId },
+) {
   return withTenant(suite.db, tenantId, async (tx) => {
     await asAppUser(tx);
-    return recordVoid(tx, backend, saleId, reason);
+    return recordVoid(tx, backend, saleId, reason, authz);
   });
 }
 
@@ -180,8 +226,9 @@ describe("recordVoid — nothing is ever edited", () => {
 
     const [row] = await suite.db.select().from(saleVoids).where(eq(saleVoids.saleId, saleId));
     expect(row?.reason).toBe("Customer returned the order");
-    // The roles seam: present, nullable, unread until sub-project 5.
-    expect(row?.voidedBy).toBeNull();
+    // The roles seam is now FILLED, not null: this default void ran under the manager session
+    // opened in `beforeEach`, and the gate records whoever `authorize` accepted as the authorizer.
+    expect(row?.voidedBy).toBe(managerId);
   });
 
   it("asks the module for a new record rather than for an edit", async () => {
@@ -303,6 +350,53 @@ describe("recordVoid — guards", () => {
   });
 });
 
+describe("recordVoid — authorization", () => {
+  it("records the authorizing supervisor when a staff session voids under an override", async () => {
+    // The operator (staff) holds nothing, but a supervisor's PIN rides along. authorize accepts the
+    // override and returns the SUPERVISOR as the authorizer, which is who `voided_by` must name — the
+    // person who actually took responsibility, not the operator at the till.
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId } = await sell(backend);
+
+    await voidSale(backend, saleId, "Wrong table", {
+      sessionId: staffSessionId,
+      override: { personId: supervisorId, pin: "1234" },
+    });
+
+    const [row] = await suite.db.select().from(saleVoids).where(eq(saleVoids.saleId, saleId));
+    expect(row?.voidedBy).toBe(supervisorId);
+  });
+
+  it("refuses a staff session with no override and appends no sale_voids row", async () => {
+    // The gate itself. A staff member cannot void alone, and — the load-bearing half — a rejected
+    // void leaves NO projection row behind. Prove the gate by deletion: drop the `authorize()` call
+    // and the `voidedBy` field from record-void.ts and this expectation flips (the staff void
+    // succeeds), which is exactly the security regression the gate exists to catch.
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId } = await sell(backend);
+
+    await expect(
+      voidSale(backend, saleId, "Wrong table", { sessionId: staffSessionId }),
+    ).rejects.toMatchObject({ code: "authorization.not_permitted" });
+
+    expect(await countRows("sale_voids")).toBe(0);
+  });
+
+  it("returns sale.not_found before the gate — a missing sale never leaks an authz error", async () => {
+    // Ordering: `authorize` runs AFTER the sale-exists lookup, so a cross-tenant or missing sale is
+    // still `sale.not_found` and never `authorization.not_permitted`, even under a staff session that
+    // could not have voided it anyway. A gate placed before the lookup would leak which sales exist.
+    await expect(
+      voidSale(
+        new FakeFiscalBackend(suite.db),
+        "00000000-0000-4000-8000-000000000000" as SaleId,
+        "Wrong table",
+        { sessionId: staffSessionId },
+      ),
+    ).rejects.toMatchObject({ code: "sale.not_found" });
+  });
+});
+
 describe("recordVoid — error propagation", () => {
   it("propagates a database error that is not a unique violation, untranslated", async () => {
     // The insert's OTHER failure path: any reason `sale_voids` could reject BESIDES the unique
@@ -316,10 +410,19 @@ describe("recordVoid — error propagation", () => {
     // provoking a genuinely different SQLSTATE from the real database would mean inventing one —
     // this stub instead asserts on `recordVoid`'s own catch/rethrow logic directly, the same way
     // `chain.test.ts`'s stub asserts on `appendToChain`'s.
+    //
+    // The stub's `select` result now has to satisfy `authorize` too — it runs between the sale
+    // lookup and the insert, resolving the session's operator and role in ONE `innerJoin` query. The
+    // sale lookup is `.from().where()`; authorize's is `.from().innerJoin().where()`, so `from()`
+    // exposes both. One row carrying every field either path reads (plus a `manager` role that holds
+    // `sale.void`) lets authorize pass on the operator path so control reaches the failing insert
+    // this test is actually about.
+    const row = [{ tenantId, tillId, nodeId, personId: "operator", role: "manager" }];
     const fakeTx = {
       select: () => ({
         from: () => ({
-          where: () => Promise.resolve([{ tenantId, tillId, nodeId }]),
+          where: () => Promise.resolve(row),
+          innerJoin: () => ({ where: () => Promise.resolve(row) }),
         }),
       }),
       insert: () => ({
@@ -359,7 +462,9 @@ describe("recordVoid — error propagation", () => {
     };
 
     const error = await captureError(() =>
-      recordVoid(fakeTx, backend, "00000000-0000-4000-8000-000000000000" as SaleId, "reason"),
+      recordVoid(fakeTx, backend, "00000000-0000-4000-8000-000000000000" as SaleId, "reason", {
+        sessionId: "operator-session",
+      }),
     );
     expect(error).not.toBeInstanceOf(AppError);
     expect(pgErrorCode(error)).toBe("53100");

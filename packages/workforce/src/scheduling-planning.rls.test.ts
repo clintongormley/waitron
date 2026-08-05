@@ -17,7 +17,7 @@ import {
 // A non-superuser LOGIN role inheriting app_user's grants. Being non-superuser is what makes RLS
 // apply at all — a superuser bypasses FORCE ROW LEVEL SECURITY, which is why PGlite cannot prove any
 // of this. absences/availability/shift_templates/shift_swaps grant SELECT, INSERT, UPDATE, DELETE
-// (drizzle 0010): they are PLANNING data, discardable, the inverse of time_entries' append-only floor.
+// (drizzle 0008): they are PLANNING data, discardable, the inverse of time_entries' append-only floor.
 const PROBE_ROLE = "workforce_planning_rls_probe";
 const PROBE_PASSWORD = "probe";
 
@@ -29,7 +29,7 @@ const suite = useRealPostgres({
 describe("absences under real row-level security (planning data, fully mutable)", () => {
   it("writes, reads, updates and DELETES its own tenant's absence as a non-superuser app_user member", async () => {
     // The whole mutability grant in one test: SELECT, INSERT, UPDATE and DELETE. Removing DELETE (or
-    // UPDATE) from 0010's GRANT fails the corresponding step here with 42501 — the inverse of
+    // UPDATE) from 0008's GRANT fails the corresponding step here with 42501 — the inverse of
     // time_entries' append-only floor.
     const tenantId = await seedTenant(suite.admin);
     const personId = await seedPerson(suite.admin, tenantId);
@@ -271,8 +271,8 @@ describe("shift_swaps under real row-level security (planning data, fully mutabl
 
 describe("row-level security is enabled AND forced on the D2.2 planning tables", () => {
   it("has relrowsecurity and relforcerowsecurity on all four", async () => {
-    // ENABLE alone (drizzle's .enableRLS(), migration 0009) leaves the owner and every superuser
-    // exempt; FORCE (the hand-written 0010) is what binds the deployment role. Deleting any FORCE
+    // ENABLE alone (drizzle's .enableRLS(), migration 0007) leaves the owner and every superuser
+    // exempt; FORCE (the hand-written 0008) is what binds the deployment role. Deleting any FORCE
     // line drops that table's relforcerowsecurity to false and fails this.
     const result = await suite.admin.execute<{
       relname: string;

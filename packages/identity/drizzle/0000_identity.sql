@@ -1,11 +1,11 @@
+CREATE TYPE "public"."person_role" AS ENUM('staff', 'supervisor', 'manager', 'admin');--> statement-breakpoint
 CREATE TYPE "public"."person_status" AS ENUM('active', 'suspended');--> statement-breakpoint
-CREATE TYPE "public"."workforce_role" AS ENUM('staff', 'supervisor', 'manager', 'admin');--> statement-breakpoint
 CREATE TABLE "persons" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"display_name" text NOT NULL,
 	"pin_hash" text NOT NULL,
-	"role" "workforce_role" DEFAULT 'staff' NOT NULL,
+	"role" "person_role" DEFAULT 'staff' NOT NULL,
 	"status" "person_status" DEFAULT 'active' NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "persons_display_name_ck" CHECK (length("persons"."display_name") > 0),

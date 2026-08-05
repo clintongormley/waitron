@@ -8,7 +8,6 @@ import * as schema from "./schema/index.js";
 
 /** Exactly the tables this package owns. Adding a table means editing this line, deliberately. */
 const OWNED = [
-  "persons",
   "employments",
   "time_entries",
   "workforce_chains",

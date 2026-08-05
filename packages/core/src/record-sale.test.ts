@@ -334,6 +334,26 @@ describe("recordSale — the happy path", () => {
   });
 });
 
+describe("recordSale — operator attribution", () => {
+  // Attribution only (design §7). A uuid-shaped value the till would supply from its open session;
+  // recordSale writes it verbatim to `sales.operator_id`, with no FK and no authorize — ringing a
+  // sale is ungated in this slice. Deliberately distinct from tenant/till/node/series so a copy of
+  // the wrong column could not produce it by coincidence.
+  const OPERATOR_ID = "11111111-1111-4111-8111-111111111111";
+
+  it("stamps input.operatorId onto sales.operator_id when supplied", async () => {
+    const { saleId } = await run(new FakeFiscalBackend(suite.db), { operatorId: OPERATOR_ID });
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
+    expect(row?.operatorId).toBe(OPERATOR_ID);
+  });
+
+  it("leaves sales.operator_id NULL when no operator is supplied", async () => {
+    const { saleId } = await run(new FakeFiscalBackend(suite.db));
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
+    expect(row?.operatorId).toBeNull();
+  });
+});
+
 describe("recordSale — the order of operations", () => {
   it("verifies the chain before allocating a number", async () => {
     const observed: number[] = [];

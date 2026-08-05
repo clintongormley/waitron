@@ -17,6 +17,7 @@ import {
   withTenant,
 } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
 import { recordCorrection } from "./record-correction.js";
 import type { RecordCorrectionInput } from "./record-correction.js";
 import { recordSale } from "./record-sale.js";
@@ -30,13 +31,24 @@ let nodeId: NodeId;
 let seriesId: SeriesId; // the ordinary (purpose='standard') series seedTenant creates
 let rectSeriesId: SeriesId; // a purpose='rectificative' series on the same node
 let workingOrderId: WorkingOrderId;
+// The people and open shift sessions the correction gate now consults. `supervisorId` holds
+// `sale.rectify`, so `supervisorSessionId` is the default authorizer every green-path correction
+// uses; `staffId` holds nothing (the reject case); `managerId` is the second person whose PIN
+// unlocks an override. The manager also holds `sale.void`, so `managerSessionId` authorizes the ONE
+// precondition void this suite performs.
+let supervisorId: string;
+let managerId: string;
+let supervisorSessionId: string;
+let managerSessionId: string;
+let staffSessionId: string;
 
 // PGlite for everything in this file: the guards here are pure logic (an unknown id, a series of
 // the wrong purpose, an unsettled corrective) that a superuser backend exercises just as well as a
 // forced-RLS one. The two cross-tenant "hidden reads as not-found" cases genuinely need RLS and
 // live in record-correction.rls.test.ts (real Postgres), per the plan's §6 target split.
 const suite = usePgliteDb({
-  migrations: [CORE_MIGRATIONS],
+  // IDENTITY_MIGRATIONS after CORE: recordVoid now calls `authorize`, which reads persons/sessions.
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   // FakeFiscalBackend.recordSale/recordCorrection/checkIntegrity read and write
   // fake_node_registrations/fake_fiscal_records, and nothing else creates those tables.
   setup: (db) => FakeFiscalBackend.install(db),
@@ -46,7 +58,38 @@ const suite = usePgliteDb({
 beforeEach(async () => {
   ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenant(suite.db));
   rectSeriesId = await seedRectificativeSeries(suite.db, tenantId, nodeId);
+  // A supervisor and a manager (both hold `sale.rectify`), and a staff member (holds nothing).
+  // Seeded as the superuser owner exactly like the record-void suite does — PGlite bypasses RLS for
+  // the seeding connection, so no `app.tenant_id` is needed here.
+  supervisorId = await seedPerson("supervisor");
+  managerId = await seedPerson("manager");
+  const staffId = await seedPerson("staff");
+  // Three open shift sessions, opened through `loginWithPin` exactly as a till would at the start of
+  // a shift. The supervisor's is the default authorizer for green-path corrections; the manager's
+  // also authorizes the precondition void; the staff one is what the gate must reject unless a
+  // manager override rides along.
+  supervisorSessionId = await openSession(supervisorId);
+  managerSessionId = await openSession(managerId);
+  staffSessionId = await openSession(staffId);
 });
+
+/** A person of `role` whose PIN is "1234", inserted as the superuser owner (RLS bypassed on PGlite),
+ * the same shape identity's own suites and the record-void suite seed. */
+async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): Promise<string> {
+  const { rows } = await suite.db.execute<{ id: string }>(
+    sql`insert into persons (tenant_id, display_name, pin_hash, role)
+        values (${tenantId}, 'P', ${hashPin("1234")}, ${role}) returning id`,
+  );
+  return rows[0]!.id;
+}
+
+/** Opens a shift session for `personId` at this tenant's till and returns its id. */
+async function openSession(personId: string): Promise<string> {
+  const session = await withTenant(suite.db, tenantId, (tx) =>
+    loginWithPin(tx, { tenantId, tillId, personId, pin: "1234" }),
+  );
+  return session.id;
+}
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
 
@@ -145,6 +188,10 @@ function correctionInput(
     ],
     fiscalBackend: "fake",
     clock: steadyClock,
+    // Default authorizer: the supervisor session opened in `beforeEach`. A supervisor holds
+    // `sale.rectify`, so every green-path correction here is authorized on the operator's own role;
+    // the authorization suite below overrides this to exercise the staff-reject and override paths.
+    authz: { sessionId: supervisorSessionId },
     ...overrides,
   };
 }
@@ -186,6 +233,15 @@ async function countRows(table: string): Promise<number> {
 async function countForSale(table: string, saleId: SaleId): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
     sql`select count(*)::int as n from ${sql.raw(table)} where sale_id = ${saleId}`,
+  );
+  return result.rows[0]!.n;
+}
+
+/** How many corrective sales point at `originalId` — the direct measure of "a corrective sale was
+ * written" that the authorization gate turns on. A rejected correction must leave this at zero. */
+async function countCorrectives(originalId: SaleId): Promise<number> {
+  const result = await suite.db.execute<{ n: number }>(
+    sql`select count(*)::int as n from sales where corrects_sale_id = ${originalId}`,
   );
   return result.rows[0]!.n;
 }
@@ -251,7 +307,7 @@ describe("recordCorrection — the sale being corrected", () => {
     const { saleId } = await sell(backend);
     await withTenant(suite.db, tenantId, async (tx) => {
       await asAppUser(tx);
-      await recordVoid(tx, backend, saleId, "Wrong table");
+      await recordVoid(tx, backend, saleId, "Wrong table", { sessionId: managerSessionId });
     });
     await expect(correct(backend, saleId)).rejects.toMatchObject({
       code: "sale.voided",
@@ -342,6 +398,76 @@ describe("recordCorrection — a sale may be corrected more than once", () => {
     expect(rows.map((r) => r.id).sort()).toEqual([first.saleId, second.saleId].sort());
     const numbers = rows.map((r) => r.invoiceNumber).sort();
     expect(numbers).toEqual([1, 2]);
+  });
+});
+
+describe("recordCorrection — authorization", () => {
+  it("records the authorizing supervisor on the corrective sale", async () => {
+    // The green path. The operator's own role (supervisor) holds `sale.rectify`, so `authorize`
+    // accepts on the operator path and returns the supervisor as the authorizer — which is who
+    // `authorized_by` must name on the corrective sale it just created.
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+
+    const { saleId: correctiveId } = await correct(backend, originalId, {
+      authz: { sessionId: supervisorSessionId },
+    });
+
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, correctiveId));
+    expect(row?.authorizedBy).toBe(supervisorId);
+  });
+
+  it("records the authorizing manager when a staff session corrects under an override", async () => {
+    // The operator (staff) holds nothing, but a manager's PIN rides along. authorize accepts the
+    // override and returns the MANAGER as the authorizer — the person who took responsibility, not
+    // the operator at the till — which is who `authorized_by` must name.
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+
+    const { saleId: correctiveId } = await correct(backend, originalId, {
+      authz: { sessionId: staffSessionId, override: { personId: managerId, pin: "1234" } },
+    });
+
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, correctiveId));
+    expect(row?.authorizedBy).toBe(managerId);
+  });
+
+  it("refuses a staff session with no override, allocating no number and writing no corrective sale", async () => {
+    // The gate itself, and its placement. A staff member cannot rectify alone; the load-bearing
+    // halves are that a rejected correction (a) writes NO corrective sale and (b) burns NO invoice
+    // number — proving `authorize` runs BEFORE `allocateInvoiceNumber`, so a rejected correction
+    // leaves no permanent series gap. Prove the gate by deletion: drop the `authorize()` call and
+    // the `authorizedBy` field from record-correction.ts and this expectation flips (the staff
+    // correction succeeds), which is exactly the security regression the gate exists to catch.
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+    const [before] = await suite.db
+      .select({ n: invoiceSeries.nextNumber })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.id, rectSeriesId));
+
+    await expect(
+      correct(backend, originalId, { authz: { sessionId: staffSessionId } }),
+    ).rejects.toMatchObject({ code: "authorization.not_permitted" });
+
+    const [after] = await suite.db
+      .select({ n: invoiceSeries.nextNumber })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.id, rectSeriesId));
+    expect(after?.n).toBe(before?.n); // no number burned
+    expect(await countCorrectives(originalId)).toBe(0);
+  });
+
+  it("returns the series guard before the gate — a wrong-purpose series never leaks an authz error", async () => {
+    // Ordering: `authorize` runs AFTER the series purpose guard, so a staff session correcting on
+    // the ORDINARY series still gets `sale.series_wrong_purpose`, never `authorization.not_permitted`
+    // — even under an operator who could not have rectified anyway. A gate placed before the guard
+    // would answer the wrong question first.
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId } = await sell(backend);
+    await expect(
+      correct(backend, saleId, { seriesId, authz: { sessionId: staffSessionId } }),
+    ).rejects.toMatchObject({ code: "sale.series_wrong_purpose" });
   });
 });
 

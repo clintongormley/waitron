@@ -115,7 +115,7 @@ describe("publishRoster under real contention", () => {
     // PUBLISHED rows is the deterministic invariant, and it is one.
     //
     // Prove the INDEX is the guarantee by DELETION: drop roster_versions_published_period_uq from
-    // migration 0011 and simultaneous publishers all commit, so the published count climbs above one.
+    // migration 0009 and simultaneous publishers all commit, so the published count climbs above one.
     // Prove the LOCK is NOT the guarantee: remove `for update of prior` (or the whole supersede) and
     // the published count is STILL one — the index alone holds it (see the report's deletion matrix).
     const period = { periodStart: "2026-06-01", periodEnd: "2026-06-07" };

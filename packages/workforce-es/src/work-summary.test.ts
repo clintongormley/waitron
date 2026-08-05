@@ -3,6 +3,7 @@ import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
+import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WorkforceBackend, WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { resolveWorkTimeRuleset } from "./convenio.js";
 import { WORKFORCE_ES_MIGRATIONS } from "./migrations.js";
@@ -12,9 +13,10 @@ const backend = new WorkforceBackend();
 let tenantId: string;
 
 const suite = usePgliteDb({
-  // Core first — the tenants/locations FKs. Then workforce (persons/employments/time_entries) and
-  // workforce-es (convenio_config): the end-to-end path reads all three.
-  migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
+  // Core first (tenants/locations FKs), then identity (persons), then workforce
+  // (employments/time_entries, which FK persons) and workforce-es (convenio_config): the end-to-end
+  // path reads all four.
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
   setup: async (db) => {
     tenantId = await seedTenant(db);
   },

@@ -9,7 +9,7 @@ import { insertTimeEntry, seedEmployment, seedLocation, seedPerson } from "../te
 // A non-superuser LOGIN role inheriting app_user's grants. Being non-superuser is what makes RLS
 // apply at all — a superuser bypasses FORCE ROW LEVEL SECURITY, which is why PGlite cannot prove any
 // of this. employments grants SELECT, INSERT, UPDATE; time_entries grants only SELECT, INSERT
-// (drizzle/0003_workforce_d1a_rls.sql).
+// (drizzle/0001_workforce_d1a_rls.sql).
 const PROBE_ROLE = "workforce_rls_probe";
 const PROBE_PASSWORD = "probe";
 
@@ -174,7 +174,7 @@ describe("time_entries under real row-level security", () => {
   it("refuses to delete a clock event — DELETE was never granted to the app role", async () => {
     // The append-only floor from the app role's side, complementing immutability.test.ts's owner-side
     // proof: the grant is exactly SELECT, INSERT, so a DELETE fails with 42501. Adding DELETE to
-    // 0003_workforce_d1a_rls.sql's GRANT is what this would catch.
+    // 0001_workforce_d1a_rls.sql's GRANT is what this would catch.
     const tenantId = await seedTenant(suite.admin);
     const personId = await seedPerson(suite.admin, tenantId);
     const locationId = await seedLocation(suite.admin, tenantId);

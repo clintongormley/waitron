@@ -7,9 +7,6 @@ describe("the public surface", () => {
     expect(Object.keys(api).sort()).toEqual(
       [
         "WORKFORCE_MIGRATIONS",
-        "persons",
-        "personStatus",
-        "workforceRole",
         "employments",
         "timeEntries",
         "workforceCorrectionStatus",
@@ -34,8 +31,6 @@ describe("the public surface", () => {
         "lockChainHead",
         "computeEntryHash",
         "verifyChain",
-        "hashPin",
-        "verifyPin",
         "WorkforceBackend",
         "validateRoster",
         "comparePlannedVsActual",
@@ -50,28 +45,12 @@ describe("the public surface", () => {
 
 /**
  * drizzle invokes each table's `(t) => [...]` extraConfig callback LAZILY — a plain import never runs
- * it, which is why persons.ts's FK/index/check block shows as uncovered even though every other test
- * imports the table. Calling `getTableConfig` forces the callback to run, and the assertions below
- * are the meaningful check that persons' constraints exist under the names the migration and the RLS
- * policy depend on — not a coverage stunt. Mirrors packages/credentials/src/index.test.ts.
+ * it, which is why a schema file's FK/index/check block shows as uncovered even though every other
+ * test imports the table. Calling `getTableConfig` forces the callback to run, and the assertions
+ * below are the meaningful check that each table's constraints exist under the names the migration
+ * and the RLS policy depend on — not a coverage stunt. Mirrors packages/credentials/src/index.test.ts.
+ * (persons moved to @waitron/identity, which owns its own such block now.)
  */
-describe("persons constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares persons' primary key, foreign key and check constraints", () => {
-    const config = getTableConfig(api.persons);
-
-    // The PK is inline on `id` (a column flag), not a composite in extraConfig; the FK, index and
-    // checks below ARE in extraConfig, so asserting them is what forces the lazy callback to run.
-    expect(config.columns.find((c) => c.name === "id")?.primary).toBe(true);
-
-    const fkNames = config.foreignKeys.map((fk) => fk.getName());
-    expect(fkNames).toContain("persons_tenant_fk");
-
-    const checkNames = config.checks.map((c) => c.name);
-    expect(checkNames).toContain("persons_display_name_ck");
-    expect(checkNames).toContain("persons_pin_hash_ck");
-  });
-});
-
 describe("employments constraint declarations (forces the lazy extraConfig callback)", () => {
   it("declares employments' foreign keys and check constraints", () => {
     const config = getTableConfig(api.employments);
