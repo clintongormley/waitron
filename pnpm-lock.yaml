@@ -50,6 +50,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.0
         version: 1.19.15(hono@4.12.32)
+      '@waitron/catalogue':
+        specifier: workspace:*
+        version: link:../../packages/catalogue
       '@waitron/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -77,6 +80,9 @@ importers:
       '@waitron/payments-stripe':
         specifier: workspace:*
         version: link:../../packages/payments-stripe
+      '@waitron/provisioning':
+        specifier: workspace:*
+        version: link:../../packages/provisioning
       '@waitron/reporting':
         specifier: workspace:*
         version: link:../../packages/reporting
