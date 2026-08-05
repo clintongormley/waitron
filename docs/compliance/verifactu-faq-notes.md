@@ -344,6 +344,34 @@ And F3 is not a rectificativa, does not annul the tickets, and carries `Facturas
 
 ---
 
+## 20. Per-line `CuotaRepercutida = base × TipoImpositivo ±10€`, `CuotaTotal ±10€`, and the F2 €3.000 cap
+
+> 15.7 CuotaRepercutida … `[CuotaRepercutida] = ([BaseImponibleOimporteNoSujeto] * TipoImpositivo) / 100
+> +/- 10,00 euros` … (excepto si `TipoRectificativa = "I"` o `TipoFactura "R2","R3"`).
+>
+> 16. CuotaTotal — Se validará que sea igual a Ʃ (CuotaRepercutida + CuotaRecargoEquivalencia) … se
+> devolverá un aviso de error (no generará rechazo), admitiéndose un margen de error de +/- 10,00 euros.
+>
+> 15.8 — Cuando `TipoFactura` sea "F2", se validará que Ʃ (BaseImponibleOimporteNoSujeto +
+> CuotaRepercutida) de todas las líneas de detalle no sea superior a 3.000,00 euros. Se admitirá un error
+> de + 10,00 euros.
+>
+> — **`Validaciones_Errores_Veri-Factu.pdf`, v1.2.2, §§15.7 / 16 / 15.8, p.14** (companion to the FAQ)
+
+**Bears on:** the **catalogue** gross-inclusive *difference method* (`@waitron/catalogue`, sub-project 7/18
+seed). AEAT *does* validate per-line `CuotaRepercutida` against `base × rate` — but with a **±10,00 €**
+tolerance and only as an *aviso*, never a *rechazo*. The difference method (`cuota = gross − base`) deviates
+from `base × rate` by at most a rounding céntimo per rate group (a little more across many same-rate lines) —
+céntimos against a **ten-euro** tolerance. So it clears all three validations by three orders of magnitude:
+`ImporteTotal` (§11) and `CuotaTotal` (§16) are exact under the difference method, and per-line
+`CuotaRepercutida` (§15.7) is within céntimos. This **closes** the "is the difference-method residual within
+AEAT tolerance?" question on primary source — **no asesor needed** — and makes the rounding *locus*
+(line-item vs tax-group) fiscally irrelevant for acceptance. Skipped for `TipoRectificativa "I"` /
+`TipoFactura "R2","R3"`. Separately, **§15.8 caps an F2 simplified ticket at Σ(base+cuota) ≤ 3.000,00 €**
+(+10 tol.) — bears on the till (#7): a simplified sale over €3.000 must become an ordinary invoice.
+
+---
+
 ## Not yet indexed
 
 The pinned PDF has more that no current task needs verbatim yet. Index these the same way (verbatim quote +

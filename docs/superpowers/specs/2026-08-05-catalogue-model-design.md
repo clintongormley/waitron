@@ -290,12 +290,15 @@ This demonstrates the seam the till will use, headless, against the real fiscal 
   rejection** — exactly what `verifactu/src/validate.ts`'s `TOTAL_TOLERANCE = 10` already encodes. The
   difference method makes that identity hold **exactly** (`cuota = gross − base`, `ImporteTotal = Σ
   gross`), so it passes with zero discrepancy. Critically, the FAQ describes **no** validation that
-  `CuotaRepercutida == BaseImponible × TipoImpositivo`, so the difference-method residual
-  (`cuota ≠ base×rate`) is not something AEAT checks — the D8 worry is a non-issue for AEAT acceptance.
-  **Residual to confirm** (narrowed, not fully closed): the FAQ points to *"el documento de
-  validaciones de la web de desarrolladores de la AEAT"* for the full rule set — check that document
-  for any *per-desglose-line* `CuotaRepercutida` validation before treating the per-line residual as
-  wholly unconstrained. (This finding belongs in `docs/compliance/verifactu-faq-notes.md` too.)
+  `CuotaRepercutida == BaseImponible × TipoImpositivo` in that passage. **Now fully closed on primary
+  source:** the companion `Validaciones_Errores_Veri-Factu.pdf` (v1.2.2 §15.7) *does* validate per-line
+  `CuotaRepercutida = base × TipoImpositivo / 100`, but with a **±10,00 € tolerance** and only as an
+  *aviso, no rechazo* (§16 `CuotaTotal` and §17 `ImporteTotal` likewise). The difference method's
+  deviation from `base × rate` is *céntimos* per rate group — three orders of magnitude inside a
+  ten-euro tolerance — so it passes all three validations trivially, and the rounding *locus*
+  (line-item vs tax-group) is **fiscally irrelevant for acceptance**. Recorded in
+  `docs/compliance/verifactu-faq-notes.md` §20. (§15.8 also caps an F2 simplified ticket at
+  Σ(base+cuota) ≤ 3.000 €, +10 tol. — a till/#7 concern, not this slice.)
 - **Rounding choices are a *tax-module* property, not a global constant — the configurability seam is
   #57's `resolveFiscalModules` / `nodes.tax_module`.** Price basis (gross vs net), rounding *locus*
   (line-item vs tax-group base rounding), and decimal precision differ by tax authority; this slice

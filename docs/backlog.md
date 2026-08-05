@@ -331,11 +331,15 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     validation: `ImporteTotal == Σ(BaseImponible + CuotaRepercutida + CuotaRecargoEquivalencia)` with a
     **±10.00 € tolerance** and a **warning, not a rejection** (= `verifactu/src/validate.ts`'s
     `TOTAL_TOLERANCE = 10`). The difference method makes that identity hold **exactly**, and the FAQ
-    describes **no** `CuotaRepercutida == base×rate` check — so the per-line residual the earlier
-    framing worried about does not affect AEAT acceptance. **Remaining:** (1) check *"el documento de
-    validaciones"* the FAQ points to for any *per-desglose-line* cuota validation before treating the
-    residual as wholly unconstrained; fold the §20 finding into `docs/compliance/verifactu-faq-notes.md`.
-    (2) **Configurability:** price basis, rounding *locus* (line-item vs tax-group), and precision are a
+    itself describes no `CuotaRepercutida == base×rate` check. **Now fully CLOSED on primary source:**
+    the companion `Validaciones_Errores_Veri-Factu.pdf` (v1.2.2 §15.7) *does* validate per-line
+    `CuotaRepercutida = base × rate`, but with a **±10,00 € tolerance**, *aviso not rechazo* (§16/§17
+    likewise). The difference-method deviation is *céntimos* — three orders of magnitude inside a
+    ten-euro tolerance — so it passes all three validations trivially, and the rounding *locus* is
+    **fiscally irrelevant for acceptance**. No asesor needed; recorded in
+    `docs/compliance/verifactu-faq-notes.md` §20. (§15.8 also caps an F2 ticket at Σ(base+cuota) ≤
+    3.000 € — a till/#7 concern.) **Remaining is only configurability:** price basis, rounding *locus*
+    (line-item vs tax-group), and precision are a
     **tax-module property** — the #57 `resolveFiscalModules`/`nodes.tax_module` seam — so a non-ES
     regime (IGIC/IPSI, other country) carries its own rules; this slice hardcodes ES-común/IVA as the
     first piece of that module. The rounding *mode* (half-away-from-zero = *redondeo al alza*) stays
