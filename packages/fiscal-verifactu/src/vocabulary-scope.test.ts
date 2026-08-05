@@ -28,7 +28,7 @@ const englishOnlySource = readFileSync(
 describe("the English-only vocabulary guard is scoped out of this package", () => {
   it("does not scan fiscal-verifactu", () => {
     expect(englishOnlySource).toMatch(
-      /GENERIC_PACKAGES\s*=\s*\[\s*"db",\s*"core",\s*"fiscal",\s*"shared",\s*"payments",\s*"scheduler",\s*"credentials",\s*"workforce",\s*"reporting",\s*"identity",?\s*\]/,
+      /GENERIC_PACKAGES\s*=\s*\[\s*"db",\s*"core",\s*"fiscal",\s*"shared",\s*"payments",\s*"scheduler",\s*"credentials",\s*"workforce",\s*"reporting",\s*"identity",\s*"catalogue",?\s*\]/,
     );
   });
 
