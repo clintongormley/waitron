@@ -45,7 +45,9 @@ feature work resumed.
 server app exist; `packages/ui` has six primitives and nothing consumes them; there is no
 `apps/till`. The system can reconcile a Stripe account and file with AEAT, and cannot ring up a
 sandwich. That is a deliberate ordering, not an oversight, but it should be revisited at each
-reprioritisation rather than assumed.
+reprioritisation rather than assumed. **(Superseded 2026-08-05:** the Counter POS walk-up cash-sale
+slice — `apps/till`, consuming `packages/ui` — is built on this branch and landing as the Counter POS
+PR; a person can now ring up a sandwich. See *Now* and sub-project 7 under *Not started*.**)**
 
 ---
 
@@ -69,6 +71,7 @@ reprioritisation rather than assumed.
 | **Reporting — daily close** (sub-project 8, first slice) | **Merged** (#56). Read-only `@waitron/reporting`: `computeDailyClose(tx, input)` → a per-`(tenant, node, business-day)` close — a VAT summary (base + tax per rate, corrections netted) anchored on **issuance**, and an operational cash-up (by till + tender method) anchored on **settlement**, plus record counts. Derived, no new tables/migration; DST-aware business-day bucketing with a configurable cutover; headless (a till/UI consumes it later). The F3-canje VAT exclusion is confirmed on primary source (FAQ v1.3 §27 — *modelo 303* counts R1–R5, not F3). [design](superpowers/specs/2026-08-04-daily-close-reporting-design.md), [plan](superpowers/plans/2026-08-04-daily-close-reporting.md). Two follow-ups under *Debt* |
 | **Locations — provision a sellable venue** (sub-project 6) | **Merged as #57** (2026-08-04). Reshapes fiscal identity to country/territory-driven: `tenants.nif` → `country` (ISO-3166 alpha-2) + `tax_id`, unique on `(country, tax_id)`; `locations` gain `fiscal_territory` + address + `time_zone` (IANA) + `day_cutover`; `nodes` record the resolved `filing_module` + `tax_module`. Adds `resolveFiscalModules` (`"ES-common"` → Veri\*Factu + IVA, **every other territory refused** — new `fiscal.regime_not_implemented`, fired both as a provisioning input refusal and as a runtime hard-error, defence in depth), a deterministic `obligadoTenantId(country, tax_id)` (so insert-and-catch-unique reuse works under RLS without a forbidden NIF lookup), `planVenue` (pure planner) / `applyVenue` (one transaction; idempotent for the obligado via `ON CONFLICT DO NOTHING`, but each run otherwise ADDS a shop — location/till/node/SIF at installation #2/fresh chain), and the `waitron-provision venue` CLI. Retires and **deletes** the stale `apps/server/sql/bootstrap-tenant.sql`. A venue is now provisionable such that `recordSale` can immediately chain a sale. [design](superpowers/specs/2026-08-04-locations-provisioning-design.md), [plan](superpowers/plans/2026-08-04-locations-provisioning.md) |
 | **Catalogue — priced products the till can sell** (sub-project 7 unblocker / 18 seed) | **Merged as #59** (2026-08-05). New headless `@waitron/catalogue`: a **catalogue** (named menu) → **products** model a till reads to build a basket. A tenant owns catalogues; products belong to a catalogue; a **location is assigned a catalogue** (N identical delis share one; a deli + restaurant get one each, so the restaurant never sees deli products). **Categories** are a tenant-wide analytics taxonomy **snapshotted onto each sale line** (the no-`product_id` snapshot rule leaves nothing to join back through). Prices are stored **VAT-inclusive (gross)** and reversed to base/cuota by the **difference method** (cuota = gross − base, so `total == Σ(base+cuota)` exactly and the customer is charged the marked/weighed gross to the céntimo). Weighed items are in the model now (`pricing_unit ∈ {each,weight}`); VAT via a semantic `vat_class` → a minimal ES-común IVA rate resolver (21/10/4/0, primary-source receipted). `recordSale` gains an optional caller-supplied `vatBreakdown` (used verbatim; else `buildVatBreakdown` as before) + a line `category`, plus a `sale.total_mismatch` guard — **no fiscal-backend change**. Proven end-to-end (integration test + a demo that ran live: chained `alta A/1`, `total == Σ(base+tax)`). Headless: no till UI, no working-order producer, no management surface. [design](superpowers/specs/2026-08-05-catalogue-model-design.md), [plan](superpowers/plans/2026-08-05-catalogue-model.md). Follow-ups under *Debt* |
+| **Counter POS — walk-up cash sale** (sub-project 7, slice 1 / 7a) | **Built on this branch; landing as the Counter POS PR.** The first thing a person can actually operate: a new browser app **`@waitron/till`** (Lit + Vite) driving a same-origin till HTTP surface in `@waitron/server` (`src/till-api.ts`). Lock-screen PIN login (pre-login staff roster + `POST /api/session`) → a **layout-driven** counter screen composing product-grid / basket / total / pay widgets from a `LayoutDef` → one **cash** tender → a filed Veri\*Factu **ticket** with its AEAT QR → new sale. The server re-prices the basket **authoritatively** (`recordTillSale` — the browser sends no price), files through the real `VerifactuBackend` chain in one transaction, and attributes the sale to the **logged-in operator** (never a browser-sent id). Stands on the three foundations that just landed: Identity (#58) for the roster + PIN login, Catalogue (#59) for priced products, Locations (#57) for the venue the till points at via `WAITRON_TILL_*`. Proven end to end over real Postgres (login → menu → mixed-rate sale → legal ticket + an intact fiscal chain across two sales) and by a runnable `pnpm --filter @waitron/server demo:till` script; `apps/till/README.md` documents the dev run. **Cash only**, no offline/card/hardware/refunds; the layout & receipt **editors** and slices **7b/7c** are later — deferred edges under *Debt and odd jobs* → **Counter POS follow-ups**. [design](superpowers/specs/2026-08-05-counter-pos-walkup-sale-design.md), [plan](superpowers/plans/2026-08-05-counter-pos-walkup-sale.md) |
 
 ---
 
@@ -273,12 +276,14 @@ not payment method); a short payment agreed as payment-in-full before the factur
 Nothing below has any code, **except: sub-project 16 (workforce) — *registro de jornada* floor (#47),
 D2 scheduling (#50), only D3 remains; sub-project 8 (reporting) — the daily-close first slice landed
 (#56); sub-project 6 (Locations) — the provision-a-sellable-venue slice merged
-as #57 (2026-08-04); and sub-project 5 (Identity) — the headless first slice merged as #58 (2026-08-05)
-(persons + sessions, PIN login, `authorize()`, staff API, void/refund authorization).**
+as #57 (2026-08-04); sub-project 5 (Identity) — the headless first slice merged as #58 (2026-08-05)
+(persons + sessions, PIN login, `authorize()`, staff API, void/refund authorization); and sub-project 7
+(Counter POS) — the walk-up cash-sale slice (7a) built on this branch and landing as the Counter POS PR
+(`@waitron/till` + the server till API).**
 
 | Sub-project | Note |
 | --- | --- |
-| **7 — Counter POS UI** | The till. Also owns the working-order amendment log (art. 29.2.j LGT), deferred here deliberately: nothing writes working orders yet, and a log with no producer cannot be shown to work |
+| **7 — Counter POS UI** | **Slice 1 (7a — walk-up cash sale) is built and landing as the Counter POS PR** (see *Now*): `@waitron/till` + the server till API ring one cash sale end to end. Remaining slices: **7b park & retrieve** (hold a working order and pick it up again) and **7c prepare & collect** (kitchen prep states + the working-order **amendment log**, art. 29.2.j LGT — the log rides with 7c deliberately, because nothing writes working orders until park/retrieve produces them, and a log with no producer cannot be shown to work). Slice-1 deferred edges under *Debt and odd jobs* → **Counter POS follow-ups** |
 | **5 — Identity** | **Headless first slice merged (#58, 2026-08-05).** `@waitron/identity` owns `persons` + `sessions` (FORCE-RLS tenant isolation, now also scanned by fiscal-verifactu's `inmutabilidad` guard), salted-PIN hashing, a role/permission catalog, `authorize()` (operator session + supervisor `{personId, pin}` override), `loginWithPin` / `endSession`, and a `person.manage`-gated staff API. `recordVoid` / `recordCorrection` now require `sale.void` / `sale.rectify` authorization; `sales.authorized_by` / `sales.operator_id` + `payment_refunds.authorized_by` seams and a `waitron-provision venue` admin seed are in place. Remaining sub-project 5 scope (mid-shift-suspension enforcement, the discount gate, till-refund enforcement, the workforce-gate consolidation, branded ids) is under *Debt and odd jobs* → **Identity follow-ups**. The human-facing call sites (must-be-logged-in to ring, till refunds must be authorized) land with the counter POS (#7) |
 | **6 — Locations** | **Provision-a-sellable-venue slice merged (#57)** (2026-08-04; see *Now*) — the foundational till-track unblocker. Country/territory-driven fiscal identity, `resolveFiscalModules` (común → Veri\*Factu + IVA, others refused), `planVenue` / `applyVenue` and the `waitron-provision venue` CLI stand up tenant → location → till → node → SIF → series so `recordSale` can chain a sale; the stale `bootstrap-tenant.sql` was **deleted**. Remaining sub-project 6 scope (multiple locations, editing/deactivation, the #33 SIF-topology deferrals) is under *Debt and odd jobs* → **Locations follow-ups** |
 | **8 — Reporting** | **Daily-close first slice DONE (#56)** — `@waitron/reporting`'s `computeDailyClose` (VAT summary + operational cash-up, two anchors). Unstarted next slices: a **frozen/signed *cierre Z*** (numbered, immutable, with counted-cash / opening float / *descuadre* — the derived close deliberately leaves a clean seam for it), date **ranges** + the **monthly VAT return** (*modelo 303*) aggregation, and the reporting **UI** (belongs to the till, sub-project 7) |
@@ -303,6 +308,52 @@ putting the tip on `tenders`).
 
 Carried from finished work. None of it blocks anything; all of it makes later work cheaper.
 
+- **Counter POS follow-ups (sub-project 7, slice 1 / 7a — the walk-up cash sale). None blocking; each
+  is a deliberate slice-1 boundary or a small review Minor, deferred rather than dropped.**
+  - **TLS termination, LAN binding and serving the built bundle are deployment (#9).** In dev the till
+    is served by Vite on loopback over plain HTTP, and the session cookie's `Secure` attribute tracks
+    whether the server has TLS configured (`secureCookies: config.tls !== undefined`, `boot.ts`). The
+    process is already TLS-**capable** (`tls.ts`, `WAITRON_TLS_*`); what #9 owns is production HTTPS
+    with a local-CA trust root, binding to the LAN rather than `127.0.0.1`, and serving the built
+    `apps/till` assets (dev runs the Vite server, not a bundle).
+  - **Card / Terminal tender.** Slice 1 is **cash only** — `recordTillSale` refuses any non-cash
+    method (`sale.unsupported_tender`). Card capture, the timed-out-card UX (retry / alternative
+    tender / wait — already noted under the #33 SIF follow-ups), and tips-on-card wiring are a later
+    slice.
+  - **Offline-first store-and-forward.** The till needs the server reachable; there is no local queue
+    that rings while disconnected and forwards later. It belongs with the app-level sync subsystem
+    (the `sync_log` design), not the till alone.
+  - **Scale + printer hardware.** No electronic-scale weight capture (the weighed quantity is typed),
+    no receipt-printer or cash-drawer drivers. When the printed ticket lands, its print stylesheet
+    must size the **Veri\*Factu QR at 30–40 mm** per **art. 21.1** — recorded here so the print slice
+    does not rediscover the size rule (confirm the exact instrument/article against primary source
+    before it ships).
+  - **Refunds / voids / corrections UI.** The fiscal backends exist (`recordVoid` / `recordCorrection`,
+    authorization-gated by Identity #58), but the till has no operator surface to trigger a refund,
+    void or R5 rectificativa. Lands with Identity's human-facing call sites (see *Identity follow-ups*).
+  - **The layout & receipt editors + per-widget config.** The counter screen is layout-driven from a
+    `LayoutDef` and every placed widget already carries a `config: Record<string, unknown>` bag
+    (`apps/till/src/layout.ts`), but slice 1 ships a fixed layout with **empty** config bags and
+    nothing reads them — the editor that authors layouts and the per-widget config it would write are
+    a later slice. The seam is present but unread.
+  - **One till per server.** `boot.ts` resolves a single `WAITRON_TILL_*` identity; multiple tills
+    served by one server (and the roster/session model that implies) is later.
+  - **Small review Minors (none blocking):**
+    - **Normalize the real-Postgres test filename.** `apps/server/src/till-api.realpg.test.ts` uses a
+      one-off `.realpg.test.ts` suffix where the package's other container suites are `*.rls.test.ts`
+      (`pass.rls`, `webhook.rls`); rename for consistency (it is not a `.preprod` suite, which
+      `vitest.config.ts` excludes).
+    - **`#boot` has no `catch` → unhandled rejection.** `till-app.ts`'s `firstUpdated` fires
+      `void this.#boot()`, and `#boot` `await`s `this.api.getTill()` with no `try/catch`
+      (`apps/till/src/till-app.ts:90`), so a server unreachable at boot surfaces as an unhandled promise
+      rejection rather than a handled "cannot reach the till" state. Wrap it the way `#onConfirmPayment`
+      already wraps its await.
+    - **Basket remove control is below the touch target.** The per-line remove button renders at
+      `size="sm"` (`apps/till/src/widgets/basket.ts:101`), under the 44 px minimum a touch POS wants —
+      bump it for finger use.
+    - **Add a basket drift-guard regression test for a rounding-sensitive weighed line.** The store's
+      running-total / drift guard lacks a regression test pinning a weighed line whose gross rounds in
+      a way that could drift the displayed total from the authoritative re-price.
 - **Catalogue follow-ups (sub-project 7/18 seed, `feat/catalogue-model`). None blocking; deferred by
   the slice's headless YAGNI boundary (design §9) or surfaced by its whole-branch review.**
   - **`products.catalogue_id`/`category_id` are single-column FKs**, so a product could reference
