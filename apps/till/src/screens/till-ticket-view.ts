@@ -217,6 +217,14 @@ export class TillTicketView extends LitElement {
 
         <ul class="lines">
           ${this.lines.map(
+            // LINE-GROSS SOURCE (slice-1 assumption, §1). Each per-line gross is computed CLIENT-side
+            // from the login-time `TillProduct.unitPrice` (via `lineGross`), NOT read from the sale
+            // response — `POST /api/sales` returns only `total` + `vatBreakdown`, no per-line amounts.
+            // In slice 1 the catalogue is fixed at provisioning and cannot be edited mid-session, so
+            // `unitPrice` here is exactly what the server re-priced with and Σ(line grosses) == the
+            // server `total`. A future mid-session price change would break that identity: the server
+            // would then have to return priced lines for the receipt to stay authoritative (backlog:
+            // Counter POS follow-ups → "return priced lines from POST /api/sales").
             (line) => html`
               <li class="line">
                 <span class="line-name">${productName(line.product, locale)}</span>

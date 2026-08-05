@@ -148,6 +148,44 @@ describe("till-tender-pay", () => {
     expect(query(el, "till-numeric-pad")).toBeNull();
   });
 
+  it("disables Pay while busy (a sale is in flight), even with a rung-up basket", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2"); // Pay would otherwise be enabled
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store, busy: true });
+    // busy is the visible half of the app-level single-flight guard; dropping `|| this.busy` here
+    // enables Pay mid-submit (the deletion proof).
+    expect(query(el, ".pay")!.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("disables Confirm while busy even when the tender covers the total", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2"); // total 3.00
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    click(el, ".pay");
+    await el.updateComplete;
+    await type(el, "5"); // tender ≥ total → Confirm normally enabled
+    expect(query(el, ".confirm")!.hasAttribute("disabled")).toBe(false);
+    el.busy = true;
+    await el.updateComplete;
+    expect(query(el, ".confirm")!.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("guards a double Add: two rapid clicks before re-render ring the weighed line ONCE", async () => {
+    const store = new WorkingOrderStore();
+    const addSpy = vi.spyOn(store, "addProduct");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    store.emit("product-selected", jamon);
+    await el.updateComplete;
+    await type(el, "0.320");
+    // Two synchronous clicks before Lit re-renders: the first flips mode to "idle" BEFORE addProduct,
+    // so the second (against the still-mounted button, product captured in its closure) is a no-op.
+    // Deleting the `if (this.mode !== "weighing") return` guard rings the line twice.
+    click(el, ".add");
+    click(el, ".add");
+    expect(addSpy).toHaveBeenCalledTimes(1);
+    expect(store.lines).toHaveLength(1);
+  });
+
   it("returns to idle from the cash screen when Cancel is tapped, emitting nothing", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2");

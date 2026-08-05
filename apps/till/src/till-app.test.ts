@@ -228,6 +228,64 @@ describe("till-app", () => {
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 
+  it("single-flight: a second confirm-payment while recordSale is pending files the sale EXACTLY ONCE", async () => {
+    // The double-file safety (CLAUDE.md §5): two chained registros_facturacion for one basket are
+    // unrepairable. First recordSale never settles, so the sale stays in flight; a second
+    // confirm-payment dispatched in that window (double-tap / laggy link) must be a no-op. Deleting
+    // the `if (this.submitting) return` guard makes recordSale fire twice — the deletion proof.
+    const recordSale = vi.fn(() => new Promise<TillSaleResult>(() => {})); // never resolves
+    const { el } = await mountApp({ recordSale });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" }); // first — raises submitting, awaits
+    await el.updateComplete;
+    expect(counter(el)!.busy).toBe(true); // in flight → the pay affordance is disabled
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" }); // second — guarded, a no-op
+    await el.updateComplete;
+
+    expect(recordSale).toHaveBeenCalledOnce();
+  });
+
+  it("resets the busy state after a REJECTED sale so the counter re-enables for a retry", async () => {
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockRejectedValue({ code: "sale.rejected" }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    // Back on the counter, and `submitting` was cleared in the `finally` — the pay affordance is live
+    // again so the operator can retry. (Without the finally reset, busy would stay true and stick.)
+    expect(counter(el)).not.toBeNull();
+    expect(counter(el)!.busy).toBe(false);
+  });
+
+  it("resets the busy state after a SUCCESSFUL sale so a later sale is not blocked", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(ticket(el)).not.toBeNull();
+
+    // A fresh sale must fire a SECOND recordSale — proving `submitting` was cleared after the first
+    // success rather than left stuck (a stuck flag would make this confirm-payment a silent no-op).
+    emit(ticket(el)!, "new-sale");
+    await flush(el);
+    counter(el)!.store.addProduct(cafe, "1");
+    await el.updateComplete;
+    emit(counter(el)!, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(currentApi.recordSale).toHaveBeenCalledTimes(2);
+  });
+
   it("does not change the global locale when the app disconnects before getTill resolves", async () => {
     let resolveTill!: (v: typeof till) => void;
     const getTill = vi.fn(() => new Promise<typeof till>((r) => (resolveTill = r)));

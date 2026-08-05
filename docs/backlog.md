@@ -354,6 +354,32 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     - **Add a basket drift-guard regression test for a rounding-sensitive weighed line.** The store's
       running-total / drift guard lacks a regression test pinning a weighed line whose gross rounds in
       a way that could drift the displayed total from the authoritative re-price.
+  - **Whole-branch review deferrals (surfaced by the pre-merge review; none blocking):**
+    - **Server-side sale idempotency for the lost-response retry.** The walk-up-sale PR added a
+      CLIENT-side single-flight guard (`till-app`'s `submitting`), which stops a double-tap firing a
+      second `POST /api/sales`. It does NOT cover the case where the request succeeded on the server
+      but the RESPONSE was lost (dropped link, tab reload) and the operator re-rings: that is a fresh
+      request the client cannot dedupe. The server fix is a client-generated `workingOrderId` threaded
+      through `POST /api/sales` plus a `UNIQUE(tenant_id, working_order_id)` on `sales`, so a retried
+      identical sale collides instead of filing a second chained `registros_facturacion` record
+      (CLAUDE.md §5 — the double-file is unrepairable). Deferred to the park/retrieve slice (7b), which
+      is where working orders first get a persisted id.
+    - **Return priced lines from `POST /api/sales` so the receipt is server-authoritative.** The ticket
+      computes each per-line gross CLIENT-side from the login-time `TillProduct.unitPrice` (`lineGross`),
+      because the sale response carries only `total` + `vatBreakdown`, no per-line amounts. In slice 1
+      the catalogue is fixed at provisioning and cannot change mid-session, so Σ(line grosses) equals the
+      server `total`; a future mid-session price edit would break that identity. Have `recordTillSale`
+      return priced lines and render those instead (see the LINE-GROSS SOURCE note in
+      `till-ticket-view.ts`).
+    - **Consolidate the two per-request transactions** on `GET /api/products` and `POST /api/sales`.
+      Each currently runs the `requireSession` session lookup in one `withTenant` transaction and the
+      work in a second (`recordTillSale` opens its own), so a request pays two round-trips where one
+      would do. Efficiency only (flagged in simplify); the `POST /api/sales` half needs `recordTillSale`'s
+      transaction boundary reshaped so the caller can supply the already-open tx.
+    - **Operator-UI money/locale is hardcoded es-ES.** `formatMoney` in the operator widgets formats in
+      es-ES unconditionally — correct for slice 1's single-locale deli, but it must follow the operator
+      UI locale once a locale switcher exists. (The RECEIPT is already locale-correct: it formats in the
+      independent `invoiceLocale` from `GET /api/till`.)
 - **Catalogue follow-ups (sub-project 7/18 seed, `feat/catalogue-model`). None blocking; deferred by
   the slice's headless YAGNI boundary (design §9) or surfaced by its whole-branch review.**
   - **`products.catalogue_id`/`category_id` are single-column FKs**, so a product could reference

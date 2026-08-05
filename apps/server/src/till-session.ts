@@ -18,6 +18,19 @@ import "./errors.js";
 export const SESSION_COOKIE = "waitron_till_session";
 
 /**
+ * Anchored UUID shape check for the session cookie. `sessions.id` is a Postgres `uuid` column, so a
+ * cookie that is NOT a UUID makes `eq(sessions.id, id)` raise `22P02 invalid input syntax for type
+ * uuid` — which `run` maps to an opaque 500. A forged non-UUID cookie is a client fault, not a server
+ * one: the callers below screen the cookie's SHAPE first so a malformed value fails as `session.required`
+ * (401) or is skipped (idempotent logout), never reaching the database. Anchored at both ends for the
+ * reason `@waitron/shared`'s `ids.ts` records — an unanchored match would accept a UUID with trailing
+ * junk. (Not reusing that module's validator: it is a private const there, unexported.)
+ */
+export function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+/**
  * Writes the session id into the shift cookie. `httpOnly` so no browser script can read it (the id is
  * a bearer credential); `sameSite: "Strict"` so it never rides a cross-site request; `path: "/"` so
  * it covers the whole till app. `secure` is caller-supplied — TRUE on a production HTTPS host, FALSE
@@ -62,7 +75,10 @@ export async function requireSession(
   c: Context,
 ): Promise<{ personId: string; sessionId: string }> {
   const id = readSessionId(c);
-  if (id === null) throw new AppError("session.required", {});
+  // Screen the cookie's SHAPE before the DB: a missing OR non-UUID cookie is `session.required` (401)
+  // without a round-trip. Passing a non-UUID into the `uuid` column would raise 22P02 → an opaque 500
+  // (see `isUuid`), so the shape check is what keeps a forged cookie a 401 rather than a 500.
+  if (id === null || !isUuid(id)) throw new AppError("session.required", {});
   const personId = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
     await asAppUser(tx);
     const [row] = await tx

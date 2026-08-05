@@ -220,6 +220,25 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     expect(await del.json()).toEqual({ ok: true });
   });
 
+  it("DELETE with a NON-UUID cookie is an idempotent 200 that clears the cookie (never a 500)", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+
+    // A malformed cookie names no `uuid` row and must not reach the DB — `endSession` would raise
+    // `22P02 invalid input syntax for type uuid`, which `run` maps to an opaque 500, contradicting the
+    // route's documented idempotency (a stale/garbage cookie is never an error). The `isUuid` screen
+    // skips `endSession`, clears the cookie and answers 200. Dropping the screen makes this a 500.
+    const del = await app.request("/api/session", {
+      method: "DELETE",
+      headers: { cookie: `${SESSION_COOKIE}=not-a-uuid` },
+    });
+    expect(del.status).toBe(200);
+    expect(await del.json()).toEqual({ ok: true });
+    const cleared = del.headers.get("set-cookie")!;
+    expect(cleared).toMatch(/waitron_till_session=;/);
+    expect(cleared).toMatch(/Max-Age=0/);
+  });
+
   it("DELETE naming an ALREADY-ended session is still an idempotent 200 that clears the cookie", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -309,6 +328,17 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
   });
 
+  it("REJECTS (401 session.required) a NON-UUID cookie WITHOUT hitting the DB (not an opaque 500)", async () => {
+    // A forged, non-UUID cookie is a CLIENT fault. Passed into the `uuid` column it would raise
+    // `22P02` → an opaque 500; the `isUuid` shape screen in `requireSession` refuses it as
+    // `session.required` (401) before any query. Dropping the screen turns this into a 500.
+    const res = await guardApp(suite.db).request("/whoami", {
+      headers: { cookie: `${SESSION_COOKIE}=not-a-uuid` },
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+
   it("REJECTS (401 session.required) an ENDED session — logging out invalidates the cookie", async () => {
     // Open a real session, then end it. Its id still names a row, but `ended_at IS NOT NULL`, so the
     // `IS NULL` filter excludes it: a logged-out cookie is as good as no cookie.
@@ -365,6 +395,19 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     // No cookie: the guard must refuse before any catalogue is read. Deleting the `requireSession`
     // call in the route makes this 200-with-the-list instead, which is the deletion proof.
     const res = await app.request("/api/products");
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+
+  it("REJECTS (401 session.required) a NON-UUID cookie — a malformed cookie is a 401, not a 500", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+
+    // Through the real route: a non-UUID cookie must be refused by the guard as 401 before any
+    // catalogue read, not become an opaque 500 from a `22P02` on the `uuid` column.
+    const res = await app.request("/api/products", {
+      headers: { cookie: `${SESSION_COOKIE}=not-a-uuid` },
+    });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
   });

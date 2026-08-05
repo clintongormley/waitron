@@ -88,6 +88,17 @@ export class TillApp extends LitElement {
   @state() private invoiceLocale = "es-ES";
   /** The string key of a non-fatal error to show over the counter, or `undefined` for none. */
   @state() private errorKey?: StringKey;
+  /**
+   * SINGLE-FLIGHT GUARD for sale confirmation — the fiscal double-file safety (CLAUDE.md §5: two
+   * chained `registros_facturacion` records for one purchase are UNREPAIRABLE). Set synchronously at
+   * the TOP of {@link TillApp.#onConfirmPayment}, BEFORE the first `await recordSale`, and cleared in
+   * its `finally`. Because event dispatch is synchronous, a second `confirm-payment` fired before the
+   * first settles (double-tap, a laggy link) sees `submitting === true` and is a no-op, so only ONE
+   * `POST /api/sales` ever fires per basket regardless of UI timing. Also threaded down as
+   * `till-counter-screen.busy` → `till-tender-pay.busy` to disable the pay affordance while in flight —
+   * that disabling is the visible feedback; this flag is the actual safety.
+   */
+  @state() private submitting = false;
 
   override firstUpdated(): void {
     void this.#boot();
@@ -126,6 +137,11 @@ export class TillApp extends LitElement {
    * rung up, and so a rejection can leave that same basket untouched on the counter.
    */
   async #onConfirmPayment(event: Event): Promise<void> {
+    // Single-flight: a second confirm-payment fired before the first sale settles is a no-op, so the
+    // same basket can never file twice (see `submitting`). Set BEFORE the first await — event dispatch
+    // is synchronous, so the re-entrant call reads the flag that this call has already raised.
+    if (this.submitting) return;
+    this.submitting = true;
     const tender = (event as CustomEvent<ConfirmPaymentDetail>).detail;
     // `store.lines` already returns a fresh defensive copy, so this snapshot needs no second spread.
     const lines = this.#store.lines;
@@ -141,6 +157,10 @@ export class TillApp extends LitElement {
       // A rejected {code} must not lose the sale in progress: stay on the counter, basket intact, and
       // surface a generic, non-fatal message — never the raw domain code.
       this.errorKey = "sale.error";
+    } finally {
+      // Re-enable Pay whichever way the sale settled: on success the counter is already gone (screen
+      // is now `ticket`), on rejection the operator is back on the counter and may retry.
+      this.submitting = false;
     }
   }
 
@@ -183,6 +203,7 @@ export class TillApp extends LitElement {
           .store=${this.#store}
           .products=${this.products}
           .operatorName=${this.operatorName}
+          .busy=${this.submitting}
         ></till-counter-screen>`;
       case "ticket":
         return html`<till-ticket-view

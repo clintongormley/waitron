@@ -14,6 +14,7 @@ import { recordTillSale } from "./till-sale.js";
 import type { TillSaleRequest } from "./till-sale.js";
 import {
   clearSessionCookie,
+  isUuid,
   readSessionId,
   requireSession,
   setSessionCookie,
@@ -110,13 +111,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Log out: end the shift session and clear the cookie. Idempotent — a request with no cookie, or
-  // one naming an already-closed session (`endSession` returns false), still clears the cookie and
-  // answers 200, so a double logout or a stale tab is never an error.
+  // Log out: end the shift session and clear the cookie. Idempotent — a request with no cookie, one
+  // whose cookie is not even UUID-shaped (so it names no `uuid` row and would 22P02 in the DB), or one
+  // naming an already-closed session (`endSession` returns false), still clears the cookie and answers
+  // 200, so a double logout or a stale tab is never an error. The `isUuid` screen keeps a malformed
+  // cookie a 200 no-op rather than the opaque 500 the raw value would raise (see `till-session.ts`).
   app.delete("/api/session", (c) =>
     run(c, log, async () => {
       const id = readSessionId(c);
-      if (id !== null) {
+      if (id !== null && isUuid(id)) {
         await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
           await asAppUser(tx);
           await endSession(tx, id);

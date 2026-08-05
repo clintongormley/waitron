@@ -102,6 +102,13 @@ export class TillTenderPay extends LitElement {
 
   /** The order this widget settles. Set before the widget connects (its lifecycle subscribes). */
   @property({ attribute: false }) store!: WorkingOrderStore;
+  /**
+   * A sale is in flight — the app is awaiting `recordSale` (see `till-app`'s `submitting`). While set,
+   * both the Pay and the Confirm-payment buttons are disabled so the operator cannot start or re-fire
+   * a settlement mid-submit. This is the VISIBLE half of the double-file guard; the real safety is the
+   * app-level single-flight flag, which blocks a second `confirm-payment` regardless of this state.
+   */
+  @property({ type: Boolean }) busy = false;
 
   @state() private mode: Mode = "idle";
   /** The digits the keypad has entered — a partial number string shared by both keypad screens. */
@@ -178,14 +185,21 @@ export class TillTenderPay extends LitElement {
     this.entry = "";
   }
 
-  /** Ring up the weighed line and return to idle. Guarded so a zero/empty weight is a no-op. */
+  /**
+   * Ring up the weighed line and return to idle. Guarded so a zero/empty weight is a no-op, and
+   * single-flight so two rapid clicks before Lit re-renders ring the line ONCE: the mode is flipped to
+   * `"idle"` BEFORE `addProduct`, so the second synchronous call sees `mode !== "weighing"` and
+   * returns. (The click handler captures `product` from the render closure, so it would otherwise fire
+   * again against a stale button.)
+   */
   #addWeight(product: TillProduct): void {
+    if (this.mode !== "weighing") return;
     const kg = this.#enteredDecimal();
     if (compareDecimal(kg, ZERO) <= 0) return;
-    this.store.addProduct(product, kg);
     this.selected = undefined;
     this.entry = "";
     this.mode = "idle";
+    this.store.addProduct(product, kg);
   }
 
   /** What the keypad has entered so far, shown as `"0"` rather than blank when nothing is typed. */
@@ -205,7 +219,7 @@ export class TillTenderPay extends LitElement {
         class="pay"
         variant="primary"
         size="lg"
-        ?disabled=${this.store.lineCount === 0}
+        ?disabled=${this.store.lineCount === 0 || this.busy}
         @click=${() => this.#startPaying()}
       >
         ${t("action.pay")}
@@ -248,7 +262,7 @@ export class TillTenderPay extends LitElement {
           class="confirm"
           variant="primary"
           size="lg"
-          ?disabled=${short}
+          ?disabled=${short || this.busy}
           @click=${() => this.#confirm()}
         >
           ${t("action.confirm_payment")}

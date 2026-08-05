@@ -103,6 +103,12 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) products: TillProduct[] = [];
   /** The logged-in operator's display name, shown in the header. Data, never translated. */
   @property() operatorName = "";
+  /**
+   * A sale is in flight (the app is awaiting `recordSale`). Threaded straight through to the pay
+   * widget, which disables its Pay/Confirm affordances while set — the visible half of the app's
+   * single-flight double-file guard (see `till-app`'s `submitting`).
+   */
+  @property({ type: Boolean }) busy = false;
   /** The arrangement to render. Defaults to slice 1's {@link LAYOUT_A}; a later editor supplies its own. */
   @property({ attribute: false }) layout: LayoutDef = LAYOUT_A;
 
@@ -128,7 +134,7 @@ export class TillCounterScreen extends LitElement {
       case "total":
         return html`<till-total .store=${this.store}></till-total>`;
       case "tender-pay":
-        return html`<till-tender-pay .store=${this.store}></till-tender-pay>`;
+        return html`<till-tender-pay .store=${this.store} .busy=${this.busy}></till-tender-pay>`;
     }
   }
 
