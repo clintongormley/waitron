@@ -8,6 +8,7 @@ export * from "./nodes.js";
 export * from "./series.js";
 export * from "./orders.js";
 export * from "./catalogue.js";
+export * from "./working-order-counters.js";
 export * from "./sales.js";
 export * from "./sale-voids.js";
 export * from "./incidents.js";

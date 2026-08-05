@@ -71,7 +71,7 @@ async function seedInitiated(
     insert into tills (tenant_id, location_id, name)
     values (${tenantId}, ${loc.rows[0]!.id}, 'Till 1') returning id`);
   const wo = await db.execute<{ id: string }>(sql`
-    insert into working_orders (tenant_id, till_id) values (${tenantId}, ${till.rows[0]!.id}) returning id`);
+    insert into working_orders (tenant_id, till_id, order_number) values (${tenantId}, ${till.rows[0]!.id}, 1) returning id`);
   await withTenant(db, tenantId, (tx) =>
     insertInitiated(tx, {
       tenantId,

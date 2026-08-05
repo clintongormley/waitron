@@ -14,6 +14,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { nodes } from "./nodes.js";
+import { workingOrders } from "./orders.js";
 import { invoiceSeries } from "./series.js";
 import { tenants, tills } from "./tenants.js";
 
@@ -141,6 +142,15 @@ export const sales = pgTable(
     // backfill (pre-production), write-once at insert and immutable table-wide like every other
     // column here.
     operatorId: uuid("operator_id"),
+    // The parked working order this sale was FILED from (park & retrieve, sub-project 7b), or NULL
+    // for a walk-up sale rung with no draft. This is the SALE-IDEMPOTENCY KEY: `sales_working_order_id_key`
+    // below makes (tenant_id, working_order_id) unique, so a retrieved order that is submitted twice
+    // (double-tap, two registers racing) files exactly one sale — the second INSERT collides 23505
+    // rather than minting a second invoice number for the same order. NULLABLE: MATCH SIMPLE skips
+    // the FK for a NULL, and NULLs are distinct under the UNIQUE, so any number of walk-up sales
+    // coexist. The tenant-consistent composite FK is in extraConfig below, so this bare column
+    // carries no single-column `.references()`. Write-once and immutable table-wide like the rest.
+    workingOrderId: uuid("working_order_id"),
   },
   (t) => [
     unique("sales_series_invoice_number_key").on(t.tenantId, t.seriesId, t.invoiceNumber),
@@ -171,6 +181,19 @@ export const sales = pgTable(
       foreignColumns: [nodes.tenantId, nodes.id],
       name: "sales_node_fk",
     }).onDelete("restrict"),
+    // Tenant-consistent composite FK to the parked order this sale was filed from (park & retrieve):
+    // a sale cannot point at a working order of another tenant. MATCH SIMPLE (the default) means a
+    // NULL working_order_id — an ordinary walk-up sale — skips the check, so the column stays
+    // nullable. onDelete "restrict": the settled draft is not deleted out from under its sale.
+    foreignKey({
+      columns: [t.tenantId, t.workingOrderId],
+      foreignColumns: [workingOrders.tenantId, workingOrders.id],
+      name: "sales_working_order_fk",
+    }).onDelete("restrict"),
+    // The sale-idempotency key: at most one sale per (tenant, working order). NULLs are distinct in
+    // a UNIQUE, so unlimited walk-up sales (working_order_id NULL) coexist; only a retrieved order
+    // filed twice collides. See the column comment above.
+    unique("sales_working_order_id_key").on(t.tenantId, t.workingOrderId),
     // `total >= 0` for an ordinary sale, but a rectificativa por diferencias
     // carries a NEGATIVE total (findings §10.2): `record-sale` passes `total`
     // verbatim into the fiscal record's `ImporteTotal`, which the huella hashes,

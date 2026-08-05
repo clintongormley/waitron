@@ -13,6 +13,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import { products } from "./catalogue.js";
 import { nodes } from "./nodes.js";
 import { tenants, tills } from "./tenants.js";
 
@@ -57,6 +58,15 @@ export const workingOrders = pgTable(
     // merely exist somewhere in `nodes`. MATCH SIMPLE (the default) means a NULL node_id skips the
     // check, so the column stays nullable. No `.references()` here, so nothing for v8 to track.
     nodeId: uuid("node_id"),
+    // The human-facing order number the counter parks against (park & retrieve, sub-project 7b):
+    // allocated from working_order_counters per node, printed on the ticket, and typed back in to
+    // retrieve the order at any register. NOT NULL — every working order gets one at open. No
+    // UNIQUE here in this slice: the allocator (a later task) owns issuing distinct numbers per
+    // node; this task lays the column the counter feeds.
+    orderNumber: integer("order_number").notNull(),
+    // An optional operator-supplied label ("table 4", "blue umbrella") shown beside the number in
+    // the retrieve list. Nullable — most walk-up orders never get one.
+    label: text("label"),
     status: workingOrderStatus("status").notNull().default("open"),
     openedAt: timestamp("opened_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
     settledAt: timestamp("settled_at", { withTimezone: true, mode: "string" }),
@@ -83,9 +93,17 @@ export const workingOrders = pgTable(
 ).enableRLS();
 
 /**
- * Snapshotted values, never catalogue references (architecture §6). There is
- * deliberately no product or menu-item column: a stale catalogue is then not a
- * correctness problem, only a freshness one.
+ * Prices and descriptions are still snapshotted here, never read live from the catalogue
+ * (architecture §6): `descriptions`, `unit_price` and `category` are frozen onto the line so a
+ * later catalogue edit is a freshness problem, never a correctness one — and when the order is
+ * FILED, the resulting `sale_lines` carry these snapshots and NO product reference at all, so a
+ * completed record can never be reached back into.
+ *
+ * What this DRAFT line adds over that, for park & retrieve (sub-project 7b), is `product_id`: a
+ * pricing INPUT, not a reference the record depends on. A parked draft is mutable and may be
+ * retrieved and repriced, so it keeps a link back to the priced product it was built from; the
+ * snapshot columns are what the till writes and reads, the FK is what lets a repricing re-resolve.
+ * The composite (tenant_id, product_id) → products FK below keeps it tenant-consistent.
  *
  * `descriptions` is a locale→string map holding EXACTLY the venue's configured
  * locales (spec §9), checked by trigger against locations.invoice_locales.
@@ -97,6 +115,11 @@ export const workingOrderLines = pgTable(
     tenantId: uuid("tenant_id").notNull(),
     workingOrderId: uuid("working_order_id").notNull(),
     lineNo: integer("line_no").notNull(),
+    // The priced product this draft line was built from — the pricing input described above. NOT
+    // NULL: every counter line comes from a product (there is no free-text line on this path). The
+    // FK is the tenant-consistent COMPOSITE in extraConfig below, so this column carries no plain
+    // single-column `.references()` of its own.
+    productId: uuid("product_id").notNull(),
     descriptions: jsonb("descriptions").$type<Record<string, string>>().notNull(),
     quantity: numeric("quantity", { precision: 12, scale: 3 }).notNull(),
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
@@ -115,6 +138,15 @@ export const workingOrderLines = pgTable(
       foreignColumns: [workingOrders.tenantId, workingOrders.id],
       name: "working_order_lines_order_fk",
     }).onDelete("cascade"),
+    // Tenant-consistent composite FK to the product this line prices against (park & retrieve): a
+    // draft line cannot reference a product of another tenant, independently of RLS. onDelete
+    // "restrict" mirrors the catalogue's own rule that a product is deactivated, never deleted
+    // (catalogue.ts) — an in-flight draft must not lose the product under it.
+    foreignKey({
+      columns: [t.tenantId, t.productId],
+      foreignColumns: [products.tenantId, products.id],
+      name: "working_order_lines_product_fk",
+    }).onDelete("restrict"),
     unique("working_order_lines_line_no_key").on(t.workingOrderId, t.lineNo),
     index("working_order_lines_order_idx").on(t.workingOrderId),
     check("working_order_lines_quantity_ck", sql`${t.quantity} <> 0`),
