@@ -134,6 +134,15 @@ declare module "@waitron/shared" {
      */
     "server.shutdown_failed": { errorCode: string };
     /**
+     * A caught value that is NOT an AppError reached the till API's `run` wrapper — an unclassified
+     * fault (a driver error, a request-body parse failure, a bug), surfaced to the client as an
+     * opaque 500 so nothing internal leaks. `run` logs the structured `codeOf` classification under
+     * `till.failed`; the RESPONSE carries only this code and no params, telling the client nothing
+     * about the cause — the same no-message discipline `server.shutdown_failed` follows for its own
+     * caught value.
+     */
+    "server.internal": Record<string, never>;
+    /**
      * This host is configured for one environment and the database belongs to another. Thrown
      * before migrations run, so nothing is written.
      *
@@ -214,5 +223,19 @@ declare module "@waitron/shared" {
      * translator can name what was attempted; it is caller-supplied text, never a secret.
      */
     "sale.unsupported_tender": { method: string };
+    /**
+     * An operation needed an open shift session and none was supplied — the till's session cookie was
+     * absent or named no open session. A fact about the REQUEST, so the operator-scoped routes
+     * Tasks 5/6 add (`GET /api/staff`, `POST /api/sales`) refuse with this before doing any work. No
+     * params: there is nothing to carry beyond the code, and the missing cookie's value is never
+     * echoed.
+     *
+     * `session.*`, not `server.*`, for the reason `tenant.not_found`'s note above gives (the prefix
+     * names the DOMAIN CONCEPT, never the throwing package). `@waitron/identity` owns the rest of the
+     * `session.*` family (`session.not_open`); this adds to it by declaration merging, and belongs
+     * there once a package other than this host needs to throw it — the same note `tenant.not_found`
+     * carries about its own placement.
+     */
+    "session.required": Record<string, never>;
   }
 }
