@@ -17,7 +17,12 @@ export interface TicketIssuer {
   nif: string;
 }
 
-/** The Spanish fiscal labels for the receipt face, in the invoice locale (see {@link TillTicketView.invoiceLocale}). */
+/**
+ * The fiscal labels are fixed Spanish constants — the invoice locale for a Spanish (ES-común) venue
+ * is es-ES, so the receipt is a Spanish legal document regardless of the operator-UI language. The
+ * {@link TillTicketView.invoiceLocale} property drives number/date FORMATTING only; a non-Spanish
+ * invoice locale (a future non-ES territory) would need a translated label set.
+ */
 const LABEL = {
   nif: "NIF",
   invoice: "Factura",

@@ -79,6 +79,23 @@ describe("WorkingOrderStore", () => {
     expect(n).toBe(3); // two adds + one remove
   });
 
+  it("removeLine is a true no-op for an out-of-range index — no mutation, no notification", () => {
+    const s = new WorkingOrderStore();
+    let n = 0;
+    s.subscribe(() => n++);
+    s.addProduct(cafe, "1");
+    s.addProduct(jamon, "0.100");
+    const notificationsAfterAdds = n;
+
+    s.removeLine(-1); // splice(-1, 1) would otherwise drop the LAST line
+    s.removeLine(5); // past the end
+
+    expect(s.lines).toHaveLength(2);
+    expect(s.lines[0]?.product).toBe(cafe);
+    expect(s.lines[1]?.product).toBe(jamon);
+    expect(n).toBe(notificationsAfterAdds);
+  });
+
   it("stops notifying once the subscription is disposed", () => {
     const s = new WorkingOrderStore();
     let n = 0;

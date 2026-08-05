@@ -89,6 +89,9 @@ export class WorkingOrderStore {
 
   /** Drop the line at `index` (out-of-range indices are a no-op) and notify. */
   removeLine(index: number): void {
+    if (index < 0 || index >= this.#lines.length) {
+      return;
+    }
     this.#lines.splice(index, 1);
     this.#priced = null;
     this.emit("changed");
