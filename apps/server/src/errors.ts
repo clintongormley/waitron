@@ -258,5 +258,27 @@ declare module "@waitron/shared" {
      * `sale.unknown_product` carries about its own placement.
      */
     "working_order.not_found": { workingOrderId: string };
+    /**
+     * A working order this caller tried to MODIFY is not `open` — it names one already
+     * `settled`/`abandoned`, or it names none at all (an absent id, or another tenant's order that
+     * RLS hides). All of those report THIS one code: to a till trying to edit or abandon a draft the
+     * distinction between "closed" and "never existed" is the same fact ("there is no open draft here
+     * to change"), and a distinct "it exists but is closed" code would confirm a closed or foreign
+     * order exists — the same fail-closed reasoning `working_order.not_found` uses for the RETRIEVE
+     * side. Mapped to HTTP 409 in Task 8, the mutation counterpart to `not_found`'s 404: the id may be
+     * perfectly valid, but the order's state forbids the edit.
+     *
+     * The database is the backstop, not this code: `working_orders_enforce_transition` (0004) rejects
+     * any UPDATE of a non-open row and `working_order_lines_require_open_parent` rejects a line
+     * write under a non-open parent, so an update that slipped past the app check would still fail —
+     * just with a raw trigger error instead of this actionable one. `updateHeldOrder` and
+     * `abandonHeldOrder` throw this from the app side so the caller gets the domain code.
+     *
+     * `workingOrderId` is echoed and qualified for the same reasons `working_order.not_found` gives
+     * (a caller-supplied uuid, not a secret; qualified to match the domain-record family). And
+     * `working_order.*`, not `server.*`, and destined for `@waitron/core` once a package other than
+     * this host throws it — the same note `working_order.not_found` and `sale.unknown_product` carry.
+     */
+    "working_order.not_open": { workingOrderId: string };
   }
 }

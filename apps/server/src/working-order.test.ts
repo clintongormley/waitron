@@ -24,7 +24,13 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
-import { getHeldOrder, listHeldOrders, parkOrder } from "./working-order.js";
+import {
+  abandonHeldOrder,
+  getHeldOrder,
+  listHeldOrders,
+  parkOrder,
+  updateHeldOrder,
+} from "./working-order.js";
 import "./errors.js";
 
 // PGlite, not real Postgres: this suite proves the WRITE behaviour of `parkOrder` — the working-order
@@ -390,6 +396,187 @@ describe("getHeldOrder", () => {
     await expect(getHeldOrder({ db }, cfg, id)).rejects.toMatchObject({
       code: "working_order.not_found",
       params: { workingOrderId: id },
+    });
+  });
+});
+
+describe("updateHeldOrder", () => {
+  it("replaces the lines, re-prices the total and updates the label, leaving the order row otherwise unchanged", async () => {
+    const { cfg, cafeId, aguaId } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      lines: [{ productId: cafeId, quantity: "2" }],
+      label: "Mesa 4",
+    });
+    const [beforeSummary] = await listHeldOrders({ db }, cfg);
+
+    // A fresh basket in a deliberately different order (agua first) — proving the per-line product_id
+    // zip is re-applied, the line_no is re-numbered from 1, and the total is re-priced authoritatively.
+    await updateHeldOrder({ db }, cfg, id, {
+      lines: [
+        { productId: aguaId, quantity: "1" },
+        { productId: cafeId, quantity: "1" },
+      ],
+      label: "Mesa 7",
+    });
+
+    // order_number / node_id / till_id / tenant_id are untouched; only the label changed and the
+    // status stays open (the update ran over the enforce_transition trigger, not around it).
+    const [wo] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
+    expect(wo).toMatchObject({
+      status: "open",
+      label: "Mesa 7",
+      orderNumber: 1,
+      nodeId: cfg.nodeId,
+      tillId: cfg.tillId,
+      tenantId: cfg.tenantId,
+      settledAt: null,
+    });
+
+    // The old café line is gone; the two new lines carry the new products, re-numbered from 1.
+    const lines = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatchObject({ lineNo: 1, productId: aguaId });
+    expect(lines[1]).toMatchObject({ lineNo: 2, productId: cafeId });
+
+    // Re-priced: the new total differs from the parked one AND matches an independent JS sum of the
+    // replaced lines' persisted line_totals (the aggregate is validated, not restated).
+    const [afterSummary] = await listHeldOrders({ db }, cfg);
+    const after = await readOrder(id);
+    expect(afterSummary!.itemCount).toBe(2);
+    expect(afterSummary!.total).not.toBe(beforeSummary!.total);
+    expect(afterSummary!.total).toBe(
+      after.lineTotals.reduce((sum, t) => sum + Number(t), 0).toFixed(2),
+    );
+  });
+
+  it("clears the label to null when the update omits one — the whole request is the new state", async () => {
+    const { cfg, cafeId, aguaId } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      lines: [{ productId: cafeId, quantity: "1" }],
+      label: "Mesa 4",
+    });
+
+    // No label on the update: a label is part of the order's state, so omitting it clears the
+    // parked "Mesa 4" rather than leaving it in place.
+    await updateHeldOrder({ db }, cfg, id, { lines: [{ productId: aguaId, quantity: "1" }] });
+
+    const [wo] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
+    expect(wo!.label).toBeNull();
+  });
+
+  it("refuses an empty basket (sale.empty_basket) and an unknown product (sale.unknown_product), leaving the parked lines untouched", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      lines: [{ productId: cafeId, quantity: "2" }],
+      label: "Mesa 4",
+    });
+    const before = await readOrder(id);
+    const UUID_NOT_IN_CAT = "00000000-0000-0000-0000-000000000000";
+
+    await expect(updateHeldOrder({ db }, cfg, id, { lines: [] })).rejects.toMatchObject({
+      code: "sale.empty_basket",
+    });
+    await expect(
+      updateHeldOrder({ db }, cfg, id, { lines: [{ productId: UUID_NOT_IN_CAT, quantity: "1" }] }),
+    ).rejects.toMatchObject({
+      code: "sale.unknown_product",
+      params: { productId: UUID_NOT_IN_CAT },
+    });
+
+    // Both refusals happen before any line is deleted, so the parked order still holds its one
+    // original café line unchanged.
+    const after = await readOrder(id);
+    expect(after.lineTotals).toEqual(before.lineTotals);
+    const lines = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ productId: cafeId, lineNo: 1 });
+  });
+
+  it("throws working_order.not_open on a settled order — a closed order can no longer be edited", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    testTenant = cfg.tenantId;
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
+    await setStatus(id, "settled");
+
+    await expect(
+      updateHeldOrder({ db }, cfg, id, { lines: [{ productId: cafeId, quantity: "2" }] }),
+    ).rejects.toMatchObject({
+      code: "working_order.not_open",
+      params: { workingOrderId: id },
+    });
+  });
+
+  it("throws working_order.not_open for an absent id", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const missing = randomUUID();
+
+    await expect(
+      updateHeldOrder({ db }, cfg, missing, { lines: [{ productId: cafeId, quantity: "1" }] }),
+    ).rejects.toMatchObject({
+      code: "working_order.not_open",
+      params: { workingOrderId: missing },
+    });
+  });
+});
+
+describe("abandonHeldOrder", () => {
+  it("flips an open order to abandoned and drops it from the held list, leaving settled_at null", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
+    expect((await listHeldOrders({ db }, cfg)).map((o) => o.id)).toEqual([id]);
+
+    await abandonHeldOrder({ db }, cfg, id);
+
+    const [wo] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
+    // abandoned is terminal and carries NO settled_at (the settled_at biconditional): only `settled`
+    // may set it. The held list, filtered to status = 'open', no longer shows the order.
+    expect(wo).toMatchObject({ status: "abandoned", settledAt: null });
+    expect(await listHeldOrders({ db }, cfg)).toEqual([]);
+  });
+
+  it("throws working_order.not_open on an already-abandoned order", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
+    await abandonHeldOrder({ db }, cfg, id);
+
+    await expect(abandonHeldOrder({ db }, cfg, id)).rejects.toMatchObject({
+      code: "working_order.not_open",
+      params: { workingOrderId: id },
+    });
+  });
+
+  it("throws working_order.not_open on a settled order and on an absent id", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    testTenant = cfg.tenantId;
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
+    await setStatus(id, "settled");
+
+    await expect(abandonHeldOrder({ db }, cfg, id)).rejects.toMatchObject({
+      code: "working_order.not_open",
+      params: { workingOrderId: id },
+    });
+
+    const missing = randomUUID();
+    await expect(abandonHeldOrder({ db }, cfg, missing)).rejects.toMatchObject({
+      code: "working_order.not_open",
+      params: { workingOrderId: missing },
     });
   });
 });

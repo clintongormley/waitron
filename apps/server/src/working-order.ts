@@ -11,12 +11,61 @@ import {
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { listAvailableProducts, priceBasket } from "@waitron/catalogue";
 import type { TillConfig } from "./till-config.js";
 
 export interface WorkingOrderDeps {
   db: Database;
+}
+
+/** The rows a park or an update writes into `working_order_lines`, as Drizzle types the insert. */
+type WorkingOrderLineInsert = typeof workingOrderLines.$inferInsert;
+
+/**
+ * Re-read THIS location's sellable catalogue, resolve every requested line against it, and price the
+ * basket authoritatively with `priceBasket` — returning the ready-to-insert `working_order_lines`
+ * rows for `workingOrderId`. Shared by `parkOrder` (a fresh order) and `updateHeldOrder` (a repriced
+ * one): the server never trusts a browser-computed price, so the caller's `lines` carry none, and a
+ * product not sellable here (deactivated, unassigned, or another tenant's, which RLS hides) is
+ * refused with the same `sale.unknown_product` `recordTillSale` uses — a fact about the order, not
+ * the process. Runs on the CALLER's transaction under its tenant/app_user scope.
+ *
+ * The empty-basket refusal and the order row itself stay with each caller: park mints and inserts an
+ * OPEN order (allocating its number), update rewrites an existing one's lines and label — this helper
+ * owns only the lines, which are identical between the two. `priced.lines` is in `lines` order
+ * (priceBasket iterates in order and stamps `lineNo = i + 1`), so row `i` takes its `product_id` from
+ * `lines[i]`; everything else is the display snapshot priceBasket produced.
+ */
+async function priceOrderLines(
+  tx: Transaction,
+  cfg: TillConfig,
+  workingOrderId: string,
+  lines: { productId: string; quantity: string }[],
+): Promise<WorkingOrderLineInsert[]> {
+  const available = await listAvailableProducts(tx, cfg.locationId);
+  const byId = new Map(available.map((p) => [p.id, p]));
+  const items = lines.map((line) => {
+    const product = byId.get(line.productId);
+    if (product === undefined) {
+      throw new AppError("sale.unknown_product", { productId: line.productId });
+    }
+    return { product, quantity: line.quantity };
+  });
+
+  const priced = priceBasket(items);
+  return priced.lines.map((line, i) => ({
+    tenantId: cfg.tenantId,
+    workingOrderId,
+    lineNo: line.lineNo,
+    productId: lines[i]!.productId,
+    descriptions: line.descriptions,
+    quantity: line.quantity,
+    unitPrice: line.unitPrice,
+    vatRate: line.vatRate,
+    lineTotal: line.lineTotal,
+    category: line.category ?? null,
+  }));
 }
 
 /**
@@ -67,21 +116,9 @@ export async function parkOrder(
   return withTenant(deps.db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
 
-    // Re-read the sellable catalogue for THIS location and resolve every requested line against it;
-    // a product not sellable here (deactivated, unassigned, or another tenant's, which RLS hides) is
-    // refused with the same `sale.unknown_product` `recordTillSale` uses — a fact about the order,
-    // not the process. Resolving here also gives `priceBasket` the authoritative product to price.
-    const available = await listAvailableProducts(tx, cfg.locationId);
-    const byId = new Map(available.map((p) => [p.id, p]));
-    const items = req.lines.map((line) => {
-      const product = byId.get(line.productId);
-      if (product === undefined) {
-        throw new AppError("sale.unknown_product", { productId: line.productId });
-      }
-      return { product, quantity: line.quantity };
-    });
-
-    const priced = priceBasket(items);
+    // Resolve + price the basket authoritatively (refusing an unknown product) into the line rows —
+    // the block `updateHeldOrder` shares. `priceOrderLines`'s own doc-comment explains the zip.
+    const lineRows = await priceOrderLines(tx, cfg, req.id, req.lines);
     const orderNumber = await allocateOrderNumber(tx, cfg.tenantId, cfg.nodeId);
 
     await tx.insert(workingOrders).values({
@@ -94,24 +131,9 @@ export async function parkOrder(
       status: "open",
     });
 
-    // `priced.lines` is in `req.lines` order (priceBasket iterates `items` in order and stamps
-    // `lineNo = i + 1`), so line `i` takes its `product_id` from `req.lines[i]`. Everything else is the
-    // display snapshot priceBasket produced; the parent order was inserted just above, so the FK and
-    // the `require_open_parent`/`check_locales` triggers all resolve it.
-    await tx.insert(workingOrderLines).values(
-      priced.lines.map((line, i) => ({
-        tenantId: cfg.tenantId,
-        workingOrderId: req.id,
-        lineNo: line.lineNo,
-        productId: req.lines[i]!.productId,
-        descriptions: line.descriptions,
-        quantity: line.quantity,
-        unitPrice: line.unitPrice,
-        vatRate: line.vatRate,
-        lineTotal: line.lineTotal,
-        category: line.category ?? null,
-      })),
-    );
+    // The parent order was inserted just above, so the composite FK and the
+    // `require_open_parent`/`check_locales` triggers all resolve it.
+    await tx.insert(workingOrderLines).values(lineRows);
 
     return { id: req.id, orderNumber };
   });
@@ -229,5 +251,118 @@ export async function getHeldOrder(
       .orderBy(workingOrderLines.lineNo);
 
     return { id: order.id, orderNumber: order.orderNumber, label: order.label, lines };
+  });
+}
+
+/**
+ * An edit to a parked order: the whole new basket (`lines`) plus an optional new `label`. Like
+ * `ParkOrderRequest` it carries NO price — the server re-reads the catalogue and re-prices with
+ * `priceBasket`, so a browser cannot influence the snapshot. It carries no `id` (that addresses the
+ * order, a separate argument) and no `order_number`/`node_id` (those are fixed at park and never move).
+ * The basket is a full REPLACEMENT, not a delta: whatever the till sends becomes the order's lines.
+ */
+export interface UpdateHeldOrderRequest {
+  lines: { productId: string; quantity: string }[];
+  label?: string;
+}
+
+/**
+ * Edit a parked order (park & retrieve, sub-project 7b): re-price `req.lines` authoritatively, REPLACE
+ * the order's `working_order_lines` with the result, and update its `label` — all in ONE
+ * `withTenant`/`asAppUser` transaction, so the delete + re-insert commit as a unit (or roll back
+ * together, leaving the parked order exactly as it was). Only an `open` order may change; a
+ * `settled`/`abandoned` order, an absent id, or another tenant's order (RLS hides it) all throw
+ * `working_order.not_open`.
+ *
+ * The row is taken `for update` so a concurrent update/abandon/pay cannot race this read-modify-write
+ * of its lines; the `status` is read off THAT locked row rather than added to the `WHERE`, so an
+ * order that exists but is closed is told apart from one that never existed only inside the tx — both
+ * still surface the one `working_order.not_open`, the fail-closed shape that code's note describes.
+ * `order_number` and `node_id` are deliberately untouched.
+ *
+ * NOT node-scoped (`where id` alone), consistent with `getHeldOrder`: an edit follows a retrieve
+ * which follows the node-scoped `listHeldOrders`, and RLS still confines the row to the tenant. If a
+ * foreign-node id should ever fail closed, add `node_id = cfg.nodeId` here AND in `getHeldOrder`
+ * together — the whole by-id family moves as one.
+ *
+ * PGlite is enough for THIS behaviour — the state machine (open-only), the FK/`require_open_parent`/
+ * `check_locales` triggers on the replaced lines, and the `enforce_transition` trigger the label
+ * update runs over — all hold on a single backend. RLS cross-tenant isolation and the `for update`
+ * concurrency are Task 7's real-Postgres suite; the lock is still issued here exactly as production.
+ */
+export async function updateHeldOrder(
+  deps: WorkingOrderDeps,
+  cfg: TillConfig,
+  id: string,
+  req: UpdateHeldOrderRequest,
+): Promise<void> {
+  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+
+    // Lock the order row for the life of the tx, then read its status off the locked copy. Absent or
+    // not-open → `working_order.not_open`; the DB triggers (enforce_transition on the label update,
+    // require_open_parent on the line delete/insert) are the backstop if this app check is ever wrong.
+    const [order] = await tx
+      .select({ status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id))
+      .for("update");
+
+    if (order === undefined || order.status !== "open") {
+      throw new AppError("working_order.not_open", { workingOrderId: id });
+    }
+
+    // Refused before any line is touched: an empty basket has nothing to price, and rewriting an
+    // order to zero lines is a discard, which is `abandonHeldOrder`'s job, not this one's. The same
+    // guard `parkOrder`/`recordTillSale` make.
+    if (req.lines.length === 0) {
+      throw new AppError("sale.empty_basket", {});
+    }
+
+    // Price the new basket (refusing an unknown product) BEFORE deleting anything, so a bad line
+    // aborts the tx with the parked order still intact. Then swap the lines wholesale: the parent is
+    // open (checked above, held under the lock), so the line delete and the re-insert both satisfy
+    // `require_open_parent`, and the re-numbered `line_no`s start from 1.
+    const lineRows = await priceOrderLines(tx, cfg, id, req.lines);
+    await tx.delete(workingOrderLines).where(eq(workingOrderLines.workingOrderId, id));
+    await tx.insert(workingOrderLines).values(lineRows);
+
+    // Runs over the `enforce_transition` trigger (OLD.status = 'open', so it passes). `req.label`
+    // absent clears any prior label to NULL — the whole request is the new state, labels included.
+    await tx
+      .update(workingOrders)
+      .set({ label: req.label ?? null })
+      .where(eq(workingOrders.id, id));
+  });
+}
+
+/**
+ * Discard a parked order (park & retrieve, sub-project 7b): `open → abandoned`, a terminal transition
+ * the `working_orders_enforce_transition` trigger (0004) validates. A single conditional UPDATE —
+ * `set status = 'abandoned' where id = … and status = 'open'` — so the open-only guard IS the write:
+ * a `settled`/`abandoned` order, an absent id, or another tenant's order (RLS hides it) match no row,
+ * and the empty `returning` throws `working_order.not_open`. No `settled_at` is set — abandoned is not
+ * settled, and the `settled_at` biconditional (0004) requires it stay NULL.
+ *
+ * NOT node-scoped, for the reason `updateHeldOrder`/`getHeldOrder` give. PGlite proves this state
+ * machine (the conditional update and the trigger); RLS isolation is Task 7's real-Postgres suite.
+ */
+export async function abandonHeldOrder(
+  deps: WorkingOrderDeps,
+  cfg: TillConfig,
+  id: string,
+): Promise<void> {
+  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+
+    const updated = await tx
+      .update(workingOrders)
+      .set({ status: "abandoned" })
+      .where(and(eq(workingOrders.id, id), eq(workingOrders.status, "open")))
+      .returning({ id: workingOrders.id });
+
+    if (updated.length === 0) {
+      throw new AppError("working_order.not_open", { workingOrderId: id });
+    }
   });
 }
