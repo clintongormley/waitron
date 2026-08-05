@@ -68,6 +68,7 @@ reprioritisation rather than assumed.
 | **Consolidate the session-memory notes** | Not started. They predate this file and now overlap it — see below |
 | **Reporting — daily close** (sub-project 8, first slice) | **Merged** (#56). Read-only `@waitron/reporting`: `computeDailyClose(tx, input)` → a per-`(tenant, node, business-day)` close — a VAT summary (base + tax per rate, corrections netted) anchored on **issuance**, and an operational cash-up (by till + tender method) anchored on **settlement**, plus record counts. Derived, no new tables/migration; DST-aware business-day bucketing with a configurable cutover; headless (a till/UI consumes it later). The F3-canje VAT exclusion is confirmed on primary source (FAQ v1.3 §27 — *modelo 303* counts R1–R5, not F3). [design](superpowers/specs/2026-08-04-daily-close-reporting-design.md), [plan](superpowers/plans/2026-08-04-daily-close-reporting.md). Two follow-ups under *Debt* |
 | **Locations — provision a sellable venue** (sub-project 6) | **Merged as #57** (2026-08-04). Reshapes fiscal identity to country/territory-driven: `tenants.nif` → `country` (ISO-3166 alpha-2) + `tax_id`, unique on `(country, tax_id)`; `locations` gain `fiscal_territory` + address + `time_zone` (IANA) + `day_cutover`; `nodes` record the resolved `filing_module` + `tax_module`. Adds `resolveFiscalModules` (`"ES-common"` → Veri\*Factu + IVA, **every other territory refused** — new `fiscal.regime_not_implemented`, fired both as a provisioning input refusal and as a runtime hard-error, defence in depth), a deterministic `obligadoTenantId(country, tax_id)` (so insert-and-catch-unique reuse works under RLS without a forbidden NIF lookup), `planVenue` (pure planner) / `applyVenue` (one transaction; idempotent for the obligado via `ON CONFLICT DO NOTHING`, but each run otherwise ADDS a shop — location/till/node/SIF at installation #2/fresh chain), and the `waitron-provision venue` CLI. Retires and **deletes** the stale `apps/server/sql/bootstrap-tenant.sql`. A venue is now provisionable such that `recordSale` can immediately chain a sale. [design](superpowers/specs/2026-08-04-locations-provisioning-design.md), [plan](superpowers/plans/2026-08-04-locations-provisioning.md) |
+| **Catalogue — priced products the till can sell** (sub-project 7 unblocker / 18 seed) | **In flight** on `feat/catalogue-model`. New headless `@waitron/catalogue`: a **catalogue** (named menu) → **products** model a till reads to build a basket. A tenant owns catalogues; products belong to a catalogue; a **location is assigned a catalogue** (N identical delis share one; a deli + restaurant get one each, so the restaurant never sees deli products). **Categories** are a tenant-wide analytics taxonomy **snapshotted onto each sale line** (the no-`product_id` snapshot rule leaves nothing to join back through). Prices are stored **VAT-inclusive (gross)** and reversed to base/cuota by the **difference method** (cuota = gross − base, so `total == Σ(base+cuota)` exactly and the customer is charged the marked/weighed gross to the céntimo). Weighed items are in the model now (`pricing_unit ∈ {each,weight}`); VAT via a semantic `vat_class` → a minimal ES-común IVA rate resolver (21/10/4/0, primary-source receipted). `recordSale` gains an optional caller-supplied `vatBreakdown` (used verbatim; else `buildVatBreakdown` as before) + a line `category`, plus a `sale.total_mismatch` guard — **no fiscal-backend change**. Proven end-to-end (integration test + a demo that ran live: chained `alta A/1`, `total == Σ(base+tax)`). Headless: no till UI, no working-order producer, no management surface. [design](superpowers/specs/2026-08-05-catalogue-model-design.md), [plan](superpowers/plans/2026-08-05-catalogue-model.md). Follow-ups under *Debt* |
 
 ---
 
@@ -302,6 +303,23 @@ putting the tip on `tenders`).
 
 Carried from finished work. None of it blocks anything; all of it makes later work cheaper.
 
+- **Catalogue follow-ups (sub-project 7/18 seed, `feat/catalogue-model`). None blocking; deferred by
+  the slice's headless YAGNI boundary (design §9) or surfaced by its whole-branch review.**
+  - **`products.catalogue_id`/`category_id` are single-column FKs**, so a product could reference
+    *another tenant's* catalogue — the referenced tenant is not RLS-checked at FK validation (the
+    product's own `tenant_id` is). Brief-specified, and RLS + the app only ever supplying own-tenant
+    ids is the primary defence, so **no wrong fiscal filing is reachable** (the sale is filed under the
+    operating tenant; `listAvailableProducts` joins stay within RLS scope). But it **deviates from the
+    codebase's own convention** — `sale_lines`/`working_order_lines` use composite `(tenant_id, id)`
+    FKs precisely so a line cannot point at another tenant's row independently of RLS. Cheap
+    belt-and-suspenders in pre-production: a `UNIQUE(tenant_id, id)` on `catalogues`/`categories` +
+    composite FKs from `products`. Flagged by the base-to-tip review; non-blocking.
+  - **Deferred by design (§9), each attaches when its consumer exists:** no management UI/CLI/HTTP
+    (→ dashboard); catalogue **sync** — the `catalogues.version` column is the seam, present but not
+    bumped — and per-location price/availability overrides (→ sync slice); allergens/variants/recipes
+    (→ #18); scale hardware, weight-entry UI, barcode (→ a later till slice); category-based **reports**
+    (the snapshot lands now; GROUP-BY comes with reporting); the `catalogue.manage` **permission
+    enforcement** (→ with the till's call sites, like the discount seam).
 - **Locations follow-ups (sub-project 6, merged as #57, 2026-08-04). None
   blocking; all deferred by the slice's YAGNI boundary (design §8) or inherited from #33.**
   - **The #33 SIF-topology deferrals stand.** The slice is single-node-per-location, one `venue`

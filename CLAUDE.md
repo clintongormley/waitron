@@ -546,7 +546,7 @@ convention this file had already stated was violated in 94 places, which is the 
 
 **A guard that reads the whole tree belongs in the ROOT Vitest project, not in a package.** Both of
 this repo's tree-wide guards lived in `packages/db` — the teardown guard above, which scans every
-`*.test.ts` under `packages/` and `apps/`, and `english-only`, which scans the eight generic
+`*.test.ts` under `packages/` and `apps/`, and `english-only`, which scans the eleven generic
 packages' `src/`. A suite only loads when its package is in scope, and once both gates started
 scoping by package, most pushes stopped reaching `packages/db`: measured on 2026-08-01,
 `pnpm --filter "...@waitron/ui" ls -r --depth -1 --json` lists one package and
