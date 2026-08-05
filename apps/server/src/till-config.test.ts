@@ -67,6 +67,15 @@ describe("loadTillConfig", () => {
     expect(config.invoiceLocales).toEqual(["ca-ES"]);
   });
 
+  it("treats an empty WAITRON_TILL_LOCALE as unset, defaulting to es-ES", () => {
+    // Same "absent OR empty string is unset" rule the five ids' `required` uses — an operator's
+    // `WAITRON_TILL_LOCALE=` line must not push an empty locale into `invoiceLocales`, which
+    // downstream invoice rendering consumes.
+    const config = loadTillConfig({ ...base, WAITRON_TILL_LOCALE: "" });
+    expect(config.locale).toBe("es-ES");
+    expect(config.invoiceLocales).toEqual(["es-ES"]);
+  });
+
   describe.each(ID_VARS)("%s", (key) => {
     it("throws server.till_config_missing when unset", () => {
       const error = captureThrow(() => loadTillConfig({ ...base, [key]: undefined }));

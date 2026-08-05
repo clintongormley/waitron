@@ -60,7 +60,12 @@ function brand<T>(key: string, fn: (value: string) => T, raw: string): T {
  * optional value, defaulting to `es-ES`.
  */
 export function loadTillConfig(env: NodeJS.ProcessEnv): TillConfig {
-  const locale = env.WAITRON_TILL_LOCALE ?? "es-ES";
+  // "Unset" is absent OR the empty string — the same rule `required` applies to the ids, so an
+  // operator's `WAITRON_TILL_LOCALE=` line falls back to the default rather than pushing an empty
+  // locale into `invoiceLocales` (which downstream invoice rendering consumes). A bare `?? "es-ES"`
+  // would only catch `undefined`.
+  const rawLocale = env.WAITRON_TILL_LOCALE;
+  const locale = rawLocale === undefined || rawLocale === "" ? "es-ES" : rawLocale;
   return {
     tenantId: brand("WAITRON_TILL_TENANT_ID", tenantId, required(env, "WAITRON_TILL_TENANT_ID")),
     tillId: brand("WAITRON_TILL_TILL_ID", tillId, required(env, "WAITRON_TILL_TILL_ID")),
