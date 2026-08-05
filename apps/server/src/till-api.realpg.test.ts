@@ -252,4 +252,123 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     });
     expect(saleRows).toEqual([{ operatorId }]);
   });
+
+  // The definitive "ring up a sandwich" proof (Task 20). The test above rings a single-rate cash
+  // sale; this one drives the operator's WHOLE server-side journey — log in, read the menu, ring a
+  // MIXED-rate basket built from that menu — and then holds the response to the legal ticket
+  // standard (findings §14) AND the database to an intact hash chain across two sales. Nothing here
+  // touches production code; it is pure end-to-end verification over the same real-Postgres harness.
+  it("walks the full journey: login → menu → mixed-rate sale → legal ticket + an intact fiscal chain", async () => {
+    const { cfg, operatorId } = await setupVenue();
+
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+
+    // 1. Log in through the HTTP surface and capture the session cookie.
+    const login = await app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ personId: operatorId, pin: "5555" }),
+    });
+    expect(login.status).toBe(200);
+    const cookie = login.headers.get("set-cookie")!;
+    expect(cookie).toMatch(/waitron_till_session=/);
+
+    // 2. The operator sees the menu: GET /api/products returns the seeded catalogue. The sale lines
+    // are built FROM this response, exactly as the real till does (it never invents product ids).
+    const productsRes = await app.request("/api/products", { headers: { cookie } });
+    expect(productsRes.status).toBe(200);
+    const products = (await productsRes.json()) as {
+      id: string;
+      pricingUnit: "each" | "weight";
+      descriptions: Record<string, string>;
+    }[];
+    // The two seeded, sellable products come back — the reduced-rate weighed one and the
+    // general-rate each one — so the basket below genuinely mixes VAT rates.
+    expect(products.map((p) => p.descriptions[LOCALE]).sort()).toEqual([
+      "Agua mineral",
+      "Jamón cortado",
+    ]);
+    const jamon = products.find((p) => p.pricingUnit === "weight")!; // 24.90 €/kg reduced(10%)
+    const agua = products.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
+
+    // 3. Ring a MIXED basket: 0.200 kg jamón (4.98 gross @10%) + 2 × agua (3.00 gross @21%) = 7.98,
+    // tendered 10.00 → 2.02 change. Two rate groups, so the vatBreakdown must carry a per-rate base
+    // for each (findings §14: the base imponible split per rate is mandatory once rates mix).
+    const saleRes = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        lines: [
+          { productId: jamon.id, quantity: "0.200" },
+          { productId: agua.id, quantity: "2" },
+        ],
+        tender: { method: "cash", amount: "10.00" },
+      }),
+    });
+    expect(saleRes.status).toBe(200);
+
+    // 4. Every legally-required ticket field (findings §14).
+    const ticket = await saleRes.json();
+    expect(ticket.invoiceNumber).toMatch(/^A\/\d+$/); // número + serie
+    expect(ticket.issuedAt).toMatch(/^\d{4}-\d\d-\d\dT/); // fecha de expedición, ISO-8601…
+    expect(Number.isNaN(Date.parse(ticket.issuedAt))).toBe(false); // …and a real instant
+    expect(ticket.total).toBe("7.98"); // contraprestación total
+    // base imponible per rate — ≥2 rate groups, asserted order-independently.
+    expect(ticket.vatBreakdown).toHaveLength(2);
+    expect(ticket.vatBreakdown).toEqual(
+      expect.arrayContaining([
+        { rate: "10.00", base: "4.53", tax: "0.45" },
+        { rate: "21.00", base: "2.48", tax: "0.52" },
+      ]),
+    );
+    expect(ticket.change).toBe("2.02"); // operational efectivo/cambio line
+    // The QR is the AEAT verification URL — required on every RRSIF invoice, so a non-empty string.
+    expect(typeof ticket.qr).toBe("string");
+    expect(ticket.qr.length).toBeGreaterThan(0);
+
+    // 5. Ring a SECOND identical mixed sale so the chain has a predecessor to link to. Same cookie,
+    // same app — invoice A/2.
+    const secondRes = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        lines: [
+          { productId: jamon.id, quantity: "0.200" },
+          { productId: agua.id, quantity: "2" },
+        ],
+        tender: { method: "cash", amount: "10.00" },
+      }),
+    });
+    expect(secondRes.status).toBe(200);
+
+    // 6. Two GENUINE, chained fiscal records exist for this tenant/node (own tenant, so the count is
+    // this test's alone). The chain-integrity assertions follow `write-path.e2e.test.ts`'s pattern:
+    // the first record opens the chain (`primerRegistro`, no predecessor pointer), and the second
+    // increments `secuencia` and carries the first record's ACTUAL huella as its predecessor
+    // (`anteriorHuella`) — the four-part Encadenamiento link (schema/registros.ts). Both hashes are
+    // the stored 64-hex huella the append-only table pins.
+    const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
+    });
+    expect(registros).toHaveLength(2);
+
+    const [first, second] = registros;
+    expect(first!.tenantId).toBe(cfg.tenantId);
+    expect(first!.nodeId).toBe(cfg.nodeId);
+    expect(first!.secuencia).toBe(1);
+    expect(first!.primerRegistro).toBe(true);
+    expect(first!.anteriorHuella).toBeNull();
+    expect(first!.huella).toMatch(/^[0-9A-F]{64}$/);
+
+    expect(second!.tenantId).toBe(cfg.tenantId);
+    expect(second!.nodeId).toBe(cfg.nodeId);
+    expect(second!.secuencia).toBe(2); // the per-node sequence increments
+    expect(second!.primerRegistro).toBe(false);
+    expect(second!.huella).toMatch(/^[0-9A-F]{64}$/);
+    // …and the chain links: the second's predecessor pointer IS the first's actual huella.
+    expect(second!.anteriorHuella).toBe(first!.huella);
+    expect(second!.anteriorNumSerieFactura).toBe("A/1");
+  });
 });
