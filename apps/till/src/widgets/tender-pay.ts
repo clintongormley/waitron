@@ -5,6 +5,7 @@ import { type Decimal, compareDecimal, decimal, subtractDecimal } from "@waitron
 import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import "./numeric-pad.js";
+import { StoreChangeController } from "../state/store-controller.js";
 import type { TillProduct } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 
@@ -108,23 +109,18 @@ export class TillTenderPay extends LitElement {
   /** The weight product awaiting a kg entry; set only while {@link mode} is `"weighing"`. */
   @state() private selected?: TillProduct;
 
-  #unsubscribeChanged?: () => void;
-  #unsubscribeSelected?: () => void;
-
-  override connectedCallback(): void {
-    super.connectedCallback();
-    this.#unsubscribeChanged = this.store.subscribe(() => this.requestUpdate());
-    this.#unsubscribeSelected = this.store.on("product-selected", (product) =>
-      this.#onProductSelected(product as TillProduct),
+  constructor() {
+    super();
+    // Two store channels, each its own controller (spec §3 — coordinate only through the store):
+    // `"changed"` re-renders so the Pay button tracks the basket; `"product-selected"` opens the
+    // weigh screen for a picked weight tile. Both `() => this.store` read lazily on connect.
+    new StoreChangeController(this, () => this.store);
+    new StoreChangeController(
+      this,
+      () => this.store,
+      "product-selected",
+      (product) => this.#onProductSelected(product as TillProduct),
     );
-  }
-
-  override disconnectedCallback(): void {
-    super.disconnectedCallback();
-    this.#unsubscribeChanged?.();
-    this.#unsubscribeSelected?.();
-    this.#unsubscribeChanged = undefined;
-    this.#unsubscribeSelected = undefined;
   }
 
   /** Open the weigh screen for a picked weight product; ignore a non-weight pick (never weighed). */
@@ -209,7 +205,7 @@ export class TillTenderPay extends LitElement {
         class="pay"
         variant="primary"
         size="lg"
-        ?disabled=${this.store.lines.length === 0}
+        ?disabled=${this.store.lineCount === 0}
         @click=${() => this.#startPaying()}
       >
         ${t("action.pay")}

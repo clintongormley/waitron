@@ -45,37 +45,59 @@ type Priced = ReturnType<typeof priceBasket>;
 export class WorkingOrderStore {
   readonly #lines: OrderLine[] = [];
   readonly #listeners = new Map<WorkingOrderEvent, Set<WorkingOrderListener>>();
+  /**
+   * The memoised `priceBasket(this.#lines)` result, or `null` when a mutation has invalidated it.
+   * `total` and `vatBreakdown` both read the same cached object, so a mutation re-prices once rather
+   * than once per getter per consumer. Set to `null` in every mutation and recomputed lazily.
+   */
+  #priced: Priced | null = null;
 
   /** The current basket lines. A defensive copy — mutate the order only through the methods below. */
   get lines(): readonly OrderLine[] {
     return [...this.#lines];
   }
 
+  /** How many lines are in the basket — a cheap count that avoids materialising the defensive copy. */
+  get lineCount(): number {
+    return this.#lines.length;
+  }
+
+  /** The memoised priced basket, recomputed only after a mutation cleared {@link #priced}. */
+  get #pricedOrder(): Priced {
+    if (this.#priced === null) {
+      this.#priced = priceBasket(this.#lines);
+    }
+    return this.#priced;
+  }
+
   /** The previewed grand total (VAT-inclusive), priced by the server's `priceBasket`. */
   get total(): Decimal {
-    return priceBasket(this.#lines).total;
+    return this.#pricedOrder.total;
   }
 
   /** The previewed VAT bands (one per rate present in the basket), priced by the server's `priceBasket`. */
   get vatBreakdown(): Priced["vatBreakdown"] {
-    return priceBasket(this.#lines).vatBreakdown;
+    return this.#pricedOrder.vatBreakdown;
   }
 
   /** Append a line and notify. `quantity` is a count for `each` products, a kg string for `weight`. */
   addProduct(product: TillProduct, quantity: string): void {
     this.#lines.push({ product, quantity });
+    this.#priced = null;
     this.emit("changed");
   }
 
   /** Drop the line at `index` (out-of-range indices are a no-op) and notify. */
   removeLine(index: number): void {
     this.#lines.splice(index, 1);
+    this.#priced = null;
     this.emit("changed");
   }
 
   /** Empty the basket and notify. This is the ONLY thing that clears the order — logout does not. */
   clear(): void {
     this.#lines.length = 0;
+    this.#priced = null;
     this.emit("changed");
   }
 

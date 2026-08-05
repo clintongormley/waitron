@@ -135,6 +135,22 @@ describe("till-app", () => {
     expect(view.lines[0]!.quantity).toBe("2");
   });
 
+  it("threads the invoice locale from getTill through to the ticket", async () => {
+    // getTill's locale drives the RECEIPT locale (till-ticket-view.invoiceLocale), threaded from the
+    // server till config — separately from the operator-UI setLocale. Use a locale that differs from
+    // the es-ES default so the wiring is observable.
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, locale: "en" }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    expect(ticket(el)!.invoiceLocale).toBe("en");
+  });
+
   it("new-sale: clears the basket and returns to an empty counter", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);

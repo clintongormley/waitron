@@ -18,9 +18,19 @@
  * narrow no-break space U+202F on some ICU builds) between the amount and the €,
  * not an ASCII space — callers comparing the output must account for that.
  */
+
+/**
+ * Cache the `Intl.NumberFormat` per locale. `formatMoney` runs on every keystroke
+ * and basket render, and building a formatter is the expensive part; the instances
+ * are immutable and safe to reuse. Keyed by locale (the only thing that varies).
+ */
+const formatters = new Map<string, Intl.NumberFormat>();
+
 export function formatMoney(value: string, l: string = "es-ES"): string {
-  return new Intl.NumberFormat(l, {
-    style: "currency",
-    currency: "EUR",
-  }).format(Number(value));
+  let formatter = formatters.get(l);
+  if (formatter === undefined) {
+    formatter = new Intl.NumberFormat(l, { style: "currency", currency: "EUR" });
+    formatters.set(l, formatter);
+  }
+  return formatter.format(Number(value));
 }

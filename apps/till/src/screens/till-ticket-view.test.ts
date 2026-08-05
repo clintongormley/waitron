@@ -53,6 +53,9 @@ const mount = (over: Partial<TillSaleResult> = {}) =>
     result: { ...result, ...over },
     issuer,
     lines,
+    // The receipt renders in its INVOICE locale prop (fed from server config), never the operator UI.
+    // Pin it explicitly so the "operator UI is English, ticket stays Spanish" test is unambiguous.
+    invoiceLocale: "es-ES",
   });
 
 const text = (el: TillTicketView): string => norm(el.shadowRoot!.textContent ?? "");

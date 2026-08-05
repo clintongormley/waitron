@@ -28,7 +28,8 @@ type Screen = "lock" | "counter" | "ticket";
  * not — every screen/widget emits a composed, bubbling event that reaches the handlers on the wrapper
  * below, and the app decides what happens next:
  *
- *  - boot → `getTill` sets the invoice locale and the ticket issuer; the app opens on `lock`;
+ *  - boot → `getTill` sets the operator-UI locale, remembers the receipt (invoice) locale and the
+ *    ticket issuer; the app opens on `lock`;
  *  - `logged-in` → load the products, remember the operator, show the `counter`;
  *  - `confirm-payment` → `recordSale` the basket, then show the `ticket` (or, on a rejected `{code}`,
  *    stay on the counter with the basket intact and surface a non-fatal error — a till must never
@@ -78,7 +79,13 @@ export class TillApp extends LitElement {
   /** The filed sale to print; set on a successful `recordSale`, read by the ticket view. */
   @state() private result?: TillSaleResult;
   /** The basket lines snapshotted at pay time — the goods the ticket identifies (art. 7.1.e). */
-  @state() private ticketLines: OrderLine[] = [];
+  @state() private ticketLines: readonly OrderLine[] = [];
+  /**
+   * The receipt (invoice) locale for the ticket, from `GET /api/till` — the language the legal
+   * receipt renders in. Threaded to `till-ticket-view` SEPARATELY from the operator-UI `setLocale`,
+   * even though both read the same server `locale` (see `#boot`). Defaults to the deli's es-ES.
+   */
+  @state() private invoiceLocale = "es-ES";
   /** The string key of a non-fatal error to show over the counter, or `undefined` for none. */
   @state() private errorKey?: StringKey;
 
@@ -86,7 +93,13 @@ export class TillApp extends LitElement {
     void this.#boot();
   }
 
-  /** Read the public till info once: set the invoice locale and remember the ticket issuer. */
+  /**
+   * Read the public till info once: set the OPERATOR-UI locale (`setLocale`), remember the receipt
+   * (invoice) locale for the ticket, and remember the ticket issuer. `setLocale` and `invoiceLocale`
+   * both take the SAME server `locale`, but they drive different things and are threaded separately —
+   * the receipt uses its `invoiceLocale` PROP and must never follow the operator UI (see
+   * `till-ticket-view`'s INVOICE LOCALE note).
+   */
   async #boot(): Promise<void> {
     const till = await this.api.getTill();
     // Guard the ONE post-await external effect: setLocale mutates module-global state, so a boot that
@@ -94,6 +107,7 @@ export class TillApp extends LitElement {
     // below need no such guard — Lit never paints a detached element.
     if (!this.isConnected) return;
     setLocale(till.locale);
+    this.invoiceLocale = till.locale;
     this.issuer = { venueName: till.venueName, nif: till.nif };
   }
 
@@ -113,7 +127,8 @@ export class TillApp extends LitElement {
    */
   async #onConfirmPayment(event: Event): Promise<void> {
     const tender = (event as CustomEvent<ConfirmPaymentDetail>).detail;
-    const lines = [...this.#store.lines];
+    // `store.lines` already returns a fresh defensive copy, so this snapshot needs no second spread.
+    const lines = this.#store.lines;
     this.errorKey = undefined;
     try {
       this.result = await this.api.recordSale(
@@ -174,6 +189,7 @@ export class TillApp extends LitElement {
           .result=${this.result}
           .issuer=${this.issuer}
           .lines=${this.ticketLines}
+          .invoiceLocale=${this.invoiceLocale}
         ></till-ticket-view>`;
     }
   }

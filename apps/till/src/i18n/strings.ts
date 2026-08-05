@@ -34,7 +34,6 @@ export const en = {
   "label.change": "Change",
   "label.total": "Total",
   "label.tendered": "Tendered",
-  "label.all": "All",
   // Basket
   "basket.empty": "Basket is empty",
   // Login / operator selection
@@ -73,7 +72,6 @@ export const es: Record<StringKey, string> = {
   "label.change": "Cambio",
   "label.total": "Total",
   "label.tendered": "Entregado",
-  "label.all": "Todos",
   "basket.empty": "La cesta está vacía",
   "login.enter_pin": "Introduce el PIN",
   "login.pick_operator": "Elige tu nombre",

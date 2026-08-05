@@ -2,10 +2,11 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { baseStyles } from "@waitron/ui";
-import { MONEY_SCALE, addDecimal, decimal, multiplyDecimal, toScale } from "@waitron/shared";
+import { addDecimal, decimal } from "@waitron/shared";
 import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import { productName } from "../widgets/product-name.js";
+import { lineGross, quantityLabel } from "../state/order-line.js";
 import { qrSvg } from "../qr.js";
 import type { TillSaleResult } from "../api/client.js";
 import type { OrderLine } from "../state/working-order.js";
@@ -16,20 +17,7 @@ export interface TicketIssuer {
   nif: string;
 }
 
-/**
- * INVOICE LOCALE — the language the legal receipt is rendered in.
- *
- * The customer ticket is a fiscal document ISSUED IN SPAIN and is rendered in the INVOICE locale,
- * which is INDEPENDENT of the operator's UI language (spec §9, `docs/compliance/verifactu-findings.md`
- * §14): an English-speaking operator still hands the customer a Spanish ticket. For slice 1 the deli's
- * invoice locale is es-ES, hardcoded here. So the fiscal labels below are Spanish CONSTANTS, the money
- * and date are formatted with THIS locale, and the product names are read in it — deliberately NOT via
- * the operator-UI `t()` / `currentLocale()`, which would flip "Efectivo"/"Cambio"/… (and the date
- * format) to English when the operator's UI is English.
- */
-const INVOICE_LOCALE = "es-ES";
-
-/** The Spanish fiscal labels for the receipt face, in the invoice locale (see {@link INVOICE_LOCALE}). */
+/** The Spanish fiscal labels for the receipt face, in the invoice locale (see {@link TillTicketView.invoiceLocale}). */
 const LABEL = {
   nif: "NIF",
   invoice: "Factura",
@@ -45,29 +33,11 @@ const LABEL = {
 const LEGEND = "VERI*FACTU";
 
 /** The issue timestamp formatted in the invoice locale — the fecha de expedición (art. 7.1.b). */
-function issueDate(iso: string): string {
-  return new Intl.DateTimeFormat(INVOICE_LOCALE, {
+function issueDate(iso: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(iso));
-}
-
-/**
- * Gross line total = `unitPrice × quantity` at money scale, in `@waitron/shared` Decimals (never a
- * float). This is the SAME expression the basket (`till-basket`) and the server price with, so the
- * printed ticket can never round differently from what was rung up or filed.
- */
-function lineGross(line: OrderLine): string {
-  const gross = toScale(
-    multiplyDecimal(decimal(line.product.unitPrice), decimal(line.quantity)),
-    MONEY_SCALE,
-  );
-  return formatMoney(gross, INVOICE_LOCALE);
-}
-
-/** How much of a line: `"N kg"` for a weight product, the bare count for an `each` product. */
-function quantityLabel(line: OrderLine): string {
-  return line.product.pricingUnit === "weight" ? `${line.quantity} kg` : line.quantity;
 }
 
 /**
@@ -86,8 +56,16 @@ function quantityLabel(line: OrderLine): string {
  *  - contraprestación total (7.1.g) — `result.total`;
  *  - QR + VERI*FACTU legend.
  *
- * Allowed operational extras: efectivo (= total + change) and cambio. It renders in the INVOICE locale
- * (see {@link INVOICE_LOCALE}), never the operator's UI language.
+ * Allowed operational extras: efectivo (= total + change) and cambio.
+ *
+ * INVOICE LOCALE. The customer ticket is a fiscal document ISSUED IN SPAIN and is rendered in the
+ * INVOICE locale ({@link invoiceLocale}), which is INDEPENDENT of the operator's UI language (spec §9,
+ * `docs/compliance/verifactu-findings.md` §14): an English-speaking operator still hands the customer a
+ * Spanish ticket. So the fiscal labels are Spanish CONSTANTS, while the money and date are formatted
+ * with `invoiceLocale` and the product names are read in it — deliberately NOT via the operator-UI
+ * `t()` / `currentLocale()`, which would flip "Efectivo"/"Cambio"/… (and the date format) to English
+ * when the operator's UI is English. The locale is threaded in from the server till config
+ * (`GET /api/till`), the same source that sets the operator UI — but separately, via {@link invoiceLocale}.
  */
 @customElement("till-ticket-view")
 export class TillTicketView extends LitElement {
@@ -203,6 +181,12 @@ export class TillTicketView extends LitElement {
   @property({ attribute: false }) issuer!: TicketIssuer;
   /** The basket that was rung up — the goods this ticket identifies (art. 7.1.e). */
   @property({ attribute: false }) lines!: OrderLine[];
+  /**
+   * The locale the receipt is RENDERED in — the money, date and product names (see the class doc's
+   * INVOICE LOCALE note). Fed from the server till config by the parent (`GET /api/till`), NEVER the
+   * operator-UI `currentLocale()`. Defaults to es-ES, the deli's invoice locale.
+   */
+  @property() invoiceLocale = "es-ES";
 
   /** Announce that the operator wants to start the next sale. The parent (Task 19) swaps the screen. */
   #newSale(): void {
@@ -211,6 +195,7 @@ export class TillTicketView extends LitElement {
 
   override render() {
     const r = this.result;
+    const locale = this.invoiceLocale;
     const svg = qrSvg(r.qr);
     return html`
       <article class="ticket">
@@ -226,7 +211,7 @@ export class TillTicketView extends LitElement {
           </div>
           <div class="meta-row">
             <span class="meta-label">${LABEL.date}</span>
-            <span>${issueDate(r.issuedAt)}</span>
+            <span>${issueDate(r.issuedAt, locale)}</span>
           </div>
         </div>
 
@@ -234,9 +219,9 @@ export class TillTicketView extends LitElement {
           ${this.lines.map(
             (line) => html`
               <li class="line">
-                <span class="line-name">${productName(line.product, INVOICE_LOCALE)}</span>
+                <span class="line-name">${productName(line.product, locale)}</span>
                 <span class="line-qty">${quantityLabel(line)}</span>
-                <span class="line-gross">${lineGross(line)}</span>
+                <span class="line-gross">${formatMoney(lineGross(line), locale)}</span>
               </li>
             `,
           )}
@@ -247,11 +232,11 @@ export class TillTicketView extends LitElement {
             (v) => html`
               <div class="vat-row">
                 <span class="vat-label">${LABEL.base} ${v.rate}%</span>
-                <span class="vat-amount">${formatMoney(v.base, INVOICE_LOCALE)}</span>
+                <span class="vat-amount">${formatMoney(v.base, locale)}</span>
               </div>
               <div class="vat-row">
                 <span class="vat-label">${LABEL.vat} ${v.rate}%</span>
-                <span class="vat-amount">${formatMoney(v.tax, INVOICE_LOCALE)}</span>
+                <span class="vat-amount">${formatMoney(v.tax, locale)}</span>
               </div>
             `,
           )}
@@ -259,19 +244,17 @@ export class TillTicketView extends LitElement {
 
         <div class="total-row">
           <span>${LABEL.total}</span>
-          <span>${formatMoney(r.total, INVOICE_LOCALE)}</span>
+          <span>${formatMoney(r.total, locale)}</span>
         </div>
 
         <div class="tender">
           <div class="tender-row">
             <span>${LABEL.cash}</span>
-            <span
-              >${formatMoney(addDecimal(decimal(r.total), decimal(r.change)), INVOICE_LOCALE)}</span
-            >
+            <span>${formatMoney(addDecimal(decimal(r.total), decimal(r.change)), locale)}</span>
           </div>
           <div class="tender-row">
             <span>${LABEL.change}</span>
-            <span>${formatMoney(r.change, INVOICE_LOCALE)}</span>
+            <span>${formatMoney(r.change, locale)}</span>
           </div>
         </div>
 

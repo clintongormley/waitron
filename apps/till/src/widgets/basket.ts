@@ -1,11 +1,12 @@
 import { LitElement, css, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import { MONEY_SCALE, decimal, multiplyDecimal, toScale } from "@waitron/shared";
 import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import { productName } from "./product-name.js";
-import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
+import { lineGross, quantityLabel } from "../state/order-line.js";
+import { StoreChangeController } from "../state/store-controller.js";
+import type { WorkingOrderStore } from "../state/working-order.js";
 
 /**
  * The running order: one row per rung-up line, each with the product's name, the quantity (a count,
@@ -55,33 +56,11 @@ export class TillBasket extends LitElement {
   /** The order this basket shows and mutates. Set before the widget connects (its lifecycle subscribes). */
   @property({ attribute: false }) store!: WorkingOrderStore;
 
-  /** Disposes the store subscription taken in {@link connectedCallback}. */
-  #unsubscribe?: () => void;
-
-  override connectedCallback(): void {
-    super.connectedCallback();
-    // Re-render on any basket change (add / remove / clear). The dispose fn is kept for teardown.
-    this.#unsubscribe = this.store.subscribe(() => this.requestUpdate());
-  }
-
-  override disconnectedCallback(): void {
-    super.disconnectedCallback();
-    this.#unsubscribe?.();
-    this.#unsubscribe = undefined;
-  }
-
-  /** How much of this line: `"N kg"` for a weight product, the bare count for an `each` product. */
-  #quantityLabel(line: OrderLine): string {
-    return line.product.pricingUnit === "weight" ? `${line.quantity} kg` : line.quantity;
-  }
-
-  /** Gross line total = `unitPrice × quantity`, rounded to money scale, then formatted for display. */
-  #lineTotal(line: OrderLine): string {
-    const gross = toScale(
-      multiplyDecimal(decimal(line.product.unitPrice), decimal(line.quantity)),
-      MONEY_SCALE,
-    );
-    return formatMoney(gross);
+  constructor() {
+    super();
+    // Re-render on any basket change (add / remove / clear); the controller owns the subscription
+    // lifecycle. `() => this.store` is read lazily on connect, after the property is assigned.
+    new StoreChangeController(this, () => this.store);
   }
 
   override render() {
@@ -94,8 +73,8 @@ export class TillBasket extends LitElement {
         (line, index) => html`
           <div class="line">
             <span class="name">${productName(line.product)}</span>
-            <span class="qty">${this.#quantityLabel(line)}</span>
-            <span class="line-total">${this.#lineTotal(line)}</span>
+            <span class="qty">${quantityLabel(line)}</span>
+            <span class="line-total">${formatMoney(lineGross(line))}</span>
             <wt-button
               variant="ghost"
               size="sm"
