@@ -2,11 +2,11 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, hashPin } from "@waitron/identity";
+import { IDENTITY_MIGRATIONS, endSession, hashPin, loginWithPin } from "@waitron/identity";
 import {
   AppError,
   locationId as brandLocationId,
@@ -89,6 +89,30 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
+/** Opens a real shift session for Ana on the app role — the same `withTenant` + `asAppUser` +
+ * `loginWithPin` path the login route runs — and returns its id, so a test can hand `requireSession`
+ * or the logout route a cookie that names a genuine row. */
+async function openSession(db: Database): Promise<string> {
+  const session = await withTenant(db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return loginWithPin(tx, {
+      tenantId: cfg.tenantId,
+      tillId: cfg.tillId,
+      personId: ana.id,
+      pin: "5555",
+    });
+  });
+  return session.id;
+}
+
+/** Ends a session out of band on the app role, so a cookie can be made to name a CLOSED row. */
+async function closeSession(db: Database, id: string): Promise<void> {
+  await withTenant(db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    await endSession(tx, id);
+  });
+}
+
 describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
   it("POST opens a session and sets an httpOnly SameSite=Strict cookie; DELETE ends it", async () => {
     const app = new Hono();
@@ -144,6 +168,27 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     expect(del.status).toBe(200);
     expect(await del.json()).toEqual({ ok: true });
   });
+
+  it("DELETE naming an ALREADY-ended session is still an idempotent 200 that clears the cookie", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+
+    // A cookie naming a session that was already closed: `endSession` matches nothing, but logout
+    // still answers 200 and clears the cookie (the idempotency the route comment claims).
+    const id = await openSession(suite.db);
+    await closeSession(suite.db, id);
+
+    const del = await app.request("/api/session", {
+      method: "DELETE",
+      headers: { cookie: `${SESSION_COOKIE}=${id}` },
+    });
+    expect(del.status).toBe(200);
+    expect(await del.json()).toEqual({ ok: true });
+    // The clear is a Set-Cookie that empties the value and expires it (deleteCookie → maxAge 0).
+    const cleared = del.headers.get("set-cookie")!;
+    expect(cleared).toMatch(/waitron_till_session=;/);
+    expect(cleared).toMatch(/Max-Age=0/);
+  });
 });
 
 describe("the run wrapper (the shared error boundary Tasks 5 & 6 reuse)", () => {
@@ -177,27 +222,51 @@ describe("the run wrapper (the shared error boundary Tasks 5 & 6 reuse)", () => 
   });
 });
 
-describe("requireSession (the gate Tasks 5 & 6's operator-scoped routes sit behind)", () => {
-  it("returns the session id when the cookie is present", async () => {
+describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected routes)", () => {
+  // A throwaway route standing in for the protected routes Tasks 5/6 add: it calls `requireSession`
+  // and echoes what it resolved. `requireSession` does the DB lookup, so these tests exercise real
+  // validation, not a cookie-presence check.
+  function guardApp(db: Database): Hono {
     const app = new Hono();
-    app.get("/whoami", (c) =>
-      run(c, collect([]), () => Promise.resolve(c.json({ id: requireSession(c) }))),
-    );
+    const d = { db, cfg };
+    app.get("/whoami", (c) => run(c, collect([]), async () => c.json(await requireSession(d, c))));
+    return app;
+  }
 
-    const res = await app.request("/whoami", {
-      headers: { cookie: `${SESSION_COOKIE}=sess-123` },
+  it("ACCEPTS an open session and returns the operator's personId + sessionId", async () => {
+    const id = await openSession(suite.db);
+    const res = await guardApp(suite.db).request("/whoami", {
+      headers: { cookie: `${SESSION_COOKIE}=${id}` },
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ id: "sess-123" });
+    expect(await res.json()).toEqual({ personId: ana.id, sessionId: id });
   });
 
-  it("throws session.required (→ 401 through run) when no cookie is present", async () => {
-    const app = new Hono();
-    app.get("/whoami", (c) =>
-      run(c, collect([]), () => Promise.resolve(c.json({ id: requireSession(c) }))),
-    );
+  it("REJECTS (401 session.required) when no cookie is present", async () => {
+    const res = await guardApp(suite.db).request("/whoami");
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  });
 
-    const res = await app.request("/whoami");
+  it("REJECTS (401 session.required) a well-formed but nonexistent/forged session id", async () => {
+    // A valid uuid the attacker guessed — never issued, so it names no row. A cookie is present, so a
+    // mere presence check would WRONGLY accept it; the DB lookup is what refuses it.
+    const res = await guardApp(suite.db).request("/whoami", {
+      headers: { cookie: `${SESSION_COOKIE}=${randomUUID()}` },
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+
+  it("REJECTS (401 session.required) an ENDED session — logging out invalidates the cookie", async () => {
+    // Open a real session, then end it. Its id still names a row, but `ended_at IS NOT NULL`, so the
+    // `IS NULL` filter excludes it: a logged-out cookie is as good as no cookie.
+    const id = await openSession(suite.db);
+    await closeSession(suite.db, id);
+
+    const res = await guardApp(suite.db).request("/whoami", {
+      headers: { cookie: `${SESSION_COOKIE}=${id}` },
+    });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
   });

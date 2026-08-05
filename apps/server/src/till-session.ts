@@ -1,6 +1,11 @@
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { and, eq, isNull } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
+import { asAppUser, withTenant } from "@waitron/db";
+import type { Database } from "@waitron/db";
+import { sessions } from "@waitron/identity";
+import type { TillConfig } from "./till-config.js";
 // Side-effect only: keeps this host's `session.required` code (errors.ts) reachable from the file
 // that throws it — the reachability convention `till-config.ts`/`webhook.ts` follow (a bare import,
 // no value used here). See the note atop `errors.ts`.
@@ -41,13 +46,31 @@ export function readSessionId(c: Context): string | null {
 }
 
 /**
- * The session id, or a loud `session.required` when none is present — the gate the operator-scoped
- * routes Tasks 5/6 add (`GET /api/staff`, `POST /api/sales`) sit behind. Kept here beside the cookie
- * helpers so "what names the session" lives in one file; the login/logout routes in `till-api.ts`
- * deliberately do NOT use it (logging in has no prior session, and logout tolerates its absence).
+ * Resolves the request's cookie to an OPEN shift session, or throws `session.required`. This is real
+ * validation against the database, not a presence check: the cookie's id is looked up as the app role
+ * under the till's tenant with `ended_at IS NULL`, so a forged or guessed id, an id belonging to
+ * another tenant (RLS hides it), and an already-logged-out session all fail exactly as a missing
+ * cookie does — the cookie merely NAMES a session, it does not prove one is open.
+ *
+ * Returns the operator's `personId` (for sale attribution) and the `sessionId`. The operator-scoped
+ * routes Tasks 5/6 add (`GET /api/staff`, `POST /api/sales`) call this before doing any work; the
+ * login/logout routes in `till-api.ts` deliberately do NOT (logging in has no prior session, and
+ * logout tolerates a missing or already-closed one).
  */
-export function requireSession(c: Context): string {
+export async function requireSession(
+  deps: { db: Database; cfg: TillConfig },
+  c: Context,
+): Promise<{ personId: string; sessionId: string }> {
   const id = readSessionId(c);
   if (id === null) throw new AppError("session.required", {});
-  return id;
+  const personId = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const [row] = await tx
+      .select({ personId: sessions.personId })
+      .from(sessions)
+      .where(and(eq(sessions.id, id), isNull(sessions.endedAt)));
+    return row?.personId ?? null;
+  });
+  if (personId === null) throw new AppError("session.required", {});
+  return { personId, sessionId: id };
 }
