@@ -39,7 +39,11 @@ describe("buildServeOptions", () => {
  */
 describe("serve(buildServeOptions(base, tls)) over a real TLS handshake", () => {
   const material = mintMtlsMaterial();
-  let dir: string;
+  // `string | undefined`: an uninitialized `let` is `undefined` at runtime if `beforeAll` throws
+  // before `mkdtemp` assigns it, which is exactly what the afterAll guard below protects against —
+  // so the type carries that possibility honestly (the assignment on the first beforeAll line
+  // narrows it back to `string` for the uses that follow).
+  let dir: string | undefined;
   let certFile: string;
   let keyFile: string;
 
