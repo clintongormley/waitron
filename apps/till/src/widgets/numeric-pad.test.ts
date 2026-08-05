@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { TillNumericPad, nextPadValue } from "./numeric-pad.js";
+import { TillNumericPad, nextPadValue, nextPinValue } from "./numeric-pad.js";
 
 afterEach(cleanupWidgets);
 
@@ -49,6 +49,48 @@ describe("nextPadValue", () => {
   });
 });
 
+// The pin-mode string-builder: digit-append with leading zeros preserved, so a PIN round-trips.
+// Chained through a whole key sequence to prove the fix (the decimal builder collapses the same run).
+describe("nextPinValue", () => {
+  const build = (keys: string, next = nextPinValue) => {
+    let value = "";
+    for (const key of keys) value = next(value, key);
+    return value;
+  };
+
+  it("keeps every leading zero, so 0,0,0,0 builds 0000", () => {
+    expect(build("0000")).toBe("0000");
+  });
+
+  it("preserves a leading zero in a mixed PIN, so 0,1,2,3 builds 0123", () => {
+    expect(build("0123")).toBe("0123");
+  });
+
+  it("decimal mode still collapses that same 0,0,0,0 run to 0 — pin mode is what differs", () => {
+    expect(build("0000", nextPadValue)).toBe("0");
+  });
+
+  it("appends a digit to a fresh pad", () => {
+    expect(nextPinValue("", "7")).toBe("7");
+  });
+
+  it("appends a zero onto an existing zero rather than collapsing it", () => {
+    expect(nextPinValue("0", "0")).toBe("00");
+  });
+
+  it("backspaces the last digit", () => {
+    expect(nextPinValue("0000", "backspace")).toBe("000");
+  });
+
+  it("backspacing an empty value stays empty", () => {
+    expect(nextPinValue("", "backspace")).toBe("");
+  });
+
+  it("ignores a decimal point (the pad hides that key in pin mode)", () => {
+    expect(nextPinValue("12", ".")).toBe("12");
+  });
+});
+
 describe("till-numeric-pad", () => {
   it("registers as a custom element", () => {
     expect(customElements.get("till-numeric-pad")).toBe(TillNumericPad);
@@ -83,5 +125,38 @@ describe("till-numeric-pad", () => {
     el.addEventListener("wt-change", (e) => spy((e as CustomEvent).detail));
     el.shadowRoot!.querySelector<HTMLElement>('[data-key="backspace"]')!.click();
     expect(spy).toHaveBeenCalledWith({ value: "1" });
+  });
+
+  it("omits the decimal-point key in pin mode but keeps every digit and backspace", async () => {
+    const { el } = await mountWidget<TillNumericPad>("till-numeric-pad", {
+      value: "",
+      mode: "pin",
+    });
+    expect(el.shadowRoot!.querySelector('[data-key="."]')).toBeNull();
+    for (const key of ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "backspace"]) {
+      expect(el.shadowRoot!.querySelector(`[data-key="${key}"]`), key).not.toBeNull();
+    }
+  });
+
+  it("appends a digit verbatim in pin mode, so a zero onto zeros keeps the leading run", async () => {
+    const { el } = await mountWidget<TillNumericPad>("till-numeric-pad", {
+      value: "000",
+      mode: "pin",
+    });
+    const spy = vi.fn();
+    el.addEventListener("wt-change", (e) => spy((e as CustomEvent).detail));
+    el.shadowRoot!.querySelector<HTMLElement>('[data-key="0"]')!.click();
+    expect(spy).toHaveBeenCalledWith({ value: "0000" });
+  });
+
+  it("backspaces in pin mode", async () => {
+    const { el } = await mountWidget<TillNumericPad>("till-numeric-pad", {
+      value: "0000",
+      mode: "pin",
+    });
+    const spy = vi.fn();
+    el.addEventListener("wt-change", (e) => spy((e as CustomEvent).detail));
+    el.shadowRoot!.querySelector<HTMLElement>('[data-key="backspace"]')!.click();
+    expect(spy).toHaveBeenCalledWith({ value: "000" });
   });
 });

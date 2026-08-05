@@ -40,9 +40,8 @@ function loginErrorKey(code: string): StringKey {
  * `{ code }` it shows the LOCALISED message for that code (never the raw code — see
  * {@link loginErrorKey}) and clears the PIN so the operator can retry the same person.
  *
- * The pad's entered string is captured raw as the PIN. NOTE: `till-numeric-pad` carries decimal-number
- * semantics (it strips a lone leading zero and offers a `.` key), so a PIN that begins with `0` would
- * not round-trip through it — see the task-16 report's concern. Today's flow types digit PINs that do.
+ * The `till-numeric-pad` runs in `mode="pin"` (digit-append, no `.` key), so the pad's entered string
+ * is captured raw as the PIN and leading zeros survive — a PIN like `"0000"` or `"0123"` round-trips.
  */
 @customElement("till-lock-screen")
 export class TillLockScreen extends LitElement {
@@ -228,6 +227,7 @@ export class TillLockScreen extends LitElement {
       <div class="pin-display" aria-hidden="true">${"●".repeat(this.pin.length)}</div>
       ${this.errorKey ? html`<p class="error" role="alert">${t(this.errorKey)}</p>` : nothing}
       <till-numeric-pad
+        mode="pin"
         .value=${this.pin}
         @wt-change=${(event: Event) => this.#onPadChange(event)}
       ></till-numeric-pad>

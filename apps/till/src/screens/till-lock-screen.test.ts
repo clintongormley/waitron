@@ -136,6 +136,21 @@ describe("till-lock-screen", () => {
     expect(spy).toHaveBeenCalledWith({ personId: "p1" });
   });
 
+  it("round-trips a leading-zero PIN (e.g. the default 0000) to login unmangled", async () => {
+    // Regression: the pad's decimal mode would collapse 0,0,0,0 to "0" and lock those staff out.
+    // In pin mode every keystroke appends, so the full "0000" reaches login.
+    const login = vi.fn().mockResolvedValue({ personId: "p1" });
+    const api = stubApi({ login });
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api });
+    await flush(el);
+    click(el, 'wt-button.operator-button[data-person="p1"]');
+    await el.updateComplete;
+    await type(el, "0000");
+    click(el, ".submit");
+    await flush(el);
+    expect(login).toHaveBeenCalledWith("p1", "0000");
+  });
+
   it("shows the localised pin.invalid error and clears the PIN, without logging in", async () => {
     const login = vi.fn().mockRejectedValue({ code: "pin.invalid" });
     const api = stubApi({ login });

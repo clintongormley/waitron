@@ -33,6 +33,21 @@ export function nextPadValue(value: string, key: string): string {
   return value + key;
 }
 
+/**
+ * The string produced by pressing `key` on a pad in "pin" mode, where the value is a PIN rather than
+ * a number. A PIN is a literal string the server hashes and length-checks — leading zeros are
+ * significant and repeats are allowed — so every digit APPENDS verbatim: `"0"` + `"0"` stays `"00"`,
+ * and a four-key `0,0,0,0` builds `"0000"` (the decimal-mode {@link nextPadValue} would collapse that
+ * to `"0"`). `key` is a digit `"0"`–`"9"` or `"backspace"`; the pad hides the `.` key in pin mode, so
+ * a `"."` never reaches here and is ignored defensively rather than inserted into a PIN. Pure and
+ * exported for the same reason as `nextPadValue` — every branch is pinned by a DOM-free unit test.
+ */
+export function nextPinValue(value: string, key: string): string {
+  if (key === "backspace") return value.slice(0, -1);
+  if (key === ".") return value;
+  return value + key;
+}
+
 /** The pad's key layout, top-left to bottom-right. `glyph` is what shows; `label` is the a11y name
  * for the two keys whose glyph is not its own accessible name (`.` and `⌫`). */
 interface PadKey {
@@ -42,12 +57,18 @@ interface PadKey {
 }
 
 /**
- * A reusable touch numeric keypad — the shared input surface for the cash-tender amount and the kg
- * weight entry (Task 15). It is deliberately PRESENTATIONAL: it knows nothing of money, weight or
- * totals. It reads the current string via its `value` property, and on each key press emits a
- * `wt-change` CustomEvent carrying `{ value }` — the string that pressing that key produces (see
- * {@link nextPadValue}). The parent owns the meaning: it holds the value, decides what it means, and
- * passes the updated string back down.
+ * A reusable touch numeric keypad — the shared input surface for the cash-tender amount, the kg
+ * weight entry (Task 15) and the login PIN (Task 16). It is deliberately PRESENTATIONAL: it knows
+ * nothing of money, weight or PINs. It reads the current string via its `value` property, and on each
+ * key press emits a `wt-change` CustomEvent carrying `{ value }` — the string that pressing that key
+ * produces. The parent owns the meaning: it holds the value, decides what it means, and passes the
+ * updated string back down.
+ *
+ * Two `mode`s pick which string-builder runs and which keys show:
+ *  - `"decimal"` (the DEFAULT — cash and kg entry are unchanged): {@link nextPadValue}, with a `.` key
+ *    and leading-zero suppression, so the value stays a valid decimal number.
+ *  - `"pin"`: {@link nextPinValue}, digit-append with NO `.` key, so leading zeros survive and a PIN
+ *    like `"0000"` round-trips.
  *
  * Every key is a `<wt-button>` (a 44px tap target with a focus ring for free). The `.` and `⌫` keys
  * carry an accessible `aria-label` and hide their decorative glyph, so their name is spoken text and
@@ -92,8 +113,12 @@ export class TillNumericPad extends LitElement {
   /** The string the pad is editing. Owned by the parent; the pad only reads it to compute the next. */
   @property() value = "";
 
+  /** Which string-builder + key layout to use — see the class doc. `"decimal"` by default so the
+   * cash and kg screens are unaffected; the lock screen sets `"pin"`. */
+  @property() mode: "decimal" | "pin" = "decimal";
+
   #keys(): PadKey[] {
-    return [
+    const keys: PadKey[] = [
       { key: "7", glyph: "7" },
       { key: "8", glyph: "8" },
       { key: "9", glyph: "9" },
@@ -107,10 +132,15 @@ export class TillNumericPad extends LitElement {
       { key: "0", glyph: "0" },
       { key: "backspace", glyph: "⌫", label: t("pad.backspace") },
     ];
+    // A PIN is digits only, so the decimal-point key has no place on it (and dropping it is what
+    // keeps a "." out of a PIN — the Minor half of this fix).
+    return this.mode === "pin" ? keys.filter((padKey) => padKey.key !== ".") : keys;
   }
 
   #press(key: string, event: Event): void {
-    dispatchWtChange(this, event, { value: nextPadValue(this.value, key) });
+    const next =
+      this.mode === "pin" ? nextPinValue(this.value, key) : nextPadValue(this.value, key);
+    dispatchWtChange(this, event, { value: next });
   }
 
   /**
