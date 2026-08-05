@@ -3,8 +3,9 @@ import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 // PIN hashing with scrypt from node:crypto — no native dependency, a real password KDF (salted,
 // memory-hard), and the same "reach for node:crypto, not a new package" posture the credentials
 // vault takes with AES-256-GCM. bcrypt/argon2 would each add a native module for what a PIN verify
-// does not need. packages/identity stores the hash on `persons.pin_hash`; the PIN-login consumer
-// that calls `verifyPin` is `./login.ts` (a later task).
+// does not need. packages/identity stores the hash on `persons.pin_hash`; `verifyPin` is called by
+// `./credential.ts` (`verifyPersonCredential`), which backs both `./login.ts`'s `loginWithPin` and
+// `./authorize.ts`'s supervisor-override path.
 
 /** 16 random bytes, fresh per hash: without a per-hash salt two identical PINs would share a
  * `pin_hash`, a visible equality an operator with SELECT could read. */
