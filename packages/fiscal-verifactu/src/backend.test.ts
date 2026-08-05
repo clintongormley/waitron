@@ -4,7 +4,7 @@ import { recordSale } from "@waitron/core";
 import { CORE_MIGRATIONS, asAppUser, sales, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
-import type { NodeId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { decimal, nodeId as brandNodeId, saleId as brandSaleId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
@@ -28,12 +28,11 @@ let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
-let workingOrderId: WorkingOrderId;
 
 const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenantWithSif(pg.db));
+  ({ tenantId, tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -45,11 +44,7 @@ beforeEach(async () => {
 async function sell() {
   return withTenant(pg.db, tenantId, async (tx) => {
     await asAppUser(tx);
-    return recordSale(
-      tx,
-      backend,
-      saleInput({ tenantId, tillId, nodeId, seriesId, workingOrderId }),
-    );
+    return recordSale(tx, backend, saleInput({ tenantId, tillId, nodeId, seriesId }));
   });
 }
 

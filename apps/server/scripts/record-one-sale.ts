@@ -34,7 +34,6 @@
 // `drain` refuses it AND every successor on its chain, every pass, forever, until a human either
 // runs superuser DDL or abandons the chain entirely via `registerSif`. A safe default is the right
 // answer when being wrong costs a retry; it is the wrong answer when being wrong costs a chain.
-import { randomUUID } from "node:crypto";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -51,7 +50,6 @@ import {
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
   tillId as brandTillId,
-  workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 
 // The deli's operating locale. Not an argument: this script is not a general-purpose till, and
@@ -180,7 +178,6 @@ async function main(): Promise<void> {
       // Audit-trail context only — `sales` carries no foreign key onto `working_orders` at all,
       // and this script has no working order to point at (`write-path-fixtures.ts`'s
       // `seedTenantWithSif` makes the identical choice, for the identical reason).
-      workingOrderId: brandWorkingOrderId(randomUUID()),
       locale: LOCALE,
       invoiceLocales: [LOCALE],
       total,

@@ -3,11 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
 import { asAppUser, captureError, pgErrorCode, withTenant } from "@waitron/db";
 import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
-import {
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-  workingOrderId as brandWorkingOrderId,
-} from "@waitron/shared";
+import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
 import { currentSif, registerSif } from "./registro-sif.js";
@@ -219,7 +215,6 @@ describe("the series↔node guard (record-sale)", () => {
             tillId: node.tillId,
             nodeId: other.nodeId,
             seriesId: brandSeriesId(node.seriesId),
-            workingOrderId: brandWorkingOrderId(crypto.randomUUID()),
           }),
         );
       }),
@@ -239,7 +234,6 @@ describe("the series↔node guard (record-sale)", () => {
           tillId: node.tillId,
           nodeId: node.nodeId,
           seriesId: brandSeriesId(node.seriesId),
-          workingOrderId: brandWorkingOrderId(crypto.randomUUID()),
         }),
       );
     });

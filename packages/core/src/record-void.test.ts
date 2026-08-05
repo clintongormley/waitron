@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 // See record-sale.test.ts's identical deviation note: there is no `@waitron/fiscal/testing`
 // subpath (no `exports` map entry, no such folder). `packages/fiscal/src/index.ts`'s own closing
 // comment states the real path: "packages/core imports it from
@@ -32,7 +32,6 @@ let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
-let workingOrderId: WorkingOrderId;
 // The people and the open shift session the void gate now consults. `managerId` holds `sale.void`
 // on its own role, so `managerSessionId` is the default authorizer every green-path void uses;
 // `staffId` holds nothing, and `supervisorId` is the second person whose PIN unlocks an override.
@@ -54,7 +53,7 @@ const suite = usePgliteDb({
 });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenant(suite.db));
+  ({ tenantId, tillId, nodeId, seriesId } = await seedTenant(suite.db));
   // A manager (holds `sale.void`), a supervisor (holds it too — the override authorizer), and a
   // staff member (holds nothing). Seeded as the superuser owner exactly like `seedTenant` above:
   // PGlite bypasses RLS for the seeding connection, so no `app.tenant_id` is needed here.
@@ -114,7 +113,6 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
     tillId,
     nodeId,
     seriesId,
-    workingOrderId,
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     total: "14.41",

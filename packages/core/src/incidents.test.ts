@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import type { NodeId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
 // See record-sale.test.ts's identical deviation note: there is no `@waitron/fiscal/testing`
 // subpath. `packages/fiscal/src/index.ts`'s own closing comment states the real path.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
@@ -26,7 +26,6 @@ let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
-let workingOrderId: WorkingOrderId;
 
 // PGlite boots a WASM PostgreSQL and then runs @waitron/db's own migrations, well past Vitest's
 // 5s default hook timeout — mirrors record-sale.test.ts's identical setup for the identical
@@ -38,7 +37,7 @@ const suite = usePgliteDb({
 });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenant(suite.db));
+  ({ tenantId, tillId, nodeId, seriesId } = await seedTenant(suite.db));
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -91,7 +90,6 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
     tillId,
     nodeId,
     seriesId,
-    workingOrderId,
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     total: "14.41",

@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, seriesId as brandSeriesId } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 // See record-sale.test.ts's own deviation note: there is no `@waitron/fiscal/testing` subpath. The
 // real import path — stated verbatim in `packages/fiscal/src/index.ts`'s closing comment — is
 // `@waitron/fiscal/src/testing/fake-backend.js`, used in test files only.
@@ -30,7 +30,6 @@ let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId; // the ordinary (purpose='standard') series seedTenant creates
 let rectSeriesId: SeriesId; // a purpose='rectificative' series on the same node
-let workingOrderId: WorkingOrderId;
 // The people and open shift sessions the correction gate now consults. `supervisorId` holds
 // `sale.rectify`, so `supervisorSessionId` is the default authorizer every green-path correction
 // uses; `staffId` holds nothing (the reject case); `managerId` is the second person whose PIN
@@ -56,7 +55,7 @@ const suite = usePgliteDb({
 });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenant(suite.db));
+  ({ tenantId, tillId, nodeId, seriesId } = await seedTenant(suite.db));
   rectSeriesId = await seedRectificativeSeries(suite.db, tenantId, nodeId);
   // A supervisor and a manager (both hold `sale.rectify`), and a staff member (holds nothing).
   // Seeded as the superuser owner exactly like the record-void suite does — PGlite bypasses RLS for
@@ -121,7 +120,6 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
     tillId,
     nodeId,
     seriesId,
-    workingOrderId,
     locale: "es-ES",
     invoiceLocales: ["es-ES", "ca-ES"],
     total: "14.41",

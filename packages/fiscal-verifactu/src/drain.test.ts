@@ -84,7 +84,7 @@ describe("drain — happy path", () => {
  */
 describe("drain — happy path, an anulación row", () => {
   it("submits a voided sale's anulación through the same accept-and-persist path as an alta", async () => {
-    const { tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenantWithSif(pg.db);
+    const { tenantId, tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db);
     // recordVoid now requires `sale.void`: seed a manager and open its session to authorize the void.
     const { rows: mgr } = await pg.db.execute<{ id: string }>(
       sql`insert into persons (tenant_id, display_name, pin_hash, role)
@@ -103,11 +103,7 @@ describe("drain — happy path, an anulación row", () => {
 
     const sale = await withTenant(pg.db, tenantId, async (tx) => {
       await asAppUser(tx);
-      return recordSale(
-        tx,
-        backend,
-        saleInput({ tenantId, tillId, nodeId, seriesId, workingOrderId }),
-      );
+      return recordSale(tx, backend, saleInput({ tenantId, tillId, nodeId, seriesId }));
     });
     await withTenant(pg.db, tenantId, async (tx) => {
       await asAppUser(tx);

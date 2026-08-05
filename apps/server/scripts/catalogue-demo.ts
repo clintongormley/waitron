@@ -27,7 +27,6 @@
 //
 // `WAITRON_ENV` defaults to `preproduction` (the safe reading of "unset", config.ts), which is the
 // only environment this demo should ever run in.
-import { randomUUID } from "node:crypto";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -56,7 +55,6 @@ import {
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
   tillId as brandTillId,
-  workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 
 const LOCALE = "es-ES";
@@ -200,7 +198,6 @@ async function main(): Promise<void> {
         tillId,
         nodeId,
         seriesId,
-        workingOrderId: brandWorkingOrderId(randomUUID()),
         locale: LOCALE,
         invoiceLocales: [LOCALE],
         total: priced.total,

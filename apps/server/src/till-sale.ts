@@ -2,15 +2,8 @@
 // them — the reachability convention `till-config.ts`/`config.ts` follow (a bare import, no value
 // used here). See the note atop `errors.ts`.
 import "./errors.js";
-import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import {
-  AppError,
-  compareDecimal,
-  decimal,
-  subtractDecimal,
-  workingOrderId,
-} from "@waitron/shared";
+import { AppError, compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
 import { asAppUser, invoiceSeries, sales, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { listAvailableProducts, priceBasket } from "@waitron/catalogue";
@@ -104,7 +97,10 @@ export async function recordTillSale(
       tillId: cfg.tillId,
       nodeId: cfg.nodeId,
       seriesId: cfg.seriesId,
-      workingOrderId: workingOrderId(randomUUID()),
+      // A walk-up counter sale (7a) carries NO parked working order, so `working_order_id` inserts
+      // NULL — recordSale now WRITES this column and it is a real FK onto `working_orders` (7b), so a
+      // fabricated id would FK-violate. Task 7's retrieve-and-file path supplies a REAL retrieved
+      // working-order id here; until then this producer omits it, exactly like every other caller.
       locale: cfg.locale,
       invoiceLocales: cfg.invoiceLocales,
       total: priced.total,

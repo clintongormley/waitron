@@ -5,9 +5,8 @@ import {
   seriesId as brandSeriesId,
   tenantId,
   tillId as brandTillId,
-  workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
-import type { NodeId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { registerSif } from "../src/registro-sif.js";
 import type { Entorno } from "../src/registro-row.js";
 
@@ -234,7 +233,6 @@ export interface SeededTillWithSif {
   tillId: TillId;
   nodeId: NodeId;
   seriesId: SeriesId;
-  workingOrderId: WorkingOrderId;
 }
 
 // Module-scope, not per-call: every test file that imports `seedTenantWithSif` shares this
@@ -301,15 +299,10 @@ export async function seedTenantWithSif(db: Database): Promise<SeededTillWithSif
       nif,
       idSistemaInformatico: "WT",
     });
-    return {
-      tenantId: tenant,
-      tillId,
-      nodeId,
-      seriesId,
-      // No `working_orders` row: `sales` carries no foreign key onto `working_orders` at all
-      // (packages/db/src/schema/sales.ts), and `RecordSaleInput.workingOrderId` is audit-trail
-      // context only — never persisted or joined against. A well-formed, fabricated id suffices.
-      workingOrderId: brandWorkingOrderId(crypto.randomUUID()),
-    };
+    // No `working_orders` row and no `workingOrderId`: `recordSale` now WRITES
+    // `input.workingOrderId` to `sales.working_order_id`, a real FK onto `working_orders`
+    // (sub-project 7b). A fabricated id would FK-violate on the insert, so this fixture mints none —
+    // the write-path suites here record walk-up sales that omit it, and the column inserts NULL.
+    return { tenantId: tenant, tillId, nodeId, seriesId };
   });
 }
