@@ -326,12 +326,18 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     `vatBreakdown` stored) and read by `computeVatSummary`. Its own slice (schema + migration +
     reporting). **Not reachable in production today** (headless — no catalogue sales until the till,
     #7); the caveat is documented in `vat-summary.ts`. Found by the finish-branch fresh-context review.
-  - **Asesor / XSD confirmation: the difference-method cuota-vs-`base×rate` residual.** For a basket
-    with many same-rate lines, per-line base rounding makes the residual exceed one céntimo per rate
-    group (the exact invariants `ImporteTotal == Σ(base+cuota)` and `BaseImponible == Σ line bases`
-    always hold). Whether the residual stays within AEAT's *per-record* rounding tolerance is an
-    external claim not confirmed on primary source — sits with the other asesor/XSD questions (F3
-    canje, SumUp). Spec D8/§3 now state this as unconfirmed rather than asserting it.
+  - **Asesor / XSD confirmation: the rounding *locus* and the difference-method residual.** The open
+    question is where AEAT requires the round-to-céntimo to land — **per line item** or **per tax
+    (rate) group** — because the two can't both be exact and the choice picks which invariant we keep:
+    this slice rounds each line's base to 2dp and sums them, keeping `BaseImponible == Σ line bases`
+    exact, at the cost of a larger `cuota`-vs-`base×rate` residual across many same-rate lines;
+    group-level base rounding (`base_group = round(gross_group/(1+rate))`) minimises that residual but
+    breaks `BaseImponible == Σ line bases`. Either way the primary reconciliation
+    `ImporteTotal == Σ(base+cuota)` holds exactly, and rounding is half-away-from-zero (Spain's
+    *redondeo al alza*), full-precision BigInt intermediates, never float. Whether the chosen locus and
+    the residual sit within AEAT's *per-record* tolerance is an external claim not confirmed on primary
+    source — sits with the other asesor/XSD questions (F3 canje, SumUp). Spec D8/§3 state it as
+    unconfirmed rather than asserting it.
   - **RLS test hardening (finish-branch review, low risk).** `operations.rls.test.ts` proves
     cross-tenant isolation by deletion on `catalogues` and `products` but not `categories` (the 0027
     policy is byte-identical), and `assignCatalogueToLocation` is exercised only under PGlite
