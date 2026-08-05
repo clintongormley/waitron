@@ -126,6 +126,14 @@ FKs to it are possible later. The authorizer columns this slice adds do **not** 
 follow the existing `voided_by` no-FK precedent — but `sessions.person_id` and `employments.person_id`
 can adopt the composite shape the repo prefers.
 
+> **Reconciled in implementation (2026-08-05):** the `persons unique(tenant_id, id)` above was **not**
+> shipped, and neither was the composite FK it was meant to enable. `packages/identity/src/schema/persons.ts`
+> carries no such unique, and `sessions.person_id` ships as a **single-column** FK `person_id → persons.id`
+> (`packages/identity/src/schema/sessions.ts`) — the same shape `sales.till_id` uses for `tills`. RLS
+> provides the tenant-consistency the composite target was meant to give (a cross-tenant person read
+> returns `undefined` → `authorization.not_permitted`), so the extra unique bought nothing. The original
+> assertion is left above for history; the shipped schema uses single-column FKs (see also §4.2).
+
 ---
 
 ## 4. Data model
@@ -149,6 +157,12 @@ A shift login: a person active at a physical station.
 | `till_id` | uuid NOT NULL → `tills.id` restrict | the **till**, not the node — see below |
 | `opened_at` | timestamptz NOT NULL | application-supplied (`mode: "string"`, matching the repo's "nothing formatted is ever stored" discipline) |
 | `ended_at` | timestamptz, nullable | stamped on `endSession` |
+
+> **Reconciled in implementation (2026-08-05):** `person_id` ships as a **single-column** FK
+> `person_id → persons.id`, not the composite `(tenant_id, person_id) → persons(tenant_id, id)` shown in
+> the table above — `persons` carries no `(tenant_id, id)` unique to target (see §3). RLS provides the
+> tenant-consistency; this matches the `sales.till_id` precedent. The table row is left as originally
+> written for history.
 
 **Why `till_id`, not `node_id`.** The `till` is "A point of sale" — the physical station a cashier
 operates and where cash-up/Z-report is grouped (`packages/db/src/schema/tenants.ts:89-117`). The

@@ -164,7 +164,7 @@ describe("registros_facturacion is immutable, as the app role", () => {
  * correctly excluded: it deliberately has no `tenant_id` and no RLS (findings §1 — a single
  * cross-tenant writer, where a tenant-scoping policy would itself be the bug).
  */
-describe("row-level security on every tenant-scoped table in this package", () => {
+describe("row-level security on every tenant-scoped table in this package (and identity)", () => {
   async function tenantScopedTables(
     target: Database,
   ): Promise<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }[]> {
