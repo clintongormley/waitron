@@ -120,7 +120,7 @@ describe("till-lock-screen", () => {
     expect(query(el, ".submit")!.hasAttribute("disabled")).toBe(false);
   });
 
-  it("logs in with (personId, pin) and emits logged-in with the confirmed personId", async () => {
+  it("logs in with (personId, pin) and emits logged-in with the confirmed personId + display name", async () => {
     const login = vi.fn().mockResolvedValue({ personId: "p1" });
     const api = stubApi({ login });
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api });
@@ -133,7 +133,8 @@ describe("till-lock-screen", () => {
     click(el, ".submit");
     await flush(el);
     expect(login).toHaveBeenCalledWith("p1", "1234");
-    expect(spy).toHaveBeenCalledWith({ personId: "p1" });
+    // detail carries the server-confirmed personId AND the roster display name the parent labels with
+    expect(spy).toHaveBeenCalledWith({ personId: "p1", displayName: "Ana" });
   });
 
   it("round-trips a leading-zero PIN (e.g. the default 0000) to login unmangled", async () => {

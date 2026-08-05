@@ -84,12 +84,16 @@ export class TillTenderPay extends LitElement {
       }
 
       .actions {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
         margin-top: var(--wt-space-3);
       }
 
       .pay,
       .confirm,
-      .add {
+      .add,
+      .cancel {
         width: 100%;
       }
     `,
@@ -149,6 +153,18 @@ export class TillTenderPay extends LitElement {
   #startPaying(): void {
     this.entry = "";
     this.mode = "paying";
+  }
+
+  /**
+   * Abandon the cash or weigh screen and return to idle WITHOUT settling anything — no
+   * `confirm-payment`, no line added. It is the way back from either keypad mode for an operator who
+   * opened Pay (or picked a weight tile) by mistake; without it those two modes are one-way. The
+   * basket is left exactly as it was.
+   */
+  #cancel(): void {
+    this.selected = undefined;
+    this.entry = "";
+    this.mode = "idle";
   }
 
   /** Emit the cash tender and return to idle. Guarded so a short tender can never be emitted, even
@@ -241,6 +257,9 @@ export class TillTenderPay extends LitElement {
         >
           ${t("action.confirm_payment")}
         </wt-button>
+        <wt-button class="cancel" variant="secondary" @click=${() => this.#cancel()}>
+          ${t("action.cancel")}
+        </wt-button>
       </div>
     `;
   }
@@ -271,6 +290,9 @@ export class TillTenderPay extends LitElement {
           @click=${() => this.#addWeight(product)}
         >
           ${t("action.add")}
+        </wt-button>
+        <wt-button class="cancel" variant="secondary" @click=${() => this.#cancel()}>
+          ${t("action.cancel")}
         </wt-button>
       </div>
     `;

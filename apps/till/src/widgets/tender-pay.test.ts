@@ -148,6 +148,36 @@ describe("till-tender-pay", () => {
     expect(query(el, "till-numeric-pad")).toBeNull();
   });
 
+  it("returns to idle from the cash screen when Cancel is tapped, emitting nothing", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    const spy = vi.fn();
+    el.addEventListener("confirm-payment", () => spy());
+    click(el, ".pay");
+    await el.updateComplete;
+    await type(el, "5"); // a tender is part-entered
+    click(el, ".cancel");
+    await el.updateComplete;
+    expect(query(el, ".pay")).not.toBeNull(); // back to the idle Pay button
+    expect(query(el, "till-numeric-pad")).toBeNull();
+    expect(spy).not.toHaveBeenCalled(); // Cancel never settles the sale
+    expect(store.lines).toHaveLength(1); // basket untouched
+  });
+
+  it("returns to idle from the weigh screen when Cancel is tapped, adding no line", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    store.emit("product-selected", jamon);
+    await el.updateComplete;
+    await type(el, "0.320");
+    click(el, ".cancel");
+    await el.updateComplete;
+    expect(query(el, ".pay")).not.toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain(t("weigh.prompt"));
+    expect(store.lines).toHaveLength(0); // the weighed product was not rung up
+  });
+
   it("prompts for kg when a weight product is selected", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });

@@ -1,18 +1,14 @@
 import { html, render } from "lit";
-import { applyTokens, registerIcons } from "@waitron/ui";
+import { applyTokens } from "@waitron/ui";
+import { TillApi } from "./api/client.js";
+import "./till-app.js";
 
-// The browser entry point for the Counter POS till. The real <till-app> element arrives in
-// Task 19; this placeholder exists now so the browser toolchain — Vite dev server, the token
-// layer and the icon registry — is wired and de-risked for Tasks 9-19. It is excluded from
-// coverage (see vitest.config.ts) because it runs only in a real browser at startup.
+// The browser entry point for the Counter POS till. It paints the token layer onto the document root
+// and mounts <till-app> — the root element that runs the whole walk-up sale (lock → counter → ticket →
+// new sale) against a real, same-origin TillApi. No icons are registered: nothing in the till renders
+// an <wt-icon> yet, so there is none to preload. Excluded from coverage (see vitest.config.ts): this
+// runs only in a real browser at startup, not under the test runner.
 applyTokens(document.documentElement);
 
-// A handful of placeholder icons the till will use. Registered here so the registry is
-// populated before any component that renders an <wt-icon> mounts.
-registerIcons({
-  cart: "M1 2 h3 l2 8 h7 l2 -6 H5",
-  check: "M2 8 L6 12 L14 4",
-});
-
 const app = document.querySelector<HTMLElement>("#app")!;
-render(html`<p>Waitron Till — the till UI arrives in Task 19.</p>`, app);
+render(html`<till-app .api=${new TillApi()}></till-app>`, app);

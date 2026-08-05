@@ -6,9 +6,14 @@ import type { StringKey } from "../i18n/strings.js";
 import "../widgets/numeric-pad.js";
 import type { StaffMember, TillApi } from "../api/client.js";
 
-/** The `logged-in` event payload — the person the server confirmed a session for. */
+/**
+ * The `logged-in` event payload: the server-confirmed `personId` plus the operator's `displayName`.
+ * The name rides along because the screen already holds it (the roster entry the operator picked), so
+ * the parent (`till-app`) can label the counter header without a second `listStaff` round-trip.
+ */
 export interface LoggedInDetail {
   personId: string;
+  displayName: string;
 }
 
 /**
@@ -171,7 +176,7 @@ export class TillLockScreen extends LitElement {
       if (!this.isConnected) return;
       this.dispatchEvent(
         new CustomEvent<LoggedInDetail>("logged-in", {
-          detail: { personId },
+          detail: { personId, displayName: person.displayName },
           bubbles: true,
           composed: true,
         }),

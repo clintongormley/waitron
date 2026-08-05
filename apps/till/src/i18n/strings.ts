@@ -24,6 +24,7 @@ export const en = {
   "action.add": "Add",
   "action.login": "Log in",
   "action.back": "Back",
+  "action.cancel": "Cancel",
   // Tenders
   "tender.cash": "Cash",
   // Numeric keypad (accessible names for the non-alphanumeric keys)
@@ -48,6 +49,7 @@ export const en = {
   // Errors
   "pin.invalid": "Wrong PIN, try again",
   "person.suspended": "Account suspended, ask a manager",
+  "sale.error": "Could not complete the sale, try again",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -64,6 +66,7 @@ export const es: Record<StringKey, string> = {
   "action.add": "Añadir",
   "action.login": "Entrar",
   "action.back": "Atrás",
+  "action.cancel": "Cancelar",
   "tender.cash": "Efectivo",
   "pad.decimal": "Punto decimal",
   "pad.backspace": "Borrar",
@@ -81,6 +84,7 @@ export const es: Record<StringKey, string> = {
   "weigh.prompt": "Introduce el peso (kg)",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "person.suspended": "Cuenta suspendida, avisa a un responsable",
+  "sale.error": "No se pudo completar la venta, inténtalo de nuevo",
 };
 
 // Locale → catalogue. `en` is included as its own catalogue so an explicit
