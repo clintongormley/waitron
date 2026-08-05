@@ -30,12 +30,25 @@ import "./errors.js";
 // (identity's sessions.rls.test.ts / persons.rls.test.ts); they are not re-proven here.
 let cfg: TillConfig;
 let ana: { id: string };
+// The pre-login roster fixtures: `abel` is a second ACTIVE person whose name sorts BEFORE "Ana" but
+// is inserted AFTER it, so `[abel, ana]` proves `listActiveStaff` sorts by name rather than by
+// insertion order; `zoe` is SUSPENDED, so its absence proves the `status = 'active'` filter. The
+// tenant's tax_id is generated (a fresh NIF each run), so `GET /api/till`'s `nif` is asserted against
+// the value read back here, not a hardcoded one.
+let abel: { id: string };
+let venueTaxId: string;
 
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
     const tenantId = await seedTenant(db);
+    // `seedTenant` sets legal_name = 'Test SL' and a generated tax_id; read the tax_id back so the
+    // `GET /api/till` assertion can pin the exact NIF the route must echo.
+    const tenant = await db.execute<{ tax_id: string }>(
+      sql`select tax_id from tenants where id = ${tenantId}`,
+    );
+    venueTaxId = tenant.rows[0]!.tax_id;
     // A location → till the session cookie references: `loginWithPin` inserts a `sessions` row with a
     // FK to `tills`, so the till `cfg.tillId` names must exist. Seeded as the PGlite superuser (RLS
     // bypassed) — pure setup, as `@waitron/db`'s own seed helpers document.
@@ -50,6 +63,14 @@ const suite = usePgliteDb({
       insert into persons (tenant_id, display_name, pin_hash, role)
       values (${tenantId}, 'Ana', ${hashPin("5555")}, 'staff') returning id`);
     ana = { id: person.rows[0]!.id };
+    // Abel: ACTIVE, inserted after Ana but sorts before her. Zoe: SUSPENDED, must be excluded.
+    const abelRow = await db.execute<{ id: string }>(sql`
+      insert into persons (tenant_id, display_name, pin_hash, role)
+      values (${tenantId}, 'Abel', ${hashPin("1111")}, 'staff') returning id`);
+    abel = { id: abelRow.rows[0]!.id };
+    await db.execute(sql`
+      insert into persons (tenant_id, display_name, pin_hash, role, status)
+      values (${tenantId}, 'Zoe', ${hashPin("2222")}, 'staff', 'suspended')`);
     cfg = makeCfg(tenantId, till.rows[0]!.id, loc.rows[0]!.id);
   },
 });
@@ -269,5 +290,39 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
     });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+});
+
+describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)", () => {
+  it("GET /api/staff lists ACTIVE staff sorted by name, no cookie required, no secrets", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+
+    // No cookie at all — the lock screen calls this before any session exists.
+    const res = await app.request("/api/staff");
+    expect(res.status).toBe(200);
+    const staff = await res.json();
+    // Sorted by displayName (Abel before Ana, though Abel was inserted second), suspended Zoe absent.
+    expect(staff).toEqual([
+      { personId: abel.id, displayName: "Abel" },
+      { personId: ana.id, displayName: "Ana" },
+    ]);
+    // The roster carries the login id + display name only — nothing a customer or a bystander at the
+    // lock screen must not see (no pin material, no role, no status).
+    expect(JSON.stringify(staff)).not.toMatch(/pin|secret|password|url|cert|role|status|hash/i);
+  });
+
+  it("GET /api/till returns locale + issuer identity (venueName + nif) and no secret", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+
+    const res = await app.request("/api/till");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // The receipt-issuer identity Task 17's ticket view needs: the legal name + NIF printed on every
+    // customer receipt, plus the till's UI locale.
+    expect(body).toEqual({ locale: "es-ES", venueName: "Test SL", nif: venueTaxId });
+    // Nothing sensitive: no pin, certificate, connection string or verification url reaches the wire.
+    expect(JSON.stringify(body)).not.toMatch(/pin|secret|password|url|cert/i);
   });
 });

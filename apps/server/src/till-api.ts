@@ -1,9 +1,10 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { eq } from "drizzle-orm";
 import { isAppError } from "@waitron/shared";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, tenants, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { endSession, loginWithPin } from "@waitron/identity";
+import { endSession, listActiveStaff, loginWithPin } from "@waitron/identity";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { codeOf } from "./error-code.js";
 import type { Logger } from "./logger.js";
@@ -74,9 +75,10 @@ export async function run(c: Context, log: Logger, fn: () => Promise<Response>):
 }
 
 /**
- * Mounts the till's session routes on an existing Hono app. Only log in / log out live here; Tasks
- * 5/6 add `GET /api/staff`, `GET /api/till`, `GET /api/products` and `POST /api/sales` to THIS same
- * function, each handler wrapped in `run` (above) so the whole surface maps errors identically.
+ * Mounts the till's session, roster and boot-info routes on an existing Hono app. Log in / log out,
+ * the pre-login staff roster and the public till info live here; Task 6 adds `GET /api/products` and
+ * `POST /api/sales` to THIS same function, each handler wrapped in `run` (above) so the whole surface
+ * maps errors identically.
  */
 export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // Log in: verify the operator's PIN and set the httpOnly session cookie. The login runs as the app
@@ -114,6 +116,49 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }
       clearSessionCookie(c);
       return c.json({ ok: true });
+    }),
+  );
+
+  // Pre-login roster for the lock screen. Deliberately UNAUTHENTICATED — it is what the operator
+  // picks their name from before any session exists — so it calls `listActiveStaff` under
+  // `withTenant` + `asAppUser` (RLS scopes it to this till's tenant) rather than `requireSession`.
+  // `listActiveStaff` returns `{ personId, displayName }` only: no PIN material, role or status, so
+  // there is nothing here a bystander at the counter must not see.
+  app.get("/api/staff", (c) =>
+    run(c, log, async () => {
+      const staff = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return listActiveStaff(tx);
+      });
+      return c.json(staff);
+    }),
+  );
+
+  // Public boot info for the till app. Also UNAUTHENTICATED (the browser fetches it before login) and
+  // deliberately free of secrets: `venueName` + `nif` are the receipt-issuer identity legally printed
+  // on every customer ticket (Task 17's ticket view reads them from here, so its client never touches
+  // server code), and `locale` drives the UI language. Read from the `tenants` row under `withTenant`
+  // + `asAppUser`: `app_user` holds SELECT on `tenants` and RLS scopes it to this till's own tenant
+  // row, so the `eq(id)` filter selects exactly that row.
+  app.get("/api/till", (c) =>
+    run(c, log, async () => {
+      const issuer = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        const [row] = await tx
+          .select({ venueName: tenants.legalName, nif: tenants.taxId })
+          .from(tenants)
+          .where(eq(tenants.id, deps.cfg.tenantId));
+        return row;
+      });
+      /* v8 ignore start */
+      if (issuer === undefined) {
+        // Structurally unreachable: `deps.cfg.tenantId` is the till's own tenant (provisioning
+        // stamped it), so its `tenants` row always exists and RLS returns it. A misconfigured till
+        // pointed at a nonexistent tenant becomes an opaque 500 via `run`, never a partial payload.
+        throw new Error(`GET /api/till: no tenant row for ${deps.cfg.tenantId}`);
+      }
+      /* v8 ignore stop */
+      return c.json({ locale: deps.cfg.locale, venueName: issuer.venueName, nif: issuer.nif });
     }),
   );
 }
