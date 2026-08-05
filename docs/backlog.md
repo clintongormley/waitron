@@ -326,18 +326,20 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     `vatBreakdown` stored) and read by `computeVatSummary`. Its own slice (schema + migration +
     reporting). **Not reachable in production today** (headless — no catalogue sales until the till,
     #7); the caveat is documented in `vat-summary.ts`. Found by the finish-branch fresh-context review.
-  - **Asesor / XSD confirmation: the rounding *locus* and the difference-method residual.** The open
-    question is where AEAT requires the round-to-céntimo to land — **per line item** or **per tax
-    (rate) group** — because the two can't both be exact and the choice picks which invariant we keep:
-    this slice rounds each line's base to 2dp and sums them, keeping `BaseImponible == Σ line bases`
-    exact, at the cost of a larger `cuota`-vs-`base×rate` residual across many same-rate lines;
-    group-level base rounding (`base_group = round(gross_group/(1+rate))`) minimises that residual but
-    breaks `BaseImponible == Σ line bases`. Either way the primary reconciliation
-    `ImporteTotal == Σ(base+cuota)` holds exactly, and rounding is half-away-from-zero (Spain's
-    *redondeo al alza*), full-precision BigInt intermediates, never float. Whether the chosen locus and
-    the residual sit within AEAT's *per-record* tolerance is an external claim not confirmed on primary
-    source — sits with the other asesor/XSD questions (F3 canje, SumUp). Spec D8/§3 state it as
-    unconfirmed rather than asserting it.
+  - **Difference-method rounding — AEAT acceptance CLOSED on primary source (FAQ §20, 4 Dec 2025);
+    one residual + configurability remain.** The AEAT developer FAQ documents the only `ImporteTotal`
+    validation: `ImporteTotal == Σ(BaseImponible + CuotaRepercutida + CuotaRecargoEquivalencia)` with a
+    **±10.00 € tolerance** and a **warning, not a rejection** (= `verifactu/src/validate.ts`'s
+    `TOTAL_TOLERANCE = 10`). The difference method makes that identity hold **exactly**, and the FAQ
+    describes **no** `CuotaRepercutida == base×rate` check — so the per-line residual the earlier
+    framing worried about does not affect AEAT acceptance. **Remaining:** (1) check *"el documento de
+    validaciones"* the FAQ points to for any *per-desglose-line* cuota validation before treating the
+    residual as wholly unconstrained; fold the §20 finding into `docs/compliance/verifactu-faq-notes.md`.
+    (2) **Configurability:** price basis, rounding *locus* (line-item vs tax-group), and precision are a
+    **tax-module property** — the #57 `resolveFiscalModules`/`nodes.tax_module` seam — so a non-ES
+    regime (IGIC/IPSI, other country) carries its own rules; this slice hardcodes ES-común/IVA as the
+    first piece of that module. The rounding *mode* (half-away-from-zero = *redondeo al alza*) stays
+    fixed in `@waitron/shared` until an authority needs banker's (YAGNI). Spec §8 records both.
   - **RLS test hardening (finish-branch review, low risk).** `operations.rls.test.ts` proves
     cross-tenant isolation by deletion on `catalogues` and `products` but not `categories` (the 0027
     policy is byte-identical), and `assignCatalogueToLocation` is exercised only under PGlite

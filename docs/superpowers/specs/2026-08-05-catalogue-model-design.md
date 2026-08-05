@@ -281,6 +281,31 @@ This demonstrates the seam the till will use, headless, against the real fiscal 
 - **Composite vs plain FKs** (§2) — default plain + RLS; the plan confirms no mixed-tenant path exists.
 - **The `version` bump trigger** is a sync-slice concern; this slice ships the column defaulting to 1
   and does not bump it. Named so it is not mistaken for wired.
+- **The difference-method rounding is confirmed AEAT-safe on primary source (FAQ §20, 4 Dec 2025).**
+  The AEAT developer FAQ (`FAQs-Desarrolladores.pdf` §20) states the only `ImporteTotal` validation:
+  *"Se validará que sea igual a Σ (BaseImponibleOimporteNoSujeto + CuotaRepercutida +
+  CuotaRecargoEquivalencia) de todas las líneas de detalle de desglose … se devolverá un aviso de
+  error (no generará rechazo), admitiéndose un margen de error de +/- 10,00 euros."* So AEAT checks
+  `ImporteTotal == Σ(base + cuota + recargo)` with a **±10.00 € tolerance** and a **warning, not a
+  rejection** — exactly what `verifactu/src/validate.ts`'s `TOTAL_TOLERANCE = 10` already encodes. The
+  difference method makes that identity hold **exactly** (`cuota = gross − base`, `ImporteTotal = Σ
+  gross`), so it passes with zero discrepancy. Critically, the FAQ describes **no** validation that
+  `CuotaRepercutida == BaseImponible × TipoImpositivo`, so the difference-method residual
+  (`cuota ≠ base×rate`) is not something AEAT checks — the D8 worry is a non-issue for AEAT acceptance.
+  **Residual to confirm** (narrowed, not fully closed): the FAQ points to *"el documento de
+  validaciones de la web de desarrolladores de la AEAT"* for the full rule set — check that document
+  for any *per-desglose-line* `CuotaRepercutida` validation before treating the per-line residual as
+  wholly unconstrained. (This finding belongs in `docs/compliance/verifactu-faq-notes.md` too.)
+- **Rounding choices are a *tax-module* property, not a global constant — the configurability seam is
+  #57's `resolveFiscalModules` / `nodes.tax_module`.** Price basis (gross vs net), rounding *locus*
+  (line-item vs tax-group base rounding), and decimal precision differ by tax authority; this slice
+  hardcodes the **ES-común/IVA** rules (gross-inclusive, line-item base rounding, 2 dp) inside
+  `@waitron/catalogue`, which is the *first real piece* of the IVA tax module. When a second regime is
+  built (IGIC/IPSI, or a non-ES country), those rules lift into the resolved tax module and are
+  selected per node/location — no per-tenant flag. The rounding **mode** is the exception: it lives in
+  `@waitron/shared` (half-away-from-zero = Spain's *redondeo al alza*), is near-universal for tax, and
+  stays fixed until an authority demonstrably requires banker's/half-even — over-configuring it now
+  would be speculative (YAGNI).
 
 ---
 
