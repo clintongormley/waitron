@@ -5,6 +5,7 @@ import type { RecordSaleInput } from "@waitron/core";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { FISCAL_MIGRATIONS, VerifactuBackend } from "@waitron/fiscal-verifactu";
+import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
   nodeId as brandNodeId,
@@ -31,8 +32,13 @@ import { applyVenue } from "./venue-apply.js";
  *
  * PGlite's default connection is a SUPERUSER, so it bypasses RLS; that is fine here for the same
  * reason as `venue-apply.test.ts` — the FORCE-RLS privilege path is proven by the container suite.
+ *
+ * IDENTITY_MIGRATIONS between core and fiscal (manifest order core → identity → fiscal): the real
+ * `applyVenue` now seeds an admin `persons` row, which carries a foreign key onto `tenants`.
  */
-const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
+const suite = usePgliteDb({
+  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, FISCAL_MIGRATIONS],
+});
 
 const steadyClock: TrustedClock = {
   now: () => ({
@@ -69,6 +75,7 @@ function request(taxId = "B12345678"): VenueRequest {
     tillName: "Caja 1",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
+    admin: { displayName: "Owner", pinHash: "scrypt$00$00" },
   };
 }
 

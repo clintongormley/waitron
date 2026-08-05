@@ -522,6 +522,9 @@ importers:
       '@waitron/fiscal-verifactu':
         specifier: workspace:*
         version: link:../fiscal-verifactu
+      '@waitron/identity':
+        specifier: workspace:*
+        version: link:../identity
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../migrations

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import type { Database, DeploymentEnvironment } from "@waitron/db";
 import { manifestSets } from "@waitron/migrations";
+import { verifyPin } from "@waitron/identity";
 import { runCli } from "./cli.js";
 import type { CliDeps } from "./cli.js";
 import type { InstanceState, RoleFacts } from "./instance-state.js";
@@ -64,6 +65,10 @@ const VENUE_ARGS = [
   "A",
   "--rectificative-code",
   "R",
+  "--admin-name",
+  "Owner",
+  "--admin-pin",
+  "4321",
 ];
 
 function facts(overrides: Partial<RoleFacts> = {}): RoleFacts {
@@ -1015,6 +1020,7 @@ describe("runCli venue", () => {
     const [actions, applyDeps] = h.applyVenue.mock.calls[0] as [VenueAction[], VenueApplyDeps];
     expect(actions.map((action) => action.kind)).toEqual([
       "ensure-tenant",
+      "seed-admin",
       "create-location",
       "create-till",
       "create-node",
@@ -1022,6 +1028,12 @@ describe("runCli venue", () => {
       "create-series",
       "create-series",
     ]);
+
+    // The seed-admin action carries the admin's name and a HASH of the PIN — never the plaintext.
+    // The salt is random, so the hash is checked with `verifyPin`, not by equality.
+    const seedAdmin = actions.find((action) => action.kind === "seed-admin");
+    expect(seedAdmin?.kind === "seed-admin" && seedAdmin.displayName).toBe("Owner");
+    expect(seedAdmin?.kind === "seed-admin" && verifyPin("4321", seedAdmin.pinHash)).toBe(true);
 
     // `withVenueState` re-points the admin URI at the target database and hands THAT connection to
     // the apply — not the admin's own database, where every insert would land under the wrong RLS
@@ -1037,17 +1049,49 @@ describe("runCli venue", () => {
     // The cluster the operator is about to write to — host, port, user; never the password.
     expect(printed).toContain("Cluster: admin@db.example:5432");
     expect(printed).toContain("ensure tenant ES/B12345678");
+    // The admin is named in the plan the operator confirms — but the PIN is a secret and never
+    // appears, neither in plaintext nor as a hash.
+    expect(printed).toContain("seed admin Owner");
     expect(printed).toContain("create location Centro in ES-common");
     // The result summary names the node and the SIF the apply returned.
     expect(printed).toContain(`node:     ${VENUE_RESULT.nodeId}`);
     expect(printed).toContain(`SIF:      ${VENUE_RESULT.sif.id} (installation 1)`);
 
-    // No secret anywhere: the admin password is never echoed and venue mints no connection strings.
+    // No secret anywhere: the admin password is never echoed, the admin PIN never appears, and
+    // venue mints no connection strings.
     expect(printed).not.toContain("adminsecret");
     expect(printed).not.toContain(ADMIN_URI);
+    expect(printed).not.toContain("4321");
     expect(printedUris(h.lines)).toEqual([]);
     // The target connection was closed, whichever way the run ended.
     expect(h.closes()).toBe(1);
+  });
+
+  it("reads the admin PIN with the echo OFF and never prints it, hashing it into the plan", async () => {
+    // The PIN is a secret. When --admin-pin is omitted it is read through `promptSecret` (echo-off),
+    // exactly like the admin connection string — never through the echoing `prompt`. It is hashed at
+    // the CLI boundary (`hashPin`), so only a hash ever reaches the plan/apply and the plaintext
+    // appears nowhere in what the operator saw. `--admin-pin 4321` are the last two entries of
+    // VENUE_ARGS, so slicing them off leaves --admin-name in place and the PIN to the prompt.
+    const argsWithoutPin = VENUE_ARGS.slice(0, VENUE_ARGS.indexOf("--admin-pin"));
+    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI }, secrets: ["4321"] });
+    const code = await runCli([...argsWithoutPin, "--yes"], h.deps);
+    expect(code).toBe(0);
+
+    // The admin URI came from the env, so the ONLY echo-off prompt is the PIN — and it is echo-off,
+    // never on the visible `prompt` stream.
+    expect(h.askedSecretly).toEqual(["admin PIN: "]);
+    expect(h.asked.join(" ")).not.toContain("PIN");
+
+    const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
+    const seedAdmin = actions.find((action) => action.kind === "seed-admin");
+    expect(seedAdmin?.kind === "seed-admin" && seedAdmin.displayName).toBe("Owner");
+    // The salt is random, so the hash is checked with `verifyPin`, not by equality — and the
+    // plaintext PIN reaches neither the action nor the transcript.
+    expect(seedAdmin?.kind === "seed-admin" && verifyPin("4321", seedAdmin.pinHash)).toBe(true);
+    const transcript = h.lines.join("\n");
+    expect(transcript).not.toContain("4321");
+    expect(transcript).toContain("seed admin Owner");
   });
 
   it("refuses an unimplemented territory and applies nothing", async () => {
@@ -1306,7 +1350,11 @@ describe("runCli venue", () => {
         "Barra 1",
         "A",
         "R",
+        "Owner", // admin name
       ],
+      // The admin PIN is the one echo-OFF option: read through `promptSecret`, never the visible
+      // `prompt`. The admin URI comes from the env, so this is the only secret asked for.
+      secrets: ["4321"],
       env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
     });
     // `--yes` so the confirmation prompt does not appear amid the option prompts.
@@ -1338,8 +1386,10 @@ describe("runCli venue", () => {
       "till name: ",
       "series code: ",
       "rectificative series code: ",
+      "admin name: ",
     ]);
-    expect(h.askedSecretly).toEqual([]);
+    // The admin PIN is the sole echo-off prompt (the admin URI came from the env).
+    expect(h.askedSecretly).toEqual(["admin PIN: "]);
 
     // The two locales prompted for reach the plan.
     const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];

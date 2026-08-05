@@ -28,10 +28,16 @@ export interface VenueRequest {
   tillName: string;
   seriesCode: string;
   rectificativeSeriesCode: string;
+  /** The initial ADMIN person a freshly provisioned venue needs, so someone can log in and
+   * authorize privileged actions from day one. The PIN is already HASHED here (hashed at the CLI
+   * boundary by `hashPin`) — `pinHash`, never a plaintext PIN, so the secret never enters the plan
+   * or any action. */
+  admin: { displayName: string; pinHash: string };
 }
 
 export type VenueAction =
   | { kind: "ensure-tenant"; tenantId: string; country: string; taxId: string; legalName: string }
+  | { kind: "seed-admin"; displayName: string; pinHash: string }
   | {
       kind: "create-location";
       name: string;
@@ -106,6 +112,14 @@ export function planVenue(request: VenueRequest): VenueAction[] {
       taxId: request.taxId,
       legalName: request.legalName,
     },
+    // A person needs only the tenant scope, so the admin is seeded immediately after ensure-tenant,
+    // before the location. `pinHash` is already a hash (hashed at the CLI boundary); no plaintext PIN
+    // ever reaches an action.
+    {
+      kind: "seed-admin",
+      displayName: request.admin.displayName,
+      pinHash: request.admin.pinHash,
+    },
     {
       kind: "create-location",
       name: request.location.name,
@@ -138,6 +152,10 @@ export function describeVenueAction(action: VenueAction): string {
   switch (action.kind) {
     case "ensure-tenant":
       return `ensure tenant ${action.country}/${action.taxId} (${action.legalName})`;
+    case "seed-admin":
+      // The admin's NAME only — never the pin hash. This line goes into the plan summary an operator
+      // reads, and the hash is a secret (§ SECRET DISCIPLINE).
+      return `seed admin ${action.displayName}`;
     case "create-location":
       return `create location ${action.name} in ${action.fiscalTerritory} (${action.invoiceLocales.join(", ")})`;
     case "create-till":

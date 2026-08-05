@@ -31,6 +31,7 @@ function venueRequest(taxId: string): VenueRequest {
     tillName: "Caja 1",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
+    admin: { displayName: "Owner", pinHash: "scrypt$00$00" },
   };
 }
 

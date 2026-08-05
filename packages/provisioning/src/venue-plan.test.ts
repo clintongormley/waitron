@@ -24,15 +24,17 @@ function request(overrides: Partial<VenueRequest> = {}): VenueRequest {
     tillName: "Caja 1",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
+    admin: { displayName: "Owner", pinHash: "scrypt$00$00" },
     ...overrides,
   };
 }
 
 describe("planVenue", () => {
-  it("emits ensure-tenant → location → till → node → register-sif → two series, in order", () => {
+  it("emits ensure-tenant → seed-admin → location → till → node → register-sif → two series, in order", () => {
     const actions = planVenue(request());
     expect(actions.map((a) => a.kind)).toEqual([
       "ensure-tenant",
+      "seed-admin",
       "create-location",
       "create-till",
       "create-node",
@@ -40,6 +42,19 @@ describe("planVenue", () => {
       "create-series",
       "create-series",
     ]);
+  });
+
+  it("seeds the admin immediately after ensure-tenant, carrying the display name and pin hash", () => {
+    // The admin needs only the tenant scope, so it is emitted right after ensure-tenant and before
+    // the location. The pinHash flows straight through from the request — planVenue never sees a
+    // plaintext PIN (it is hashed at the CLI boundary).
+    const actions = planVenue(request());
+    expect(actions[0]?.kind).toBe("ensure-tenant");
+    expect(actions[1]).toEqual({
+      kind: "seed-admin",
+      displayName: "Owner",
+      pinHash: "scrypt$00$00",
+    });
   });
 
   it("derives the deterministic tenant id and stamps the resolved modules on the node", () => {
@@ -153,6 +168,7 @@ describe("planVenue", () => {
     );
     expect(actions.map((a) => a.kind)).toEqual([
       "ensure-tenant",
+      "seed-admin",
       "create-location",
       "create-till",
       "create-node",
@@ -168,6 +184,7 @@ describe("describeVenueAction", () => {
     const lines = planVenue(request()).map((action) => describeVenueAction(action));
     expect(lines).toEqual([
       "ensure tenant ES/B12345678 (Deli SL)",
+      "seed admin Owner",
       "create location Mostrador in ES-common (es-ES)",
       "create till Caja 1",
       "create node Mostrador filing=verifactu tax=iva",
@@ -175,5 +192,19 @@ describe("describeVenueAction", () => {
       "create standard series A",
       "create rectificative series R",
     ]);
+  });
+
+  it("names the admin but NEVER the pin hash — the description is operator-facing", () => {
+    // The pin_hash is a secret: it must not reach a plan summary an operator sees. Uses a distinctive
+    // hash so the negative assertion cannot pass by coincidence.
+    const line = describeVenueAction({
+      kind: "seed-admin",
+      displayName: "Alicia",
+      pinHash: "scrypt$deadbeef$cafef00d",
+    });
+    expect(line).toBe("seed admin Alicia");
+    expect(line).not.toContain("scrypt");
+    expect(line).not.toContain("deadbeef");
+    expect(line).not.toContain("cafef00d");
   });
 });

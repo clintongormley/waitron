@@ -6,6 +6,7 @@ import {
   type Database,
   type DeploymentEnvironment,
 } from "@waitron/db";
+import { hashPin } from "@waitron/identity";
 import { assertIdentifier } from "./identifiers.js";
 import { applyInstance, withDatabase, type TargetConnection } from "./instance-apply.js";
 import { describeAction, planInstance, type InstanceAction } from "./instance-plan.js";
@@ -71,7 +72,7 @@ const USAGE = [
   "           [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]",
   "           [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]",
   "           [--day-cutover <HH:MM>] [--till-name <name>] [--series-code <code>]",
-  "           [--rectificative-code <code>] [--yes]",
+  "           [--rectificative-code <code>] [--admin-name <name>] [--admin-pin <pin>] [--yes]",
   "",
   `  <env> is one of: ${ENVIRONMENTS.join(", ")}`,
   "",
@@ -330,6 +331,8 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       "till-name": { type: "string" },
       "series-code": { type: "string" },
       "rectificative-code": { type: "string" },
+      "admin-name": { type: "string" },
+      "admin-pin": { type: "string" },
       yes: { type: "boolean" },
     }));
   } catch {
@@ -386,6 +389,14 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       "rectificative series code: ",
       deps,
     );
+    const adminName = await resolveOption(values["admin-name"], "admin name: ", deps);
+    // The PIN is a SECRET. It is read echo-OFF through `promptSecret` — never `resolveOption`/
+    // `prompt`, which echo — exactly as the admin connection string is (`readAdminUri`). Then it is
+    // hashed HERE, at the CLI boundary, with `hashPin`, so only `pinHash` ever flows through
+    // `VenueRequest`/`VenueAction`/`applyVenue`: the plaintext PIN never enters the plan, is never an
+    // error param, and is never printed (§ SECRET DISCIPLINE). Unlike the other fields, a flag value
+    // is taken as-is (not trimmed): a PIN is opaque and its surrounding characters are significant.
+    const adminPin = values["admin-pin"] ?? (await deps.io.promptSecret("admin PIN: "));
 
     const request: VenueRequest = {
       country,
@@ -407,6 +418,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       tillName,
       seriesCode,
       rectificativeSeriesCode,
+      admin: { displayName: adminName, pinHash: hashPin(adminPin) },
     };
     // Pure, and the last thing that can refuse the request without touching a database: an
     // unimplemented territory (`fiscal.regime_not_implemented`), a bad locale count, equal series

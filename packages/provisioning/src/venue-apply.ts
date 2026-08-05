@@ -72,6 +72,15 @@ export async function applyVenue(
             values (${action.tenantId}, ${action.country}, ${action.taxId}, ${action.legalName})
             on conflict (country, tax_id) do nothing`);
           break;
+        case "seed-admin":
+          // Raw SQL like every other insert here — no @waitron/identity import needed; the `persons`
+          // table exists because the identity migrations run before a venue is applied. `pin_hash` is
+          // already a scrypt hash (hashed at the CLI boundary), never a plaintext PIN. `role='admin'`
+          // is the whole point: this person can log in and authorize privileged actions from day one.
+          await tx.execute(sql`
+            insert into persons (tenant_id, display_name, pin_hash, role)
+            values (${tenantId}, ${action.displayName}, ${action.pinHash}, 'admin')`);
+          break;
         case "create-location": {
           locationId = randomUUID();
           // `invoice_locales` is `text[]`. A JS array interpolated straight into a `sql` template
