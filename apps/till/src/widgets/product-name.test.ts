@@ -31,4 +31,11 @@ describe("productName", () => {
   it("falls back to the product id when there is no description at all", () => {
     expect(productName(product({}))).toBe("p1");
   });
+
+  it("reads an EXPLICIT locale over the current one — the legal receipt renders in the invoice locale", () => {
+    // The operator UI is Spanish, but the ticket asks for the English description by locale: names
+    // are data keyed by locale, so passing one overrides the module-level current locale.
+    setLocale("es-ES");
+    expect(productName(product({ "es-ES": "Café", en: "Coffee" }), "en")).toBe("Coffee");
+  });
 });
