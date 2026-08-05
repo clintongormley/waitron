@@ -24,6 +24,9 @@ import { reconcilerAsDuty } from "./reconcile-duty.js";
 import { runPass, DRAIN_DUTY } from "./pass.js";
 import { stripeAccountResolver, defaultMakeStripe } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
+import { mountTillApi } from "./till-api.js";
+import { makeFiscalBackend, systemClock } from "./till-backend.js";
+import { buildServeOptions } from "./tls.js";
 import "./errors.js";
 // `DEFAULTS` is NOT imported: `loadConfig` already applied the scheduler's defaults, so reaching for
 // them again here would be a second source of truth for the same five numbers.
@@ -151,8 +154,35 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     { db, ring, environment: config.environment, makeStripe: defaultMakeStripe },
     log,
   );
+  // The till's own HTTP surface (session, roster, boot info, catalogue, sales) on the SAME app —
+  // `mountTillApi` "attaches to this app rather than creating a second one", the identical convention
+  // `mountWebhook` above follows. `backend`/`clock` are the till's fiscal pieces, built exactly as
+  // `scripts/record-one-sale.ts` does (see `till-backend.ts`): the till's `recordSale` files the same
+  // Veri*Factu chain, and neither ever contacts AEAT (that is the `drain` loop below's job).
+  // `secureCookies` tracks the transport: TRUE only when TLS is configured, so the session cookie is
+  // never marked `Secure` on a plain-HTTP loopback host where the browser would then never send it
+  // back. Mounting registers routes only — no database work happens here, so a till pointed at an
+  // unprovisioned tenant fails per-request (via `run`), never at boot.
+  mountTillApi(
+    app,
+    {
+      db,
+      backend: makeFiscalBackend(db, env),
+      clock: systemClock(),
+      cfg: config.till,
+      secureCookies: config.tls !== undefined,
+    },
+    log,
+  );
+  // `buildServeOptions` turns the plain-HTTP options into HTTPS ones when `config.tls` is set,
+  // reading the cert/key files, and returns them unchanged otherwise (loopback dev). The exact
+  // `@hono/node-server` option names (`createServer` + `serverOptions`) are confirmed and documented
+  // in `tls.ts`. A missing or unreadable certificate fails the boot loudly here (spec §8).
   const server = serve(
-    { fetch: app.fetch, port: config.httpPort, hostname: config.httpHost },
+    buildServeOptions(
+      { fetch: app.fetch, port: config.httpPort, hostname: config.httpHost },
+      config.tls,
+    ),
     (info) => {
       bound = true;
       log("info", "server.listening", { port: info.port, environment: config.environment });

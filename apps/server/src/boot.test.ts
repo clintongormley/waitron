@@ -93,9 +93,23 @@ const PROBE_ROLE = "server_boot_probe";
 const PROBE_PASSWORD = "probe";
 const RUNTIME_ROLE = "server_boot_runtime_probe";
 const RUNTIME_PASSWORD = "probe";
+// The till's fiscal identity, now REQUIRED by `loadConfig` (it resolves `config.till` via
+// `loadTillConfig`). Distinct per field, matching till-config.test.ts's convention. Folded into
+// `KEY_ENV` below so every real-host boot in this suite carries one; the two config-guard tests at
+// the bottom, which omit `KEY_ENV` on purpose to reach `credentials.key_missing`, spread it directly.
+// The tenant is never seeded — the till routes are mounted but only `GET /api/staff` is exercised
+// (see the first test), which returns `[]` under RLS for an unknown tenant rather than needing one.
+const TILL_ENV = {
+  WAITRON_TILL_TENANT_ID: "11111111-1111-4111-8111-111111111111",
+  WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
+  WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
+  WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
+  WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
+};
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
+  ...TILL_ENV,
 };
 
 const suite = useRealPostgres({
@@ -342,6 +356,14 @@ describe("startServer, against a real container as the deployment role", () => {
       expect(response.status).toBe(200);
       const body = (await response.json()) as { ok: boolean };
       expect(body.ok).toBe(true);
+
+      // The till API is mounted on the same app (`mountTillApi` in `boot.ts`). `GET /api/staff` is
+      // the unauthenticated roster route — it needs no session and no seeded tenant: under RLS scoped
+      // to this till's own (unprovisioned) tenant it returns an empty array rather than 404, which is
+      // the proof the route exists. A 404 here would mean `mountTillApi` never ran.
+      const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
+      expect(staff.status).toBe(200);
+      expect(await staff.json()).toEqual([]);
     } finally {
       await server.close();
     }
@@ -723,6 +745,7 @@ describe("startServer's maxTickMs-vs-drain-budget guard", () => {
   it("rejects WAITRON_MAX_TICK_MS at or above drain's staleness budget, before touching any infrastructure", async () => {
     const error = await captureError(() =>
       startServer({
+        ...TILL_ENV,
         DATABASE_URL: UNREACHABLE_DATABASE_URL,
         WAITRON_MAX_TICK_MS: String(DUTY_BUDGET_MS[DRAIN_DUTY]),
       }),
@@ -742,6 +765,7 @@ describe("startServer's maxTickMs-vs-drain-budget guard", () => {
     // guard let a valid value through rather than rejecting it for the wrong reason.
     const error = await captureError(() =>
       startServer({
+        ...TILL_ENV,
         DATABASE_URL: UNREACHABLE_DATABASE_URL,
         WAITRON_MAX_TICK_MS: String(DUTY_BUDGET_MS[DRAIN_DUTY] - 1),
       }),
