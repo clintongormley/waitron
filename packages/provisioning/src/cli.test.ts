@@ -67,9 +67,14 @@ const VENUE_ARGS = [
   "R",
   "--admin-name",
   "Owner",
-  "--admin-pin",
-  "4321",
 ];
+
+/** The two secrets `venue` reads the SAME way — from the env or an echo-off prompt, never argv: the
+ * admin connection string (WAITRON_ADMIN_DATABASE_URL) and the admin PIN (WAITRON_ADMIN_PIN). Most
+ * venue tests supply both from the env so no prompt fires; the ones that exercise the prompt path
+ * omit WAITRON_ADMIN_PIN and answer through `secrets` instead. The PIN is `4321` throughout, so a
+ * seeded admin's hash is checkable with `verifyPin("4321", …)`. */
+const VENUE_ENV = { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI, WAITRON_ADMIN_PIN: "4321" };
 
 function facts(overrides: Partial<RoleFacts> = {}): RoleFacts {
   return {
@@ -1005,7 +1010,7 @@ describe("runCli status", () => {
 
 describe("runCli venue", () => {
   it("reads the stamp, applies the planned actions against the target, and exits 0", async () => {
-    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const h = harness({ env: VENUE_ENV });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(0);
 
@@ -1034,6 +1039,10 @@ describe("runCli venue", () => {
     const seedAdmin = actions.find((action) => action.kind === "seed-admin");
     expect(seedAdmin?.kind === "seed-admin" && seedAdmin.displayName).toBe("Owner");
     expect(seedAdmin?.kind === "seed-admin" && verifyPin("4321", seedAdmin.pinHash)).toBe(true);
+    // The PIN came from WAITRON_ADMIN_PIN in the env (VENUE_ENV) — the env-var half of the same
+    // discipline the admin connection string follows — so no echo-off prompt fired for it, and it
+    // was never read from argv (VENUE_ARGS carries no PIN flag).
+    expect(h.askedSecretly).toEqual([]);
 
     // `withVenueState` re-points the admin URI at the target database and hands THAT connection to
     // the apply — not the admin's own database, where every insert would land under the wrong RLS
@@ -1067,20 +1076,19 @@ describe("runCli venue", () => {
     expect(h.closes()).toBe(1);
   });
 
-  it("reads the admin PIN with the echo OFF and never prints it, hashing it into the plan", async () => {
-    // The PIN is a secret. When --admin-pin is omitted it is read through `promptSecret` (echo-off),
-    // exactly like the admin connection string — never through the echoing `prompt`. It is hashed at
-    // the CLI boundary (`hashPin`), so only a hash ever reaches the plan/apply and the plaintext
-    // appears nowhere in what the operator saw. `--admin-pin 4321` are the last two entries of
-    // VENUE_ARGS, so slicing them off leaves --admin-name in place and the PIN to the prompt.
-    const argsWithoutPin = VENUE_ARGS.slice(0, VENUE_ARGS.indexOf("--admin-pin"));
+  it("reads the admin PIN echo-OFF from a prompt when WAITRON_ADMIN_PIN is unset, and never prints it", async () => {
+    // The prompt half of the PIN discipline. Here only the admin URI is in the env, so the PIN falls
+    // through to an echo-OFF `promptSecret` — never the echoing `prompt`, exactly like the admin
+    // connection string. It is hashed at the CLI boundary (`hashPin`), so only a hash reaches the
+    // plan/apply and the plaintext appears nowhere in what the operator saw. The PIN is NOT a flag
+    // (see the argv-refusal test), so VENUE_ARGS carries no PIN — the prompt is the only source left.
     const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI }, secrets: ["4321"] });
-    const code = await runCli([...argsWithoutPin, "--yes"], h.deps);
+    const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(0);
 
     // The admin URI came from the env, so the ONLY echo-off prompt is the PIN — and it is echo-off,
     // never on the visible `prompt` stream.
-    expect(h.askedSecretly).toEqual(["admin PIN: "]);
+    expect(h.askedSecretly).toEqual(["admin PIN (not shown): "]);
     expect(h.asked.join(" ")).not.toContain("PIN");
 
     const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
@@ -1094,9 +1102,43 @@ describe("runCli venue", () => {
     expect(transcript).toContain("seed admin Owner");
   });
 
+  it("refuses --admin-pin as a flag — a login PIN is a secret and never comes from argv", async () => {
+    // The PIN follows the admin-connection-string discipline: argv is world-readable in `ps` and
+    // lands in shell history, so the PIN is read from WAITRON_ADMIN_PIN or an echo-off prompt and
+    // from nowhere else. `parse` declares no `--admin-pin`, so `strict: true` makes either argv form
+    // a parse error (exit 2) — nothing is opened. Mirrors the `--admin-url` refusal above.
+    for (const args of [
+      ["venue", "--admin-pin", "4321"],
+      ["venue", "--admin-pin=4321"],
+    ]) {
+      const h = harness();
+      expect(await runCli(args, h.deps)).toBe(2);
+      expect(h.connect).not.toHaveBeenCalled();
+      expect(h.applyVenue).not.toHaveBeenCalled();
+    }
+  });
+
+  it("refuses a too-short admin PIN and applies nothing — the floor createPerson enforces", async () => {
+    // `hashPin` validates nothing, so without a length check at the boundary an operator could seed
+    // the MOST-privileged account (role='admin') with an empty or trivially short PIN. The CLI
+    // applies the same `MIN_PIN_LENGTH` floor `createPerson` does. `999` (length 3) is below it and
+    // is a distinctive string absent from every other arg, so the leak-safety assertion is real.
+    const h = harness({
+      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI, WAITRON_ADMIN_PIN: "999" },
+    });
+    const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
+    expect(code).toBe(1);
+    // The error carries only the minimum, never the PIN.
+    expect(h.lines.join("\n")).toContain('pin.too_short {"min":4}');
+    expect(h.lines.join("\n")).not.toContain("999");
+    // Refused before the plan is built and before any connection — nothing is applied.
+    expect(h.applyVenue).not.toHaveBeenCalled();
+    expect(h.connect).not.toHaveBeenCalled();
+  });
+
   it("refuses an unimplemented territory and applies nothing", async () => {
     const args = VENUE_ARGS.map((arg) => (arg === "ES-common" ? "ES-PV-bizkaia" : arg));
-    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const h = harness({ env: VENUE_ENV });
     const code = await runCli([...args, "--yes"], h.deps);
     expect(code).toBe(1);
     expect(h.lines).toContainEqual(expect.stringContaining("fiscal.regime_not_implemented"));
@@ -1112,7 +1154,7 @@ describe("runCli venue", () => {
     // the unimplemented-territory refusal above, it is caught by the PURE planner before the admin
     // credential is asked for — so no connection is opened and nothing is applied.
     const args = VENUE_ARGS.map((arg) => (arg === "ES" ? "PT" : arg));
-    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const h = harness({ env: VENUE_ENV });
     const code = await runCli([...args, "--yes"], h.deps);
     expect(code).toBe(1);
     expect(h.lines.join("\n")).toContain(
@@ -1124,7 +1166,7 @@ describe("runCli venue", () => {
 
   it("refuses an unstamped database before applying", async () => {
     const h = harness({
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
+      env: VENUE_ENV,
       readEnvironment: async () => null,
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
@@ -1140,7 +1182,7 @@ describe("runCli venue", () => {
 
   it("refuses a country that is not two ASCII letters, before connecting", async () => {
     const args = VENUE_ARGS.map((arg) => (arg === "ES" ? "ESP" : arg));
-    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const h = harness({ env: VENUE_ENV });
     const code = await runCli([...args, "--yes"], h.deps);
     expect(code).toBe(1);
     expect(h.lines.join("\n")).toContain('provisioning.invalid_country {"value":"ESP"}');
@@ -1154,7 +1196,7 @@ describe("runCli venue", () => {
     // unique index, so `es` and `ES` must NOT mint two permanent obligados — the CLI normalises to
     // upper-case at the boundary, which is what makes a D8 re-run reuse the same obligado.
     const args = VENUE_ARGS.map((arg) => (arg === "ES" ? "es" : arg));
-    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const h = harness({ env: VENUE_ENV });
     const code = await runCli([...args, "--yes"], h.deps);
     expect(code).toBe(0);
 
@@ -1174,7 +1216,7 @@ describe("runCli venue", () => {
     // obligado from nothing but a stray space, the same footgun class as the country-case bug. The
     // derived id and the stored tax_id must both match the trimmed identity.
     const args = VENUE_ARGS.map((arg) => (arg === "B12345678" ? " B12345678 " : arg));
-    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const h = harness({ env: VENUE_ENV });
     const code = await runCli([...args, "--yes"], h.deps);
     expect(code).toBe(0);
 
@@ -1192,7 +1234,7 @@ describe("runCli venue", () => {
     // too, so flag and prompt behave identically. `--legal-name "   "` therefore falls through to
     // the prompt rather than being accepted verbatim.
     const args = VENUE_ARGS.map((arg) => (arg === "Acme SL" ? "   " : arg));
-    const h = harness({ answers: ["Acme SL"], env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const h = harness({ answers: ["Acme SL"], env: VENUE_ENV });
     const code = await runCli([...args, "--yes"], h.deps);
     expect(code).toBe(0);
     // The prompt for the legal name fired — the whitespace flag did not stand in for it.
@@ -1206,7 +1248,7 @@ describe("runCli venue", () => {
     // `resolveLocales`' prompted path trims each answer; the flag path did not, so `--locale
     // " es-ES "` used to reach the plan with the surrounding whitespace intact.
     const args = VENUE_ARGS.map((arg) => (arg === "es-ES" ? " es-ES " : arg));
-    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const h = harness({ env: VENUE_ENV });
     const code = await runCli([...args, "--yes"], h.deps);
     expect(code).toBe(0);
     const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
@@ -1216,7 +1258,7 @@ describe("runCli venue", () => {
 
   it("refuses a database name outside the identifier rule before connecting", async () => {
     const args = VENUE_ARGS.map((arg) => (arg === DATABASE ? "Waitron Prod" : arg));
-    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const h = harness({ env: VENUE_ENV });
     const code = await runCli([...args, "--yes"], h.deps);
     expect(code).toBe(1);
     expect(h.lines.join("\n")).toContain("provisioning.invalid_identifier");
@@ -1224,7 +1266,7 @@ describe("runCli venue", () => {
   });
 
   it("applies when the operator confirms with y", async () => {
-    const h = harness({ answers: ["y"], env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const h = harness({ answers: ["y"], env: VENUE_ENV });
     expect(await runCli(VENUE_ARGS, h.deps)).toBe(0);
     expect(h.applyVenue).toHaveBeenCalledTimes(1);
     // Without --yes, the plan confirmation IS asked.
@@ -1232,13 +1274,13 @@ describe("runCli venue", () => {
   });
 
   it("accepts a spelt-out 'yes' as confirmation too", async () => {
-    const h = harness({ answers: ["yes"], env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const h = harness({ answers: ["yes"], env: VENUE_ENV });
     expect(await runCli(VENUE_ARGS, h.deps)).toBe(0);
     expect(h.applyVenue).toHaveBeenCalledTimes(1);
   });
 
   it("applies NOTHING when the operator declines", async () => {
-    const h = harness({ answers: ["n"], env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const h = harness({ answers: ["n"], env: VENUE_ENV });
     const code = await runCli(VENUE_ARGS, h.deps);
     expect(code).toBe(1);
     expect(h.applyVenue).not.toHaveBeenCalled();
@@ -1251,7 +1293,7 @@ describe("runCli venue", () => {
 
   it("maps a concurrent unique-violation from the apply to provisioning.venue_conflict", async () => {
     const h = harness({
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
+      env: VENUE_ENV,
       applyVenue: () => Promise.reject(Object.assign(new Error("dup"), { code: "23505" })),
     });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
@@ -1266,7 +1308,7 @@ describe("runCli venue", () => {
     // Anything that is not a unique violation is rethrown untouched — a database fault or a bug is
     // not something this file understood, mirroring the instance path.
     const h = harness({
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
+      env: VENUE_ENV,
       applyVenue: () => Promise.reject(new TypeError("undefined is not a function")),
     });
     await expect(runCli([...VENUE_ARGS, "--yes"], h.deps)).rejects.toThrow(
@@ -1281,7 +1323,7 @@ describe("runCli venue", () => {
     // 3D000, or the admin URI lacking privilege on it) is the refused-CONNECT case. Before this fix
     // it reached the operator as a raw `unexpected failure`; now it is `provisioning.state_unreadable`
     // naming the database, exactly as `instance`/`status`. The stamp read and the apply never run.
-    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI } });
+    const h = harness({ env: VENUE_ENV });
     h.connect.mockRejectedValue(
       Object.assign(new Error('database "waitron_demo" does not exist'), { code: "3D000" }),
     );
@@ -1352,8 +1394,8 @@ describe("runCli venue", () => {
         "R",
         "Owner", // admin name
       ],
-      // The admin PIN is the one echo-OFF option: read through `promptSecret`, never the visible
-      // `prompt`. The admin URI comes from the env, so this is the only secret asked for.
+      // The admin PIN is the one echo-OFF option here: WAITRON_ADMIN_PIN is unset (URL-only env), so
+      // it is read through `promptSecret`, never the visible `prompt`. Only the admin URI is env-fed.
       secrets: ["4321"],
       env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
     });
@@ -1388,8 +1430,9 @@ describe("runCli venue", () => {
       "rectificative series code: ",
       "admin name: ",
     ]);
-    // The admin PIN is the sole echo-off prompt (the admin URI came from the env).
-    expect(h.askedSecretly).toEqual(["admin PIN: "]);
+    // The admin PIN is the sole echo-off prompt (the admin URI came from the env, WAITRON_ADMIN_PIN
+    // is unset here so the PIN falls through to the prompt).
+    expect(h.askedSecretly).toEqual(["admin PIN (not shown): "]);
 
     // The two locales prompted for reach the plan.
     const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
