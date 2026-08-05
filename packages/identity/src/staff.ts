@@ -10,7 +10,10 @@ import type { PersonRoleValue } from "./permissions.js";
 /** The shortest PIN accepted. Four digits is the floor a POS keypad expects; longer is allowed. */
 export const MIN_PIN_LENGTH = 4;
 
-function assertPinLength(pin: string): void {
+/** Refuses a PIN below `MIN_PIN_LENGTH` with `pin.too_short` (carrying only the policy `min`, never
+ * the PIN). Exported because provisioning's `venue` CLI seeds the FIRST admin outside this gated
+ * path and applies the same floor — one implementation of the check, not two that can drift. */
+export function assertPinLength(pin: string): void {
   if (pin.length < MIN_PIN_LENGTH) throw new AppError("pin.too_short", { min: MIN_PIN_LENGTH });
 }
 

@@ -109,6 +109,22 @@ describe("applyVenue", () => {
     expect(tenants.rows[0]?.n).toBe(1); // exactly one obligado, not two
   });
 
+  it("seeds the admin only once across re-runs — the D8 second-shop path adds no duplicate", async () => {
+    // create-location/create-till/create-node deliberately ADD a shop on a re-run (a tenant has many
+    // shops), but the admin belongs to the TENANT, not a shop. A plain `insert into persons` would
+    // add a second role='admin' person every run; the conditional seed (insert-where-not-exists)
+    // makes the re-run a no-op, mirroring ensure-tenant. Proven by DELETION: revert seed-admin to a
+    // plain insert and this assertion reads 2.
+    const first = await applyVenue(planVenue(request("B77777777")), { db: suite.db });
+    await applyVenue(planVenue(request("B77777777")), { db: suite.db });
+    expect(first.tenantId).toBe(obligadoTenantId("ES", "B77777777"));
+
+    const admins = await suite.db.execute<{ n: number }>(sql`
+      select count(*)::int as n from persons
+      where tenant_id = ${first.tenantId} and role = 'admin'`);
+    expect(admins.rows[0]?.n).toBe(1); // exactly one admin, not one per run
+  });
+
   it("mints a distinct installation number per node under one obligado", async () => {
     const a = await applyVenue(planVenue(request("B11111111")), { db: suite.db });
     const b = await applyVenue(planVenue(request("B11111111")), { db: suite.db });

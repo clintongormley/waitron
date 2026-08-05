@@ -1,10 +1,7 @@
-import "./errors.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
-import { persons } from "./schema/persons.js";
 import { sessions } from "./schema/sessions.js";
-import { verifyPin } from "./verify-pin.js";
+import { verifyPersonCredential } from "./credential.js";
 
 export interface Session {
   id: string;
@@ -19,14 +16,9 @@ export async function loginWithPin(
   tx: Transaction,
   input: { tenantId: string; tillId: string; personId: string; pin: string },
 ): Promise<Session> {
-  const [person] = await tx
-    .select({ pinHash: persons.pinHash, status: persons.status })
-    .from(persons)
-    .where(eq(persons.id, input.personId));
-  if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
-  if (person.status === "suspended")
-    throw new AppError("person.suspended", { personId: input.personId });
-  if (!verifyPin(input.pin, person.pinHash)) throw new AppError("pin.invalid", {});
+  // The shared credential gate (not_found → suspended → pin.invalid); the returned role is unused
+  // here — login does not gate on it. `authorize`'s override branch runs the identical sequence.
+  await verifyPersonCredential(tx, input.personId, input.pin);
 
   const [row] = await tx
     .insert(sessions)

@@ -5,11 +5,21 @@ import { AppError } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
 import { sessions } from "./schema/sessions.js";
 import { roleHasPermission, type Permission, type PersonRoleValue } from "./permissions.js";
-import { verifyPin } from "./verify-pin.js";
+import { verifyPersonCredential } from "./credential.js";
 
 export interface Override {
   personId: string;
   pin: string;
+}
+/**
+ * The authorization context a gated write threads through to `authorize`: the open session that
+ * identifies the operator, plus an optional supervisor `override` (a second person's PIN). Declared
+ * here and shared by the core write paths (`recordVoid`, `recordCorrection`) so the shape is stated
+ * once rather than retyped inline at each call site.
+ */
+export interface AuthzInput {
+  sessionId: string;
+  override?: Override;
 }
 export interface Authorization {
   authorizedBy: string;
@@ -30,37 +40,28 @@ export async function authorize(
   tx: Transaction,
   args: { sessionId: string; permission: Permission; override?: Override },
 ): Promise<Authorization> {
-  const [session] = await tx
-    .select({ personId: sessions.personId })
+  // One round-trip, not two: the open-session lookup and the operator's role are resolved by a
+  // single innerJoin. `sessions_person_fk` (restrict) guarantees a session cannot exist without its
+  // person, and RLS scopes both tables to one tenant, so the join matches whenever the session does
+  // — the row is absent ONLY when there is no open session, which is exactly `session.not_open`.
+  const [row] = await tx
+    .select({ personId: sessions.personId, role: persons.role })
     .from(sessions)
+    .innerJoin(persons, eq(persons.id, sessions.personId))
     .where(and(eq(sessions.id, args.sessionId), isNull(sessions.endedAt)));
-  if (session === undefined) throw new AppError("session.not_open", { sessionId: args.sessionId });
+  if (row === undefined) throw new AppError("session.not_open", { sessionId: args.sessionId });
 
-  const [operator] = await tx
-    .select({ role: persons.role })
-    .from(persons)
-    .where(eq(persons.id, session.personId));
-  // A session cannot exist without its person (FK), and RLS scopes both to one tenant.
-  if (
-    operator !== undefined &&
-    roleHasPermission(operator.role as PersonRoleValue, args.permission)
-  ) {
-    return { authorizedBy: session.personId, permission: args.permission, viaOverride: false };
+  if (roleHasPermission(row.role as PersonRoleValue, args.permission)) {
+    return { authorizedBy: row.personId, permission: args.permission, viaOverride: false };
   }
 
   if (args.override === undefined) {
     throw new AppError("authorization.not_permitted", { permission: args.permission });
   }
-  const [sup] = await tx
-    .select({ role: persons.role, status: persons.status, pinHash: persons.pinHash })
-    .from(persons)
-    .where(eq(persons.id, args.override.personId));
-  if (sup === undefined)
-    throw new AppError("person.not_found", { personId: args.override.personId });
-  if (sup.status === "suspended")
-    throw new AppError("person.suspended", { personId: args.override.personId });
-  if (!verifyPin(args.override.pin, sup.pinHash)) throw new AppError("pin.invalid", {});
-  if (!roleHasPermission(sup.role as PersonRoleValue, args.permission)) {
+  // Same credential gate as login (not_found → suspended → pin.invalid), then the override person
+  // must ALSO hold the permission. `verifyPersonCredential` owns the first three checks in order.
+  const cred = await verifyPersonCredential(tx, args.override.personId, args.override.pin);
+  if (!roleHasPermission(cred.role, args.permission)) {
     throw new AppError("authorization.not_permitted", { permission: args.permission });
   }
   return { authorizedBy: args.override.personId, permission: args.permission, viaOverride: true };

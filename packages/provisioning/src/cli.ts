@@ -6,7 +6,7 @@ import {
   type Database,
   type DeploymentEnvironment,
 } from "@waitron/db";
-import { hashPin, MIN_PIN_LENGTH } from "@waitron/identity";
+import { assertPinLength, hashPin } from "@waitron/identity";
 import { assertIdentifier } from "./identifiers.js";
 import { applyInstance, withDatabase, type TargetConnection } from "./instance-apply.js";
 import { describeAction, planInstance, type InstanceAction } from "./instance-plan.js";
@@ -403,13 +403,12 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     const adminName = await resolveOption(values["admin-name"], "admin name: ", deps);
     // The PIN is a SECRET, resolved exactly as the admin connection string is: from WAITRON_ADMIN_PIN
     // or an echo-OFF prompt, NEVER from argv (`readAdminPin`). Then it is checked against the same
-    // `MIN_PIN_LENGTH` floor `createPerson` enforces — this seeds the MOST-privileged account
-    // (`role='admin'`) and `hashPin` itself validates nothing, so without this an operator could seed
-    // an admin with an empty PIN. The `pin.too_short` error carries only `{ min }`, never the PIN.
+    // floor `createPerson` enforces, through the SAME `assertPinLength` — this seeds the
+    // MOST-privileged account (`role='admin'`) and `hashPin` itself validates nothing, so without
+    // this an operator could seed an admin with an empty PIN. `pin.too_short` carries only `{ min }`,
+    // never the PIN.
     const adminPin = await readAdminPin(deps);
-    if (adminPin.length < MIN_PIN_LENGTH) {
-      throw new AppError("pin.too_short", { min: MIN_PIN_LENGTH });
-    }
+    assertPinLength(adminPin);
     // Hashed HERE, at the CLI boundary, so only `pinHash` ever flows through
     // `VenueRequest`/`VenueAction`/`applyVenue`: the plaintext PIN never enters the plan, is never an
     // error param, and is never printed (§ SECRET DISCIPLINE).

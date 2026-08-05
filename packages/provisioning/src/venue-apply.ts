@@ -73,13 +73,22 @@ export async function applyVenue(
             on conflict (country, tax_id) do nothing`);
           break;
         case "seed-admin":
-          // Raw SQL like every other insert here — no @waitron/identity import needed; the `persons`
-          // table exists because the identity migrations run before a venue is applied. `pin_hash` is
-          // already a scrypt hash (hashed at the CLI boundary), never a plaintext PIN. `role='admin'`
-          // is the whole point: this person can log in and authorize privileged actions from day one.
+          // Seed the tenant's admin ONCE. Like ensure-tenant's ON CONFLICT DO NOTHING, this makes a
+          // re-run a no-op on a row keyed to the TENANT — the admin belongs to the obligado, not to a
+          // shop, so the D8 second-shop re-run (create-location/create-till/create-node deliberately
+          // ADD a shop each run) must not add a duplicate admin each time. A plain insert did exactly
+          // that. `insert … select … where not exists` seeds the admin only if the tenant has none
+          // yet (the `role='admin'` predicate, RLS-scoped to this tenant; the explicit tenant_id is
+          // redundant under RLS but guards a non-scoped connection, as elsewhere here). Raw SQL like
+          // every other insert — no @waitron/identity import; the `persons` table exists because the
+          // identity migrations run before a venue is applied. `pin_hash` is already a scrypt hash
+          // (hashed at the CLI boundary), never a plaintext PIN. `role='admin'` is the whole point:
+          // this person can log in and authorize privileged actions from day one.
           await tx.execute(sql`
             insert into persons (tenant_id, display_name, pin_hash, role)
-            values (${tenantId}, ${action.displayName}, ${action.pinHash}, 'admin')`);
+            select ${tenantId}, ${action.displayName}, ${action.pinHash}, 'admin'
+            where not exists (
+              select 1 from persons where tenant_id = ${tenantId} and role = 'admin')`);
           break;
         case "create-location": {
           locationId = randomUUID();

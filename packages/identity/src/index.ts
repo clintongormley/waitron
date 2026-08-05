@@ -1,7 +1,7 @@
 // The entire public surface of @waitron/identity. Re-exports only — no logic here.
 export { IDENTITY_MIGRATIONS } from "./migrations.js";
 export { authorize } from "./authorize.js";
-export type { Authorization, Override } from "./authorize.js";
+export type { Authorization, AuthzInput, Override } from "./authorize.js";
 export { endSession, loginWithPin } from "./login.js";
 export type { Session } from "./login.js";
 export { PERMISSIONS, roleHasPermission } from "./permissions.js";
@@ -10,6 +10,7 @@ export { persons, personStatus, personRole } from "./schema/persons.js";
 export { sessions } from "./schema/sessions.js";
 export {
   MIN_PIN_LENGTH,
+  assertPinLength,
   createPerson,
   reactivatePerson,
   resetPin,

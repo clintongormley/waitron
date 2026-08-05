@@ -17,7 +17,7 @@ import type { Transaction } from "@waitron/db";
 import { AppError, decimal } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import type { FiscalBackend, FiscalRecordRef, TrustedClock } from "@waitron/fiscal";
-import { authorize, type Override } from "@waitron/identity";
+import { authorize, type AuthzInput } from "@waitron/identity";
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
 import { buildVatBreakdown } from "./record-sale.js";
@@ -74,7 +74,7 @@ export interface RecordCorrectionInput {
    * credential `authorize` accepts (the operator's own role holds it, or a supervisor `override`
    * supplies a second person's PIN). The authorizer it returns is recorded on `sales.authorized_by`.
    */
-  authz: { sessionId: string; override?: Override };
+  authz: AuthzInput;
   fiscalBackend: string;
   clock: TrustedClock;
 }

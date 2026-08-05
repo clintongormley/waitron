@@ -9,7 +9,7 @@ import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { NodeId, SaleId, TenantId, TillId } from "@waitron/shared";
 import type { FiscalBackend, FiscalRecordRef } from "@waitron/fiscal";
-import { authorize, type Override } from "@waitron/identity";
+import { authorize, type AuthzInput } from "@waitron/identity";
 import { recordIncident } from "./incidents.js";
 
 /**
@@ -36,7 +36,7 @@ export async function recordVoid(
   backend: FiscalBackend,
   saleId: SaleId,
   reason: string,
-  authz: { sessionId: string; override?: Override },
+  authz: AuthzInput,
 ): Promise<{ fiscal: FiscalRecordRef }> {
   const [sale] = await tx
     .select({ tenantId: sales.tenantId, tillId: sales.tillId, nodeId: sales.nodeId })

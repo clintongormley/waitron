@@ -22,7 +22,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
-import type { Override } from "@waitron/identity";
+import type { AuthzInput } from "@waitron/identity";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { recordVoid } from "./record-void.js";
@@ -165,7 +165,7 @@ async function voidSale(
   backend: FiscalBackend,
   saleId: SaleId,
   reason = "Wrong table",
-  authz: { sessionId: string; override?: Override } = { sessionId: managerSessionId },
+  authz: AuthzInput = { sessionId: managerSessionId },
 ) {
   return withTenant(suite.db, tenantId, async (tx) => {
     await asAppUser(tx);
@@ -411,15 +411,18 @@ describe("recordVoid — error propagation", () => {
     // this stub instead asserts on `recordVoid`'s own catch/rethrow logic directly, the same way
     // `chain.test.ts`'s stub asserts on `appendToChain`'s.
     //
-    // The stub's single `select` result now has to satisfy `authorize` too — it runs between the
-    // sale lookup and the insert, reading the session's `personId` then the operator's `role`. One
-    // row carrying both (plus a `manager` role that holds `sale.void`) lets authorize pass on the
-    // operator path so control reaches the failing insert this test is actually about.
+    // The stub's `select` result now has to satisfy `authorize` too — it runs between the sale
+    // lookup and the insert, resolving the session's operator and role in ONE `innerJoin` query. The
+    // sale lookup is `.from().where()`; authorize's is `.from().innerJoin().where()`, so `from()`
+    // exposes both. One row carrying every field either path reads (plus a `manager` role that holds
+    // `sale.void`) lets authorize pass on the operator path so control reaches the failing insert
+    // this test is actually about.
+    const row = [{ tenantId, tillId, nodeId, personId: "operator", role: "manager" }];
     const fakeTx = {
       select: () => ({
         from: () => ({
-          where: () =>
-            Promise.resolve([{ tenantId, tillId, nodeId, personId: "operator", role: "manager" }]),
+          where: () => Promise.resolve(row),
+          innerJoin: () => ({ where: () => Promise.resolve(row) }),
         }),
       }),
       insert: () => ({
