@@ -39,6 +39,30 @@ declare module "@waitron/shared" {
       otherValue?: number;
     };
     /**
+     * A required `WAITRON_TILL_*` environment variable is unset — absent, or the empty string (an
+     * `VAR=` line, which `till-config.ts` treats as unset for the same reason `config.ts`'s `isUnset`
+     * does). `key` is the variable NAME, our own declared identifier, and is the ONLY field: the
+     * value is never echoed, so an operator who pasted a secret into the wrong `WAITRON_TILL_*`
+     * variable cannot have it land in an error's params — the same no-leak discipline
+     * `server.credential_unusable` and `payment.webhook_signature_invalid` follow.
+     *
+     * `server.*`, not a fiscal-domain prefix, even though the values it guards ARE the till's four
+     * fiscal ids: WHICH till this process is is a fact about the process's own configuration
+     * (provisioning stamps the deployed till's identity into the environment; `till-config.ts` reads
+     * it back), exactly the class `server.config_missing` above covers for the rest of the host's
+     * config. A value that is present but malformed is `server.till_config_invalid` below; this code
+     * is for one that is simply not there.
+     */
+    "server.till_config_missing": { key: string };
+    /**
+     * A `WAITRON_TILL_*` value is present but not usable — a branded-id constructor
+     * (`@waitron/shared`'s `tenantId`/`tillId`/`nodeId`/`seriesId`/`locationId`) rejected it as not a
+     * uuid. `key` names the variable and is again the only field; the rejected value is NOT carried,
+     * for the same reason as `server.till_config_missing` above, and `server.*` for the same reason
+     * too.
+     */
+    "server.till_config_invalid": { key: string };
+    /**
      * A tenant's credential exists but this host cannot use it — a field the purpose registry now
      * declares is absent from a row sealed under an older field list, or its value is not one of
      * the accepted ones. `field` is a name from `PURPOSES`, so it is ours to echo. Spec §5.1: this
@@ -110,6 +134,15 @@ declare module "@waitron/shared" {
      */
     "server.shutdown_failed": { errorCode: string };
     /**
+     * A caught value that is NOT an AppError reached the till API's `run` wrapper — an unclassified
+     * fault (a driver error, a request-body parse failure, a bug), surfaced to the client as an
+     * opaque 500 so nothing internal leaks. `run` logs the structured `codeOf` classification under
+     * `till.failed`; the RESPONSE carries only this code and no params, telling the client nothing
+     * about the cause — the same no-message discipline `server.shutdown_failed` follows for its own
+     * caught value.
+     */
+    "server.internal": Record<string, never>;
+    /**
      * This host is configured for one environment and the database belongs to another. Thrown
      * before migrations run, so nothing is written.
      *
@@ -165,5 +198,44 @@ declare module "@waitron/shared" {
      * not an error (design §4).
      */
     "payment.webhook_unresolved": { provider: string; externalRef: string };
+    /**
+     * A basket line named a product the till cannot sell at its location — it is not in the
+     * location's assigned catalogue, is deactivated, or belongs to another tenant (RLS hides it, so
+     * "not sellable here" and "another tenant's product" read identically, the same fail-closed shape
+     * `sale.series_not_found` uses). `productId` is a uuid the caller already holds, not a secret, so
+     * echoing it is what makes the error actionable.
+     *
+     * `sale.*`, not `server.*`: it is a fact about the SALE the till is ringing, not about the
+     * process (`tenant.not_found`'s note above gives the rule). Registered here by the same
+     * `declare module` this file uses for its other codes; `@waitron/core` owns the rest of the
+     * `sale.*` family, and this adds to it by declaration merging rather than colliding with it.
+     */
+    "sale.unknown_product": { productId: string };
+    /**
+     * The till was asked to ring a sale with no lines. A sale must have at least one line to price
+     * and to file, so this is refused before any catalogue read or fiscal write. No params: there is
+     * nothing to carry beyond the code itself.
+     */
+    "sale.empty_basket": Record<string, never>;
+    /**
+     * A tender method this till does not support. Slice 1 of the counter POS is cash-only, so
+     * anything but `"cash"` is refused before touching the database. `method` echoes the request so a
+     * translator can name what was attempted; it is caller-supplied text, never a secret.
+     */
+    "sale.unsupported_tender": { method: string };
+    /**
+     * An operation needed an open shift session and none was supplied — the till's session cookie was
+     * absent or named no open session. A fact about the REQUEST, so the operator-scoped routes
+     * Tasks 5/6 add (`GET /api/staff`, `POST /api/sales`) refuse with this before doing any work. No
+     * params: there is nothing to carry beyond the code, and the missing cookie's value is never
+     * echoed.
+     *
+     * `session.*`, not `server.*`, for the reason `tenant.not_found`'s note above gives (the prefix
+     * names the DOMAIN CONCEPT, never the throwing package). `@waitron/identity` owns the rest of the
+     * `session.*` family (`session.not_open`); this adds to it by declaration merging, and belongs
+     * there once a package other than this host needs to throw it — the same note `tenant.not_found`
+     * carries about its own placement.
+     */
+    "session.required": Record<string, never>;
   }
 }

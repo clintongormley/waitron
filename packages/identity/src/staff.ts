@@ -88,3 +88,26 @@ export async function reactivatePerson(
   await authorize(tx, { sessionId: input.actorSessionId, permission: "person.manage" });
   await tx.update(persons).set({ status: "active" }).where(eq(persons.id, input.personId));
 }
+
+/** One entry in the pre-login roster: the id the lock screen logs in with, and the name it shows. */
+export interface StaffListEntry {
+  personId: string;
+  displayName: string;
+}
+
+/**
+ * Pre-login roster for the till lock screen. Unlike the rest of this file it is NOT gated on
+ * `authorize` — it runs before any session exists — so it is deliberately tenant-scoped by RLS via
+ * the caller's transaction (opened under `withTenant`) and returns only `{ personId, displayName }`
+ * for `active` persons. No PIN material, no role, no status: nothing that is unsafe to show before
+ * anyone has logged in. Suspended persons are excluded — a `status = 'active'` filter, which the
+ * suite proves load-bearing by flipping it.
+ */
+export async function listActiveStaff(tx: Transaction): Promise<StaffListEntry[]> {
+  const rows = await tx
+    .select({ personId: persons.id, displayName: persons.displayName })
+    .from(persons)
+    .where(eq(persons.status, "active"))
+    .orderBy(persons.displayName);
+  return rows.map((r) => ({ personId: r.personId, displayName: r.displayName }));
+}

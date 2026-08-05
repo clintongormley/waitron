@@ -4,8 +4,32 @@ import { DEFAULTS } from "@waitron/scheduler";
 import { isAppError } from "@waitron/shared";
 import { deploymentEnvironment, loadConfig } from "./config.js";
 
-const MIN_ENV = { DATABASE_URL: "postgres://u@h/d" };
+// Distinct per field so a mis-wired till mapping fails the assertions below rather than passing by
+// coincidence — every id is the same 8-4-4-4-12 shape but a different value, matching
+// till-config.test.ts's own convention.
+const TILL_ENV = {
+  WAITRON_TILL_TENANT_ID: "11111111-1111-4111-8111-111111111111",
+  WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
+  WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
+  WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
+  WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
+};
+
+// `loadConfig` now resolves the till identity via `loadTillConfig`, so the till vars are required for
+// a successful load. Every happy-path case here spreads them; the `requires DATABASE_URL` case does
+// NOT, deliberately, because that guard fires before the till is ever read (see the test).
+const MIN_ENV = { DATABASE_URL: "postgres://u@h/d", ...TILL_ENV };
 const ROOT = "/opt/waitron/drizzle";
+
+const EXPECTED_TILL = {
+  tenantId: TILL_ENV.WAITRON_TILL_TENANT_ID,
+  tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
+  nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+  seriesId: TILL_ENV.WAITRON_TILL_SERIES_ID,
+  locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+  locale: "es-ES",
+  invoiceLocales: ["es-ES"],
+};
 
 function codeOf(error: unknown): string {
   return isAppError(error) ? error.code : `not an AppError: ${String(error)}`;
@@ -34,6 +58,9 @@ describe("loadConfig", () => {
       skipRetryMs: DEFAULTS.skipRetryMs,
       settlementLagMs: undefined,
       migrationsRoot: ROOT,
+      // No WAITRON_TLS_* set, so the whole optional block is absent — not present-but-undefined.
+      // `tls` is omitted from the returned object entirely (see loadConfig's conditional spread).
+      till: EXPECTED_TILL,
       scheduler: {
         horizonDays: 30,
         maxPeriodsPerTick: 7,
@@ -41,6 +68,73 @@ describe("loadConfig", () => {
         backoffBaseMs: 900_000,
         staleAfterMs: 3_600_000,
       },
+    });
+  });
+
+  it("populates config.till from the WAITRON_TILL_* environment (the till's fiscal identity)", () => {
+    const config = loadConfig(MIN_ENV, ROOT);
+    expect(config.till).toEqual(EXPECTED_TILL);
+  });
+
+  it("surfaces config.tls when BOTH cert and key files are set", () => {
+    const config = loadConfig(
+      {
+        ...MIN_ENV,
+        WAITRON_TLS_CERT_FILE: "/etc/waitron/tls/cert.pem",
+        WAITRON_TLS_KEY_FILE: "/etc/waitron/tls/key.pem",
+      },
+      ROOT,
+    );
+    expect(config.tls).toEqual({
+      certFile: "/etc/waitron/tls/cert.pem",
+      keyFile: "/etc/waitron/tls/key.pem",
+    });
+  });
+
+  it("leaves config.tls undefined when NEITHER cert nor key is set (plain HTTP loopback dev)", () => {
+    const config = loadConfig(MIN_ENV, ROOT);
+    expect(config.tls).toBeUndefined();
+  });
+
+  // Both-or-neither: TLS with only the cert (no private key) cannot serve HTTPS, and only the key
+  // (no certificate) is equally unusable — a half-configured pair is a boot-time refusal, not a
+  // silent fall back to plain HTTP that an operator who set one variable would never expect.
+  it.each([
+    // Cert set, key missing -> the error names the MISSING variable, the one the operator must add.
+    [{ WAITRON_TLS_CERT_FILE: "/etc/waitron/tls/cert.pem" }, "WAITRON_TLS_KEY_FILE"],
+    // Key set, cert missing -> symmetric.
+    [{ WAITRON_TLS_KEY_FILE: "/etc/waitron/tls/key.pem" }, "WAITRON_TLS_CERT_FILE"],
+  ])("rejects a half-configured TLS pair, naming the missing %o", async (extra, missing) => {
+    const error = await captureError(() =>
+      Promise.resolve(loadConfig({ ...MIN_ENV, ...extra }, ROOT)),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: missing,
+      reason: "tls_requires_cert_and_key",
+    });
+  });
+
+  // Empty string is unset (config.ts's own `isUnset`), so `WAITRON_TLS_CERT_FILE=` alongside a real
+  // key is still a half-configured pair, not a both-set one — the same `VAR=`-means-unset rule the
+  // rest of the file applies.
+  it("treats an empty WAITRON_TLS_CERT_FILE as unset, so a real key beside it is still half-configured", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(
+        loadConfig(
+          {
+            ...MIN_ENV,
+            WAITRON_TLS_CERT_FILE: "",
+            WAITRON_TLS_KEY_FILE: "/etc/waitron/tls/key.pem",
+          },
+          ROOT,
+        ),
+      ),
+    );
+    expect(codeOf(error)).toBe("server.config_invalid");
+    expect(isAppError(error) && error.params).toEqual({
+      variable: "WAITRON_TLS_CERT_FILE",
+      reason: "tls_requires_cert_and_key",
     });
   });
 

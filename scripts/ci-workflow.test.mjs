@@ -162,10 +162,10 @@ const shards = jobs
  * change while its path is a fact about the tree.
  *
  * Dropping it is not cosmetic: `pnpm ls` LISTS the root and `pnpm run` does NOT RUN it. Measured
- * here on 2026-08-01, using the one script only the root declares —
- * `pnpm --filter "!@waitron/db" --filter "!@waitron/ui" prepare` printed
- * `Scope: 13 of 16 workspace projects` and then `None of the selected packages has a "prepare"
- * script`, exit 0, while the same filters through `pnpm ls --depth -1 --json` returned 14 entries,
+ * here on 2026-08-05, using the one script only the root declares —
+ * `pnpm --filter "!@waitron/db" --filter "!@waitron/ui" --filter "!@waitron/till" prepare` printed
+ * `Scope: 18 of 22 workspace projects` and then `None of the selected packages has a "prepare"
+ * script`, exit 0, while the same filters through `pnpm ls --depth -1 --json` returned 19 entries,
  * the extra one being the root.
  */
 function selects(filters) {

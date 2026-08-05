@@ -1,5 +1,7 @@
 import { AppError } from "@waitron/shared";
 import { DEFAULTS } from "@waitron/scheduler";
+import { loadTillConfig } from "./till-config.js";
+import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
 export type DeploymentEnvironment = "production" | "preproduction";
@@ -41,6 +43,18 @@ export interface ServerConfig {
   /** Undefined means "let the neutral layer apply its own seven days" — not zero. */
   settlementLagMs: number | undefined;
   migrationsRoot: string;
+  /**
+   * The PEM files that make this host serve HTTPS. BOTH-or-NEITHER (loadConfig refuses a
+   * half-configured pair): absent means plain HTTP for loopback dev, present means TLS. This task
+   * only makes the process TLS-CAPABLE — production local-CA trust and LAN binding are deployment
+   * (#9). `boot.ts` also derives the session cookie's `Secure` attribute from whether this is set
+   * (`secureCookies: config.tls !== undefined`): a cookie marked `Secure` is never sent back over
+   * plain HTTP, so it must track the transport the host actually serves.
+   */
+  tls?: { certFile: string; keyFile: string };
+  /** WHICH till this process is — the fiscal identity provisioning stamped into the environment,
+   * resolved once here via `loadTillConfig` and handed to the till API in `boot.ts`. */
+  till: TillConfig;
   scheduler: SchedulerConfig;
 }
 
@@ -212,6 +226,23 @@ export function loadConfig(env: Env, defaultMigrationsRoot: string): ServerConfi
   const databaseUrl = required(env, "DATABASE_URL");
   const migrationsDatabaseUrl = env.WAITRON_MIGRATIONS_DATABASE_URL;
   const httpHost = env.WAITRON_HTTP_HOST;
+  // BOTH-or-NEITHER: a certificate with no private key cannot complete a TLS handshake, and a key
+  // with no certificate has nothing to present — a half-configured pair is refused here rather than
+  // silently falling back to plain HTTP, which an operator who set exactly one of the two would
+  // never intend. `isUnset` (empty string == absent) is deliberate: `WAITRON_TLS_CERT_FILE=` beside
+  // a real key is half-configured, the same `VAR=`-means-unset rule every other variable in this
+  // file follows. The error names the MISSING variable — the one the operator still has to supply.
+  const certFile = env.WAITRON_TLS_CERT_FILE;
+  const keyFile = env.WAITRON_TLS_KEY_FILE;
+  let tls: { certFile: string; keyFile: string } | undefined;
+  if (!isUnset(certFile) && !isUnset(keyFile)) {
+    tls = { certFile, keyFile };
+  } else if (!isUnset(certFile) || !isUnset(keyFile)) {
+    throw new AppError("server.config_invalid", {
+      variable: isUnset(certFile) ? "WAITRON_TLS_CERT_FILE" : "WAITRON_TLS_KEY_FILE",
+      reason: "tls_requires_cert_and_key",
+    });
+  }
   return {
     databaseUrl,
     migrationsDatabaseUrl: isUnset(migrationsDatabaseUrl) ? databaseUrl : migrationsDatabaseUrl,
@@ -223,6 +254,14 @@ export function loadConfig(env: Env, defaultMigrationsRoot: string): ServerConfi
     skipRetryMs,
     settlementLagMs: optionalPositiveInt(env, "WAITRON_SETTLEMENT_LAG_MS"),
     migrationsRoot: isUnset(migrationsDir) ? defaultMigrationsRoot : migrationsDir,
+    // Conditionally present, never present-but-undefined: an absent `tls` key is what "no TLS
+    // configured" means downstream (`config.tls !== undefined` decides `secureCookies` and whether
+    // `buildServeOptions` reads any files at all).
+    ...(tls === undefined ? {} : { tls }),
+    // The till's own fiscal identity, resolved the same way every other caller does — see
+    // `till-config.ts`. Loaded AFTER `required(env, "DATABASE_URL")` above so a host missing both
+    // still reports the DATABASE_URL fault first, matching this file's existing ordering.
+    till: loadTillConfig(env),
     scheduler: {
       horizonDays: positiveInt(env, "WAITRON_SCHEDULER_HORIZON_DAYS", DEFAULTS.horizonDays),
       maxPeriodsPerTick: positiveInt(

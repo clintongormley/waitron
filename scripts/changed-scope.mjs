@@ -76,6 +76,22 @@ export const HEAVY_PACKAGE = "@waitron/db";
 export const UI_PACKAGE = "@waitron/ui";
 
 /**
+ * The `test-till` shard's package: the Counter POS browser app, the workspace's SECOND Chromium
+ * consumer after @waitron/ui.
+ *
+ * It gets a shard of its own for the SAME reason @waitron/ui does, applied before the fact rather
+ * than after it. apps/till drives Chromium through @vitest/browser + Playwright exactly as
+ * @waitron/ui does, and the receipt for what a Chromium consumer does to the shared `test-light`
+ * shard is on UI_PACKAGE above: test-light HUNG on the workspace's only other browser package,
+ * twice, reproducibly enough to name both runs. This split is therefore a MITIGATION taken on that
+ * precedent — apps/till has never run in test-light and so has never hung it, and nothing here
+ * proves it would; the claim is only that putting a second browser package into the shard that
+ * already hung on the first is the shape worth avoiding. Whether isolation is what fixes the hang
+ * can only be read off future runs, as UI_PACKAGE notes for itself.
+ */
+export const TILL_PACKAGE = "@waitron/till";
+
+/**
  * The packages that have a test shard to themselves — the set `test-light` subtracts.
  *
  * ONE list rather than a name per gate, because `light` is defined against it: a package added here
@@ -89,7 +105,7 @@ export const UI_PACKAGE = "@waitron/ui";
  * a `pnpm install` for a selection that would then contain nothing to run, which is the shape the
  * `runnable` guard in scripts/changed-packages.mjs was added to refuse.
  */
-export const OWN_SHARD_PACKAGES = [HEAVY_PACKAGE, UI_PACKAGE];
+export const OWN_SHARD_PACKAGES = [HEAVY_PACKAGE, UI_PACKAGE, TILL_PACKAGE];
 
 /**
  * Workspace members that deliberately declare no `test:coverage` script.
@@ -149,6 +165,7 @@ const runsTests = (name) =>
 export const SCOPE_GATES = [
   { output: "heavy", covers: membership(HEAVY_PACKAGE) },
   { output: "ui", covers: membership(UI_PACKAGE) },
+  { output: "till", covers: membership(TILL_PACKAGE) },
   { output: "light", covers: (inScope) => [...inScope].some(runsTests) },
   { output: "verifactu", covers: membership("@waitron/verifactu") },
   { output: "shared", covers: membership("@waitron/shared") },
