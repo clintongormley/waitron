@@ -169,7 +169,7 @@ export async function recordVoid(tx: Transaction, params: Key): Promise<PaymentR
  * running total reaches the captured amount, otherwise `partially_refunded`. */
 export async function recordRefund(
   tx: Transaction,
-  params: Key & { amount: Decimal },
+  params: Key & { amount: Decimal; authorizedBy?: string },
 ): Promise<PaymentRow> {
   const row = await requireRowForUpdate(tx, params);
   if (row.state !== "captured" && row.state !== "partially_refunded") {
@@ -206,6 +206,7 @@ export async function recordRefund(
     paymentRef: params.paymentRef,
     amount: params.amount,
     state: "succeeded",
+    authorizedBy: params.authorizedBy ?? null,
   });
   const state: PaymentState =
     compareDecimal(afterThis, captured) === 0 ? "refunded" : "partially_refunded";
@@ -222,7 +223,7 @@ export async function recordRefund(
  * `FOR UPDATE` needed: it neither reads a running total nor transitions the payment. */
 export async function recordFailedRefund(
   tx: Transaction,
-  params: Key & { amount: Decimal },
+  params: Key & { amount: Decimal; authorizedBy?: string },
 ): Promise<void> {
   const row = await getPaymentByRef(tx, params);
   if (row === undefined) {
@@ -238,6 +239,7 @@ export async function recordFailedRefund(
     paymentRef: params.paymentRef,
     amount: params.amount,
     state: "failed",
+    authorizedBy: params.authorizedBy ?? null,
   });
 }
 

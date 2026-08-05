@@ -30,6 +30,9 @@ export const paymentRefunds = pgTable(
     paymentRef: text("payment_ref").notNull(),
     amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
     state: paymentRefundState("state").notNull(),
+    /** The person who authorised this refund at the till (#7), NULL for automated (reconcile/manual)
+     * refunds. Plain uuid, no FK — the sale_voids.voided_by precedent. */
+    authorizedBy: uuid("authorized_by"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .notNull()
       .defaultNow(),

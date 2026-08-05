@@ -169,6 +169,27 @@ describe("recordRefund", () => {
     expect(refunds.rows[0].amount).toBe("20.00");
   });
 
+  it("writes authorized_by when supplied, and NULL when omitted", async () => {
+    const seeded = await seedTenant();
+    const authorizer = "11111111-1111-1111-1111-111111111111";
+    // With an authorizer (the human gate at the till, #7): the value is persisted verbatim.
+    const withKey = await capture(seeded, "auth-with", "20.00");
+    await pg.db.transaction((tx) =>
+      recordRefund(tx, { ...withKey, amount: decimal("20.00"), authorizedBy: authorizer }),
+    );
+    // Without one (an automated reconcile/manual refund): the column stays NULL.
+    const withoutKey = await capture(seeded, "auth-without", "20.00");
+    await pg.db.transaction((tx) => recordRefund(tx, { ...withoutKey, amount: decimal("20.00") }));
+    const rows = await pg.db.execute<{ payment_ref: string; authorized_by: string | null }>(
+      sql`select payment_ref, authorized_by from payment_refunds
+          where tenant_id = ${seeded.tenantId} order by payment_ref`,
+    );
+    expect(rows.rows).toEqual([
+      { payment_ref: "auth-with", authorized_by: authorizer },
+      { payment_ref: "auth-without", authorized_by: null },
+    ]);
+  });
+
   it("a partial refund sets partially_refunded, then a second refund reaching the total sets refunded", async () => {
     const seeded = await seedTenant();
     const key = await capture(seeded, "p6", "20.00");
@@ -502,6 +523,27 @@ describe("externalRef on read-back + failed refunds", () => {
       sql`select state from payment_refunds where payment_ref = ${"e2"} and tenant_id = ${seeded.tenantId}`,
     );
     expect(refunds.rows).toEqual([{ state: "failed" }]);
+  });
+
+  it("recordFailedRefund writes authorized_by when supplied, and NULL when omitted", async () => {
+    const seeded = await seedTenant();
+    const authorizer = "22222222-2222-2222-2222-222222222222";
+    const withKey = await capture(seeded, "fauth-with", "20.00");
+    await pg.db.transaction((tx) =>
+      recordFailedRefund(tx, { ...withKey, amount: decimal("5.00"), authorizedBy: authorizer }),
+    );
+    const withoutKey = await capture(seeded, "fauth-without", "20.00");
+    await pg.db.transaction((tx) =>
+      recordFailedRefund(tx, { ...withoutKey, amount: decimal("5.00") }),
+    );
+    const rows = await pg.db.execute<{ payment_ref: string; authorized_by: string | null }>(
+      sql`select payment_ref, authorized_by from payment_refunds
+          where tenant_id = ${seeded.tenantId} and state = 'failed' order by payment_ref`,
+    );
+    expect(rows.rows).toEqual([
+      { payment_ref: "fauth-with", authorized_by: authorizer },
+      { payment_ref: "fauth-without", authorized_by: null },
+    ]);
   });
 
   it("recordRefund ignores a prior FAILED refund when summing (a failed refund does not consume the balance)", async () => {
