@@ -24,16 +24,19 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
-import { parkOrder } from "./working-order.js";
+import { getHeldOrder, listHeldOrders, parkOrder } from "./working-order.js";
 import "./errors.js";
 
 // PGlite, not real Postgres: this suite proves the WRITE behaviour of `parkOrder` — the working-order
 // state machine (an OPEN row plus its lines), the refuse-empty/refuse-unknown guards, and that the
 // database's own FK + trigger constraints (the composite node/product FKs, `require_open_parent`, the
-// `check_locales` trigger) hold on the rows it inserts. None of that needs a genuine non-superuser
-// role: RLS/cross-tenant isolation and the per-node concurrency of `allocateOrderNumber` are proven
-// against real Postgres in Task 7's `*.rls.test.ts`. The insert still runs through `withTenant` +
-// `asAppUser` exactly as production does, so the tenant-scoped inserts and the `check_locales` trigger
+// `check_locales` trigger) hold on the rows it inserts — AND the READ behaviour of `listHeldOrders`
+// (the sum/count aggregate, the open-status and node filters, the ordering) and `getHeldOrder` (the
+// open-only lookup and its `working_order.not_found`). All of that is plain SQL a single backend
+// proves; none of it needs a genuine non-superuser role — RLS/cross-tenant isolation and the per-node
+// concurrency of `allocateOrderNumber` are proven against real Postgres in Task 7's `*.rls.test.ts`.
+// Every read and write still runs through `withTenant` + `asAppUser` (as `app_user`, so RLS is in
+// force even here) exactly as production does, so the tenant scope and the `check_locales` trigger
 // (which reads the location under the caller's own scope) are exercised, not bypassed.
 const LOCALE = "es-ES";
 
@@ -218,5 +221,175 @@ describe("parkOrder", () => {
       return tx.select().from(workingOrders).where(eq(workingOrders.tenantId, cfg.tenantId));
     });
     expect(parked).toHaveLength(0);
+  });
+});
+
+/**
+ * Read a working order and its lines back RAW (superuser, no tenant scope), for computing what
+ * `listHeldOrders`/`getHeldOrder` should independently return. `openedAt` is the actual persisted
+ * value, so a `toEqual` on the list carries every field rather than an `objectContaining` that would
+ * let an unasserted key slip through (CLAUDE.md §4).
+ */
+async function readOrder(id: string): Promise<{
+  openedAt: string;
+  lineTotals: string[];
+}> {
+  const [wo] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
+  const lines = await db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, id))
+    .orderBy(workingOrderLines.lineNo);
+  return { openedAt: wo!.openedAt, lineTotals: lines.map((l) => l.lineTotal) };
+}
+
+/** Drive a parked order to a terminal status by UPDATE, the transition the enforce trigger allows. */
+async function setStatus(id: string, status: "settled" | "abandoned"): Promise<void> {
+  await withTenant(db, testTenant, async (tx) => {
+    await asAppUser(tx);
+    // `settled` demands a settled_at (working_orders_settled_at_ck is a biconditional); `abandoned`
+    // demands it stay NULL. The BEFORE UPDATE enforce_transition trigger permits open→either.
+    if (status === "settled") {
+      await tx.execute(
+        sql`update working_orders set status = 'settled', settled_at = now() where id = ${id}`,
+      );
+    } else {
+      await tx.execute(sql`update working_orders set status = 'abandoned' where id = ${id}`);
+    }
+  });
+}
+
+// `setStatus` needs the tenant of the venue it is acting on; each test assigns this before using it.
+let testTenant: string;
+
+describe("listHeldOrders", () => {
+  it("lists the node's open orders with itemCount, summed total and label, ordered by number", async () => {
+    const { cfg, cafeId, aguaId } = await setupVenue();
+    testTenant = cfg.tenantId;
+    const idA = randomUUID();
+    const idB = randomUUID();
+
+    // A: a single line (itemCount 1, total is that one line's total). B: two lines (itemCount 2,
+    // total is their sum) and NO label (the null branch). A is parked first, so its per-node number
+    // is 1 and B's is 2 — the order the list must come back in.
+    await parkOrder({ db }, cfg, {
+      id: idA,
+      lines: [{ productId: cafeId, quantity: "2" }],
+      label: "Mesa 4",
+    });
+    await parkOrder({ db }, cfg, {
+      id: idB,
+      lines: [
+        { productId: cafeId, quantity: "1" },
+        { productId: aguaId, quantity: "3" },
+      ],
+    });
+
+    const a = await readOrder(idA);
+    const b = await readOrder(idB);
+    const totalA = a.lineTotals[0]!; // one line, so the sum is that line's total verbatim
+    // Summed independently of the function under test (JS, not the same SQL) so the assertion
+    // validates the aggregate rather than restating it. Cent-magnitude 2dp values sum exactly here.
+    const totalB = b.lineTotals.reduce((sum, t) => sum + Number(t), 0).toFixed(2);
+
+    const held = await listHeldOrders({ db }, cfg);
+    expect(held).toEqual([
+      {
+        id: idA,
+        orderNumber: 1,
+        label: "Mesa 4",
+        itemCount: 1,
+        total: totalA,
+        openedAt: a.openedAt,
+      },
+      { id: idB, orderNumber: 2, label: null, itemCount: 2, total: totalB, openedAt: b.openedAt },
+    ]);
+  });
+
+  it("omits settled and abandoned orders — the status filter is the only reason they are gone", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    testTenant = cfg.tenantId;
+    const openId = randomUUID();
+    const abandonedId = randomUUID();
+    const settledId = randomUUID();
+
+    // All three are parked identically (same node, real lines), so the ONLY thing separating the
+    // listed one from the other two is status — not a missing node_id or an empty basket.
+    for (const id of [openId, abandonedId, settledId]) {
+      await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
+    }
+    await setStatus(abandonedId, "abandoned");
+    await setStatus(settledId, "settled");
+
+    const held = await listHeldOrders({ db }, cfg);
+    expect(held.map((o) => o.id)).toEqual([openId]);
+  });
+
+  it("excludes an open order on ANOTHER node of the same tenant — node scope, not just RLS", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const mine = randomUUID();
+    await parkOrder({ db }, cfg, { id: mine, lines: [{ productId: cafeId, quantity: "1" }] });
+
+    // A second node under the SAME tenant with its own open order. RLS is tenant-scoped, so it does
+    // NOT hide this row — only `node_id = cfg.nodeId` does. Removing that filter makes this order
+    // appear and fails the assertion (CLAUDE.md §4, prove the guard by deletion). Inserted directly
+    // (no lines) as superuser: this row only has to EXIST to be wrongly listed.
+    const otherNode = await seedNode(db, cfg.tenantId, cfg.locationId);
+    await db.execute(sql`
+      insert into working_orders (tenant_id, till_id, node_id, order_number, status)
+      values (${cfg.tenantId}, ${cfg.tillId}, ${otherNode}, 1, 'open')`);
+
+    const held = await listHeldOrders({ db }, cfg);
+    expect(held.map((o) => o.id)).toEqual([mine]);
+  });
+});
+
+describe("getHeldOrder", () => {
+  it("returns the open order's product/quantity lines, ordered by lineNo", async () => {
+    const { cfg, cafeId, aguaId } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      label: "Mesa 7",
+      lines: [
+        { productId: cafeId, quantity: "1" },
+        { productId: aguaId, quantity: "3" },
+      ],
+    });
+
+    const order = await getHeldOrder({ db }, cfg, id);
+    // Only product_id + quantity per line (the basket-rebuild inputs), in lineNo order. numeric(12,3)
+    // reads the quantities back as "1.000"/"3.000".
+    expect(order).toEqual({
+      id,
+      orderNumber: 1,
+      label: "Mesa 7",
+      lines: [
+        { productId: cafeId, quantity: "1.000" },
+        { productId: aguaId, quantity: "3.000" },
+      ],
+    });
+  });
+
+  it("throws working_order.not_found for an unknown id", async () => {
+    const { cfg } = await setupVenue();
+    const missing = randomUUID();
+    await expect(getHeldOrder({ db }, cfg, missing)).rejects.toMatchObject({
+      code: "working_order.not_found",
+      params: { workingOrderId: missing },
+    });
+  });
+
+  it("throws working_order.not_found for a settled (non-open) order — closed is not retrievable", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    testTenant = cfg.tenantId;
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
+    await setStatus(id, "settled");
+
+    await expect(getHeldOrder({ db }, cfg, id)).rejects.toMatchObject({
+      code: "working_order.not_found",
+      params: { workingOrderId: id },
+    });
   });
 });
