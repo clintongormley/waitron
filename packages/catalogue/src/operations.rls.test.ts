@@ -12,10 +12,10 @@ import type { SeededVenue } from "../test/fixtures.js";
 // assertion has to run under a role like this. The app_user membership is what grants it
 // SELECT/INSERT/UPDATE on the catalogue tables (0027); NO DELETE is granted, which the second test
 // proves (SQLSTATE 42501). current_tenant_id() reads `app.tenant_id`, so a query under tenant B's
-// GUC matches none of tenant A's rows. This suite runs on REAL Postgres — the authoritative source
-// of PostgreSQL's RLS and privilege semantics, per the brief and CLAUDE.md §4 ("RLS is only truly
-// enforced on real Postgres under a NON-superuser probe role"). Mirrors
-// packages/payments-stripe/src/stripe.rls.test.ts.
+// GUC matches none of tenant A's rows. This suite runs on REAL Postgres: PGlite connects as a
+// superuser and so bypasses FORCE ROW LEVEL SECURITY, which would make an RLS/grant assertion a
+// false pass — CLAUDE.md §4 requires real Postgres for anything about privileges or RLS as the
+// deployment role. Mirrors packages/payments-stripe/src/stripe.rls.test.ts.
 const PROBE_ROLE = "rls_probe";
 const PROBE_PASSWORD = "probe";
 
@@ -79,8 +79,10 @@ describe("catalogue operations under real row-level security", () => {
       // The isolation guarantee: the SAME probe role, holding the SAME SELECT grant, sees NONE of
       // tenant A's rows when scoped to tenant B. The only thing standing between these queries and
       // A's rows is the isolation policy's USING clause (tenant_id = current_tenant_id()) evaluated
-      // against B's GUC. Weakening either policy's USING to `true` makes both of these see A's rows —
-      // the prove-by-deletion check for this suite.
+      // against B's GUC. `listCatalogues` reads only `catalogues` and `listProducts` reads only
+      // `products`, so the two reads are independent: weakening the catalogues policy's USING to
+      // `true` leaks only the catalogues read, and weakening the products policy's USING to `true`
+      // leaks only the products read. The two assertions below check each independently.
       const seenByB = await withTenant(probe, tenantB.tenantId, async (tx) => {
         await asAppUser(tx);
         return {

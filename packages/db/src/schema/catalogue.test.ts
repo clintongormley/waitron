@@ -1,7 +1,10 @@
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import type { Database } from "../client.js";
+import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
 import { describeEachTarget } from "../testing/harness.js";
+import { catalogues } from "./catalogue.js";
+import { tenants } from "./tenants.js";
 
 async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]> {
   const result = (await db.execute(query)) as unknown as { rows: T[] } | T[];
@@ -29,12 +32,37 @@ describeEachTarget("catalogue — menu, taxonomy and priced items", (target) => 
     expect(out.every((r) => r.relforcerowsecurity)).toBe(true);
   });
 
-  it("rejects an invalid pricing_unit / vat_class", async () => {
-    await expect(
+  it("rejects a bad pricing_unit and a bad vat_class, each on its own CHECK", async () => {
+    // Seed real FK parents FIRST so the two INSERTs below reach the CHECK constraints instead of
+    // tripping products' tenant_id / catalogue_id foreign keys. The previous version of this test
+    // inserted gen_random_uuid() for both keys, so it threw 23503 (FK violation) whether or not the
+    // CHECKs existed — and it never exercised an invalid vat_class at all. (F1, whole-branch review.)
+    const [tenant] = await db
+      .insert(tenants)
+      .values({ country: "ES", taxId: "B00000000", legalName: "Fixture Tenant" })
+      .returning({ id: tenants.id });
+    const [catalogue] = await db
+      .insert(catalogues)
+      .values({ tenantId: tenant.id, name: "Deli" })
+      .returning({ id: catalogues.id });
+
+    // Bad pricing_unit, VALID vat_class → only products_pricing_unit_ck can fire.
+    const pricingError = await captureError(() =>
       db.execute(sql`insert into products
         (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
-        values (gen_random_uuid(), gen_random_uuid(), '{}', 'bogus', '1.00', 'general')`),
-    ).rejects.toThrow();
+        values (${tenant.id}, ${catalogue.id}, '{}', 'bogus', '1.00', 'general')`),
+    );
+    expect(pgErrorCode(pricingError)).toBe("23514");
+    expect(pgErrorMessage(pricingError)).toMatch(/products_pricing_unit_ck/);
+
+    // Bad vat_class, VALID pricing_unit → only products_vat_class_ck can fire.
+    const vatError = await captureError(() =>
+      db.execute(sql`insert into products
+        (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
+        values (${tenant.id}, ${catalogue.id}, '{}', 'each', '1.00', 'bogus')`),
+    );
+    expect(pgErrorCode(vatError)).toBe("23514");
+    expect(pgErrorMessage(vatError)).toMatch(/products_vat_class_ck/);
   });
 
   it("has a snapshot category column on both line tables and catalogue_id on locations", async () => {

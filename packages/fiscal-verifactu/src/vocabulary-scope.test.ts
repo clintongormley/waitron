@@ -3,10 +3,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
- * Task 3's English-only guard (packages/db/src/english-only.ts) scans `GENERIC_PACKAGES`
+ * Task 3's English-only guard (packages/db/src/english-only.ts) scans the eleven `GENERIC_PACKAGES`
  * ("db", "core", "fiscal", "shared", "payments", "scheduler", "credentials", "workforce",
- * "reporting", "identity") and explicitly names this package — alongside packages/verifactu — in
- * `EXEMPT_PACKAGES`.
+ * "reporting", "identity", "catalogue") and explicitly names this package — alongside
+ * packages/verifactu — in `EXEMPT_PACKAGES`.
  *
  * Its constants are read here as SOURCE TEXT rather than imported from `@waitron/db`, and that is
  * not merely a style choice carried over from packages/fiscal/src/no-regime-vocabulary.test.ts's
