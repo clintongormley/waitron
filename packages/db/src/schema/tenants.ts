@@ -77,13 +77,15 @@ export const locations = pgTable(
     timeZone: text("time_zone").notNull().default("Europe/Madrid"),
     dayCutover: time("day_cutover").notNull().default("06:00:00"),
     // Which catalogue (menu) this venue sells from — nullable (a venue may exist before a menu is
-    // assigned). This FK and `catalogue.ts`'s `tenants` FK make the two schema modules import each
-    // other, but the cycle is harmless: every cross-module reference is a lazy `.references(() =>
-    // …)` thunk, never touched at import time, so both modules finish loading before any thunk
-    // runs. Proven on this repo's pinned drizzle-orm 0.45.2 / drizzle-kit 0.31.10 + tsc: the ORM
-    // resolves both FKs, drizzle-kit emits the constraint, and the pair typechecks. (Cross-tenant
-    // integrity — that the catalogue belongs to THIS tenant — is still RLS's job, not the FK's; a
-    // composite `(tenant_id, id)` FK is the deferred hardening, backlog.)
+    // assigned). This FK and `catalogue.ts`'s own `tenants` FK make the two schema modules import
+    // each other; the cycle is harmless because every cross-module reference is a lazy
+    // `.references(() => …)` thunk, evaluated only after both modules have finished loading, never
+    // at import time. The receipt is CI, not an assertion: `pnpm --filter @waitron/db db:generate`
+    // emits this FK (see drizzle/0028_dapper_tiger_shark.sql) and `pnpm --filter @waitron/db
+    // typecheck` compiles the mutually-importing pair — both run green in CI, so a dependency bump
+    // that broke thunk resolution would fail those same commands rather than slip through here.
+    // (Cross-tenant integrity — that the catalogue belongs to THIS tenant — remains RLS's job, not
+    // this FK's; a composite `(tenant_id, id)` FK is the deferred hardening, see backlog.)
     catalogueId: uuid("catalogue_id").references(() => catalogues.id),
   },
   (t) => [
