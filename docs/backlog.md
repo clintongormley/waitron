@@ -314,6 +314,33 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     FKs precisely so a line cannot point at another tenant's row independently of RLS. Cheap
     belt-and-suspenders in pre-production: a `UNIQUE(tenant_id, id)` on `catalogues`/`categories` +
     composite FKs from `products`. Flagged by the base-to-tip review; non-blocking.
+  - **Daily-close VAT report vs the filed desglose diverge for gross-inclusive (catalogue) sales.**
+    `@waitron/reporting`'s `computeVatSummary` recomputes cuota **multiplicatively** (`base × rate`,
+    `vat-summary.ts`), which reproduces the filed cuota only for a sale filed via `buildVatBreakdown`.
+    A catalogue sale files by the **difference method** (`gross − base`), so for such sales the daily
+    close (the stated *modelo 303* source, #56) overstates cuota by a rounding céntimo per
+    `(invoice, rate)` group and reports a gross matching neither the money taken nor the filed record.
+    The filed difference-method desglose is **not persisted queryably** (only inside the hash-chained
+    `registros_facturacion`; the per-rate *gross* is not stored), so reporting cannot recompute it —
+    closing this needs the filed desglose **persisted** (a `sale_desglose` table, or the sale's
+    `vatBreakdown` stored) and read by `computeVatSummary`. Its own slice (schema + migration +
+    reporting). **Not reachable in production today** (headless — no catalogue sales until the till,
+    #7); the caveat is documented in `vat-summary.ts`. Found by the finish-branch fresh-context review.
+  - **Asesor / XSD confirmation: the difference-method cuota-vs-`base×rate` residual.** For a basket
+    with many same-rate lines, per-line base rounding makes the residual exceed one céntimo per rate
+    group (the exact invariants `ImporteTotal == Σ(base+cuota)` and `BaseImponible == Σ line bases`
+    always hold). Whether the residual stays within AEAT's *per-record* rounding tolerance is an
+    external claim not confirmed on primary source — sits with the other asesor/XSD questions (F3
+    canje, SumUp). Spec D8/§3 now state this as unconfirmed rather than asserting it.
+  - **RLS test hardening (finish-branch review, low risk).** `operations.rls.test.ts` proves
+    cross-tenant isolation by deletion on `catalogues` and `products` but not `categories` (the 0027
+    policy is byte-identical), and `assignCatalogueToLocation` is exercised only under PGlite
+    (superuser) — safe because `app_user` holds UPDATE on `locations` (0001), but not proven under the
+    non-superuser probe. Add a `categories` isolation assertion and a real-PG `assignCatalogueToLocation`.
+  - **Category analytics splits on rename.** The sale line snapshots the category *name*, so renaming
+    a category splits one analytics bucket across the rename in roll-ups (inherent to snapshotting a
+    label; a stable snapshotted code/id would avoid it). A design-acknowledged tradeoff, surfaces only
+    when category-based reports land (deferred with reporting).
   - **Deferred by design (§9), each attaches when its consumer exists:** no management UI/CLI/HTTP
     (→ dashboard); catalogue **sync** — the `catalogues.version` column is the seam, present but not
     bumped — and per-location price/availability overrides (→ sync slice); allergens/variants/recipes
