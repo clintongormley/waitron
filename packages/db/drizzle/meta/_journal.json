@@ -183,6 +183,27 @@
       "when": 1785887552126,
       "tag": "0025_dizzy_gateway",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1785916902808,
+      "tag": "0026_abnormal_frog_thor",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1785916914450,
+      "tag": "0027_light_smiling_tiger",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1785925176786,
+      "tag": "0028_dapper_tiger_shark",
+      "breakpoints": true
     }
   ]
 }

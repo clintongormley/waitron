@@ -75,6 +75,14 @@ import "@waitron/shared";
  * sum(corrections) + sum(tip_amount)`: the tip moved off the sale and onto each tender
  * (`tenders.tip_amount`), and `due` nets in every rectificativa correcting the sale (invoice-first
  * slice, 2026-08-03 — in lockstep with migration 0021's coverage trigger).
+ *
+ * **Catalogue slice addition (2026-08-05).** `sale.total_mismatch`, by the same `declare module`
+ * mechanism and for the same reason as every code above: it names a DOMAIN concept ("the supplied
+ * VAT breakdown does not reconcile with the sale total"), never `catalogue.*` and never the
+ * throwing package's name. `recordSale` gains an optional caller-supplied `vatBreakdown` (used
+ * verbatim as the AEAT desglose — e.g. `@waitron/catalogue`'s gross-inclusive difference-method
+ * figures) and asserts it agrees with `total` before writing anything; see the inline note on the
+ * code itself.
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
@@ -177,6 +185,17 @@ declare module "@waitron/shared" {
      * within one call's own `substitutedSaleIds` list, which `recordSubstitution` rejects earlier
      * as a caller precondition (a plain Error) before any row is written. */
     "sale.already_substituted": { saleId: string };
+    /** Thrown by `recordSale` when a CALLER-SUPPLIED `vatBreakdown` (`RecordSaleInput.vatBreakdown`)
+     * does not sum to the sale's declared `total`: `sumDecimals` of every group's `base` and `tax`,
+     * compared BY VALUE (`compareDecimal`, never lexically) against `decimal(total)`. A defence for
+     * an UNREPAIRABLE record (§5) — the supplied desglose is filed VERBATIM as the AEAT breakdown, so
+     * one that disagrees with the total it is filed against would chain a self-inconsistent record no
+     * later edit can fix. Fires ONLY on the supplied-breakdown path: the derived path
+     * (`buildVatBreakdown(lines)`) cannot disagree with itself and never raises it, so no existing
+     * caller can trip it. `declaredTotal` is `input.total` as given; `breakdownTotal` is the summed
+     * breakdown — both decimal literals, so a translator can show the two figures that failed to
+     * reconcile. */
+    "sale.total_mismatch": { declaredTotal: string; breakdownTotal: string };
     /** Thrown-and-caught internally by `recordSale`/`recordVoid` (never crosses either function's
      * own boundary — it is constructed only to hand its `.code`/`.params` to `recordIncident`) to
      * wrap the `IntegrityIssue`s from a failed `FiscalBackend.checkIntegrity` call as a stable,

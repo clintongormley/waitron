@@ -15,10 +15,12 @@
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "demo:daily-close": "tsx scripts/daily-close-demo.ts"
+    "demo:daily-close": "tsx scripts/daily-close-demo.ts",
+    "demo:catalogue": "tsx scripts/catalogue-demo.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.0",
+    "@waitron/catalogue": "workspace:*",
     "@waitron/core": "workspace:*",
     "@waitron/credentials": "workspace:*",
     "@waitron/db": "workspace:*",
@@ -28,6 +30,7 @@
     "@waitron/migrations": "workspace:*",
     "@waitron/payments": "workspace:*",
     "@waitron/payments-stripe": "workspace:*",
+    "@waitron/provisioning": "workspace:*",
     "@waitron/reporting": "workspace:*",
     "@waitron/scheduler": "workspace:*",
     "@waitron/shared": "workspace:*",

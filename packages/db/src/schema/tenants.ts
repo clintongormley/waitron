@@ -9,6 +9,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { catalogues } from "./catalogue.js";
 
 /**
  * The obligado tributario. Fiscal identity is country + tax_id, regime-agnostic: for a Spanish
@@ -75,6 +76,17 @@ export const locations = pgTable(
     province: text("province"),
     timeZone: text("time_zone").notNull().default("Europe/Madrid"),
     dayCutover: time("day_cutover").notNull().default("06:00:00"),
+    // Which catalogue (menu) this venue sells from — nullable (a venue may exist before a menu is
+    // assigned). This FK and `catalogue.ts`'s own `tenants` FK make the two schema modules import
+    // each other; the cycle is harmless because every cross-module reference is a lazy
+    // `.references(() => …)` thunk, evaluated only after both modules have finished loading, never
+    // at import time. The receipt is CI, not an assertion: `pnpm --filter @waitron/db db:generate`
+    // emits this FK (see drizzle/0028_dapper_tiger_shark.sql) and `pnpm --filter @waitron/db
+    // typecheck` compiles the mutually-importing pair — both run green in CI, so a dependency bump
+    // that broke thunk resolution would fail those same commands rather than slip through here.
+    // (Cross-tenant integrity — that the catalogue belongs to THIS tenant — remains RLS's job, not
+    // this FK's; a composite `(tenant_id, id)` FK is the deferred hardening, see backlog.)
+    catalogueId: uuid("catalogue_id").references(() => catalogues.id),
   },
   (t) => [
     // cardinality(), NOT array_length(). array_length('{}', 1) is NULL, a CHECK

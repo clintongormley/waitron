@@ -16,10 +16,20 @@ import type { DailyCloseInput, VatSummary } from "./types.js";
  * `ratePercent`% of `base` (the VAT tax amount — the fiscal *cuota*), exact, half away from zero at
  * money scale. Identical composition to `@waitron/core`'s `percentOf` (packages/core/src/vat.ts) —
  * kept local so reporting depends only on db + shared, not the write layer. It reuses the same rounding
- * primitive (`divideDecimal`) as `buildVatBreakdown`, and this aggregate applies it at the per-`(invoice,
- * rate)` grain (the `group by s.id, sl.vat_rate` below, §4), so the daily VAT matches the sum of the
- * filed per-invoice cuotas. Named in English (not `cuotaOf`) so this generic package stays inside the
- * english-only guard.
+ * primitive (`divideDecimal`) as `buildVatBreakdown`, applied at the per-`(invoice, rate)` grain (the
+ * `group by s.id, sl.vat_rate` below, §4).
+ *
+ * CAVEAT (2026-08-05, feat/catalogue-model): this MULTIPLICATIVE recompute (`base × rate`) reproduces
+ * the filed cuota ONLY for a sale filed via `buildVatBreakdown` (its default). A gross-inclusive
+ * catalogue sale files its cuota by the DIFFERENCE method (`gross − base`, `@waitron/catalogue`'s
+ * `priceBasket` → `recordSale`'s supplied `vatBreakdown`), which can differ by a rounding céntimo per
+ * (invoice, rate) group — so for such sales this daily VAT summary does NOT equal the filed
+ * per-invoice cuotas. The filed difference-method desglose is not persisted queryably (it lives only
+ * inside the hash-chained `registros_facturacion`; the per-rate *gross* is not stored, only the
+ * per-rate base via `sale_lines.line_total`), so reporting cannot yet recompute it. Closing this needs
+ * the filed desglose persisted and read here — tracked in docs/backlog.md. Not reachable until the
+ * till (#7) rings catalogue sales; no such sale exists today. Named in English (not `cuotaOf`) so this
+ * generic package stays inside the english-only guard.
  */
 function taxOf(base: Decimal, ratePercent: Decimal): Decimal {
   return divideDecimal(multiplyDecimal(base, ratePercent), "100" as Decimal, MONEY_SCALE);
