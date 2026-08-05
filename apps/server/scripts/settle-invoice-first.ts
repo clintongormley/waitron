@@ -20,6 +20,7 @@ import type { OutstandingSale, RecordCorrectionInput, RecordSaleInput } from "@w
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { createPostgresDb, withTenant } from "@waitron/db";
+import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { deploymentEnvironment } from "../src/config.js";
 import {
   addDecimal,
@@ -154,6 +155,28 @@ async function main(): Promise<void> {
     const before = await withTenant(db, tenant, (tx) => listOutstandingSales(tx, tenant));
     console.log(`2. outstanding: ${formatOutstanding(before)}`);
 
+    // Seed a supervisor (holds `sale.rectify`) and open a shift session — the authorizer
+    // recordCorrection's gate now requires (Task 10). Task 13's venue-seed comes later, so this
+    // runbook creates its own. Written as its own transaction so the session is committed and
+    // visible to the correction's own transaction below.
+    const authorizerSession = await withTenant(db, tenant, async (tx) => {
+      const [person] = await tx
+        .insert(persons)
+        .values({
+          tenantId: tenant,
+          displayName: "Supervisora",
+          pinHash: hashPin("1234"),
+          role: "supervisor",
+        })
+        .returning({ id: persons.id });
+      return loginWithPin(tx, {
+        tenantId: tenant,
+        tillId: till,
+        personId: person!.id,
+        pin: "1234",
+      });
+    });
+
     // 3. Correct it down by 11.00 (net 110.00 → 99.00) via a rectificativa on the rectificative series.
     const corrInput: RecordCorrectionInput = {
       tenantId: tenant,
@@ -174,6 +197,7 @@ async function main(): Promise<void> {
       ],
       fiscalBackend: "verifactu",
       clock,
+      authz: { sessionId: authorizerSession.id },
     };
     const corr = await withTenant(db, tenant, (tx) => recordCorrection(tx, backend, corrInput));
     console.log(

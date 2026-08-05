@@ -24,6 +24,7 @@
     "@waitron/db": "workspace:*",
     "@waitron/fiscal": "workspace:*",
     "@waitron/fiscal-verifactu": "workspace:*",
+    "@waitron/identity": "workspace:*",
     "@waitron/migrations": "workspace:*",
     "@waitron/payments": "workspace:*",
     "@waitron/payments-stripe": "workspace:*",

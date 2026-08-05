@@ -65,6 +65,9 @@ importers:
       '@waitron/fiscal-verifactu':
         specifier: workspace:*
         version: link:../../packages/fiscal-verifactu
+      '@waitron/identity':
+        specifier: workspace:*
+        version: link:../../packages/identity
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../../packages/migrations

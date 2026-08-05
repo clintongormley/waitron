@@ -17,6 +17,7 @@ import type { Transaction } from "@waitron/db";
 import { AppError, decimal } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import type { FiscalBackend, FiscalRecordRef, TrustedClock } from "@waitron/fiscal";
+import { authorize, type Override } from "@waitron/identity";
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
 import { buildVatBreakdown } from "./record-sale.js";
@@ -67,6 +68,13 @@ export interface RecordCorrectionInput {
   total: string;
   /** The already-signed delta lines (negative for a reversal). Same shape as an ordinary sale's. */
   lines: RecordSaleLine[];
+  /**
+   * Who authorises this rectificativa (spec §7). The gate is INTRINSIC — `recordCorrection` calls
+   * `authorize` itself with permission `sale.rectify`, so a correction cannot be performed without a
+   * credential `authorize` accepts (the operator's own role holds it, or a supervisor `override`
+   * supplies a second person's PIN). The authorizer it returns is recorded on `sales.authorized_by`.
+   */
+  authz: { sessionId: string; override?: Override };
   fiscalBackend: string;
   clock: TrustedClock;
 }
@@ -80,6 +88,13 @@ export interface RecordCorrectionInput {
  * separate payments-layer action (decoupled refund, spec §4). Unlike a void it takes a number of
  * its own, because a correction is a fresh registro de alta pointing at the invoice it corrects, not
  * an annulment of it.
+ *
+ * The gate is INTRINSIC: this call itself demands `sale.rectify`, so a correction cannot be
+ * performed without a credential `authorize` accepts — the session operator's own role holds the
+ * permission, or a supervisor `override` (a second person's PIN) supplies it. `authorize` returns
+ * the authorizing person, written to `sales.authorized_by` at insert; it runs AFTER the sale/series
+ * guards (so a missing sale or wrong series never leaks an authz error) and BEFORE any chain work
+ * (so a rejected correction burns no number). See `./record-void.ts` for the identical shape.
  *
  * No fiscal condition blocks a correction: a failed chain-integrity check records an incident and
  * the correction proceeds anyway, because a staff member correcting the very sale an incident
@@ -159,6 +174,19 @@ export async function recordCorrection(
     });
   }
 
+  // The gate (spec §7). Placed AFTER the sale-existence and series guards above (so a missing or
+  // cross-tenant original, or a wrong/absent corrective series, still returns its own code and never
+  // leaks an authz error) and BEFORE the chain work below — `checkIntegrity`'s chain-head lock and
+  // `allocateInvoiceNumber`'s series-row lock — so a rejected correction consumes NO number and does
+  // NO chain work, leaving no permanent series gap. `authorization.authorizedBy` is the person to
+  // record on the corrective sale below (the operator's own role held `sale.rectify`, or a
+  // supervisor `override` supplied it).
+  const authorization = await authorize(tx, {
+    sessionId: input.authz.sessionId,
+    permission: "sale.rectify",
+    override: input.authz.override,
+  });
+
   // Step 3. Art. 7.i verification, exactly as for an alta. Nothing branches on `verification.ok` —
   // a failed check records ONE aggregated incident (below, once `saleId` exists) and the correction
   // is chained anyway. The table-wide `incidents_open_dedup` index holds at most one open incident
@@ -217,6 +245,11 @@ export async function recordCorrection(
       fiscalBackend: input.fiscalBackend,
       fiscalState: "recorded",
       correctsSaleId: input.correctsSaleId,
+      // Recorded at INSERT because `sales` is append-only for the app role (no UPDATE grant), so
+      // there is no later moment to attribute the correction — the same seam `sale_voids.voided_by`
+      // fills. Our own metadata; it never enters the fiscal registro's huella (it is on the sales
+      // row, not the registro).
+      authorizedBy: authorization.authorizedBy,
     })
     .returning({ id: sales.id });
 
