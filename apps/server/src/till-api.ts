@@ -5,11 +5,19 @@ import { isAppError } from "@waitron/shared";
 import { asAppUser, tenants, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { endSession, listActiveStaff, loginWithPin } from "@waitron/identity";
+import { listAvailableProducts } from "@waitron/catalogue";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { codeOf } from "./error-code.js";
 import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
-import { clearSessionCookie, readSessionId, setSessionCookie } from "./till-session.js";
+import { recordTillSale } from "./till-sale.js";
+import type { TillSaleRequest } from "./till-sale.js";
+import {
+  clearSessionCookie,
+  readSessionId,
+  requireSession,
+  setSessionCookie,
+} from "./till-session.js";
 // Side-effect only: keeps this host's `server.internal` / `session.required` codes reachable from
 // the file that answers with them — the reachability convention `webhook.ts` follows. See errors.ts.
 import "./errors.js";
@@ -159,6 +167,41 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }
       /* v8 ignore stop */
       return c.json({ locale: deps.cfg.locale, venueName: issuer.venueName, nif: issuer.nif });
+    }),
+  );
+
+  // The sellable catalogue for this till's location. SESSION-GUARDED: `requireSession` runs FIRST, so
+  // an unauthenticated request 401s (`session.required`) before any catalogue is read — the operator
+  // must be logged in to see prices. The read itself runs as the app role under the till's tenant
+  // (`withTenant` + `asAppUser`), so RLS scopes `listAvailableProducts` to this tenant's own products.
+  app.get("/api/products", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const products = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return listAvailableProducts(tx, deps.cfg.locationId);
+      });
+      return c.json(products);
+    }),
+  );
+
+  // Ring one walk-up sale — the HTTP face of the fiscal sale path. SESSION-GUARDED, and the guard
+  // supplies the attribution: the sale is filed as `operatorId = session.personId`, so who rang it is
+  // the logged-in operator, never a browser-sent value. `recordTillSale` opens its OWN
+  // `withTenant`/`asAppUser` transaction and re-prices the basket authoritatively (the request
+  // carries no price), so it is called OUTSIDE any transaction here — nesting would deadlock the pool.
+  // The sale route neither opens nor rotates the session, so it emits no Set-Cookie.
+  app.post("/api/sales", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const body = await c.req.json<TillSaleRequest>();
+      const result = await recordTillSale(
+        { db: deps.db, backend: deps.backend, clock: deps.clock },
+        deps.cfg,
+        body,
+        personId,
+      );
+      return c.json(result);
     }),
   );
 }

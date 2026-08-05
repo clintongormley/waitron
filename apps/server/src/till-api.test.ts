@@ -8,6 +8,12 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, endSession, hashPin, loginWithPin } from "@waitron/identity";
 import {
+  assignCatalogueToLocation,
+  createCatalogue,
+  createCategory,
+  createProduct,
+} from "@waitron/catalogue";
+import {
   AppError,
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -37,6 +43,10 @@ let ana: { id: string };
 // the value read back here, not a hardcoded one.
 let abel: { id: string };
 let venueTaxId: string;
+// The one product seeded into the counter location's catalogue, so `GET /api/products` (Task 6) has
+// something to return. Captured here so the success test can pin the exact `AvailableProduct` shape
+// the route reads back — id, descriptions, unit price, VAT class and the resolved category NAME.
+let aguaProduct: { id: string };
 
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
@@ -71,6 +81,26 @@ const suite = usePgliteDb({
     await db.execute(sql`
       insert into persons (tenant_id, display_name, pin_hash, role, status)
       values (${tenantId}, 'Zoe', ${hashPin("2222")}, 'staff', 'suspended')`);
+    // One product in a catalogue assigned to the counter location, so `GET /api/products` returns a
+    // non-empty list. Seeded on the APP role via the catalogue helpers — the same `withTenant` +
+    // `asAppUser` path the route reads it back through — so the active/assignment filters are real,
+    // not bypassed by a superuser insert. (Catalogue tables live in CORE_MIGRATIONS, already applied.)
+    const product = await withTenant(db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cat = await createCatalogue(tx, { name: "Carta" });
+      const bebidas = await createCategory(tx, { name: "Bebidas" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: bebidas.id,
+        descriptions: { "es-ES": "Agua mineral" },
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      await assignCatalogueToLocation(tx, loc.rows[0]!.id, cat.id);
+      return p;
+    });
+    aguaProduct = { id: product.id };
     cfg = makeCfg(tenantId, till.rows[0]!.id, loc.rows[0]!.id);
   },
 });
@@ -324,5 +354,60 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(body).toEqual({ locale: "es-ES", venueName: "Test SL", nif: venueTaxId });
     // Nothing sensitive: no pin, certificate, connection string or verification url reaches the wire.
     expect(JSON.stringify(body)).not.toMatch(/pin|secret|password|url|cert/i);
+  });
+});
+
+describe("GET /api/products (session-guarded catalogue)", () => {
+  it("REJECTS (401 session.required) when no cookie is present — proves the requireSession guard", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+
+    // No cookie: the guard must refuse before any catalogue is read. Deleting the `requireSession`
+    // call in the route makes this 200-with-the-list instead, which is the deletion proof.
+    const res = await app.request("/api/products");
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+
+  it("RETURNS the location's available products when an open session's cookie is sent", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+
+    const id = await openSession(suite.db);
+    const res = await app.request("/api/products", {
+      headers: { cookie: `${SESSION_COOKIE}=${id}` },
+    });
+    expect(res.status).toBe(200);
+    // The exact `AvailableProduct` shape the route reads back: the seeded product with its resolved
+    // category NAME (not id), priced from the catalogue, one entry for the one assigned product.
+    expect(await res.json()).toEqual([
+      {
+        id: aguaProduct.id,
+        descriptions: { "es-ES": "Agua mineral" },
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+        category: "Bebidas",
+      },
+    ]);
+  });
+});
+
+describe("POST /api/sales (session-guarded sale)", () => {
+  it("REJECTS (401 session.required) when no cookie is present — the sale never runs unauthenticated", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+
+    // The guard runs BEFORE the body is even read, so an unauthenticated sale is refused with the
+    // same code a missing session yields everywhere else. The chained fiscal write (the happy path)
+    // is proven end-to-end over real Postgres in `till-api.realpg.test.ts`, not here — PGlite runs as
+    // a superuser and cannot exercise the deployment role's chained write (CLAUDE.md §4).
+    const res = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ lines: [], tender: { method: "cash", amount: "0" } }),
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
   });
 });
