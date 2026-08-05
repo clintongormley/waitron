@@ -39,6 +39,30 @@ declare module "@waitron/shared" {
       otherValue?: number;
     };
     /**
+     * A required `WAITRON_TILL_*` environment variable is unset — absent, or the empty string (an
+     * `VAR=` line, which `till-config.ts` treats as unset for the same reason `config.ts`'s `isUnset`
+     * does). `key` is the variable NAME, our own declared identifier, and is the ONLY field: the
+     * value is never echoed, so an operator who pasted a secret into the wrong `WAITRON_TILL_*`
+     * variable cannot have it land in an error's params — the same no-leak discipline
+     * `server.credential_unusable` and `payment.webhook_signature_invalid` follow.
+     *
+     * `server.*`, not a fiscal-domain prefix, even though the values it guards ARE the till's four
+     * fiscal ids: WHICH till this process is is a fact about the process's own configuration
+     * (provisioning stamps the deployed till's identity into the environment; `till-config.ts` reads
+     * it back), exactly the class `server.config_missing` above covers for the rest of the host's
+     * config. A value that is present but malformed is `server.till_config_invalid` below; this code
+     * is for one that is simply not there.
+     */
+    "server.till_config_missing": { key: string };
+    /**
+     * A `WAITRON_TILL_*` value is present but not usable — a branded-id constructor
+     * (`@waitron/shared`'s `tenantId`/`tillId`/`nodeId`/`seriesId`/`locationId`) rejected it as not a
+     * uuid. `key` names the variable and is again the only field; the rejected value is NOT carried,
+     * for the same reason as `server.till_config_missing` above, and `server.*` for the same reason
+     * too.
+     */
+    "server.till_config_invalid": { key: string };
+    /**
      * A tenant's credential exists but this host cannot use it — a field the purpose registry now
      * declares is absent from a row sealed under an older field list, or its value is not one of
      * the accepted ones. `field` is a name from `PURPOSES`, so it is ours to echo. Spec §5.1: this
