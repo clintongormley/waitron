@@ -48,10 +48,11 @@ export interface TillTender {
 }
 
 /**
- * A walk-up sale as the counter till captures it: a basket of `{ productId, quantity }` and one cash
- * tender. Deliberately carries NO price of any kind — the server re-reads the catalogue and prices
- * authoritatively (`priceBasket`), so a browser cannot influence the filed total. `quantity` is a
- * count for an `each` product and a measured kg weight (e.g. "0.320") for a `weight` product.
+ * A walk-up sale as the counter till captures it: a basket of `{ productId, quantity }` and one
+ * tender (cash or card). Deliberately carries NO price of any kind — the server re-reads the
+ * catalogue and prices authoritatively (`priceBasket`), so a browser cannot influence the filed
+ * total. `quantity` is a count for an `each` product and a measured kg weight (e.g. "0.320") for a
+ * `weight` product.
  *
  * `workingOrderId` is the pay-idempotency key (park & retrieve, sub-project 7b). The till mints it and
  * holds it stable across a lost-response retry, so a re-sent pay REPLAYS against the same
@@ -84,7 +85,9 @@ export interface TillSaleResult {
   /** Taxable base + VAT, the authoritative figure the fiscal record carries. */
   total: string;
   vatBreakdown: { rate: string; base: string; tax: string }[];
-  /** Cash to hand back: `tendered − total`, ≥ 0 (an under-tender is refused before this is read). */
+  /** Cash to hand back. `cash`: `tendered − total`, ≥ 0 (an under-tender is refused before this is
+   * read). `card`: always "0.00" — a card is charged the exact total, so there is nothing to hand
+   * back. */
   change: string;
   /** Where a customer can verify the record, or "" when the regime offers none. */
   qr: string;

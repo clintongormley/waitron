@@ -285,9 +285,10 @@ async function main(): Promise<void> {
     //    script can read the filed `tenders`/`payments` rows back by it below — `recordTillSale` would
     //    otherwise mint one internally and never report it. `amount` (5.00) DELIBERATELY disagrees with
     //    the total (1.50): a manual card tender charges the EXACT total on a separate bank terminal, so
-    //    the server ignores the sent amount and settles at the total (`till-sale.ts:195-210`) — a
-    //    client over-send can never move the filed figure. `externalRef` is the hand-keyed acquirer /
-    //    terminal operation number, a human reconciliation hook.
+    //    the server ignores the sent amount and settles at the total (`payWorkingOrder`'s
+    //    `covered`/`settledAmount` normalization in `till-sale.ts`) — a client over-send can never move
+    //    the filed figure. `externalRef` is the hand-keyed acquirer / terminal operation number, a
+    //    human reconciliation hook.
     const cardWorkingOrderId = randomUUID();
     const cardSaleRes = await app.request("/api/sales", {
       method: "POST",
