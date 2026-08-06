@@ -22,6 +22,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { listAvailableProducts, priceBasket } from "@waitron/catalogue";
+import { associatePaymentWithSale, recordManualCardPayment } from "@waitron/payments";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createOpenOrder } from "./working-order.js";
@@ -34,10 +35,24 @@ export interface TillSaleDeps {
 }
 
 /**
- * A walk-up sale as the counter till captures it: a basket of `{ productId, quantity }` and one cash
- * tender. Deliberately carries NO price of any kind — the server re-reads the catalogue and prices
- * authoritatively (`priceBasket`), so a browser cannot influence the filed total. `quantity` is a
- * count for an `each` product and a measured kg weight (e.g. "0.320") for a `weight` product.
+ * A `cash` or manual `card` tender, shared by `TillSaleRequest` and `PayWorkingOrderRequest` (which
+ * both carried the identical inline shape until this was extracted). `externalRef` is the optional
+ * hand-keyed acquirer / terminal operation number, meaningful only for `card` — see each of those
+ * interfaces' own doc comment for the per-method rules (which field is authoritative, what a mismatch
+ * means).
+ */
+export interface TillTender {
+  method: "cash" | "card";
+  amount: string;
+  externalRef?: string;
+}
+
+/**
+ * A walk-up sale as the counter till captures it: a basket of `{ productId, quantity }` and one
+ * tender (cash or card). Deliberately carries NO price of any kind — the server re-reads the
+ * catalogue and prices authoritatively (`priceBasket`), so a browser cannot influence the filed
+ * total. `quantity` is a count for an `each` product and a measured kg weight (e.g. "0.320") for a
+ * `weight` product.
  *
  * `workingOrderId` is the pay-idempotency key (park & retrieve, sub-project 7b). The till mints it and
  * holds it stable across a lost-response retry, so a re-sent pay REPLAYS against the same
@@ -48,7 +63,17 @@ export interface TillSaleDeps {
  */
 export interface TillSaleRequest {
   lines: { productId: string; quantity: string }[];
-  tender: { method: "cash"; amount: string };
+  /**
+   * How the customer paid. `cash` (7a) and `card` (this slice) are the two supported methods:
+   *  - `cash` — `amount` is the money tendered; the sale settles at the total and `change` is the
+   *    drawer cash handed back (`amount − total`).
+   *  - `card` — a MANUAL / unintegrated card tender (the "datáfono"): the operator charged the card
+   *    on a SEPARATE bank terminal, so `amount` is ignored — the card charges the EXACT total, there
+   *    is no change, and a captured `payments` row is filed beside the tender. `externalRef` is the
+   *    optional hand-keyed acquirer / terminal operation number, a human reconciliation hook.
+   * Any other `tender_method` (`voucher`/`transfer`/`other`) is refused with `sale.unsupported_tender`.
+   */
+  tender: TillTender;
   workingOrderId?: string;
 }
 
@@ -60,7 +85,9 @@ export interface TillSaleResult {
   /** Taxable base + VAT, the authoritative figure the fiscal record carries. */
   total: string;
   vatBreakdown: { rate: string; base: string; tax: string }[];
-  /** Cash to hand back: `tendered − total`, ≥ 0 (an under-tender is refused before this is read). */
+  /** Cash to hand back. `cash`: `tendered − total`, ≥ 0 (an under-tender is refused before this is
+   * read). `card`: always "0.00" — a card is charged the exact total, so there is nothing to hand
+   * back. */
   change: string;
   /** Where a customer can verify the record, or "" when the regime offers none. */
   qr: string;
@@ -78,7 +105,9 @@ export interface TillSaleResult {
 export interface PayWorkingOrderRequest {
   id: string;
   lines: { productId: string; quantity: string }[];
-  tender: { method: "cash"; amount: string };
+  /** The tender, same shape and rules as `TillSaleRequest.tender` (see there): `cash` or a manual
+   *  `card`, with `externalRef` the optional acquirer / terminal operation number for a card. */
+  tender: TillTender;
 }
 
 /**
@@ -139,12 +168,13 @@ export async function payWorkingOrder(
       }
 
       // Guards, before anything is filed — a network boundary (the till is untrusted): an empty
-      // basket has nothing to price, and this slice is cash-only. AFTER the replay check, so a retry
-      // of an already-settled order is never refused for the shape of its retry body.
+      // basket has nothing to price, and the only supported tenders are cash (7a) and a manual card
+      // (this slice); `voucher`/`transfer`/`other` are refused. AFTER the replay check, so a retry of
+      // an already-settled order is never refused for the shape of its retry body.
       if (req.lines.length === 0) {
         throw new AppError("sale.empty_basket", {});
       }
-      if (req.tender.method !== "cash") {
+      if (req.tender.method !== "cash" && req.tender.method !== "card") {
         throw new AppError("sale.unsupported_tender", { method: req.tender.method });
       }
 
@@ -178,14 +208,21 @@ export async function payWorkingOrder(
         priced = priceBasket(items);
       }
 
-      // Cash may exceed the total (change is handed back); a tender BELOW the total is a shortfall.
-      // `settleSale` (which `recordSale`'s immediate mode calls) demands EXACT coverage —
-      // `sum(amount) = total` — so the tender it records settles the sale at the total, never at the
-      // cash handed over: change is drawer cash, not a settled amount. When the cash falls short we
-      // instead hand the raw amount straight through, so that single settlement implementation raises
-      // `sale.tender_shortfall` itself — with the real `saleId` its param carries — and the whole
-      // transaction rolls back (the just-created walk-up order included).
-      const covered = compareDecimal(decimal(req.tender.amount), priced.total) >= 0;
+      const isCard = req.tender.method === "card";
+
+      // The amount the sale settles at, per method:
+      //  - CASH may exceed the total (change is handed back); a tender BELOW the total is a shortfall.
+      //    `settleSale` (which `recordSale`'s immediate mode calls) demands EXACT coverage —
+      //    `sum(amount) = total` — so a covered tender settles the sale at the total, never at the cash
+      //    handed over (change is drawer cash, not a settled amount). When the cash falls short we hand
+      //    the raw amount straight through, so that single settlement implementation raises
+      //    `sale.tender_shortfall` itself — with the real `saleId` its param carries — and the whole
+      //    transaction rolls back (the just-created walk-up order included).
+      //  - CARD is a manual/unintegrated tender: the operator charged the EXACT total on a separate
+      //    bank terminal, so the settled amount IS the total by construction. There is no coverage
+      //    question and no change — `req.tender.amount` is not consulted (a client over/under-send
+      //    cannot move the filed figure).
+      const covered = isCard || compareDecimal(decimal(req.tender.amount), priced.total) >= 0;
       const settledAmount = covered ? priced.total : req.tender.amount;
 
       // One clock reading for the settlement instant, shared by the tender and the order's
@@ -212,9 +249,33 @@ export async function payWorkingOrder(
         operatorId,
         settlement: {
           kind: "immediate",
-          tenders: [{ method: "cash", amount: settledAmount, tipAmount: "0.00", settledAt }],
+          tenders: [
+            { method: req.tender.method, amount: settledAmount, tipAmount: "0.00", settledAt },
+          ],
         },
       });
+
+      // Card ONLY: the manual card tender adds a captured `payments` ledger row beside the tender and
+      // links it to the just-filed sale, in THIS same transaction. `recordManualCardPayment` makes NO
+      // network call (there is no provider to call), so it commits inline with the sale — no orphan
+      // window, and 7b's `sales_working_order_id_key` idempotency covers a lost-response retry exactly
+      // as it does the sale (a replay never reaches here). Cash gets no payments row: cash is a tender
+      // only. `settledAt` is the SAME reading the tender carries — one clock reading per event.
+      if (isCard) {
+        const { provider, paymentRef } = await recordManualCardPayment(tx, {
+          tenantId: cfg.tenantId,
+          workingOrderId: req.id,
+          amount: decimal(priced.total),
+          settledAt,
+          externalRef: req.tender.externalRef,
+        });
+        await associatePaymentWithSale(tx, {
+          provider,
+          paymentRef,
+          saleId,
+          tenantId: cfg.tenantId,
+        });
+      }
 
       // Terminal transition `open → settled`. `working_orders_enforce_transition` validates OLD.status
       // = 'open'; the `settled_at` biconditional requires the timestamp be set — the SAME instant the
@@ -224,8 +285,10 @@ export async function payWorkingOrder(
         .set({ status: "settled", settledAt: settledAt.toISOString() })
         .where(eq(workingOrders.id, req.id));
 
-      // Only reached once `recordSale` filed the sale — so the tender covered the total and this is ≥ 0.
-      const change = subtractDecimal(decimal(req.tender.amount), priced.total);
+      // Only reached once `recordSale` filed the sale. For CASH the tender covered the total (a
+      // shortfall aborted above), so `tendered − total` is ≥ 0; a CARD charges the exact total, so
+      // nothing is handed back.
+      const change = isCard ? "0.00" : subtractDecimal(decimal(req.tender.amount), priced.total);
 
       // `FiscalRecordRef` exposes no series code or invoice number (it is regime-opaque — see
       // `packages/fiscal/src/backend.ts`), so the human-facing "A/1" is read back from the sale row
@@ -366,14 +429,15 @@ export async function recordTillSale(
   operatorId?: string,
 ): Promise<TillSaleResult> {
   // Both refusals are made before any database work (and before minting an id): an empty basket has
-  // nothing to price, and slice 1 of the counter POS is cash-only. A `tender.method` narrowed to
-  // `"cash"` at the type level can still arrive as anything at runtime (the till is a network
-  // boundary), so the guard is real. `payWorkingOrder` re-asserts both on its filing path — it is a
-  // shared entry point Task 8 also calls directly — so these are a cheap early-out, not the only check.
+  // nothing to price, and the counter POS supports cash (7a) and a manual card tender (this slice)
+  // only. A `tender.method` narrowed to `"cash" | "card"` at the type level can still arrive as
+  // anything at runtime (the till is a network boundary), so the guard is real. `payWorkingOrder`
+  // re-asserts both on its filing path — it is a shared entry point Task 8 also calls directly — so
+  // these are a cheap early-out, not the only check.
   if (req.lines.length === 0) {
     throw new AppError("sale.empty_basket", {});
   }
-  if (req.tender.method !== "cash") {
+  if (req.tender.method !== "cash" && req.tender.method !== "card") {
     throw new AppError("sale.unsupported_tender", { method: req.tender.method });
   }
 

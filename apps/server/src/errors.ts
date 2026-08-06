@@ -218,9 +218,10 @@ declare module "@waitron/shared" {
      */
     "sale.empty_basket": Record<string, never>;
     /**
-     * A tender method this till does not support. Slice 1 of the counter POS is cash-only, so
-     * anything but `"cash"` is refused before touching the database. `method` echoes the request so a
-     * translator can name what was attempted; it is caller-supplied text, never a secret.
+     * A tender method this till does not support. The counter POS supports `"cash"` (slice 1) and a
+     * manual `"card"` tender (slice 3, the "datáfono" case); `"voucher"`/`"transfer"`/`"other"` are
+     * refused before touching the database. `method` echoes the request so a translator can name what
+     * was attempted; it is caller-supplied text, never a secret.
      */
     "sale.unsupported_tender": { method: string };
     /**

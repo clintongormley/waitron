@@ -167,6 +167,35 @@ describe("till-app", () => {
     expect(view.lines[0]!.quantity).toBe("2");
   });
 
+  it("confirm-payment: a CARD tender forwards intact (method, amount, externalRef) with the store's stable id", async () => {
+    // Task 2 widened ConfirmPaymentDetail/Tender to the cash|card union and Task 3's #onConfirmPayment
+    // forwards whichever tender the widget emits without branching — this pins that a CARD tender
+    // reaches recordSale UNCHANGED (method still "card", externalRef still present, never dropped) and
+    // keyed under the store's own stable working-order id, exactly like the cash test above. Mutating
+    // #onConfirmPayment to send only `{ method: tender.method, amount: tender.amount }` (dropping
+    // externalRef) or to send `crypto.randomUUID()` instead of `this.#store.id` both fail this test —
+    // the exact-object + exact-id assertions below are what make it load-bearing rather than a type-only
+    // check.
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    const store = c.store;
+    store.addProduct(cafe, "1");
+    await el.updateComplete;
+    const workingOrderId = store.id; // the walk-up's STABLE client-minted id — the pay-idempotency key
+
+    emit(c, "confirm-payment", { method: "card", amount: "1.50", externalRef: "OP-42" });
+    await flush(el);
+
+    expect(currentApi.recordSale).toHaveBeenCalledWith(
+      [{ productId: "cafe", quantity: "1" }],
+      { method: "card", amount: "1.50", externalRef: "OP-42" },
+      workingOrderId,
+    );
+    const view = ticket(el)!;
+    expect(view).not.toBeNull();
+    expect(view.result).toBe(saleResult);
+  });
+
   it("confirm-payment success: refreshes the held-orders list so a just-paid parked order drops off", async () => {
     // The Minor review finding: paying a RETRIEVED parked order must drop it off the cross-till held
     // list immediately, like park/retrieve/discard already do. `listWorkingOrders` returns the order

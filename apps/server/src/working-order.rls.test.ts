@@ -173,6 +173,56 @@ async function registroCount(workingOrderId: string): Promise<number> {
   return Number(rows[0]!.count);
 }
 
+/** The tenders filed against this working order's sale — method + amount, read as the owner
+ *  (bypasses RLS). Ordered by method so a multi-tender assertion is stable. */
+async function tendersFor(workingOrderId: string): Promise<{ method: string; amount: string }[]> {
+  const { rows } = await suite.admin.execute<{ method: string; amount: string }>(sql`
+    select t.method, t.amount
+    from tenders t
+    join sales s on s.id = t.sale_id
+    where s.working_order_id = ${workingOrderId}
+    order by t.method
+  `);
+  return rows.map((r) => ({ method: r.method, amount: r.amount }));
+}
+
+/** The `payments` rows for this working order — provider/state/amount, plus whether `sale_id`
+ *  actually points at the filed sale (the association witness) — read as the owner (bypasses RLS).
+ *  The inner join to `sales` on `working_order_id` (unique per sale) is how `linkedToSale` compares
+ *  the payment's `sale_id` against the ONE sale filed from this order. */
+async function paymentsFor(
+  workingOrderId: string,
+): Promise<{ provider: string; state: string; amount: string; linkedToSale: boolean }[]> {
+  const { rows } = await suite.admin.execute<{
+    provider: string;
+    state: string;
+    amount: string;
+    linked: boolean;
+  }>(sql`
+    select p.provider, p.state, p.amount,
+           (p.sale_id is not null and p.sale_id = s.id) as linked
+    from payments p
+    join sales s on s.working_order_id = p.working_order_id
+    where p.working_order_id = ${workingOrderId}
+    order by p.provider
+  `);
+  return rows.map((r) => ({
+    provider: r.provider,
+    state: r.state,
+    amount: r.amount,
+    linkedToSale: r.linked,
+  }));
+}
+
+/** How many `payments` rows exist for this working order (superuser read) — the idempotency witness:
+ *  a card lost-response retry must not file a SECOND captured payment. */
+async function paymentCount(workingOrderId: string): Promise<number> {
+  const { rows } = await suite.admin.execute<{ count: string }>(sql`
+    select count(*)::text as count from payments where working_order_id = ${workingOrderId}
+  `);
+  return Number(rows[0]!.count);
+}
+
 /** The working order's own state — status + whether settled_at is set (the biconditional's witness). */
 async function orderState(id: string): Promise<{ status: string; settledAtSet: boolean }> {
   const { rows } = await suite.admin.execute<{ status: string; settled: boolean }>(sql`
@@ -480,7 +530,7 @@ describe("payWorkingOrder", () => {
     expect(await registroCount(id)).toBe(0);
   });
 
-  it("refuses an empty basket and a non-cash tender directly (payWorkingOrder guards its own filing path)", async () => {
+  it("refuses an empty basket and any tender that is neither cash nor card (voucher/transfer/other)", async () => {
     const { cfg, cafe } = await setupVenue();
     const deps = { db: suite.admin, backend, clock };
 
@@ -492,13 +542,109 @@ describe("payWorkingOrder", () => {
       }),
     ).rejects.toMatchObject({ code: "sale.empty_basket" });
 
-    await expect(
-      payWorkingOrder(deps, cfg, {
-        id: randomUUID(),
-        lines: [{ productId: cafe.id, quantity: "1" }],
-        tender: { method: "card" as unknown as "cash", amount: "1.50" },
-      }),
-    ).rejects.toMatchObject({ code: "sale.unsupported_tender", params: { method: "card" } });
+    // cash and card are the supported tenders (slice 7a cash + this slice's manual card); every other
+    // `tender_method` enum value is still refused with `sale.unsupported_tender`. The `as unknown` cast
+    // is how an untrusted till can send one past the widened `"cash" | "card"` type at runtime.
+    for (const method of ["voucher", "transfer", "other"] as const) {
+      await expect(
+        payWorkingOrder(deps, cfg, {
+          id: randomUUID(),
+          lines: [{ productId: cafe.id, quantity: "1" }],
+          tender: { method: method as unknown as "cash", amount: "1.50" },
+        }),
+      ).rejects.toMatchObject({ code: "sale.unsupported_tender", params: { method } });
+    }
+  });
+});
+
+// The manual (unintegrated) card tender — the "datáfono" case: the operator runs the card on a
+// SEPARATE bank terminal, taps Card, and the till files the same legal Veri*Factu ticket with a
+// `card` tender AND a captured `payments` row, all in the ONE sale transaction (no network call,
+// `recordManualCardPayment` commits inline). Real Postgres because a captured payment is a
+// privilege/RLS-scoped write under the app role, exactly what THIS suite exists to exercise.
+describe("card tender (manual / datáfono)", () => {
+  it("files a card sale: a card tender AND a captured manual payment linked to the filed sale; no change", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+
+    const res = await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }], // café → 1.50 gross
+      tender: { method: "card", amount: "1.50", externalRef: "OP-12345" },
+    });
+
+    // A card charges the exact amount on the terminal — nothing is handed back.
+    expect(res.total).toBe("1.50");
+    expect(res.change).toBe("0.00");
+    expect(res.invoiceNumber).toBe("A/1");
+
+    // One sale + one chained registro, exactly as the cash path.
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(id)).toBe(1);
+    expect(await registroCount(id)).toBe(1);
+
+    // The filed tender is a CARD tender at the total.
+    expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50" }]);
+
+    // A captured MANUAL payment linked to the filed sale — the ledger row the datáfono case adds
+    // beside the tender (cash gets no payments row).
+    expect(await paymentsFor(id)).toEqual([
+      { provider: "manual", state: "captured", amount: "1.50", linkedToSale: true },
+    ]);
+  });
+
+  it("normalises the card tender to the total — a client over-send does not change the filed amount", async () => {
+    const { cfg, cafe, agua } = await setupVenue();
+    const id = randomUUID();
+
+    // café + agua = 3.50 total; the till sends a card amount that DISAGREES (5.00). A card charges the
+    // exact total on the separate terminal, so both the filed tender and the payment carry 3.50, not
+    // 5.00 — there is no over-tender/change path for card. Same state, divergent inputs (CLAUDE.md §1):
+    // 5.00 ≠ 3.50, so a would-be pass-through of `req.tender.amount` would show here.
+    const res = await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id,
+      lines: [
+        { productId: cafe.id, quantity: "1" },
+        { productId: agua.id, quantity: "1" },
+      ],
+      tender: { method: "card", amount: "5.00" },
+    });
+
+    expect(res.total).toBe("3.50");
+    expect(res.change).toBe("0.00");
+    expect(await tendersFor(id)).toEqual([{ method: "card", amount: "3.50" }]);
+    expect(await paymentsFor(id)).toEqual([
+      { provider: "manual", state: "captured", amount: "3.50", linkedToSale: true },
+    ]);
+  });
+
+  it("card lost-response retry replays the SAME ticket and files no second payment (7b idempotency covers card)", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+    const req = {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+      tender: { method: "card" as const, amount: "1.50" },
+    };
+    const deps = { db: suite.admin, backend, clock };
+
+    const first = await payWorkingOrder(deps, cfg, req);
+    // The retry — same id, same body (a lost first response). The 7b `sales_working_order_id_key`
+    // idempotency replays the ORIGINAL ticket and files NOTHING: no second sale, no second registro,
+    // and — the card-specific part — no second captured payment.
+    const second = await payWorkingOrder(deps, cfg, req);
+
+    expect(second.invoiceNumber).toBe(first.invoiceNumber);
+    expect(second.total).toBe(first.total);
+    expect(second.issuedAt).toBe(first.issuedAt);
+    expect(second.change).toBe("0.00");
+
+    expect(await saleCount(id)).toBe(1);
+    expect(await registroCount(id)).toBe(1);
+    expect(await paymentCount(id)).toBe(1);
+    expect(await paymentsFor(id)).toEqual([
+      { provider: "manual", state: "captured", amount: "1.50", linkedToSale: true },
+    ]);
   });
 });
 

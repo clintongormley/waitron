@@ -58,4 +58,13 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });
+
+  it("has no violations on the card screen (operation-number field has an accessible name)", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el, host } = await mountWidget<TillTenderPay>("till-tender-pay", { store }, theme);
+    el.shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
 });
