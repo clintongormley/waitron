@@ -3,7 +3,7 @@
 // used here). See the note atop `errors.ts`.
 import "./errors.js";
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
-import { AppError, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
+import { AppError, type SaleId, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import {
   allocateOrderNumber,
   appendOrderAmendment,
@@ -19,13 +19,27 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { listAvailableProducts, priceBasket, priceLockedLines } from "@waitron/catalogue";
-import type { LockedLine } from "@waitron/catalogue";
+import type { LockedLine, PricedLines } from "@waitron/catalogue";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
+import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { TillConfig } from "./till-config.js";
-import type { TillSaleDeps } from "./till-sale.js";
 
 export interface WorkingOrderDeps {
   db: Database;
+}
+
+/**
+ * The fuller till dependency bundle — `db` plus the `backend`/`clock` a FISCAL FILE needs. `placeOrder`
+ * (Mode-I deferred invoice) and `cancelPlacedOrder` (the amendment's trusted clock) take it here, and
+ * every `till-sale.ts` filing path (`payWorkingOrder`, `collectOrder`, `fileImmediateSale`,
+ * `recordTillSale`) takes it too. It lives in this lower-level module — beside {@link WorkingOrderDeps},
+ * the `db`-only subset for the non-filing operations (park, list, retrieve, update, abandon, advance) —
+ * so `till-sale.ts` imports it from here, keeping the module dependency ONE-directional (no import cycle).
+ */
+export interface TillSaleDeps {
+  db: Database;
+  backend: FiscalBackend;
+  clock: TrustedClock;
 }
 
 /** The rows a park or an update writes into `working_order_lines`, as Drizzle types the insert. */
@@ -142,6 +156,51 @@ export async function readLockedLines(
   }
   /* v8 ignore stop */
   return stored;
+}
+
+/**
+ * Price a persisted order's STORED locked composition — `priceLockedLines` over {@link readLockedLines},
+ * the one-liner every persisted-order file repeats (retrieved-order pay, Mode-I place, Mode-T collect,
+ * and the settled-ticket read-back). `priceLockedLines` runs the SAME difference-method arithmetic over
+ * the ADD-TIME locked gross (`unit_price_gross`) that `priceBasket` runs over a live catalogue, so a
+ * catalogue price change after add never moves the filed total (line-add snapshot, 7c). Pure over
+ * `readLockedLines`'s read; throws on a lineless order (see there).
+ */
+export async function priceStoredOrder(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<PricedLines> {
+  return priceLockedLines(await readLockedLines(tx, workingOrderId));
+}
+
+/**
+ * Read a filed sale's human-facing `NumSerieFactura` ("A/1") back from its `sales` row and series, in
+ * the caller's transaction — the `FiscalRecordRef` is regime-opaque and carries neither, so both the
+ * immediate-file (`fileImmediateSale`) and the Mode-I deferred place (`placeOrder`) read it back the
+ * same way. `recordSale` guarantees exactly one `sales` row for the id, so the single-row read always
+ * resolves (the non-null assertion holds for the same reason both call sites' did).
+ */
+export async function readInvoiceNumber(tx: Transaction, saleId: SaleId): Promise<string> {
+  const [issued] = await tx
+    .select({ code: invoiceSeries.code, number: sales.invoiceNumber })
+    .from(sales)
+    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+    .where(eq(sales.id, saleId));
+  return formatInvoiceNumber(issued!.code, issued!.number);
+}
+
+/**
+ * Project a VAT desglose onto the ticket's `{ rate, base, tax }` shape — the one place the three result
+ * builders express it: `placeOrder` here (Mode-I place), and `till-sale.ts`'s `readSettledTicket` (over a
+ * FILED record's bands) and `fileImmediateSale` (over a freshly-`priced` basket). A pure per-band field
+ * copy; the surcharge fields a `VatBreakdownLine` may also carry are deliberately dropped, exactly as
+ * each inline `.map` did — the counter ticket carries base/tax only. Lives here (not in `till-sale.ts`)
+ * so `till-sale.ts` imports it one-directionally, no cycle.
+ */
+export function toVatBreakdown(
+  bands: readonly { rate: string; base: string; tax: string }[],
+): { rate: string; base: string; tax: string }[] {
+  return bands.map((v) => ({ rate: v.rate, base: v.base, tax: v.tax }));
 }
 
 /**
@@ -567,7 +626,7 @@ export async function placeOrder(
     // this).
     let placeResult: PlaceOrderResult = { id, status: "placed" };
     if (cfg.orderFlow === "invoice_first") {
-      const priced = priceLockedLines(await readLockedLines(tx, id));
+      const priced = await priceStoredOrder(tx, id);
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {
         tenantId: cfg.tenantId,
         tillId: cfg.tillId,
@@ -587,20 +646,15 @@ export async function placeOrder(
         settlement: { kind: "deferred" },
       });
       // The human-facing "A/1" is read back from the sale row + its series (the FiscalRecordRef is
-      // regime-opaque), in this same transaction — `recordSale` guarantees exactly one such row.
-      const [issued] = await tx
-        .select({ code: invoiceSeries.code, number: sales.invoiceNumber })
-        .from(sales)
-        .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
-        .where(eq(sales.id, saleId));
+      // regime-opaque), in this same transaction — the shared `readInvoiceNumber` reader.
       placeResult = {
         id,
         status: "placed",
-        invoiceNumber: formatInvoiceNumber(issued!.code, issued!.number),
+        invoiceNumber: await readInvoiceNumber(tx, saleId),
         issuedAt: fiscal.issuedAt.toISOString(),
         total: priced.total,
         qr: fiscal.verificationUrl ?? "",
-        vatBreakdown: priced.vatBreakdown.map((v) => ({ rate: v.rate, base: v.base, tax: v.tax })),
+        vatBreakdown: toVatBreakdown(priced.vatBreakdown),
       };
     }
 

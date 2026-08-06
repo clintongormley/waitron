@@ -51,7 +51,8 @@ export const orderPrep = pgTable(
     // working_order_id), matching working_order_counters — the PK is declared here (name pinned so
     // the generated SQL and snapshot agree with the migration's CONSTRAINT "order_prep_pk").
     primaryKey({ columns: [t.tenantId, t.workingOrderId], name: "order_prep_pk" }),
-    // The order IS the key: one prep record per working order.
+    // Composite FK to the parent working order, cascading on delete — a cancelled order's prep row is
+    // removed with it (there is no direct DELETE grant; see this table's own doc comment).
     foreignKey({
       columns: [t.tenantId, t.workingOrderId],
       foreignColumns: [workingOrders.tenantId, workingOrders.id],

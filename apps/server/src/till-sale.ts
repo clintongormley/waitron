@@ -20,20 +20,19 @@ import {
   withTenant,
   workingOrders,
 } from "@waitron/db";
-import type { Database, Transaction } from "@waitron/db";
-import { priceLockedLines } from "@waitron/catalogue";
+import type { Transaction } from "@waitron/db";
 import type { PricedLines } from "@waitron/catalogue";
 import { associatePaymentWithSale, recordManualCardPayment } from "@waitron/payments";
 import { formatInvoiceNumber, recordSale, settleSale } from "@waitron/core";
-import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { createOpenOrder, readLockedLines } from "./working-order.js";
+import type { FiscalBackend } from "@waitron/fiscal";
+import {
+  createOpenOrder,
+  priceStoredOrder,
+  readInvoiceNumber,
+  toVatBreakdown,
+} from "./working-order.js";
+import type { TillSaleDeps } from "./working-order.js";
 import type { TillConfig } from "./till-config.js";
-
-export interface TillSaleDeps {
-  db: Database;
-  backend: FiscalBackend;
-  clock: TrustedClock;
-}
 
 /**
  * A `cash` or manual `card` tender, shared by `TillSaleRequest` and `PayWorkingOrderRequest` (which
@@ -266,11 +265,11 @@ export async function payWorkingOrder(
         }
         ({ priced } = await createOpenOrder(tx, cfg, req.id, req.lines, null));
       } else {
-        // Retrieved order: file from the STORED locked lines via the shared `readLockedLines` reader,
-        // never a re-price of a client basket (`req.lines` is IGNORED). `priceLockedLines` runs the
-        // SAME difference-method arithmetic over the locked gross that `priceBasket` runs over a live
+        // Retrieved order: file from the STORED locked lines via the shared `priceStoredOrder` reader,
+        // never a re-price of a client basket (`req.lines` is IGNORED). It runs the SAME
+        // difference-method arithmetic over the locked gross that `priceBasket` runs over a live
         // catalogue, so a catalogue price change between park and pay never moves the filed total.
-        priced = priceLockedLines(await readLockedLines(tx, req.id));
+        priced = await priceStoredOrder(tx, req.id);
       }
 
       // File the immediate cash/card sale and settle it (open → settled), tagged with this order's id
@@ -350,11 +349,11 @@ async function readSettledTicket(
   /* v8 ignore stop */
 
   // The FILED line list (art. 7.1.e goods identification), reconstructed from the order's stored lock
-  // via the SAME `priceLockedLines` the file used — byte-identical to what was filed for both a
+  // via the SAME `priceStoredOrder` the file used — byte-identical to what was filed for both a
   // walk-up (`createOpenOrder` stored the priced lock) and a retrieved/placed order. Read straight
   // back rather than recomputed from `sale_lines` (which stores the NET base, so recovering the gross
   // would drift by a cent), so the replayed receipt's line list matches the invoice exactly.
-  const ticketLines = ticketLinesFrom(priceLockedLines(await readLockedLines(tx, workingOrderId)));
+  const ticketLines = ticketLinesFrom(await priceStoredOrder(tx, workingOrderId));
 
   // Read the QR + the exact filed desglose back from the immutable fiscal record, in this same
   // transaction. This reads nothing but the already-filed alta — never re-files, never re-hashes.
@@ -378,7 +377,7 @@ async function readSettledTicket(
     // ticket's `issuedAt` reads identically to the original's `fiscal.issuedAt.toISOString()`.
     issuedAt: new Date(issued.issuedAt).toISOString(),
     total: issued.total,
-    vatBreakdown: filed.vatBreakdown.map((v) => ({ rate: v.rate, base: v.base, tax: v.tax })),
+    vatBreakdown: toVatBreakdown(filed.vatBreakdown),
     lines: ticketLines,
     change,
     qr: filed.verificationUrl,
@@ -488,18 +487,13 @@ async function fileImmediateSale(
     .where(eq(workingOrders.id, workingOrderId));
 
   // `FiscalRecordRef` exposes no series code or invoice number (it is regime-opaque), so the
-  // human-facing "A/1" is read back from the sale row and its series, in this same transaction.
-  const [issued] = await tx
-    .select({ code: invoiceSeries.code, number: sales.invoiceNumber })
-    .from(sales)
-    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
-    .where(eq(sales.id, saleId));
-
+  // human-facing "A/1" is read back from the sale row and its series (the shared `readInvoiceNumber`
+  // reader), in this same transaction.
   return {
-    invoiceNumber: formatInvoiceNumber(issued!.code, issued!.number),
+    invoiceNumber: await readInvoiceNumber(tx, saleId),
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,
-    vatBreakdown: priced.vatBreakdown.map((v) => ({ rate: v.rate, base: v.base, tax: v.tax })),
+    vatBreakdown: toVatBreakdown(priced.vatBreakdown),
     // The FILED line list (art. 7.1.e) straight from the price just filed, so the receipt's line list
     // is the invoiced composition rather than the client basket (Finding 2).
     lines: ticketLinesFrom(priced),
@@ -635,7 +629,7 @@ export async function collectOrder(
 
     // Mode T (ticket_then_pay): no fiscal doc yet — file `recordSale` IMMEDIATE at collect from the
     // order's stored locked lines and move placed → settled (the shared filing path).
-    const priced = priceLockedLines(await readLockedLines(tx, req.id));
+    const priced = await priceStoredOrder(tx, req.id);
     return fileImmediateSale(tx, deps, cfg, req.id, req.tender, priced, operatorId);
   });
 }

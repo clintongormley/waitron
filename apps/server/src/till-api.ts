@@ -113,6 +113,25 @@ export async function run(c: Context, log: Logger, fn: () => Promise<Response>):
 }
 
 /**
+ * Screen a path `:id` param as a UUID before it reaches a query, returning it for the caller. A
+ * malformed id passed straight into `eq(workingOrders.id, id)` would `22P02` in the DB → an opaque 500;
+ * screening it here refuses it with the SAME domain `code` an absent/wrong-state id gets on that route
+ * — the fail-closed shape each route documents. `code` is the caller's deliberate per-route choice
+ * (`working_order.not_open` for place, `working_order.not_placed` for collect/cancel,
+ * `order_prep.invalid_transition` for prep); all three carry `{ workingOrderId }`. The four
+ * place/prep/collect/cancel routes share this one guard.
+ */
+function requireUuidId(
+  id: string,
+  code: "working_order.not_open" | "working_order.not_placed" | "order_prep.invalid_transition",
+): string {
+  if (!isUuid(id)) {
+    throw new AppError(code, { workingOrderId: id });
+  }
+  return id;
+}
+
+/**
  * Mounts the till's session, roster and boot-info routes on an existing Hono app. Log in / log out,
  * the pre-login staff roster and the public till info live here; Task 6 adds `GET /api/products` and
  * `POST /api/sales` to THIS same function, each handler wrapped in `run` (above) so the whole surface
@@ -338,10 +357,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/working-orders/:id/place", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const id = c.req.param("id");
-      if (!isUuid(id)) {
-        throw new AppError("working_order.not_open", { workingOrderId: id });
-      }
+      const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       const result = await placeOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock },
         deps.cfg,
@@ -362,10 +378,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/working-orders/:id/prep", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const id = c.req.param("id");
-      if (!isUuid(id)) {
-        throw new AppError("order_prep.invalid_transition", { workingOrderId: id });
-      }
+      const id = requireUuidId(c.req.param("id"), "order_prep.invalid_transition");
       const body = await c.req.json<{ to?: PrepState }>();
       if (body.to === undefined) {
         await sendToPrep({ db: deps.db }, deps.cfg, id);
@@ -398,10 +411,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/working-orders/:id/collect", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const id = c.req.param("id");
-      if (!isUuid(id)) {
-        throw new AppError("working_order.not_placed", { workingOrderId: id });
-      }
+      const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       const body = await c.req.json<{ tender: TillTender }>();
       const result = await collectOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock },
@@ -422,10 +432,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/working-orders/:id/cancel", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const id = c.req.param("id");
-      if (!isUuid(id)) {
-        throw new AppError("working_order.not_placed", { workingOrderId: id });
-      }
+      const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       const body = await c.req.json<{ reason: string }>();
       await cancelPlacedOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock },

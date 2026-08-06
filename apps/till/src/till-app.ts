@@ -281,8 +281,9 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** Maps the current basket to the wire shape `parkOrder`/`updateWorkingOrder`/`placeOrder` share:
-   * product id + quantity, never a price (the server always re-prices). */
+  /** Maps the current basket to the `{ productId, quantity }` line shape every server call takes
+   * (`parkOrder`, `updateWorkingOrder`, `placeOrder`, `recordSale`) — never a price, since the server
+   * always re-prices. Shared by `#onParkOrder`, `#onPlaceOrder`/`#syncIfDirty` and `#onConfirmPayment`. */
   #currentSaleLines(): { productId: string; quantity: string }[] {
     return this.#store.lines.map((line) => ({
       productId: line.product.id,
@@ -428,17 +429,13 @@ export class TillApp extends LitElement {
     if (this.parking) return;
     this.parking = true;
     const { label } = (event as CustomEvent<ParkOrderDetail>).detail;
-    // Read the id and lines BEFORE the await: a successful clear() re-mints the id, so the value sent
-    // must be captured against the basket as it stands now.
+    // Read the id (and map the lines) BEFORE the await: a successful clear() re-mints the id, so the
+    // values sent must be captured against the basket as it stands now. `#currentSaleLines()` maps the
+    // basket synchronously here, before the await.
     const id = this.#store.id;
-    const lines = this.#store.lines;
     this.errorKey = undefined;
     try {
-      await this.api.parkOrder({
-        id,
-        lines: lines.map((line) => ({ productId: line.product.id, quantity: line.quantity })),
-        label,
-      });
+      await this.api.parkOrder({ id, lines: this.#currentSaleLines(), label });
       this.#store.clear();
       await this.#refreshHeldOrders();
     } catch {
