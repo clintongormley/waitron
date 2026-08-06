@@ -24,6 +24,7 @@ function stubApi(): TillApi {
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
     listProducts: vi.fn().mockResolvedValue(products),
     recordSale: vi.fn(),
+    listWorkingOrders: vi.fn().mockResolvedValue([]),
     logout: vi.fn().mockResolvedValue(undefined),
   } as unknown as TillApi;
 }

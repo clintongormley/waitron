@@ -5,7 +5,7 @@ import { currentLocale, setLocale, t } from "./i18n/t.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
-import type { TillApi, TillProduct, TillSaleResult } from "./api/client.js";
+import type { HeldOrderSummary, TillApi, TillProduct, TillSaleResult } from "./api/client.js";
 import type { WorkingOrderStore } from "./state/working-order.js";
 
 const cafe: TillProduct = {
@@ -15,6 +15,24 @@ const cafe: TillProduct = {
   unitPrice: "1.50",
   vatClass: "general",
   category: null,
+};
+
+const jamon: TillProduct = {
+  id: "jamon",
+  descriptions: { "es-ES": "Jamón" },
+  pricingUnit: "weight",
+  unitPrice: "10.00",
+  vatClass: "reduced",
+  category: "charcutería",
+};
+
+const heldSummary: HeldOrderSummary = {
+  id: "wo-1",
+  orderNumber: 5,
+  label: "Mesa 4",
+  itemCount: 2,
+  total: "3.00",
+  openedAt: "2026-08-05T10:00:00.000Z",
 };
 
 const saleResult: TillSaleResult = {
@@ -41,6 +59,14 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listProducts: vi.fn().mockResolvedValue([cafe]),
     recordSale: vi.fn().mockResolvedValue(saleResult),
     parkOrder: vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 }),
+    listWorkingOrders: vi.fn().mockResolvedValue([]),
+    retrieveWorkingOrder: vi.fn().mockResolvedValue({
+      id: "wo-1",
+      orderNumber: 5,
+      label: "Mesa 4",
+      lines: [{ productId: "cafe", quantity: "2.000" }],
+    }),
+    abandonWorkingOrder: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;
@@ -247,6 +273,129 @@ describe("till-app", () => {
     await el.updateComplete;
 
     expect(parkOrder).toHaveBeenCalledOnce();
+  });
+
+  it("entering the counter loads the held-orders list and threads it to the counter", async () => {
+    const { el } = await mountApp({
+      listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]),
+    });
+    const c = await toCounter(el);
+    expect(currentApi.listWorkingOrders).toHaveBeenCalledOnce();
+    expect(c.heldOrders).toEqual([heldSummary]);
+  });
+
+  it("park success: refreshes the held-orders list", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+
+    emit(c, "park-order", { label: "Mesa 4" });
+    await flush(el);
+
+    // once on entering the counter, once after the successful park.
+    expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
+  });
+
+  it("retrieve-order: fetches, maps productId→OrderLine via products, loads it under the order's id", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    const store = c.store;
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+
+    expect(currentApi.retrieveWorkingOrder).toHaveBeenCalledWith("wo-1");
+    // the retrieved order's own id is adopted (so paying it later keys the same idempotency slot)
+    expect(store.id).toBe("wo-1");
+    expect(store.label).toBe("Mesa 4");
+    expect(store.lines).toHaveLength(1);
+    expect(store.lines[0]!.product).toBe(cafe);
+    // still on the counter with the retrieved basket
+    expect(counter(el)).not.toBeNull();
+    expect(ticket(el)).toBeNull();
+  });
+
+  it("retrieve-order: an each quantity displays without trailing zeros; a weight keeps its decimals", async () => {
+    const { el } = await mountApp({
+      listProducts: vi.fn().mockResolvedValue([cafe, jamon]),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        id: "wo-1",
+        orderNumber: 5,
+        label: null,
+        lines: [
+          { productId: "cafe", quantity: "2.000" },
+          { productId: "jamon", quantity: "0.320" },
+        ],
+      }),
+    });
+    const c = await toCounter(el);
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+
+    const store = c.store;
+    expect(store.lines).toHaveLength(2);
+    // each: numeric(_,3) "2.000" is cleaned to "2" for display; re-pricing is unaffected
+    expect(store.lines[0]!.quantity).toBe("2");
+    // weight: decimals are kept verbatim
+    expect(store.lines[1]!.quantity).toBe("0.320");
+  });
+
+  it("retrieve-order: drops a line whose product no longer resolves and shows a non-fatal held.product_gone", async () => {
+    const { el } = await mountApp({
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        id: "wo-1",
+        orderNumber: 5,
+        label: "Mesa 4",
+        lines: [
+          { productId: "cafe", quantity: "1.000" },
+          { productId: "ghost", quantity: "1.000" }, // deactivated since the order was parked
+        ],
+      }),
+    });
+    const c = await toCounter(el); // products default to [cafe] — "ghost" won't resolve
+    const store = c.store;
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+
+    // the unresolved line is dropped; the rest of the order is loaded
+    expect(store.lines).toHaveLength(1);
+    expect(store.lines[0]!.product).toBe(cafe);
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("held.product_gone"));
+    // still on the counter with the partial basket
+    expect(counter(el)).not.toBeNull();
+  });
+
+  it("retrieve-order: refreshes the held-orders list after loading", async () => {
+    const { el } = await mountApp({
+      listWorkingOrders: vi
+        .fn()
+        .mockResolvedValueOnce([heldSummary]) // on entering the counter
+        .mockResolvedValueOnce([]), // after the retrieve
+    });
+    const c = await toCounter(el);
+    expect(c.heldOrders).toEqual([heldSummary]);
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+
+    expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
+    expect(c.heldOrders).toEqual([]);
+  });
+
+  it("discard-order: abandons the order and refreshes the held-orders list", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+
+    emit(c, "discard-order", { id: "wo-1" });
+    await flush(el);
+
+    expect(currentApi.abandonWorkingOrder).toHaveBeenCalledWith("wo-1");
+    // once on entering the counter, once after the discard.
+    expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
   });
 
   it("logout: calls logout, returns to lock, and KEEPS the basket", async () => {

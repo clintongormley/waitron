@@ -48,11 +48,16 @@ export const en = {
   "weigh.prompt": "Enter weight (kg)",
   // Held (parked) orders
   "held.label_prompt": "Name this order (optional)",
+  "held.title": "Held orders",
+  "held.empty": "No held orders",
+  "held.retrieve": "Retrieve",
+  "held.discard": "Discard",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
   "person.suspended": "Account suspended, ask a manager",
   "sale.error": "Could not complete the sale, try again",
   "held.park_error": "Could not hold the order, try again",
+  "held.product_gone": "A product was removed and dropped from the order",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -86,10 +91,15 @@ export const es: Record<StringKey, string> = {
   "login.error": "No se pudo iniciar sesión, inténtalo de nuevo",
   "weigh.prompt": "Introduce el peso (kg)",
   "held.label_prompt": "Nombra este pedido (opcional)",
+  "held.title": "Pedidos aparcados",
+  "held.empty": "No hay pedidos aparcados",
+  "held.retrieve": "Recuperar",
+  "held.discard": "Descartar",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "person.suspended": "Cuenta suspendida, avisa a un responsable",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",
   "held.park_error": "No se pudo aparcar el pedido, inténtalo de nuevo",
+  "held.product_gone": "Se quitó un producto y se eliminó del pedido",
 };
 
 // Locale → catalogue. `en` is included as its own catalogue so an explicit

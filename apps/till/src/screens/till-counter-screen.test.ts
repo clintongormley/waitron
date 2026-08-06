@@ -32,7 +32,7 @@ describe("till-counter-screen", () => {
     expect(customElements.get("till-counter-screen")).toBe(TillCounterScreen);
   });
 
-  it("renders the four widgets per LAYOUT_A: product-grid in main, basket/total/tender-pay in aside", async () => {
+  it("renders the widgets per LAYOUT_A: product-grid in main, basket/total/tender-pay/held-orders in aside", async () => {
     const { el } = await mount();
     const main = el.shadowRoot!.querySelector(".region-main")!;
     const aside = el.shadowRoot!.querySelector(".region-aside")!;
@@ -41,13 +41,31 @@ describe("till-counter-screen", () => {
     expect(main.querySelector("till-product-grid")).not.toBeNull();
     expect(aside.querySelector("till-product-grid")).toBeNull();
 
-    // basket, total and tender-pay stack in the aside region and appear nowhere else
+    // basket, total, tender-pay and the held-orders list stack in the aside region and nowhere else
     expect(aside.querySelector("till-basket")).not.toBeNull();
     expect(aside.querySelector("till-total")).not.toBeNull();
     expect(aside.querySelector("till-tender-pay")).not.toBeNull();
+    expect(aside.querySelector("till-held-orders")).not.toBeNull();
     expect(main.querySelector("till-basket")).toBeNull();
     expect(main.querySelector("till-total")).toBeNull();
     expect(main.querySelector("till-tender-pay")).toBeNull();
+    expect(main.querySelector("till-held-orders")).toBeNull();
+  });
+
+  it("threads the held-orders list through to the held-orders widget", async () => {
+    const heldOrders = [
+      {
+        id: "wo-1",
+        orderNumber: 5,
+        label: "Mesa 4",
+        itemCount: 2,
+        total: "3.00",
+        openedAt: "2026-08-05T10:00:00.000Z",
+      },
+    ];
+    const { el } = await mount({ heldOrders });
+    const held = el.shadowRoot!.querySelector("till-held-orders")!;
+    expect(held.orders).toBe(heldOrders);
   });
 
   it("is layout-driven: a layout that omits `total` renders no total widget, keeping the rest", async () => {
