@@ -955,9 +955,14 @@ describe("till-app", () => {
       expect(currentApi.listPrepQueue).toHaveBeenCalledTimes(2);
     });
 
-    it("place-order on an ALREADY-persisted (retrieved) order syncs via updateWorkingOrder, never re-parks", async () => {
-      // Retrieving adopts the order's id and marks it persisted (loadFrom); placing it must not try to
-      // INSERT it again (parkOrder is a plain insert — a re-park of the same id would 23505).
+    it("place-order on an UNEDITED retrieved order does NOT re-sync — placeOrder files the stored composition", async () => {
+      // Symmetric with the unedited retrieve→pay path (Behaviour 1 above): retrieving adopts the order's
+      // id and marks it persisted+clean (loadFrom). An UNEDITED retrieved order must NOT re-sync before
+      // placing — `updateWorkingOrder` re-prices with the LIVE catalogue and would replace the add-time
+      // lock, filing at the place-time price and defeating the line-add snapshot (design §3: placing does
+      // not re-lock price). It must never re-park either (a re-park of the same id would 23505 on the
+      // server's plain INSERT). `placeOrder` files the STORED composition straight. Removing the `dirty`
+      // gate in `#syncIfDirty` makes this fail (the unedited order re-syncs).
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
       });
@@ -966,17 +971,81 @@ describe("till-app", () => {
       emit(c, "retrieve-order", { id: "wo-1" });
       await flush(el);
       expect(c.store.persisted).toBe(true);
+      expect(c.store.dirty).toBe(false); // retrieved but never edited
 
       emit(c, "place-order");
       await flush(el);
 
       expect(currentApi.parkOrder).not.toHaveBeenCalled();
-      expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
-        lines: [{ productId: "cafe", quantity: "2" }], // retrieveWorkingOrder's default fixture line
-        label: "Mesa 4",
-      });
+      expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
       expect(currentApi.placeOrder).toHaveBeenCalledWith("wo-1");
       expect(tenderPay(el).stage).toBe("collect");
+    });
+
+    it("place-order on an EDITED retrieved order re-syncs the edit via updateWorkingOrder before placing", async () => {
+      // The mirror of the pay path's retrieve→edit→pay: an edit made after retrieve must be re-locked
+      // (`updateWorkingOrder`) BEFORE placing, or the server places the STORED lock and silently drops
+      // the edit. Retrieve wo-1 (café×2), add a second café, then place: `updateWorkingOrder` carries the
+      // EDITED composition and runs BEFORE `placeOrder`. Deleting the `#syncIfDirty` call in the
+      // persisted branch of `#onPlaceOrder` makes this fail (the edit is lost).
+      const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+      const placeOrder = vi.fn().mockResolvedValue(placedResult);
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+        updateWorkingOrder,
+        placeOrder,
+      });
+      const c = await toCounter(el);
+
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+      c.store.addProduct(cafe, "1"); // the edit AFTER retrieve → the basket is dirty
+      await el.updateComplete;
+
+      emit(c, "place-order");
+      await flush(el);
+
+      expect(currentApi.parkOrder).not.toHaveBeenCalled();
+      expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
+        lines: [
+          { productId: "cafe", quantity: "2" }, // retrieved
+          { productId: "cafe", quantity: "1" }, // the edit
+        ],
+        label: "Mesa 4",
+      });
+      expect(placeOrder).toHaveBeenCalledWith("wo-1");
+      expect(updateWorkingOrder.mock.invocationCallOrder[0]!).toBeLessThan(
+        placeOrder.mock.invocationCallOrder[0]!,
+      );
+      expect(tenderPay(el).stage).toBe("collect");
+    });
+
+    it("place-order on an EDITED retrieved order: a not_open re-sync FALLS THROUGH to placeOrder, not place.error", async () => {
+      // The concurrent-place race / already-placed re-tap, symmetric with the pay path's Findings 3 & 4:
+      // the edit-gated re-sync throws `working_order.not_open`, which must NOT surface. It means the order
+      // already moved past open (placed on another register, or an already-placed re-tap): fall through
+      // to `placeOrder`, which replays via `sales_working_order_id_key`. No `place.error` banner. Deleting
+      // the `not_open` swallow in `#syncIfDirty` makes this fail (the throw reaches the place.error
+      // handler and the stage never advances).
+      const updateWorkingOrder = vi.fn().mockRejectedValue({ code: "working_order.not_open" });
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+        updateWorkingOrder,
+      });
+      const c = await toCounter(el);
+
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+      c.store.addProduct(cafe, "1"); // edit → dirty → re-sync attempted
+      await el.updateComplete;
+
+      emit(c, "place-order");
+      await flush(el);
+
+      expect(updateWorkingOrder).toHaveBeenCalled();
+      expect(currentApi.placeOrder).toHaveBeenCalledWith("wo-1"); // fell through to place
+      expect(tenderPay(el).stage).toBe("collect");
+      expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull(); // no place.error banner
     });
 
     it("a failed place keeps the counter, the order stage and the basket, showing a non-fatal error", async () => {
