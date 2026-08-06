@@ -10,7 +10,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("TillApi", () => {
-  it("recordSale POSTs lines+tender with credentials and returns the ticket payload", async () => {
+  it("recordSale POSTs lines+tender+workingOrderId with credentials and returns the ticket payload", async () => {
     const ticket = {
       invoiceNumber: "A/1",
       issuedAt: "2026-08-05T10:00:00.000Z",
@@ -22,10 +22,11 @@ describe("TillApi", () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(ticket));
     const api = new TillApi("", fetchStub);
 
-    const result = await api.recordSale([{ productId: "p", quantity: "2" }], {
-      method: "cash",
-      amount: "5.00",
-    });
+    const result = await api.recordSale(
+      [{ productId: "p", quantity: "2" }],
+      { method: "cash", amount: "5.00" },
+      "wo1",
+    );
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/sales",
@@ -33,9 +34,12 @@ describe("TillApi", () => {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
+        // `workingOrderId` is the idempotency key: keyed on the same order, a lost-response retry
+        // replays rather than filing a second chained fiscal record.
         body: JSON.stringify({
           lines: [{ productId: "p", quantity: "2" }],
           tender: { method: "cash", amount: "5.00" },
+          workingOrderId: "wo1",
         }),
       }),
     );
@@ -161,5 +165,128 @@ describe("TillApi", () => {
   it("defaults baseUrl to '' and fetchImpl to the global fetch", () => {
     // Exercises the constructor's default parameter initializers with no network call.
     expect(() => new TillApi()).not.toThrow();
+  });
+
+  it("parkOrder POSTs the client-minted id, lines and label, returning the persisted number", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ id: "wo1", orderNumber: 7 }));
+    const api = new TillApi("", fetchStub);
+
+    const r = await api.parkOrder({
+      id: "wo1",
+      lines: [{ productId: "cafe", quantity: "2" }],
+      label: "Mesa 4",
+    });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id: "wo1",
+          lines: [{ productId: "cafe", quantity: "2" }],
+          label: "Mesa 4",
+        }),
+      }),
+    );
+    expect(r).toEqual({ id: "wo1", orderNumber: 7 });
+  });
+
+  it("listWorkingOrders GETs the cross-till held list and returns the summaries", async () => {
+    const summaries = [
+      {
+        id: "wo1",
+        orderNumber: 7,
+        label: "Mesa 4",
+        itemCount: 2,
+        total: "3.00",
+        openedAt: "2026-08-06T10:00:00.000Z",
+      },
+    ];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(summaries));
+
+    const r = await new TillApi("", fetchStub).listWorkingOrders();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual(summaries);
+  });
+
+  it("retrieveWorkingOrder GETs the addressed order and returns its label + rebuild lines", async () => {
+    // The server sends `quantity` at numeric(_,3) scale ("2.000"); the client passes it through as
+    // sent — the basket-display normalisation is a later task's concern, not the client's.
+    const order = {
+      id: "wo1",
+      orderNumber: 7,
+      label: "Mesa 4",
+      lines: [{ productId: "cafe", quantity: "2.000" }],
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(order));
+
+    const r = await new TillApi("", fetchStub).retrieveWorkingOrder("wo1");
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/wo1",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual(order);
+  });
+
+  it("updateWorkingOrder PUTs the whole new basket to the addressed order (empty 200 body)", async () => {
+    // The server answers PUT with an EMPTY 200 body (`c.body(null, 200)`), so the client must
+    // resolve void without trying to JSON-parse nothing.
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    const api = new TillApi("", fetchStub);
+
+    await expect(
+      api.updateWorkingOrder("wo1", {
+        lines: [{ productId: "cafe", quantity: "3" }],
+        label: "Mesa 5",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/wo1",
+      expect.objectContaining({
+        method: "PUT",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          lines: [{ productId: "cafe", quantity: "3" }],
+          label: "Mesa 5",
+        }),
+      }),
+    );
+  });
+
+  it("abandonWorkingOrder DELETEs the addressed order (empty 200 body, no request body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    const api = new TillApi("", fetchStub);
+
+    await expect(api.abandonWorkingOrder("wo1")).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/wo1",
+      expect.objectContaining({ method: "DELETE", credentials: "include" }),
+    );
+    // A discard carries neither a body nor a content-type header.
+    const init = fetchStub.mock.calls[0][1] as RequestInit;
+    expect(init.body).toBeUndefined();
+    expect(init.headers).toBeUndefined();
+  });
+
+  it("surfaces the server's { code } when a working-order request 4xxs (retrieve of a closed order)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "working_order.not_found" } }), {
+        status: 404,
+      }),
+    );
+
+    await expect(new TillApi("", fetchStub).retrieveWorkingOrder("gone")).rejects.toMatchObject({
+      code: "working_order.not_found",
+    });
   });
 });

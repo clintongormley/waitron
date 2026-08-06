@@ -150,6 +150,10 @@ export class TillApp extends LitElement {
       this.result = await this.api.recordSale(
         lines.map((line) => ({ productId: line.product.id, quantity: line.quantity })),
         tender,
+        // Task 9 placeholder: a walk-up mints a fresh idempotency id per sale (the same default the
+        // server applies when none is sent). Task 10/11 replaces this with the store's held
+        // working-order id, so paying a RETRIEVED parked order settles under that order's own id.
+        crypto.randomUUID(),
       );
       this.ticketLines = lines;
       this.screen = "ticket";

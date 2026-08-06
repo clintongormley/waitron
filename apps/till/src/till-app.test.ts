@@ -121,10 +121,13 @@ describe("till-app", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
 
-    expect(currentApi.recordSale).toHaveBeenCalledWith([{ productId: "cafe", quantity: "2" }], {
-      method: "cash",
-      amount: "5",
-    });
+    expect(currentApi.recordSale).toHaveBeenCalledWith(
+      [{ productId: "cafe", quantity: "2" }],
+      { method: "cash", amount: "5" },
+      // Task 9 threads a workingOrderId through as the pay-idempotency key; the walk-up placeholder
+      // is a fresh uuid (Task 10/11 finalises the store-held id), so assert its shape, not its value.
+      expect.any(String),
+    );
     const view = ticket(el)!;
     expect(view).not.toBeNull();
     expect(view.result).toBe(saleResult);
