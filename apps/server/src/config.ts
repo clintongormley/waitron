@@ -53,8 +53,10 @@ export interface ServerConfig {
    */
   tls?: { certFile: string; keyFile: string };
   /** WHICH till this process is — the fiscal identity provisioning stamped into the environment,
-   * resolved once here via `loadTillConfig` and handed to the till API in `boot.ts`. */
-  till: TillConfig;
+   * resolved once here via `loadTillConfig`. `Omit<…, "orderFlow">`: the pay-timing mode is a
+   * per-LOCATION column, not an env var, so `boot.ts` reads it via `readOrderFlow` and spreads it in
+   * to form the full `TillConfig` handed to the till API (see `till-config.ts`'s `orderFlow` note). */
+  till: Omit<TillConfig, "orderFlow">;
   scheduler: SchedulerConfig;
 }
 

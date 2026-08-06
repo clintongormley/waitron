@@ -18,15 +18,15 @@ import {
   isUniqueViolation,
   sales,
   withTenant,
-  workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { priceBasket, priceLockedLines } from "@waitron/catalogue";
+import { priceLockedLines } from "@waitron/catalogue";
+import type { PricedLines } from "@waitron/catalogue";
 import { associatePaymentWithSale, recordManualCardPayment } from "@waitron/payments";
-import { formatInvoiceNumber, recordSale } from "@waitron/core";
+import { formatInvoiceNumber, recordSale, settleSale } from "@waitron/core";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { createOpenOrder } from "./working-order.js";
+import { createOpenOrder, readLockedLines } from "./working-order.js";
 import type { TillConfig } from "./till-config.js";
 
 export interface TillSaleDeps {
@@ -207,136 +207,23 @@ export async function payWorkingOrder(
       //    park and pay never moves the filed total (the whole point of the snapshot model).
       // The result is then filed with recordSale's immediate cash settlement, tagged with this order's
       // id (`sales_working_order_id_key` = the idempotency key).
-      let priced: ReturnType<typeof priceBasket>;
+      let priced: PricedLines;
       if (locked === undefined) {
         if (req.lines.length === 0) {
           throw new AppError("sale.empty_basket", {});
         }
         ({ priced } = await createOpenOrder(tx, cfg, req.id, req.lines, null));
       } else {
-        // Read the locked lines in `line_no` order — exactly the columns `priceLockedLines` needs
-        // (gross unit, quantity, rate, descriptions, category), all snapshotted at add-time.
-        const stored = await tx
-          .select({
-            grossUnitPrice: workingOrderLines.unitPriceGross,
-            quantity: workingOrderLines.quantity,
-            vatRate: workingOrderLines.vatRate,
-            descriptions: workingOrderLines.descriptions,
-            category: workingOrderLines.category,
-          })
-          .from(workingOrderLines)
-          .where(eq(workingOrderLines.workingOrderId, req.id))
-          .orderBy(workingOrderLines.lineNo);
-        /* v8 ignore start */
-        if (stored.length === 0) {
-          // A retrieved OPEN order always has ≥1 line (park refuses an empty basket, and update never
-          // leaves it lineless), so this is corruption, not a reachable flow.
-          throw new Error(`payWorkingOrder: open working order ${req.id} has no lines to file`);
-        }
-        /* v8 ignore stop */
-        priced = priceLockedLines(stored);
+        // Retrieved order: file from the STORED locked lines via the shared `readLockedLines` reader,
+        // never a re-price of a client basket (`req.lines` is IGNORED). `priceLockedLines` runs the
+        // SAME difference-method arithmetic over the locked gross that `priceBasket` runs over a live
+        // catalogue, so a catalogue price change between park and pay never moves the filed total.
+        priced = priceLockedLines(await readLockedLines(tx, req.id));
       }
 
-      const isCard = req.tender.method === "card";
-
-      // The amount the sale settles at, per method:
-      //  - CASH may exceed the total (change is handed back); a tender BELOW the total is a shortfall.
-      //    `settleSale` (which `recordSale`'s immediate mode calls) demands EXACT coverage —
-      //    `sum(amount) = total` — so a covered tender settles the sale at the total, never at the cash
-      //    handed over (change is drawer cash, not a settled amount). When the cash falls short we hand
-      //    the raw amount straight through, so that single settlement implementation raises
-      //    `sale.tender_shortfall` itself — with the real `saleId` its param carries — and the whole
-      //    transaction rolls back (the just-created walk-up order included).
-      //  - CARD is a manual/unintegrated tender: the operator charged the EXACT total on a separate
-      //    bank terminal, so the settled amount IS the total by construction. There is no coverage
-      //    question and no change — `req.tender.amount` is not consulted (a client over/under-send
-      //    cannot move the filed figure).
-      const covered = isCard || compareDecimal(decimal(req.tender.amount), priced.total) >= 0;
-      const settledAmount = covered ? priced.total : req.tender.amount;
-
-      // One clock reading for the settlement instant, shared by the tender and the order's
-      // `settled_at` so both name the same moment. recordSale reads its own clock for the sale's
-      // `issued_at` (a separate reading, exactly as the 7a path did).
-      const settledAt = deps.clock.now().instant;
-
-      const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-        tenantId: cfg.tenantId,
-        tillId: cfg.tillId,
-        nodeId: cfg.nodeId,
-        seriesId: cfg.seriesId,
-        // The persisted working order this sale is filed from — created just above for a walk-up, or
-        // the retrieved parked order. It is the sale-idempotency key: a second pay for the same id
-        // collides on `sales_working_order_id_key` (23505) and replays rather than filing again.
-        workingOrderId: brandWorkingOrderId(req.id),
-        locale: cfg.locale,
-        invoiceLocales: cfg.invoiceLocales,
-        total: priced.total,
-        lines: priced.lines,
-        vatBreakdown: priced.vatBreakdown,
-        fiscalBackend: "verifactu",
-        clock: deps.clock,
-        operatorId,
-        settlement: {
-          kind: "immediate",
-          tenders: [
-            { method: req.tender.method, amount: settledAmount, tipAmount: "0.00", settledAt },
-          ],
-        },
-      });
-
-      // Card ONLY: the manual card tender adds a captured `payments` ledger row beside the tender and
-      // links it to the just-filed sale, in THIS same transaction. `recordManualCardPayment` makes NO
-      // network call (there is no provider to call), so it commits inline with the sale — no orphan
-      // window, and 7b's `sales_working_order_id_key` idempotency covers a lost-response retry exactly
-      // as it does the sale (a replay never reaches here). Cash gets no payments row: cash is a tender
-      // only. `settledAt` is the SAME reading the tender carries — one clock reading per event.
-      if (isCard) {
-        const { provider, paymentRef } = await recordManualCardPayment(tx, {
-          tenantId: cfg.tenantId,
-          workingOrderId: req.id,
-          amount: decimal(priced.total),
-          settledAt,
-          externalRef: req.tender.externalRef,
-        });
-        await associatePaymentWithSale(tx, {
-          provider,
-          paymentRef,
-          saleId,
-          tenantId: cfg.tenantId,
-        });
-      }
-
-      // Terminal transition `open → settled`. `working_orders_enforce_transition` validates OLD.status
-      // = 'open'; the `settled_at` biconditional requires the timestamp be set — the SAME instant the
-      // tender carries.
-      await tx
-        .update(workingOrders)
-        .set({ status: "settled", settledAt: settledAt.toISOString() })
-        .where(eq(workingOrders.id, req.id));
-
-      // Only reached once `recordSale` filed the sale. For CASH the tender covered the total (a
-      // shortfall aborted above), so `tendered − total` is ≥ 0; a CARD charges the exact total, so
-      // nothing is handed back.
-      const change = isCard ? "0.00" : subtractDecimal(decimal(req.tender.amount), priced.total);
-
-      // `FiscalRecordRef` exposes no series code or invoice number (it is regime-opaque — see
-      // `packages/fiscal/src/backend.ts`), so the human-facing "A/1" is read back from the sale row
-      // and its series, in this same transaction. `recordSale` guarantees exactly one such row for
-      // `saleId`, so the row is always present.
-      const [issued] = await tx
-        .select({ code: invoiceSeries.code, number: sales.invoiceNumber })
-        .from(sales)
-        .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
-        .where(eq(sales.id, saleId));
-
-      return {
-        invoiceNumber: formatInvoiceNumber(issued!.code, issued!.number),
-        issuedAt: fiscal.issuedAt.toISOString(),
-        total: priced.total,
-        vatBreakdown: priced.vatBreakdown.map((v) => ({ rate: v.rate, base: v.base, tax: v.tax })),
-        change,
-        qr: fiscal.verificationUrl ?? "",
-      };
+      // File the immediate cash/card sale and settle it (open → settled), tagged with this order's id
+      // — the shared filing path Mode-T collect reuses (`fileImmediateSale`).
+      return fileImmediateSale(tx, deps, cfg, req.id, req.tender, priced, operatorId);
     });
   } catch (error) {
     // Step 6. The CONCURRENT backstop. Anything but a unique violation is a real failure (a shortfall,
@@ -368,23 +255,25 @@ export async function payWorkingOrder(
 }
 
 /**
- * Reconstruct a settled working order's ticket for an idempotent replay — filing NOTHING.
- * `invoiceNumber`, `issuedAt` and `total` are exact (the immutable `sales` row + its series); `qr` and
- * `vatBreakdown` are read back from the ALREADY-FILED fiscal record via `backend.filedReceiptFor`, so
- * the reprinted ticket carries the regime's mandatory verification QR and the EXACT filed
- * difference-method desglose (Task 14) rather than a QR-less, recomputed breakdown that could diverge
- * by a cent from what was filed.
- *
- * One field is deliberately NOT the original, a documented limitation of replaying without re-filing:
- *  - `change` is "0.00": the cash actually tendered is not persisted (only the settled amount, which
- *    equals the total, is), and the drawer change was handed over at the ORIGINAL sale — a replay
- *    re-prints the ticket and hands over nothing.
+ * Reconstruct a settled working order's ticket by reading back its ALREADY-FILED record — filing
+ * NOTHING. `invoiceNumber`, `issuedAt` and `total` are exact (the immutable `sales` row + its series);
+ * `qr` and `vatBreakdown` are read back from the fiscal record via `backend.filedReceiptFor`, so the
+ * ticket carries the regime's mandatory verification QR and the EXACT filed difference-method desglose
+ * (Task 14) rather than a QR-less, recomputed breakdown that could diverge by a cent from what was
+ * filed. Two callers:
+ *  - an idempotent REPLAY (a payWorkingOrder/collectOrder retry, or a race loser that saw the order
+ *    already `settled`): `change` defaults to "0.00" — the cash actually tendered is not persisted
+ *    (only the settled amount, which equals the total), and the drawer change was handed over at the
+ *    ORIGINAL sale, so a replay re-prints the ticket and hands over nothing;
+ *  - Mode-I's FRESH collect, which settled the deferred invoice just now and passes the real cash-back
+ *    (`tendered − total`) so THIS ticket reports the change the operator actually gives.
  */
 async function readSettledTicket(
   backend: FiscalBackend,
   tx: Transaction,
   cfg: TillConfig,
   workingOrderId: string,
+  change = "0.00",
 ): Promise<TillSaleResult> {
   // The single sale filed from this working order — `sales_working_order_id_key` guarantees at most
   // one, and a settled order always has exactly one (filed in the same transaction that settled it).
@@ -431,9 +320,234 @@ async function readSettledTicket(
     issuedAt: new Date(issued.issuedAt).toISOString(),
     total: issued.total,
     vatBreakdown: filed.vatBreakdown.map((v) => ({ rate: v.rate, base: v.base, tax: v.tax })),
-    change: "0.00",
+    change,
     qr: filed.verificationUrl,
   };
+}
+
+/**
+ * The amount to SETTLE a sale at and the CHANGE to hand back, per tender method — the one place both
+ * the immediate file (`fileImmediateSale`) and the invoice-first collect (`collectOrder`) derive
+ * these, so the coverage branches live and are proven in a single spot:
+ *  - CASH may exceed the total (change is handed back); a tender BELOW the total is a shortfall.
+ *    `settleSale` demands EXACT coverage (`sum(amount) = total`), so a covered tender settles the sale
+ *    at the TOTAL, never at the cash handed over (change is drawer cash, not a settled amount). When
+ *    the cash falls short we hand the RAW amount straight through so `settleSale` itself raises
+ *    `sale.tender_shortfall` and the whole transaction rolls back — the caller never has to pre-check.
+ *  - CARD is a manual/unintegrated tender: the operator charged the EXACT total on a separate bank
+ *    terminal, so the settled amount IS the total and there is no change — `tender.amount` is not
+ *    consulted (a client over/under-send cannot move the filed figure).
+ * `change` for the short-cash case is "0.00" (never used — the shortfall aborts first), so a caller
+ * that reaches the return value always has a non-negative change.
+ */
+function settlementFor(
+  tender: TillTender,
+  total: string,
+): { settledAmount: string; change: string } {
+  if (tender.method === "card") {
+    return { settledAmount: total, change: "0.00" };
+  }
+  const covered = compareDecimal(decimal(tender.amount), decimal(total)) >= 0;
+  return {
+    settledAmount: covered ? total : tender.amount,
+    change: covered ? subtractDecimal(decimal(tender.amount), decimal(total)) : "0.00",
+  };
+}
+
+/**
+ * File an IMMEDIATE cash/card sale from an already-priced basket and settle it in ONE transaction —
+ * the shared filing tail of `payWorkingOrder` (walk-up + retrieved) and `collectOrder`'s Mode-T branch
+ * (ticket-then-pay). It takes the caller's `tx`, so the sale, its tender/settlement, its chained
+ * fiscal record and the `open`/`placed` → `settled` transition all commit as one unit (or roll back
+ * together). It does NOT lock or read the order status — the caller has already locked it `for update`
+ * and is responsible for the guard — it only files, settles and transitions.
+ *
+ * `workingOrderId` tags the sale (`sales_working_order_id_key` = the idempotency key); `priced` is the
+ * authoritative price (walk-up `priceBasket`, or a stored-lock `priceLockedLines`).
+ */
+async function fileImmediateSale(
+  tx: Transaction,
+  deps: TillSaleDeps,
+  cfg: TillConfig,
+  workingOrderId: string,
+  tender: TillTender,
+  priced: PricedLines,
+  operatorId?: string,
+): Promise<TillSaleResult> {
+  const isCard = tender.method === "card";
+  const { settledAmount, change } = settlementFor(tender, priced.total);
+
+  // One clock reading for the settlement instant, shared by the tender and the order's `settled_at`
+  // so both name the same moment. recordSale reads its own clock for the sale's `issued_at`.
+  const settledAt = deps.clock.now().instant;
+
+  const { saleId, fiscal } = await recordSale(tx, deps.backend, {
+    tenantId: cfg.tenantId,
+    tillId: cfg.tillId,
+    nodeId: cfg.nodeId,
+    seriesId: cfg.seriesId,
+    // The persisted working order this sale is filed from. It is the sale-idempotency key: a second
+    // pay for the same id collides on `sales_working_order_id_key` (23505) and replays.
+    workingOrderId: brandWorkingOrderId(workingOrderId),
+    locale: cfg.locale,
+    invoiceLocales: cfg.invoiceLocales,
+    total: priced.total,
+    lines: priced.lines,
+    vatBreakdown: priced.vatBreakdown,
+    fiscalBackend: "verifactu",
+    clock: deps.clock,
+    operatorId,
+    settlement: {
+      kind: "immediate",
+      tenders: [{ method: tender.method, amount: settledAmount, tipAmount: "0.00", settledAt }],
+    },
+  });
+
+  // Card ONLY: the manual card tender adds a captured `payments` ledger row beside the tender and
+  // links it to the just-filed sale, in THIS same transaction. `recordManualCardPayment` makes NO
+  // network call, so it commits inline with the sale — no orphan window, and 7b's
+  // `sales_working_order_id_key` idempotency covers a lost-response retry (a replay never reaches
+  // here). Cash gets no payments row. `settledAt` is the SAME reading the tender carries.
+  if (isCard) {
+    const { provider, paymentRef } = await recordManualCardPayment(tx, {
+      tenantId: cfg.tenantId,
+      workingOrderId,
+      amount: decimal(priced.total),
+      settledAt,
+      externalRef: tender.externalRef,
+    });
+    await associatePaymentWithSale(tx, { provider, paymentRef, saleId, tenantId: cfg.tenantId });
+  }
+
+  // → settled. `working_orders_enforce_transition` permits both open → settled (walk-up/pay) and
+  // placed → settled (Mode-T collect); the `settled_at` biconditional requires the timestamp be set —
+  // the SAME instant the tender carries.
+  await tx
+    .update(workingOrders)
+    .set({ status: "settled", settledAt: settledAt.toISOString() })
+    .where(eq(workingOrders.id, workingOrderId));
+
+  // `FiscalRecordRef` exposes no series code or invoice number (it is regime-opaque), so the
+  // human-facing "A/1" is read back from the sale row and its series, in this same transaction.
+  const [issued] = await tx
+    .select({ code: invoiceSeries.code, number: sales.invoiceNumber })
+    .from(sales)
+    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+    .where(eq(sales.id, saleId));
+
+  return {
+    invoiceNumber: formatInvoiceNumber(issued!.code, issued!.number),
+    issuedAt: fiscal.issuedAt.toISOString(),
+    total: priced.total,
+    vatBreakdown: priced.vatBreakdown.map((v) => ({ rate: v.rate, base: v.base, tax: v.tax })),
+    change,
+    qr: fiscal.verificationUrl ?? "",
+  };
+}
+
+/**
+ * Collect and finalise a PLACED order (prepare & collect, sub-project 7c) — the COLLECT half of the
+ * mode dispatch, dispatching on the location's `order_flow` (design §3's state-machine table). All in
+ * one `withTenant`/`asAppUser` transaction:
+ *  - `invoice_first` (Mode I): the invoice was ALREADY issued (deferred) at placing, so collect
+ *    SETTLES the existing sale (`settleSale`) and moves `placed → settled`. It files NO second fiscal
+ *    record — a double-file would be an unrepairable defect (§5).
+ *  - `ticket_then_pay` (Mode T): no fiscal doc exists yet, so collect FILES `recordSale` immediate
+ *    from the order's stored locked lines and moves `placed → settled` (the shared `fileImmediateSale`).
+ *
+ * Idempotency, both modes, WITHOUT a 23505 backstop: unlike `payWorkingOrder`'s walk-up shape (no row
+ * to lock), a collected order ALWAYS exists (it was placed), so the `SELECT … FOR UPDATE` fully
+ * serialises a concurrent collect — the loser blocks, then re-reads the row as `settled` and REPLAYS
+ * the ticket (filing/settling nothing). The `sales_working_order_id_key` and `sale_settlements` UNIQUE
+ * constraints are the constraints underneath, but the lock means neither is ever reached concurrently.
+ *
+ * A non-`placed`, non-`settled` order (still `open`, already `abandoned`, or absent / another tenant's,
+ * RLS-hidden) fails closed with `working_order.not_placed` — collect is a placed-order operation. The
+ * tender guard mirrors `payWorkingOrder`'s: cash or manual card only.
+ *
+ * `req.lines` is IGNORED (a placed order files its frozen stored composition); it is on
+ * `PayWorkingOrderRequest` only to share the shape. `operatorId` is the collecting operator.
+ */
+export async function collectOrder(
+  deps: TillSaleDeps,
+  cfg: TillConfig,
+  req: PayWorkingOrderRequest,
+  operatorId?: string,
+): Promise<TillSaleResult> {
+  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+
+    // Lock the order for the life of the tx and read its status off the locked copy. A concurrent
+    // collect blocks here and re-reads `settled` below (the idempotency serialisation).
+    const [locked] = await tx
+      .select({ status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, req.id))
+      .for("update");
+
+    // Already settled → idempotent replay: a retry whose first response was lost, or the loser of a
+    // concurrent collect that blocked on the lock above and now sees it settled. Files nothing.
+    if (locked?.status === "settled") {
+      return readSettledTicket(deps.backend, tx, cfg, req.id);
+    }
+
+    // Only a placed order may be collected — an `open` (never placed), `abandoned`, absent or
+    // RLS-hidden order fails closed. `not_placed` (not `not_open`): collect is the placed→settled
+    // operation, and calling it on an open order is a state error about placing, not opening.
+    if (locked === undefined || locked.status !== "placed") {
+      throw new AppError("working_order.not_placed", { workingOrderId: req.id });
+    }
+
+    // Tender guard — a network boundary, cash (7a) and manual card only, the same guard
+    // `payWorkingOrder` makes. AFTER the replay check, so a retry is never refused for its body shape.
+    if (req.tender.method !== "cash" && req.tender.method !== "card") {
+      throw new AppError("sale.unsupported_tender", { method: req.tender.method });
+    }
+
+    if (cfg.orderFlow === "invoice_first") {
+      // Mode I: the invoice already issued (deferred) at placing. Settle the EXISTING sale and move
+      // placed → settled — file nothing new. `settlementFor` derives the settle amount + change over
+      // the already-filed total (a covered cash tender settles at the total and hands back change; a
+      // short one is passed through raw so `settleSale` raises `sale.tender_shortfall`).
+      const [sale] = await tx
+        .select({ id: sales.id, total: sales.total })
+        .from(sales)
+        .where(and(eq(sales.tenantId, cfg.tenantId), eq(sales.workingOrderId, req.id)));
+      /* v8 ignore start */
+      if (sale === undefined) {
+        // Structurally unreachable: an invoice-first order reaches `placed` only via `placeOrder`,
+        // which filed the deferred sale in the same transaction that placed it. A placed invoice-first
+        // order with no sale is corruption, not a reachable flow.
+        throw new Error(`collectOrder: placed invoice-first order ${req.id} has no sale`);
+      }
+      /* v8 ignore stop */
+
+      const { settledAmount, change } = settlementFor(req.tender, sale.total);
+      const settledAt = deps.clock.now().instant;
+
+      await settleSale(tx, {
+        tenantId: cfg.tenantId,
+        saleId: brandSaleId(sale.id),
+        tenders: [
+          { method: req.tender.method, amount: settledAmount, tipAmount: "0.00", settledAt },
+        ],
+      });
+
+      await tx
+        .update(workingOrders)
+        .set({ status: "settled", settledAt: settledAt.toISOString() })
+        .where(eq(workingOrders.id, req.id));
+
+      // Read the ticket back from the just-settled invoice, carrying the real cash-back (a FRESH
+      // collect, not a replay, so not the "0.00" default).
+      return readSettledTicket(deps.backend, tx, cfg, req.id, change);
+    }
+
+    // Mode T (ticket_then_pay): no fiscal doc yet — file `recordSale` IMMEDIATE at collect from the
+    // order's stored locked lines and move placed → settled (the shared filing path).
+    const priced = priceLockedLines(await readLockedLines(tx, req.id));
+    return fileImmediateSale(tx, deps, cfg, req.id, req.tender, priced, operatorId);
+  });
 }
 
 /**

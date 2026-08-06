@@ -151,6 +151,8 @@ async function main(): Promise<void> {
       locationId: brandLocationId(venue.locationId),
       locale: LOCALE,
       invoiceLocales: [LOCALE],
+      // The venue's default pay-timing mode (design §3); this demo drives the prepay walk-up/park-pay path.
+      orderFlow: "prepay",
     };
 
     // Caja 2 — a SECOND register on the SAME node/location, differing only in `till_id`. Inserted as

@@ -168,6 +168,8 @@ async function main(): Promise<void> {
       locationId: brandLocationId(venue.locationId),
       locale: LOCALE,
       invoiceLocales: [LOCALE],
+      // The venue's default pay-timing mode (design §3); this demo drives the prepay walk-up path.
+      orderFlow: "prepay",
     };
 
     // Seed a catalogue and a staff person as the application role (not the owner): one weight-priced

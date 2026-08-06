@@ -86,6 +86,8 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
+    // The walk-up sale path is mode-agnostic; the provisioned venue defaults to prepay.
+    orderFlow: "prepay",
   };
 }
 

@@ -3,18 +3,22 @@
 // used here). See the note atop `errors.ts`.
 import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
-import { AppError } from "@waitron/shared";
+import { AppError, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import {
   allocateOrderNumber,
   appendOrderAmendment,
   asAppUser,
+  invoiceSeries,
   orderPrep,
+  sales,
   withTenant,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { listAvailableProducts, priceBasket } from "@waitron/catalogue";
+import { listAvailableProducts, priceBasket, priceLockedLines } from "@waitron/catalogue";
+import type { LockedLine } from "@waitron/catalogue";
+import { formatInvoiceNumber, recordSale } from "@waitron/core";
 import type { TillConfig } from "./till-config.js";
 import type { TillSaleDeps } from "./till-sale.js";
 
@@ -100,6 +104,42 @@ async function priceOrderLines(
     category: line.category ?? null,
   }));
   return { lineRows, priced };
+}
+
+/**
+ * Read a persisted order's STORED lines in `line_no` order — exactly the columns `priceLockedLines`
+ * needs (gross unit, quantity, rate, descriptions, category), each snapshotted at add-time. THE ONE
+ * reader shared by `payWorkingOrder` (a retrieved order), `placeOrder` (Mode-I's deferred file at
+ * placing) and `collectOrder` (Mode-T's immediate file at collect), so all three file a persisted
+ * order from the SAME locked composition and a catalogue price change after add never moves the filed
+ * total (line-add snapshot, 7c).
+ *
+ * Throws on a lineless order: a persisted `open`/`placed` order always has ≥1 line (park refuses an
+ * empty basket, `updateHeldOrder` never leaves it lineless, and placing freezes the composition), so
+ * an empty result is corruption rather than a reachable flow — the same guard `payWorkingOrder` used
+ * inline before this was extracted.
+ */
+export async function readLockedLines(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<LockedLine[]> {
+  const stored = await tx
+    .select({
+      grossUnitPrice: workingOrderLines.unitPriceGross,
+      quantity: workingOrderLines.quantity,
+      vatRate: workingOrderLines.vatRate,
+      descriptions: workingOrderLines.descriptions,
+      category: workingOrderLines.category,
+    })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, workingOrderId))
+    .orderBy(workingOrderLines.lineNo);
+  /* v8 ignore start */
+  if (stored.length === 0) {
+    throw new Error(`readLockedLines: working order ${workingOrderId} has no lines to file`);
+  }
+  /* v8 ignore stop */
+  return stored;
 }
 
 /**
@@ -472,14 +512,24 @@ export interface PlaceOrderResult {
  * logged amendment (the future correction slice), not a line rewrite. `updateHeldOrder` also refuses
  * a placed order at the app layer with `working_order.not_open`.
  *
- * This is the Mode-T / generic placing: it files NO fiscal document here (design §3's state-machine
- * table). Task 8 adds the mode dispatch — Mode I files `recordSale` deferred and Mode P files + settles
- * — which is why `deps` is the fuller `TillSaleDeps` (its `backend` is unused in Task 7). The order is
- * locked `for update` and its status read off the locked row: a non-`open` order (already
+ * The mode dispatch (Task 8, design §3's state-machine table) keys on the location's `order_flow`:
+ *  - `invoice_first` (Mode I): file `recordSale` DEFERRED here — an unpaid, chained invoice issued at
+ *    placing — from the order's stored locked lines, and return its invoice number. `collectOrder`
+ *    settles it later.
+ *  - `ticket_then_pay` (Mode T) and `prepay` (Mode P): file NO fiscal document here. Mode T pays at
+ *    collect (`collectOrder`); Mode P never reaches placing at all — a walk-up/prepay order pays and
+ *    issues at ORDER via `payWorkingOrder` (open → settled, no placed state). So `placeOrder` under
+ *    `prepay` is a bare place with no fiscal doc, the same as Mode T.
+ * `deps` is the fuller `TillSaleDeps` because Mode I needs `backend`/`clock` to file.
+ *
+ * The order is locked `for update` and its status read off the locked row: a non-`open` order (already
  * placed/settled/abandoned, or absent / another tenant's, RLS-hidden) fails closed with
  * `working_order.not_open`, the same shape `payWorkingOrder`/`updateHeldOrder` use for the modify side.
- * Placing is NOT idempotent in Task 7 — Mode-I double-place idempotency (via `sales_working_order_id_key`)
- * arrives with the mode dispatch.
+ * That FOR UPDATE lock is ALSO the Mode-I double-place idempotency: a concurrent second place blocks
+ * on the lock, then re-reads the row as `placed` and is refused `working_order.not_open` BEFORE it
+ * files — so the `sales_working_order_id_key` guard is never even reached, and at most one deferred
+ * invoice is ever filed per order (the order row always exists here, unlike a walk-up, so the lock
+ * fully serialises; there is no create-race backstop to add).
  *
  * `operatorId` is REQUIRED: `order_amendments.actor_id` is NOT NULL and the genesis entry's
  * accountability rests on a real operator (the session's `personId`, wired by the till), so there is
@@ -507,8 +557,53 @@ export async function placeOrder(
       throw new AppError("working_order.not_open", { workingOrderId: id });
     }
 
-    // Mode T / generic placing files no fiscal document here (design §3). Mode I files `recordSale`
-    // deferred and Mode P files + settles — both added in Task 8's mode dispatch, in this same spot.
+    // Mode dispatch (design §3). Mode I files the DEFERRED invoice HERE, before the transition, from
+    // the order's stored locked lines (never a re-price — the composition was locked at add-time); the
+    // read-back invoice number rides on the result. Modes T and P file nothing at placing. The
+    // deferred file tags the sale with `working_order_id = id`, so the FOR UPDATE lock above already
+    // guarantees one invoice per order (a second place sees `placed` and is refused before reaching
+    // this).
+    let placeResult: PlaceOrderResult = { id, status: "placed" };
+    if (cfg.orderFlow === "invoice_first") {
+      const priced = priceLockedLines(await readLockedLines(tx, id));
+      const { saleId, fiscal } = await recordSale(tx, deps.backend, {
+        tenantId: cfg.tenantId,
+        tillId: cfg.tillId,
+        nodeId: cfg.nodeId,
+        seriesId: cfg.seriesId,
+        workingOrderId: brandWorkingOrderId(id),
+        locale: cfg.locale,
+        invoiceLocales: cfg.invoiceLocales,
+        total: priced.total,
+        lines: priced.lines,
+        vatBreakdown: priced.vatBreakdown,
+        fiscalBackend: "verifactu",
+        clock: deps.clock,
+        operatorId,
+        // A chained invoice with NO tender and NO settlement — the legitimate unsettled steady state
+        // an invoice-first sale sits in until `collectOrder` settles it (design §3, Ordering 1).
+        settlement: { kind: "deferred" },
+      });
+      // The human-facing "A/1" is read back from the sale row + its series (the FiscalRecordRef is
+      // regime-opaque), in this same transaction — `recordSale` guarantees exactly one such row.
+      const [issued] = await tx
+        .select({ code: invoiceSeries.code, number: sales.invoiceNumber })
+        .from(sales)
+        .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+        .where(eq(sales.id, saleId));
+      placeResult = {
+        id,
+        status: "placed",
+        invoiceNumber: formatInvoiceNumber(issued!.code, issued!.number),
+        issuedAt: fiscal.issuedAt.toISOString(),
+        total: priced.total,
+        qr: fiscal.verificationUrl ?? "",
+        vatBreakdown: priced.vatBreakdown.map((v) => ({ rate: v.rate, base: v.base, tax: v.tax })),
+      };
+    }
+
+    // open → placed. `working_orders_enforce_transition` validates OLD.status = 'open'; no `settled_at`
+    // (the biconditional requires it stay NULL for a non-settled status).
     await tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id));
 
     // Open the amendment log with its `order_placed` genesis. `appendOrderAmendment` owns the
@@ -539,7 +634,7 @@ export async function placeOrder(
       state: "queued",
     });
 
-    return { id, status: "placed" };
+    return placeResult;
   });
 }
 

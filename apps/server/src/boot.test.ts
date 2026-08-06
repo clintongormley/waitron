@@ -97,8 +97,9 @@ const RUNTIME_PASSWORD = "probe";
 // `loadTillConfig`). Distinct per field, matching till-config.test.ts's convention. Folded into
 // `KEY_ENV` below so every real-host boot in this suite carries one; the two config-guard tests at
 // the bottom, which omit `KEY_ENV` on purpose to reach `credentials.key_missing`, spread it directly.
-// The tenant is never seeded — the till routes are mounted but only `GET /api/staff` is exercised
-// (see the first test), which returns `[]` under RLS for an unknown tenant rather than needing one.
+// A minimal tenant + location for these ids IS seeded in `beforeAll` — `startServer` now reads the
+// till's pay-timing mode from its location at boot (`readOrderFlow`, Task 8), so the location must
+// exist for a successful boot. No staff are seeded, so `GET /api/staff` still returns `[]`.
 const TILL_ENV = {
   WAITRON_TILL_TENANT_ID: "11111111-1111-4111-8111-111111111111",
   WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
@@ -147,6 +148,19 @@ beforeAll(async () => {
     sql.raw(`create role ${RUNTIME_ROLE} login password '${RUNTIME_PASSWORD}' in role app_user`),
   );
   runtimeDatabaseUrl = roleUrl(suite.pg.uri, RUNTIME_ROLE, RUNTIME_PASSWORD);
+
+  // The till's own tenant + location, seeded once as the container superuser (RLS bypassed, exactly as
+  // `seedTenant`/`seedNode` do). `startServer` reads the location's `order_flow` at boot
+  // (`readOrderFlow`, Task 8) to complete the `TillConfig` it hands the routes, so the location must
+  // exist or every successful-boot test would fail at that read. `order_flow` defaults to `prepay`. A
+  // distinctive NIF (90M base) stays clear of every other seed generator sharing this database.
+  await suite.admin.execute(sql`
+    insert into tenants (id, country, tax_id, legal_name)
+    values (${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'ES', '90000000K', 'Boot Till SL')`);
+  await suite.admin.execute(sql`
+    insert into locations (id, tenant_id, name, invoice_locales, operation_description)
+    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'Barra',
+            array['es-ES'], 'Venta en establecimiento')`);
 
   // `boot.ts`'s own default migrations root is `<dirname of boot.ts>/drizzle` — under source (this
   // test, not the bundle) that resolves to `apps/server/src/drizzle`, which does not exist; only
@@ -358,9 +372,9 @@ describe("startServer, against a real container as the deployment role", () => {
       expect(body.ok).toBe(true);
 
       // The till API is mounted on the same app (`mountTillApi` in `boot.ts`). `GET /api/staff` is
-      // the unauthenticated roster route — it needs no session and no seeded tenant: under RLS scoped
-      // to this till's own (unprovisioned) tenant it returns an empty array rather than 404, which is
-      // the proof the route exists. A 404 here would mean `mountTillApi` never ran.
+      // the unauthenticated roster route — it needs no session: under RLS scoped to this till's own
+      // tenant (seeded minimally in `beforeAll`, with NO staff) it returns an empty array rather than
+      // 404, which is the proof the route exists. A 404 here would mean `mountTillApi` never ran.
       const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
       expect(staff.status).toBe(200);
       expect(await staff.json()).toEqual([]);

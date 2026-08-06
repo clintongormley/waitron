@@ -17,6 +17,7 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import { asAppUser, verifyAmendmentChain, withTenant } from "@waitron/db";
 import type { VerifiableAmendment } from "@waitron/db";
+import { listOutstandingSales } from "@waitron/core";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -25,7 +26,8 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
-import type { TillConfig } from "./till-config.js";
+import { readOrderFlow } from "./till-config.js";
+import type { OrderFlow, TillConfig } from "./till-config.js";
 import {
   cancelPlacedOrder,
   getHeldOrder,
@@ -34,7 +36,7 @@ import {
   placeOrder,
   updateHeldOrder,
 } from "./working-order.js";
-import { payWorkingOrder } from "./till-sale.js";
+import { collectOrder, payWorkingOrder } from "./till-sale.js";
 import { startRealPostgres } from "./testing/postgres.js";
 import "./errors.js";
 
@@ -95,6 +97,9 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
+    // The venue provisions with the DEFAULT `prepay` mode; a mode-specific test overrides both the
+    // cfg field AND the location's `order_flow` column via `modeVenue` (below).
+    orderFlow: "prepay",
   };
 }
 
@@ -166,6 +171,31 @@ async function setupVenue(): Promise<SeededVenue> {
   const cafe = available.find((p) => p.descriptions[LOCALE] === "Café")!;
   const agua = available.find((p) => p.descriptions[LOCALE] === "Agua")!;
   return { cfg, available, cafe, agua };
+}
+
+/**
+ * A fresh venue set to a specific pay-timing `mode`: `setupVenue` provisions with the DEFAULT `prepay`
+ * (planVenue has no mode input), then this flips the location's `order_flow` column to `mode` (as the
+ * owner, RLS bypassed) AND sets `cfg.orderFlow` to match — so both the DB (what `readOrderFlow` reads)
+ * and the in-memory config (what `placeOrder`/`collectOrder` dispatch on) agree, exactly as boot wires
+ * them in production.
+ */
+async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
+  const venue = await setupVenue();
+  await suite.admin.execute(
+    sql`update locations set order_flow = ${mode} where id = ${venue.cfg.locationId}`,
+  );
+  return { ...venue, cfg: { ...venue.cfg, orderFlow: mode } };
+}
+
+/** This tenant's OUTSTANDING (issued-but-unsettled) sales, read as the app role under the tenant —
+ *  the surface an invoice-first order shows on between placing and collect. */
+async function outstandingFor(cfg: TillConfig): Promise<{ saleId: string; amountDue: string }[]> {
+  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const rows = await listOutstandingSales(tx, cfg.tenantId);
+    return rows.map((r) => ({ saleId: r.saleId, amountDue: r.amountDue }));
+  });
 }
 
 /** How many `sales` rows reference this working order — read as the superuser owner (bypasses RLS). */
@@ -1109,5 +1139,293 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await readAmendments(id)).toHaveLength(0); // no placing → no log (design §3)
     expect(await prepStateOf(id)).toBeNull();
+  });
+});
+
+// The pay-timing config + the three-mode dispatch (Modes P/I/T — design §3's state-machine × config
+// table). FISCAL-CRITICAL: each mode must fire the right issuance primitive at the right point — a
+// wrong dispatch files the wrong kind of unrepairable fiscal record (CLAUDE.md §5). Real Postgres —
+// the fiscal writes run as `app_user` under RLS, and the idempotency proofs are genuine two-backend
+// races, both of which PGlite's superuser/single-backend connection cannot show (CLAUDE.md §4). No
+// primitive is reimplemented here: the dispatch ORCHESTRATES `recordSale` (immediate + deferred),
+// `settleSale` and `listOutstandingSales`.
+describe("prepare & collect — three-mode dispatch (order_flow)", () => {
+  it("readOrderFlow reads the venue's configured mode from its location", async () => {
+    const { cfg } = await modeVenue("invoice_first");
+    expect(await readOrderFlow(suite.admin, cfg)).toBe("invoice_first");
+  });
+
+  // MODE P (prepay): pay + issue at ORDER — open → settled, no placed state. The unchanged
+  // walk-up/park-pay `payWorkingOrder`, asserted under an explicit `prepay` cfg so P's contract is
+  // pinned beside I and T.
+  it("Mode P (prepay): pay at order files an immediate sale, open → settled, nothing outstanding", async () => {
+    const { cfg, cafe } = await modeVenue("prepay");
+    const id = randomUUID();
+
+    const res = await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+      tender: { method: "cash", amount: "5.00" },
+    });
+
+    expect(res.invoiceNumber).toBe("A/1");
+    expect(res.total).toBe("1.50");
+    expect(res.change).toBe("3.50");
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(id)).toBe(1);
+    expect(await registroCount(id)).toBe(1);
+    // Pay + issue are the same instant, so nothing is ever owed.
+    expect(await outstandingFor(cfg)).toEqual([]);
+  });
+
+  // MODE I (invoice_first): at PLACE issue a DEFERRED (unpaid) chained invoice, open → placed, and it
+  // shows as outstanding; at COLLECT `settleSale` closes it, placed → settled, filing NO second record.
+  it("Mode I (invoice_first): place issues a deferred invoice; collect settles it, no second file", async () => {
+    const { cfg, cafe, agua } = await modeVenue("invoice_first");
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [
+        { productId: cafe.id, quantity: "1" },
+        { productId: agua.id, quantity: "1" },
+      ],
+    });
+
+    // PLACE → the deferred invoice issues HERE (A/1); the order freezes at `placed`, unsettled.
+    const placed = await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+    expect(placed.status).toBe("placed");
+    expect(placed.invoiceNumber).toBe("A/1"); // the deferred invoice, issued at placing
+    expect(placed.total).toBe("3.50"); // 1.50 café + 2.00 agua
+    expect(placed.qr).not.toBe(""); // a genuine chained filing carries the AEAT QR
+    expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
+
+    // The chained record exists NOW, before any payment — one sale, one registro — and shows as
+    // OUTSTANDING (what is owed).
+    expect(await saleCount(id)).toBe(1);
+    expect(await registroCount(id)).toBe(1);
+    const outstanding = await outstandingFor(cfg);
+    expect(outstanding).toHaveLength(1);
+    expect(outstanding[0]!.amountDue).toBe("3.50");
+
+    // COLLECT → settle the EXISTING invoice, placed → settled, filing NOTHING new.
+    const collected = await collectOrder({ db: suite.admin, backend, clock }, cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "3.50" },
+    });
+    expect(collected.invoiceNumber).toBe("A/1"); // the SAME invoice, read back
+    expect(collected.total).toBe("3.50");
+    expect(collected.change).toBe("0.00");
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(id)).toBe(1); // STILL one sale — no second file at collect
+    expect(await registroCount(id)).toBe(1); // STILL one registro
+    expect(await outstandingFor(cfg)).toEqual([]); // settled → no longer owed
+    expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "3.50" }]);
+  });
+
+  it("Mode I: a covered cash over-tender at collect settles at the total and hands back change", async () => {
+    const { cfg, cafe } = await modeVenue("invoice_first");
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+
+    // 5.00 cash against the 1.50 invoice: the SALE settles at the invoice total (1.50) and 3.50 is
+    // drawer change — settling at the tendered cash would over-report the fiscal total (§5).
+    const collected = await collectOrder({ db: suite.admin, backend, clock }, cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "5.00" },
+    });
+    expect(collected.total).toBe("1.50");
+    expect(collected.change).toBe("3.50");
+    expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "1.50" }]);
+    expect(await saleCount(id)).toBe(1);
+  });
+
+  it("Mode I: a double-tap place issues exactly ONE deferred invoice (FOR UPDATE serialises)", async () => {
+    const { cfg, cafe } = await modeVenue("invoice_first");
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+
+    // TWO distinct backends racing to place the SAME order. Load-bearing: distinct backend PROCESSES —
+    // on PGlite they collapse onto one and the race never happens (a false pass). The FOR UPDATE lock
+    // serialises them: the winner files the deferred invoice and moves the row to `placed`; the loser
+    // blocks, re-reads `placed`, and is refused `working_order.not_open` BEFORE it files.
+    const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
+    try {
+      const results = await Promise.allSettled([
+        placeOrder({ db: connA, backend, clock }, cfg, id, OPERATOR),
+        placeOrder({ db: connB, backend, clock }, cfg, id, OPERATOR),
+      ]);
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      const rejected = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0]!.reason).toMatchObject({ code: "working_order.not_open" });
+    } finally {
+      await Promise.all([connA.close(), connB.close()]);
+    }
+
+    // ONE deferred invoice, one registro — the unrepairable double-file the dispatch must prevent.
+    expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
+    expect(await saleCount(id)).toBe(1);
+    expect(await registroCount(id)).toBe(1);
+  });
+
+  it("Mode I: a concurrent double collect settles the invoice ONCE and both see the same ticket", async () => {
+    const { cfg, cafe } = await modeVenue("invoice_first");
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+
+    const req = { id, lines: [], tender: { method: "cash" as const, amount: "1.50" } };
+    const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
+    try {
+      // Both collect the placed order on distinct backends. FOR UPDATE serialises: one settles
+      // (placed → settled), the other blocks, sees `settled`, and REPLAYS the ticket — neither errors,
+      // ONE settlement (no 23505 backstop needed: the placed row always exists to lock).
+      const [rA, rB] = await Promise.all([
+        collectOrder({ db: connA, backend, clock }, cfg, req, OPERATOR),
+        collectOrder({ db: connB, backend, clock }, cfg, req, OPERATOR),
+      ]);
+      expect(rA.invoiceNumber).toBe(rB.invoiceNumber);
+    } finally {
+      await Promise.all([connA.close(), connB.close()]);
+    }
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(id)).toBe(1);
+    expect(await registroCount(id)).toBe(1);
+    expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "1.50" }]); // one settlement
+    expect(await outstandingFor(cfg)).toEqual([]);
+  });
+
+  // MODE T (ticket_then_pay): at PLACE no fiscal doc, open → placed; at COLLECT `recordSale` immediate
+  // files + settles, placed → settled.
+  it("Mode T (ticket_then_pay): place files no fiscal doc; collect files immediate at collect", async () => {
+    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+
+    // PLACE → NO fiscal document (design §3). The order freezes at `placed` with nothing filed.
+    const placed = await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+    expect(placed.status).toBe("placed");
+    expect(placed.invoiceNumber).toBeUndefined(); // no invoice issued at placing
+    expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
+    expect(await saleCount(id)).toBe(0); // nothing filed yet
+    expect(await outstandingFor(cfg)).toEqual([]); // no issued invoice → nothing outstanding
+
+    // COLLECT → file `recordSale` IMMEDIATE, placed → settled.
+    const collected = await collectOrder({ db: suite.admin, backend, clock }, cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "1.50" },
+    });
+    expect(collected.invoiceNumber).toBe("A/1"); // the FIRST filing is at collect
+    expect(collected.total).toBe("1.50");
+    expect(collected.change).toBe("0.00");
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(id)).toBe(1); // filed at collect
+    expect(await registroCount(id)).toBe(1);
+  });
+
+  it("Mode T: a concurrent double collect-pay files ONE sale, and a later sequential collect replays", async () => {
+    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+
+    const req = { id, lines: [], tender: { method: "cash" as const, amount: "1.50" } };
+    const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
+    try {
+      // Two collects racing to FILE on distinct backends. FOR UPDATE serialises: one files + settles,
+      // the other blocks, sees `settled`, and REPLAYS — ONE sale, no 23505 needed (the placed row
+      // always exists to lock, unlike a walk-up).
+      const [rA, rB] = await Promise.all([
+        collectOrder({ db: connA, backend, clock }, cfg, req, OPERATOR),
+        collectOrder({ db: connB, backend, clock }, cfg, req, OPERATOR),
+      ]);
+      expect(rA.invoiceNumber).toBe(rB.invoiceNumber);
+    } finally {
+      await Promise.all([connA.close(), connB.close()]);
+    }
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(id)).toBe(1);
+    expect(await registroCount(id)).toBe(1);
+
+    // A further SEQUENTIAL collect of the now-settled order deterministically hits the settled-replay
+    // branch: it returns the same ticket and files nothing (change 0.00 — the drawer change was given
+    // at the original collect).
+    const replay = await collectOrder({ db: suite.admin, backend, clock }, cfg, req, OPERATOR);
+    expect(replay.invoiceNumber).toBe("A/1");
+    expect(replay.change).toBe("0.00");
+    expect(await saleCount(id)).toBe(1);
+  });
+
+  it("collectOrder refuses a non-placed order (open, absent) and an unsupported tender, filing nothing", async () => {
+    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+
+    // An OPEN (parked, never placed) order → `working_order.not_placed`, files nothing. `not_placed`,
+    // not `not_open`: collect is the placed → settled operation, so an open order is a placing-state
+    // error (a false "not open" label would be the §1 defect class).
+    const openId = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id: openId,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await expect(
+      collectOrder({ db: suite.admin, backend, clock }, cfg, {
+        id: openId,
+        lines: [],
+        tender: { method: "cash", amount: "1.50" },
+      }),
+    ).rejects.toMatchObject({
+      code: "working_order.not_placed",
+      params: { workingOrderId: openId },
+    });
+    expect(await saleCount(openId)).toBe(0);
+
+    // An ABSENT id → the FOR UPDATE locks nothing (the undefined branch), same fail-closed code.
+    const missing = randomUUID();
+    await expect(
+      collectOrder({ db: suite.admin, backend, clock }, cfg, {
+        id: missing,
+        lines: [],
+        tender: { method: "cash", amount: "1.50" },
+      }),
+    ).rejects.toMatchObject({
+      code: "working_order.not_placed",
+      params: { workingOrderId: missing },
+    });
+
+    // A PLACED order with an UNSUPPORTED tender → `sale.unsupported_tender`, files nothing. The `as
+    // unknown` cast is how an untrusted till sends one past the widened `"cash" | "card"` type.
+    const placedId = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id: placedId,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, placedId, OPERATOR);
+    await expect(
+      collectOrder({ db: suite.admin, backend, clock }, cfg, {
+        id: placedId,
+        lines: [],
+        tender: { method: "voucher" as unknown as "cash", amount: "1.50" },
+      }),
+    ).rejects.toMatchObject({ code: "sale.unsupported_tender", params: { method: "voucher" } });
+    expect(await saleCount(placedId)).toBe(0);
   });
 });

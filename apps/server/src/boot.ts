@@ -25,6 +25,8 @@ import { runPass, DRAIN_DUTY } from "./pass.js";
 import { stripeAccountResolver, defaultMakeStripe } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
+import { readOrderFlow } from "./till-config.js";
+import type { TillConfig } from "./till-config.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
 import { buildServeOptions } from "./tls.js";
 import "./errors.js";
@@ -163,13 +165,19 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // never marked `Secure` on a plain-HTTP loopback host where the browser would then never send it
   // back. Mounting registers routes only — no database work happens here, so a till pointed at an
   // unprovisioned tenant fails per-request (via `run`), never at boot.
+  // The till's pay-timing mode is a per-LOCATION column, not an env var, so `config.till` (from
+  // `loadTillConfig`) carries every fiscal id but NOT `orderFlow`. Read it here, ONCE, now that the
+  // pool is open, and spread it in to form the full `TillConfig` the routes dispatch on — the merge
+  // the type demands (`config.till` is `Omit<TillConfig, "orderFlow">`, see `till-config.ts`). A
+  // boot-time read, not per request: the mode is stable provisioning-time config.
+  const till: TillConfig = { ...config.till, orderFlow: await readOrderFlow(db, config.till) };
   mountTillApi(
     app,
     {
       db,
       backend: makeFiscalBackend(db, env),
       clock: systemClock(),
-      cfg: config.till,
+      cfg: till,
       secureCookies: config.tls !== undefined,
     },
     log,

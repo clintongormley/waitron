@@ -94,6 +94,8 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
+    // These API tests exercise routes that do not dispatch on the mode; the venue defaults to prepay.
+    orderFlow: "prepay",
   };
 }
 

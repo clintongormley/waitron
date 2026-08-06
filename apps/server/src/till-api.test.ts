@@ -137,6 +137,8 @@ function makeCfg(
     locationId: brandLocationId(locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
+    // These API tests exercise the session/roster/park routes, none of which dispatch on the mode.
+    orderFlow: "prepay",
   };
 }
 

@@ -117,6 +117,8 @@ async function setupVenue(): Promise<SeededVenue> {
     locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
+    // This PGlite suite covers park/list/retrieve/update/abandon, none of which dispatch on the mode.
+    orderFlow: "prepay",
   };
   return { cfg, cafeId, aguaId };
 }
