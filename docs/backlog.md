@@ -998,6 +998,45 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   settlement interleaving, which only the till UI (sub-project 7) makes possible. The fix, when it
   becomes reachable: give the coverage `RAISE EXCEPTION` a dedicated SQLSTATE, the same way
   `tenders_reject_post_settlement` got WT002, and translate it in `settleSale`
+- **Collapse the per-module drizzle migration chains into per-module baselines (pre-production
+  cleanup, not now).** Migrations are already **per-module** — 8 independent sets in
+  `packages/migrations/migrations.manifest.json`, each package with its own `drizzle/` dir, numbered
+  sequence and `__drizzle_migrations_*` tracking table, replayed in manifest order by
+  `packages/migrations/src/apply.ts`. The debt is the **length** of each chain: 78 source SQL files
+  across the eight sets, 30 in `packages/db` alone (`0000`–`0029` as of 2026-08-06), a real fraction
+  of them pure development churn — `0016_add_node_id.sql` is `ADD COLUMN`/`ADD CONSTRAINT` retrofitting
+  `node_id` onto tables that in a fresh build could be born with it, and the payments/fiscal
+  `add_node_id`+`rekey` pairs are the same shape. CLAUDE.md §3 makes a collapse legitimate: nothing is
+  deployed, schema drops and recreates, CI builds fresh, so **nothing depends on the history — only the
+  end state**. This is a build refactor, not a fiscal operation.
+  - **Not a `drizzle-kit generate` one-liner.** The valuable migrations are hand-written custom SQL —
+    `FORCE ROW LEVEL SECURITY`, `CREATE POLICY`, GRANTs, the immutability triggers — that Drizzle does
+    **not** emit (`packages/db/drizzle/0017_nodes_rls.sql`'s header says so in as many words). A naive
+    "delete all, regenerate" gives the `CREATE TABLE`s and **silently drops every FORCE RLS, policy and
+    grant** — the §1 "reading is not verification" trap, invisible to eyeballing and catastrophic. Each
+    baseline is a careful hand-fold: generated final DDL **plus** the interleaved custom SQL, arriving
+    at the same end state, plus regenerated `meta/_journal.json` + snapshots so the next
+    `drizzle-kit generate` diffs against a real baseline rather than a stale one. The migrations also
+    double as documentation (the `0017` header is an essay on why a grant is SELECT-only, with a dated
+    re-audit) — the collapse must carry that commentary forward, not just the DDL.
+  - **Verification is the actual work, and the safety net already exists.** A collapse touches every
+    package, so per §4 it must be proven against the **whole unfiltered suite**, not scoped shards. The
+    fiscal `inmutabilidad` guard scans every `tenant_id`-bearing table for FORCE RLS + policy; the
+    RLS-isolation, `english-only` and reachability guards back it. A dropped clause turns a guard
+    **red** (recoverable) rather than corrupting a chain (not) — which is exactly why this is safe to
+    do here and would not be in production.
+  - **Timing: once, late in the pre-production window — not a priority now.** The churn is cosmetic: a
+    fresh build applies all 78 in seconds, and the only real cost is cognitive (replaying the chain to
+    see the actual schema). The right trigger is *after the last foundational reshape lands*. The
+    `node_id` re-key (#54) was one such reshape and left the corrective migrations above; replication
+    is still-pending shared infra (single-writer-per-row groundwork) that may touch many tables, so
+    collapsing now risks paying the fold-and-verify cost twice. Collapse **once**, near the end of
+    pre-production.
+  - **Unit:** per-module baselines (a single `0000_baseline.sql` per set), matching the manifest — not
+    one repo-wide file, which would fight the per-set tracking tables. **Cheaper middle option** if
+    relief is wanted sooner: squash only the corrective churn (fold the `add_node_id`/`rekey` sequences
+    back into their originating table migrations) and leave the custom RLS migrations as separate
+    readable units.
 
 ---
 
