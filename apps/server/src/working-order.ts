@@ -73,7 +73,14 @@ async function priceOrderLines(
     quantity: line.quantity,
     unitPrice: line.unitPrice,
     vatRate: line.vatRate,
-    lineTotal: line.lineTotal,
+    // The DRAFT line stores the GROSS (VAT-inclusive) line total, not `line.lineTotal`'s net base:
+    // `working_order_lines` is the counter's mutable display, and every other total the operator/
+    // customer sees is gross (the basket grand total, the per-line gross, the filed ticket), so the
+    // held-orders list `sum(line_total)` must be gross too. This deliberately DIVERGES from the FILED
+    // `sale_lines.line_total`, which keeps `line.lineTotal`'s net base for the fiscal record — the
+    // walk-up/pay path files from `priced.lines`, unaffected by this draft column. See
+    // `working_order_lines.line_total`'s schema comment and `priceBasket`'s `grossLineTotals`.
+    lineTotal: priced.grossLineTotals[i]!,
     category: line.category ?? null,
   }));
   return { lineRows, priced };
@@ -162,7 +169,8 @@ export async function createOpenOrder(
  * (or roll back together, leaving nothing parked). The server never trusts a browser-computed price;
  * `req` carries none. The persisted line keeps `product_id` (a pricing INPUT a later repricing
  * re-resolves) alongside the frozen display snapshot (`descriptions`, `unit_price`, `vat_rate`,
- * `line_total`, `category`) that came straight from `priceBasket`. The persist itself is
+ * `category`) from `priceBasket`, plus its GROSS `line_total` (`priceBasket`'s `grossLineTotals`, not
+ * the net base the fiscal line carries — see `priceOrderLines`). The persist itself is
  * `createOpenOrder`, shared verbatim with `payWorkingOrder`'s walk-up path.
  */
 export async function parkOrder(
@@ -192,7 +200,12 @@ export interface HeldOrderSummary {
   label: string | null;
   /** Number of lines on the order (`count(lines)`, so 0 for a lineless order), a whole number. */
   itemCount: number;
-  /** Sum of the lines' `line_total` (net base), a numeric(12,2) as text — the codebase's money shape. */
+  /**
+   * Sum of the lines' `line_total`, which for a working-order DRAFT is the GROSS (VAT-inclusive)
+   * customer-facing total — EQUAL to the basket grand total the operator saw (`priceBasket(...).total`).
+   * A numeric(12,2) as text, the codebase's money shape. (The FILED `sale_lines.line_total` is net;
+   * the draft deliberately diverges — see `working_order_lines.line_total`'s schema comment.)
+   */
   total: string;
   openedAt: string;
 }
@@ -208,9 +221,10 @@ export interface HeldOrder {
 
 /**
  * The open working orders parked on THIS server's node (park & retrieve, sub-project 7b) — the
- * cross-till held list any register on the node shows. `total` is the summed `line_total` and
- * `itemCount` the line count, from a LEFT JOIN aggregate so an order with no lines would still list
- * (`total` coalesced to 0); ordered by the human `order_number` the counter types back in.
+ * cross-till held list any register on the node shows. `total` is the summed `line_total` — the GROSS
+ * (VAT-inclusive) draft total, equal to the basket total the operator saw — and `itemCount` the line
+ * count, from a LEFT JOIN aggregate so an order with no lines would still list (`total` coalesced to
+ * 0); ordered by the human `order_number` the counter types back in.
  *
  * Scoped by `status = 'open'` and `node_id = cfg.nodeId`; RLS already confines it to the tenant
  * (the read runs as `app_user` under `withTenant`, exactly as `parkOrder` writes). PGlite is enough

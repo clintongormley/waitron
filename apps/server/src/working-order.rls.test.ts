@@ -216,9 +216,10 @@ async function addNode(cfg: TillConfig, name: string): Promise<TillConfig> {
 }
 
 /**
- * A parked order's line count and summed `line_total` (net base) — read as the owner and summed in JS,
- * NOT the SQL `listHeldOrders` runs, so its `itemCount`/`total` aggregate is validated rather than
- * restated (CLAUDE.md §1). Cent-magnitude 2dp values sum exactly in float here.
+ * A parked order's line count and summed `line_total` (the GROSS draft total the held list shows) —
+ * read as the owner and summed in JS, NOT the SQL `listHeldOrders` runs, so its `itemCount`/`total`
+ * aggregate is validated rather than restated (CLAUDE.md §1). Cent-magnitude 2dp values sum exactly
+ * in float here.
  */
 async function draftAggregate(id: string): Promise<{ itemCount: number; total: string }> {
   const { rows } = await suite.admin.execute<{ line_total: string }>(sql`

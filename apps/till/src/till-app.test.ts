@@ -167,6 +167,34 @@ describe("till-app", () => {
     expect(view.lines[0]!.quantity).toBe("2");
   });
 
+  it("confirm-payment success: refreshes the held-orders list so a just-paid parked order drops off", async () => {
+    // The Minor review finding: paying a RETRIEVED parked order must drop it off the cross-till held
+    // list immediately, like park/retrieve/discard already do. `listWorkingOrders` returns the order
+    // first, then an empty list after it is settled — so a successful pay re-reads and the settled
+    // order is gone. Removing the new `#refreshHeldOrders()` on the success path fails this (one call,
+    // not two — the order lingers in the in-memory list until the next park/retrieve/discard).
+    const { el } = await mountApp({
+      listWorkingOrders: vi.fn().mockResolvedValueOnce([heldSummary]).mockResolvedValue([]),
+    });
+    const c = await toCounter(el);
+    expect(c.heldOrders).toEqual([heldSummary]); // one call on entering the counter
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    // once on entering the counter, once after the successful pay — the settled order drops off.
+    expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
+    expect(ticket(el)).not.toBeNull(); // the sale still filed and the ticket still shows
+
+    // Returning to the counter ("New sale") shows the refreshed (now empty) list, not the stale one —
+    // the app's held state was updated to [] by the pay refresh, so the re-rendered counter reads it.
+    emit(ticket(el)!, "new-sale");
+    await flush(el);
+    expect(counter(el)!.heldOrders).toEqual([]);
+  });
+
   it("threads the invoice locale from getTill through to the ticket", async () => {
     // getTill's locale drives the RECEIPT locale (till-ticket-view.invoiceLocale), threaded from the
     // server till config — separately from the operator-UI setLocale. Use a locale that differs from
@@ -556,6 +584,9 @@ describe("till-app", () => {
     await flush(el);
 
     expect(currentApi.recordSale).toHaveBeenCalledOnce();
+    // The held-list refresh is gated to the SUCCESS path: a rejected pay must not re-read the list
+    // (only the one call on entering the counter). Proves the new refresh is on success, not always.
+    expect(currentApi.listWorkingOrders).toHaveBeenCalledOnce();
     expect(ticket(el)).toBeNull();
     expect(counter(el)).not.toBeNull();
     expect(store.lines).toHaveLength(1); // basket intact — the sale in progress is not lost

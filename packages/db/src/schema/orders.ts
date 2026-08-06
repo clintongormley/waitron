@@ -127,6 +127,12 @@ export const workingOrderLines = pgTable(
     quantity: numeric("quantity", { precision: 12, scale: 3 }).notNull(),
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
     vatRate: numeric("vat_rate", { precision: 5, scale: 2 }).notNull(),
+    // GROSS (VAT-inclusive) line total = unit gross × quantity — the customer-facing number, so the
+    // held-orders list `sum(line_total)` equals the basket total the operator saw. This DELIBERATELY
+    // DIVERGES from the FILED `sale_lines.line_total` (sales.ts), which is the NET base the fiscal
+    // record needs: a working order is a mutable counter DRAFT, not the fiscal record, so its money
+    // column carries the gross the operator reads. `priceBasket` produces both — `grossLineTotals`
+    // (this column, via `priceOrderLines`) and each line's net `lineTotal` (the filed `sale_lines`).
     lineTotal: numeric("line_total", { precision: 12, scale: 2 }).notNull(),
     // Snapshotted analytics label (architecture §6), NOT a category_id or a catalogue FK — the
     // value is frozen onto the line so a stale catalogue is a freshness problem, never a

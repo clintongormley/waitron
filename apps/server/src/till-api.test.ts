@@ -552,9 +552,9 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     });
     const { orderNumber } = (await parked.json()) as { orderNumber: number };
 
-    // GET list carries this order's summary. `total` is the summed NET base (line_total): 2 × 1.50
-    // gross @21% → base 2.48, not the 3.00 gross. Assert containment — the suite shares one node, so
-    // other tests' open orders also list.
+    // GET list carries this order's summary. `total` is the GROSS (VAT-inclusive) draft total the
+    // operator saw: 2 × 1.50 = 3.00 gross (NOT the net base 2.48 the filed sale line carries). Assert
+    // containment — the suite shares one node, so other tests' open orders also list.
     const list = await app.request("/api/working-orders", { headers: { cookie } });
     expect(list.status).toBe(200);
     const summaries = (await list.json()) as {
@@ -565,7 +565,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       total: string;
     }[];
     expect(summaries).toContainEqual(
-      expect.objectContaining({ id, orderNumber, label: "Mesa 7", itemCount: 1, total: "2.48" }),
+      expect.objectContaining({ id, orderNumber, label: "Mesa 7", itemCount: 1, total: "3.00" }),
     );
 
     // GET /:id rebuilds the basket inputs (product_id + quantity, in line order) — no stored price.

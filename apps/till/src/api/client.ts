@@ -79,8 +79,9 @@ export interface TillSaleResult {
 /**
  * One row of `GET /api/working-orders` — a parked order the counter can retrieve (park & retrieve,
  * sub-project 7b). Mirrors the server's `HeldOrderSummary` (`apps/server/src/working-order.ts`):
- * `total` is the summed net `line_total` and `itemCount` the line count, both as the server sends
- * them; `label` is null when the order was parked without one.
+ * `total` is the GROSS (VAT-inclusive) draft total — equal to the basket total the operator saw, the
+ * figure the held-orders widget shows with `formatMoney` — and `itemCount` the line count, both as the
+ * server sends them; `label` is null when the order was parked without one.
  */
 export interface HeldOrderSummary {
   id: string;

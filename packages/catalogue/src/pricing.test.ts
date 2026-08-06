@@ -82,3 +82,27 @@ describe("priceBasket — difference method", () => {
     expect(compareDecimal(reconstructed, r.total)).toBe(0);
   });
 });
+
+describe("priceBasket — grossLineTotals (the working-order draft's customer-facing line total)", () => {
+  it("exposes each line's GROSS unitPrice×quantity, parallel to lines and distinct from the net lineTotal", () => {
+    const r = priceBasket([
+      { product: each("1.50", "general"), quantity: "2" }, // 3.00 gross, 2.48 net base
+      { product: weight("24.90", "reduced"), quantity: "0.320" }, // 7.97 gross, 7.25 net base
+    ]);
+    expect(r.grossLineTotals).toEqual([decimal("3.00"), decimal("7.97")]);
+    // The gross line total is what the operator/customer sees (and what the working-order draft
+    // stores in `working_order_lines.line_total`); the FILED fiscal line keeps the NET base.
+    expect(r.lines[0]!.lineTotal).toBe(decimal("2.48"));
+    expect(r.lines[1]!.lineTotal).toBe(decimal("7.25"));
+  });
+
+  it("sums to `total` EXACTLY — the invariant the held-orders list's sum(line_total) relies on", () => {
+    const r = priceBasket([
+      { product: weight("24.90", "reduced"), quantity: "0.320" },
+      { product: each("8.50", "general"), quantity: "2" },
+      { product: each("1.30", "super_reduced"), quantity: "5" },
+    ]);
+    expect(r.grossLineTotals).toHaveLength(r.lines.length);
+    expect(sumDecimals(r.grossLineTotals)).toBe(r.total);
+  });
+});

@@ -16,6 +16,8 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
+  listAvailableProducts,
+  priceBasket,
 } from "@waitron/catalogue";
 import {
   locationId as brandLocationId,
@@ -148,8 +150,9 @@ describe("parkOrder", () => {
       .where(eq(workingOrderLines.workingOrderId, id));
     expect(lines).toHaveLength(1);
     // The line carries its product FK + quantity AND the full display snapshot priceBasket produced:
-    // 1.50 gross each × 2 = 3.00 gross; at 21% the difference-method base is 2.48 and the net unit
-    // 1.24. numeric(12,3) reads "2" back as "2.000".
+    // 1.50 gross each × 2 = 3.00 gross. `line_total` on this DRAFT is the GROSS 3.00 (the
+    // customer-facing total the held list shows), NOT the net base 2.48 the FILED sale line carries;
+    // `unit_price` stays the net unit 1.24 and `vat_rate` 21%. numeric(12,3) reads "2" back as "2.000".
     expect(lines[0]).toMatchObject({
       productId: cafeId,
       lineNo: 1,
@@ -157,7 +160,7 @@ describe("parkOrder", () => {
       descriptions: { [LOCALE]: "Café" },
       unitPrice: "1.24",
       vatRate: "21.00",
-      lineTotal: "2.48",
+      lineTotal: "3.00",
       category: "Bebidas",
     });
   });
@@ -249,6 +252,27 @@ async function readOrder(id: string): Promise<{
   return { openedAt: wo!.openedAt, lineTotals: lines.map((l) => l.lineTotal) };
 }
 
+/**
+ * The GROSS (VAT-inclusive) basket total the operator saw for `lines` — computed the SAME way the
+ * server prices a basket (`listAvailableProducts` → `priceBasket`), then take its `.total`. This is
+ * the number every other surface shows (the basket grand total, the printed ticket), and the
+ * invariant a held-orders `total` MUST equal EXACTLY (Important review finding). Derived independently
+ * of the persisted `line_total` column, so a held total computed from the NET base — the bug — fails
+ * against it (2 × 1.50 gross is 3.00 here, not the net 2.48 the fiscal line carries).
+ */
+async function grossBasketTotal(
+  cfg: TillConfig,
+  lines: { productId: string; quantity: string }[],
+): Promise<string> {
+  return withTenant(db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const available = await listAvailableProducts(tx, cfg.locationId);
+    const byId = new Map(available.map((p) => [p.id, p]));
+    const items = lines.map((l) => ({ product: byId.get(l.productId)!, quantity: l.quantity }));
+    return priceBasket(items).total;
+  });
+}
+
 /** Drive a parked order to a terminal status by UPDATE, the transition the enforce trigger allows. */
 async function setStatus(id: string, status: "settled" | "abandoned"): Promise<void> {
   await withTenant(db, testTenant, async (tx) => {
@@ -269,34 +293,34 @@ async function setStatus(id: string, status: "settled" | "abandoned"): Promise<v
 let testTenant: string;
 
 describe("listHeldOrders", () => {
-  it("lists the node's open orders with itemCount, summed total and label, ordered by number", async () => {
+  it("lists the node's open orders with itemCount, GROSS total and label, ordered by number", async () => {
     const { cfg, cafeId, aguaId } = await setupVenue();
     testTenant = cfg.tenantId;
     const idA = randomUUID();
     const idB = randomUUID();
 
-    // A: a single line (itemCount 1, total is that one line's total). B: two lines (itemCount 2,
-    // total is their sum) and NO label (the null branch). A is parked first, so its per-node number
-    // is 1 and B's is 2 — the order the list must come back in.
-    await parkOrder({ db }, cfg, {
-      id: idA,
-      lines: [{ productId: cafeId, quantity: "2" }],
-      label: "Mesa 4",
-    });
-    await parkOrder({ db }, cfg, {
-      id: idB,
-      lines: [
-        { productId: cafeId, quantity: "1" },
-        { productId: aguaId, quantity: "3" },
-      ],
-    });
+    // A: a single line (itemCount 1). B: two lines (itemCount 2) and NO label (the null branch). A is
+    // parked first, so its per-node number is 1 and B's is 2 — the order the list must come back in.
+    const linesA = [{ productId: cafeId, quantity: "2" }];
+    const linesB = [
+      { productId: cafeId, quantity: "1" },
+      { productId: aguaId, quantity: "3" },
+    ];
+    await parkOrder({ db }, cfg, { id: idA, lines: linesA, label: "Mesa 4" });
+    await parkOrder({ db }, cfg, { id: idB, lines: linesB });
+
+    // The Important review finding: the held `total` is the GROSS (VAT-inclusive) basket total the
+    // operator saw — `priceBasket(sameItems).total`, computed independently of the persisted column —
+    // NOT the summed net base. A: 1.50 × 2 = 3.00 gross (the old bug showed the net 2.48); B: 1.50 +
+    // 6.00 = 7.50. Both asserted as literals AND against the pricer, so the test fails if the held
+    // total ever reverts to net (2.48 ≠ 3.00) or if the pricer itself drifts.
+    const grossA = await grossBasketTotal(cfg, linesA);
+    const grossB = await grossBasketTotal(cfg, linesB);
+    expect(grossA).toBe("3.00");
+    expect(grossB).toBe("7.50");
 
     const a = await readOrder(idA);
     const b = await readOrder(idB);
-    const totalA = a.lineTotals[0]!; // one line, so the sum is that line's total verbatim
-    // Summed independently of the function under test (JS, not the same SQL) so the assertion
-    // validates the aggregate rather than restating it. Cent-magnitude 2dp values sum exactly here.
-    const totalB = b.lineTotals.reduce((sum, t) => sum + Number(t), 0).toFixed(2);
 
     const held = await listHeldOrders({ db }, cfg);
     expect(held).toEqual([
@@ -305,10 +329,10 @@ describe("listHeldOrders", () => {
         orderNumber: 1,
         label: "Mesa 4",
         itemCount: 1,
-        total: totalA,
+        total: grossA,
         openedAt: a.openedAt,
       },
-      { id: idB, orderNumber: 2, label: null, itemCount: 2, total: totalB, openedAt: b.openedAt },
+      { id: idB, orderNumber: 2, label: null, itemCount: 2, total: grossB, openedAt: b.openedAt },
     ]);
   });
 
@@ -413,13 +437,11 @@ describe("updateHeldOrder", () => {
 
     // A fresh basket in a deliberately different order (agua first) — proving the per-line product_id
     // zip is re-applied, the line_no is re-numbered from 1, and the total is re-priced authoritatively.
-    await updateHeldOrder({ db }, cfg, id, {
-      lines: [
-        { productId: aguaId, quantity: "1" },
-        { productId: cafeId, quantity: "1" },
-      ],
-      label: "Mesa 7",
-    });
+    const newLines = [
+      { productId: aguaId, quantity: "1" },
+      { productId: cafeId, quantity: "1" },
+    ];
+    await updateHeldOrder({ db }, cfg, id, { lines: newLines, label: "Mesa 7" });
 
     // order_number / node_id / till_id / tenant_id are untouched; only the label changed and the
     // status stays open (the update ran over the enforce_transition trigger, not around it).
@@ -444,15 +466,16 @@ describe("updateHeldOrder", () => {
     expect(lines[0]).toMatchObject({ lineNo: 1, productId: aguaId });
     expect(lines[1]).toMatchObject({ lineNo: 2, productId: cafeId });
 
-    // Re-priced: the new total differs from the parked one AND matches an independent JS sum of the
-    // replaced lines' persisted line_totals (the aggregate is validated, not restated).
+    // Re-priced: the new total differs from the parked one AND equals the GROSS basket total for the
+    // replaced lines (`priceBasket(newLines).total`, computed independently of the persisted column) —
+    // agua 2.00 + café 1.50 = 3.50 gross, where the parked cafe×2 was 3.00. Asserting against the
+    // gross pricer (not the summed line_total column) is what fails if the held total reverts to net.
+    const grossAfter = await grossBasketTotal(cfg, newLines);
+    expect(grossAfter).toBe("3.50");
     const [afterSummary] = await listHeldOrders({ db }, cfg);
-    const after = await readOrder(id);
     expect(afterSummary!.itemCount).toBe(2);
     expect(afterSummary!.total).not.toBe(beforeSummary!.total);
-    expect(afterSummary!.total).toBe(
-      after.lineTotals.reduce((sum, t) => sum + Number(t), 0).toFixed(2),
-    );
+    expect(afterSummary!.total).toBe(grossAfter);
   });
 
   it("clears the label to null when the update omits one — the whole request is the new state", async () => {

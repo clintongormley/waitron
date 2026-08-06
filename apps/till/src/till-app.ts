@@ -45,9 +45,9 @@ function displayQuantity(product: TillProduct, quantity: string): string {
  *  - boot → `getTill` sets the operator-UI locale, remembers the receipt (invoice) locale and the
  *    ticket issuer; the app opens on `lock`;
  *  - `logged-in` → load the products, remember the operator, show the `counter`;
- *  - `confirm-payment` → `recordSale` the basket, then show the `ticket` (or, on a rejected `{code}`,
- *    stay on the counter with the basket intact and surface a non-fatal error — a till must never
- *    lose a sale in progress);
+ *  - `confirm-payment` → `recordSale` the basket, then show the `ticket` and refresh the held list so
+ *    a settled parked order drops off (or, on a rejected `{code}`, stay on the counter with the basket
+ *    intact and surface a non-fatal error — a till must never lose a sale in progress);
  *  - `new-sale` → clear the basket, back to an empty `counter`;
  *  - `logout` → end the server session, back to `lock`, WITHOUT clearing the basket.
  *
@@ -92,9 +92,9 @@ export class TillApp extends LitElement {
   @state() private operatorName = "";
   /**
    * The node's OPEN parked orders (the cross-till held list), handed to the counter's held-orders
-   * widget. Refreshed from `listWorkingOrders` on entering the counter and after every park, retrieve
-   * and discard — the four moments the set changes — so a register always shows the current parked
-   * orders, including ones parked on a different register.
+   * widget. Refreshed from `listWorkingOrders` on entering the counter and after every park, retrieve,
+   * discard and successful pay — the moments the set changes — so a register always shows the current
+   * parked orders, including ones parked on a different register.
    */
   @state() private heldOrders: HeldOrderSummary[] = [];
   /** The filed sale to print; set on a successful `recordSale`, read by the ticket view. */
@@ -164,8 +164,9 @@ export class TillApp extends LitElement {
 
   /**
    * Reload the cross-till held-orders list from the server. Called on entering the counter and after
-   * every park/retrieve/discard, the moments the node's set of open parked orders changes. Only writes
-   * reactive state, so no `isConnected` guard is needed (see the app's DISCONNECT SAFETY note).
+   * every park/retrieve/discard and every successful pay, the moments the node's set of open parked
+   * orders changes. Only writes reactive state, so no `isConnected` guard is needed (see the app's
+   * DISCONNECT SAFETY note).
    */
   async #refreshHeldOrders(): Promise<void> {
     this.heldOrders = await this.api.listWorkingOrders();
@@ -199,6 +200,13 @@ export class TillApp extends LitElement {
       );
       this.ticketLines = lines;
       this.screen = "ticket";
+      // A settled PARKED order must drop off the cross-till held list immediately — mirror the
+      // park/retrieve/discard refresh (the four moments the node's open set changes). Without this a
+      // just-paid retrieved order lingers in the in-memory `heldOrders` and re-appears on the counter
+      // after "New sale" until the next park/retrieve/discard. Only on the success path; a walk-up
+      // simply re-reads an unchanged list. Self-heals even if it fails — a retrieve of the settled
+      // order 404s → `held.stale` → refresh — and cannot double-file (pay is idempotent, spec §3).
+      await this.#refreshHeldOrders();
     } catch {
       // A rejected {code} must not lose the sale in progress: stay on the counter, basket intact, and
       // surface a generic, non-fatal message — never the raw domain code.
