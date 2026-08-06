@@ -552,6 +552,35 @@ pre-production server's records leak into a production peer's series and burn nu
 Each is a *container experiment*, not a paragraph (`CLAUDE.md` §1). State the failing case before
 running each (§1's "a measurement where both answers look alike measures nothing").
 
+### Gate results — run 2026-08-06 (all pass; one design change)
+
+The nine gates below **ran** against real `postgres:18-alpine` (PostgreSQL 18.4) as a non-superuser,
+non-BYPASSRLS `app_login` role with the full migrations applied — receipts in
+[`2026-08-06-sync-container-gates-findings.md`](2026-08-06-sync-container-gates-findings.md). Every
+mechanism the chosen outbox path needs works **with no new privilege**: the capture trigger,
+echo-suppression (the `WHEN app.sync_apply` GUC clause, proven load-bearing by a control that
+re-captured the echo without it), byte-identical `to_jsonb`, the non-regressing watermark upsert,
+`ON CONFLICT DO NOTHING` idempotency, the `23503` fast-lane defer, and the environment handshake
+refusing a mismatched peer in both directions.
+
+**One design-changing finding.** `envios` and `acks` carry **no monotonic column**, so the row-level
+watermark guard (`WHERE excluded.updated_at > …`) cannot be written for them — their non-regression
+rests entirely on the subscriber's `seq` cursor never re-applying an older `seq`. That makes them
+**ineligible for the `payments` fast lane** (§3(3), §4): they must ride the single ordered lane. **The
+enrolment registry (§6) must encode this as a routing rule** — the refinement is deferred to the
+build, recorded here so it is not lost.
+
+**Two corrections to the gate premises below.** Gate 2's "a stray direct UPDATE still trips WT001"
+holds only for the table **owner**; the `app_login` role is stopped first by `42501` (no UPDATE
+grant), and WT001 is the owner-level backstop. And (build-time) these gates granted `sync_log` SELECT
+to `app_user` for read-back, whereas the design wants a dedicated **tailer role** to hold SELECT (the
+app role INSERT-only) — settle at build time.
+
+**Gate 6 (native decoding) stays N/A even for the §7 backfill:** a non-superuser can drain a
+`pgoutput` slot only with the cluster-wide `REPLICATION` attribute (which also opens a base-backup
+reach), and `pg_create_subscription` is insufficient — confirming §3(a)'s concern. Native decoding is
+out unless `REPLICATION` is later judged acceptable.
+
 1. **The generic capture trigger under FORCE RLS, with echo suppression.** Prove the `AFTER
    INSERT/UPDATE` trigger writes a byte-identical `sync_log` row as `app_user` (huella/amount `text`
    preserved through `to_jsonb`), and that the `WHEN (current_setting('app.sync_apply', true) is
