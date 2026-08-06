@@ -61,6 +61,51 @@ describe("computeDailyClose", () => {
     expect(day5.cash.tenderTotal).toBe("121.00");
   });
 
+  // PGlite suffices here, same as the rest of this suite: the anchors are deterministic
+  // arithmetic over immutable rows (businessDayClause's `AT TIME ZONE` computation), with no
+  // RLS-as-non-superuser or concurrency behaviour to exercise — no Testcontainers needed.
+  it("Mode-I straddling the day_cutover: VAT on the placing day, cash on the settlement day", async () => {
+    // Both instants fall on the SAME UTC (and Madrid-local) calendar date, 2026-08-05, only an
+    // hour apart — chosen so a wrong anchor (e.g. cash landing on D1, or VAT on D2) would visibly
+    // fail, unlike two instants a full day apart where a timezone bug could still coincidentally
+    // agree.
+    //   issued  2026-08-05T02:30:00.000Z = 04:30 Europe/Madrid (CEST, +02:00) — BEFORE the 05:00
+    //     cutover, so businessDayClause's `(local - cutover)::date` rolls back to 2026-08-04.
+    //   settled 2026-08-05T03:30:00.000Z = 05:30 Europe/Madrid — AFTER the cutover, so the date
+    //     stays 2026-08-05.
+    // (The brief's draft instants dated the issuance "2026-08-04T02:30:00.000Z"; run RED against
+    // businessDayClause and that lands issuance on business day 2026-08-03, not 2026-08-04, because
+    // subtracting the cutover from a pre-cutover local time always rolls back a calendar day from
+    // whatever date the local wall clock reads. Shifting the issuance instant one day later, to
+    // 2026-08-05T02:30:00.000Z, is what actually pins D1 = 2026-08-04 / D2 = 2026-08-05.)
+    const issued = "2026-08-05T02:30:00.000Z";
+    const settled = "2026-08-05T03:30:00.000Z";
+    const saleId = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: issued,
+      total: "121.00",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+    });
+    await seedTender(
+      suite.db,
+      { tenantId: venue.tenantId, saleId },
+      { method: "card", amount: "121.00", settledAt: settled },
+    );
+
+    const day4 = await run(
+      input({ businessDay: "2026-08-04", dayCutover: "05:00", timeZone: "Europe/Madrid" }),
+    );
+    expect(day4.vat.byRate).toEqual([{ rate: "21.00", base: "100.00", tax: "21.00" }]); // VAT on the placing day
+    expect(day4.cash.byTill).toEqual([]); // no cash yet — not settled until D2
+
+    const day5 = await run(
+      input({ businessDay: "2026-08-05", dayCutover: "05:00", timeZone: "Europe/Madrid" }),
+    );
+    expect(day5.vat.byRate).toEqual([]); // no VAT on the settlement day — it was already booked on D1
+    expect(day5.cash.byTill).toHaveLength(1); // the cash lands here
+    expect(day5.cash.tenderTotal).toBe("121.00");
+  });
+
   it("assembles all three sections and echoes the request identity", async () => {
     const issued = new Date("2026-08-04T10:00:00Z").toISOString();
     const saleId = await seedSale(suite.db, venue, {
