@@ -10,7 +10,8 @@ import "../widgets/basket.js";
 import "../widgets/total.js";
 import "../widgets/tender-pay.js";
 import "../widgets/held-orders.js";
-import type { HeldOrderSummary, TillProduct } from "../api/client.js";
+import "../widgets/prep-queue.js";
+import type { HeldOrderSummary, PrepQueueEntry, TillProduct } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 
 /**
@@ -104,6 +105,12 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) products: TillProduct[] = [];
   /** The node's open parked orders, handed to the held-orders list (the app owns and refreshes them). */
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
+  /**
+   * This node's active prep-queue entries (7c prepare & collect), handed to the prep-queue widget
+   * (the app owns and refreshes them — see `till-prep-queue`'s own doc). Defaults empty so a layout
+   * that includes `prep-queue` renders its empty state until the app wires a live refresh.
+   */
+  @property({ attribute: false }) prepQueue: PrepQueueEntry[] = [];
   /** The logged-in operator's display name, shown in the header. Data, never translated. */
   @property() operatorName = "";
   /**
@@ -140,6 +147,8 @@ export class TillCounterScreen extends LitElement {
         return html`<till-tender-pay .store=${this.store} .busy=${this.busy}></till-tender-pay>`;
       case "held-orders":
         return html`<till-held-orders .orders=${this.heldOrders}></till-held-orders>`;
+      case "prep-queue":
+        return html`<till-prep-queue .entries=${this.prepQueue}></till-prep-queue>`;
     }
   }
 

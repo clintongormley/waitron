@@ -11,7 +11,8 @@
  */
 
 /** The widgets the counter can place. Each maps to one custom element in the screen's registry. */
-export type WidgetType = "product-grid" | "basket" | "total" | "tender-pay" | "held-orders";
+export type WidgetType =
+  "product-grid" | "basket" | "total" | "tender-pay" | "held-orders" | "prep-queue";
 
 /** One placed widget: which widget, which region it sits in, and its (slice-1-empty) config bag. */
 export interface WidgetInstance {
@@ -25,9 +26,10 @@ export type LayoutDef = WidgetInstance[];
 
 /**
  * Layout A — the walk-up-sale arrangement slice 1 ships: the product grid fills `main` (the left),
- * with the basket, total, pay flow and the held-orders list stacked in `aside` (the right). The
- * held-orders list sits at the foot of the aside — the sale flow (basket → total → pay) stays on top,
- * with the cross-till parked orders below it.
+ * with the basket, total, pay flow, the held-orders list and the prep queue stacked in `aside` (the
+ * right). The held-orders list sits at the foot of the sale flow (basket → total → pay), with the
+ * cross-till parked orders below it; the prep queue (7c prepare & collect) sits below that — the
+ * kitchen-facing view is the last thing in the stack, after every order-taking control.
  */
 export const LAYOUT_A: LayoutDef = [
   { type: "product-grid", region: "main", config: {} },
@@ -35,4 +37,5 @@ export const LAYOUT_A: LayoutDef = [
   { type: "total", region: "aside", config: {} },
   { type: "tender-pay", region: "aside", config: {} },
   { type: "held-orders", region: "aside", config: {} },
+  { type: "prep-queue", region: "aside", config: {} },
 ];

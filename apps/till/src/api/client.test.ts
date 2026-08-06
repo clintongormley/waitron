@@ -289,4 +289,166 @@ describe("TillApi", () => {
       code: "working_order.not_found",
     });
   });
+
+  it("placeOrder POSTs to the addressed order's /place route with no body, returning the result", async () => {
+    const result = {
+      id: "wo1",
+      status: "placed",
+      invoiceNumber: "A/1",
+      issuedAt: "2026-08-06T10:00:00.000Z",
+      total: "1.50",
+      qr: "x",
+      vatBreakdown: [{ rate: "21", base: "1.24", tax: "0.26" }],
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(result));
+
+    const r = await new TillApi("", fetchStub).placeOrder("wo1");
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/wo1/place",
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    );
+    // A no-body POST carries neither a request body nor a content-type header.
+    const init = fetchStub.mock.calls[0]![1] as RequestInit;
+    expect(init.body).toBeUndefined();
+    expect(init.headers).toBeUndefined();
+    expect(r).toEqual(result);
+  });
+
+  it("placeOrder surfaces { code } for a non-open order", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "working_order.not_open" } }), {
+        status: 409,
+      }),
+    );
+
+    await expect(new TillApi("", fetchStub).placeOrder("wo1")).rejects.toMatchObject({
+      code: "working_order.not_open",
+    });
+  });
+
+  it("collectOrder POSTs the tender to the addressed order's /collect route, returning the ticket", async () => {
+    const ticket = {
+      invoiceNumber: "A/1",
+      issuedAt: "2026-08-06T10:00:00.000Z",
+      total: "1.50",
+      vatBreakdown: [],
+      change: "0.00",
+      qr: "x",
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(ticket));
+
+    const r = await new TillApi("", fetchStub).collectOrder("wo1", {
+      method: "cash",
+      amount: "1.50",
+    });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/wo1/collect",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tender: { method: "cash", amount: "1.50" } }),
+      }),
+    );
+    expect(r).toEqual(ticket);
+  });
+
+  it("advancePrep POSTs { to } to the addressed order's /prep route (empty 200 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(
+      new TillApi("", fetchStub).advancePrep("wo1", "preparing"),
+    ).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/wo1/prep",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ to: "preparing" }),
+      }),
+    );
+  });
+
+  it("advancePrep surfaces { code } for an illegal transition", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "order_prep.invalid_transition" } }), {
+        status: 409,
+      }),
+    );
+
+    await expect(new TillApi("", fetchStub).advancePrep("wo1", "ready")).rejects.toMatchObject({
+      code: "order_prep.invalid_transition",
+    });
+  });
+
+  it("sendToPrep POSTs an empty object (no `to`) to the addressed order's /prep route", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(new TillApi("", fetchStub).sendToPrep("wo1")).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/wo1/prep",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+    );
+  });
+
+  it("cancelOrder POSTs the reason to the addressed order's /cancel route (empty 200 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(
+      new TillApi("", fetchStub).cancelOrder("wo1", "Cliente cambió de idea"),
+    ).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/wo1/cancel",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason: "Cliente cambió de idea" }),
+      }),
+    );
+  });
+
+  it("cancelOrder surfaces { code } for a blank reason", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "working_order.reason_required" } }), {
+        status: 400,
+      }),
+    );
+
+    await expect(new TillApi("", fetchStub).cancelOrder("wo1", "")).rejects.toMatchObject({
+      code: "working_order.reason_required",
+    });
+  });
+
+  it("listPrepQueue GETs the node-scoped prep queue", async () => {
+    const queue = [
+      {
+        id: "wo1",
+        orderNumber: 7,
+        label: "Mesa 4",
+        state: "queued",
+        queuedAt: "2026-08-06T10:00:00.000Z",
+      },
+    ];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(queue));
+
+    const r = await new TillApi("", fetchStub).listPrepQueue();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/prep-queue",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual(queue);
+  });
 });

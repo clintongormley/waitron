@@ -120,6 +120,54 @@ export interface HeldOrder {
   lines: SaleLine[];
 }
 
+/**
+ * The per-location pay-timing / service mode (7c prepare & collect, design §3). Mirrors the server's
+ * `OrderFlow` (`apps/server/src/till-config.ts`, derived from `@waitron/db`'s `order_flow` enum) as a
+ * LOCAL copy — same decoupling rationale as every other type in this file. `prepay` (Mode P) pays at
+ * order, today's walk-up flow; `invoice_first` (Mode I) and `ticket_then_pay` (Mode T) place the order
+ * first and collect payment later.
+ */
+export type OrderFlow = "prepay" | "invoice_first" | "ticket_then_pay";
+
+/**
+ * One order's kitchen-prep state (7c, design §5). Mirrors the server's `PrepState`
+ * (`apps/server/src/working-order.ts`, derived from `@waitron/db`'s `prep_state` enum). An order
+ * enters at `queued` (placing, for Modes I/T, or `sendToPrep` for Mode P) and advances one step at a
+ * time; `collected` never appears in `GET /api/prep-queue` (see {@link PrepQueueEntry}).
+ */
+export type PrepState = "queued" | "preparing" | "ready" | "collected";
+
+/**
+ * `POST /api/working-orders/:id/place` success (7c). `open → placed`: Mode I files a deferred
+ * invoice HERE and returns its number; Modes T and P (the latter never reaches this route) file
+ * nothing at placing, so every field past `id`/`status` is present only for Mode I. Mirrors the
+ * server's `PlaceOrderResult`.
+ */
+export interface PlaceOrderResult {
+  id: string;
+  status: "placed" | "settled";
+  invoiceNumber?: string;
+  issuedAt?: string;
+  total?: string;
+  qr?: string;
+  vatBreakdown?: VatBreakdownEntry[];
+}
+
+/**
+ * One row of `GET /api/prep-queue` (7c) — an order still ACTIVE in prep on this node (queued,
+ * preparing or ready). `collected` orders never appear: `listPrepQueue` excludes them server-side, so
+ * an order drops off the till's queue the moment its last advance lands. Mirrors the server's
+ * `PrepQueueEntry`; `queuedAt` is when the order FIRST entered prep, not when it reached its current
+ * `state`.
+ */
+export interface PrepQueueEntry {
+  id: string;
+  orderNumber: number;
+  label: string | null;
+  state: PrepState;
+  queuedAt: string;
+}
+
 export class TillApi {
   readonly #baseUrl: string;
   readonly #fetchImpl: FetchLike;
@@ -206,6 +254,67 @@ export class TillApi {
    */
   async abandonWorkingOrder(id: string): Promise<void> {
     await this.#request<void>(`/api/working-orders/${id}`, "DELETE");
+  }
+
+  /**
+   * Place a working order (7c, design §3) → `POST /api/working-orders/:id/place`. `open → placed`:
+   * freezes the order's composition and opens its amendment log; for Mode I also files a deferred
+   * (unpaid) chained invoice and returns its number, issue time, total, QR and VAT breakdown. A
+   * non-open id (already placed/settled/abandoned, or absent/foreign — RLS hides it) rejects with
+   * `{ code: "working_order.not_open" }`.
+   */
+  placeOrder(id: string): Promise<PlaceOrderResult> {
+    return this.#request<PlaceOrderResult>(`/api/working-orders/${id}/place`, "POST");
+  }
+
+  /**
+   * Collect and finalise a PLACED order (7c) → `POST /api/working-orders/:id/collect`. Mode I settles
+   * the already-issued deferred invoice with `tender`; Mode T files `recordSale` immediate from the
+   * order's stored (locked) lines — never a client basket. Returns the same ticket payload
+   * {@link recordSale} does. A non-placed id (still open, already settled and not idempotently
+   * replayable in a new way, or absent/foreign) rejects with `{ code: "working_order.not_placed" }`.
+   */
+  collectOrder(id: string, tender: Tender): Promise<TillSaleResult> {
+    return this.#request<TillSaleResult>(`/api/working-orders/${id}/collect`, "POST", { tender });
+  }
+
+  /**
+   * Advance an order's prep state one step (7c, design §5) → `POST /api/working-orders/:id/prep` with
+   * `{ to }`. Only the NEXT state in `queued → preparing → ready → collected` is legal; any other
+   * target (or an id with no active prep row) rejects with `{ code: "order_prep.invalid_transition" }`.
+   * The server answers an empty 200; re-read `listPrepQueue` for the new state.
+   */
+  async advancePrep(id: string, to: PrepState): Promise<void> {
+    await this.#request<void>(`/api/working-orders/${id}/prep`, "POST", { to });
+  }
+
+  /**
+   * Enqueue a SETTLED order into the node's prep queue at `queued` (7c, design §5) → the same
+   * `POST /api/working-orders/:id/prep` route as {@link advancePrep}, with no `to` — the Mode-P
+   * pickup for an order that pays at order and so never places (Modes I/T enqueue automatically when
+   * `placeOrder` runs). A non-settled or already-queued id rejects `{ code: "order_prep.invalid_transition" }`.
+   */
+  async sendToPrep(id: string): Promise<void> {
+    await this.#request<void>(`/api/working-orders/${id}/prep`, "POST", {});
+  }
+
+  /**
+   * Cancel a PLACED order (7c, spec §4) → `POST /api/working-orders/:id/cancel`. `placed → abandoned`,
+   * appending a logged `order_cancelled` amendment carrying `reason` — the accountable content, so an
+   * absent/blank reason rejects `{ code: "working_order.reason_required" }` before any transition. A
+   * non-placed or absent/foreign id rejects `{ code: "working_order.not_placed" }`.
+   */
+  async cancelOrder(id: string, reason: string): Promise<void> {
+    await this.#request<void>(`/api/working-orders/${id}/cancel`, "POST", { reason });
+  }
+
+  /**
+   * The node-scoped prep queue (7c, design §5) → `GET /api/prep-queue`. Every order still active in
+   * prep on this node (queued/preparing/ready), oldest first; a collected order has already dropped
+   * off (see {@link PrepQueueEntry}).
+   */
+  listPrepQueue(): Promise<PrepQueueEntry[]> {
+    return this.#request<PrepQueueEntry[]>("/api/prep-queue", "GET");
   }
 
   /**

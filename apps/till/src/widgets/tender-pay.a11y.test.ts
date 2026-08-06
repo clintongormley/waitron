@@ -67,4 +67,26 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });
+
+  it("has no violations in the idle Place view (Modes I/T, order stage)", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { host } = await mountWidget<TillTenderPay>(
+      "till-tender-pay",
+      { store, mode: "invoice_first", stage: "order" },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations in the idle Collect view (Modes I/T, collect stage)", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { host } = await mountWidget<TillTenderPay>(
+      "till-tender-pay",
+      { store, mode: "ticket_then_pay", stage: "collect" },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
 });

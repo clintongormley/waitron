@@ -6,7 +6,7 @@ import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import "./numeric-pad.js";
 import { StoreChangeController } from "../state/store-controller.js";
-import type { TillProduct } from "../api/client.js";
+import type { OrderFlow, TillProduct } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 
 /**
@@ -30,14 +30,16 @@ export interface ParkOrderDetail {
 const ZERO = decimal("0");
 
 /**
- * One widget, five views: the idle Pay/Card/Hold buttons, the cash-tender screen, the kg-weight
- * screen, the hold label prompt, and the card-tender screen.
+ * One widget, five VIEWS: the idle buttons, the cash-tender screen, the kg-weight screen, the hold
+ * label prompt, and the card-tender screen. Named `View` (not `Mode`) to keep it distinct from the
+ * {@link TillTenderPay.mode} property below, which is the per-VENUE pay-timing mode (7c) — an
+ * unrelated axis the widget also renders against.
  */
-type Mode = "idle" | "paying" | "weighing" | "holding" | "card";
+type View = "idle" | "paying" | "weighing" | "holding" | "card";
 
 /**
  * The pay flow and the kg-weight entry — the two moments the walk-up sale needs a numeric keypad.
- * It owns a small mode state (idle → paying / weighing / holding / card → idle) and renders exactly
+ * It owns a small view state (idle → paying / weighing / holding / card → idle) and renders exactly
  * one view at a time, sharing the `till-numeric-pad` between the cash and weight screens.
  *
  * It coordinates only through the store (spec §3): it subscribes to `"changed"` so the Pay button's
@@ -46,12 +48,26 @@ type Mode = "idle" | "paying" | "weighing" | "holding" | "card";
  *
  * MONEY DISCIPLINE. Every amount is an `@waitron/shared` Decimal, never a float, and both tenders
  * read the store's previewed total, so the number the operator settles against is the same one the
- * server re-prices and files. The two tenders diverge in what `confirm-payment` carries: for cash
+ * server re-prices and files. The two tenders diverge in what the terminal event carries: for cash
  * (`#confirm`), `amount` is the operator-entered tendered amount, never the total — the displayed
  * change is `tendered − total` by decimal subtraction, and the server records the fiscal tender at
  * the total and returns the change. For card (`#confirmCard`), there is no operator entry to tender
  * against; `amount` is `this.store.total` itself, since a card is charged the exact total and there
  * is no change.
+ *
+ * PER-MODE CONTROL (7c prepare & collect, design §3). {@link mode} names the location's pay-timing
+ * config and {@link stage} names where in that order's life this widget instance sits; together they
+ * pick which idle control renders:
+ *  - `mode === "prepay"` (Mode P, the default): the walk-up flow above, unchanged — Pay/Card/Hold,
+ *    `stage` is irrelevant (a prepay sale is always settled at order).
+ *  - `mode !== "prepay"` (Modes I/T) at `stage === "order"`: no tender is collected here — placing
+ *    freezes composition (and, for Mode I, issues a deferred invoice) but a walk-up basket is not
+ *    filed against a tender YET — so only Place and Hold are offered. Place emits `place-order`.
+ *  - `mode !== "prepay"` at `stage === "collect"`: the order is already placed (Mode I already
+ *    invoiced); this is where the tender is finally collected. The SAME cash/card screens Mode P
+ *    uses (keypad, change, the optional card ref field) are reused — only their idle button's label
+ *    and their terminal event's name differ: `collect-order` instead of `confirm-payment` (see
+ *    `#confirm`/`#confirmCard`). No Hold (a placed order is not something you park again).
  */
 @customElement("till-tender-pay")
 export class TillTenderPay extends LitElement {
@@ -135,15 +151,28 @@ export class TillTenderPay extends LitElement {
    * `confirm-payment` regardless of this state.
    */
   @property({ type: Boolean }) busy = false;
+  /**
+   * The location's pay-timing mode (7c, design §3) — `"prepay"` (Mode P, pay at order, the default
+   * that reproduces 7a/7b's walk-up flow unchanged) or `"invoice_first"` / `"ticket_then_pay"`
+   * (Modes I/T, place then collect). See the class doc's PER-MODE CONTROL section for exactly which
+   * idle control each combination of `mode`/`stage` renders.
+   */
+  @property() mode: OrderFlow = "prepay";
+  /**
+   * Where in a Mode-I/T order's life this widget instance sits: `"order"` (composing/placing, the
+   * default) or `"collect"` (the order is already placed; this instance collects its tender).
+   * Ignored entirely when {@link mode} is `"prepay"` — a prepay sale has no separate collect stage.
+   */
+  @property() stage: "order" | "collect" = "order";
 
-  @state() private mode: Mode = "idle";
+  @state() private view: View = "idle";
   /** The digits the keypad has entered — a partial number string shared by both keypad screens. */
   @state() private entry = "";
-  /** The free-text order name typed into the hold prompt; set only while {@link mode} is `"holding"`. */
+  /** The free-text order name typed into the hold prompt; set only while {@link view} is `"holding"`. */
   @state() private labelEntry = "";
   /** The optional bank-terminal operation number typed on the card screen; set only while `"card"`. */
   @state() private refEntry = "";
-  /** The weight product awaiting a kg entry; set only while {@link mode} is `"weighing"`. */
+  /** The weight product awaiting a kg entry; set only while {@link view} is `"weighing"`. */
   @state() private selected?: TillProduct;
 
   constructor() {
@@ -165,7 +194,7 @@ export class TillTenderPay extends LitElement {
     if (product.pricingUnit !== "weight") return;
     this.selected = product;
     this.entry = "";
-    this.mode = "weighing";
+    this.view = "weighing";
   }
 
   /**
@@ -185,19 +214,29 @@ export class TillTenderPay extends LitElement {
 
   #startPaying(): void {
     this.entry = "";
-    this.mode = "paying";
+    this.view = "paying";
   }
 
   /** Open the hold label prompt with an empty field — the operator may name the order or leave it blank. */
   #startHolding(): void {
     this.labelEntry = "";
-    this.mode = "holding";
+    this.view = "holding";
   }
 
   /** Open the card-tender screen with an empty operation-number field (the field is optional). */
   #startCard(): void {
     this.refEntry = "";
-    this.mode = "card";
+    this.view = "card";
+  }
+
+  /**
+   * Place the order (Modes I/T at the order stage, 7c): freezes composition (and, for Mode I, issues
+   * a deferred invoice) with NO tender collected here — a fire-and-forget trigger, unlike Pay/Collect,
+   * so it carries no detail. The app reads `store.id` itself, the same way `#park` leaves the id
+   * implicit.
+   */
+  #place(): void {
+    this.dispatchEvent(new CustomEvent("place-order", { bubbles: true, composed: true }));
   }
 
   #onLabelChange(event: Event): void {
@@ -213,13 +252,13 @@ export class TillTenderPay extends LitElement {
   /**
    * Emit `park-order` with the (optional) label and return to idle. The app parks the basket and clears
    * it on success; a blank/whitespace-only field parks the order UNNAMED (`label` undefined), matching
-   * the store's optional label. The mode and label are reset BEFORE the dispatch (unlike `#confirm`,
+   * the store's optional label. The view and label are reset BEFORE the dispatch (unlike `#confirm`,
    * which resets after), so the view is back to idle regardless of what the handler does next — even a
    * synchronous listener that throws leaves the widget idle.
    */
   #park(): void {
     const label = this.labelEntry.trim();
-    this.mode = "idle";
+    this.view = "idle";
     this.labelEntry = "";
     this.dispatchEvent(
       new CustomEvent<ParkOrderDetail>("park-order", {
@@ -232,16 +271,26 @@ export class TillTenderPay extends LitElement {
 
   /**
    * Abandon the cash, weigh, or hold-label screen and return to idle WITHOUT settling anything — no
-   * `confirm-payment`, no `park-order`, no line added. It is the way back from any of those modes for an
-   * operator who opened Pay/Hold (or picked a weight tile) by mistake; without it those modes are
-   * one-way. The basket is left exactly as it was.
+   * terminal tender event, no `park-order`, no line added. It is the way back from any of those views
+   * for an operator who opened Pay/Collect/Hold (or picked a weight tile) by mistake; without it those
+   * views are one-way. The basket is left exactly as it was.
    */
   #cancel(): void {
     this.selected = undefined;
     this.entry = "";
     this.labelEntry = "";
     this.refEntry = "";
-    this.mode = "idle";
+    this.view = "idle";
+  }
+
+  /**
+   * The terminal tender event's NAME (7c, design §3): Mode P's cash/card screens settle a fresh sale
+   * (`confirm-payment`, the app's `recordSale`); Modes I/T's collect-stage screens settle an already
+   * PLACED order instead (`collect-order`, the app's `collectOrder`) — same screens, same detail
+   * shape, different verb because a different server route answers it.
+   */
+  #tenderEventName(): "confirm-payment" | "collect-order" {
+    return this.mode === "prepay" ? "confirm-payment" : "collect-order";
   }
 
   /** Emit the cash tender and return to idle. Guarded so a short tender can never be emitted, even
@@ -249,13 +298,13 @@ export class TillTenderPay extends LitElement {
   #confirm(): void {
     if (compareDecimal(this.#enteredDecimal(), this.store.total) < 0) return;
     this.dispatchEvent(
-      new CustomEvent<ConfirmPaymentDetail>("confirm-payment", {
+      new CustomEvent<ConfirmPaymentDetail>(this.#tenderEventName(), {
         detail: { method: "cash", amount: this.#enteredDecimal() },
         bubbles: true,
         composed: true,
       }),
     );
-    this.mode = "idle";
+    this.view = "idle";
     this.entry = "";
   }
 
@@ -263,7 +312,7 @@ export class TillTenderPay extends LitElement {
    * Emit the card tender at the sale total and return to idle. A card is charged the exact total, so
    * `amount` is `this.store.total` (not an operator entry) and there is no change. `externalRef` — the
    * bank terminal's operation number — rides along only when the operator keyed one; a blank or
-   * whitespace-only field is omitted. The mode and field are reset BEFORE the dispatch (like `#park`,
+   * whitespace-only field is omitted. The view and field are reset BEFORE the dispatch (like `#park`,
    * per the 7b Copilot fix), so a synchronous listener that throws still leaves the widget idle.
    */
   #confirmCard(): void {
@@ -273,10 +322,10 @@ export class TillTenderPay extends LitElement {
       amount: this.store.total,
       ...(ref === "" ? {} : { externalRef: ref }),
     };
-    this.mode = "idle";
+    this.view = "idle";
     this.refEntry = "";
     this.dispatchEvent(
-      new CustomEvent<ConfirmPaymentDetail>("confirm-payment", {
+      new CustomEvent<ConfirmPaymentDetail>(this.#tenderEventName(), {
         detail,
         bubbles: true,
         composed: true,
@@ -286,18 +335,18 @@ export class TillTenderPay extends LitElement {
 
   /**
    * Ring up the weighed line and return to idle. Guarded so a zero/empty weight is a no-op, and
-   * single-flight so two rapid clicks before Lit re-renders ring the line ONCE: the mode is flipped to
-   * `"idle"` BEFORE `addProduct`, so the second synchronous call sees `mode !== "weighing"` and
+   * single-flight so two rapid clicks before Lit re-renders ring the line ONCE: the view is flipped to
+   * `"idle"` BEFORE `addProduct`, so the second synchronous call sees `view !== "weighing"` and
    * returns. (The click handler captures `product` from the render closure, so it would otherwise fire
    * again against a stale button.)
    */
   #addWeight(product: TillProduct): void {
-    if (this.mode !== "weighing") return;
+    if (this.view !== "weighing") return;
     const kg = this.#enteredDecimal();
     if (compareDecimal(kg, ZERO) <= 0) return;
     this.selected = undefined;
     this.entry = "";
-    this.mode = "idle";
+    this.view = "idle";
     this.store.addProduct(product, kg);
   }
 
@@ -307,18 +356,87 @@ export class TillTenderPay extends LitElement {
   }
 
   override render() {
-    if (this.mode === "paying") return this.#renderPaying();
-    if (this.mode === "weighing") return this.#renderWeighing();
-    if (this.mode === "holding") return this.#renderHolding();
-    if (this.mode === "card") return this.#renderCard();
+    if (this.view === "paying") return this.#renderPaying();
+    if (this.view === "weighing") return this.#renderWeighing();
+    if (this.view === "holding") return this.#renderHolding();
+    if (this.view === "card") return this.#renderCard();
     return this.#renderIdle();
   }
 
   #renderIdle() {
+    // Every idle control shares the same gate — a non-empty basket and no sale in flight.
+    const disabled = this.store.lineCount === 0 || this.busy;
+    if (this.mode !== "prepay" && this.stage === "order") return this.#renderIdlePlace(disabled);
+    if (this.mode !== "prepay" && this.stage === "collect")
+      return this.#renderIdleCollect(disabled);
+    return this.#renderIdlePay(disabled);
+  }
+
+  /**
+   * Modes I/T at the order stage (7c): no tender is collected here (design §3) — Place freezes
+   * composition (and, for Mode I, issues a deferred invoice); Hold still parks the basket unplaced.
+   */
+  #renderIdlePlace(disabled: boolean) {
+    return html`
+      <div class="actions">
+        <wt-button
+          class="place"
+          variant="primary"
+          size="lg"
+          ?disabled=${disabled}
+          @click=${() => this.#place()}
+        >
+          ${t("action.place")}
+        </wt-button>
+        <wt-button
+          class="hold"
+          variant="secondary"
+          size="lg"
+          ?disabled=${disabled}
+          @click=${() => this.#startHolding()}
+        >
+          ${t("action.hold")}
+        </wt-button>
+      </div>
+    `;
+  }
+
+  /**
+   * Modes I/T at the collect stage (7c): the order is already placed, so this collects its tender —
+   * reusing the SAME cash/card screens Mode P's Pay/Card open (`#startPaying`/`#startCard`); only the
+   * cash button's label changes (Collect, not Pay) and the terminal Confirm emits `collect-order`
+   * (see `#tenderEventName`). No Hold — a placed order is not parked again.
+   */
+  #renderIdleCollect(disabled: boolean) {
+    return html`
+      <div class="actions">
+        <wt-button
+          class="pay"
+          variant="primary"
+          size="lg"
+          ?disabled=${disabled}
+          @click=${() => this.#startPaying()}
+        >
+          ${t("action.collect")}
+        </wt-button>
+        <wt-button
+          class="pay-card"
+          variant="primary"
+          size="lg"
+          ?disabled=${disabled}
+          @click=${() => this.#startCard()}
+        >
+          ${t("tender.card")}
+        </wt-button>
+      </div>
+    `;
+  }
+
+  /** Mode P (prepay, the default): pay at order, unchanged from 7a/7b. */
+  #renderIdlePay(disabled: boolean) {
     // Pay, Card and Hold share the same gate — all need a non-empty basket and no sale in flight. Pay
     // (cash) and Card are the two tender options; Hold is secondary (parking is the lesser action).
     // All size "lg" like Pay so every one clears the 44px POS touch minimum.
-    const disabled = this.store.lineCount === 0 || this.busy;
     return html`
       <div class="actions">
         <wt-button
@@ -453,7 +571,7 @@ export class TillTenderPay extends LitElement {
   }
 
   #renderWeighing() {
-    // `mode === "weighing"` is only ever entered with a product set (see #onProductSelected), so
+    // `view === "weighing"` is only ever entered with a product set (see #onProductSelected), so
     // `selected` is defined here — asserting it keeps a dead, uncoverable runtime guard out.
     const product = this.selected as TillProduct;
     const invalid = compareDecimal(this.#enteredDecimal(), ZERO) <= 0;
