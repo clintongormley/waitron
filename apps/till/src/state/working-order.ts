@@ -14,9 +14,13 @@
  * would break the browser bundle; `pricing.ts` in isolation depends only on `@waitron/shared` (its
  * `@waitron/core`/`@waitron/fiscal` imports are `import type`, erased at build). `@waitron/catalogue`
  * has no `exports` map, so the deep subpath resolves, and Vite bundles only `pricing.ts` +
- * `@waitron/shared`. Using the real pricer — not a reimplementation — is what guarantees the preview
- * equals the total the server re-prices and files at pay time; they cannot drift because they are the
- * same function.
+ * `@waitron/shared`. Using the real pricer — not a reimplementation — is what keeps the preview equal
+ * to the total the server re-prices at pay time ON THE WALK-UP PATH: there both sides run the same
+ * `priceBasket` over the same live catalogue, so they cannot drift. It is NOT a guarantee for a
+ * PLACED or RETRIEVED order (7c): the server files those from `priceLockedLines` over the ADD-TIME
+ * lock (`working_order_lines.unit_price_gross`) while this preview reprices the CURRENT catalogue, so
+ * the two DIVERGE if the catalogue price changed between add and pay — the deliberate line-add
+ * snapshot, not a bug.
  */
 import { priceBasket } from "@waitron/catalogue/src/pricing.js";
 import type { Decimal } from "@waitron/shared";

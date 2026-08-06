@@ -296,9 +296,12 @@ declare module "@waitron/shared" {
      * forcing a reason on `order_cancelled` (that column is nullable, null being the genesis
      * `order_placed`'s legitimate value — see the schema comment), so nothing but this guard stops a
      * reasonless cancel from writing an accountability-empty entry. Its OWN code, deliberately NOT
-     * `working_order.not_placed`: at the point this fires the order genuinely IS placed, so reporting
-     * "not placed" would be a false label (CLAUDE.md §1). Carried through 7c's carry-forward from
-     * Task 3's review, which required the reason-non-null contract be enforced by the app.
+     * `working_order.not_placed`: this guard fires BEFORE the order is locked and its status read
+     * (`cancelPlacedOrder` checks the reason first), so the order's state is unknown at this point — it
+     * may be open, settled, abandoned or absent. A missing reason is a client/request-shape error
+     * independent of that state, so `not_placed` would mislabel it as a state conflict (CLAUDE.md §1).
+     * Carried through 7c's carry-forward from Task 3's review, which required the reason-non-null
+     * contract be enforced by the app.
      *
      * A client error (the request omitted a required field), distinct from `not_placed`'s state
      * conflict — a 400 to that code's 409, mapped in the route layer (Task 8+). `workingOrderId` is

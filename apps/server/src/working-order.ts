@@ -650,8 +650,10 @@ export async function placeOrder(
  * on `order_cancelled`, so this guard is the ONLY thing stopping a reasonless cancel from writing an
  * accountability-empty entry (art. 29.2.j — the reason is the contestable content; 7c carry-forward
  * from Task 3's review). An absent, empty or whitespace-only reason is refused with
- * `working_order.reason_required` — deliberately its OWN code, not `working_order.not_placed`: at this
- * point the order genuinely IS placed, so reporting "not placed" would be a false label (CLAUDE.md §1).
+ * `working_order.reason_required` — deliberately its OWN code, not `working_order.not_placed`: this
+ * guard runs BEFORE the order is locked and its status read, so the order's state is unknown here (it
+ * may be open, settled, abandoned or absent). A missing reason is a client/request-shape error
+ * independent of that state, so `not_placed` would mislabel it as a state conflict (CLAUDE.md §1).
  * The guard runs BEFORE any database work, so a reasonless cancel neither transitions the order nor
  * touches the log.
  *
@@ -674,7 +676,8 @@ export async function cancelPlacedOrder(
 ): Promise<void> {
   // Refused before any database work: a cancel with no reason is not a loggable amendment (its reason
   // is the accountable content), so an empty/whitespace reason neither transitions the order nor
-  // appends a reasonless entry. Its own code — the order IS placed, so `not_placed` would be false (§1).
+  // appends a reasonless entry. Its own code — this fires BEFORE the status is read, so a missing
+  // reason is a request-shape error, not the state conflict `not_placed` names (§1).
   if (reason.trim() === "") {
     throw new AppError("working_order.reason_required", { workingOrderId: id });
   }
