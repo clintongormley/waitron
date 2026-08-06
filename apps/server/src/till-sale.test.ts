@@ -208,7 +208,7 @@ describe("recordTillSale", () => {
     expect(result.change).toBe("0.00");
   });
 
-  it("rejects an empty basket, an unknown product, a non-cash tender, and a shortfall", async () => {
+  it("rejects an empty basket, an unknown product, an unsupported tender, and a shortfall", async () => {
     const { cfg, available } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const UUID_NOT_IN_CAT = "00000000-0000-0000-0000-000000000000";
@@ -228,12 +228,16 @@ describe("recordTillSale", () => {
       params: { productId: UUID_NOT_IN_CAT },
     });
 
-    await expect(
-      recordTillSale(deps, cfg, {
-        lines: [{ productId: each.id, quantity: "1" }],
-        tender: { method: "card" as unknown as "cash", amount: "1.50" },
-      }),
-    ).rejects.toMatchObject({ code: "sale.unsupported_tender", params: { method: "card" } });
+    // cash and card are supported (7a cash + this slice's manual card); every other tender_method is
+    // still refused. The `as unknown` cast is how an untrusted till sends one past the widened type.
+    for (const method of ["voucher", "transfer", "other"] as const) {
+      await expect(
+        recordTillSale(deps, cfg, {
+          lines: [{ productId: each.id, quantity: "1" }],
+          tender: { method: method as unknown as "cash", amount: "1.50" },
+        }),
+      ).rejects.toMatchObject({ code: "sale.unsupported_tender", params: { method } });
+    }
 
     // Under-tender: 1.00 tendered against a 1.50 total. `settleSale` (inside recordSale's immediate
     // mode) raises `sale.tender_shortfall`; the whole transaction rolls back.
