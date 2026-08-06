@@ -191,11 +191,14 @@ export class TillTenderPay extends LitElement {
   /**
    * Emit `park-order` with the (optional) label and return to idle. The app parks the basket and clears
    * it on success; a blank/whitespace-only field parks the order UNNAMED (`label` undefined), matching
-   * the store's optional label. Like `#confirm`, the mode is flipped BEFORE the dispatch so the view is
-   * back to idle regardless of what the handler does next.
+   * the store's optional label. The mode and label are reset BEFORE the dispatch (unlike `#confirm`,
+   * which resets after), so the view is back to idle regardless of what the handler does next — even a
+   * synchronous listener that throws leaves the widget idle.
    */
   #park(): void {
     const label = this.labelEntry.trim();
+    this.mode = "idle";
+    this.labelEntry = "";
     this.dispatchEvent(
       new CustomEvent<ParkOrderDetail>("park-order", {
         detail: { label: label === "" ? undefined : label },
@@ -203,8 +206,6 @@ export class TillTenderPay extends LitElement {
         composed: true,
       }),
     );
-    this.mode = "idle";
-    this.labelEntry = "";
   }
 
   /**

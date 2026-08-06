@@ -225,10 +225,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   // Park a working order to pay later (park & retrieve, sub-project 7b). SESSION-GUARDED like the
   // sale routes: `requireSession` runs FIRST, and the guard — not the browser — supplies the
-  // attribution, so `operatorId` is `session.personId`. The client mints `body.id` (so a retry is
-  // idempotent against the primary key); `parkOrder` re-reads the catalogue and prices authoritatively
-  // (the request carries no price), opening its OWN `withTenant`/`asAppUser` transaction, so it is
-  // called OUTSIDE any transaction here. Returns the persisted `{ id, orderNumber }`.
+  // attribution, so `operatorId` is `session.personId`. The client mints `body.id`, so a re-sent park
+  // collides on the primary key and rolls back rather than creating a second order — but that is NOT
+  // an idempotent replay: `parkOrder` does a plain INSERT, so the retry surfaces as a 23505 error, not
+  // the original result. (Idempotent replay applies to pay, `payWorkingOrder`, not park.) `parkOrder`
+  // re-reads the catalogue and prices authoritatively (the request carries no price), opening its OWN
+  // `withTenant`/`asAppUser` transaction, so it is called OUTSIDE any transaction here. Returns the
+  // persisted `{ id, orderNumber }`.
   app.post("/api/working-orders", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
