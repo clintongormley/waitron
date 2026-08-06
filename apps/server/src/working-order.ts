@@ -22,14 +22,24 @@ export interface WorkingOrderDeps {
 /** The rows a park or an update writes into `working_order_lines`, as Drizzle types the insert. */
 type WorkingOrderLineInsert = typeof workingOrderLines.$inferInsert;
 
+/** `priceBasket`'s authoritative result (`{ lines, total, vatBreakdown }`) — threaded out of
+ * `priceOrderLines`/`createOpenOrder` so a caller that both persists the order AND files its sale in
+ * the same transaction (a walk-up, `payWorkingOrder`) reuses this price rather than re-reading the
+ * catalogue and re-pricing the identical basket a second time. */
+type PricedBasket = ReturnType<typeof priceBasket>;
+
 /**
  * Re-read THIS location's sellable catalogue, resolve every requested line against it, and price the
- * basket authoritatively with `priceBasket` — returning the ready-to-insert `working_order_lines`
- * rows for `workingOrderId`. Shared by `parkOrder` (a fresh order) and `updateHeldOrder` (a repriced
- * one): the server never trusts a browser-computed price, so the caller's `lines` carry none, and a
- * product not sellable here (deactivated, unassigned, or another tenant's, which RLS hides) is
- * refused with the same `sale.unknown_product` `recordTillSale` uses — a fact about the order, not
- * the process. Runs on the CALLER's transaction under its tenant/app_user scope.
+ * basket authoritatively with `priceBasket` — returning BOTH the ready-to-insert `working_order_lines`
+ * rows for `workingOrderId` AND the raw `priceBasket` result (`{ lines, total, vatBreakdown }`) they
+ * were derived from. The second half is what lets a caller that will also FILE the sale from the same
+ * basket (a walk-up, via `createOpenOrder` → `payWorkingOrder`) reuse this one price rather than
+ * re-reading the catalogue and re-pricing the identical `lines` a second time. Shared by `parkOrder`
+ * (a fresh order) and `updateHeldOrder` (a repriced one), which use only `lineRows`: the server never
+ * trusts a browser-computed price, so the caller's `lines` carry none, and a product not sellable here
+ * (deactivated, unassigned, or another tenant's, which RLS hides) is refused with the same
+ * `sale.unknown_product` `recordTillSale` uses — a fact about the order, not the process. Runs on the
+ * CALLER's transaction under its tenant/app_user scope.
  *
  * The empty-basket refusal and the order row itself stay with each caller: park mints and inserts an
  * OPEN order (allocating its number), update rewrites an existing one's lines and label — this helper
@@ -42,7 +52,7 @@ async function priceOrderLines(
   cfg: TillConfig,
   workingOrderId: string,
   lines: { productId: string; quantity: string }[],
-): Promise<WorkingOrderLineInsert[]> {
+): Promise<{ lineRows: WorkingOrderLineInsert[]; priced: PricedBasket }> {
   const available = await listAvailableProducts(tx, cfg.locationId);
   const byId = new Map(available.map((p) => [p.id, p]));
   const items = lines.map((line) => {
@@ -54,7 +64,7 @@ async function priceOrderLines(
   });
 
   const priced = priceBasket(items);
-  return priced.lines.map((line, i) => ({
+  const lineRows = priced.lines.map((line, i) => ({
     tenantId: cfg.tenantId,
     workingOrderId,
     lineNo: line.lineNo,
@@ -66,6 +76,7 @@ async function priceOrderLines(
     lineTotal: line.lineTotal,
     category: line.category ?? null,
   }));
+  return { lineRows, priced };
 }
 
 /**
@@ -102,14 +113,17 @@ export interface ParkOrderResult {
  * Persist an OPEN working order plus its priced lines on the CALLER's transaction: re-read the
  * catalogue, re-price `lines` with `priceBasket`, allocate the next per-node order number, and INSERT
  * the `working_orders` row (status `open`) and its `working_order_lines`. Returns the allocated order
- * number. The server never trusts a browser-computed price; `lines` carry none.
+ * number AND the authoritative `priceBasket` result its lines were priced from — so `payWorkingOrder`'s
+ * walk-up path files the sale from the SAME price this creation computed, never a second catalogue
+ * read of the identical basket. The server never trusts a browser-computed price; `lines` carry none.
  *
- * Shared by `parkOrder` (a counter parks an order to pay later) and `payWorkingOrder` (a WALK-UP,
- * which creates the order `open` and settles it in the same transaction) — extracted so a walk-up
- * order is IDENTICAL in shape to a parked one: same allocated number, same priced lines, same triggers
- * (`require_open_parent`/`check_locales` fire on the inserted lines because their parent was inserted
- * just above). The empty-basket refusal stays with each caller (it is checked before any database
- * work), as does the surrounding `withTenant`/`asAppUser` scope; this helper owns only the two inserts.
+ * Shared by `parkOrder` (a counter parks an order to pay later, which uses only `orderNumber`) and
+ * `payWorkingOrder` (a WALK-UP, which creates the order `open` and settles it in the same transaction,
+ * reusing `priced`) — extracted so a walk-up order is IDENTICAL in shape to a parked one: same
+ * allocated number, same priced lines, same triggers (`require_open_parent`/`check_locales` fire on
+ * the inserted lines because their parent was inserted just above). The empty-basket refusal stays
+ * with each caller (it is checked before any database work), as does the surrounding
+ * `withTenant`/`asAppUser` scope; this helper owns only the two inserts.
  */
 export async function createOpenOrder(
   tx: Transaction,
@@ -117,10 +131,11 @@ export async function createOpenOrder(
   id: string,
   lines: { productId: string; quantity: string }[],
   label: string | null,
-): Promise<number> {
-  // Resolve + price the basket authoritatively (refusing an unknown product) into the line rows —
-  // `priceOrderLines`'s own doc-comment explains the zip.
-  const lineRows = await priceOrderLines(tx, cfg, id, lines);
+): Promise<{ orderNumber: number; priced: PricedBasket }> {
+  // Resolve + price the basket authoritatively (refusing an unknown product) into the line rows,
+  // keeping the raw price so the caller need not re-derive it — `priceOrderLines`'s own doc-comment
+  // explains the zip and why `priced` is threaded back out.
+  const { lineRows, priced } = await priceOrderLines(tx, cfg, id, lines);
   const orderNumber = await allocateOrderNumber(tx, cfg.tenantId, cfg.nodeId);
 
   await tx.insert(workingOrders).values({
@@ -137,7 +152,7 @@ export async function createOpenOrder(
   // `require_open_parent`/`check_locales` triggers all resolve it.
   await tx.insert(workingOrderLines).values(lineRows);
 
-  return orderNumber;
+  return { orderNumber, priced };
 }
 
 /**
@@ -163,7 +178,8 @@ export async function parkOrder(
 
   return withTenant(deps.db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    const orderNumber = await createOpenOrder(tx, cfg, req.id, req.lines, req.label ?? null);
+    // Park needs only the allocated number; `priced` is `payWorkingOrder`'s walk-up shortcut, unused here.
+    const { orderNumber } = await createOpenOrder(tx, cfg, req.id, req.lines, req.label ?? null);
     return { id: req.id, orderNumber };
   });
 }
@@ -352,7 +368,8 @@ export async function updateHeldOrder(
     // aborts the tx with the parked order still intact. Then swap the lines wholesale: the parent is
     // open (checked above, held under the lock), so the line delete and the re-insert both satisfy
     // `require_open_parent`, and the re-numbered `line_no`s start from 1.
-    const lineRows = await priceOrderLines(tx, cfg, id, req.lines);
+    // An edit only rewrites the persisted lines; `priced` is `payWorkingOrder`'s walk-up shortcut, unused here.
+    const { lineRows } = await priceOrderLines(tx, cfg, id, req.lines);
     await tx.delete(workingOrderLines).where(eq(workingOrderLines.workingOrderId, id));
     await tx.insert(workingOrderLines).values(lineRows);
 

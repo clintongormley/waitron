@@ -148,26 +148,35 @@ export async function payWorkingOrder(
         throw new AppError("sale.unsupported_tender", { method: req.tender.method });
       }
 
-      // Step 4. Walk-up: the order does not exist yet. Create it OPEN with its priced lines (the same
-      // `createOpenOrder` `parkOrder` uses, so a walk-up order is identical in shape to a parked one),
-      // then settle it below in this same transaction. A walk-up carries no label.
+      // Steps 4-5. Obtain the authoritative price of the SENT basket, one way per shape, so it is
+      // computed exactly ONCE either way:
+      //  - WALK-UP (order does not exist yet): create it OPEN with its priced lines (the same
+      //    `createOpenOrder` `parkOrder` uses, so a walk-up order is identical in shape to a parked
+      //    one) and REUSE the price that creation already derived — `createOpenOrder` read the
+      //    catalogue and ran `priceBasket` to build the line rows, so re-reading and re-pricing the
+      //    identical `req.lines` here would just double the catalogue join on the till's hottest path.
+      //    A walk-up carries no label.
+      //  - RETRIEVED order (already exists): `createOpenOrder` is NOT called, so re-price the SENT
+      //    basket from the catalogue here — a parked order is always re-priced at CURRENT prices at pay
+      //    time, never from its stored draft snapshot.
+      // The result is then filed with recordSale's immediate cash settlement, tagged with this order's
+      // id (`sales_working_order_id_key` = the idempotency key).
+      let priced: ReturnType<typeof priceBasket>;
       if (locked === undefined) {
-        await createOpenOrder(tx, cfg, req.id, req.lines, null);
+        ({ priced } = await createOpenOrder(tx, cfg, req.id, req.lines, null));
+      } else {
+        const available = await listAvailableProducts(tx, cfg.locationId);
+        const byId = new Map(available.map((p) => [p.id, p]));
+        const items = req.lines.map((line) => {
+          const product = byId.get(line.productId);
+          if (product === undefined) {
+            throw new AppError("sale.unknown_product", { productId: line.productId });
+          }
+          return { product, quantity: line.quantity };
+        });
+
+        priced = priceBasket(items);
       }
-
-      // Step 5. Re-price the SENT basket authoritatively and file it with recordSale's immediate cash
-      // settlement, tagged with this order's id (`sales_working_order_id_key` = the idempotency key).
-      const available = await listAvailableProducts(tx, cfg.locationId);
-      const byId = new Map(available.map((p) => [p.id, p]));
-      const items = req.lines.map((line) => {
-        const product = byId.get(line.productId);
-        if (product === undefined) {
-          throw new AppError("sale.unknown_product", { productId: line.productId });
-        }
-        return { product, quantity: line.quantity };
-      });
-
-      const priced = priceBasket(items);
 
       // Cash may exceed the total (change is handed back); a tender BELOW the total is a shortfall.
       // `settleSale` (which `recordSale`'s immediate mode calls) demands EXACT coverage —

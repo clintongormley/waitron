@@ -354,17 +354,19 @@ export class VerifactuBackend implements FiscalBackend {
    *
    * Pure read: it re-uses `recordVoid`'s own `where sale_id = … and tipo_registro = 'alta'` lookup
    * shape (the alta is the sale's original record; a later anulación shares the `sale_id` but is
-   * excluded by the `tipo_registro` filter), re-derives `verificationUrl` through the same
-   * `qrPayloadFor` `recordSale` used at filing time (so the replay's QR is byte-identical to the
-   * original's), and INVERTS the stored `desglose` back into `VatBreakdownLine[]`. It never writes,
-   * appends or re-hashes — the immutable record (§5) is only read.
+   * excluded by the `tipo_registro` filter) but selects the FULL row once, then derives BOTH outputs
+   * from it in memory — `verificationUrl` by the SAME `fromRegistroRow` → `buildQrPayload` derivation
+   * `qrPayloadFor` (and thus `recordSale` at filing time) applies, so the replay's QR is byte-identical
+   * to the original's; and `vatBreakdown` by INVERTING the stored `desglose`. It routes through neither
+   * a second `select` nor `qrPayloadFor` (which would re-read this very row by id), never writes,
+   * appends or re-hashes — the immutable record (§5) is only read, exactly once.
    */
   async filedReceiptFor(
     tx: Transaction,
     saleId: SaleId,
   ): Promise<{ verificationUrl: string; vatBreakdown: VatBreakdownLine[] } | undefined> {
-    const { rows } = await tx.execute<{ id: string; desglose: RegistroAlta["Desglose"] }>(sql`
-      select id, desglose
+    const { rows } = await tx.execute<RegistroRow>(sql`
+      select *
       from registros_facturacion
       where sale_id = ${saleId} and tipo_registro = 'alta'
       limit 1
@@ -374,7 +376,11 @@ export class VerifactuBackend implements FiscalBackend {
       return undefined;
     }
 
-    const verificationUrl = await this.qrPayloadFor(tx, row.id);
+    // Rebuild the alta from its OWN stored columns and derive the QR from it — the identical derivation
+    // `qrPayloadFor` performs (and `recordSale` used at filing time). The `as RegistroAlta` cast is
+    // safe for the same reason `qrPayloadFor`'s is: the `tipo_registro = 'alta'` filter selects only
+    // altas, never an anulación.
+    const verificationUrl = buildQrPayload(fromRegistroRow(row) as RegistroAlta, this.environment);
 
     // Invert `recordSale`'s own `sale.vatBreakdown` → `Desglose` mapping (backend.ts, the `desglose`
     // built in `recordSale`/`recordCorrection`/`recordSubstitution`): `BaseImponibleOimporteNoSujeto`
@@ -383,9 +389,11 @@ export class VerifactuBackend implements FiscalBackend {
     // rate/cuota) and carries no recargo de equivalencia, so the three fields are read back with a
     // cast — the same `Desglose`/`TipoFactura` cast convention `fromRegistroRow` uses for values a
     // real write-path invariant guarantees present — and no surcharge fields are inverted because
-    // none is ever filed. A future task that files an exempt or recargo line extends this inversion
-    // beside the write side that produces it.
-    const vatBreakdown: VatBreakdownLine[] = row.desglose.map((detalle) => ({
+    // none is ever filed. `row.desglose` is non-null on any alta (`tipo_registro = 'alta'` excludes
+    // the anulación NULL case), cast the same way `fromRegistroRow` casts it. A future task that files
+    // an exempt or recargo line extends this inversion beside the write side that produces it.
+    const desglose = row.desglose as RegistroAlta["Desglose"];
+    const vatBreakdown: VatBreakdownLine[] = desglose.map((detalle) => ({
       rate: decimal(detalle.TipoImpositivo as string),
       base: decimal(detalle.BaseImponibleOimporteNoSujeto),
       tax: decimal(detalle.CuotaRepercutida as string),
