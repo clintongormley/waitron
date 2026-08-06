@@ -140,6 +140,12 @@ export class StripeOnDeviceProvider implements PaymentProvider {
     // policy instead would be caught one statement too late.
     this.requireOwnTenant(params.tenantId);
     const paymentRef = randomUUID();
+    // The device PaymentIntent-creation idempotency key is derived from the STABLE working-order id,
+    // NOT the per-call random `paymentRef` (§4): a retry after a lost response re-drives the SAME
+    // PaymentIntent, so the card is charged once. The local `paymentRef` stays random (the `payments`
+    // row's idempotency anchor, one row per attempt) and remains the `metadata.payment_ref`
+    // attribution hint below — the two are deliberately decoupled.
+    const stripeIdempotencyKey = `wo_${params.workingOrderId}`;
     // Gate up front: the neutral policy decides whether offline is permitted for THIS transaction,
     // which configures the device's offline behaviour BEFORE anything is stored.
     const offlineAllowed = await this.inTenant(async (tx) => {
@@ -152,7 +158,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
     const outcome = await this.opts.client.collectOnDevice({
       amount: params.amount,
       currency: CURRENCY,
-      idempotencyKey: paymentRef,
+      idempotencyKey: stripeIdempotencyKey,
       offlineAllowed,
       // snake_case: these are Stripe-side field names travelling in Stripe metadata, not our
       // TypeScript — kept distinct from our camelCase `params.workingOrderId`/`paymentRef` on

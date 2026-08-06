@@ -19,6 +19,13 @@ export class FakeStripe implements StripeClient {
    * how a test proves the resolution happened (and, for the terminal/on-device callers, that it
    * did NOT). */
   lastRefund: { paymentIntentId: string; amount?: Decimal; idempotencyKey: string } | undefined;
+  /** The params of the most recent `createPaymentIntent` call; `undefined` until one is made.
+   * Recorded because the idempotency key the provider hands Stripe is otherwise unobservable, and it
+   * is the whole point of the §4 capture-idempotency guard: two `collect`s on ONE working order must
+   * pass the SAME (working-order-derived) key so Stripe charges once, DECOUPLED from the per-attempt
+   * random `paymentRef` (the `payments` row's own idempotency anchor). This field is how a test
+   * proves that derivation. Mirrors `lastRefund`. */
+  lastCreateIntent: { amount: Decimal; currency: string; idempotencyKey: string } | undefined;
   private outcome: Outcome = "succeeded";
   private nextRefundFails = false;
   private nextPollThrows = false;
@@ -37,17 +44,15 @@ export class FakeStripe implements StripeClient {
     this.nextPollThrows = true;
   }
 
-  // `params` is part of `StripeClient`'s public contract (the real adapter needs the amount,
-  // currency and idempotency key to call Stripe); this fake mints a deterministic id and has
-  // nothing else to do with it, but the parameter stays — underscore-prefixed so tsc's own
-  // `noUnusedParameters` leaves it alone — so callers on the concrete class are still typechecked
-  // against the real signature. Mirrors `FakeFiscalBackend`'s identical `_reason`/`_now` convention.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- see comment above
-  createPaymentIntent(_params: {
+  // Records its params into `lastCreateIntent` (so a test can assert the derived idempotency key —
+  // see that field's doc) then mints a deterministic id. `params` is part of `StripeClient`'s public
+  // contract, so callers on the concrete class stay typechecked against the real signature.
+  createPaymentIntent(params: {
     amount: Decimal;
     currency: string;
     idempotencyKey: string;
   }): Promise<{ id: string }> {
+    this.lastCreateIntent = params;
     return Promise.resolve({ id: nextId("pi") });
   }
   // `paymentIntentId` is part of the public contract; this fake only needs `readerId` to key the

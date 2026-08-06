@@ -157,6 +157,48 @@ describe("stripe collect -> recordSale -> associate (the adapter seam, end to en
   });
 });
 
+describe("stripe idempotency key is derived from the working order, decoupled from paymentRef", () => {
+  // §4 (capture idempotency): the Stripe PaymentIntent-creation key must be STABLE across retries so
+  // a lost-response re-tap re-drives the SAME PaymentIntent and Stripe charges once. It is derived
+  // from `workingOrderId`, NOT from the per-call random `paymentRef` (which stays the `payments`
+  // row's idempotency anchor, one row per attempt). `FakeStripe.lastCreateIntent` records the key the
+  // provider handed Stripe, so this asserts the derivation on the hermetic target — the key is pure
+  // logic (no RLS), so PGlite is the right target here (the wiring-test pattern), and the real SDK's
+  // honouring of that key is the nightly sandbox suite's half (collect.sandbox.test.ts).
+  it("passes a stable wo-derived key across two collects for one working order, with distinct payment rows", async () => {
+    const backend = new FakeFiscalBackend(pg.db);
+    const s = await seedForSale(pg.db, backend, freshNif());
+    const client = new FakeStripe();
+    const provider = new StripeTerminalProvider({
+      client,
+      db: pg.db,
+      tenantId: brandTenantId(s.tenantId),
+      resolveReader: () => Promise.resolve("reader_1"),
+      poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
+    });
+    const args = {
+      tenantId: brandTenantId(s.tenantId),
+      tillId: brandTillId(s.tillId),
+      workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      amount: decimal("12.10"),
+    };
+
+    const first = await provider.collect(args);
+    const firstKey = client.lastCreateIntent?.idempotencyKey;
+    const second = await provider.collect(args);
+    const secondKey = client.lastCreateIntent?.idempotencyKey;
+
+    // The Stripe key is DERIVED FROM THE WORKING ORDER and identical across retries...
+    expect(firstKey).toBe(`wo_${s.workingOrderId}`);
+    expect(secondKey).toBe(firstKey);
+    // ...while the LOCAL payment_ref stays random (one payments-row idempotency anchor per attempt).
+    expect(second.paymentRef).not.toBe(first.paymentRef);
+    // Prove the decoupling: the key is NOT either random ref.
+    expect(firstKey).not.toBe(first.paymentRef);
+    expect(secondKey).not.toBe(second.paymentRef);
+  });
+});
+
 /**
  * A coherence check on the package root's Slice B (reconcile) surface — this package has no
  * `index.test.ts` yet, so this lives here per the brief's fallback. Every other test in this file

@@ -101,6 +101,13 @@ export class StripeTerminalProvider implements PaymentProvider {
     this.requireOwnTenant(params.tenantId);
     const readerId = await this.opts.resolveReader(params.tenantId, params.tillId);
     const paymentRef = randomUUID();
+    // The Stripe PaymentIntent-creation idempotency key is derived from the STABLE working-order id,
+    // NOT the per-call random `paymentRef` (§4): a retry after a lost response re-drives the SAME
+    // PaymentIntent to completion, so Stripe charges once. The local `paymentRef` stays random — it
+    // is the `payments` row's (tenant, provider, payment_ref) idempotency anchor, one row per
+    // attempt — so the two are deliberately decoupled: one PaymentIntent per working order, many
+    // `payments` rows across retries.
+    const stripeIdempotencyKey = `wo_${params.workingOrderId}`;
     const key = { tenantId: params.tenantId, provider: PROVIDER, paymentRef };
 
     // T1 — commit the attempt before any network call.
@@ -115,7 +122,7 @@ export class StripeTerminalProvider implements PaymentProvider {
     );
 
     // Network — outside any transaction (T1/T2).
-    const outcome = await this.drive(readerId, params.amount, paymentRef);
+    const outcome = await this.drive(readerId, params.amount, stripeIdempotencyKey);
 
     // T2 — persist the terminal outcome.
     const row = await this.inTenant((tx) =>
@@ -151,13 +158,13 @@ export class StripeTerminalProvider implements PaymentProvider {
   private async drive(
     readerId: string,
     amount: Decimal,
-    paymentRef: string,
+    idempotencyKey: string,
   ): Promise<{ captured: true; settledAt: Date; piId: string } | { captured: false }> {
     try {
       const intent = await this.opts.client.createPaymentIntent({
         amount,
         currency: CURRENCY,
-        idempotencyKey: paymentRef,
+        idempotencyKey,
       });
       const piId = intent.id;
       await this.opts.client.processPaymentIntent(readerId, piId);

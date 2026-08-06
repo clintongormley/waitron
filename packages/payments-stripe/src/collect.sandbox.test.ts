@@ -8,7 +8,7 @@ import {
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
-import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
+import { PAYMENTS_MIGRATIONS, getPaymentByRef } from "@waitron/payments";
 import { stripeClient } from "./stripe-client.js";
 import { StripeTerminalProvider } from "./provider.js";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
@@ -100,5 +100,56 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
     const result = await collecting;
     expect(result.state).toBe("captured");
     expect(result.settledAt).not.toBeNull();
+  });
+
+  it("re-creating the PaymentIntent for the same working order reuses ONE PaymentIntent (real Stripe idempotency → charged once)", async () => {
+    // §4 (capture idempotency), the real-API half: the PaymentIntent-creation idempotency key is
+    // derived from the working order, so a retry after a lost response must re-drive the SAME
+    // PaymentIntent — Stripe charges once. `FakeStripe` mints a fresh `pi_` per call, so it CANNOT
+    // prove reuse; only real Stripe can, which is what this nightly test adds.
+    //
+    // We drive ONE collect to capture (recording its `pi_` in `external_ref`), then ask the SAME
+    // client to create a PaymentIntent again with the SAME derived key `wo_<workingOrderId>` and the
+    // identical amount/currency, and assert Stripe's documented idempotency replay returns the SAME
+    // PaymentIntent id. Asserting the key-honouring via a raw second `createPaymentIntent` — rather
+    // than a second full `provider.collect` — is deliberate: after the first capture the PaymentIntent
+    // has already SUCCEEDED, so re-driving it through the reader is not this layer's property (§4's
+    // server-side pre-check, a separate slice, is what stops a second collect ever reaching the
+    // reader). This isolates the one thing the Stripe key contributes: same key ⇒ same PaymentIntent
+    // ⇒ one charge. A random key (the pre-change behaviour) would mint a SECOND PaymentIntent here.
+    const s = await seedWorkingOrder(pg.db, freshNif());
+    const client = stripeClient(stripe);
+    const provider = new StripeTerminalProvider({
+      client,
+      db: pg.db,
+      tenantId: brandTenantId(s.tenantId),
+      resolveReader: () => Promise.resolve(readerId),
+      poll: { maxAttempts: 40, intervalMs: 500 },
+    });
+    const collecting = provider.collect({
+      tenantId: brandTenantId(s.tenantId),
+      tillId: brandTillId(s.tillId),
+      workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      amount: decimal("12.10"),
+    });
+    await new Promise((r) => setTimeout(r, 1500));
+    await stripe.testHelpers.terminal.readers.presentPaymentMethod(readerId);
+    const first = await collecting;
+    expect(first.state).toBe("captured");
+    const row = await pg.db.transaction((tx) =>
+      getPaymentByRef(tx, {
+        tenantId: s.tenantId,
+        provider: "stripe",
+        paymentRef: first.paymentRef,
+      }),
+    );
+    expect(row?.externalRef).toMatch(/^pi_/);
+
+    const replay = await client.createPaymentIntent({
+      amount: decimal("12.10"),
+      currency: "eur",
+      idempotencyKey: `wo_${s.workingOrderId}`,
+    });
+    expect(replay.id).toBe(row?.externalRef);
   });
 });

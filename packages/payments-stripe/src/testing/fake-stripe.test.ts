@@ -50,6 +50,26 @@ describe("FakeStripe", () => {
     expect(bad.status).toBe("failed");
   });
 
+  it("records the last createPaymentIntent params, and nothing before the first call", async () => {
+    const fake = new FakeStripe();
+    expect(fake.lastCreateIntent).toBeUndefined();
+    await fake.createPaymentIntent({
+      amount: decimal("12.10"),
+      currency: "eur",
+      idempotencyKey: "wo_a",
+    });
+    await fake.createPaymentIntent({
+      amount: decimal("3.50"),
+      currency: "eur",
+      idempotencyKey: "wo_b",
+    });
+    expect(fake.lastCreateIntent).toEqual({
+      amount: decimal("3.50"),
+      currency: "eur",
+      idempotencyKey: "wo_b",
+    });
+  });
+
   it("records the last refund's params, and nothing before the first refund", async () => {
     const fake = new FakeStripe();
     expect(fake.lastRefund).toBeUndefined();
