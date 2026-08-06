@@ -203,13 +203,11 @@ describe("order_prep schema", () => {
     expect(pgErrorCode(e)).toBe("P0001");
   });
 
-  it("the node-scoped queue returns only this tenant's node rows; tenant B sees none of A's", async () => {
-    // Nodes scoped to just this test, not the shared nodeA/nodeB fixture: order_prep is mutable but
-    // nothing truncates it between tests, so counting by the SHARED node would pick up rows other
-    // tests in this file already inserted on it. A dedicated node per tenant here keeps the exact
-    // count below immune to run order or to what earlier tests seeded (append-order-amendment's
-    // tenant-wide-total-drift comment, same shape, a different fix: exact count via isolation
-    // instead of a filtered total).
+  it("the node-scoped queue is tenant-isolated: neither tenant sees the other's rows, even queried by the other's node id (both non-empty)", async () => {
+    // Nodes scoped to just this test, not the shared nodeA fixture: order_prep is mutable but
+    // nothing truncates it between tests, so counting against a SHARED node would pick up rows
+    // other tests in this file already inserted on it. A dedicated node per tenant keeps both counts
+    // below immune to run order or to what earlier tests seeded.
     const queueNodeA = await seedNode(
       suite.admin,
       brandTenantId(TENANT_A),
@@ -225,25 +223,37 @@ describe("order_prep schema", () => {
     await seedPrep(TENANT_A, orderA, queueNodeA, "queued");
     await seedPrepB(TENANT_B, orderB, queueNodeB, "queued");
 
-    const aSeen = await asApp((tx) =>
+    // As A: rows are visible (not a blanket denial, `total`), and NONE of them sit on B's node —
+    // even queried by B's own node id, which only B ever populated. `total` is deliberately
+    // UNFILTERED rather than narrowed to queueNodeA: a count narrowed to a node only A could ever
+    // have populated reads the same whether or not the isolation policy exists (CLAUDE.md §1 — "a
+    // measurement where both answers look alike measures nothing"), which is exactly the defect this
+    // fixes. `foreign`, filtered by queueNodeB, is the discriminating check: if the tenant predicate
+    // were gone, A would see B's row here, since that node id was never A's to begin with.
+    const aView = await asApp((tx) =>
       tx
-        .execute<{ n: number }>(
-          sql`select count(*)::int as n from order_prep where node_id = ${queueNodeA}`,
+        .execute<{ total: number; foreign: number }>(
+          sql`select count(*)::int as total,
+                     (count(*) filter (where node_id = ${queueNodeB}))::int as foreign
+              from order_prep`,
         )
-        .then((r) => r.rows[0]!.n),
+        .then((r) => r.rows[0]!),
     );
-    // RLS hides A's prep from B even querying by A's own node id — not merely "B has no rows of its
-    // own for that node", but "B cannot see A's row at all", the tenant predicate rather than the
-    // node filter doing the work.
-    const bSeesA = await asAppB((tx) =>
+    expect(aView.total).toBeGreaterThan(0); // A genuinely has rows — access is not the thing denied.
+    expect(aView.foreign).toBe(0); // A sees NONE of B's — even by B's own node id.
+
+    // Symmetric, so the assertion is not one-directional: B sees rows, and none sit on A's node.
+    const bView = await asAppB((tx) =>
       tx
-        .execute<{ n: number }>(
-          sql`select count(*)::int as n from order_prep where node_id = ${queueNodeA}`,
+        .execute<{ total: number; foreign: number }>(
+          sql`select count(*)::int as total,
+                     (count(*) filter (where node_id = ${queueNodeA}))::int as foreign
+              from order_prep`,
         )
-        .then((r) => r.rows[0]!.n),
+        .then((r) => r.rows[0]!),
     );
-    expect(aSeen).toBe(1);
-    expect(bSeesA).toBe(0);
+    expect(bView.total).toBeGreaterThan(0);
+    expect(bView.foreign).toBe(0);
   });
 
   it("app_user has UPDATE on order_prep but NOT DELETE", async () => {
