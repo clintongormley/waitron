@@ -1020,17 +1020,24 @@ describe("till-app", () => {
       expect(tenderPay(el).stage).toBe("collect");
     });
 
-    it("place-order on an EDITED retrieved order: a not_open re-sync FALLS THROUGH to placeOrder, not place.error", async () => {
-      // The concurrent-place race / already-placed re-tap, symmetric with the pay path's Findings 3 & 4:
-      // the edit-gated re-sync throws `working_order.not_open`, which must NOT surface. It means the order
-      // already moved past open (placed on another register, or an already-placed re-tap): fall through
-      // to `placeOrder`, which replays via `sales_working_order_id_key`. No `place.error` banner. Deleting
-      // the `not_open` swallow in `#syncIfDirty` makes this fail (the throw reaches the place.error
-      // handler and the stage never advances).
+    it("place-order on an EDITED retrieved order already placed elsewhere: the re-tap surfaces place.error (placeOrder is not idempotent)", async () => {
+      // The concurrent-place race / lost-response re-tap: the order has already moved past `open` (placed
+      // on another register, or the first place landed and its response was lost). The edit-gated re-sync
+      // calls `updateWorkingOrder`, which returns `working_order.not_open` — SWALLOWED by `#syncIfDirty` —
+      // and then the server's `placeOrder`, which is NOT idempotent (it refuses ANY non-open order with
+      // the same `working_order.not_open`; till-api.test.ts pins that 409), returns `not_open` too. So
+      // `#onPlaceOrder` surfaces `place.error` and stays on the ORDER stage — it does NOT fall through to
+      // collect: placing has no `sales_working_order_id_key` replay the way pay does. Both server calls are
+      // mocked to reject `not_open`, matching the real server (the earlier revision mocked `placeOrder` to
+      // SUCCESS, an impossible pairing — `placeOrder` succeeds only when the order is open, which is exactly
+      // when `updateWorkingOrder` would not have thrown). Removing `#onPlaceOrder`'s place.error handler,
+      // or advancing the stage on a failed place, makes this fail.
       const updateWorkingOrder = vi.fn().mockRejectedValue({ code: "working_order.not_open" });
+      const placeOrder = vi.fn().mockRejectedValue({ code: "working_order.not_open" });
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
         updateWorkingOrder,
+        placeOrder,
       });
       const c = await toCounter(el);
 
@@ -1042,10 +1049,11 @@ describe("till-app", () => {
       emit(c, "place-order");
       await flush(el);
 
-      expect(updateWorkingOrder).toHaveBeenCalled();
-      expect(currentApi.placeOrder).toHaveBeenCalledWith("wo-1"); // fell through to place
-      expect(tenderPay(el).stage).toBe("collect");
-      expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull(); // no place.error banner
+      expect(tenderPay(el).stage).toBe("order"); // NOT advanced to collect — the place failed
+      expect(ticket(el)).toBeNull(); // stays on the counter, no ticket
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("place.error"));
+      expect(el.shadowRoot!.textContent).not.toContain("working_order.not_open"); // raw code never leaks
     });
 
     it("a failed place keeps the counter, the order stage and the basket, showing a non-fatal error", async () => {

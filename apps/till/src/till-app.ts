@@ -305,12 +305,19 @@ export class TillApp extends LitElement {
    *    Gating on the edit keeps the no-edit path filing the stored lock.
    *
    * A `working_order.not_open` rejection is SWALLOWED (never re-thrown): it means the order is already
-   * non-open — settled (a lost-response re-tap, or the loser of a two-till concurrent pay on the same
-   * parked order), or placed (a concurrent place / an already-placed re-tap). That is NOT an error to
-   * show: the caller's next step REPLAYS against the persisted row — `recordSale`'s settled branch
-   * re-prints the filed ticket (spec §3), or `placeOrder` replays via `sales_working_order_id_key` —
-   * never a double-file. Any OTHER rejection is a real sync failure and propagates to the caller's
-   * `sale.error`/`place.error` handler.
+   * non-open — settled, or placed (a lost-response re-tap, or the loser of a two-till concurrent
+   * pay/place on the same order). What the caller's NEXT step does with that differs, and only the PAY
+   * path is made whole by it:
+   *  - PAY: swallowing lets `recordSale`'s settled branch REPLAY the filed ticket (spec §3) instead of
+   *    surfacing an error — that replay is the whole point of the swallow. Never a double-file.
+   *  - PLACE: server `placeOrder` is NOT idempotent — for a non-open order it re-raises the SAME
+   *    `working_order.not_open` (working-order.ts refuses any non-open row; there is no
+   *    `sales_working_order_id_key` replay for placing), which `#onPlaceOrder` surfaces as `place.error`.
+   *    So a concurrent/re-tapped place of an already-placed order shows `place.error` whether or not this
+   *    swallow fires — the swallow neither helps nor hurts the place path. Do NOT read it as a place
+   *    replay; an idempotent `placeOrder` is a recorded backlog follow-up, not this behaviour.
+   * Any OTHER rejection is a real sync failure and propagates to the caller's `sale.error`/`place.error`
+   * handler.
    */
   async #syncIfDirty(
     id: string,
