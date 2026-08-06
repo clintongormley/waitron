@@ -2,7 +2,7 @@
 // them — the reachability convention `till-sale.ts`/`till-config.ts` follow (a bare import, no value
 // used here). See the note atop `errors.ts`.
 import "./errors.js";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { AppError, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import {
   allocateOrderNumber,
@@ -744,19 +744,21 @@ export interface PrepQueueEntry {
  * no `placeOrder` call to pick a prep row up from, and this is that pickup: called once the order is
  * already `settled`.
  *
- * A plain INSERT, not a state-machine transition: `order_prep`'s PK is `(tenant_id,
- * working_order_id)` (one row per order), so a SECOND send-to-prep for the same order collides on
- * it. Rather than let that surface as a raw `23505`, it is caught and reported as the domain
- * `order_prep.invalid_transition` — the same code `advancePrep` uses for every other illegal prep
- * move, since "this order already has a prep record" is exactly as illegal a move as "the target
- * isn't the next state" (see that code's own note in `errors.ts`).
+ * The order's status IS checked first, and enforced: an id naming NO working order (absent, or
+ * another tenant's — RLS hides it), or one that is `open` (never paid) or `placed` (Modes I/T's own
+ * route, `placeOrder`, already enqueued its prep row at placing — sending it here too would be the
+ * wrong path, not a legitimate double-enqueue), all refuse with the domain
+ * `working_order.not_settled` (409) BEFORE any write — never a raw `order_prep_order_fk` violation
+ * surfacing as an opaque 500 for a well-formed but wrong/absent id (fix round 1, review finding).
  *
- * Deliberately does NOT re-check `working_orders.status` first: `order_prep` carries no FK or CHECK
- * tying it to the order's fiscal status, and validating it here would duplicate a check the CALLER —
- * the till route, immediately after a successful settle — already satisfies by construction. An id
- * naming NO working order at all still fails closed, via `order_prep_order_fk`'s composite FK — a raw
- * FK-violation 500 for that shape (not the domain code), acceptable because this function is only
- * ever reached from a route that just settled the very id it is passed.
+ * Only past that guard is it a plain INSERT, not a state-machine transition: `order_prep`'s PK is
+ * `(tenant_id, working_order_id)` (one row per order), so a SECOND send-to-prep for an order already
+ * sent (this same guard having passed both times) collides on it. Rather than let that surface as a
+ * raw `23505`, it is caught and reported as the domain `order_prep.invalid_transition` — the same
+ * code `advancePrep` uses for every other illegal prep MOVE (as opposed to the order-level
+ * `not_settled` guard above, which is about the order's FISCAL eligibility to enter prep at all),
+ * since "this order already has a prep record" is exactly as illegal a move as "the target isn't the
+ * next state" (see that code's own note in `errors.ts`).
  */
 export async function sendToPrep(
   deps: WorkingOrderDeps,
@@ -765,6 +767,18 @@ export async function sendToPrep(
 ): Promise<void> {
   return withTenant(deps.db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
+
+    // Only a SETTLED order is eligible — `settled` is terminal, so there is no race between this read
+    // and the insert below that could invalidate it. Absent, foreign (RLS-hidden), `open` and
+    // `placed` orders all match the SAME `undefined`/non-settled branch, one fail-closed code.
+    const [order] = await tx
+      .select({ status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id));
+    if (order === undefined || order.status !== "settled") {
+      throw new AppError("working_order.not_settled", { workingOrderId: id });
+    }
+
     try {
       await tx.insert(orderPrep).values({
         tenantId: cfg.tenantId,
@@ -846,19 +860,26 @@ export async function advancePrep(
 
 /**
  * The node-scoped prep-queue view (design §5): every ACTIVE (not yet collected) prep row on THIS
- * node, joined to its working order for the display fields a cook's screen needs — reusing 7b's
- * `listHeldOrders` node-scoping SHAPE (`node_id = cfg.nodeId`, RLS confines the tenant) over a
- * DIFFERENT storage table: prep lives in `order_prep`, not `working_orders`, for the reason that
- * table's own schema comment gives (a Mode-P order is already fiscally frozen `settled` when prep
- * runs, so a `working_orders` column could not advance on it). Ordered by `queued_at` — when the
- * order FIRST entered prep — so the queue reads oldest-first regardless of which state each row has
- * since advanced to.
+ * node for a working order that is STILL prep-eligible, joined to its working order for the display
+ * fields a cook's screen needs — reusing 7b's `listHeldOrders` node-scoping SHAPE (`node_id =
+ * cfg.nodeId`, RLS confines the tenant) over a DIFFERENT storage table: prep lives in `order_prep`,
+ * not `working_orders`, for the reason that table's own schema comment gives (a Mode-P order is
+ * already fiscally frozen `settled` when prep runs, so a `working_orders` column could not advance on
+ * it). Ordered by `queued_at` — when the order FIRST entered prep — so the queue reads oldest-first
+ * regardless of which state each row has since advanced to.
  *
  * `collected` rows are excluded (`state in ('queued','preparing','ready')`): once collected, an order
  * leaves the ACTIVE queue a cook's screen shows, mirroring `listHeldOrders` dropping a `settled`
- * order from the held list. PGlite is enough for THIS behaviour — the join, the state filter and the
- * ordering are plain SQL a single backend proves; the node/tenant SCOPING is real-Postgres's job, the
- * same split `listHeldOrders` uses (CLAUDE.md §4).
+ * order from the held list. A SECOND, independent exclusion drops an `abandoned` working order
+ * (`ne(workingOrders.status, "abandoned")`) — `cancelPlacedOrder` (`placed → abandoned`) never
+ * touches `order_prep` at all (design §4's amendment log and design §5's prep table are deliberately
+ * separate concerns), so a cancelled order's `order_prep` row would otherwise sit at whatever state it
+ * was in FOREVER, still `state in (queued, preparing, ready)` and so still matching the first filter —
+ * this join is what retires it instead (fix round 1, review finding), rather than requiring every
+ * removal path (cancel, and any future one) to also know to touch `order_prep`. PGlite is enough for
+ * THIS behaviour — the join, the state/status filters and the ordering are plain SQL a single backend
+ * proves; the node/tenant SCOPING is real-Postgres's job, the same split `listHeldOrders` uses
+ * (CLAUDE.md §4).
  */
 export async function listPrepQueue(
   deps: WorkingOrderDeps,
@@ -889,6 +910,7 @@ export async function listPrepQueue(
           and(
             eq(orderPrep.nodeId, cfg.nodeId),
             inArray(orderPrep.state, ["queued", "preparing", "ready"]),
+            ne(workingOrders.status, "abandoned"),
           ),
         )
         .orderBy(orderPrep.queuedAt)

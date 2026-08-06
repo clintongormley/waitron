@@ -61,11 +61,12 @@ export interface TillApiDeps {
  *
  * The working-order and prep codes are given SPECIFIC statuses rather than the 400 default: a
  * retrieve of an id that names no open order is a 404 (`working_order.not_found`); a MODIFY of an
- * order that is not open (`working_order.not_open`), not placed (`working_order.not_placed`), or a
- * prep move the order's current prep state forbids (`order_prep.invalid_transition`) are all 409 —
- * the id may be valid, but the order's (or its prep row's) STATE forbids the operation (see each
- * code's own note in `errors.ts`). `working_order.reason_required` is listed explicitly at 400 despite
- * being the table's own default, matching every other `working_order.*`/`sale.*` entry here.
+ * order that is not open (`working_order.not_open`), not placed (`working_order.not_placed`), not
+ * settled (`working_order.not_settled`, `sendToPrep`'s own guard), or a prep move the order's current
+ * prep state forbids (`order_prep.invalid_transition`) are all 409 — the id may be valid, but the
+ * order's (or its prep row's) STATE forbids the operation (see each code's own note in `errors.ts`).
+ * `working_order.reason_required` is listed explicitly at 400 despite being the table's own default,
+ * matching every other `working_order.*`/`sale.*` entry here.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "pin.invalid": 401,
@@ -81,6 +82,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "working_order.not_found": 404,
   "working_order.not_open": 409,
   "working_order.not_placed": 409,
+  "working_order.not_settled": 409,
   "working_order.reason_required": 400,
   "order_prep.invalid_transition": 409,
 };

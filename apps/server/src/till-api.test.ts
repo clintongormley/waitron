@@ -770,7 +770,14 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
 });
 
 describe("/api/working-orders/:id/prep + GET /api/prep-queue", () => {
-  it("POST {} sends a parked order to prep at queued — GET /api/prep-queue then lists it", async () => {
+  // `sendToPrep` (a `{}` body) needs a SETTLED order (fix round 1), and settling one under this
+  // suite's `prepay` cfg means a real fiscal write the stub `FiscalBackend` cannot make — so the
+  // send-to-prep SUCCESS path (a genuine Mode-P walk-up settled via `POST /api/sales`, then sent to
+  // prep) lives in `till-api.rls.test.ts`. This suite proves the REFUSAL the route now forwards, and
+  // the advance/malformed-id mechanics using `placeOrder`'s OWN enqueue (which needs no fiscal write
+  // under this suite's `prepay` cfg — Task 8's dispatch only reaches the backend for `invoice_first`)
+  // to seed a queued row instead of `sendToPrep`.
+  it("POST {} on a still-OPEN (parked, unpaid) order is refused 409 working_order.not_settled, not enqueued", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
@@ -786,28 +793,40 @@ describe("/api/working-orders/:id/prep + GET /api/prep-queue", () => {
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({}),
     });
-    expect(sent.status).toBe(200);
-    expect(await sent.text()).toBe("");
+    expect(sent.status).toBe(409);
+    expect(await sent.json()).toMatchObject({
+      error: { code: "working_order.not_settled", params: { workingOrderId: id } },
+    });
 
+    // Refused BEFORE any write — the order never appears on the prep queue.
     const queue = await app.request("/api/prep-queue", { headers: { cookie } });
-    expect(queue.status).toBe(200);
-    const entries = (await queue.json()) as { id: string; state: string; label: string | null }[];
-    expect(entries).toContainEqual(
-      expect.objectContaining({ id, state: "queued", label: "Mesa 5" }),
-    );
+    const entries = (await queue.json()) as { id: string }[];
+    expect(entries.find((e) => e.id === id)).toBeUndefined();
   });
 
-  it("POST { to } advances the prep state one step; skipping straight to a later state is refused", async () => {
+  it("POST { to } advances a prep-queued order one step; skipping straight to a later state is refused", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
     const id = randomUUID();
-    await park(app, cookie, { id, lines: [{ productId: aguaProduct.id, quantity: "1" }] });
-    await app.request(`/api/working-orders/${id}/prep`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({}),
+    await park(app, cookie, {
+      id,
+      lines: [{ productId: aguaProduct.id, quantity: "1" }],
+      label: "Mesa 6",
     });
+    // `placeOrder`'s OWN enqueue seeds the `queued` row — no fiscal write needed under `prepay` (Task
+    // 8's dispatch only reaches the backend for `invoice_first`), unlike `sendToPrep` (see above).
+    await app.request(`/api/working-orders/${id}/place`, { method: "POST", headers: { cookie } });
+
+    const queueBefore = await app.request("/api/prep-queue", { headers: { cookie } });
+    const before = (await queueBefore.json()) as {
+      id: string;
+      state: string;
+      label: string | null;
+    }[];
+    expect(before).toContainEqual(
+      expect.objectContaining({ id, state: "queued", label: "Mesa 6" }),
+    );
 
     const advance = (to: string) =>
       app.request(`/api/working-orders/${id}/prep`, {

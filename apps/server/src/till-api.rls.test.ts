@@ -599,3 +599,76 @@ describe("/api/working-orders/:id/place → :id/prep → GET /api/prep-queue →
     expect(after.registros).toHaveLength(1); // exactly one chained record, filed at collect
   });
 });
+
+// Fix round 1 (review): `sendToPrep` (a `{}` body to `POST /:id/prep`) is Mode P's own pickup — it
+// needs a genuinely SETTLED order, which under this suite's `prepay` cfg means a real fiscal write
+// (`POST /api/sales`, Mode P's walk-up path) that `till-api.test.ts`'s stub `FiscalBackend` cannot
+// make. Real Postgres, so this is the one place the SUCCESS path is proven end to end.
+describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route (fix round 1)", () => {
+  it("sends a genuinely SETTLED walk-up order to prep; a still-OPEN parked order is refused 409", async () => {
+    const { cfg, available, operatorId } = await setupVenue(); // default mode: prepay
+    const each = available.find((p) => p.pricingUnit === "each")!;
+
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+
+    const login = await app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ personId: operatorId, pin: "5555" }),
+    });
+    expect(login.status).toBe(200);
+    const cookie = login.headers.get("set-cookie")!;
+
+    // A genuine Mode-P walk-up: `POST /api/sales` settles it immediately (open → settled) — no
+    // `place` step at all, since Mode P never places.
+    const workingOrderId = randomUUID();
+    const sale = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        workingOrderId,
+        lines: [{ productId: each.id, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      }),
+    });
+    expect(sale.status).toBe(200);
+
+    // NOW send it to prep — the SETTLED-order pickup the fix's guard exists to allow.
+    const sent = await app.request(`/api/working-orders/${workingOrderId}/prep`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({}),
+    });
+    expect(sent.status).toBe(200);
+
+    const queue = await app.request("/api/prep-queue", { headers: { cookie } });
+    expect(await queue.json()).toEqual([
+      expect.objectContaining({ id: workingOrderId, state: "queued" }),
+    ]);
+
+    // A SEPARATE, still-OPEN (parked, unpaid) order is refused — the other half of the fix, over the
+    // real route rather than the library function directly.
+    const openId = randomUUID();
+    const park = await app.request("/api/working-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ id: openId, lines: [{ productId: each.id, quantity: "1" }] }),
+    });
+    expect(park.status).toBe(200);
+    const refused = await app.request(`/api/working-orders/${openId}/prep`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({}),
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "working_order.not_settled", params: { workingOrderId: openId } },
+    });
+    // Refused before any write — never appears on the prep queue.
+    const queueAfterRefusal = (await (
+      await app.request("/api/prep-queue", { headers: { cookie } })
+    ).json()) as { id: string }[];
+    expect(queueAfterRefusal.find((e) => e.id === openId)).toBeUndefined();
+  });
+});

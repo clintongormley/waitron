@@ -308,6 +308,20 @@ declare module "@waitron/shared" {
      */
     "working_order.reason_required": { workingOrderId: string };
     /**
+     * A working order this caller tried to SEND TO PREP (`sendToPrep`, the Mode-P pickup — design §5)
+     * is not `settled`. It names one still `open` (never paid), one `placed` (Modes I/T enqueue their
+     * OWN prep row at PLACING, via `placeOrder` — `sendToPrep` is never their route, so a `placed`
+     * order here means the wrong path was called, not a legitimate double-enqueue), one `abandoned`,
+     * or it names none at all (absent, or another tenant's order that RLS hides). All report THIS one
+     * code, the same fail-closed shape `working_order.not_open`/`not_placed` use for their own state
+     * guards — to a caller trying to enqueue a Mode-P pickup, "wrong status" and "doesn't exist" are
+     * the same fact ("there is no settled order here to send to prep"). Mapped to 409: the id may be
+     * valid, but the order's state forbids the move (fix round 1 — a valid-but-wrong-state or
+     * valid-but-absent id was previously reaching a raw `order_prep_order_fk` violation, an opaque
+     * 500). `working_order.*`, not `server.*`, for the reason `working_order.not_open`'s note gives.
+     */
+    "working_order.not_settled": { workingOrderId: string };
+    /**
      * A prep operation is not legal given the order's current prep state (design §5's prep surface):
      *  - `advancePrep`: the requested `to` is not the order's IMMEDIATE next state
      *    (queued → preparing → ready → collected — no skip, no repeat, no jump backwards), or the
@@ -315,8 +329,9 @@ declare module "@waitron/shared" {
      *    hides — the same fail-closed shape `working_order.not_open` uses), or `to` is `"queued"`
      *    itself: no prep state legally advances TO queued — reaching `queued` is `sendToPrep`'s job
      *    (an INSERT), never a transition.
-     *  - `sendToPrep`: the order already has a prep record (`order_prep_pk`) — a double send-to-prep,
-     *    not a fresh enqueue.
+     *  - `sendToPrep`: the order is settled and ELIGIBLE (already past the `working_order.not_settled`
+     *    guard above) but already has a prep record (`order_prep_pk`) — a double send-to-prep, not a
+     *    fresh enqueue.
      * A fact about the order's PREP, not the process. Mapped to 409 (the id may be valid, but the
      * prep state forbids the move — the same shape `working_order.not_open`/`not_placed` use for their
      * own state machines). `order_prep.*` names the domain concept (order preparation), the rule

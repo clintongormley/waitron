@@ -1592,18 +1592,108 @@ describe("sendToPrep / advancePrep / listPrepQueue (prep surface)", () => {
     expect(await prepStateOf(id)).toBe("queued"); // the refused re-send changed nothing
   });
 
-  it("sendToPrep on an id naming NO working order fails closed via the composite FK, not the domain code", async () => {
+  it("sendToPrep refuses a still-OPEN or PLACED order (working_order.not_settled) and does not enqueue it", async () => {
+    const { cfg, cafe } = await modeVenue("prepay");
+
+    // OPEN — parked but never paid. `sendToPrep` is Mode P's own pickup (settle happens at ORDER via
+    // `payWorkingOrder`); an open order has never reached settlement at all.
+    const openId = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id: openId,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await expect(sendToPrep({ db: suite.admin }, cfg, openId)).rejects.toMatchObject({
+      code: "working_order.not_settled",
+      params: { workingOrderId: openId },
+    });
+    expect(await prepStateOf(openId)).toBeNull(); // nothing enqueued by the refused call
+
+    // PLACED — Modes I/T's own shape, whose prep row is already enqueued INSIDE `placeOrder` at
+    // placing. Calling `sendToPrep` on a placed (not yet settled) order is the WRONG route for it —
+    // refused the same way, not treated as a legitimate double-enqueue.
+    const { cfg: modeTCfg, cafe: modeTCafe } = await modeVenue("ticket_then_pay");
+    const placedId = randomUUID();
+    await parkOrder({ db: suite.admin }, modeTCfg, {
+      id: placedId,
+      lines: [{ productId: modeTCafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, modeTCfg, placedId, OPERATOR);
+    expect(await prepStateOf(placedId)).toBe("queued"); // placeOrder's OWN enqueue, already there
+    await expect(sendToPrep({ db: suite.admin }, modeTCfg, placedId)).rejects.toMatchObject({
+      code: "working_order.not_settled",
+      params: { workingOrderId: placedId },
+    });
+    expect(await prepStateOf(placedId)).toBe("queued"); // unchanged by the refused call
+  });
+
+  it("sendToPrep on a NONEXISTENT id is refused working_order.not_settled, not a raw FK-violation 500", async () => {
     const { cfg } = await modeVenue("prepay");
     const missing = randomUUID();
 
-    // No `working_orders` row exists for `missing`, so the INSERT violates `order_prep_order_fk` —
-    // NOT a unique violation, so `sendToPrep`'s catch re-throws it UNCHANGED (this function's own doc
-    // comment: "a raw FK-violation 500 for that shape, acceptable because this function is only ever
-    // reached from a route that just settled the very id it is passed"). Distinguishing this from the
-    // double-send-to-prep case above is the whole point of the `isUniqueViolation` branch.
-    const attempt = sendToPrep({ db: suite.admin }, cfg, missing);
+    // No `working_orders` row exists for `missing` — the existence+status guard now catches this
+    // BEFORE the insert is ever attempted, so `order_prep_order_fk` is never reached (fix round 1: it
+    // previously WAS reached here, surfacing as an opaque, un-caught driver error).
+    await expect(sendToPrep({ db: suite.admin }, cfg, missing)).rejects.toMatchObject({
+      code: "working_order.not_settled",
+      params: { workingOrderId: missing },
+    });
+    expect(await prepStateOf(missing)).toBeNull();
+  });
+
+  it("sendToPrep surfaces a RAW error for a non-unique insert failure — a settled order but a phantom node (order_prep_node_fk)", async () => {
+    const { cfg, cafe } = await modeVenue("prepay");
+    const id = randomUUID();
+    await payWorkingOrder(
+      { db: suite.admin, backend, clock },
+      cfg,
+      {
+        id,
+        lines: [{ productId: cafe.id, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true }); // passes the guard
+
+    // `cfg.nodeId` names NO row in `nodes` for this tenant — the order itself genuinely IS settled
+    // (the existence+status guard passes), but the INSERT then violates `order_prep_node_fk`, which
+    // is NOT a unique violation, so `sendToPrep`'s catch re-throws it UNCHANGED rather than reporting
+    // either domain code. The backstop `isUniqueViolation` branch exists specifically to distinguish
+    // this from the double-send-to-prep case (`order_prep_pk`).
+    const badNodeCfg = { ...cfg, nodeId: brandNodeId(randomUUID()) };
+    const attempt = sendToPrep({ db: suite.admin }, badNodeCfg, id);
     await expect(attempt).rejects.toBeTruthy();
     await expect(attempt).rejects.not.toMatchObject({ code: "order_prep.invalid_transition" });
+    await expect(attempt).rejects.not.toMatchObject({ code: "working_order.not_settled" });
+  });
+
+  it("sendToPrep on ANOTHER tenant's settled order is refused the SAME code — RLS hides it, not a leak of its real state", async () => {
+    const { cfg: tenantA, cafe } = await modeVenue("prepay");
+    const { cfg: tenantB } = await modeVenue("prepay"); // a wholly separate venue + tenant
+
+    const foreignId = randomUUID();
+    await payWorkingOrder(
+      { db: suite.admin, backend, clock },
+      tenantA,
+      {
+        id: foreignId,
+        lines: [{ productId: cafe.id, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    expect(await orderState(foreignId)).toEqual({ status: "settled", settledAtSet: true }); // genuinely settled — under tenant A
+
+    // Tenant B's config cannot see it at all (RLS) — the SAME `working_order.not_settled` a
+    // nonexistent id gets, not a distinct "wrong tenant" code (the fail-closed reasoning
+    // `node.not_found`'s own note in `errors.ts` gives: a separate code would confirm another
+    // tenant's order exists).
+    await expect(sendToPrep({ db: suite.admin }, tenantB, foreignId)).rejects.toMatchObject({
+      code: "working_order.not_settled",
+      params: { workingOrderId: foreignId },
+    });
+    // And no prep row was created reachable from EITHER tenant's scope.
+    expect(await listPrepQueue({ db: suite.admin }, tenantB)).toEqual([]);
   });
 
   it("listPrepQueue lists this node's ACTIVE prep oldest-first and drops a collected order", async () => {
@@ -1634,6 +1724,36 @@ describe("sendToPrep / advancePrep / listPrepQueue (prep surface)", () => {
     await advancePrep({ db: suite.admin }, cfg, id, "ready");
     await advancePrep({ db: suite.admin }, cfg, id, "collected");
     expect(await listPrepQueue({ db: suite.admin }, cfg)).toEqual([]); // collected leaves the active queue
+  });
+
+  it("listPrepQueue drops a CANCELLED order — cancelling doesn't leave it stuck in the active queue forever", async () => {
+    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+      label: "Mesa 3",
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR); // enqueues at queued
+    expect(await listPrepQueue({ db: suite.admin }, cfg)).toEqual([
+      expect.objectContaining({ id, state: "queued" }),
+    ]);
+
+    // `cancelPlacedOrder` (placed → abandoned) never touches `order_prep` at all — the row itself
+    // stays `queued`, UNCHANGED. It is `listPrepQueue`'s own join on `working_orders.status` that
+    // retires it, not a write this cancel makes (fix round 1: previously nothing did, so a cancelled
+    // order sat on the active queue forever).
+    await cancelPlacedOrder(
+      { db: suite.admin, backend, clock },
+      cfg,
+      id,
+      "customer left",
+      OPERATOR,
+    );
+    expect(await orderState(id)).toEqual({ status: "abandoned", settledAtSet: false });
+    expect(await prepStateOf(id)).toBe("queued"); // order_prep itself is untouched by cancel
+
+    expect(await listPrepQueue({ db: suite.admin }, cfg)).toEqual([]); // but no longer surfaced
   });
 
   it("listPrepQueue node scope is SYMMETRIC: each node sees only its own order, both non-empty", async () => {
