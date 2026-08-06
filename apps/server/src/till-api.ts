@@ -177,9 +177,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // Public boot info for the till app. Also UNAUTHENTICATED (the browser fetches it before login) and
   // deliberately free of secrets: `venueName` + `nif` are the receipt-issuer identity legally printed
   // on every customer ticket (Task 17's ticket view reads them from here, so its client never touches
-  // server code), and `locale` drives the UI language. Read from the `tenants` row under `withTenant`
-  // + `asAppUser`: `app_user` holds SELECT on `tenants` and RLS scopes it to this till's own tenant
-  // row, so the `eq(id)` filter selects exactly that row.
+  // server code), `locale` drives the UI language, and `orderFlow` (7c prepare & collect) is the
+  // location's pay-timing mode — already resolved onto `deps.cfg` at boot (`readOrderFlow`,
+  // `till-config.ts`), so this is a plain field read, no extra query. The till UI needs it BEFORE
+  // login to select which pay control to render (Place/Collect for Modes I/T vs the unchanged Pay for
+  // Mode P), so it rides on this same unauthenticated boot-info route rather than a session-guarded
+  // one. `venueName`/`nif` still come from the `tenants` row under `withTenant` + `asAppUser`:
+  // `app_user` holds SELECT on `tenants` and RLS scopes it to this till's own tenant row, so the
+  // `eq(id)` filter selects exactly that row.
   app.get("/api/till", (c) =>
     run(c, log, async () => {
       const issuer = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
@@ -198,7 +203,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         throw new Error(`GET /api/till: no tenant row for ${deps.cfg.tenantId}`);
       }
       /* v8 ignore stop */
-      return c.json({ locale: deps.cfg.locale, venueName: issuer.venueName, nif: issuer.nif });
+      return c.json({
+        locale: deps.cfg.locale,
+        venueName: issuer.venueName,
+        nif: issuer.nif,
+        orderFlow: deps.cfg.orderFlow,
+      });
     }),
   );
 

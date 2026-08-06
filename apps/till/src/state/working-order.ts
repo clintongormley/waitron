@@ -65,6 +65,15 @@ export class WorkingOrderStore {
    * than once per getter per consumer. Set to `null` in every mutation and recomputed lazily.
    */
   #priced: Priced | null = null;
+  /**
+   * Whether {@link id} already names an OPEN row server-side (7c place/collect). A fresh store starts
+   * `false` — nothing has synced it yet; {@link loadFrom} sets it `true` (a RETRIEVED order already
+   * exists); {@link clear} resets it `false` (a fresh id is a fresh, unsynced basket); the app calls
+   * {@link markPersisted} after a successful `parkOrder`. Placing a basket (Task 11's `#onPlaceOrder`)
+   * reads this to decide whether it must park FIRST or can sync-then-place an already-parked one — a
+   * retrieved order re-parked with the same id would 23505 on the server's plain INSERT.
+   */
+  #persisted = false;
 
   /** The stable client-minted working-order id for this basket. Changes only on {@link clear}. */
   get id(): string {
@@ -90,6 +99,18 @@ export class WorkingOrderStore {
   /** How many lines are in the basket — a cheap count that avoids materialising the defensive copy. */
   get lineCount(): number {
     return this.#lines.length;
+  }
+
+  /** Whether {@link id} already names an OPEN row server-side. See the field's own doc for why this
+   * exists. */
+  get persisted(): boolean {
+    return this.#persisted;
+  }
+
+  /** Record that {@link id} now names a persisted (parked) row. Not a rendering concern — no `"changed"`
+   * notification, unlike every basket mutation below. */
+  markPersisted(): void {
+    this.#persisted = true;
   }
 
   /** The memoised priced basket, recomputed only after a mutation cleared {@link #priced}. */
@@ -137,6 +158,7 @@ export class WorkingOrderStore {
     this.#id = crypto.randomUUID();
     this.#label = undefined;
     this.#priced = null;
+    this.#persisted = false;
     this.emit("changed");
   }
 
@@ -153,6 +175,7 @@ export class WorkingOrderStore {
     this.#lines.push(...lines);
     this.#label = label;
     this.#priced = null;
+    this.#persisted = true;
     this.emit("changed");
   }
 

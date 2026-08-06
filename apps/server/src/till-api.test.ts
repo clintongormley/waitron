@@ -415,7 +415,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(JSON.stringify(staff)).not.toMatch(/pin|secret|password|url|cert|role|status|hash/i);
   });
 
-  it("GET /api/till returns locale + issuer identity (venueName + nif) and no secret", async () => {
+  it("GET /api/till returns locale + issuer identity + orderFlow, and no secret", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
@@ -423,8 +423,14 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(res.status).toBe(200);
     const body = await res.json();
     // The receipt-issuer identity Task 17's ticket view needs: the legal name + NIF printed on every
-    // customer receipt, plus the till's UI locale.
-    expect(body).toEqual({ locale: "es-ES", venueName: "Test SL", nif: venueTaxId });
+    // customer receipt, the till's UI locale, and (7c) the location's pay-timing mode — this suite's
+    // seeded location carries the schema default, `prepay`, matching `deps`' cfg.
+    expect(body).toEqual({
+      locale: "es-ES",
+      venueName: "Test SL",
+      nif: venueTaxId,
+      orderFlow: "prepay",
+    });
     // Nothing sensitive: no pin, certificate, connection string or verification url reaches the wire.
     expect(JSON.stringify(body)).not.toMatch(/pin|secret|password|url|cert/i);
   });

@@ -5,6 +5,8 @@ import { currentLocale, setLocale, t } from "./i18n/t.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
+import type { TillTenderPay } from "./widgets/tender-pay.js";
+import type { TillPrepQueue } from "./widgets/prep-queue.js";
 import type { HeldOrderSummary, TillApi, TillProduct, TillSaleResult } from "./api/client.js";
 import type { WorkingOrderStore } from "./state/working-order.js";
 
@@ -44,7 +46,30 @@ const saleResult: TillSaleResult = {
   qr: "https://example.test/vf?nif=B1&num=F-0001&fecha=05-08-2026&total=3.00",
 };
 
-const till = { locale: "es-ES", venueName: "Bar Pepe", nif: "B12345678" };
+const till = {
+  locale: "es-ES",
+  venueName: "Bar Pepe",
+  nif: "B12345678",
+  orderFlow: "prepay" as const,
+};
+
+const placedResult = {
+  id: "wo-1",
+  status: "placed" as const,
+  invoiceNumber: "A/1",
+  issuedAt: "2026-08-06T10:00:00.000Z",
+  total: "3.00",
+  qr: "x",
+  vatBreakdown: [{ rate: "21", base: "2.48", tax: "0.52" }],
+};
+
+const prepEntry = {
+  id: "wo-1",
+  orderNumber: 5,
+  label: "Mesa 4",
+  state: "queued" as const,
+  queuedAt: "2026-08-06T10:00:00.000Z",
+};
 
 /**
  * A fake `TillApi` covering every method the app (and the lock screen it mounts) calls. Each defaults
@@ -67,6 +92,11 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       lines: [{ productId: "cafe", quantity: "2.000" }],
     }),
     abandonWorkingOrder: vi.fn().mockResolvedValue(undefined),
+    updateWorkingOrder: vi.fn().mockResolvedValue(undefined),
+    placeOrder: vi.fn().mockResolvedValue(placedResult),
+    collectOrder: vi.fn().mockResolvedValue(saleResult),
+    advancePrep: vi.fn().mockResolvedValue(undefined),
+    listPrepQueue: vi.fn().mockResolvedValue([]),
     logout: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;
@@ -82,6 +112,13 @@ const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen");
 const ticket = (el: TillApp) => el.shadowRoot!.querySelector<TillTicketView>("till-ticket-view");
+/** The pay widget nested inside the counter screen's OWN shadow root (7c per-mode control). */
+const tenderPay = (el: TillApp) =>
+  counter(el)!.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+/** The prep-queue widget nested inside the counter screen's shadow root, or `null` when the layout
+ * (Mode P) omits it. */
+const prepQueueWidget = (el: TillApp) =>
+  counter(el)!.shadowRoot!.querySelector<TillPrepQueue>("till-prep-queue");
 
 /** Fires a composed, bubbling CustomEvent from `source` — the shape every till screen emits. */
 function emit(source: Element, type: string, detail?: unknown): void {
@@ -700,6 +737,262 @@ describe("till-app", () => {
     emit(counter(el)!, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     expect(currentApi.recordSale).toHaveBeenCalledTimes(2);
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  // 7c prepare & collect: per-mode control selection (end-to-end, not just the widget in isolation)
+  // and the prep queue rendered from fetched data.
+  // ---------------------------------------------------------------------------------------------
+
+  describe("per-mode pay control + prep queue (7c)", () => {
+    it("boots into Mode P (prepay, the default): tender-pay shows the unchanged Pay flow, no prep queue fetched or rendered", async () => {
+      const { el } = await mountApp(); // the till fixture defaults orderFlow: "prepay"
+      const c = await toCounter(el);
+      expect(tenderPay(el).mode).toBe("prepay");
+      expect(tenderPay(el).stage).toBe("order");
+      expect(prepQueueWidget(el)).toBeNull(); // Mode P's layout omits the widget entirely
+      expect(currentApi.listPrepQueue).not.toHaveBeenCalled();
+      expect(c.products).toEqual([cafe]); // sanity: still a normal counter otherwise
+    });
+
+    it("boots into Mode I (invoice_first): tender-pay starts on the order stage; the prep queue is fetched and rendered", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+      });
+      await toCounter(el);
+      expect(tenderPay(el).mode).toBe("invoice_first");
+      expect(tenderPay(el).stage).toBe("order");
+      expect(prepQueueWidget(el)).not.toBeNull();
+      expect(currentApi.listPrepQueue).toHaveBeenCalledOnce(); // fetched on entering the counter
+    });
+
+    it("boots into Mode T (ticket_then_pay): the same per-mode selection applies", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+      });
+      await toCounter(el);
+      expect(tenderPay(el).mode).toBe("ticket_then_pay");
+      expect(prepQueueWidget(el)).not.toBeNull();
+    });
+
+    it("renders the prep queue from fetched data, not just an empty placeholder", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        listPrepQueue: vi.fn().mockResolvedValue([prepEntry]),
+      });
+      await toCounter(el);
+      expect(prepQueueWidget(el)!.entries).toEqual([prepEntry]);
+    });
+
+    it("place-order (fresh basket): parks then places, moves to the collect stage, refreshes the prep queue", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      const id = c.store.id;
+      expect(c.store.persisted).toBe(false); // a fresh walk-up basket, never parked
+
+      emit(c, "place-order");
+      await flush(el);
+
+      expect(currentApi.parkOrder).toHaveBeenCalledWith({
+        id,
+        lines: [{ productId: "cafe", quantity: "2" }],
+        label: undefined,
+      });
+      expect(currentApi.placeOrder).toHaveBeenCalledWith(id);
+      expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
+      expect(c.store.persisted).toBe(true); // marked persisted after the successful park
+      expect(tenderPay(el).stage).toBe("collect"); // Place → Collect
+      expect(counter(el)).not.toBeNull(); // stays on the counter (no ticket for a mere place)
+      expect(ticket(el)).toBeNull();
+      // once on entering the counter, once after the successful place (Modes I/T auto-enqueue).
+      expect(currentApi.listPrepQueue).toHaveBeenCalledTimes(2);
+    });
+
+    it("place-order on an ALREADY-persisted (retrieved) order syncs via updateWorkingOrder, never re-parks", async () => {
+      // Retrieving adopts the order's id and marks it persisted (loadFrom); placing it must not try to
+      // INSERT it again (parkOrder is a plain insert — a re-park of the same id would 23505).
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+      });
+      const c = await toCounter(el);
+
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+      expect(c.store.persisted).toBe(true);
+
+      emit(c, "place-order");
+      await flush(el);
+
+      expect(currentApi.parkOrder).not.toHaveBeenCalled();
+      expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
+        lines: [{ productId: "cafe", quantity: "2" }], // retrieveWorkingOrder's default fixture line
+        label: "Mesa 4",
+      });
+      expect(currentApi.placeOrder).toHaveBeenCalledWith("wo-1");
+      expect(tenderPay(el).stage).toBe("collect");
+    });
+
+    it("a failed place keeps the counter, the order stage and the basket, showing a non-fatal error", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        parkOrder: vi.fn().mockRejectedValue({ code: "working_order.rejected" }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "place-order");
+      await flush(el);
+
+      expect(currentApi.placeOrder).not.toHaveBeenCalled(); // never reached — the park failed first
+      expect(tenderPay(el).stage).toBe("order"); // never advanced
+      expect(counter(el)).not.toBeNull();
+      expect(c.store.lines).toHaveLength(1); // basket intact
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("place.error"));
+      expect(el.shadowRoot!.textContent).not.toContain("working_order.rejected");
+    });
+
+    it("place single-flight: a second place-order while the first is pending places EXACTLY ONCE", async () => {
+      const parkOrder = vi.fn(() => new Promise(() => {})); // never resolves
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        parkOrder,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "place-order"); // first — raises the guard, awaits
+      await el.updateComplete;
+      expect(counter(el)!.busy).toBe(true); // in flight → the Place affordance is disabled
+      emit(c, "place-order"); // second — guarded, a no-op
+      await el.updateComplete;
+
+      expect(parkOrder).toHaveBeenCalledOnce();
+    });
+
+    it("collect-order: settles the placed order and shows the ticket", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      const id = c.store.id;
+      emit(c, "place-order");
+      await flush(el);
+      expect(tenderPay(el).stage).toBe("collect");
+
+      emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
+      await flush(el);
+
+      expect(currentApi.collectOrder).toHaveBeenCalledWith(id, { method: "cash", amount: "5" });
+      const view = ticket(el)!;
+      expect(view).not.toBeNull();
+      expect(view.result).toBe(saleResult);
+      expect(view.lines).toHaveLength(1);
+    });
+
+    it("a failed collect keeps the counter (collect stage) and the basket, showing a non-fatal error", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        collectOrder: vi.fn().mockRejectedValue({ code: "working_order.not_placed" }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "place-order");
+      await flush(el);
+
+      emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
+      await flush(el);
+
+      expect(ticket(el)).toBeNull();
+      expect(counter(el)).not.toBeNull();
+      expect(tenderPay(el).stage).toBe("collect"); // still awaiting collection
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("sale.error"));
+      expect(el.shadowRoot!.textContent).not.toContain("working_order.not_placed");
+    });
+
+    it("collect single-flight: a second collect-order while the first is pending collects EXACTLY ONCE", async () => {
+      const collectOrder = vi.fn(() => new Promise<TillSaleResult>(() => {})); // never resolves
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        collectOrder,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "place-order");
+      await flush(el);
+
+      emit(counter(el)!, "collect-order", { method: "cash", amount: "5" }); // first — awaits
+      await el.updateComplete;
+      expect(counter(el)!.busy).toBe(true);
+      emit(counter(el)!, "collect-order", { method: "cash", amount: "5" }); // second — guarded
+      await el.updateComplete;
+
+      expect(collectOrder).toHaveBeenCalledOnce();
+    });
+
+    it("new-sale resets the collect stage back to order for the next basket", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "place-order");
+      await flush(el);
+      emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
+      await flush(el);
+      expect(ticket(el)).not.toBeNull();
+
+      emit(ticket(el)!, "new-sale");
+      await flush(el);
+
+      expect(tenderPay(el).stage).toBe("order");
+    });
+
+    it("advance-prep: advances the entry, then refreshes the prep queue", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        listPrepQueue: vi.fn().mockResolvedValueOnce([prepEntry]).mockResolvedValue([]),
+      });
+      const c = await toCounter(el);
+      expect(prepQueueWidget(el)!.entries).toEqual([prepEntry]);
+
+      emit(c, "advance-prep", { id: "wo-1", to: "preparing" });
+      await flush(el);
+
+      expect(currentApi.advancePrep).toHaveBeenCalledWith("wo-1", "preparing");
+      // once on entering the counter, once after the advance.
+      expect(currentApi.listPrepQueue).toHaveBeenCalledTimes(2);
+      expect(prepQueueWidget(el)!.entries).toEqual([]);
+    });
+
+    it("a failed advance-prep still refreshes the queue and shows a non-fatal error", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        advancePrep: vi.fn().mockRejectedValue({ code: "order_prep.invalid_transition" }),
+      });
+      const c = await toCounter(el);
+
+      emit(c, "advance-prep", { id: "wo-1", to: "preparing" });
+      await flush(el);
+
+      // the refresh runs even though the advance rejected — a stale entry corrects itself.
+      expect(currentApi.listPrepQueue).toHaveBeenCalledTimes(2);
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("prep.advance_error"));
+      expect(el.shadowRoot!.textContent).not.toContain("order_prep.invalid_transition");
+    });
   });
 
   it("does not change the global locale when the app disconnects before getTill resolves", async () => {

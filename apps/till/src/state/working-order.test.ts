@@ -216,4 +216,33 @@ describe("WorkingOrderStore", () => {
     expect(s.label).toBe("Mesa 7");
     expect(n).toBe(1);
   });
+
+  // `persisted` (7c place/collect): whether `id` already names an OPEN row server-side, so the app
+  // knows whether placing this basket needs a park first or can sync-then-place an already-parked one.
+  it("a fresh store is not persisted", () => {
+    const s = new WorkingOrderStore();
+    expect(s.persisted).toBe(false);
+  });
+
+  it("markPersisted flips persisted to true, without notifying (not a rendering concern)", () => {
+    const s = new WorkingOrderStore();
+    let n = 0;
+    s.subscribe(() => n++);
+    s.markPersisted();
+    expect(s.persisted).toBe(true);
+    expect(n).toBe(0);
+  });
+
+  it("loadFrom marks the store persisted — a retrieved order already exists server-side", () => {
+    const s = new WorkingOrderStore();
+    s.loadFrom("held-1", [{ product: cafe, quantity: "1" }]);
+    expect(s.persisted).toBe(true);
+  });
+
+  it("clear() resets persisted to false — a fresh basket is not yet parked", () => {
+    const s = new WorkingOrderStore();
+    s.markPersisted();
+    s.clear();
+    expect(s.persisted).toBe(false);
+  });
 });

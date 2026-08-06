@@ -4,13 +4,22 @@ import { baseStyles } from "@waitron/ui";
 import { setLocale, t } from "./i18n/t.js";
 import { TillApi } from "./api/client.js";
 import { WorkingOrderStore } from "./state/working-order.js";
+import { LAYOUT_A } from "./layout.js";
 // Side-effect imports register the three screen elements this app swaps between; it names them only
 // as tags below, so the wiring — not the screens — is what lives here.
 import "./screens/till-lock-screen.js";
 import "./screens/till-counter-screen.js";
 import "./screens/till-ticket-view.js";
 import type { StringKey } from "./i18n/strings.js";
-import type { HeldOrderSummary, TillProduct, TillSaleResult } from "./api/client.js";
+import type {
+  HeldOrderSummary,
+  OrderFlow,
+  PrepQueueEntry,
+  PrepState,
+  TillProduct,
+  TillSaleResult,
+} from "./api/client.js";
+import type { LayoutDef } from "./layout.js";
 import type { OrderLine } from "./state/working-order.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
@@ -42,13 +51,19 @@ function displayQuantity(product: TillProduct, quantity: string): string {
  * not — every screen/widget emits a composed, bubbling event that reaches the handlers on the wrapper
  * below, and the app decides what happens next:
  *
- *  - boot → `getTill` sets the operator-UI locale, remembers the receipt (invoice) locale and the
- *    ticket issuer; the app opens on `lock`;
- *  - `logged-in` → load the products, remember the operator, show the `counter`;
- *  - `confirm-payment` → `recordSale` the basket, then show the `ticket` and refresh the held list so
- *    a settled parked order drops off (or, on a rejected `{code}`, stay on the counter with the basket
- *    intact and surface a non-fatal error — a till must never lose a sale in progress);
- *  - `new-sale` → clear the basket, back to an empty `counter`;
+ *  - boot → `getTill` sets the operator-UI locale, remembers the receipt (invoice) locale, the ticket
+ *    issuer and (7c) the location's pay-timing mode ({@link orderFlow}); the app opens on `lock`;
+ *  - `logged-in` → load the products, remember the operator, show the `counter`, refresh the held list
+ *    and (Modes I/T) the prep queue;
+ *  - `confirm-payment` (Mode P) → `recordSale` the basket, then show the `ticket` and refresh the held
+ *    list so a settled parked order drops off (or, on a rejected `{code}`, stay on the counter with the
+ *    basket intact and surface a non-fatal error — a till must never lose a sale in progress);
+ *  - `place-order` (Modes I/T) → park-or-sync then `placeOrder` the basket, move to the `"collect"`
+ *    stage for the SAME order and refresh the prep queue;
+ *  - `collect-order` (Modes I/T) → `collectOrder` the placed order, then show the `ticket` — the same
+ *    shape `confirm-payment` follows, on the collect-stage tender instead of a fresh sale;
+ *  - `advance-prep` → `advancePrep` one prep-queue entry, then refresh the queue regardless of outcome;
+ *  - `new-sale` → clear the basket, reset the `"order"`/`"collect"` stage, back to an empty `counter`;
  *  - `logout` → end the server session, back to `lock`, WITHOUT clearing the basket.
  *
  * DISCONNECT SAFETY. Only one post-await step here has an effect that outlives the element: `setLocale`
@@ -97,6 +112,28 @@ export class TillApp extends LitElement {
    * parked orders, including ones parked on a different register.
    */
   @state() private heldOrders: HeldOrderSummary[] = [];
+  /**
+   * The location's pay-timing mode (7c prepare & collect, design §3), read once from `GET /api/till`
+   * on boot (see `#boot`) — BEFORE login, since the counter needs it the moment it first renders.
+   * Defaults `"prepay"` (Mode P), the walk-up flow every earlier slice shipped, so a boot that has not
+   * yet resolved (or a stub that omits it) never shows Modes I/T's Place/Collect controls by accident.
+   */
+  @state() private orderFlow: OrderFlow = "prepay";
+  /**
+   * Where the CURRENT basket sits in a Mode-I/T order's life: `"order"` (composing/placing, the
+   * default) or `"collect"` (this basket's order was placed and now awaits its tender). Ignored by
+   * `tender-pay` under Mode P (`orderFlow === "prepay"`), which has no separate collect stage. Reset
+   * to `"order"` by `#onNewSale` — the same moment the basket itself is cleared.
+   */
+  @state() private stage: "order" | "collect" = "order";
+  /**
+   * This node's active prep-queue entries (7c, design §5), handed to the counter's prep-queue widget.
+   * Refreshed on entering the counter, after a successful place (Modes I/T enqueue automatically) and
+   * after every advance — the moments the queue's contents change. Fetching is gated on
+   * {@link orderFlow}: Mode P has no automatic path into prep (`sendToPrep` is a manual, unbuilt
+   * follow-up — see `#refreshPrepQueue`), so a prepay till never issues the request.
+   */
+  @state() private prepQueue: PrepQueueEntry[] = [];
   /** The filed sale to print; set on a successful `recordSale`, read by the ticket view. */
   @state() private result?: TillSaleResult;
   /** The basket lines snapshotted at pay time — the goods the ticket identifies (art. 7.1.e). */
@@ -128,6 +165,14 @@ export class TillApp extends LitElement {
    * hygiene rather than a fiscal safety — but a duplicate `POST` is still avoided.
    */
   @state() private parking = false;
+  /**
+   * REENTRY GUARD for placing — the same shape as {@link parking}, one flag per in-flight request. Set
+   * synchronously at the top of {@link TillApp.#onPlaceOrder} before its first await and cleared in its
+   * `finally`. Also OR'd into the `busy` prop threaded to `till-counter-screen` (alongside
+   * {@link submitting}), so the Place control disables while its park-then-place round trip is
+   * in flight — the same visible feedback `submitting` gives Pay/Collect.
+   */
+  @state() private placing = false;
 
   override firstUpdated(): void {
     void this.#boot();
@@ -135,10 +180,10 @@ export class TillApp extends LitElement {
 
   /**
    * Read the public till info once: set the OPERATOR-UI locale (`setLocale`), remember the receipt
-   * (invoice) locale for the ticket, and remember the ticket issuer. `setLocale` and `invoiceLocale`
-   * both take the SAME server `locale`, but they drive different things and are threaded separately —
-   * the receipt uses its `invoiceLocale` PROP and must never follow the operator UI (see
-   * `till-ticket-view`'s INVOICE LOCALE note).
+   * (invoice) locale for the ticket, remember the ticket issuer, and (7c) remember the location's
+   * pay-timing mode. `setLocale` and `invoiceLocale` both take the SAME server `locale`, but they
+   * drive different things and are threaded separately — the receipt uses its `invoiceLocale` PROP and
+   * must never follow the operator UI (see `till-ticket-view`'s INVOICE LOCALE note).
    */
   async #boot(): Promise<void> {
     const till = await this.api.getTill();
@@ -149,9 +194,11 @@ export class TillApp extends LitElement {
     setLocale(till.locale);
     this.invoiceLocale = till.locale;
     this.issuer = { venueName: till.venueName, nif: till.nif };
+    this.orderFlow = till.orderFlow;
   }
 
-  /** A confirmed login: load the catalogue, remember the operator, show the counter, list held orders. */
+  /** A confirmed login: load the catalogue, remember the operator, show the counter, list held orders
+   * and (Modes I/T) the prep queue. */
   async #onLoggedIn(event: Event): Promise<void> {
     const { displayName } = (event as CustomEvent<LoggedInDetail>).detail;
     const products = await this.api.listProducts();
@@ -160,6 +207,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     this.screen = "counter";
     await this.#refreshHeldOrders();
+    await this.#refreshPrepQueue();
   }
 
   /**
@@ -170,6 +218,18 @@ export class TillApp extends LitElement {
    */
   async #refreshHeldOrders(): Promise<void> {
     this.heldOrders = await this.api.listWorkingOrders();
+  }
+
+  /**
+   * Reload the node's prep queue (7c, design §5). Called on entering the counter, after a successful
+   * place (Modes I/T enqueue automatically at placing) and after every advance — the moments the
+   * queue's contents change. Gated on {@link orderFlow}: under Mode P nothing auto-enqueues (`sendToPrep`
+   * is a manual action with no UI control yet — a documented follow-up, not built here), so the widget
+   * would only ever show its empty state and the request would be pure waste; skip it entirely.
+   */
+  async #refreshPrepQueue(): Promise<void> {
+    if (this.orderFlow === "prepay") return;
+    this.prepQueue = await this.api.listPrepQueue();
   }
 
   /**
@@ -216,6 +276,100 @@ export class TillApp extends LitElement {
       // is now `ticket`), on rejection the operator is back on the counter and may retry.
       this.submitting = false;
     }
+  }
+
+  /** Maps the current basket to the wire shape `parkOrder`/`updateWorkingOrder`/`placeOrder` share:
+   * product id + quantity, never a price (the server always re-prices). */
+  #currentSaleLines(): { productId: string; quantity: string }[] {
+    return this.#store.lines.map((line) => ({
+      productId: line.product.id,
+      quantity: line.quantity,
+    }));
+  }
+
+  /**
+   * Place the current basket (Modes I/T only — `tender-pay` never emits `place-order` under Mode P,
+   * design §3): `open → placed`, freezing composition and (Mode I) issuing a deferred invoice.
+   *
+   * `placeOrder` requires the order to ALREADY exist as an `open` row, so this syncs it first: a
+   * basket never yet persisted (a fresh walk-up) is PARKED (`parkOrder`, then `store.markPersisted()`);
+   * a basket already persisted (a RETRIEVED held order, possibly edited locally since) is instead
+   * synced with `updateWorkingOrder` — re-parking it would collide on the primary key (`parkOrder` is a
+   * plain INSERT, not an idempotent replace). Either way the server places the CURRENT local
+   * composition, never a stale one.
+   *
+   * On success this widget instance moves to the `"collect"` stage for the SAME order (`store.id` is
+   * unchanged — only `#onNewSale` re-mints it) and refreshes the prep queue, since Modes I/T enqueue
+   * automatically at placing. Reentry-guarded like `#onParkOrder`'s `parking` (see `placing`'s own doc).
+   */
+  async #onPlaceOrder(): Promise<void> {
+    if (this.placing) return;
+    this.placing = true;
+    const id = this.#store.id;
+    const lines = this.#currentSaleLines();
+    const label = this.#store.label;
+    this.errorKey = undefined;
+    try {
+      if (this.#store.persisted) {
+        await this.api.updateWorkingOrder(id, { lines, label });
+      } else {
+        await this.api.parkOrder({ id, lines, label });
+        this.#store.markPersisted();
+      }
+      await this.api.placeOrder(id);
+      this.stage = "collect";
+      await this.#refreshPrepQueue();
+    } catch {
+      // A rejected {code} must not lose the order in progress: stay on the counter, basket (and its
+      // `"order"` stage) intact, and surface a generic, non-fatal message — never the raw domain code.
+      this.errorKey = "place.error";
+    } finally {
+      this.placing = false;
+    }
+  }
+
+  /**
+   * Collect and finalise a PLACED order (Modes I/T only, design §3): Mode I settles the already-issued
+   * deferred invoice, Mode T files immediate — `collectOrder`'s own dispatch, unreached by this call.
+   * Reuses `submitting`, the SAME single-flight guard `#onConfirmPayment` uses — both are terminal
+   * fiscal-file moments (CLAUDE.md §5's double-file safety) — so a re-fired `collect-order` before the
+   * first settles is a no-op exactly like a re-fired `confirm-payment`. The lines are snapshotted for
+   * the ticket exactly like a walk-up pay; the basket itself is left untouched either way (like
+   * `#onConfirmPayment`), so `#onNewSale` remains the one place that clears it and resets `stage`.
+   */
+  async #onCollectOrder(event: Event): Promise<void> {
+    if (this.submitting) return;
+    this.submitting = true;
+    const tender = (event as CustomEvent<ConfirmPaymentDetail>).detail;
+    const lines = this.#store.lines;
+    const id = this.#store.id;
+    this.errorKey = undefined;
+    try {
+      this.result = await this.api.collectOrder(id, tender);
+      this.ticketLines = lines;
+      this.screen = "ticket";
+    } catch {
+      this.errorKey = "sale.error";
+    } finally {
+      this.submitting = false;
+    }
+  }
+
+  /**
+   * Advance a prep-queue entry one step (7c, design §5) — the kitchen action `<till-prep-queue>`'s
+   * Advance control emits. Runs the refresh on BOTH paths, like `#onDiscardOrder`: even a rejected
+   * advance (a race with another till, or a since-collected order) re-reads the queue, so a stale entry
+   * corrects itself rather than sitting on an out-of-date state.
+   */
+  async #onAdvancePrep(event: Event): Promise<void> {
+    const { id, to } = (event as CustomEvent<{ id: string; to: PrepState }>).detail;
+    this.errorKey = undefined;
+    try {
+      await this.api.advancePrep(id, to);
+    } catch {
+      this.errorKey = "prep.advance_error";
+    }
+    await this.#refreshPrepQueue();
   }
 
   /**
@@ -324,9 +478,11 @@ export class TillApp extends LitElement {
     await this.#refreshHeldOrders();
   }
 
-  /** Start the next sale: empty the basket, back to the counter. */
+  /** Start the next sale: empty the basket (and, with it, its `persisted` flag), reset the place/collect
+   * stage back to `"order"`, back to the counter. */
   #onNewSale(): void {
     this.#store.clear();
+    this.stage = "order";
     this.errorKey = undefined;
     this.screen = "counter";
   }
@@ -339,12 +495,28 @@ export class TillApp extends LitElement {
     this.screen = "lock";
   }
 
+  /**
+   * The layout to render for {@link orderFlow}: `LAYOUT_A` minus the prep-queue widget under Mode P.
+   * Mode P has no automatic path into prep (see `#refreshPrepQueue`'s doc), so the widget would only
+   * ever show its empty state there; Modes I/T enqueue automatically at placing (design §5) and are the
+   * modes prep-queue exists for. `layout.ts` itself stays plain data (its own stated invariant) — this
+   * derivation lives here, in the composition root, not there.
+   */
+  #layoutFor(): LayoutDef {
+    return this.orderFlow === "prepay"
+      ? LAYOUT_A.filter((widget) => widget.type !== "prep-queue")
+      : LAYOUT_A;
+  }
+
   override render() {
     return html`
       <div
         class="app"
         @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
         @confirm-payment=${(event: Event) => void this.#onConfirmPayment(event)}
+        @place-order=${() => void this.#onPlaceOrder()}
+        @collect-order=${(event: Event) => void this.#onCollectOrder(event)}
+        @advance-prep=${(event: Event) => void this.#onAdvancePrep(event)}
         @park-order=${(event: Event) => void this.#onParkOrder(event)}
         @retrieve-order=${(event: Event) => void this.#onRetrieveOrder(event)}
         @discard-order=${(event: Event) => void this.#onDiscardOrder(event)}
@@ -366,8 +538,12 @@ export class TillApp extends LitElement {
           .store=${this.#store}
           .products=${this.products}
           .heldOrders=${this.heldOrders}
+          .prepQueue=${this.prepQueue}
           .operatorName=${this.operatorName}
-          .busy=${this.submitting}
+          .orderFlow=${this.orderFlow}
+          .stage=${this.stage}
+          .busy=${this.submitting || this.placing}
+          .layout=${this.#layoutFor()}
         ></till-counter-screen>`;
       case "ticket":
         return html`<till-ticket-view

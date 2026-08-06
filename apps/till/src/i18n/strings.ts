@@ -72,6 +72,8 @@ export const en = {
   "held.park_error": "Could not hold the order, try again",
   "held.product_gone": "A product was removed and dropped from the order",
   "held.stale": "That order is no longer available",
+  "place.error": "Could not place the order, try again",
+  "prep.advance_error": "Could not update the order's status, try again",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -127,6 +129,8 @@ export const es: Record<StringKey, string> = {
   "held.park_error": "No se pudo aparcar el pedido, inténtalo de nuevo",
   "held.product_gone": "Se quitó un producto y se eliminó del pedido",
   "held.stale": "Ese pedido ya no está disponible",
+  "place.error": "No se pudo enviar el pedido, inténtalo de nuevo",
+  "prep.advance_error": "No se pudo actualizar el estado del pedido, inténtalo de nuevo",
 };
 
 // Locale → catalogue. `en` is included as its own catalogue so an explicit

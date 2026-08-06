@@ -19,11 +19,17 @@
 /** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 export type FetchLike = typeof fetch;
 
-/** `GET /api/till` — the public boot info the app reads before login. */
+/**
+ * `GET /api/till` — the public boot info the app reads before login. `orderFlow` (7c prepare &
+ * collect) is the location's pay-timing mode — see {@link OrderFlow}'s own doc — needed BEFORE login
+ * so the app can select which pay control (Place/Collect vs Pay) to render once the operator reaches
+ * the counter.
+ */
 export interface TillInfo {
   locale: string;
   venueName: string;
   nif: string;
+  orderFlow: OrderFlow;
 }
 
 /** One `GET /api/staff` roster entry — no PIN, role or status (the server strips them). */

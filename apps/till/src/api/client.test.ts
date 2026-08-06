@@ -86,7 +86,7 @@ describe("TillApi", () => {
   });
 
   it("getTill GETs the boot info with no request body or content-type", async () => {
-    const info = { locale: "es-ES", venueName: "Deli", nif: "B12345678" };
+    const info = { locale: "es-ES", venueName: "Deli", nif: "B12345678", orderFlow: "prepay" };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(info));
     const api = new TillApi("", fetchStub);
 
@@ -152,7 +152,9 @@ describe("TillApi", () => {
   it("prefixes every path with the configured baseUrl", async () => {
     const fetchStub = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ locale: "es-ES", venueName: "D", nif: "N" }));
+      .mockResolvedValue(
+        jsonResponse({ locale: "es-ES", venueName: "D", nif: "N", orderFlow: "prepay" }),
+      );
 
     await new TillApi("https://till.example", fetchStub).getTill();
 

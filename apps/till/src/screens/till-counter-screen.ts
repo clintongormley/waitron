@@ -11,7 +11,7 @@ import "../widgets/total.js";
 import "../widgets/tender-pay.js";
 import "../widgets/held-orders.js";
 import "../widgets/prep-queue.js";
-import type { HeldOrderSummary, PrepQueueEntry, TillProduct } from "../api/client.js";
+import type { HeldOrderSummary, OrderFlow, PrepQueueEntry, TillProduct } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 
 /**
@@ -111,6 +111,16 @@ export class TillCounterScreen extends LitElement {
    * that includes `prep-queue` renders its empty state until the app wires a live refresh.
    */
   @property({ attribute: false }) prepQueue: PrepQueueEntry[] = [];
+  /**
+   * The location's pay-timing mode (7c prepare & collect), threaded straight through to the pay
+   * widget's own `mode` — see `till-tender-pay`'s PER-MODE CONTROL doc for exactly which idle control
+   * each `orderFlow`/`stage` combination renders. Defaults `"prepay"`, reproducing 7a/7b's walk-up
+   * flow unchanged.
+   */
+  @property() orderFlow: OrderFlow = "prepay";
+  /** Where the current basket sits in a Mode-I/T order's life — threaded straight through to the pay
+   * widget's own `stage`. Ignored under Mode P. */
+  @property() stage: "order" | "collect" = "order";
   /** The logged-in operator's display name, shown in the header. Data, never translated. */
   @property() operatorName = "";
   /**
@@ -144,7 +154,12 @@ export class TillCounterScreen extends LitElement {
       case "total":
         return html`<till-total .store=${this.store}></till-total>`;
       case "tender-pay":
-        return html`<till-tender-pay .store=${this.store} .busy=${this.busy}></till-tender-pay>`;
+        return html`<till-tender-pay
+          .store=${this.store}
+          .busy=${this.busy}
+          .mode=${this.orderFlow}
+          .stage=${this.stage}
+        ></till-tender-pay>`;
       case "held-orders":
         return html`<till-held-orders .orders=${this.heldOrders}></till-held-orders>`;
       case "prep-queue":
