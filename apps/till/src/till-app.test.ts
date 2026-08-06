@@ -40,6 +40,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
     listProducts: vi.fn().mockResolvedValue([cafe]),
     recordSale: vi.fn().mockResolvedValue(saleResult),
+    parkOrder: vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 }),
     logout: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;
@@ -169,6 +170,83 @@ describe("till-app", () => {
     expect(counter(el)).not.toBeNull();
     expect(ticket(el)).toBeNull();
     expect(store.lines).toHaveLength(0);
+  });
+
+  it("park-order: parks the basket with its id + mapped lines + label, then empties it and stays on the counter", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    const store = c.store;
+    store.addProduct(cafe, "2");
+    await el.updateComplete;
+    const parkedId = store.id; // captured BEFORE the park — clear() re-mints it on success
+
+    emit(c, "park-order", { label: "Mesa 4" });
+    await flush(el);
+
+    expect(currentApi.parkOrder).toHaveBeenCalledWith({
+      id: parkedId,
+      lines: [{ productId: "cafe", quantity: "2" }],
+      label: "Mesa 4",
+    });
+    // The basket is emptied and its id re-minted, ready for the next customer; still on the counter.
+    expect(store.lines).toHaveLength(0);
+    expect(store.id).not.toBe(parkedId);
+    expect(counter(el)).not.toBeNull();
+    expect(ticket(el)).toBeNull();
+  });
+
+  it("park-order: forwards an unlabelled park (label undefined)", async () => {
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+
+    emit(c, "park-order", { label: undefined });
+    await flush(el);
+
+    expect(currentApi.parkOrder).toHaveBeenCalledWith({
+      id: expect.any(String),
+      lines: [{ productId: "cafe", quantity: "2" }],
+      label: undefined,
+    });
+  });
+
+  it("a failed parkOrder keeps the counter and the basket, showing a non-fatal error", async () => {
+    const { el } = await mountApp({
+      parkOrder: vi.fn().mockRejectedValue({ code: "working_order.rejected" }),
+    });
+    const c = await toCounter(el);
+    const store = c.store;
+    store.addProduct(cafe, "2");
+    await el.updateComplete;
+
+    emit(c, "park-order", { label: "Mesa 4" });
+    await flush(el);
+
+    expect(currentApi.parkOrder).toHaveBeenCalledOnce();
+    expect(ticket(el)).toBeNull();
+    expect(counter(el)).not.toBeNull();
+    expect(store.lines).toHaveLength(1); // basket intact — a failed park never loses the order
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("held.park_error"));
+    expect(el.shadowRoot!.textContent).not.toContain("working_order.rejected"); // never leaks the code
+  });
+
+  it("park single-flight: a second park-order while the first is pending parks EXACTLY ONCE", async () => {
+    // A re-entrant park (double-tap / laggy link) must not fire a second POST. Deleting the
+    // `if (this.parking) return` guard makes parkOrder fire twice — the deletion proof.
+    const parkOrder = vi.fn(() => new Promise(() => {})); // never resolves
+    const { el } = await mountApp({ parkOrder });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+
+    emit(c, "park-order", { label: "Mesa 4" }); // first — raises the guard, awaits
+    await el.updateComplete;
+    emit(c, "park-order", { label: "Mesa 4" }); // second — guarded, a no-op
+    await el.updateComplete;
+
+    expect(parkOrder).toHaveBeenCalledOnce();
   });
 
   it("logout: calls logout, returns to lock, and KEEPS the basket", async () => {

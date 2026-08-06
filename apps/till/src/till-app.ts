@@ -14,7 +14,7 @@ import type { TillProduct, TillSaleResult } from "./api/client.js";
 import type { OrderLine } from "./state/working-order.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
-import type { ConfirmPaymentDetail } from "./widgets/tender-pay.js";
+import type { ConfirmPaymentDetail, ParkOrderDetail } from "./widgets/tender-pay.js";
 
 /** The three faces of the till: sign in, ring up, print. The app shows exactly one at a time. */
 type Screen = "lock" | "counter" | "ticket";
@@ -99,6 +99,14 @@ export class TillApp extends LitElement {
    * that disabling is the visible feedback; this flag is the actual safety.
    */
   @state() private submitting = false;
+  /**
+   * REENTRY GUARD for parking — the same shape as {@link submitting}, one flag per in-flight request.
+   * Set synchronously at the top of {@link TillApp.#onParkOrder} before the first `await parkOrder` and
+   * cleared in its `finally`, so a re-fired `park-order` (double-tap, a laggy link) is a no-op while the
+   * first is pending. Parking twice is idempotent server-side (the id is the primary key), so this is
+   * hygiene rather than a fiscal safety — but a duplicate `POST` is still avoided.
+   */
+  @state() private parking = false;
 
   override firstUpdated(): void {
     void this.#boot();
@@ -168,6 +176,39 @@ export class TillApp extends LitElement {
     }
   }
 
+  /**
+   * Park the current basket to pay later, then empty it for the next customer — staying on the counter
+   * (a parked order is NOT a completed sale, so there is no ticket). The store's stable `id` is sent as
+   * the park-idempotency key; on success `store.clear()` empties the basket AND re-mints that id, so the
+   * next park/pay keys a fresh working order rather than colliding with the parked one. A rejected park
+   * must not lose the order: like `#onConfirmPayment`, it surfaces a non-fatal error and leaves the
+   * basket intact (no `clear`) so the operator can retry.
+   */
+  async #onParkOrder(event: Event): Promise<void> {
+    // Reentry guard: a second park-order fired before the first settles is a no-op (see `parking`).
+    if (this.parking) return;
+    this.parking = true;
+    const { label } = (event as CustomEvent<ParkOrderDetail>).detail;
+    // Read the id and lines BEFORE the await: a successful clear() re-mints the id, so the value sent
+    // must be captured against the basket as it stands now.
+    const id = this.#store.id;
+    const lines = this.#store.lines;
+    this.errorKey = undefined;
+    try {
+      await this.api.parkOrder({
+        id,
+        lines: lines.map((line) => ({ productId: line.product.id, quantity: line.quantity })),
+        label,
+      });
+      this.#store.clear();
+    } catch {
+      // A rejected park must not lose the order: stay on the counter, basket intact, generic message.
+      this.errorKey = "held.park_error";
+    } finally {
+      this.parking = false;
+    }
+  }
+
   /** Start the next sale: empty the basket, back to the counter. */
   #onNewSale(): void {
     this.#store.clear();
@@ -189,6 +230,7 @@ export class TillApp extends LitElement {
         class="app"
         @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
         @confirm-payment=${(event: Event) => void this.#onConfirmPayment(event)}
+        @park-order=${(event: Event) => void this.#onParkOrder(event)}
         @new-sale=${() => this.#onNewSale()}
         @logout=${() => void this.#onLogout()}
       >
