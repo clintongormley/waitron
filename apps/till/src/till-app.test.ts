@@ -330,6 +330,10 @@ describe("till-app", () => {
       { method: "cash", amount: "5" },
       "wo-1",
     );
+    // Behaviour 1 (re-review): the order was retrieved but NOT edited, so it must NOT be re-synced —
+    // re-syncing re-prices with the live catalogue and would file at the pay-time price, defeating the
+    // add-time lock. An unedited retrieve→pay files from the stored lock (recordSale straight through).
+    expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
   });
 
   it("retrieve → edit → pay re-syncs the edited basket BEFORE paying, so the edit is not dropped (Finding 2)", async () => {
@@ -375,6 +379,69 @@ describe("till-app", () => {
     expect(updateWorkingOrder.mock.invocationCallOrder[0]!).toBeLessThan(
       recordSale.mock.invocationCallOrder[0]!,
     );
+  });
+
+  it("retrieve → edit → pay: a not_open re-sync FALLS THROUGH to the settled replay, not sale.error (Findings 3 & 4)", async () => {
+    // Behaviours 3 & 4 of the re-review: a lost-response retry, or the LOSER of a two-till concurrent
+    // pay on the same parked order (a normal 7b flow), finds the order ALREADY settled. The edit-gated
+    // re-sync then throws `working_order.not_open` — which must NOT surface. It means "already settled →
+    // let the pay path replay": `recordSale`'s settled branch returns the FILED ticket (no double-file,
+    // no error banner). Deleting the not_open swallow in `#onConfirmPayment` makes this fail (the throw
+    // reaches the sale.error handler and no ticket shows) — the replay-safety deletion proof.
+    const updateWorkingOrder = vi.fn().mockRejectedValue({ code: "working_order.not_open" });
+    const recordSale = vi.fn().mockResolvedValue(saleResult); // the server's settled-replay ticket
+    const { el } = await mountApp({ updateWorkingOrder, recordSale });
+    const c = await toCounter(el);
+    const store = c.store;
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    store.addProduct(cafe, "1"); // an edit → the basket is dirty, so the re-sync is attempted
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    // The re-sync was attempted and rejected `not_open` — but the pay REPLAYED: ticket shown, no error.
+    expect(updateWorkingOrder).toHaveBeenCalled();
+    expect(recordSale).toHaveBeenCalledWith(
+      [
+        { productId: "cafe", quantity: "2" },
+        { productId: "cafe", quantity: "1" },
+      ],
+      { method: "cash", amount: "5" },
+      "wo-1",
+    );
+    expect(ticket(el)).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull(); // no sale.error banner
+  });
+
+  it("retrieve → edit → pay: a NON-not_open re-sync failure surfaces as a non-fatal error (basket intact)", async () => {
+    // The other side of the swallow: only `working_order.not_open` falls through. Any OTHER re-sync
+    // rejection (a network error, some other domain code) is a real failure — it must surface as the
+    // generic sale.error, leave the basket intact, and NOT file (recordSale is never reached). Mutating
+    // the swallow to catch every code would let a genuine failure be silently paid past.
+    const updateWorkingOrder = vi.fn().mockRejectedValue({ code: "server.internal" });
+    const recordSale = vi.fn().mockResolvedValue(saleResult);
+    const { el } = await mountApp({ updateWorkingOrder, recordSale });
+    const c = await toCounter(el);
+    const store = c.store;
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    store.addProduct(cafe, "1"); // edit → dirty → re-sync attempted
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    expect(recordSale).not.toHaveBeenCalled(); // the failed sync short-circuits before filing
+    expect(ticket(el)).toBeNull();
+    expect(counter(el)).not.toBeNull();
+    expect(store.lines).toHaveLength(2); // basket intact — café×2 retrieved + café×1 edit
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("sale.error"));
+    expect(el.shadowRoot!.textContent).not.toContain("server.internal"); // never leaks the raw code
   });
 
   it("walk-up pay retry: a re-tapped confirm sends the SAME store id (idempotent replay, never two ids)", async () => {

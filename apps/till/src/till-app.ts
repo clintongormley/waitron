@@ -252,17 +252,34 @@ export class TillApp extends LitElement {
     const id = this.#store.id;
     const lines = this.#currentSaleLines();
     const label = this.#store.label;
-    const persisted = this.#store.persisted;
+    // Re-sync ONLY a persisted basket that was actually EDITED since it was retrieved. Two guards, both
+    // load-bearing:
+    //  - `persisted`: a fresh walk-up (not persisted) needs no sync — the server creates its order from
+    //    the sent `lines`.
+    //  - `dirty`: an UNEDITED retrieved order must NOT re-sync. `updateWorkingOrder` re-prices with the
+    //    live catalogue, so re-syncing an untouched order would file at the pay-time price and defeat
+    //    the ADD-TIME lock (a catalogue change between park and pay would move the filed total). Gating
+    //    on the edit keeps the no-edit path filing the stored lock.
+    const needsResync = this.#store.persisted && this.#store.dirty;
     this.errorKey = undefined;
     try {
-      // A PERSISTED (retrieved/parked) basket must be re-synced before paying: the server's
-      // retrieved-order pay path files from the STORED lock and IGNORES `req.lines`, so an edit made
-      // after retrieve would be SILENTLY DROPPED from both the charge and the filed record without this
-      // (7b→7c regression). `updateWorkingOrder` re-locks the current composition at edit time, exactly
-      // as `#onPlaceOrder`'s persisted-sync does, so the edit is what gets filed. A fresh walk-up (not
-      // persisted) needs no sync — the server creates its order from the sent `lines`.
-      if (persisted) {
-        await this.api.updateWorkingOrder(id, { lines, label });
+      // An EDITED retrieved basket is re-synced before paying: the server's retrieved-order pay path
+      // files from the STORED lock and IGNORES `req.lines`, so an edit made after retrieve would be
+      // SILENTLY DROPPED from both the charge and the filed record without this (7b→7c regression).
+      // `updateWorkingOrder` re-locks the current composition at edit time, exactly as `#onPlaceOrder`'s
+      // persisted-sync does, so the edit is what gets filed.
+      if (needsResync) {
+        try {
+          await this.api.updateWorkingOrder(id, { lines, label });
+        } catch (error) {
+          // A `working_order.not_open` from the re-sync means the order is ALREADY settled (or otherwise
+          // non-open): a lost-response re-tap, or the loser of a two-till concurrent pay on the SAME
+          // parked order (a normal 7b cross-till flow). That is NOT an error to show — it means "already
+          // settled, let the pay path replay". Fall through to `recordSale`, whose settled branch
+          // REPLAYS the filed ticket (spec §3), never a double-file. Any OTHER rejection is a real sync
+          // failure and propagates to the `sale.error` handler below.
+          if ((error as { code?: string }).code !== "working_order.not_open") throw error;
+        }
       }
       this.result = await this.api.recordSale(lines, tender, id);
       this.screen = "ticket";

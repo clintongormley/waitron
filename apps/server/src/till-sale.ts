@@ -81,10 +81,12 @@ export interface TillSaleRequest {
 /**
  * One line of the FILED composition, for the receipt's goods-identification list (RD 1619/2012
  * art. 7.1.e). It comes from the priced/locked lines the server FILED — never a client basket — so the
- * printed line list can never diverge from the invoice (the whole point of Finding 2's fix). A
- * catalogue price change between a park/place and pay moves neither this nor the filed total: both are
- * derived from the ADD-TIME lock (`priceLockedLines`) or, for a walk-up, the single price the sale was
- * filed at.
+ * printed line list can never diverge from the invoice (the whole point of Finding 2's fix). For an
+ * UNEDITED retrieved/placed order a catalogue price change between park/place and pay moves neither
+ * this nor the filed total: both derive from the ADD-TIME lock (`priceLockedLines`), or, for a walk-up,
+ * the single price the sale was filed at. (Editing a retrieved order before pay explicitly re-locks it
+ * at edit time via `updateWorkingOrder` — the till only re-syncs when the basket actually changed — so
+ * an edit is the operator's own change, not silent price drift.)
  */
 export interface TillSaleLine {
   /** locale → text: the line's goods descriptions, snapshotted at add-time and filed verbatim. The

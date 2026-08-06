@@ -78,6 +78,18 @@ export class WorkingOrderStore {
    * retrieved order re-parked with the same id would 23505 on the server's plain INSERT.
    */
   #persisted = false;
+  /**
+   * Whether the basket's LINES have changed since it last MATCHED the server's stored composition —
+   * i.e. since the last {@link loadFrom} (retrieve), {@link markPersisted} (park) or {@link clear}. A
+   * fresh or just-loaded/just-parked basket is clean (`false`); {@link addProduct} and
+   * {@link removeLine} set it `true`. The PAY flow (`till-app`'s `#onConfirmPayment`) reads this so it
+   * re-syncs a RETRIEVED order to the server ONLY when it was actually edited: an UNEDITED retrieved
+   * order pays straight from its stored ADD-TIME lock with no pay-time re-price, so a catalogue change
+   * between park and pay never moves the filed total. A LABEL change is deliberately NOT a line edit
+   * and does not set this — the label is held-list metadata that never reaches the filed sale, so it
+   * needs no re-lock.
+   */
+  #dirty = false;
 
   /** The stable client-minted working-order id for this basket. Changes only on {@link clear}. */
   get id(): string {
@@ -111,10 +123,19 @@ export class WorkingOrderStore {
     return this.#persisted;
   }
 
+  /** Whether the basket's lines have changed since it last matched the server (see {@link #dirty}). The
+   * pay flow re-syncs a retrieved order only when this is `true`. */
+  get dirty(): boolean {
+    return this.#dirty;
+  }
+
   /** Record that {@link id} now names a persisted (parked) row. Not a rendering concern — no `"changed"`
    * notification, unlike every basket mutation below. */
   markPersisted(): void {
     this.#persisted = true;
+    // A just-parked basket now MATCHES the server's stored composition, so it is clean — a later pay
+    // needs no re-sync until it is edited again.
+    this.#dirty = false;
   }
 
   /** The memoised priced basket, recomputed only after a mutation cleared {@link #priced}. */
@@ -139,6 +160,7 @@ export class WorkingOrderStore {
   addProduct(product: TillProduct, quantity: string): void {
     this.#lines.push({ product, quantity });
     this.#priced = null;
+    this.#dirty = true;
     this.emit("changed");
   }
 
@@ -149,6 +171,7 @@ export class WorkingOrderStore {
     }
     this.#lines.splice(index, 1);
     this.#priced = null;
+    this.#dirty = true;
     this.emit("changed");
   }
 
@@ -163,6 +186,7 @@ export class WorkingOrderStore {
     this.#label = undefined;
     this.#priced = null;
     this.#persisted = false;
+    this.#dirty = false;
     this.emit("changed");
   }
 
@@ -180,6 +204,9 @@ export class WorkingOrderStore {
     this.#label = label;
     this.#priced = null;
     this.#persisted = true;
+    // A just-retrieved basket MATCHES the server's stored composition, so it starts clean — the pay
+    // flow re-syncs it only once the operator edits it (see {@link #dirty}).
+    this.#dirty = false;
     this.emit("changed");
   }
 
