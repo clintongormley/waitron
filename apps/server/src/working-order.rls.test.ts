@@ -309,33 +309,46 @@ describe("payWorkingOrder", () => {
     expect(await registroCount(id)).toBe(1);
   });
 
-  it("idempotent replay: a second pay with the same id returns the SAME ticket and files no second record", async () => {
+  it("idempotent replay: a second pay with the same id returns the SAME ticket — filed QR and breakdown, no second record", async () => {
     const { cfg, cafe, agua } = await setupVenue();
     const id = randomUUID();
     const req = {
       id,
-      // Two lines at the SAME rate (21%), so the replayed VAT desglose is reconstructed by SUMMING
-      // both lines' bases into one group.
+      // A DIVERGENCE-PRONE basket at ONE rate (21%): café×1 (gross 1.50 → base 1.24) + agua×2 (gross
+      // 4.00 → base 3.31). The FILED difference-method group is base 4.55, tax = 5.50 − 4.55 = 0.95;
+      // a naive base×rate recompute gives round(4.55 × 21%) = 0.96 — a DIFFERENT cent. So this basket
+      // proves the replay returns the FILED figures (Task 14), not the old reconstruction, which would
+      // have made the assertion below fail with 0.96 ≠ 0.95.
       lines: [
         { productId: cafe.id, quantity: "1" },
-        { productId: agua.id, quantity: "1" },
+        { productId: agua.id, quantity: "2" },
       ],
       tender: { method: "cash" as const, amount: "10.00" },
     };
     const deps = { db: suite.admin, backend, clock };
 
     const first = await payWorkingOrder(deps, cfg, req);
+    // The filed breakdown is the difference-method figure (0.95), the divergent value the old replay
+    // reconstruction (0.96) could not have produced.
+    expect(first.total).toBe("5.50");
+    expect(first.vatBreakdown).toEqual([{ rate: "21.00", base: "4.55", tax: "0.95" }]);
+    expect(first.qr.length).toBeGreaterThan(0); // a genuine first filing carries the AEAT QR
+
     // The retry — same id, same body. Files NOTHING; returns the first ticket.
     const second = await payWorkingOrder(deps, cfg, req);
 
     expect(second.invoiceNumber).toBe(first.invoiceNumber);
     expect(second.total).toBe(first.total);
     expect(second.issuedAt).toBe(first.issuedAt);
+    // The replay now reads the EXACT filed desglose (Task 14), so it equals the original's — the
+    // divergence between the difference method and a recompute is gone.
     expect(second.vatBreakdown).toEqual(first.vatBreakdown);
-    // Replay ticket: change is 0.00 (the drawer change was handed over at the original sale) and the
-    // QR is empty (a documented limitation — it lives only on the inaccessible fiscal record).
+    // The replayed ticket carries the SAME mandatory Veri*Factu QR the original did, re-derived from
+    // the filed record. `change` stays 0.00 — a documented replay limitation: the tendered cash is not
+    // persisted and the drawer change was handed over at the ORIGINAL sale.
     expect(second.change).toBe("0.00");
-    expect(second.qr).toBe("");
+    expect(second.qr).toBe(first.qr);
+    expect(second.qr.length).toBeGreaterThan(0);
 
     // The unrepairable double-file the whole task exists to prevent: STILL exactly one sale + one
     // registro after the retry.

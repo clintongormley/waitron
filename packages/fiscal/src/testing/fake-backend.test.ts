@@ -394,6 +394,37 @@ describe("recordSubstitution", () => {
   });
 });
 
+describe("filedReceiptFor", () => {
+  beforeEach(() =>
+    suite.db.transaction((tx) => backend.registerNode(tx, NODE_A, { tenantId: TENANT })),
+  );
+
+  it("returns the sale's stored breakdown and a stable verification url", async () => {
+    // The replay read-back (Counter POS 7b, Task 14): a lost-response retry reprints the ticket from
+    // the already-filed record. The fake stores the breakdown it filed and hands it back verbatim,
+    // plus a deterministic stand-in URL — enough for a caller (the till-sale replay path) to prove it
+    // reads the filed figures rather than recomputing them.
+    const sale = saleOn(NODE_A, 1);
+    await suite.db.transaction((tx) => backend.recordSale(tx, sale));
+
+    const filed = await suite.db.transaction((tx) => backend.filedReceiptFor(tx, sale.saleId));
+    expect(filed).toBeDefined();
+    expect(filed!.verificationUrl.length).toBeGreaterThan(0);
+    expect(filed!.vatBreakdown).toEqual(sale.vatBreakdown);
+
+    // Stable across replays: the same sale yields the same URL every time — an idempotent replay must
+    // reprint the SAME qr, never a fresh one.
+    const again = await suite.db.transaction((tx) => backend.filedReceiptFor(tx, sale.saleId));
+    expect(again!.verificationUrl).toBe(filed!.verificationUrl);
+  });
+
+  it("returns undefined for a sale it never recorded", async () => {
+    const unknown = saleId("00000000-0000-0000-0000-000000000000");
+    const filed = await suite.db.transaction((tx) => backend.filedReceiptFor(tx, unknown));
+    expect(filed).toBeUndefined();
+  });
+});
+
 describe("reconcile", () => {
   beforeEach(() =>
     suite.db.transaction((tx) => backend.registerNode(tx, NODE_A, { tenantId: TENANT })),

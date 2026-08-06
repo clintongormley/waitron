@@ -219,6 +219,7 @@ function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>)
   return {
     registerNode: (tx, node, params) => fake.registerNode(tx, node, params),
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
+    filedReceiptFor: (tx, saleId) => fake.filedReceiptFor(tx, saleId),
     recordVoid: (tx, saleId, reason) => fake.recordVoid(tx, saleId, reason),
     recordCorrection: (tx, sale, correction) => fake.recordCorrection(tx, sale, correction),
     recordSubstitution: (tx, sale, substitution) => fake.recordSubstitution(tx, sale, substitution),

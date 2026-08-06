@@ -6,21 +6,16 @@ import "./errors.js";
 import { and, eq } from "drizzle-orm";
 import {
   AppError,
-  addDecimal,
   compareDecimal,
   decimal,
-  divideDecimal,
-  multiplyDecimal,
+  saleId as brandSaleId,
   subtractDecimal,
   workingOrderId as brandWorkingOrderId,
-  MONEY_SCALE,
 } from "@waitron/shared";
-import type { Decimal } from "@waitron/shared";
 import {
   asAppUser,
   invoiceSeries,
   isUniqueViolation,
-  saleLines,
   sales,
   withTenant,
   workingOrders,
@@ -133,7 +128,7 @@ export async function payWorkingOrder(
       // Step 2. Already settled → idempotent replay. A retry whose first response was lost, or the
       // loser of a parked-order race that blocked on the lock above and now sees it settled.
       if (locked?.status === "settled") {
-        return readSettledTicket(tx, cfg, req.id);
+        return readSettledTicket(deps.backend, tx, cfg, req.id);
       }
 
       // Step 3. Abandoned (or any non-open, non-settled) order cannot be paid — the same refusal
@@ -266,27 +261,26 @@ export async function payWorkingOrder(
         throw error;
       }
       /* v8 ignore stop */
-      return readSettledTicket(tx, cfg, req.id);
+      return readSettledTicket(deps.backend, tx, cfg, req.id);
     });
   }
 }
 
 /**
- * Reconstruct a settled working order's ticket from PERSISTED data, for an idempotent replay — filing
- * nothing. `invoiceNumber`, `issuedAt` and `total` are exact (the immutable `sales` row + its series);
- * `vatBreakdown` is rebuilt from the persisted `sale_lines` (`reconstructVatBreakdown`).
+ * Reconstruct a settled working order's ticket for an idempotent replay — filing NOTHING.
+ * `invoiceNumber`, `issuedAt` and `total` are exact (the immutable `sales` row + its series); `qr` and
+ * `vatBreakdown` are read back from the ALREADY-FILED fiscal record via `backend.filedReceiptFor`, so
+ * the reprinted ticket carries the regime's mandatory verification QR and the EXACT filed
+ * difference-method desglose (Task 14) rather than a QR-less, recomputed breakdown that could diverge
+ * by a cent from what was filed.
  *
- * Two fields are deliberately NOT the originals, and both are documented limitations of replaying
- * without re-filing:
+ * One field is deliberately NOT the original, a documented limitation of replaying without re-filing:
  *  - `change` is "0.00": the cash actually tendered is not persisted (only the settled amount, which
  *    equals the total, is), and the drawer change was handed over at the ORIGINAL sale — a replay
  *    re-prints the ticket and hands over nothing.
- *  - `qr` is "": the verification URL lives only on the module's `registros_facturacion`, which
- *    `packages/core`/this host may not read across the fiscal boundary, and `FiscalBackend` exposes no
- *    read-back for an already-recorded sale. See the task report's concern + recommended follow-up
- *    (a `FiscalBackend` method to re-derive the QR from a sale, so a replayed receipt carries it).
  */
 async function readSettledTicket(
+  backend: FiscalBackend,
   tx: Transaction,
   cfg: TillConfig,
   workingOrderId: string,
@@ -313,10 +307,21 @@ async function readSettledTicket(
   }
   /* v8 ignore stop */
 
-  const lines = await tx
-    .select({ vatRate: saleLines.vatRate, lineTotal: saleLines.lineTotal })
-    .from(saleLines)
-    .where(eq(saleLines.saleId, issued.saleId));
+  // Read the QR + the exact filed desglose back from the immutable fiscal record, in this same
+  // transaction. This reads nothing but the already-filed alta — never re-files, never re-hashes.
+  const filed = await backend.filedReceiptFor(tx, brandSaleId(issued.saleId));
+  /* v8 ignore start */
+  if (filed === undefined) {
+    // Structurally unreachable, for the same reason the `issued === undefined` guard above is: a
+    // settled order always has exactly one sale, filed with an `alta` fiscal record in the SAME
+    // transaction that settled it, so the read-back always finds it. A missing record here is that
+    // same corruption — fail rather than reprint a legal receipt with a fabricated breakdown and no
+    // QR (§5: never present invented fiscal figures as filed).
+    throw new Error(
+      `payWorkingOrder: settled working order ${workingOrderId} has no filed fiscal record`,
+    );
+  }
+  /* v8 ignore stop */
 
   return {
     invoiceNumber: formatInvoiceNumber(issued.code, issued.number),
@@ -324,35 +329,10 @@ async function readSettledTicket(
     // ticket's `issuedAt` reads identically to the original's `fiscal.issuedAt.toISOString()`.
     issuedAt: new Date(issued.issuedAt).toISOString(),
     total: issued.total,
-    vatBreakdown: reconstructVatBreakdown(lines),
+    vatBreakdown: filed.vatBreakdown.map((v) => ({ rate: v.rate, base: v.base, tax: v.tax })),
     change: "0.00",
-    qr: "",
+    qr: filed.verificationUrl,
   };
-}
-
-/**
- * Rebuild the VAT desglose from persisted `sale_lines`: group by `vat_rate`, `base` = summed
- * `line_total` at that rate, `tax` = base × rate ÷ 100 (rounded to money scale — the same
- * `amount × rate ÷ 100` `packages/core`'s own `percentOf` computes). Exact for the single-rate counter
- * sale, where it equals `priceBasket`'s originally-filed difference-method breakdown (gross − base);
- * a rare multi-line same-rate basket may differ by up to a cent from that filed breakdown, which lives
- * on the (inaccessible) fiscal record and remains authoritative. Used ONLY on the replay path.
- */
-function reconstructVatBreakdown(
-  lines: { vatRate: string; lineTotal: string }[],
-): { rate: string; base: string; tax: string }[] {
-  const bases = new Map<Decimal, Decimal>();
-  for (const line of lines) {
-    const rate = decimal(line.vatRate);
-    const base = decimal(line.lineTotal);
-    const existing = bases.get(rate);
-    bases.set(rate, existing === undefined ? base : addDecimal(existing, base));
-  }
-  return [...bases.entries()].map(([rate, base]) => ({
-    rate,
-    base,
-    tax: divideDecimal(multiplyDecimal(base, rate), decimal("100"), MONEY_SCALE),
-  }));
 }
 
 /**

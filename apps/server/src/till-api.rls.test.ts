@@ -468,10 +468,14 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     const replayTicket = await replay.json();
     expect(replayTicket.invoiceNumber).toBe(ticket.invoiceNumber);
     expect(replayTicket.total).toBe("3.00");
-    // Documented replay limitations (Task 14 restores the qr): the replayed ticket carries qr "" and
-    // change "0.00" — the verification URL and the tendered cash are not re-derivable without
-    // re-filing, and the drawer change was handed over at the ORIGINAL sale. See `readSettledTicket`.
-    expect(replayTicket.qr).toBe("");
+    // Task 14: the replay reads the filed record back, so the reprinted ticket now carries the SAME
+    // mandatory Veri*Factu QR and the SAME authoritative desglose as the original — no longer a
+    // QR-less, recomputed ticket. `change` stays "0.00", still a documented limitation: the tendered
+    // cash is not persisted and the drawer change was handed over at the ORIGINAL sale. See
+    // `readSettledTicket`.
+    expect(replayTicket.qr).toBe(ticket.qr);
+    expect(replayTicket.qr.length).toBeGreaterThan(0);
+    expect(replayTicket.vatBreakdown).toEqual(ticket.vatBreakdown);
     expect(replayTicket.change).toBe("0.00");
 
     // Still exactly ONE record — the replay filed nothing.

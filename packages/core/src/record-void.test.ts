@@ -188,6 +188,7 @@ function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>)
   return {
     registerNode: (tx, node, params) => fake.registerNode(tx, node, params),
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
+    filedReceiptFor: (tx, saleId) => fake.filedReceiptFor(tx, saleId),
     recordVoid: (tx, id, reason) => fake.recordVoid(tx, id, reason),
     recordCorrection: (tx, sale, correction) => fake.recordCorrection(tx, sale, correction),
     recordSubstitution: (tx, sale, substitution) => fake.recordSubstitution(tx, sale, substitution),
@@ -433,6 +434,9 @@ describe("recordVoid — error propagation", () => {
         throw new Error("not used by this test");
       },
       recordSale: () => {
+        throw new Error("not used by this test");
+      },
+      filedReceiptFor: () => {
         throw new Error("not used by this test");
       },
       recordVoid: () => {
