@@ -268,10 +268,11 @@ export class TillTenderPay extends LitElement {
    */
   #confirmCard(): void {
     const ref = this.refEntry.trim();
-    const detail: ConfirmPaymentDetail =
-      ref === ""
-        ? { method: "card", amount: this.store.total }
-        : { method: "card", amount: this.store.total, externalRef: ref };
+    const detail: ConfirmPaymentDetail = {
+      method: "card",
+      amount: this.store.total,
+      ...(ref === "" ? {} : { externalRef: ref }),
+    };
     this.mode = "idle";
     this.refEntry = "";
     this.dispatchEvent(

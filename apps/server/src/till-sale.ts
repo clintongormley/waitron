@@ -35,6 +35,19 @@ export interface TillSaleDeps {
 }
 
 /**
+ * A `cash` or manual `card` tender, shared by `TillSaleRequest` and `PayWorkingOrderRequest` (which
+ * both carried the identical inline shape until this was extracted). `externalRef` is the optional
+ * hand-keyed acquirer / terminal operation number, meaningful only for `card` — see each of those
+ * interfaces' own doc comment for the per-method rules (which field is authoritative, what a mismatch
+ * means).
+ */
+export interface TillTender {
+  method: "cash" | "card";
+  amount: string;
+  externalRef?: string;
+}
+
+/**
  * A walk-up sale as the counter till captures it: a basket of `{ productId, quantity }` and one cash
  * tender. Deliberately carries NO price of any kind — the server re-reads the catalogue and prices
  * authoritatively (`priceBasket`), so a browser cannot influence the filed total. `quantity` is a
@@ -59,7 +72,7 @@ export interface TillSaleRequest {
    *    optional hand-keyed acquirer / terminal operation number, a human reconciliation hook.
    * Any other `tender_method` (`voucher`/`transfer`/`other`) is refused with `sale.unsupported_tender`.
    */
-  tender: { method: "cash" | "card"; amount: string; externalRef?: string };
+  tender: TillTender;
   workingOrderId?: string;
 }
 
@@ -91,7 +104,7 @@ export interface PayWorkingOrderRequest {
   lines: { productId: string; quantity: string }[];
   /** The tender, same shape and rules as `TillSaleRequest.tender` (see there): `cash` or a manual
    *  `card`, with `externalRef` the optional acquirer / terminal operation number for a card. */
-  tender: { method: "cash" | "card"; amount: string; externalRef?: string };
+  tender: TillTender;
 }
 
 /**
