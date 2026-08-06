@@ -163,7 +163,7 @@ beforeAll(() => {
 });
 
 describe("recordTillSale", () => {
-  it("re-prices a basket authoritatively and files a chained immediate cash sale", async () => {
+  it("walk-up: prices the sent basket authoritatively and files a chained immediate cash sale", async () => {
     const { cfg, available } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
 

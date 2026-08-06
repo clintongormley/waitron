@@ -90,6 +90,10 @@ describe("priceBasket — grossLineTotals (the working-order draft's customer-fa
       { product: weight("24.90", "reduced"), quantity: "0.320" }, // 7.97 gross, 7.25 net base
     ]);
     expect(r.grossLineTotals).toEqual([decimal("3.00"), decimal("7.97")]);
+    // The per-UNIT gross (stored as `working_order_lines.unit_price_gross`) is the gross unit itself,
+    // NOT multiplied by quantity — distinct from `grossLineTotals` for any quantity ≠ 1: café 1.50 (not
+    // 3.00) and jamón 24.90/kg (not 7.97). `priceLockedLines` reads exactly these back to file the lock.
+    expect(r.grossUnitPrices).toEqual([decimal("1.50"), decimal("24.90")]);
     // The gross line total is what the operator/customer sees (and what the working-order draft
     // stores in `working_order_lines.line_total`); the FILED fiscal line keeps the NET base.
     expect(r.lines[0]!.lineTotal).toBe(decimal("2.48"));

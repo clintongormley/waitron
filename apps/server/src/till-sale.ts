@@ -18,10 +18,11 @@ import {
   isUniqueViolation,
   sales,
   withTenant,
+  workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { listAvailableProducts, priceBasket } from "@waitron/catalogue";
+import { priceBasket, priceLockedLines } from "@waitron/catalogue";
 import { associatePaymentWithSale, recordManualCardPayment } from "@waitron/payments";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -98,12 +99,21 @@ export interface TillSaleResult {
  * pay path shared by a walk-up (`recordTillSale`, which mints a fresh id) and a parked order (the
  * retrieve-and-pay route, Task 8). `id` is the idempotency key: the till holds it stable across a
  * lost-response retry, and `sales_working_order_id_key` makes at most one sale per working order.
- * Like `TillSaleRequest` it carries NO price of any kind — the server re-reads the catalogue and
- * re-prices the SENT basket authoritatively at pay time (never the browser's price, never the stored
- * draft snapshot).
+ *
+ * `lines` is the basket to price and file, and how it is used depends ENTIRELY on the shape (line-add
+ * snapshot, 7c):
+ *  - WALK-UP (no `working_orders` row exists for `id`): `lines` is the basket the till captured. Like
+ *    `TillSaleRequest` it carries NO price — the server re-reads the catalogue, prices authoritatively
+ *    (`priceBasket`), creates the order OPEN with those priced lines, and files from that fresh price.
+ *  - RETRIEVED order (the row already exists, parked earlier): `lines` is IGNORED. A retrieved order is
+ *    filed from its own STORED `working_order_lines`, whose gross unit was LOCKED at add-time, via
+ *    `priceLockedLines` — so a catalogue price change between park and pay never moves the filed total.
+ *    The till sends no basket for this shape (the persisted lines are the authoritative composition).
  */
 export interface PayWorkingOrderRequest {
   id: string;
+  /** The walk-up basket to price and file; IGNORED for a retrieved order, which files its stored
+   *  locked lines (see this interface's doc comment). */
   lines: { productId: string; quantity: string }[];
   /** The tender, same shape and rules as `TillSaleRequest.tender` (see there): `cash` or a manual
    *  `card`, with `externalRef` the optional acquirer / terminal operation number for a card. */
@@ -123,10 +133,13 @@ export interface PayWorkingOrderRequest {
  *  2. Already `settled` → IDEMPOTENT REPLAY: return the existing sale's ticket, file NOTHING.
  *  3. `abandoned` → refuse (`working_order.not_open`), the domain code the settle UPDATE's trigger
  *     would otherwise raise raw.
- *  4. Does not exist → WALK-UP: create it `open` with its priced lines (`createOpenOrder`, the same
- *     helper `parkOrder` uses), then settle below.
- *  5. `open` (or just created) → re-price the sent basket, file with `recordSale`'s immediate cash
- *     settlement tagged with `working_order_id = req.id`, then UPDATE the order `open → settled`.
+ *  4. Does not exist → WALK-UP: create it `open` with its freshly-priced lines (`createOpenOrder`, the
+ *     same helper `parkOrder` uses) and file from that price, then settle below.
+ *  5. Already `open` (RETRIEVED) → file from the order's STORED locked lines (`priceLockedLines` over
+ *     `working_order_lines`, whose gross unit was locked at add-time), NOT a re-price of `req.lines` —
+ *     a catalogue price change between park and pay never moves the filed total (line-add snapshot,
+ *     7c). Either way file with `recordSale`'s immediate cash settlement tagged with
+ *     `working_order_id = req.id`, then UPDATE the order `open → settled`.
  *  6. On a `23505` unique violation (a concurrent pay won the race — its `working_orders` row on a
  *     walk-up, or its sale on a parked order — committed first, aborting this transaction), CATCH it
  *     and replay in a FRESH transaction: read the winner's settled sale and return its ticket. Never
@@ -167,45 +180,61 @@ export async function payWorkingOrder(
         throw new AppError("working_order.not_open", { workingOrderId: req.id });
       }
 
-      // Guards, before anything is filed — a network boundary (the till is untrusted): an empty
-      // basket has nothing to price, and the only supported tenders are cash (7a) and a manual card
-      // (this slice); `voucher`/`transfer`/`other` are refused. AFTER the replay check, so a retry of
-      // an already-settled order is never refused for the shape of its retry body.
-      if (req.lines.length === 0) {
-        throw new AppError("sale.empty_basket", {});
-      }
+      // Tender guard, before anything is filed — a network boundary (the till is untrusted): the only
+      // supported tenders are cash (7a) and a manual card (this slice); `voucher`/`transfer`/`other`
+      // are refused. AFTER the replay check, so a retry of an already-settled order is never refused
+      // for the shape of its retry body. The EMPTY-BASKET guard is NOT here: it belongs to the walk-up
+      // shape only (below), because a retrieved order ignores `req.lines` and files its stored lines.
       if (req.tender.method !== "cash" && req.tender.method !== "card") {
         throw new AppError("sale.unsupported_tender", { method: req.tender.method });
       }
 
-      // Steps 4-5. Obtain the authoritative price of the SENT basket, one way per shape, so it is
-      // computed exactly ONCE either way:
-      //  - WALK-UP (order does not exist yet): create it OPEN with its priced lines (the same
+      // Steps 4-5. Obtain the authoritative price to file, one way per shape (line-add snapshot, 7c),
+      // so it is computed exactly ONCE either way:
+      //  - WALK-UP (order does not exist yet): create it OPEN with its freshly-priced lines (the same
       //    `createOpenOrder` `parkOrder` uses, so a walk-up order is identical in shape to a parked
       //    one) and REUSE the price that creation already derived — `createOpenOrder` read the
       //    catalogue and ran `priceBasket` to build the line rows, so re-reading and re-pricing the
       //    identical `req.lines` here would just double the catalogue join on the till's hottest path.
-      //    A walk-up carries no label.
-      //  - RETRIEVED order (already exists): `createOpenOrder` is NOT called, so re-price the SENT
-      //    basket from the catalogue here — a parked order is always re-priced at CURRENT prices at pay
-      //    time, never from its stored draft snapshot.
+      //    A walk-up carries no label. An empty basket is refused here (nothing to price), a guard the
+      //    retrieved shape does not need.
+      //  - RETRIEVED order (already exists): file from the STORED locked lines, NOT a re-price of a
+      //    client basket. `req.lines` is IGNORED — the browser sends none; the persisted
+      //    `working_order_lines` are the authoritative composition, and their `unit_price_gross` was
+      //    LOCKED at add-time. `priceLockedLines` runs the SAME difference-method arithmetic over that
+      //    locked gross that `priceBasket` runs over a live catalogue, so the filed record is
+      //    byte-identical to what the line was priced to at add — and a catalogue price change between
+      //    park and pay never moves the filed total (the whole point of the snapshot model).
       // The result is then filed with recordSale's immediate cash settlement, tagged with this order's
       // id (`sales_working_order_id_key` = the idempotency key).
       let priced: ReturnType<typeof priceBasket>;
       if (locked === undefined) {
+        if (req.lines.length === 0) {
+          throw new AppError("sale.empty_basket", {});
+        }
         ({ priced } = await createOpenOrder(tx, cfg, req.id, req.lines, null));
       } else {
-        const available = await listAvailableProducts(tx, cfg.locationId);
-        const byId = new Map(available.map((p) => [p.id, p]));
-        const items = req.lines.map((line) => {
-          const product = byId.get(line.productId);
-          if (product === undefined) {
-            throw new AppError("sale.unknown_product", { productId: line.productId });
-          }
-          return { product, quantity: line.quantity };
-        });
-
-        priced = priceBasket(items);
+        // Read the locked lines in `line_no` order — exactly the columns `priceLockedLines` needs
+        // (gross unit, quantity, rate, descriptions, category), all snapshotted at add-time.
+        const stored = await tx
+          .select({
+            grossUnitPrice: workingOrderLines.unitPriceGross,
+            quantity: workingOrderLines.quantity,
+            vatRate: workingOrderLines.vatRate,
+            descriptions: workingOrderLines.descriptions,
+            category: workingOrderLines.category,
+          })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, req.id))
+          .orderBy(workingOrderLines.lineNo);
+        /* v8 ignore start */
+        if (stored.length === 0) {
+          // A retrieved OPEN order always has ≥1 line (park refuses an empty basket, and update never
+          // leaves it lineless), so this is corruption, not a reachable flow.
+          throw new Error(`payWorkingOrder: open working order ${req.id} has no lines to file`);
+        }
+        /* v8 ignore stop */
+        priced = priceLockedLines(stored);
       }
 
       const isCard = req.tender.method === "card";

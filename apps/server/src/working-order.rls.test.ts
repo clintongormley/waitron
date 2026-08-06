@@ -162,6 +162,15 @@ async function saleCount(workingOrderId: string): Promise<number> {
   return Number(rows[0]!.count);
 }
 
+/** The IMMUTABLE filed `sales.total` for this working order's sale — read as the owner (bypasses RLS).
+ *  The witness that a retrieved order files at the LOCKED price, not a re-price at pay. */
+async function filedSaleTotal(workingOrderId: string): Promise<string> {
+  const { rows } = await suite.admin.execute<{ total: string }>(sql`
+    select total from sales where working_order_id = ${workingOrderId}
+  `);
+  return rows[0]!.total;
+}
+
 /** How many chained `registros_facturacion` rows exist for this working order's sale (superuser read). */
 async function registroCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.admin.execute<{ count: string }>(sql`
@@ -329,33 +338,73 @@ describe("payWorkingOrder", () => {
     expect(await registroCount(id)).toBe(1);
   });
 
-  it("parked: pays an existing open order at CURRENT prices and settles it", async () => {
+  it("parked: pays the STORED composition at its LOCKED prices and settles it", async () => {
     const { cfg, cafe, agua } = await setupVenue();
     const id = randomUUID();
 
-    // Park an open order (its stored draft lines are café×1), then PAY a DIFFERENT current basket
-    // (café×1 + agua×1). The pay re-prices what is SENT, not the stored draft (spec §3/§4).
+    // Park café×1 + agua×1 — BOTH added, so both gross units are LOCKED onto their `working_order_lines`
+    // rows (design §2, line-add snapshot). Then pay the SAME id with NO client basket (`lines: []`): a
+    // retrieved order is filed from its STORED locked lines, not a re-price of anything the till sends.
+    // The old model re-priced the sent basket; this one cannot, which is the behaviour under test.
     await parkOrder({ db: suite.admin }, cfg, {
-      id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
-      label: "Mesa 4",
-    });
-    expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
-
-    const res = await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
       id,
       lines: [
         { productId: cafe.id, quantity: "1" },
         { productId: agua.id, quantity: "1" },
       ],
+      label: "Mesa 4",
+    });
+    expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
+    // What the customer was shown at park — the GROSS draft total (sum of the locked line totals).
+    const parkedTotal = (await draftAggregate(id)).total;
+    expect(parkedTotal).toBe("3.50"); // 1.50 café + 2.00 agua, locked
+
+    const res = await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id,
+      lines: [],
       tender: { method: "cash", amount: "5.00" },
     });
 
-    // 1.50 + 2.00 = 3.50 gross (the CURRENT basket), not the parked 1.50.
+    // The LOCKED composition, filed from the stored lines: 1.50 + 2.00 = 3.50. Round-trip invariant —
+    // the filed total EQUALS the gross the customer was shown at park (`parkedTotal`).
     expect(res.total).toBe("3.50");
+    expect(res.total).toBe(parkedTotal);
     expect(res.change).toBe("1.50");
     expect(res.invoiceNumber).toBe("A/1");
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(id)).toBe(1);
+    expect(await registroCount(id)).toBe(1);
+  });
+
+  it("files a parked line at its LOCKED price after the catalogue price changes (line-add snapshot)", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+
+    // Park café×1 at the locked 1.50 — the gross unit is snapshotted onto the line here.
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+
+    // Change the catalogue price AFTER the lock — the exact mutation across the park→pay gap that
+    // separates the two pricing models (CLAUDE.md §1: a measurement where both answers look alike
+    // measures nothing). A re-price at pay would file 9.99; filing from the lock files 1.50.
+    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await tx.execute(sql`update products set unit_price = '9.99' where id = ${cafe.id}`);
+    });
+
+    // Pay — files at the LOCKED 1.50, never the new 9.99.
+    const res = await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "5.00" },
+    });
+
+    expect(res.total).toBe("1.50"); // the lock, not 9.99
+    expect(res.change).toBe("3.50");
+    // The IMMUTABLE fiscal record carries the locked price — read back as the owner (bypasses RLS).
+    expect(await filedSaleTotal(id)).toBe("1.50");
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
   });
@@ -502,32 +551,33 @@ describe("payWorkingOrder", () => {
     expect(await registroCount(id)).toBe(0);
   });
 
-  it("refuses an unknown product in a parked pay's basket, leaving the order open and nothing filed", async () => {
+  it("a retrieved pay IGNORES req.lines — even an unknown product there — and files the STORED lock", async () => {
     const { cfg, cafe } = await setupVenue();
     const id = randomUUID();
     await parkOrder({ db: suite.admin }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      lines: [{ productId: cafe.id, quantity: "1" }], // the STORED lock: café×1 at 1.50
     });
     const UUID_NOT_IN_CAT = "00000000-0000-0000-0000-000000000000";
 
-    // A parked pay re-prices the SENT basket; an unknown product there is refused at the filing step
-    // (the order already exists, so `createOpenOrder` is skipped and this is the first pricing).
-    await expect(
-      payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
-        id,
-        lines: [{ productId: UUID_NOT_IN_CAT, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      }),
-    ).rejects.toMatchObject({
-      code: "sale.unknown_product",
-      params: { productId: UUID_NOT_IN_CAT },
+    // A retrieved order files from its STORED locked lines; `req.lines` is IGNORED entirely (design §2,
+    // line-add snapshot). Under the OLD re-price-at-pay model this garbage basket — an unknown product —
+    // would have thrown `sale.unknown_product`; under the new one it is not even looked at, so the pay
+    // SUCCEEDS on the stored café×1. Divergent inputs, opposite outcomes (CLAUDE.md §1): this is the
+    // regression guard against anyone re-reading `req.lines` for a retrieved order.
+    const res = await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id,
+      lines: [{ productId: UUID_NOT_IN_CAT, quantity: "1" }],
+      tender: { method: "cash", amount: "5.00" },
     });
 
-    // The refusal aborts the transaction: the parked order is untouched (still open) and no sale filed.
-    expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
-    expect(await saleCount(id)).toBe(0);
-    expect(await registroCount(id)).toBe(0);
+    // Filed the stored lock (1.50), not the garbage basket — settled exactly once.
+    expect(res.total).toBe("1.50");
+    expect(res.change).toBe("3.50");
+    expect(await filedSaleTotal(id)).toBe("1.50");
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(id)).toBe(1);
+    expect(await registroCount(id)).toBe(1);
   });
 
   it("refuses an empty basket and any tender that is neither cash nor card (voucher/transfer/other)", async () => {
@@ -705,7 +755,8 @@ describe("cross-till end-to-end", () => {
     expect(retrieved.label).toBe("Mesa 7");
     expect(retrieved.lines.map((l) => l.productId)).toEqual([cafe.id, agua.id]);
 
-    // PAY on till B (Sale 2, A/2): re-price the retrieved basket authoritatively and file it. The
+    // PAY on till B (Sale 2, A/2): file the retrieved order from its STORED locked lines (design §2 —
+    // `req.lines` is ignored; `retrieved.lines` is passed only to mirror the real till round-trip). The
     // series is per-node, so till B's sale continues till A's chain — A/1 then A/2.
     const paid = await payWorkingOrder(deps, tillB, {
       id: orderId,

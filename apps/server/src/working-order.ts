@@ -45,7 +45,9 @@ type PricedBasket = ReturnType<typeof priceBasket>;
  * OPEN order (allocating its number), update rewrites an existing one's lines and label — this helper
  * owns only the lines, which are identical between the two. `priced.lines` is in `lines` order
  * (priceBasket iterates in order and stamps `lineNo = i + 1`), so row `i` takes its `product_id` from
- * `lines[i]`; everything else is the display snapshot priceBasket produced.
+ * `lines[i]`; the display columns (`descriptions`, `unit_price`, `category`) are the snapshot
+ * priceBasket produced, while `unit_price_gross` is the AUTHORITATIVE gross unit LOCKED at add-time —
+ * the input a retrieved order is later filed from without a re-price (see that column's comment below).
  */
 async function priceOrderLines(
   tx: Transaction,
@@ -72,14 +74,25 @@ async function priceOrderLines(
     descriptions: line.descriptions,
     quantity: line.quantity,
     unitPrice: line.unitPrice,
+    // The GROSS (VAT-inclusive) UNIT price LOCKED at add-time (line-add snapshot, 7c) — the
+    // AUTHORITATIVE input a retrieved order is FILED from without a re-price (`priceLockedLines`,
+    // @waitron/catalogue reads this straight back as its `grossUnitPrice`). `unit_price` above is the
+    // NET unit, informational only; this is the gross the line was priced from, so a later catalogue
+    // price change never moves the filed total. Stored from `priceBasket`'s `grossUnitPrices` — the
+    // per-UNIT gross at MONEY_SCALE, the exact figure `priceLockedLines` recomputes from — never
+    // `line_total ÷ quantity`, which is exact for `each` but DRIFTS for a weighed line. This is a
+    // durable lock, not a display cache.
+    unitPriceGross: priced.grossUnitPrices[i]!,
     vatRate: line.vatRate,
     // The DRAFT line stores the GROSS (VAT-inclusive) line total, not `line.lineTotal`'s net base:
     // `working_order_lines` is the counter's mutable display, and every other total the operator/
     // customer sees is gross (the basket grand total, the per-line gross, the filed ticket), so the
     // held-orders list `sum(line_total)` must be gross too. This deliberately DIVERGES from the FILED
-    // `sale_lines.line_total`, which keeps `line.lineTotal`'s net base for the fiscal record — the
-    // walk-up/pay path files from `priced.lines`, unaffected by this draft column. See
-    // `working_order_lines.line_total`'s schema comment and `priceBasket`'s `grossLineTotals`.
+    // `sale_lines.line_total`, which keeps `line.lineTotal`'s net base for the fiscal record. The
+    // FILED line of a retrieved order now derives from the locked `unit_price_gross` unit above via
+    // `priceLockedLines`, NOT from `priced.lines`; a freshly-created walk-up still files from
+    // `priced.lines`. See `working_order_lines.line_total`'s schema comment and `priceBasket`'s
+    // `grossLineTotals`/`grossUnitPrices`.
     lineTotal: priced.grossLineTotals[i]!,
     category: line.category ?? null,
   }));

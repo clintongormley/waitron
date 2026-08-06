@@ -221,8 +221,9 @@ async function main(): Promise<void> {
       tender: { method: "cash", amount: "5.00" },
     });
 
-    // PARK on Caja 1: 0.250 kg jamón + 1 agua, labelled "Mesa 7". The server re-prices authoritatively;
-    // the request carries no price. `id` is client-minted (the till's idempotency key).
+    // PARK on Caja 1: 0.250 kg jamón + 1 agua, labelled "Mesa 7". The server prices authoritatively at
+    // add-time and LOCKS the gross unit onto each line (the request carries no price); that lock is what
+    // the pay below files. `id` is client-minted (the till's idempotency key).
     const orderId = randomUUID();
     const parked = await parkOrder({ db }, caja1, {
       id: orderId,
@@ -240,9 +241,10 @@ async function main(): Promise<void> {
     // RETRIEVE on Caja 2: rebuild the basket from the parked order's pricing inputs.
     const retrieved = await getHeldOrder({ db }, caja2, orderId);
 
-    // PAY on Caja 2 (Sale 2, A/2): re-price the retrieved basket and file it by cash. A FRESH file (not
-    // an idempotent replay), so the ticket carries its verification QR. The series is per-node, so this
-    // continues Caja 1's chain.
+    // PAY on Caja 2 (Sale 2, A/2): file the retrieved order from its STORED locked lines by cash — NOT a
+    // re-price (design §2, line-add snapshot); `retrieved.lines` is passed only to mirror the real till
+    // round-trip. A FRESH file (not an idempotent replay), so the ticket carries its verification QR. The
+    // series is per-node, so this continues Caja 1's chain.
     const ticket = await payWorkingOrder(deps, caja2, {
       id: orderId,
       lines: retrieved.lines,

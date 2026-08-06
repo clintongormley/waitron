@@ -86,6 +86,15 @@ export interface PricedLines {
    * (`working_order_lines.line_total`) stores the gross the operator saw — a deliberate divergence.
    */
   grossLineTotals: Decimal[];
+  /**
+   * The GROSS (VAT-inclusive) UNIT price per line, at MONEY_SCALE, in `lines` order — the per-item (or
+   * per-kg) gross the line was priced from, NOT multiplied by quantity. This is the exact figure
+   * `working_order_lines.unit_price_gross` stores at add-time so a retrieved order files from the lock:
+   * `priceLockedLines` reads it straight back as its `grossUnitPrice`, so the stored value and the
+   * file-time recompute round-trip byte-for-byte (never `grossLineTotals ÷ quantity`, which drifts for
+   * a weighed line). Parallel to `lines`/`grossLineTotals`.
+   */
+  grossUnitPrices: Decimal[];
   total: Decimal;
   vatBreakdown: VatBreakdownLine[];
 }
@@ -110,15 +119,17 @@ interface PricingRow {
 function priceRows(rows: readonly PricingRow[]): PricedLines {
   const lines: RecordSaleLine[] = [];
   const grossLineTotals: Decimal[] = [];
+  const grossUnitPrices: Decimal[] = [];
   const groups = new Map<Decimal, { base: Decimal; gross: Decimal }>();
 
   rows.forEach((row, i) => {
     // `quantity` is a plain `string`, so it is wrapped with `decimal()` (which validates the
     // literal) before reaching the branded-`Decimal` helpers; `grossUnit` and `rate` arrive already
     // branded from the callers, which is where each is validated.
+    const grossUnit = toScale(row.grossUnit, MONEY_SCALE);
     const gross = toScale(multiplyDecimal(row.grossUnit, decimal(row.quantity)), MONEY_SCALE);
     const base = baseFromGross(gross, row.rate);
-    const netUnit = baseFromGross(toScale(row.grossUnit, MONEY_SCALE), row.rate);
+    const netUnit = baseFromGross(grossUnit, row.rate);
     lines.push({
       lineNo: i + 1,
       descriptions: row.descriptions,
@@ -129,6 +140,7 @@ function priceRows(rows: readonly PricingRow[]): PricedLines {
       category: row.category,
     });
     grossLineTotals.push(gross); // parallel to `lines`; the customer-facing gross of this same line
+    grossUnitPrices.push(grossUnit); // parallel to `lines`; the per-UNIT gross stored as unit_price_gross
     const g = groups.get(row.rate);
     groups.set(
       row.rate,
@@ -146,7 +158,7 @@ function priceRows(rows: readonly PricingRow[]): PricedLines {
   // Sum of every per-line gross — identical value to `sum(grossLineTotals)` (the group sums just
   // partition the same addends by rate), so the held-orders list's `sum(line_total)` matches this total.
   const total = sumDecimals([...groups.values()].map((g) => g.gross));
-  return { lines, grossLineTotals, total, vatBreakdown };
+  return { lines, grossLineTotals, grossUnitPrices, total, vatBreakdown };
 }
 
 /** Prices a live basket: gross unit from the product's `unitPrice`, rate resolved from its `vatClass`. */
