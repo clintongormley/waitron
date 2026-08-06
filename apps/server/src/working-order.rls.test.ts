@@ -25,7 +25,7 @@ import {
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import type { TillConfig } from "./till-config.js";
-import { parkOrder } from "./working-order.js";
+import { getHeldOrder, listHeldOrders, parkOrder } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
 import { startRealPostgres } from "./testing/postgres.js";
 import "./errors.js";
@@ -179,6 +179,65 @@ async function orderState(id: string): Promise<{ status: string; settledAtSet: b
     select status, (settled_at is not null) as settled from working_orders where id = ${id}
   `);
   return { status: rows[0]!.status, settledAtSet: rows[0]!.settled };
+}
+
+/**
+ * A SECOND register on the SAME node — a `cfg` that shares `cfg`'s tenant, node, series and location
+ * and differs only in `till_id`. The row is inserted as the OWNER under `withTenant`, exactly as
+ * `applyVenue` writes a till (an explicit `tenant_id` satisfies the RLS WITH CHECK whether or not the
+ * owner is forced under it). Proving cross-till retrieval needs a genuine second till row because both
+ * `working_orders.till_id` and `sales.till_id` FK onto `tills` — a fabricated uuid would fail those.
+ */
+async function addTill(cfg: TillConfig, name: string): Promise<TillConfig> {
+  const id = randomUUID();
+  await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await tx.execute(sql`
+      insert into tills (id, tenant_id, location_id, name)
+      values (${id}, ${cfg.tenantId}, ${cfg.locationId}, ${name})`);
+  });
+  return { ...cfg, tillId: brandTillId(id) };
+}
+
+/**
+ * A SECOND node under the SAME tenant + location — a `cfg` differing only in `node_id`. It never
+ * sells here; it exists so `listHeldOrders` on it proves the `node_id = cfg.nodeId` filter rather than
+ * RLS (which is tenant-scoped and would NOT hide a same-tenant order on another node). Inserted as the
+ * owner under `withTenant`, the way `applyVenue`'s create-node does; `filing_module`/`tax_module` are
+ * nullable and unused for a listing-only node, so they are left out.
+ */
+async function addNode(cfg: TillConfig, name: string): Promise<TillConfig> {
+  const id = randomUUID();
+  await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await tx.execute(sql`
+      insert into nodes (id, tenant_id, location_id, name)
+      values (${id}, ${cfg.tenantId}, ${cfg.locationId}, ${name})`);
+  });
+  return { ...cfg, nodeId: brandNodeId(id) };
+}
+
+/**
+ * A parked order's line count and summed `line_total` (net base) — read as the owner and summed in JS,
+ * NOT the SQL `listHeldOrders` runs, so its `itemCount`/`total` aggregate is validated rather than
+ * restated (CLAUDE.md §1). Cent-magnitude 2dp values sum exactly in float here.
+ */
+async function draftAggregate(id: string): Promise<{ itemCount: number; total: string }> {
+  const { rows } = await suite.admin.execute<{ line_total: string }>(sql`
+    select line_total from working_order_lines where working_order_id = ${id}
+  `);
+  const total = rows.reduce((sum, r) => sum + Number(r.line_total), 0).toFixed(2);
+  return { itemCount: rows.length, total };
+}
+
+/** The till the SALE was filed under vs the till the working order was PARKED under — the cross-till
+ *  witness (parked on A, sold on B). Read as the owner (bypasses RLS). */
+async function saleAndOrderTill(
+  workingOrderId: string,
+): Promise<{ saleTillId: string; orderTillId: string }> {
+  const sale = await suite.admin.execute<{ till_id: string }>(sql`
+    select till_id from sales where working_order_id = ${workingOrderId}`);
+  const order = await suite.admin.execute<{ till_id: string }>(sql`
+    select till_id from working_orders where id = ${workingOrderId}`);
+  return { saleTillId: sale.rows[0]!.till_id, orderTillId: order.rows[0]!.till_id };
 }
 
 beforeAll(() => {
@@ -426,5 +485,136 @@ describe("payWorkingOrder", () => {
         tender: { method: "card" as unknown as "cash", amount: "1.50" },
       }),
     ).rejects.toMatchObject({ code: "sale.unsupported_tender", params: { method: "card" } });
+  });
+});
+
+// The park & retrieve headline (spec §7b): a parked order is HELD BY THE NODE, not by the register
+// that parked it, so any till on the node can list, retrieve and pay it. Real Postgres as the app
+// role — the cross-tenant/cross-node isolation below is exactly what PGlite's superuser connection
+// cannot show (RLS bypassed), the reason THIS suite exists.
+describe("cross-till end-to-end", () => {
+  it("parks on till A, lists + retrieves + pays on till B (same node), and the chain across two sales verifies", async () => {
+    const { cfg: tillA, cafe, agua } = await setupVenue();
+    // A SECOND register on the SAME node. It differs from till A ONLY in `till_id`: same tenant, node,
+    // series and location. That shared node is the whole point — the held list is node-scoped.
+    const tillB = await addTill(tillA, "Caja 2");
+    expect(tillB.tillId).not.toBe(tillA.tillId);
+    expect(tillB.nodeId).toBe(tillA.nodeId);
+
+    const deps = { db: suite.admin, backend, clock };
+
+    // Sale 1 (A/1): a walk-up cash sale on till A, so the node's huella chain already has one link
+    // before the cross-till sale — `checkIntegrity` at the end verifies a chain of TWO that spans two
+    // DIFFERENT tills, the concrete proof the chain is per-node, not per-till.
+    const walkUp = await payWorkingOrder(deps, tillA, {
+      id: randomUUID(),
+      lines: [{ productId: cafe.id, quantity: "1" }],
+      tender: { method: "cash", amount: "5.00" },
+    });
+    expect(walkUp.invoiceNumber).toBe("A/1");
+
+    // Park an order on till A: café + agua (one VAT group at 21%), labelled for the counter.
+    const orderId = randomUUID();
+    const { orderNumber } = await parkOrder({ db: suite.admin }, tillA, {
+      id: orderId,
+      lines: [
+        { productId: cafe.id, quantity: "1" },
+        { productId: agua.id, quantity: "1" },
+      ],
+      label: "Mesa 7",
+    });
+
+    // CROSS-TILL VISIBILITY: till B's held list shows the order parked on till A. The aggregate is
+    // validated against an owner read summed in JS (`draftAggregate`), not the SQL under test.
+    const agg = await draftAggregate(orderId);
+    expect(agg.itemCount).toBe(2);
+    const heldOnB = await listHeldOrders({ db: suite.admin }, tillB);
+    expect(heldOnB).toContainEqual(
+      expect.objectContaining({
+        id: orderId,
+        orderNumber,
+        label: "Mesa 7",
+        itemCount: agg.itemCount,
+        total: agg.total,
+      }),
+    );
+
+    // CROSS-TILL RETRIEVE: till B rebuilds the basket from the parked order's pricing inputs.
+    const retrieved = await getHeldOrder({ db: suite.admin }, tillB, orderId);
+    expect(retrieved.id).toBe(orderId);
+    expect(retrieved.label).toBe("Mesa 7");
+    expect(retrieved.lines.map((l) => l.productId)).toEqual([cafe.id, agua.id]);
+
+    // PAY on till B (Sale 2, A/2): re-price the retrieved basket authoritatively and file it. The
+    // series is per-node, so till B's sale continues till A's chain — A/1 then A/2.
+    const paid = await payWorkingOrder(deps, tillB, {
+      id: orderId,
+      lines: retrieved.lines,
+      tender: { method: "cash", amount: "10.00" },
+    });
+    expect(paid.invoiceNumber).toBe("A/2");
+    expect(paid.total).toBe("3.50"); // 1.50 café + 2.00 agua, gross (the ticket total, not the net-base list sum)
+    expect(paid.qr).not.toBe(""); // a FRESH file (not a replay) carries its verification URL
+
+    // Settled exactly once, and the cross-till witness at the row level: the SALE is filed under till
+    // B while the working order stays stamped with the till it was PARKED on (A).
+    expect(await orderState(orderId)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(orderId)).toBe(1);
+    expect(await registroCount(orderId)).toBe(1);
+    expect(await saleAndOrderTill(orderId)).toEqual({
+      orderTillId: tillA.tillId,
+      saleTillId: tillB.tillId,
+    });
+
+    // Once paid it leaves EVERY register's held list — till B no longer shows it.
+    expect((await listHeldOrders({ db: suite.admin }, tillB)).map((o) => o.id)).not.toContain(
+      orderId,
+    );
+
+    // THE CHAIN: the two sales on this node (A/1 walk-up on till A, A/2 cross-till on till B) verify as
+    // one intact huella chain.
+    const report = await withTenant(suite.admin, tillA.tenantId, (tx) =>
+      backend.checkIntegrity(tx, tillA.tenantId, tillA.nodeId),
+    );
+    expect(report.ok).toBe(true);
+    expect(report.checked).toBe(2);
+  });
+
+  it("tenant isolation: a DIFFERENT tenant's register sees NONE of tenant A's held orders", async () => {
+    const { cfg: tenantA, cafe } = await setupVenue();
+    const { cfg: tenantB } = await setupVenue(); // a wholly separate venue + tenant
+
+    // Park an order under tenant A that stays OPEN, so the two reads below differ in the SAME state:
+    // tenant A's list HAS it while tenant B's is empty — not "both empty", which would prove nothing
+    // (CLAUDE.md §1). RLS is the mechanism confining a held order to its own tenant across the node
+    // boundary; PGlite's superuser connection could not exercise it.
+    const orderId = randomUUID();
+    await parkOrder({ db: suite.admin }, tenantA, {
+      id: orderId,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+      label: "Mesa 1",
+    });
+
+    expect((await listHeldOrders({ db: suite.admin }, tenantA)).map((o) => o.id)).toContain(
+      orderId,
+    );
+    expect(await listHeldOrders({ db: suite.admin }, tenantB)).toEqual([]);
+  });
+
+  it("node scope: a same-tenant register on a DIFFERENT node does not list an order parked on node A", async () => {
+    const { cfg: nodeA, cafe } = await setupVenue();
+    // A second node under the SAME tenant. RLS is tenant-scoped, so it does NOT hide node A's order
+    // from node B — only the `node_id = cfg.nodeId` filter does, which is what this asserts. Same
+    // state, opposite answers: node A lists it, node B does not.
+    const nodeB = await addNode(nodeA, "Servidor 2");
+
+    const orderId = randomUUID();
+    await parkOrder({ db: suite.admin }, nodeA, {
+      id: orderId,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+
+    expect((await listHeldOrders({ db: suite.admin }, nodeA)).map((o) => o.id)).toContain(orderId);
+    expect(await listHeldOrders({ db: suite.admin }, nodeB)).toEqual([]);
   });
 });

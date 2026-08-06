@@ -17,7 +17,8 @@
     "lint": "eslint .",
     "demo:daily-close": "tsx scripts/daily-close-demo.ts",
     "demo:catalogue": "tsx scripts/catalogue-demo.ts",
-    "demo:till": "tsx scripts/till-demo.ts"
+    "demo:till": "tsx scripts/till-demo.ts",
+    "demo:park-retrieve": "tsx scripts/park-retrieve-demo.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.0",
