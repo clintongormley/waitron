@@ -37,18 +37,21 @@ type Mode = "idle" | "paying" | "weighing" | "holding" | "card";
 
 /**
  * The pay flow and the kg-weight entry — the two moments the walk-up sale needs a numeric keypad.
- * It owns a small mode state (idle → paying → weighing → idle) and renders exactly one view at a
- * time, sharing the `till-numeric-pad` between the cash and weight screens.
+ * It owns a small mode state (idle → paying / weighing / holding / card → idle) and renders exactly
+ * one view at a time, sharing the `till-numeric-pad` between the cash and weight screens.
  *
  * It coordinates only through the store (spec §3): it subscribes to `"changed"` so the Pay button's
  * enabled state tracks the basket, and to `"product-selected"` so picking a weight tile opens the
  * weigh screen. It never references a sibling widget.
  *
- * MONEY DISCIPLINE. Every amount is an `@waitron/shared` Decimal, never a float. The change is
- * `tendered − total` by decimal subtraction; the total read for both the change and the Confirm gate
- * is the store's previewed total, so the number the operator settles against is the same one the
- * server re-prices and files. `confirm-payment` carries the amount the operator entered, not the
- * total — the server records the fiscal tender at the total and returns the change.
+ * MONEY DISCIPLINE. Every amount is an `@waitron/shared` Decimal, never a float, and both tenders
+ * read the store's previewed total, so the number the operator settles against is the same one the
+ * server re-prices and files. The two tenders diverge in what `confirm-payment` carries: for cash
+ * (`#confirm`), `amount` is the operator-entered tendered amount, never the total — the displayed
+ * change is `tendered − total` by decimal subtraction, and the server records the fiscal tender at
+ * the total and returns the change. For card (`#confirmCard`), there is no operator entry to tender
+ * against; `amount` is `this.store.total` itself, since a card is charged the exact total and there
+ * is no change.
  */
 @customElement("till-tender-pay")
 export class TillTenderPay extends LitElement {
