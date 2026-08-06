@@ -1,6 +1,6 @@
 import type { RecordSaleInput } from "@waitron/core";
 import type { TrustedClock } from "@waitron/fiscal";
-import type { NodeId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
 import type { VerifactuClient } from "@waitron/verifactu";
 
@@ -66,16 +66,14 @@ export function saleInput(
     tillId: TillId;
     nodeId: NodeId;
     seriesId: SeriesId;
-    workingOrderId: WorkingOrderId;
   } & Partial<RecordSaleInput>,
 ): RecordSaleInput {
-  const { tenantId, tillId, nodeId, seriesId, workingOrderId, ...overrides } = params;
+  const { tenantId, tillId, nodeId, seriesId, ...overrides } = params;
   return {
     tenantId,
     tillId,
     nodeId,
     seriesId,
-    workingOrderId,
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     total: "14.41",

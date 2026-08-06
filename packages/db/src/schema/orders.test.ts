@@ -7,6 +7,7 @@ import { describeEachTarget } from "../testing/harness.js";
 import { asAppUser } from "../testing/roles.js";
 import { seedNode } from "../testing/seed.js";
 import { withTenant } from "../tenancy.js";
+import { catalogues, products } from "./catalogue.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
 import { locations, tenants, tills } from "./tenants.js";
 
@@ -17,6 +18,15 @@ const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const TILL_B1 = "bbbbbbbb-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
+
+// working_order_lines.product_id is NOT NULL with a tenant-consistent composite FK to products
+// (park & retrieve, Task 1), so every line needs a real product in its own tenant. seed() creates
+// one priced product per tenant and stores its id here; the LINE fixture defaults to tenant A's.
+let productA = "";
+let productB = "";
+// order_number is NOT NULL on working_orders. No UNIQUE constraint yet (the per-node allocator is a
+// later task), so a simple ascending counter keeps every fixture order distinct without one.
+let orderNumberSeq = 0;
 
 async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]> {
   const result = (await db.execute(query)) as unknown as { rows: T[] } | T[];
@@ -50,16 +60,51 @@ async function seed(db: Database): Promise<void> {
     { id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" },
     { id: TILL_B1, tenantId: TENANT_B, locationId: LOCATION_B, name: "B1" },
   ]);
+  // One priced product per tenant — the FK target every draft line now needs. Each is its own
+  // tenant's, so a line pointing at the other tenant's product would trip the composite FK.
+  const [catA] = await db
+    .insert(catalogues)
+    .values({ tenantId: TENANT_A, name: "Deli A" })
+    .returning({ id: catalogues.id });
+  const [catB] = await db
+    .insert(catalogues)
+    .values({ tenantId: TENANT_B, name: "Deli B" })
+    .returning({ id: catalogues.id });
+  const [prodA] = await db
+    .insert(products)
+    .values({
+      tenantId: TENANT_A,
+      catalogueId: catA.id,
+      descriptions: { es: "Café solo", ca: "Cafè sol" },
+      pricingUnit: "each",
+      unitPrice: "1.30",
+      vatClass: "general",
+    })
+    .returning({ id: products.id });
+  const [prodB] = await db
+    .insert(products)
+    .values({
+      tenantId: TENANT_B,
+      catalogueId: catB.id,
+      descriptions: { es: "Café solo" },
+      pricingUnit: "each",
+      unitPrice: "1.30",
+      vatClass: "general",
+    })
+    .returning({ id: products.id });
+  productA = prodA.id;
+  productB = prodB.id;
 }
 
 async function openOrder(db: Database, tenantId = TENANT_A, tillId = TILL_A1): Promise<string> {
   const [row] = await db
     .insert(workingOrders)
-    .values({ tenantId, tillId, status: "open", openedAt: AT })
+    .values({ tenantId, tillId, orderNumber: ++orderNumberSeq, status: "open", openedAt: AT })
     .returning({ id: workingOrders.id });
   return row.id;
 }
 
+// Defaults to tenant A's product; the two tenant-B line inserts override productId to productB.
 const LINE = {
   lineNo: 1,
   descriptions: { es: "Café solo", ca: "Cafè sol" },
@@ -111,10 +156,12 @@ describeEachTarget("working_orders", (target) => {
     // open → open is the ordinary case and must stay cheap: a table adds a
     // round of drinks four times before it asks for the bill.
     const id = await openOrder(db);
-    await db.insert(workingOrderLines).values({ ...LINE, tenantId: TENANT_A, workingOrderId: id });
     await db
       .insert(workingOrderLines)
-      .values({ ...LINE, lineNo: 2, tenantId: TENANT_A, workingOrderId: id });
+      .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id });
+    await db
+      .insert(workingOrderLines)
+      .values({ ...LINE, productId: productA, lineNo: 2, tenantId: TENANT_A, workingOrderId: id });
     await db
       .update(workingOrderLines)
       .set({ quantity: "2.000", lineTotal: "2.60" })
@@ -267,7 +314,14 @@ describeEachTarget("working_orders", (target) => {
     // ... and accepts a valid node id when set.
     const [withNode] = await db
       .insert(workingOrders)
-      .values({ tenantId: TENANT_A, tillId: TILL_A1, status: "open", openedAt: AT, nodeId: node })
+      .values({
+        tenantId: TENANT_A,
+        tillId: TILL_A1,
+        orderNumber: ++orderNumberSeq,
+        status: "open",
+        openedAt: AT,
+        nodeId: node,
+      })
       .returning({ nodeId: workingOrders.nodeId });
     expect(withNode.nodeId).toBe(node);
   });
@@ -277,6 +331,7 @@ describeEachTarget("working_orders", (target) => {
       db.insert(workingOrders).values({
         tenantId: TENANT_A,
         tillId: TILL_A1,
+        orderNumber: ++orderNumberSeq,
         status: "open",
         openedAt: AT,
         nodeId: "99999999-9999-4999-8999-999999999999",
@@ -297,6 +352,7 @@ describeEachTarget("working_orders", (target) => {
       db.insert(workingOrders).values({
         tenantId: TENANT_A,
         tillId: TILL_A1,
+        orderNumber: ++orderNumberSeq,
         status: "open",
         openedAt: AT,
         nodeId: foreignNode,
@@ -325,7 +381,9 @@ describeEachTarget("working_order_lines", (target) => {
 
   it("adds a line to an open order", async () => {
     const id = await openOrder(db);
-    await db.insert(workingOrderLines).values({ ...LINE, tenantId: TENANT_A, workingOrderId: id });
+    await db
+      .insert(workingOrderLines)
+      .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id });
     const found = await db.select().from(workingOrderLines);
     expect(found).toHaveLength(1);
     expect(found[0].descriptions).toEqual({ es: "Café solo", ca: "Cafè sol" });
@@ -333,9 +391,13 @@ describeEachTarget("working_order_lines", (target) => {
 
   it("rejects a duplicate line_no within an order", async () => {
     const id = await openOrder(db);
-    await db.insert(workingOrderLines).values({ ...LINE, tenantId: TENANT_A, workingOrderId: id });
+    await db
+      .insert(workingOrderLines)
+      .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id });
     const error = await captureError(() =>
-      db.insert(workingOrderLines).values({ ...LINE, tenantId: TENANT_A, workingOrderId: id }),
+      db
+        .insert(workingOrderLines)
+        .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id }),
     );
     expect(pgErrorMessage(error)).toMatch(/duplicate key value/);
   });
@@ -347,7 +409,9 @@ describeEachTarget("working_order_lines", (target) => {
       .set({ status: "settled", settledAt: AT })
       .where(eq(workingOrders.id, id));
     const error = await captureError(() =>
-      db.insert(workingOrderLines).values({ ...LINE, tenantId: TENANT_A, workingOrderId: id }),
+      db
+        .insert(workingOrderLines)
+        .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id }),
     );
     expect(pgErrorMessage(error)).toMatch(/lines may only be written while the order is open/);
   });
@@ -356,7 +420,9 @@ describeEachTarget("working_order_lines", (target) => {
     const id = await openOrder(db);
     await db.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
     const error = await captureError(() =>
-      db.insert(workingOrderLines).values({ ...LINE, tenantId: TENANT_A, workingOrderId: id }),
+      db
+        .insert(workingOrderLines)
+        .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id }),
     );
     expect(pgErrorMessage(error)).toMatch(/lines may only be written while the order is open/);
   });
@@ -365,7 +431,9 @@ describeEachTarget("working_order_lines", (target) => {
     // Deletion is the transition that would otherwise slip through: the
     // trigger has to cover DELETE, and OLD rather than NEW carries the id.
     const id = await openOrder(db);
-    await db.insert(workingOrderLines).values({ ...LINE, tenantId: TENANT_A, workingOrderId: id });
+    await db
+      .insert(workingOrderLines)
+      .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id });
     await db
       .update(workingOrders)
       .set({ status: "settled", settledAt: AT })
@@ -381,6 +449,7 @@ describeEachTarget("working_order_lines", (target) => {
     const error = await captureError(() =>
       db.insert(workingOrderLines).values({
         ...LINE,
+        productId: productA,
         tenantId: TENANT_A,
         workingOrderId: id,
         descriptions: { es: "Café solo" },
@@ -394,6 +463,7 @@ describeEachTarget("working_order_lines", (target) => {
     const error = await captureError(() =>
       db.insert(workingOrderLines).values({
         ...LINE,
+        productId: productA,
         tenantId: TENANT_A,
         workingOrderId: id,
         descriptions: { es: "Café solo", ca: "Cafè sol", en: "Black coffee" },
@@ -407,7 +477,9 @@ describeEachTarget("working_order_lines", (target) => {
     // configuration would mean a receipt reprinted next year reads differently
     // from the one the customer took.
     const id = await openOrder(db);
-    await db.insert(workingOrderLines).values({ ...LINE, tenantId: TENANT_A, workingOrderId: id });
+    await db
+      .insert(workingOrderLines)
+      .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id });
     await db
       .update(locations)
       .set({ invoiceLocales: ["es", "en"] })
@@ -416,20 +488,24 @@ describeEachTarget("working_order_lines", (target) => {
     expect(line.descriptions).toEqual({ es: "Café solo", ca: "Cafè sol" });
   });
 
-  it("carries no reference to a catalogue", async () => {
-    // Values are snapshotted, never referenced (architecture §6). The
-    // catalogue is out of scope for this plan, and a nullable foreign key
-    // added later "just for reporting" is exactly how a price change reaches
-    // back into a record that was supposed to be frozen.
+  it("carries a product_id pricing reference on the draft line, and no other catalogue link", async () => {
+    // Park & retrieve (Task 1) inverts the old "no catalogue reference at all" rule — but only for
+    // the MUTABLE draft. A working_order_line keeps a product_id so a retrieved order can be
+    // repriced (orders.ts); it is a pricing INPUT, not a snapshot. descriptions/unit_price/category
+    // stay frozen onto the line, and when the order is FILED the resulting sale_lines carry those
+    // snapshots and NO product reference (asserted in sales.test.ts's "carries no reference to a
+    // catalogue on sale_lines"). So exactly ONE catalogue-shaped column is expected here —
+    // product_id — with category_id/menu_id/sku_id/variant_id all still absent, the guard that a
+    // stale catalogue can never reach back into a completed record.
     const cols = await rows<{ column_name: string }>(
       db,
       sql`select column_name from information_schema.columns
            where table_name = 'working_order_lines'`,
     );
-    const offenders = cols
+    const references = cols
       .map((c) => c.column_name)
-      .filter((n) => /(product|item|catalogue|catalog|menu|sku|variant)_id$/i.test(n));
-    expect(offenders).toEqual([]);
+      .filter((n) => /(product|item|catalogue|catalog|menu|sku|variant|category)_id$/i.test(n));
+    expect(references).toEqual(["product_id"]);
   });
 
   it("stores every monetary column as numeric(12, 2)", async () => {
@@ -456,7 +532,12 @@ describeEachTarget("working_order_lines", (target) => {
   it("rejects a line whose tenant differs from its order's", async () => {
     const id = await openOrder(db);
     const error = await captureError(() =>
-      db.insert(workingOrderLines).values({ ...LINE, tenantId: TENANT_B, workingOrderId: id }),
+      db.insert(workingOrderLines).values({
+        ...LINE,
+        productId: productB,
+        tenantId: TENANT_B,
+        workingOrderId: id,
+      }),
     );
     expect(pgErrorMessage(error)).toMatch(/violates foreign key constraint/);
   });
@@ -465,12 +546,13 @@ describeEachTarget("working_order_lines", (target) => {
     const orderA = await openOrder(db);
     await db
       .insert(workingOrderLines)
-      .values({ ...LINE, tenantId: TENANT_A, workingOrderId: orderA });
+      .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: orderA });
     const orderB = await openOrder(db, TENANT_B, TILL_B1);
     // LOCATION_B configures only "es" (see seed()), so tenant B's line must
     // carry exactly that locale rather than the shared bilingual LINE fixture.
     await db.insert(workingOrderLines).values({
       ...LINE,
+      productId: productB,
       tenantId: TENANT_B,
       workingOrderId: orderB,
       descriptions: { es: "Café solo" },

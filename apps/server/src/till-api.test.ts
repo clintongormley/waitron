@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, endSession, hashPin, loginWithPin } from "@waitron/identity";
 import {
   assignCatalogueToLocation,
@@ -62,12 +62,19 @@ const suite = usePgliteDb({
     // A location → till the session cookie references: `loginWithPin` inserts a `sessions` row with a
     // FK to `tills`, so the till `cfg.tillId` names must exist. Seeded as the PGlite superuser (RLS
     // bypassed) — pure setup, as `@waitron/db`'s own seed helpers document.
+    // invoice_locales is `es-ES` (matching the seeded product's `es-ES` description key), because the
+    // working-order-line insert `POST /api/working-orders` performs fires `check_locales`, which
+    // demands a line's `descriptions` keys equal the location's locales EXACTLY.
     const loc = await db.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Counter', array['es'], 'Retail') returning id`);
+      values (${tenantId}, 'Counter', array['es-ES'], 'Retail') returning id`);
     const till = await db.execute<{ id: string }>(sql`
       insert into tills (tenant_id, location_id, name)
       values (${tenantId}, ${loc.rows[0]!.id}, 'Till 1') returning id`);
+    // A node the working-order routes need: `parkOrder`/`payWorkingOrder` write `working_orders.node_id`
+    // (its composite FK `(tenant_id, node_id) → nodes(tenant_id, id)` requires a real row), and
+    // `listHeldOrders` filters by it. `cfg.nodeId` names THIS row so every parked order is on-node.
+    const nodeId = await seedNode(db, tenantId, brandLocationId(loc.rows[0]!.id));
     // Ana's PIN is "5555"; anything else must not verify. Stored hashed via `hashPin`, never plain.
     const person = await db.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
@@ -101,7 +108,7 @@ const suite = usePgliteDb({
       return p;
     });
     aguaProduct = { id: product.id };
-    cfg = makeCfg(tenantId, till.rows[0]!.id, loc.rows[0]!.id);
+    cfg = makeCfg(tenantId, till.rows[0]!.id, loc.rows[0]!.id, nodeId);
   },
 });
 
@@ -112,17 +119,24 @@ function collect(
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-/** The till's config for the seeded tenant. `nodeId`/`seriesId` are unused by the session routes, so
- * they carry fresh uuids; `locationId` is the seeded one the sale routes (Tasks 5/6) will read. */
-function makeCfg(tenantId: TenantId, tillId: string, locationId: string): TillConfig {
+/** The till's config for the seeded tenant. `nodeId` is the seeded node the working-order routes
+ * write and filter by; `seriesId` is unused by these routes (the chained sale write is proven over
+ * real Postgres in `till-api.rls.test.ts`), so it carries a fresh uuid; `locationId` is the seeded
+ * one the sale/catalogue routes read. */
+function makeCfg(
+  tenantId: TenantId,
+  tillId: string,
+  locationId: string,
+  nodeId: string,
+): TillConfig {
   return {
     tenantId,
     tillId: brandTillId(tillId),
-    nodeId: brandNodeId(randomUUID()),
+    nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
     locale: "es-ES",
-    invoiceLocales: ["es"],
+    invoiceLocales: ["es-ES"],
   };
 }
 
@@ -443,8 +457,9 @@ describe("POST /api/sales (session-guarded sale)", () => {
 
     // The guard runs BEFORE the body is even read, so an unauthenticated sale is refused with the
     // same code a missing session yields everywhere else. The chained fiscal write (the happy path)
-    // is proven end-to-end over real Postgres in `till-api.realpg.test.ts`, not here — PGlite runs as
-    // a superuser and cannot exercise the deployment role's chained write (CLAUDE.md §4).
+    // and the idempotent replay are proven end-to-end over real Postgres in `till-api.rls.test.ts`,
+    // not here — PGlite runs as a superuser and cannot exercise the deployment role's chained write
+    // (CLAUDE.md §4).
     const res = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -452,5 +467,180 @@ describe("POST /api/sales (session-guarded sale)", () => {
     });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+});
+
+describe("/api/working-orders (session-guarded park & retrieve)", () => {
+  // Park a fresh order for the logged-in operator over the real HTTP surface (never the working-order
+  // module directly), so every assertion below rides the route's own requireSession + run wrapper.
+  async function park(
+    app: Hono,
+    cookie: string,
+    body: { id: string; lines: { productId: string; quantity: string }[]; label?: string },
+  ): Promise<Response> {
+    return app.request("/api/working-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("REJECTS every route with 401 session.required when no cookie is present", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const id = randomUUID();
+    const json = { "content-type": "application/json" };
+    // The guard runs FIRST on each route (before any body is read or catalogue touched), so an
+    // unauthenticated park/list/retrieve/update/abandon all 401 with the one code. Deleting the
+    // `requireSession` call from any route flips that route's case to a 200/404, the deletion proof.
+    const cases = [
+      app.request("/api/working-orders", {
+        method: "POST",
+        headers: json,
+        body: JSON.stringify({ id, lines: [] }),
+      }),
+      app.request("/api/working-orders"),
+      app.request(`/api/working-orders/${id}`),
+      app.request(`/api/working-orders/${id}`, {
+        method: "PUT",
+        headers: json,
+        body: JSON.stringify({ lines: [] }),
+      }),
+      app.request(`/api/working-orders/${id}`, { method: "DELETE" }),
+    ];
+    for (const res of await Promise.all(cases)) {
+      expect(res.status).toBe(401);
+      expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+    }
+  });
+
+  it("POST parks an order attributed to the session's till and returns { id, orderNumber }", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const id = randomUUID();
+
+    const res = await park(app, cookie, {
+      id,
+      lines: [{ productId: aguaProduct.id, quantity: "2" }],
+      label: "Mesa 4",
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { id: string; orderNumber: number };
+    expect(body.id).toBe(id);
+    // Per-(tenant,node) counter shared across this suite's tests, so assert the shape, not the value.
+    expect(Number.isInteger(body.orderNumber)).toBe(true);
+    expect(body.orderNumber).toBeGreaterThanOrEqual(1);
+
+    // The order really persisted OPEN on the seeded till (read as the PGlite superuser, RLS bypassed).
+    const rows = await suite.db.execute<{ status: string; till_id: string }>(
+      sql`select status, till_id from working_orders where id = ${id}`,
+    );
+    expect(rows.rows[0]).toMatchObject({ status: "open", till_id: cfg.tillId });
+  });
+
+  it("GET lists it, GET/:id retrieves its lines, PUT edits it, DELETE abandons it", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const id = randomUUID();
+
+    const parked = await park(app, cookie, {
+      id,
+      lines: [{ productId: aguaProduct.id, quantity: "2" }],
+      label: "Mesa 7",
+    });
+    const { orderNumber } = (await parked.json()) as { orderNumber: number };
+
+    // GET list carries this order's summary. `total` is the GROSS (VAT-inclusive) draft total the
+    // operator saw: 2 × 1.50 = 3.00 gross (NOT the net base 2.48 the filed sale line carries). Assert
+    // containment — the suite shares one node, so other tests' open orders also list.
+    const list = await app.request("/api/working-orders", { headers: { cookie } });
+    expect(list.status).toBe(200);
+    const summaries = (await list.json()) as {
+      id: string;
+      orderNumber: number;
+      label: string | null;
+      itemCount: number;
+      total: string;
+    }[];
+    expect(summaries).toContainEqual(
+      expect.objectContaining({ id, orderNumber, label: "Mesa 7", itemCount: 1, total: "3.00" }),
+    );
+
+    // GET /:id rebuilds the basket inputs (product_id + quantity, in line order) — no stored price.
+    // `quantity` reads back at the column's numeric(_, 3) scale ("2.000", not the sent "2").
+    const got = await app.request(`/api/working-orders/${id}`, { headers: { cookie } });
+    expect(got.status).toBe(200);
+    expect(await got.json()).toEqual({
+      id,
+      orderNumber,
+      label: "Mesa 7",
+      lines: [{ productId: aguaProduct.id, quantity: "2.000" }],
+    });
+
+    // PUT replaces the whole basket + label — a 200 with no body — and a re-retrieve reflects it.
+    const put = await app.request(`/api/working-orders/${id}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        lines: [{ productId: aguaProduct.id, quantity: "5" }],
+        label: "Mesa 7 bis",
+      }),
+    });
+    expect(put.status).toBe(200);
+    expect(await put.text()).toBe("");
+    const afterPut = await (
+      await app.request(`/api/working-orders/${id}`, { headers: { cookie } })
+    ).json();
+    expect(afterPut).toEqual({
+      id,
+      orderNumber,
+      label: "Mesa 7 bis",
+      lines: [{ productId: aguaProduct.id, quantity: "5.000" }],
+    });
+
+    // DELETE abandons it — a 200 with no body — after which retrieve is 404 and it leaves the list.
+    const del = await app.request(`/api/working-orders/${id}`, {
+      method: "DELETE",
+      headers: { cookie },
+    });
+    expect(del.status).toBe(200);
+    expect(await del.text()).toBe("");
+    const goneGet = await app.request(`/api/working-orders/${id}`, { headers: { cookie } });
+    expect(goneGet.status).toBe(404);
+    expect(await goneGet.json()).toMatchObject({ error: { code: "working_order.not_found" } });
+    const afterList = (await (
+      await app.request("/api/working-orders", { headers: { cookie } })
+    ).json()) as { id: string }[];
+    expect(afterList.find((o) => o.id === id)).toBeUndefined();
+  });
+
+  it("GET /:id of an unknown id is 404 working_order.not_found", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const res = await app.request(`/api/working-orders/${randomUUID()}`, { headers: { cookie } });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "working_order.not_found" } });
+  });
+
+  it("PUT of an abandoned (terminal) order is 409 working_order.not_open", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const id = randomUUID();
+    await park(app, cookie, { id, lines: [{ productId: aguaProduct.id, quantity: "1" }] });
+    await app.request(`/api/working-orders/${id}`, { method: "DELETE", headers: { cookie } });
+
+    // The order now sits in the terminal `abandoned` state, so an edit is refused 409 — the mutation
+    // counterpart to the retrieve side's 404.
+    const put = await app.request(`/api/working-orders/${id}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ lines: [{ productId: aguaProduct.id, quantity: "2" }] }),
+    });
+    expect(put.status).toBe(409);
+    expect(await put.json()).toMatchObject({ error: { code: "working_order.not_open" } });
   });
 });

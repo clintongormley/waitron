@@ -10,14 +10,28 @@ import "./screens/till-lock-screen.js";
 import "./screens/till-counter-screen.js";
 import "./screens/till-ticket-view.js";
 import type { StringKey } from "./i18n/strings.js";
-import type { TillProduct, TillSaleResult } from "./api/client.js";
+import type { HeldOrderSummary, TillProduct, TillSaleResult } from "./api/client.js";
 import type { OrderLine } from "./state/working-order.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
-import type { ConfirmPaymentDetail } from "./widgets/tender-pay.js";
+import type { ConfirmPaymentDetail, ParkOrderDetail } from "./widgets/tender-pay.js";
 
 /** The three faces of the till: sign in, ring up, print. The app shows exactly one at a time. */
 type Screen = "lock" | "counter" | "ticket";
+
+/**
+ * The quantity string to DISPLAY for a retrieved parked line. The server stores and returns every
+ * quantity at numeric(_,3) scale, so an EACH product's whole count arrives as "2.000" — which the
+ * basket would otherwise render verbatim. Trim the trailing zeros (and a bare trailing dot) so an
+ * each line reads "2", not "2.000"; a WEIGHT product keeps its decimals ("0.320"). Only the DISPLAY
+ * string is cleaned — re-pricing is untouched, because `priceBasket` parses the decimal either way
+ * (`decimal("2")` and `decimal("2.000")` are equal), as does the pay-time `recordSale`. Applied here
+ * in the app's retrieve mapping, deliberately NOT in the store (which stores lines verbatim).
+ */
+function displayQuantity(product: TillProduct, quantity: string): string {
+  if (product.pricingUnit !== "each" || !quantity.includes(".")) return quantity;
+  return quantity.replace(/0+$/, "").replace(/\.$/, "");
+}
 
 /**
  * The till's ROOT element — the capstone that turns the screens and widgets into a working POS.
@@ -31,9 +45,9 @@ type Screen = "lock" | "counter" | "ticket";
  *  - boot → `getTill` sets the operator-UI locale, remembers the receipt (invoice) locale and the
  *    ticket issuer; the app opens on `lock`;
  *  - `logged-in` → load the products, remember the operator, show the `counter`;
- *  - `confirm-payment` → `recordSale` the basket, then show the `ticket` (or, on a rejected `{code}`,
- *    stay on the counter with the basket intact and surface a non-fatal error — a till must never
- *    lose a sale in progress);
+ *  - `confirm-payment` → `recordSale` the basket, then show the `ticket` and refresh the held list so
+ *    a settled parked order drops off (or, on a rejected `{code}`, stay on the counter with the basket
+ *    intact and surface a non-fatal error — a till must never lose a sale in progress);
  *  - `new-sale` → clear the basket, back to an empty `counter`;
  *  - `logout` → end the server session, back to `lock`, WITHOUT clearing the basket.
  *
@@ -76,6 +90,13 @@ export class TillApp extends LitElement {
   @state() private products: TillProduct[] = [];
   /** The logged-in operator's display name, shown in the counter header. */
   @state() private operatorName = "";
+  /**
+   * The node's OPEN parked orders (the cross-till held list), handed to the counter's held-orders
+   * widget. Refreshed from `listWorkingOrders` on entering the counter and after every park, retrieve,
+   * discard and successful pay — the moments the set changes — so a register always shows the current
+   * parked orders, including ones parked on a different register.
+   */
+  @state() private heldOrders: HeldOrderSummary[] = [];
   /** The filed sale to print; set on a successful `recordSale`, read by the ticket view. */
   @state() private result?: TillSaleResult;
   /** The basket lines snapshotted at pay time — the goods the ticket identifies (art. 7.1.e). */
@@ -99,6 +120,14 @@ export class TillApp extends LitElement {
    * that disabling is the visible feedback; this flag is the actual safety.
    */
   @state() private submitting = false;
+  /**
+   * REENTRY GUARD for parking — the same shape as {@link submitting}, one flag per in-flight request.
+   * Set synchronously at the top of {@link TillApp.#onParkOrder} before the first `await parkOrder` and
+   * cleared in its `finally`, so a re-fired `park-order` (double-tap, a laggy link) is a no-op while the
+   * first is pending. Parking twice is idempotent server-side (the id is the primary key), so this is
+   * hygiene rather than a fiscal safety — but a duplicate `POST` is still avoided.
+   */
+  @state() private parking = false;
 
   override firstUpdated(): void {
     void this.#boot();
@@ -122,7 +151,7 @@ export class TillApp extends LitElement {
     this.issuer = { venueName: till.venueName, nif: till.nif };
   }
 
-  /** A confirmed login: load the catalogue, remember the operator, show the counter. */
+  /** A confirmed login: load the catalogue, remember the operator, show the counter, list held orders. */
   async #onLoggedIn(event: Event): Promise<void> {
     const { displayName } = (event as CustomEvent<LoggedInDetail>).detail;
     const products = await this.api.listProducts();
@@ -130,6 +159,17 @@ export class TillApp extends LitElement {
     this.operatorName = displayName;
     this.errorKey = undefined;
     this.screen = "counter";
+    await this.#refreshHeldOrders();
+  }
+
+  /**
+   * Reload the cross-till held-orders list from the server. Called on entering the counter and after
+   * every park/retrieve/discard and every successful pay, the moments the node's set of open parked
+   * orders changes. Only writes reactive state, so no `isConnected` guard is needed (see the app's
+   * DISCONNECT SAFETY note).
+   */
+  async #refreshHeldOrders(): Promise<void> {
+    this.heldOrders = await this.api.listWorkingOrders();
   }
 
   /**
@@ -150,9 +190,23 @@ export class TillApp extends LitElement {
       this.result = await this.api.recordSale(
         lines.map((line) => ({ productId: line.product.id, quantity: line.quantity })),
         tender,
+        // The store's STABLE working-order id — its own client-minted uuid for a walk-up, or a
+        // retrieved order's id after `loadFrom` adopted it (see `#onRetrieveOrder`). Sending it (never
+        // a fresh uuid) is the pay-idempotency key (spec §3): a lost-response re-tap replays against
+        // the same row rather than filing a second chained record, and paying a RETRIEVED order
+        // settles under that order's own id instead of orphaning it `open`. `#onParkOrder` sends the
+        // same `#store.id`.
+        this.#store.id,
       );
       this.ticketLines = lines;
       this.screen = "ticket";
+      // A settled PARKED order must drop off the cross-till held list immediately — mirror the
+      // park/retrieve/discard refresh (the four moments the node's open set changes). Without this a
+      // just-paid retrieved order lingers in the in-memory `heldOrders` and re-appears on the counter
+      // after "New sale" until the next park/retrieve/discard. Only on the success path; a walk-up
+      // simply re-reads an unchanged list. Self-heals even if it fails — a retrieve of the settled
+      // order 404s → `held.stale` → refresh — and cannot double-file (pay is idempotent, spec §3).
+      await this.#refreshHeldOrders();
     } catch {
       // A rejected {code} must not lose the sale in progress: stay on the counter, basket intact, and
       // surface a generic, non-fatal message — never the raw domain code.
@@ -162,6 +216,112 @@ export class TillApp extends LitElement {
       // is now `ticket`), on rejection the operator is back on the counter and may retry.
       this.submitting = false;
     }
+  }
+
+  /**
+   * Park the current basket to pay later, then empty it for the next customer — staying on the counter
+   * (a parked order is NOT a completed sale, so there is no ticket). The store's stable `id` is sent as
+   * the park-idempotency key; on success `store.clear()` empties the basket AND re-mints that id, so the
+   * next park/pay keys a fresh working order rather than colliding with the parked one. A rejected park
+   * must not lose the order: like `#onConfirmPayment`, it surfaces a non-fatal error and leaves the
+   * basket intact (no `clear`) so the operator can retry.
+   */
+  async #onParkOrder(event: Event): Promise<void> {
+    // Reentry guard: a second park-order fired before the first settles is a no-op (see `parking`).
+    if (this.parking) return;
+    this.parking = true;
+    const { label } = (event as CustomEvent<ParkOrderDetail>).detail;
+    // Read the id and lines BEFORE the await: a successful clear() re-mints the id, so the value sent
+    // must be captured against the basket as it stands now.
+    const id = this.#store.id;
+    const lines = this.#store.lines;
+    this.errorKey = undefined;
+    try {
+      await this.api.parkOrder({
+        id,
+        lines: lines.map((line) => ({ productId: line.product.id, quantity: line.quantity })),
+        label,
+      });
+      this.#store.clear();
+      await this.#refreshHeldOrders();
+    } catch {
+      // A rejected park must not lose the order: stay on the counter, basket intact, generic message.
+      this.errorKey = "held.park_error";
+    } finally {
+      this.parking = false;
+    }
+  }
+
+  /**
+   * Retrieve a parked order into the basket — the other half of the cross-till story. Fetch the order,
+   * rebuild its lines by resolving each `productId` against the loaded catalogue (the parked line
+   * stores only id + quantity — never a price — so the till RE-PRICES on retrieve), load them into the
+   * shared store under the retrieved order's own id (so paying it later keys the same idempotency slot
+   * the server persisted it under), and refresh the list. Stays on the counter with the retrieved
+   * basket ready to ring or pay.
+   *
+   * DEACTIVATED-PRODUCT EDGE (spec §4): a line whose product no longer resolves — deactivated in the
+   * catalogue since the order was parked — is DROPPED from the rebuilt basket and a non-fatal
+   * `held.product_gone` is surfaced, rather than failing the whole retrieve. The operator gets the rest
+   * of the order back and is told something was removed.
+   *
+   * Each `quantity` arrives at numeric(_,3) scale ("2.000"); {@link displayQuantity} cleans an EACH
+   * count's trailing zeros for display without touching re-pricing (a weight keeps its decimals).
+   *
+   * CROSS-TILL STALE-LIST RACE. The held list has no live push (by design — replication is future
+   * shared infra), so between our last `listWorkingOrders` and this tap another register may have paid
+   * or discarded the order, and `retrieveWorkingOrder` then rejects (`working_order.not_found`). Like
+   * `#onParkOrder`/`#onConfirmPayment`, that must fail GRACEFULLY: surface a non-fatal `held.stale` (never
+   * the raw code) and leave the current basket UNTOUCHED — `loadFrom` runs only after the successful
+   * await, so a rejection never half-loads it. The refresh below then runs on both paths, so the
+   * vanished order drops off the list rather than sitting there inviting another dead tap.
+   */
+  async #onRetrieveOrder(event: Event): Promise<void> {
+    const { id } = (event as CustomEvent<{ id: string }>).detail;
+    this.errorKey = undefined;
+    try {
+      const order = await this.api.retrieveWorkingOrder(id);
+      const lines: OrderLine[] = [];
+      let droppedAProduct = false;
+      for (const line of order.lines) {
+        const product = this.products.find((candidate) => candidate.id === line.productId);
+        if (product === undefined) {
+          // The product was deactivated since the order was parked: drop the line, flag it, keep going.
+          droppedAProduct = true;
+          continue;
+        }
+        lines.push({ product, quantity: displayQuantity(product, line.quantity) });
+      }
+      if (droppedAProduct) this.errorKey = "held.product_gone";
+      this.#store.loadFrom(order.id, lines, order.label ?? undefined);
+    } catch {
+      // The order was paid/discarded on another register since our list was refreshed: non-fatal
+      // notice, basket left intact (loadFrom never ran), never leak the raw code.
+      this.errorKey = "held.stale";
+    }
+    // Runs on both paths: on success the list is re-read; on the stale race the vanished row drops off.
+    await this.#refreshHeldOrders();
+  }
+
+  /**
+   * Discard a parked order (`open → abandoned`), then refresh the held list so it drops off. The same
+   * cross-till stale-list race as {@link TillApp.#onRetrieveOrder} applies: if the order was already
+   * paid/discarded on another register, `abandonWorkingOrder` rejects (`working_order.not_open`) — a
+   * non-fatal `held.stale`, never the raw code. The refresh runs on both paths, so a stale row drops
+   * off whether the discard landed or the order was already gone.
+   */
+  async #onDiscardOrder(event: Event): Promise<void> {
+    const { id } = (event as CustomEvent<{ id: string }>).detail;
+    // Clear any prior non-fatal banner on the way in, exactly as `#onRetrieveOrder` does — a
+    // successful discard must not leave a stale error (e.g. a `held.stale` from an earlier dead tap)
+    // showing over the counter.
+    this.errorKey = undefined;
+    try {
+      await this.api.abandonWorkingOrder(id);
+    } catch {
+      this.errorKey = "held.stale";
+    }
+    await this.#refreshHeldOrders();
   }
 
   /** Start the next sale: empty the basket, back to the counter. */
@@ -185,6 +345,9 @@ export class TillApp extends LitElement {
         class="app"
         @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
         @confirm-payment=${(event: Event) => void this.#onConfirmPayment(event)}
+        @park-order=${(event: Event) => void this.#onParkOrder(event)}
+        @retrieve-order=${(event: Event) => void this.#onRetrieveOrder(event)}
+        @discard-order=${(event: Event) => void this.#onDiscardOrder(event)}
         @new-sale=${() => this.#onNewSale()}
         @logout=${() => void this.#onLogout()}
       >
@@ -202,6 +365,7 @@ export class TillApp extends LitElement {
         return html`<till-counter-screen
           .store=${this.#store}
           .products=${this.products}
+          .heldOrders=${this.heldOrders}
           .operatorName=${this.operatorName}
           .busy=${this.submitting}
         ></till-counter-screen>`;

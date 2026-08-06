@@ -4,8 +4,15 @@ import { recordSale } from "@waitron/core";
 import { CORE_MIGRATIONS, asAppUser, sales, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
-import type { NodeId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
-import { decimal, nodeId as brandNodeId, saleId as brandSaleId } from "@waitron/shared";
+import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import {
+  MONEY_SCALE,
+  decimal,
+  divideDecimal,
+  multiplyDecimal,
+  nodeId as brandNodeId,
+  saleId as brandSaleId,
+} from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { envios } from "./schema/envios.js";
@@ -28,12 +35,11 @@ let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
-let workingOrderId: WorkingOrderId;
 
 const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenantWithSif(pg.db));
+  ({ tenantId, tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -45,11 +51,7 @@ beforeEach(async () => {
 async function sell() {
   return withTenant(pg.db, tenantId, async (tx) => {
     await asAppUser(tx);
-    return recordSale(
-      tx,
-      backend,
-      saleInput({ tenantId, tillId, nodeId, seriesId, workingOrderId }),
-    );
+    return recordSale(tx, backend, saleInput({ tenantId, tillId, nodeId, seriesId }));
   });
 }
 
@@ -490,5 +492,101 @@ describe("pendingCount", () => {
     await sell();
     await pg.db.execute(sql`update envios set estado = 'aceptado' where tenant_id = ${tenantId}`);
     expect(await backend.pendingCount(tenantId, nodeId)).toBe(0);
+  });
+});
+
+/**
+ * The idempotent-replay read-back (Counter POS 7b, Task 14): re-derives the QR and returns the EXACT
+ * filed desglose for an already-recorded sale, so a lost-response retry's reprinted ticket carries the
+ * mandatory Veri*Factu QR and the authoritative VAT breakdown rather than a QR-less, recomputed one.
+ *
+ * PGlite, deliberately (CLAUDE.md §4): this is a pure READ-BACK of the stored `desglose` plus a QR
+ * derivation — the identical read `write-path.e2e.test.ts` ("makes the QR payload derivable from the
+ * stored record", "hands back a verificationUrl built from the same stored record") and `recordVoid`'s
+ * own `select … where sale_id = …` already do on PGlite. It has no privilege / RLS-as-deployment-role /
+ * concurrency dimension, so the heavier target's justification does not apply. The REAL-Postgres
+ * read-back of the registro (the app role reading it under RLS on a live replay) is exercised at the
+ * integration layer by `apps/server`'s `working-order.rls.test.ts` / `till-api.rls.test.ts` replay
+ * tests, which drive THIS method through the real backend.
+ */
+describe("filedReceiptFor", () => {
+  it("returns the exact filed difference-method desglose, not a recompute", async () => {
+    // A basket whose FILED figures are the difference method (tax = gross − base) and DIVERGE from a
+    // naive base×rate recompute — the whole reason a replay must READ the filed record. For the 21%
+    // group, gross 100.00 → base round(100×100/121) = 82.64, filed tax 100.00 − 82.64 = 17.36; the
+    // normal method round(82.64 × 0.21) = 17.35 (asserted as the control below). A recomputing
+    // implementation would return 17.35; `filedReceiptFor` returns the stored 17.36.
+    const freshSaleId = brandSaleId("77777777-7777-4777-8777-777777777777");
+    const vatBreakdown = [
+      { rate: decimal("21.00"), base: decimal("82.64"), tax: decimal("17.36") },
+      { rate: decimal("10.00"), base: decimal("9.09"), tax: decimal("0.91") },
+    ];
+    // `registros_facturacion.sale_id` FKs onto `sales.id`, so the sale row must exist before the
+    // registro is chained — inserted directly (like the "F1" case above), bypassing core, so the
+    // divergence-prone breakdown reaches the backend verbatim.
+    const ref = await withTenant(pg.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      await tx.insert(sales).values({
+        id: freshSaleId,
+        tenantId,
+        tillId,
+        nodeId,
+        seriesId,
+        invoiceNumber: 700,
+        issuedAt: "2026-03-01T12:05:00.000Z",
+        issuedOffsetMinutes: 60,
+        total: "110.00",
+        locale: "es-ES",
+        invoiceLocales: ["es-ES"],
+        fiscalBackend: "verifactu",
+        fiscalState: "recorded",
+      });
+      return backend.recordSale(tx, {
+        tenantId,
+        tillId,
+        nodeId,
+        saleId: freshSaleId,
+        seriesId,
+        seriesCode: "A",
+        invoiceNumber: 700,
+        issuedAt: new Date("2026-03-01T12:05:00.000Z"),
+        offsetMinutes: 60,
+        descriptionOfOperation: "Venta en establecimiento",
+        total: decimal("110.00"),
+        vatBreakdown,
+        counterparty: null,
+      });
+    });
+    expect(ref.verificationUrl).toBeTruthy();
+
+    const filed = await withTenant(pg.db, tenantId, (tx) =>
+      backend.filedReceiptFor(tx, freshSaleId),
+    );
+    expect(filed).toBeDefined();
+    // The QR re-derived from the stored record equals the one `recordSale` returned at filing time.
+    expect(filed!.verificationUrl).toBe(ref.verificationUrl);
+    // The EXACT filed difference-method figures round-trip, element for element and in order.
+    expect(filed!.vatBreakdown).toEqual([
+      { rate: "21.00", base: "82.64", tax: "17.36" },
+      { rate: "10.00", base: "9.09", tax: "0.91" },
+    ]);
+    // Control (CLAUDE.md §1): the normal method gives a DIFFERENT cuota (17.35) for the 21% group, so
+    // a recomputing implementation fails this exact assertion; `filedReceiptFor` returned the filed
+    // 17.36, proving it read the record rather than recomputing it.
+    const normalTax = divideDecimal(
+      multiplyDecimal(decimal("82.64"), decimal("21.00")),
+      decimal("100"),
+      MONEY_SCALE,
+    );
+    expect(normalTax).toBe("17.35");
+    expect(filed!.vatBreakdown[0]!.tax).toBe("17.36");
+  });
+
+  it("returns undefined for a sale with no filed alta", async () => {
+    const neverFiled = brandSaleId("00000000-0000-4000-8000-000000000000");
+    const filed = await withTenant(pg.db, tenantId, (tx) =>
+      backend.filedReceiptFor(tx, neverFiled),
+    );
+    expect(filed).toBeUndefined();
   });
 });

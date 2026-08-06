@@ -16,11 +16,20 @@ export interface ConfirmPaymentDetail {
   amount: string;
 }
 
+/** The payload of the `park-order` event: the operator's optional free-text name for the parked order. */
+export interface ParkOrderDetail {
+  /** A free-text order name ("Mesa 4", "Barra"), or `undefined` when parked unnamed. */
+  label?: string;
+}
+
 /** Zero, precomputed — the floor a kg entry must clear to be a real weight. */
 const ZERO = decimal("0");
 
-/** One widget, three views: the idle Pay button, the cash-tender screen, the kg-weight screen. */
-type Mode = "idle" | "paying" | "weighing";
+/**
+ * One widget, four views: the idle Pay/Hold buttons, the cash-tender screen, the kg-weight screen, and
+ * the hold label prompt.
+ */
+type Mode = "idle" | "paying" | "weighing" | "holding";
 
 /**
  * The pay flow and the kg-weight entry — the two moments the walk-up sale needs a numeric keypad.
@@ -92,10 +101,16 @@ export class TillTenderPay extends LitElement {
       }
 
       .pay,
+      .hold,
+      .park,
       .confirm,
       .add,
       .cancel {
         width: 100%;
+      }
+
+      .label-input {
+        margin-bottom: var(--wt-space-3);
       }
     `,
   ];
@@ -104,15 +119,19 @@ export class TillTenderPay extends LitElement {
   @property({ attribute: false }) store!: WorkingOrderStore;
   /**
    * A sale is in flight — the app is awaiting `recordSale` (see `till-app`'s `submitting`). While set,
-   * both the Pay and the Confirm-payment buttons are disabled so the operator cannot start or re-fire
-   * a settlement mid-submit. This is the VISIBLE half of the double-file guard; the real safety is the
-   * app-level single-flight flag, which blocks a second `confirm-payment` regardless of this state.
+   * the idle Pay and Hold buttons AND the Confirm-payment button are all disabled (`#renderIdle` gates
+   * both idle actions on `busy`, `#renderPaying` gates Confirm), so mid-submit the operator can neither
+   * start a new settlement, park the basket, nor re-fire the settlement. This is the VISIBLE half of
+   * the double-file guard; the real safety is the app-level single-flight flag, which blocks a second
+   * `confirm-payment` regardless of this state.
    */
   @property({ type: Boolean }) busy = false;
 
   @state() private mode: Mode = "idle";
   /** The digits the keypad has entered — a partial number string shared by both keypad screens. */
   @state() private entry = "";
+  /** The free-text order name typed into the hold prompt; set only while {@link mode} is `"holding"`. */
+  @state() private labelEntry = "";
   /** The weight product awaiting a kg entry; set only while {@link mode} is `"weighing"`. */
   @state() private selected?: TillProduct;
 
@@ -158,15 +177,47 @@ export class TillTenderPay extends LitElement {
     this.mode = "paying";
   }
 
+  /** Open the hold label prompt with an empty field — the operator may name the order or leave it blank. */
+  #startHolding(): void {
+    this.labelEntry = "";
+    this.mode = "holding";
+  }
+
+  #onLabelChange(event: Event): void {
+    event.stopPropagation();
+    this.labelEntry = (event as CustomEvent<{ value: string }>).detail.value;
+  }
+
   /**
-   * Abandon the cash or weigh screen and return to idle WITHOUT settling anything — no
-   * `confirm-payment`, no line added. It is the way back from either keypad mode for an operator who
-   * opened Pay (or picked a weight tile) by mistake; without it those two modes are one-way. The
-   * basket is left exactly as it was.
+   * Emit `park-order` with the (optional) label and return to idle. The app parks the basket and clears
+   * it on success; a blank/whitespace-only field parks the order UNNAMED (`label` undefined), matching
+   * the store's optional label. The mode and label are reset BEFORE the dispatch (unlike `#confirm`,
+   * which resets after), so the view is back to idle regardless of what the handler does next — even a
+   * synchronous listener that throws leaves the widget idle.
+   */
+  #park(): void {
+    const label = this.labelEntry.trim();
+    this.mode = "idle";
+    this.labelEntry = "";
+    this.dispatchEvent(
+      new CustomEvent<ParkOrderDetail>("park-order", {
+        detail: { label: label === "" ? undefined : label },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  /**
+   * Abandon the cash, weigh, or hold-label screen and return to idle WITHOUT settling anything — no
+   * `confirm-payment`, no `park-order`, no line added. It is the way back from any of those modes for an
+   * operator who opened Pay/Hold (or picked a weight tile) by mistake; without it those modes are
+   * one-way. The basket is left exactly as it was.
    */
   #cancel(): void {
     this.selected = undefined;
     this.entry = "";
+    this.labelEntry = "";
     this.mode = "idle";
   }
 
@@ -210,20 +261,55 @@ export class TillTenderPay extends LitElement {
   override render() {
     if (this.mode === "paying") return this.#renderPaying();
     if (this.mode === "weighing") return this.#renderWeighing();
+    if (this.mode === "holding") return this.#renderHolding();
     return this.#renderIdle();
   }
 
   #renderIdle() {
+    // Pay and Hold share the same gate — both need a non-empty basket and no sale in flight. Hold is
+    // secondary (parking is the lesser action), size "lg" like Pay so both clear the 44px POS touch
+    // minimum and read as an equal-weight pair.
+    const disabled = this.store.lineCount === 0 || this.busy;
     return html`
-      <wt-button
-        class="pay"
-        variant="primary"
-        size="lg"
-        ?disabled=${this.store.lineCount === 0 || this.busy}
-        @click=${() => this.#startPaying()}
-      >
-        ${t("action.pay")}
-      </wt-button>
+      <div class="actions">
+        <wt-button
+          class="pay"
+          variant="primary"
+          size="lg"
+          ?disabled=${disabled}
+          @click=${() => this.#startPaying()}
+        >
+          ${t("action.pay")}
+        </wt-button>
+        <wt-button
+          class="hold"
+          variant="secondary"
+          size="lg"
+          ?disabled=${disabled}
+          @click=${() => this.#startHolding()}
+        >
+          ${t("action.hold")}
+        </wt-button>
+      </div>
+    `;
+  }
+
+  #renderHolding() {
+    return html`
+      <wt-input
+        class="label-input"
+        .value=${this.labelEntry}
+        .label=${t("held.label_prompt")}
+        @wt-change=${(event: Event) => this.#onLabelChange(event)}
+      ></wt-input>
+      <div class="actions">
+        <wt-button class="park" variant="primary" size="lg" @click=${() => this.#park()}>
+          ${t("action.hold")}
+        </wt-button>
+        <wt-button class="cancel" variant="secondary" @click=${() => this.#cancel()}>
+          ${t("action.cancel")}
+        </wt-button>
+      </div>
     `;
   }
 

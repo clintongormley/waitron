@@ -45,8 +45,9 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
   const node = await db.execute<{ id: string }>(sql`
     insert into nodes (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Node 1') returning id`);
   const nodeId = node.rows[0].id;
+  // order_number is NOT NULL since park & retrieve (@waitron/db Task 1); this seed just needs a value.
   const wo = await db.execute<{ id: string }>(sql`
-    insert into working_orders (tenant_id, till_id) values (${tenantId}, ${tillId}) returning id`);
+    insert into working_orders (tenant_id, till_id, order_number) values (${tenantId}, ${tillId}, 1) returning id`);
   return { tenantId, tillId, nodeId, workingOrderId: wo.rows[0].id };
 }
 

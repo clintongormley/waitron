@@ -8,6 +8,7 @@ export { nodes } from "./schema/nodes.js";
 export { invoiceSeries } from "./schema/series.js";
 export { workingOrderLines, workingOrders, workingOrderStatus } from "./schema/orders.js";
 export { catalogues, categories, products } from "./schema/catalogue.js";
+export { workingOrderCounters } from "./schema/working-order-counters.js";
 export {
   fiscalState,
   saleLines,
@@ -24,6 +25,7 @@ export { readDeploymentEnvironment, stampDeployment } from "./deployment.js";
 export type { DeploymentEnvironment } from "./deployment.js";
 export * from "./schema/deployment.js";
 export { allocateInvoiceNumber } from "./allocate-number.js";
+export { allocateOrderNumber } from "./allocate-order-number.js";
 export { withTenant } from "./tenancy.js";
 export { isUniqueViolation } from "./unique-violation.js";
 export { CORE_MIGRATIONS } from "./migrations.js";

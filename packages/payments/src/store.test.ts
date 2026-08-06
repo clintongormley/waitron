@@ -1022,7 +1022,7 @@ async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
     insert into nodes (tenant_id, location_id, name)
     values (${seeded.tenantId}, ${till.location_id}, 'Node 2') returning id`);
   const wo2 = await pg.db.execute<{ id: string }>(sql`
-    insert into working_orders (tenant_id, till_id) values (${seeded.tenantId}, ${tillId}) returning id`);
+    insert into working_orders (tenant_id, till_id, order_number) values (${seeded.tenantId}, ${tillId}, 1) returning id`);
   return {
     tenantId: seeded.tenantId,
     tillId,

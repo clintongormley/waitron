@@ -5,9 +5,8 @@ import {
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
   tillId as brandTillId,
-  workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { sales } from "@waitron/db";
 import type { Database } from "@waitron/db";
 
@@ -16,7 +15,6 @@ export interface SeededTenant {
   tillId: TillId;
   nodeId: NodeId;
   seriesId: SeriesId;
-  workingOrderId: WorkingOrderId;
 }
 
 // Module-scope, not per-call: every test in record-sale.test.ts shares this counter across the
@@ -30,8 +28,8 @@ function freshNif(): string {
 }
 
 /**
- * Seeds tenant -> location -> till -> node -> invoice series for `record-sale.test.ts`, plus a
- * fabricated `WorkingOrderId`. Runs as plain, unscoped statements rather than inside `withTenant`
+ * Seeds tenant -> location -> till -> node -> invoice series for `record-sale.test.ts`. Runs as
+ * plain, unscoped statements rather than inside `withTenant`
  * — PGlite's default connection is a superuser and bypasses row-level security unconditionally,
  * so no `app.tenant_id` needs to be set for these inserts to satisfy each table's
  * tenant-isolation `WITH CHECK` — the identical convention
@@ -83,17 +81,13 @@ export async function seedTenant(
   `);
   const seriesId = brandSeriesId(series.rows[0]!.id);
 
-  return {
-    tenantId,
-    tillId,
-    nodeId,
-    seriesId,
-    // No `working_orders` row is created: `sales` carries no foreign key onto `working_orders`
-    // at all (packages/db/src/schema/sales.ts), and `RecordSaleInput.workingOrderId` is used
-    // purely as audit-trail context on `sale.tender_unsettled`/`sale.tender_shortfall` — never
-    // persisted or joined against. A well-formed, fabricated id is therefore enough.
-    workingOrderId: brandWorkingOrderId(crypto.randomUUID()),
-  };
+  // No `working_orders` row and no `workingOrderId`: `recordSale` now WRITES `input.workingOrderId`
+  // to `sales.working_order_id`, a real FK onto `working_orders` (sub-project 7b). A fabricated id
+  // would FK-violate on the insert, so this fixture mints none — the walk-up sales every suite here
+  // records omit it and the column inserts NULL. A test that needs the linkage seeds its own real
+  // `working_orders` row and passes its id explicitly (see record-sale.test.ts's "working order
+  // linkage").
+  return { tenantId, tillId, nodeId, seriesId };
 }
 
 /**

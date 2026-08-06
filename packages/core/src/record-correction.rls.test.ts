@@ -49,6 +49,9 @@ const unreachableBackend: FiscalBackend = {
   recordSale: () => {
     throw new Error("backend must not be reached");
   },
+  filedReceiptFor: () => {
+    throw new Error("backend must not be reached");
+  },
   recordVoid: () => {
     throw new Error("backend must not be reached");
   },

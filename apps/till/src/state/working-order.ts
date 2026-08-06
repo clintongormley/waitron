@@ -46,11 +46,41 @@ export class WorkingOrderStore {
   readonly #lines: OrderLine[] = [];
   readonly #listeners = new Map<WorkingOrderEvent, Set<WorkingOrderListener>>();
   /**
+   * The STABLE client-minted id for this working order — one uuid per basket, minted here at
+   * construction and kept across every add/remove. Park and pay send it as the idempotency key, so a
+   * retried request re-sends the SAME id and settles the order once rather than twice. It changes in
+   * exactly one place, {@link clear}, because a fresh basket is a new working order; adding a line
+   * never re-mints it, and {@link loadFrom} adopts a retrieved order's id verbatim.
+   */
+  #id: string = crypto.randomUUID();
+  /**
+   * The operator's optional name for the order ("Mesa 4", "Barra"), shown in the held-orders list.
+   * Metadata, not a line — but {@link label}'s setter and {@link loadFrom} both emit `"changed"` so a
+   * basket header re-renders when it is set or a retrieved order carries one.
+   */
+  #label?: string;
+  /**
    * The memoised `priceBasket(this.#lines)` result, or `null` when a mutation has invalidated it.
    * `total` and `vatBreakdown` both read the same cached object, so a mutation re-prices once rather
    * than once per getter per consumer. Set to `null` in every mutation and recomputed lazily.
    */
   #priced: Priced | null = null;
+
+  /** The stable client-minted working-order id for this basket. Changes only on {@link clear}. */
+  get id(): string {
+    return this.#id;
+  }
+
+  /** The operator's optional name for the order, or `undefined` when unnamed. */
+  get label(): string | undefined {
+    return this.#label;
+  }
+
+  /** Name (or rename) the order. Emits `"changed"` so a basket header showing the label re-renders. */
+  set label(value: string | undefined) {
+    this.#label = value;
+    this.emit("changed");
+  }
 
   /** The current basket lines. A defensive copy — mutate the order only through the methods below. */
   get lines(): readonly OrderLine[] {
@@ -97,9 +127,31 @@ export class WorkingOrderStore {
     this.emit("changed");
   }
 
-  /** Empty the basket and notify. This is the ONLY thing that clears the order — logout does not. */
+  /**
+   * Empty the basket and notify. This is the ONLY thing that clears the order — logout does not — and
+   * it mints a FRESH {@link id}: a cleared basket is a new working order, so its next park/pay keys a
+   * new idempotency slot rather than colliding with the settled one. The label is dropped with it.
+   */
   clear(): void {
     this.#lines.length = 0;
+    this.#id = crypto.randomUUID();
+    this.#label = undefined;
+    this.#priced = null;
+    this.emit("changed");
+  }
+
+  /**
+   * Replace the basket with a RETRIEVED working order: adopt its `id` verbatim (so paying it later
+   * keys the same idempotency slot the server persisted it under), swap in the given lines, and set
+   * the label. Callers pass ready {@link OrderLine}s — the app resolves a retrieved order's
+   * `{ productId, quantity }` against its loaded products and builds the `OrderLine[]` before calling
+   * here. A missing `label` clears any prior one. Notifies once.
+   */
+  loadFrom(id: string, lines: OrderLine[], label?: string): void {
+    this.#id = id;
+    this.#lines.length = 0;
+    this.#lines.push(...lines);
+    this.#label = label;
     this.#priced = null;
     this.emit("changed");
   }

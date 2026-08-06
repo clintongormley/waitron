@@ -1,6 +1,11 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { AppError, seriesId as brandSeriesId, decimal } from "@waitron/shared";
+import {
+  AppError,
+  seriesId as brandSeriesId,
+  workingOrderId as brandWorkingOrderId,
+  decimal,
+} from "@waitron/shared";
 import type { NodeId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
 // **Deviation from the brief.** The brief imports `FakeFiscalBackend` from `@waitron/fiscal/testing`
 // — a subpath that does not exist (no `packages/fiscal/testing` folder, no `exports` map, and
@@ -38,7 +43,6 @@ let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
-let workingOrderId: WorkingOrderId;
 
 // PGlite boots a WASM PostgreSQL and then runs @waitron/db's own migrations, which is
 // comfortably past Vitest's 5s default. The explicit hook timeout is not padding — without it
@@ -65,7 +69,7 @@ const suite = usePgliteDb({
 });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenant(suite.db));
+  ({ tenantId, tillId, nodeId, seriesId } = await seedTenant(suite.db));
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -111,7 +115,6 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
     tillId,
     nodeId,
     seriesId,
-    workingOrderId,
     locale: "es-ES",
     invoiceLocales: ["es-ES", "ca-ES"],
     // The taxable total: base (10.00 + 2.10 = 12.10) plus this fixture's own VAT (2.10 + 0.21 =
@@ -216,6 +219,7 @@ function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>)
   return {
     registerNode: (tx, node, params) => fake.registerNode(tx, node, params),
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
+    filedReceiptFor: (tx, saleId) => fake.filedReceiptFor(tx, saleId),
     recordVoid: (tx, saleId, reason) => fake.recordVoid(tx, saleId, reason),
     recordCorrection: (tx, sale, correction) => fake.recordCorrection(tx, sale, correction),
     recordSubstitution: (tx, sale, substitution) => fake.recordSubstitution(tx, sale, substitution),
@@ -623,7 +627,6 @@ describe("recordSale — settlement modes", () => {
           tillId: other.tillId,
           nodeId: other.nodeId,
           seriesId: other.seriesId,
-          workingOrderId: other.workingOrderId,
           settlement: { kind: "deferred" },
         }),
       );
@@ -798,6 +801,43 @@ describe("recordSale — series validation", () => {
       code: "sale.series_wrong_purpose",
       params: { seriesId: rectSeriesId, expected: "standard", actual: "rectificative" },
     });
+  });
+});
+
+describe("recordSale — working order linkage", () => {
+  // The parked working order this sale is FILED from is the sale-idempotency key
+  // (`sales_working_order_id_key`, migration for sub-project 7b): recordSale writes
+  // `input.workingOrderId` onto `sales.working_order_id` when the till supplies one, and leaves it
+  // NULL for a walk-up sale rung with no draft. The composite FK
+  // `(tenant_id, working_order_id) → working_orders(tenant_id, id)` is enforced even on PGlite (its
+  // default connection is a superuser, but constraints still hold), so the "supplied" case needs a
+  // REAL working_orders row as the FK target — a fabricated id would FK-violate, which is why the
+  // seed fixtures no longer mint one.
+  async function seedOpenWorkingOrder(): Promise<WorkingOrderId> {
+    const { rows } = await suite.db.execute<{ id: string }>(
+      sql`insert into working_orders (tenant_id, till_id, order_number)
+          values (${tenantId}, ${tillId}, 1) returning id`,
+    );
+    return brandWorkingOrderId(rows[0]!.id);
+  }
+
+  it("writes working_order_id onto the sale when supplied", async () => {
+    const woId = await seedOpenWorkingOrder();
+    const { saleId } = await run(new FakeFiscalBackend(suite.db), { workingOrderId: woId });
+    const [row] = await suite.db
+      .select({ wo: sales.workingOrderId })
+      .from(sales)
+      .where(eq(sales.id, saleId));
+    expect(row!.wo).toBe(woId);
+  });
+
+  it("leaves working_order_id NULL when omitted (an ordinary walk-up sale)", async () => {
+    const { saleId } = await run(new FakeFiscalBackend(suite.db));
+    const [row] = await suite.db
+      .select({ wo: sales.workingOrderId })
+      .from(sales)
+      .where(eq(sales.id, saleId));
+    expect(row!.wo).toBeNull();
   });
 });
 

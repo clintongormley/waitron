@@ -441,7 +441,7 @@ describe("reconcile — the three audit cases", () => {
     // fixed instant (write-path-fixtures.ts) is 2026-03-01, not this file's usual July, so this
     // test reconciles a LOCAL March period, not the shared `PERIOD` constant.
     const period = { year: "2026", month: "03" };
-    const { tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenantWithSif(pg.db);
+    const { tenantId, tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db);
     // recordVoid now requires `sale.void`: seed a manager and open its session to authorize the void.
     const { rows: mgr } = await pg.db.execute<{ id: string }>(
       sql`insert into persons (tenant_id, display_name, pin_hash, role)
@@ -460,11 +460,7 @@ describe("reconcile — the three audit cases", () => {
 
     const sale = await withTenant(pg.db, tenantId, async (tx) => {
       await asAppUser(tx);
-      return recordSale(
-        tx,
-        backend,
-        saleInput({ tenantId, tillId, nodeId, seriesId, workingOrderId }),
-      );
+      return recordSale(tx, backend, saleInput({ tenantId, tillId, nodeId, seriesId }));
     });
     // `recordSale`'s own envío row takes `proximo_intento_en`'s column DEFAULT (real wall-clock
     // `now()` at insert), NOT this file's simulated `DRAIN_AT` — `seedPendingEnvios`'s fixture stamps

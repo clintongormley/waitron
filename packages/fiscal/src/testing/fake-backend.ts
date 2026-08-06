@@ -13,6 +13,7 @@ import type {
   ReconcileMismatch,
   ReconcileResult,
   SaleForFiscalRecord,
+  VatBreakdownLine,
 } from "../backend.js";
 
 /**
@@ -81,6 +82,10 @@ export class FakeFiscalBackend implements FiscalBackend {
         invoice_number integer not null,
         total numeric(12, 2) not null,
         state text not null,
+        -- The filed VAT breakdown, stored so filedReceiptFor can hand back the EXACT figures the
+        -- replay path reprints (Task 14). NULL for a void, which files no breakdown of its own; set
+        -- for a sale, the only kind the replay read-back reads.
+        vat_breakdown jsonb,
         unique (node_id, sequence)
       );
     `);
@@ -148,7 +153,43 @@ export class FakeFiscalBackend implements FiscalBackend {
       total: sale.total,
       issuedAt: sale.issuedAt,
       offsetMinutes: sale.offsetMinutes,
+      vatBreakdown: sale.vatBreakdown,
     });
+  }
+
+  /**
+   * The replay read-back (`FiscalBackend.filedReceiptFor`, Task 14): returns the breakdown this fake
+   * FILED for the sale plus a deterministic stand-in verification URL. Reads the `sale` record only —
+   * the one kind the till-sale replay path reprints — so a void's own `sale_id` row (which carries no
+   * breakdown) is never mistaken for the sale's receipt. `undefined` for a sale it never recorded.
+   *
+   * The fake has no real regime and so no real QR to re-derive; it fabricates a STABLE one from the
+   * record's own id, the same value on every replay of the sale — which is all the replay path needs
+   * (an idempotent replay must reprint the SAME qr). The breakdown, by contrast, is genuinely stored
+   * and handed back verbatim, so the read-back round-trips the exact filed figures.
+   */
+  async filedReceiptFor(
+    tx: Transaction,
+    saleId: SaleId,
+  ): Promise<{ verificationUrl: string; vatBreakdown: VatBreakdownLine[] } | undefined> {
+    const rows = await tx.execute<{ record_id: string; vat_breakdown: VatBreakdownLine[] }>(sql`
+      select record_id, vat_breakdown
+      from fake_fiscal_records
+      where sale_id = ${saleId} and kind = 'sale'
+      limit 1
+    `);
+    const row = rows.rows[0];
+    if (row === undefined) {
+      return undefined;
+    }
+    // A `kind = 'sale'` row always carries a non-null `vat_breakdown` — `recordSale` always supplies
+    // it (see `append`), so no null branch is reachable here. The host is a regime-NEUTRAL stand-in
+    // (this package names no regime — its own no-regime-vocabulary guard scans this file), not any
+    // real verification service.
+    return {
+      verificationUrl: `https://fiscal-receipt.example/fake/${row.record_id}`,
+      vatBreakdown: row.vat_breakdown,
+    };
   }
 
   // `reason` is part of FiscalBackend's public contract (a real backend may keep it as part of
@@ -417,6 +458,10 @@ export class FakeFiscalBackend implements FiscalBackend {
       total: string;
       issuedAt: Date;
       offsetMinutes: number;
+      /** The filed VAT breakdown, so `filedReceiptFor` can hand back the exact figures a replay
+       * reprints. Supplied by `recordSale` (the only kind the replay read-back reads); absent for a
+       * void, which files no breakdown. */
+      vatBreakdown?: readonly VatBreakdownLine[];
     },
   ): Promise<FiscalRecordRef> {
     const recordId = nextId();
@@ -429,14 +474,19 @@ export class FakeFiscalBackend implements FiscalBackend {
       where node_id = ${entry.nodeId}
     `);
     const sequence = next.rows[0].sequence;
+    // `null::jsonb` when no breakdown was filed (a void), the serialised array otherwise — stored so
+    // `filedReceiptFor` returns the EXACT filed figures rather than a recompute.
+    const vatBreakdown =
+      entry.vatBreakdown === undefined ? null : JSON.stringify(entry.vatBreakdown);
     // UNIQUE (node_id, sequence) is the backstop, mirroring the real one. A fake that assigned
     // positions without a constraint would let a core test interleave two writes and still pass.
     await tx.execute(sql`
       insert into fake_fiscal_records
-        (record_id, tenant_id, node_id, sale_id, sequence, kind, invoice_number, total, state)
+        (record_id, tenant_id, node_id, sale_id, sequence, kind, invoice_number, total, state,
+         vat_breakdown)
       values
         (${recordId}, ${entry.tenantId}, ${entry.nodeId}, ${entry.saleId}, ${sequence},
-         ${entry.kind}, ${entry.invoiceNumber}, ${entry.total}, 'pending')
+         ${entry.kind}, ${entry.invoiceNumber}, ${entry.total}, 'pending', ${vatBreakdown}::jsonb)
     `);
     return {
       backend: "fake",

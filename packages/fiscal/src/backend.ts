@@ -222,6 +222,34 @@ export interface FiscalBackend {
    */
   recordSale(tx: Transaction, sale: SaleForFiscalRecord): Promise<FiscalRecordRef>;
 
+  /**
+   * The reprint data for an ALREADY-FILED sale — the verification link a customer scans and the exact
+   * VAT breakdown that was filed. For an idempotent replay (a lost-response pay retry that reprints
+   * the ticket WITHOUT re-filing — park & retrieve, spec §3), this is the only way the replayed
+   * receipt can carry the regime's mandatory QR and the authoritative desglose: both live only on the
+   * regime's own immutable record, which the generic caller may not read across this boundary, and
+   * `FiscalRecordRef` is minted at filing time and long gone by the time a retry arrives.
+   *
+   * Returns the figures EXACTLY as filed, never a recomputation: `vatBreakdown` is the stored
+   * difference-method desglose (tax = gross − base), which can diverge by up to a cent from a naive
+   * base×rate recompute over a multi-line same-rate group. A replayed legal receipt must show what was
+   * filed, not a value that merely approximates it.
+   *
+   * `undefined` when the sale has no filed record to reprint (no `recordSale` ran for it) — the caller
+   * keeps whatever fallback it had. Takes the transaction, like the write methods and unlike
+   * `pendingCount`: a replay resolves the settled sale and reads its record in ONE transaction.
+   *
+   * READ-ONLY. It files nothing, appends nothing and re-hashes nothing — the immutable record (§5) is
+   * only read back. `verificationUrl` here is a plain non-optional `string` (unlike
+   * `FiscalRecordRef.verificationUrl`, optional because a regime may offer none): this method returns a
+   * value only when a filed record exists, and a regime that mints no QR simply need not implement a
+   * receipt read-back at all.
+   */
+  filedReceiptFor(
+    tx: Transaction,
+    saleId: SaleId,
+  ): Promise<{ verificationUrl: string; vatBreakdown: VatBreakdownLine[] } | undefined>;
+
   recordVoid(tx: Transaction, saleId: SaleId, reason: string): Promise<FiscalRecordRef>;
 
   /**

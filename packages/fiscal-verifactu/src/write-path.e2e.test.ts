@@ -7,7 +7,7 @@ import { buildQrPayload, computeHuella } from "@waitron/verifactu";
 import type { RegistroAlta } from "@waitron/verifactu";
 import { CORE_MIGRATIONS, asAppUser, incidents, sales, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import type { NodeId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { fromRegistroRow } from "./registro-row.js";
@@ -23,7 +23,6 @@ let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
-let workingOrderId: WorkingOrderId;
 
 /**
  * This IS the end-to-end test — the one place both sides of the boundary may be imported
@@ -42,7 +41,7 @@ let workingOrderId: WorkingOrderId;
 const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, FISCAL_MIGRATIONS] });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenantWithSif(pg.db));
+  ({ tenantId, tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
   // **Deviation from the brief.** The brief constructed `new VerifactuBackend({ clock:
   // steadyClock })`. The real constructor also requires `db`: `pendingCount(tenantId, nodeId)` is the one
   // `FiscalBackend` method with no `tx` parameter at all, so it cannot participate in a caller's
@@ -59,11 +58,7 @@ beforeEach(async () => {
 async function sell(overrides: Record<string, unknown> = {}) {
   return withTenant(pg.db, tenantId, async (tx) => {
     await asAppUser(tx);
-    return recordSale(
-      tx,
-      backend,
-      saleInput({ tenantId, tillId, nodeId, seriesId, workingOrderId, ...overrides }),
-    );
+    return recordSale(tx, backend, saleInput({ tenantId, tillId, nodeId, seriesId, ...overrides }));
   });
 }
 
@@ -219,11 +214,7 @@ describe("the write path against the real Veri*Factu backend", () => {
     await expect(
       withTenant(pg.db, tenantId, async (tx) => {
         await asAppUser(tx);
-        await recordSale(
-          tx,
-          backend,
-          saleInput({ tenantId, tillId, nodeId, seriesId, workingOrderId }),
-        );
+        await recordSale(tx, backend, saleInput({ tenantId, tillId, nodeId, seriesId }));
         throw new Error("simulated crash after the fiscal write");
       }),
     ).rejects.toThrow("simulated crash");

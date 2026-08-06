@@ -37,6 +37,18 @@ async function type(el: TillTenderPay, keys: string): Promise<void> {
   for (const key of keys) await press(el, key);
 }
 
+/** Types free text into the hold-label field by driving the real `wt-input`'s inner `<input>`. */
+async function typeLabel(el: TillTenderPay, text: string): Promise<void> {
+  const input = el.shadowRoot!.querySelector(".label-input") as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  await input.updateComplete;
+  const inner = input.shadowRoot!.querySelector("input")!;
+  inner.value = text;
+  inner.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+}
+
 const query = (el: TillTenderPay, selector: string) => el.shadowRoot!.querySelector(selector);
 const click = (el: TillTenderPay, selector: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(selector)!.click();
@@ -261,6 +273,95 @@ describe("till-tender-pay", () => {
     expect(query(el, ".add")!.hasAttribute("disabled")).toBe(true);
     click(el, ".add");
     expect(store.lines).toHaveLength(0);
+  });
+
+  it("shows a Hold button in the idle view, disabled on an empty basket", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    expect(query(el, ".hold")!.hasAttribute("disabled")).toBe(true);
+    expect(el.shadowRoot!.textContent).toContain(t("action.hold"));
+  });
+
+  it("enables Hold once a line is rung up, reacting to store changes", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    store.addProduct(cafe, "2");
+    await el.updateComplete;
+    expect(query(el, ".hold")!.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("disables Hold while busy (a sale is in flight), even with a rung-up basket", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2"); // Hold would otherwise be enabled
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store, busy: true });
+    // Same visible half of the single-flight guard as Pay: a sale in flight disables Hold too, so an
+    // order cannot be parked mid-settle. Dropping `|| this.busy` here enables Hold — the deletion proof.
+    expect(query(el, ".hold")!.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("opens the label prompt when Hold is tapped", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    click(el, ".hold");
+    await el.updateComplete;
+    expect(query(el, ".label-input")).not.toBeNull();
+    expect(query(el, ".park")).not.toBeNull();
+    expect(query(el, ".pay")).toBeNull(); // the idle Pay button is replaced by the prompt view
+  });
+
+  it("emits park-order with the entered label", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    const spy = vi.fn();
+    el.addEventListener("park-order", (e) => spy((e as CustomEvent).detail));
+    click(el, ".hold");
+    await el.updateComplete;
+    await typeLabel(el, "Mesa 4");
+    click(el, ".park");
+    expect(spy).toHaveBeenCalledWith({ label: "Mesa 4" });
+  });
+
+  it("emits park-order with no label when the field is left empty", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    const spy = vi.fn();
+    el.addEventListener("park-order", (e) => spy((e as CustomEvent).detail));
+    click(el, ".hold");
+    await el.updateComplete;
+    click(el, ".park"); // no label typed — the label is optional
+    expect(spy).toHaveBeenCalledWith({ label: undefined });
+  });
+
+  it("returns to idle after Hold is confirmed", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    click(el, ".hold");
+    await el.updateComplete;
+    click(el, ".park");
+    await el.updateComplete;
+    expect(query(el, ".pay")).not.toBeNull(); // back to the idle view (the app clears the basket)
+    expect(query(el, ".label-input")).toBeNull();
+  });
+
+  it("returns to idle from the label prompt when Cancel is tapped, emitting nothing", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    const spy = vi.fn();
+    el.addEventListener("park-order", () => spy());
+    click(el, ".hold");
+    await el.updateComplete;
+    await typeLabel(el, "Mesa 4"); // a label is part-entered
+    click(el, ".cancel");
+    await el.updateComplete;
+    expect(query(el, ".pay")).not.toBeNull(); // back to the idle Pay button
+    expect(query(el, ".label-input")).toBeNull();
+    expect(spy).not.toHaveBeenCalled(); // Cancel parks nothing
+    expect(store.lines).toHaveLength(1); // basket untouched
   });
 
   it("stops reacting to the store after disconnect", async () => {

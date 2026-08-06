@@ -49,4 +49,13 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });
+
+  it("has no violations on the hold label prompt", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el, host } = await mountWidget<TillTenderPay>("till-tender-pay", { store }, theme);
+    el.shadowRoot!.querySelector<HTMLElement>(".hold")!.click();
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
 });

@@ -9,6 +9,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants.js";
@@ -70,6 +71,12 @@ export const products = pgTable(
   },
   (t) => [
     index("products_catalogue_id_idx").on(t.catalogueId),
+    // Composite target so a tenant-scoped table can carry a tenant-consistent (tenant_id,
+    // product_id) FK — the same role nodes_tenant_id_key plays for `working_orders`/`sales`. Used
+    // by working_order_lines_product_fk (schema/orders.ts): a draft line cannot price against a
+    // product belonging to another tenant. `id` alone is already unique (it is the PK); this adds
+    // the composite so the FK can be tenant-consistent rather than merely referential.
+    unique("products_tenant_id_key").on(t.tenantId, t.id),
     check("products_pricing_unit_ck", sql`${t.pricingUnit} in ('each','weight')`),
     check(
       "products_vat_class_ck",

@@ -27,7 +27,6 @@
 // grossTotal (169.95) deliberately differs from tenderTotal (176.00): a correction lowers declared
 // VAT, but the cash was collected before it and a refund is a separate payments action, never a
 // negative tender (design §5).
-import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { computeDailyClose } from "@waitron/reporting";
 import { recordCorrection, recordSale, settleSale } from "@waitron/core";
@@ -42,7 +41,6 @@ import {
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
   tillId as brandTillId,
-  workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
 
@@ -138,7 +136,6 @@ async function main(): Promise<void> {
     const venue = await seedVenue(db);
     const backend = new FakeFiscalBackend(db);
     const clock = fixedClock();
-    const workingOrderId = brandWorkingOrderId(randomUUID());
 
     // Register the node once (a one-time admin action recordSale itself never performs), as app_user
     // in its own committed transaction so the later write transactions see it.
@@ -153,7 +150,6 @@ async function main(): Promise<void> {
       tillId: venue.tillId,
       nodeId: venue.nodeId,
       seriesId: venue.seriesId,
-      workingOrderId,
       locale: LOCALE,
       invoiceLocales: [LOCALE],
       total: "121.00",
@@ -185,7 +181,6 @@ async function main(): Promise<void> {
       tillId: venue.tillId,
       nodeId: venue.nodeId,
       seriesId: venue.seriesId,
-      workingOrderId,
       locale: LOCALE,
       invoiceLocales: [LOCALE],
       total: "55.00",

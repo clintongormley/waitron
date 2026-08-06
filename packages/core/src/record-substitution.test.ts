@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 // See record-correction.test.ts's own note: there is no `@waitron/fiscal/testing` subpath; the real
 // import path is `@waitron/fiscal/src/testing/fake-backend.js`, used in test files only.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
@@ -31,7 +31,6 @@ let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId; // the ordinary (purpose='standard') series — the F3 reuses it (owner decision)
-let workingOrderId: WorkingOrderId;
 // A manager shift session authorizes the ONE precondition void this suite performs — recordVoid now
 // requires `sale.void`, and only the void's authorization matters here, not the substitution's caller.
 let voidSessionId: string;
@@ -51,7 +50,7 @@ const suite = usePgliteDb({
 });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenant(suite.db));
+  ({ tenantId, tillId, nodeId, seriesId } = await seedTenant(suite.db));
   // Seed a manager (holds `sale.void`) as the superuser owner and open its session — the precondition
   // void below needs an authorizer, exactly as the record-void suite arranges.
   const { rows } = await suite.db.execute<{ id: string }>(
@@ -99,7 +98,6 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
     tillId,
     nodeId,
     seriesId,
-    workingOrderId,
     locale: "es-ES",
     invoiceLocales: ["es-ES", "ca-ES"],
     total: "14.41",

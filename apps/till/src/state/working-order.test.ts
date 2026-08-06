@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { WorkingOrderStore } from "./working-order.js";
+import type { OrderLine } from "./working-order.js";
 import type { TillProduct } from "../api/client.js";
+
+// A v4 uuid, as `crypto.randomUUID()` mints: 8-4-4-4-12 hex, version nibble 4, variant 8..b.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // A gross-1.50 espresso at the general rate; the brief's worked example (×2 = "3.00").
 const cafe: TillProduct = {
@@ -140,5 +144,76 @@ describe("WorkingOrderStore", () => {
     // instance's state never leaks into another.
     expect(a.lines).toHaveLength(1);
     expect(b.lines).toHaveLength(0);
+  });
+
+  // The stable client-minted working-order id (keys pay-time idempotency; a retry re-sends it).
+  it("mints a uuid id for a fresh store, unique per instance", () => {
+    const a = new WorkingOrderStore();
+    const b = new WorkingOrderStore();
+    expect(a.id).toMatch(UUID_RE);
+    expect(b.id).toMatch(UUID_RE);
+    expect(a.id).not.toBe(b.id); // a new basket is a new working order
+  });
+
+  it("clear() mints a fresh id and empties the lines", () => {
+    const s = new WorkingOrderStore();
+    const before = s.id;
+    s.addProduct(cafe, "1");
+    s.clear();
+    expect(s.id).not.toBe(before); // a cleared basket is a new working order
+    expect(s.id).toMatch(UUID_RE);
+    expect(s.lines).toHaveLength(0);
+  });
+
+  it("loadFrom replaces the basket — id, lines, total and label", () => {
+    const s = new WorkingOrderStore();
+    s.addProduct(jamon, "0.100"); // a pre-existing line that loadFrom must drop
+    // Read total BEFORE loadFrom so the #priced cache is POPULATED (10.00 × 0.100 = 1.00). This is
+    // what makes the "re-priced from the loaded lines" assertion below load-bearing on loadFrom's
+    // `#priced = null` invalidation: without a populated cache going in, that line is untested and a
+    // refactor could drop it and ship a stale retrieved-order total. Proven by deletion (CLAUDE.md §4).
+    expect(s.total).toBe("1.00");
+    const lines: OrderLine[] = [
+      { product: cafe, quantity: "2" }, // 1.50 × 2 = 3.00 (general)
+      { product: jamon, quantity: "0.320" }, // 10.00 × 0.320 = 3.20 (reduced)
+    ];
+    s.loadFrom("held-123", lines, "Mesa 4");
+    expect(s.id).toBe("held-123");
+    expect(s.label).toBe("Mesa 4");
+    expect(s.lines).toEqual(lines);
+    expect(s.total).toBe("6.20"); // re-priced from the loaded lines — proves #priced was invalidated
+  });
+
+  it("keeps the loaded id when a product is added after loadFrom — only clear() re-mints", () => {
+    const s = new WorkingOrderStore();
+    s.loadFrom("held-abc", [{ product: cafe, quantity: "1" }]);
+    s.addProduct(jamon, "0.100");
+    expect(s.id).toBe("held-abc");
+    expect(s.lines).toHaveLength(2);
+  });
+
+  it("loadFrom notifies subscribers once", () => {
+    const s = new WorkingOrderStore();
+    let n = 0;
+    s.subscribe(() => n++);
+    s.loadFrom("held-1", [{ product: cafe, quantity: "1" }], "Barra");
+    expect(n).toBe(1);
+  });
+
+  it("loadFrom without a label clears any prior label", () => {
+    const s = new WorkingOrderStore();
+    s.label = "old";
+    s.loadFrom("held-2", [{ product: cafe, quantity: "1" }]);
+    expect(s.label).toBeUndefined();
+  });
+
+  it("set label updates the label and notifies subscribers so a header can re-render", () => {
+    const s = new WorkingOrderStore();
+    let n = 0;
+    s.subscribe(() => n++);
+    expect(s.label).toBeUndefined();
+    s.label = "Mesa 7";
+    expect(s.label).toBe("Mesa 7");
+    expect(n).toBe(1);
   });
 });

@@ -9,7 +9,8 @@ import "../widgets/product-grid.js";
 import "../widgets/basket.js";
 import "../widgets/total.js";
 import "../widgets/tender-pay.js";
-import type { TillProduct } from "../api/client.js";
+import "../widgets/held-orders.js";
+import type { HeldOrderSummary, TillProduct } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 
 /**
@@ -101,6 +102,8 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) store!: WorkingOrderStore;
   /** The sellable products, handed to the product grid (the only widget that needs them). */
   @property({ attribute: false }) products: TillProduct[] = [];
+  /** The node's open parked orders, handed to the held-orders list (the app owns and refreshes them). */
+  @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
   /** The logged-in operator's display name, shown in the header. Data, never translated. */
   @property() operatorName = "";
   /**
@@ -135,6 +138,8 @@ export class TillCounterScreen extends LitElement {
         return html`<till-total .store=${this.store}></till-total>`;
       case "tender-pay":
         return html`<till-tender-pay .store=${this.store} .busy=${this.busy}></till-tender-pay>`;
+      case "held-orders":
+        return html`<till-held-orders .orders=${this.heldOrders}></till-held-orders>`;
     }
   }
 

@@ -5,7 +5,7 @@ import { computeHuella } from "@waitron/verifactu";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
-import type { NodeId, SaleId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { fromRegistroRow } from "./registro-row.js";
@@ -21,7 +21,6 @@ let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
-let workingOrderId: WorkingOrderId;
 // recordVoid now requires `sale.void`; this is a manager shift session that authorizes every void
 // in this suite (only the void's authorization matters here, not who rang the sale).
 let voidSessionId: string;
@@ -43,7 +42,7 @@ let voidSessionId: string;
 const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, FISCAL_MIGRATIONS] });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId, workingOrderId } = await seedTenantWithSif(pg.db));
+  ({ tenantId, tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
   // Seed a manager (holds `sale.void`) as the superuser owner and open its session — the void path
   // under test now needs an authorizer, mirroring packages/core/src/record-correction.test.ts.
   const { rows } = await pg.db.execute<{ id: string }>(
@@ -65,11 +64,7 @@ beforeEach(async () => {
 async function sell() {
   return withTenant(pg.db, tenantId, async (tx) => {
     await asAppUser(tx);
-    return recordSale(
-      tx,
-      backend,
-      saleInput({ tenantId, tillId, nodeId, seriesId, workingOrderId }),
-    );
+    return recordSale(tx, backend, saleInput({ tenantId, tillId, nodeId, seriesId }));
   });
 }
 

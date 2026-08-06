@@ -76,6 +76,35 @@ export interface TillSaleResult {
   qr: string;
 }
 
+/**
+ * One row of `GET /api/working-orders` — a parked order the counter can retrieve (park & retrieve,
+ * sub-project 7b). Mirrors the server's `HeldOrderSummary` (`apps/server/src/working-order.ts`):
+ * `total` is the GROSS (VAT-inclusive) draft total — equal to the basket total the operator saw, the
+ * figure the held-orders widget shows with `formatMoney` — and `itemCount` the line count, both as the
+ * server sends them; `label` is null when the order was parked without one.
+ */
+export interface HeldOrderSummary {
+  id: string;
+  orderNumber: number;
+  label: string | null;
+  itemCount: number;
+  total: string;
+  openedAt: string;
+}
+
+/**
+ * `GET /api/working-orders/:id` — a retrieved parked order: enough to name it in the UI plus the
+ * pricing INPUTS to rebuild its basket. Mirrors the server's `HeldOrder`. `lines` are `product_id` +
+ * `quantity` only (never a stored price — the till re-prices on retrieve); the server sends
+ * `quantity` at numeric(_,3) scale ("2.000"), passed through here as sent.
+ */
+export interface HeldOrder {
+  id: string;
+  orderNumber: number;
+  label: string | null;
+  lines: SaleLine[];
+}
+
 export class TillApi {
   readonly #baseUrl: string;
   readonly #fetchImpl: FetchLike;
@@ -110,8 +139,62 @@ export class TillApi {
     return this.#request<TillProduct[]>("/api/products", "GET");
   }
 
-  recordSale(lines: SaleLine[], tender: CashTender): Promise<TillSaleResult> {
-    return this.#request<TillSaleResult>("/api/sales", "POST", { lines, tender });
+  /**
+   * Ring one sale over a persisted working order. `workingOrderId` is the pay-idempotency key: the
+   * till holds it stable across a lost-response retry, so a re-sent pay REPLAYS against the same
+   * `working_orders`/`sales` row rather than filing a second chained fiscal record (unrepairable — an
+   * invoice number is never reused). For a walk-up it is a fresh client-minted id; to pay a PARKED
+   * order the till sends that order's own id, so the settle lands on the retrieved order.
+   */
+  recordSale(
+    lines: SaleLine[],
+    tender: CashTender,
+    workingOrderId: string,
+  ): Promise<TillSaleResult> {
+    return this.#request<TillSaleResult>("/api/sales", "POST", { lines, tender, workingOrderId });
+  }
+
+  /**
+   * Park a working order to pay later (park & retrieve, sub-project 7b) → `POST /api/working-orders`.
+   * `id` is client-minted (the till mints the working-order uuid) so a lost-response retry is
+   * idempotent against the primary key; `lines` carry no price — the server re-prices. Returns the
+   * persisted `{ id, orderNumber }` (the human order number the counter types back in to retrieve).
+   */
+  parkOrder(req: { id: string; lines: SaleLine[]; label?: string }): Promise<{
+    id: string;
+    orderNumber: number;
+  }> {
+    return this.#request<{ id: string; orderNumber: number }>("/api/working-orders", "POST", req);
+  }
+
+  /** The cross-till held list for this node → `GET /api/working-orders`. Every OPEN parked order. */
+  listWorkingOrders(): Promise<HeldOrderSummary[]> {
+    return this.#request<HeldOrderSummary[]>("/api/working-orders", "GET");
+  }
+
+  /**
+   * Retrieve one parked order to rebuild its basket → `GET /api/working-orders/:id`. An id naming no
+   * OPEN order rejects with `{ code: "working_order.not_found" }` (the server's 404).
+   */
+  retrieveWorkingOrder(id: string): Promise<HeldOrder> {
+    return this.#request<HeldOrder>(`/api/working-orders/${id}`, "GET");
+  }
+
+  /**
+   * Edit a parked order → `PUT /api/working-orders/:id`. A full REPLACEMENT: whatever `lines` +
+   * `label` are sent become the order's new state (`label` absent clears it). The server re-prices
+   * and answers an empty 200; only an `open` order may change (else `{ code: "working_order.not_open" }`).
+   */
+  async updateWorkingOrder(id: string, req: { lines: SaleLine[]; label?: string }): Promise<void> {
+    await this.#request<void>(`/api/working-orders/${id}`, "PUT", req);
+  }
+
+  /**
+   * Discard a parked order (`open → abandoned`) → `DELETE /api/working-orders/:id`. The server answers
+   * an empty 200; a non-open or unknown id rejects with `{ code: "working_order.not_open" }`.
+   */
+  async abandonWorkingOrder(id: string): Promise<void> {
+    await this.#request<void>(`/api/working-orders/${id}`, "DELETE");
   }
 
   /**
@@ -123,6 +206,11 @@ export class TillApi {
    *
    * `fetchImpl` is read into a local before the call so it is invoked as a free function, not as a
    * method of `this` (which would rebind a native `fetch`).
+   *
+   * A 2xx with an EMPTY body resolves to `undefined` rather than being JSON-parsed: the working-order
+   * `PUT`/`DELETE` routes answer `204`-style empty 200s (`c.body(null, 200)`), on which `res.json()`
+   * would throw a `SyntaxError`. Those callers type `T` as `void`; every JSON route sends a body, so
+   * the non-empty branch parses exactly as before.
    */
   async #request<T>(path: string, method: string, body?: unknown): Promise<T> {
     const fetchImpl = this.#fetchImpl;
@@ -140,6 +228,7 @@ export class TillApi {
       const envelope = (await res.json()) as { error?: { code?: string } };
       throw { code: envelope.error?.code ?? "server.internal" };
     }
-    return (await res.json()) as T;
+    const text = await res.text();
+    return (text === "" ? undefined : JSON.parse(text)) as T;
   }
 }

@@ -58,10 +58,19 @@ function baseFromGross(gross: Decimal, rate: Decimal): Decimal {
 
 export function priceBasket(items: readonly BasketItem[]): {
   lines: RecordSaleLine[];
+  /**
+   * The GROSS (VAT-inclusive) `unitPrice × quantity` per line, at MONEY_SCALE, in `lines` order —
+   * the customer-facing line total. Their sum equals `total` EXACTLY (both are the sum of the same
+   * per-line gross values). Exposed alongside `lines` because `RecordSaleLine.lineTotal` is the NET
+   * base the fiscal record needs, whereas the mutable working-order DRAFT
+   * (`working_order_lines.line_total`) stores the gross the operator saw — a deliberate divergence.
+   */
+  grossLineTotals: Decimal[];
   total: Decimal;
   vatBreakdown: VatBreakdownLine[];
 } {
   const lines: RecordSaleLine[] = [];
+  const grossLineTotals: Decimal[] = [];
   const groups = new Map<Decimal, { base: Decimal; gross: Decimal }>();
 
   items.forEach((item, i) => {
@@ -84,6 +93,7 @@ export function priceBasket(items: readonly BasketItem[]): {
       lineTotal: base,
       category: item.product.category,
     });
+    grossLineTotals.push(gross); // parallel to `lines`; the customer-facing gross of this same line
     const g = groups.get(rate);
     groups.set(
       rate,
@@ -98,6 +108,8 @@ export function priceBasket(items: readonly BasketItem[]): {
     base: g.base,
     tax: subtractDecimal(g.gross, g.base), // DIFFERENCE method: tax = gross − base
   }));
+  // Sum of every per-line gross — identical value to `sum(grossLineTotals)` (the group sums just
+  // partition the same addends by rate), so the held-orders list's `sum(line_total)` matches this total.
   const total = sumDecimals([...groups.values()].map((g) => g.gross));
-  return { lines, total, vatBreakdown };
+  return { lines, grossLineTotals, total, vatBreakdown };
 }

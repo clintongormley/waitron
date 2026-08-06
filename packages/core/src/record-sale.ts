@@ -75,7 +75,15 @@ export interface RecordSaleInput {
    * 2026-08-03, #33). The series↔node guard requires the named series to belong to this node. */
   nodeId: NodeId;
   seriesId: SeriesId;
-  workingOrderId: WorkingOrderId;
+  /**
+   * The parked working order this sale is FILED from (park & retrieve, sub-project 7b), written to
+   * `sales.working_order_id` — the sale-idempotency key `sales_working_order_id_key`, and the FK
+   * target `(tenant_id, working_order_id) → working_orders`. OPTIONAL: only the till's
+   * retrieve-and-file path supplies one; an ordinary walk-up sale (and every non-till caller — a
+   * correction, an F3, a void, a demo script) omits it, and the column inserts NULL. When supplied
+   * it MUST name a real `working_orders` row of this tenant, or the composite FK rejects the insert.
+   */
+  workingOrderId?: WorkingOrderId;
   locale: string;
   invoiceLocales: string[];
   /** The taxable total — base plus VAT summed across every line — excluding the tip, which is
@@ -270,6 +278,11 @@ export async function recordSale(
       tillId: input.tillId,
       nodeId: input.nodeId,
       seriesId: input.seriesId,
+      // The parked working order this sale was filed from, or NULL for a walk-up sale with no draft
+      // (park & retrieve, sub-project 7b). Written once here, never updated — `sales` is immutable
+      // (§5) and this is its sale-idempotency key. Only the till supplies it (Task 7); every other
+      // caller omits it and this inserts NULL.
+      workingOrderId: input.workingOrderId ?? null,
       invoiceNumber,
       issuedAt: now.instant.toISOString(),
       issuedOffsetMinutes: now.offsetMinutes,

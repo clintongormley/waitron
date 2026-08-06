@@ -33,10 +33,8 @@ import {
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
   tillId as brandTillId,
-  workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
-import { randomUUID } from "node:crypto";
 
 const LOCALE = "es-ES";
 
@@ -128,7 +126,6 @@ async function main(): Promise<void> {
       tillId: till,
       nodeId: node,
       seriesId: stdSeries,
-      workingOrderId: brandWorkingOrderId(randomUUID()),
       locale: LOCALE,
       invoiceLocales: [LOCALE],
       total: saleTotal,
