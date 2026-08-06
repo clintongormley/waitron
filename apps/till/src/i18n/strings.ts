@@ -28,6 +28,8 @@ export const en = {
   "action.hold": "Hold",
   // Tenders
   "tender.cash": "Cash",
+  "tender.card": "Card",
+  "tender.card_ref": "Operation number (optional)",
   // Numeric keypad (accessible names for the non-alphanumeric keys)
   "pad.decimal": "Decimal point",
   "pad.backspace": "Backspace",
@@ -78,6 +80,8 @@ export const es: Record<StringKey, string> = {
   "action.cancel": "Cancelar",
   "action.hold": "Aparcar",
   "tender.cash": "Efectivo",
+  "tender.card": "Tarjeta",
+  "tender.card_ref": "Número de operación (opcional)",
   "pad.decimal": "Punto decimal",
   "pad.backspace": "Borrar",
   "label.change": "Cambio",

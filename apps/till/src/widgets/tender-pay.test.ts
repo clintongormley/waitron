@@ -37,9 +37,9 @@ async function type(el: TillTenderPay, keys: string): Promise<void> {
   for (const key of keys) await press(el, key);
 }
 
-/** Types free text into the hold-label field by driving the real `wt-input`'s inner `<input>`. */
-async function typeLabel(el: TillTenderPay, text: string): Promise<void> {
-  const input = el.shadowRoot!.querySelector(".label-input") as HTMLElement & {
+/** Types free text into a `wt-input` (matched by `selector`) by driving its inner `<input>`. */
+async function typeInput(el: TillTenderPay, selector: string, text: string): Promise<void> {
+  const input = el.shadowRoot!.querySelector(selector) as HTMLElement & {
     updateComplete: Promise<unknown>;
   };
   await input.updateComplete;
@@ -48,6 +48,11 @@ async function typeLabel(el: TillTenderPay, text: string): Promise<void> {
   inner.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await el.updateComplete;
 }
+
+/** Types free text into the hold-label field. */
+const typeLabel = (el: TillTenderPay, text: string) => typeInput(el, ".label-input", text);
+/** Types free text into the card operation-number (externalRef) field. */
+const typeRef = (el: TillTenderPay, text: string) => typeInput(el, ".ref-input", text);
 
 const query = (el: TillTenderPay, selector: string) => el.shadowRoot!.querySelector(selector);
 const click = (el: TillTenderPay, selector: string) =>
@@ -361,6 +366,96 @@ describe("till-tender-pay", () => {
     expect(query(el, ".pay")).not.toBeNull(); // back to the idle Pay button
     expect(query(el, ".label-input")).toBeNull();
     expect(spy).not.toHaveBeenCalled(); // Cancel parks nothing
+    expect(store.lines).toHaveLength(1); // basket untouched
+  });
+
+  it("shows a Card button in the idle view, disabled on an empty basket", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    expect(query(el, ".pay-card")!.hasAttribute("disabled")).toBe(true);
+    expect(el.shadowRoot!.textContent).toContain(t("tender.card"));
+  });
+
+  it("enables Card once a line is rung up, reacting to store changes", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    store.addProduct(cafe, "2");
+    await el.updateComplete;
+    expect(query(el, ".pay-card")!.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("disables Card while busy (a sale is in flight), even with a rung-up basket", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2"); // Card would otherwise be enabled
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store, busy: true });
+    // Same visible half of the single-flight guard as Pay/Hold: dropping `|| this.busy` enables Card.
+    expect(query(el, ".pay-card")!.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("opens the card screen showing the total, with no keypad, when Card is tapped", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2"); // total 3.00
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    click(el, ".pay-card");
+    await el.updateComplete;
+    expect(el.shadowRoot!.textContent).toContain(t("tender.card"));
+    expect(el.shadowRoot!.textContent).toContain(t("label.total"));
+    expect(el.shadowRoot!.textContent).toContain(formatMoney("3.00"));
+    expect(query(el, "till-numeric-pad")).toBeNull(); // a card charges the exact total — no keypad
+    expect(query(el, ".ref-input")).not.toBeNull(); // the optional operation-number field
+  });
+
+  it("emits confirm-payment method:card with amount == total, no change entry", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1"); // total 1.50
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    const spy = vi.fn();
+    el.addEventListener("confirm-payment", (e) => spy((e as CustomEvent).detail));
+    click(el, ".pay-card");
+    await el.updateComplete;
+    click(el, ".confirm");
+    expect(spy).toHaveBeenCalledWith({ method: "card", amount: "1.50" });
+  });
+
+  it("rides an entered externalRef along with the card tender", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1"); // total 1.50
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    const spy = vi.fn();
+    el.addEventListener("confirm-payment", (e) => spy((e as CustomEvent).detail));
+    click(el, ".pay-card");
+    await el.updateComplete;
+    await typeRef(el, "OP-12345");
+    click(el, ".confirm");
+    expect(spy).toHaveBeenCalledWith({ method: "card", amount: "1.50", externalRef: "OP-12345" });
+  });
+
+  it("returns to idle after a confirmed card payment", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    click(el, ".pay-card");
+    await el.updateComplete;
+    click(el, ".confirm");
+    await el.updateComplete;
+    expect(query(el, ".pay-card")).not.toBeNull(); // back to the idle view
+    expect(query(el, ".ref-input")).toBeNull();
+  });
+
+  it("returns to idle from the card screen when Cancel is tapped, emitting nothing", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    const spy = vi.fn();
+    el.addEventListener("confirm-payment", () => spy());
+    click(el, ".pay-card");
+    await el.updateComplete;
+    await typeRef(el, "OP-12345"); // a ref is part-entered
+    click(el, ".cancel");
+    await el.updateComplete;
+    expect(query(el, ".pay-card")).not.toBeNull(); // back to the idle view
+    expect(query(el, ".ref-input")).toBeNull();
+    expect(spy).not.toHaveBeenCalled(); // Cancel never settles the sale
     expect(store.lines).toHaveLength(1); // basket untouched
   });
 

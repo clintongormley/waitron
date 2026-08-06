@@ -60,11 +60,26 @@ export interface SaleLine {
   quantity: string;
 }
 
-/** The single cash tender slice 1 supports. */
+/** A cash tender: the full amount the operator keyed in (the server computes the change). */
 export interface CashTender {
   method: "cash";
   amount: string;
 }
+
+/**
+ * A manual card tender — the counter charged the card on the standalone bank terminal (datáfono) and
+ * records it here. `amount` is the sale total (a card is charged the exact total, never over-tendered,
+ * so there is no change); `externalRef` is the terminal's optional operation number, absent when the
+ * operator did not key one.
+ */
+export interface CardTender {
+  method: "card";
+  amount: string;
+  externalRef?: string;
+}
+
+/** Either tender `POST /api/sales` accepts. The server distinguishes them on `method`. */
+export type Tender = CashTender | CardTender;
 
 /** `POST /api/sales` success — the ticket payload the receipt view renders. */
 export interface TillSaleResult {
@@ -146,11 +161,7 @@ export class TillApi {
    * invoice number is never reused). For a walk-up it is a fresh client-minted id; to pay a PARKED
    * order the till sends that order's own id, so the settle lands on the retrieved order.
    */
-  recordSale(
-    lines: SaleLine[],
-    tender: CashTender,
-    workingOrderId: string,
-  ): Promise<TillSaleResult> {
+  recordSale(lines: SaleLine[], tender: Tender, workingOrderId: string): Promise<TillSaleResult> {
     return this.#request<TillSaleResult>("/api/sales", "POST", { lines, tender, workingOrderId });
   }
 

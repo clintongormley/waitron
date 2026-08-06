@@ -9,12 +9,16 @@ import { StoreChangeController } from "../state/store-controller.js";
 import type { TillProduct } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 
-/** The payload of the `confirm-payment` event: a cash tender for the amount the operator entered. */
-export interface ConfirmPaymentDetail {
-  method: "cash";
-  /** The FULL operator-entered tendered amount (a Decimal string), never the total. */
-  amount: string;
-}
+/**
+ * The payload of the `confirm-payment` event — either tender the widget can settle:
+ * - `cash`: `amount` is the FULL operator-entered tendered amount (a Decimal string), never the
+ *   total — the server records the fiscal tender at the total and returns the change.
+ * - `card`: a manual bank-terminal (datáfono) charge. `amount` is the sale total exactly (a card is
+ *   charged the total, never over-tendered, so there is no change), and `externalRef` is the
+ *   terminal's optional operation number, omitted when the operator did not key one.
+ */
+export type ConfirmPaymentDetail =
+  { method: "cash"; amount: string } | { method: "card"; amount: string; externalRef?: string };
 
 /** The payload of the `park-order` event: the operator's optional free-text name for the parked order. */
 export interface ParkOrderDetail {
@@ -26,10 +30,10 @@ export interface ParkOrderDetail {
 const ZERO = decimal("0");
 
 /**
- * One widget, four views: the idle Pay/Hold buttons, the cash-tender screen, the kg-weight screen, and
- * the hold label prompt.
+ * One widget, five views: the idle Pay/Card/Hold buttons, the cash-tender screen, the kg-weight
+ * screen, the hold label prompt, and the card-tender screen.
  */
-type Mode = "idle" | "paying" | "weighing" | "holding";
+type Mode = "idle" | "paying" | "weighing" | "holding" | "card";
 
 /**
  * The pay flow and the kg-weight entry — the two moments the walk-up sale needs a numeric keypad.
@@ -101,6 +105,7 @@ export class TillTenderPay extends LitElement {
       }
 
       .pay,
+      .pay-card,
       .hold,
       .park,
       .confirm,
@@ -109,7 +114,8 @@ export class TillTenderPay extends LitElement {
         width: 100%;
       }
 
-      .label-input {
+      .label-input,
+      .ref-input {
         margin-bottom: var(--wt-space-3);
       }
     `,
@@ -132,6 +138,8 @@ export class TillTenderPay extends LitElement {
   @state() private entry = "";
   /** The free-text order name typed into the hold prompt; set only while {@link mode} is `"holding"`. */
   @state() private labelEntry = "";
+  /** The optional bank-terminal operation number typed on the card screen; set only while `"card"`. */
+  @state() private refEntry = "";
   /** The weight product awaiting a kg entry; set only while {@link mode} is `"weighing"`. */
   @state() private selected?: TillProduct;
 
@@ -183,9 +191,20 @@ export class TillTenderPay extends LitElement {
     this.mode = "holding";
   }
 
+  /** Open the card-tender screen with an empty operation-number field (the field is optional). */
+  #startCard(): void {
+    this.refEntry = "";
+    this.mode = "card";
+  }
+
   #onLabelChange(event: Event): void {
     event.stopPropagation();
     this.labelEntry = (event as CustomEvent<{ value: string }>).detail.value;
+  }
+
+  #onRefChange(event: Event): void {
+    event.stopPropagation();
+    this.refEntry = (event as CustomEvent<{ value: string }>).detail.value;
   }
 
   /**
@@ -218,6 +237,7 @@ export class TillTenderPay extends LitElement {
     this.selected = undefined;
     this.entry = "";
     this.labelEntry = "";
+    this.refEntry = "";
     this.mode = "idle";
   }
 
@@ -234,6 +254,30 @@ export class TillTenderPay extends LitElement {
     );
     this.mode = "idle";
     this.entry = "";
+  }
+
+  /**
+   * Emit the card tender at the sale total and return to idle. A card is charged the exact total, so
+   * `amount` is `this.store.total` (not an operator entry) and there is no change. `externalRef` — the
+   * bank terminal's operation number — rides along only when the operator keyed one; a blank or
+   * whitespace-only field is omitted. The mode and field are reset BEFORE the dispatch (like `#park`,
+   * per the 7b Copilot fix), so a synchronous listener that throws still leaves the widget idle.
+   */
+  #confirmCard(): void {
+    const ref = this.refEntry.trim();
+    const detail: ConfirmPaymentDetail =
+      ref === ""
+        ? { method: "card", amount: this.store.total }
+        : { method: "card", amount: this.store.total, externalRef: ref };
+    this.mode = "idle";
+    this.refEntry = "";
+    this.dispatchEvent(
+      new CustomEvent<ConfirmPaymentDetail>("confirm-payment", {
+        detail,
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   /**
@@ -262,13 +306,14 @@ export class TillTenderPay extends LitElement {
     if (this.mode === "paying") return this.#renderPaying();
     if (this.mode === "weighing") return this.#renderWeighing();
     if (this.mode === "holding") return this.#renderHolding();
+    if (this.mode === "card") return this.#renderCard();
     return this.#renderIdle();
   }
 
   #renderIdle() {
-    // Pay and Hold share the same gate — both need a non-empty basket and no sale in flight. Hold is
-    // secondary (parking is the lesser action), size "lg" like Pay so both clear the 44px POS touch
-    // minimum and read as an equal-weight pair.
+    // Pay, Card and Hold share the same gate — all need a non-empty basket and no sale in flight. Pay
+    // (cash) and Card are the two tender options; Hold is secondary (parking is the lesser action).
+    // All size "lg" like Pay so every one clears the 44px POS touch minimum.
     const disabled = this.store.lineCount === 0 || this.busy;
     return html`
       <div class="actions">
@@ -280,6 +325,15 @@ export class TillTenderPay extends LitElement {
           @click=${() => this.#startPaying()}
         >
           ${t("action.pay")}
+        </wt-button>
+        <wt-button
+          class="pay-card"
+          variant="primary"
+          size="lg"
+          ?disabled=${disabled}
+          @click=${() => this.#startCard()}
+        >
+          ${t("tender.card")}
         </wt-button>
         <wt-button
           class="hold"
@@ -305,6 +359,40 @@ export class TillTenderPay extends LitElement {
       <div class="actions">
         <wt-button class="park" variant="primary" size="lg" @click=${() => this.#park()}>
           ${t("action.hold")}
+        </wt-button>
+        <wt-button class="cancel" variant="secondary" @click=${() => this.#cancel()}>
+          ${t("action.cancel")}
+        </wt-button>
+      </div>
+    `;
+  }
+
+  #renderCard() {
+    // A card is charged the exact total on the standalone terminal — no keypad, no tendered/change
+    // rows. The only input is the OPTIONAL operation number; Confirm settles at the store total.
+    return html`
+      <div class="summary">
+        <p class="tender-kind">${t("tender.card")}</p>
+        <div class="row">
+          <span class="label">${t("label.total")}</span>
+          <span class="amount total">${formatMoney(this.store.total)}</span>
+        </div>
+      </div>
+      <wt-input
+        class="ref-input"
+        .value=${this.refEntry}
+        .label=${t("tender.card_ref")}
+        @wt-change=${(event: Event) => this.#onRefChange(event)}
+      ></wt-input>
+      <div class="actions">
+        <wt-button
+          class="confirm"
+          variant="primary"
+          size="lg"
+          ?disabled=${this.busy}
+          @click=${() => this.#confirmCard()}
+        >
+          ${t("action.confirm_payment")}
         </wt-button>
         <wt-button class="cancel" variant="secondary" @click=${() => this.#cancel()}>
           ${t("action.cancel")}
