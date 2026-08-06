@@ -283,6 +283,53 @@ export async function getPaymentByRef(
   return row;
 }
 
+/** A captured (or offline-accepted) payment found for a working order — the §4 capture-idempotency
+ * pre-check's result. `saleId` NULL is the "collect committed, P3 never ran" recovery window; set
+ * means the sale is already filed and the pay is a replay. `amount`/`settledAt`/`externalRef` are the
+ * raw column strings, so the recovery path can reconstruct the tender and associate this exact row. */
+export interface CapturedPaymentForOrder {
+  id: string;
+  paymentRef: string;
+  amount: string; // numeric(12,2) as text
+  saleId: string | null;
+  externalRef: string | null;
+  settledAt: string | null; // always set for captured/accepted_offline, but typed nullable like the column
+  state: "captured" | "accepted_offline";
+}
+
+const CAPTURED_FOR_ORDER_COLUMNS = {
+  id: payments.id,
+  paymentRef: payments.paymentRef,
+  amount: payments.amount,
+  saleId: payments.saleId,
+  externalRef: payments.externalRef,
+  settledAt: payments.settledAt,
+  state: payments.state,
+};
+
+/** The §4 capture-idempotency pre-check: has this working order already got a captured (or
+ * offline-accepted) payment for this provider? Read-only, over existing columns/`payments_working_order_idx`.
+ * A `failed`/`attempting` row is NOT captured, so a legitimately-declined card stays re-chargeable and
+ * a lost-T2 `attempting` orphan is never mistaken for a completed capture (§4). */
+export async function findCapturedPaymentForWorkingOrder(
+  tx: Transaction,
+  key: { tenantId: string; provider: string; workingOrderId: string },
+): Promise<CapturedPaymentForOrder | undefined> {
+  const [row] = await tx
+    .select(CAPTURED_FOR_ORDER_COLUMNS)
+    .from(payments)
+    .where(
+      and(
+        eq(payments.tenantId, key.tenantId),
+        eq(payments.provider, key.provider),
+        eq(payments.workingOrderId, key.workingOrderId),
+        inArray(payments.state, ["captured", "accepted_offline"]),
+      ),
+    )
+    .limit(1);
+  return row as CapturedPaymentForOrder | undefined;
+}
+
 /** A payment row plus its tenant, looked up by (provider, paymentRef) WITHOUT a tenant filter — the
  * lookup a provider uses when it holds only its own reference (e.g. the fake's `void`/`refund`, or a
  * real adapter's webhook). Under RLS with no tenant set this returns nothing (the policy hides every

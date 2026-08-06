@@ -4,6 +4,7 @@ import { withTenant } from "@waitron/db";
 import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import { decimal } from "@waitron/shared";
 import {
+  findCapturedPaymentForWorkingOrder,
   getPaymentByRef,
   insertCapturedPayment,
   insertInitiated,
@@ -69,6 +70,76 @@ describe("payments under real row-level security", () => {
       // returns nothing, which is the isolation guarantee actually holding under a real
       // RLS-subject role rather than being assumed from the migration text.
       const hidden = await withTenant(probe, tenantB.tenantId, (tx) => getPaymentByRef(tx, key));
+      expect(hidden).toBeUndefined();
+    } finally {
+      await probe.close();
+    }
+  });
+});
+
+describe("findCapturedPaymentForWorkingOrder under real row-level security", () => {
+  it("finds only the caller-tenant's captured payment, with BOTH tenants non-empty in the same state", async () => {
+    // Seeded as the superuser (admin) — RLS bypassed for setup, same as above.
+    const tenantA = await seedWorkingOrder(postgres.admin, "B55555555");
+    const tenantB = await seedWorkingOrder(postgres.admin, "B66666666");
+
+    const probe = await postgres.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const keyA = {
+        tenantId: tenantA.tenantId,
+        provider: "stripe",
+        workingOrderId: tenantA.workingOrderId,
+      };
+      const keyB = {
+        tenantId: tenantB.tenantId,
+        provider: "stripe",
+        workingOrderId: tenantB.workingOrderId,
+      };
+
+      // Both tenants get a CAPTURED payment, in the same state — deliberately, so "invisible"
+      // below cannot be the trivial "there was nothing there to find" answer (CLAUDE.md §1: a
+      // measurement where both answers look alike measures nothing). If tenant B were left empty,
+      // querying under B's scope would return undefined whether or not RLS does anything at all.
+      await withTenant(probe, tenantA.tenantId, (tx) =>
+        insertCapturedPayment(tx, {
+          tenantId: tenantA.tenantId,
+          workingOrderId: tenantA.workingOrderId,
+          provider: "stripe",
+          paymentRef: "rls-a",
+          amount: decimal("10.00"),
+          settledAt: SETTLED,
+        }),
+      );
+      await withTenant(probe, tenantB.tenantId, (tx) =>
+        insertCapturedPayment(tx, {
+          tenantId: tenantB.tenantId,
+          workingOrderId: tenantB.workingOrderId,
+          provider: "stripe",
+          paymentRef: "rls-b",
+          amount: decimal("20.00"),
+          settledAt: SETTLED,
+        }),
+      );
+
+      // Each tenant finds its OWN captured payment under its own scope — proves both rows really
+      // exist and are independently reachable (not just "everything returns undefined").
+      const seenA = await withTenant(probe, tenantA.tenantId, (tx) =>
+        findCapturedPaymentForWorkingOrder(tx, keyA),
+      );
+      expect(seenA?.paymentRef).toBe("rls-a");
+      const seenB = await withTenant(probe, tenantB.tenantId, (tx) =>
+        findCapturedPaymentForWorkingOrder(tx, keyB),
+      );
+      expect(seenB?.paymentRef).toBe("rls-b");
+
+      // Same query, same key (tenantId = tenantA.tenantId, so the app-level explicit tenant_id
+      // predicate in the query STILL matches tenant A's row) — but scoped to tenant B instead. The
+      // row indisputably exists and the explicit predicate indisputably agrees with it (both just
+      // proven above); the ONLY thing standing between this query and that row is the isolation
+      // policy's USING clause evaluating tenant_id = current_tenant_id() against B's GUC.
+      const hidden = await withTenant(probe, tenantB.tenantId, (tx) =>
+        findCapturedPaymentForWorkingOrder(tx, keyA),
+      );
       expect(hidden).toBeUndefined();
     } finally {
       await probe.close();

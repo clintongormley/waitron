@@ -11,6 +11,7 @@ import {
   existingReferences,
   expireInitiated,
   failAttempting,
+  findCapturedPaymentForWorkingOrder,
   findPaymentByRef,
   getPaymentByRef,
   insertAcceptedOffline,
@@ -394,6 +395,67 @@ describe("findPaymentByRef", () => {
     await seedTenant();
     const row = await pg.db.transaction((tx) => findPaymentByRef(tx, "fake", "unknown"));
     expect(row).toBeUndefined();
+  });
+});
+
+describe("findCapturedPaymentForWorkingOrder", () => {
+  // PGlite: this asserts the STATE filter and column projection only — no RLS, no concurrency — so
+  // the hermetic superuser target is the right one (CLAUDE.md §4). Tenant isolation is proven on
+  // real Postgres in payments.rls.test.ts.
+  it("returns a captured payment for the working order, ignoring non-captured states", async () => {
+    const s = await seedWorkingOrder(pg.db, freshNif());
+    const key = { tenantId: s.tenantId, provider: "stripe", workingOrderId: s.workingOrderId };
+    // A failed attempt must NOT match (a legitimately-declined card is re-chargeable).
+    await pg.db.transaction((tx) =>
+      insertFailedPayment(tx, { ...key, paymentRef: "f1", amount: decimal("5.00") }),
+    );
+    expect(
+      await pg.db.transaction((tx) => findCapturedPaymentForWorkingOrder(tx, key)),
+    ).toBeUndefined();
+    // A captured payment matches, carrying its ref/amount/saleId(null)/externalRef.
+    await pg.db.transaction((tx) =>
+      insertCapturedPayment(tx, {
+        ...key,
+        paymentRef: "c1",
+        amount: decimal("12.10"),
+        settledAt: new Date("2026-07-24T12:00:00Z"),
+        externalRef: "pi_x",
+      }),
+    );
+    const found = await pg.db.transaction((tx) => findCapturedPaymentForWorkingOrder(tx, key));
+    expect(found).toMatchObject({
+      paymentRef: "c1",
+      amount: "12.10",
+      saleId: null,
+      externalRef: "pi_x",
+      state: "captured",
+    });
+  });
+
+  it("matches an accepted_offline payment too (it chained its sale)", async () => {
+    const s = await seedWorkingOrder(pg.db, freshNif());
+    const key = { tenantId: s.tenantId, provider: "stripe", workingOrderId: s.workingOrderId };
+    await pg.db.transaction((tx) =>
+      insertAcceptedOffline(tx, {
+        ...key,
+        paymentRef: "o1",
+        amount: decimal("8.00"),
+        settledAt: new Date("2026-07-24T12:00:00Z"),
+      }),
+    );
+    const found = await pg.db.transaction((tx) => findCapturedPaymentForWorkingOrder(tx, key));
+    expect(found).toMatchObject({ paymentRef: "o1", state: "accepted_offline", saleId: null });
+  });
+
+  it("returns undefined when the only payment is attempting (the lost-T2 window is not yet captured)", async () => {
+    const s = await seedWorkingOrder(pg.db, freshNif());
+    const key = { tenantId: s.tenantId, provider: "stripe", workingOrderId: s.workingOrderId };
+    await pg.db.transaction((tx) =>
+      insertAttempting(tx, { ...key, paymentRef: "a1", amount: decimal("9.00") }),
+    );
+    expect(
+      await pg.db.transaction((tx) => findCapturedPaymentForWorkingOrder(tx, key)),
+    ).toBeUndefined();
   });
 });
 
