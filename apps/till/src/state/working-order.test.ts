@@ -168,6 +168,11 @@ describe("WorkingOrderStore", () => {
   it("loadFrom replaces the basket — id, lines, total and label", () => {
     const s = new WorkingOrderStore();
     s.addProduct(jamon, "0.100"); // a pre-existing line that loadFrom must drop
+    // Read total BEFORE loadFrom so the #priced cache is POPULATED (10.00 × 0.100 = 1.00). This is
+    // what makes the "re-priced from the loaded lines" assertion below load-bearing on loadFrom's
+    // `#priced = null` invalidation: without a populated cache going in, that line is untested and a
+    // refactor could drop it and ship a stale retrieved-order total. Proven by deletion (CLAUDE.md §4).
+    expect(s.total).toBe("1.00");
     const lines: OrderLine[] = [
       { product: cafe, quantity: "2" }, // 1.50 × 2 = 3.00 (general)
       { product: jamon, quantity: "0.320" }, // 10.00 × 0.320 = 3.20 (reduced)
@@ -176,7 +181,7 @@ describe("WorkingOrderStore", () => {
     expect(s.id).toBe("held-123");
     expect(s.label).toBe("Mesa 4");
     expect(s.lines).toEqual(lines);
-    expect(s.total).toBe("6.20"); // re-priced from the loaded lines
+    expect(s.total).toBe("6.20"); // re-priced from the loaded lines — proves #priced was invalidated
   });
 
   it("keeps the loaded id when a product is added after loadFrom — only clear() re-mints", () => {
