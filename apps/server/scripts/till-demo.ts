@@ -118,9 +118,9 @@ async function main(): Promise<void> {
     // seed-admin needs `persons`, and the login route verifies a person's PIN), then fiscal
     // (registerSif needs `registro_sif`/`cadenas`; recordSale's chain needs `registros_facturacion`),
     // then payments (a manual card tender's `recordManualCardPayment` needs the `payments` table) —
-    // the same order the production manifest runs them in (`packages/migrations/migrations.manifest.
-    // json`: core, identity, …, fiscal, payments). Omitted before this slice because a cash-only
-    // walk-up never touched `payments`; a card sale does.
+    // the same order the production manifest runs them in
+    // (`packages/migrations/migrations.manifest.json`: core, identity, …, fiscal, payments). Omitted
+    // before this slice because a cash-only walk-up never touched `payments`; a card sale does.
     await runMigrations(db, CORE_MIGRATIONS);
     await runMigrations(db, IDENTITY_MIGRATIONS);
     await runMigrations(db, FISCAL_MIGRATIONS);
