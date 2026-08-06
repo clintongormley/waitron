@@ -73,9 +73,14 @@ async function priceOrderLines(
  * `TillSaleRequest`, it carries NO price of any kind — the server re-reads the catalogue and prices
  * authoritatively (`priceBasket`), so a browser cannot influence the snapshot the draft carries.
  *
- * `id` is client-supplied: the till mints the working-order uuid so the same request can be retried
- * idempotently against `working_orders.id`'s primary key without minting a second order. `quantity`
- * is a count for an `each` product and a measured kg weight for a `weight` product.
+ * `id` is client-supplied: the till mints the working-order uuid and holds it stable across a retry.
+ * That prevents a SECOND parked order — a re-sent park PK-COLLIDES on `working_orders.id` and the
+ * whole transaction rolls back (a raw 23505 that `till-api.ts`'s `run` catch turns into an opaque
+ * 500, since park adds no `onConflict`), so at most one order is ever parked for the id. It is NOT an
+ * idempotent replay: park does not recognise the existing row and return it, it simply fails on the
+ * collision. Idempotent REPLAY belongs to PAY (`payWorkingOrder`), which recognises an already-settled
+ * order and re-returns its result rather than filing a second chained record. `quantity` is a count
+ * for an `each` product and a measured kg weight for a `weight` product.
  *
  * `operatorId` is the person who parked the order, for later attribution. It is accepted here for the
  * caller's convenience and forward-compatibility with the session wiring (Task 5) but is NOT persisted
@@ -169,7 +174,7 @@ export interface HeldOrderSummary {
   orderNumber: number;
   /** The operator-supplied label ("Mesa 4"), or null when the order was parked without one. */
   label: string | null;
-  /** Number of lines on the order (`count(*)`), a whole number. */
+  /** Number of lines on the order (`count(lines)`, so 0 for a lineless order), a whole number. */
   itemCount: number;
   /** Sum of the lines' `line_total` (net base), a numeric(12,2) as text — the codebase's money shape. */
   total: string;

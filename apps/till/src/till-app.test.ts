@@ -144,6 +144,7 @@ describe("till-app", () => {
     const store = c.store;
     store.addProduct(cafe, "2");
     await el.updateComplete;
+    const workingOrderId = store.id; // the walk-up's STABLE client-minted id — the pay-idempotency key
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
@@ -151,9 +152,10 @@ describe("till-app", () => {
     expect(currentApi.recordSale).toHaveBeenCalledWith(
       [{ productId: "cafe", quantity: "2" }],
       { method: "cash", amount: "5" },
-      // Task 9 threads a workingOrderId through as the pay-idempotency key; the walk-up placeholder
-      // is a fresh uuid (Task 10/11 finalises the store-held id), so assert its shape, not its value.
-      expect.any(String),
+      // The workingOrderId sent is the store's stable id, NOT a fresh uuid, so a lost-response re-tap
+      // replays and a retrieved order settles under its own id (see the retrieve→pay and retry tests
+      // below). A `expect.any(String)` here was satisfied by the old `crypto.randomUUID()` bug.
+      workingOrderId,
     );
     const view = ticket(el)!;
     expect(view).not.toBeNull();
@@ -179,6 +181,57 @@ describe("till-app", () => {
     await flush(el);
 
     expect(ticket(el)!.invoiceLocale).toBe("en");
+  });
+
+  it("retrieve then pay: recordSale settles under the RETRIEVED order's own id, not a fresh one", async () => {
+    // The Critical fix: paying a retrieved order must send that order's adopted id (wo-1), so the
+    // server takes the pay-the-parked-order branch and settles it. The pre-fix `crypto.randomUUID()`
+    // sent a random id → the walk-up branch → wo-1 left `open` and re-payable → double-charge + a
+    // second unrepairable chained record. `retrieveWorkingOrder` defaults to id "wo-1" + a cafe line.
+    const { el } = await mountApp();
+    const c = await toCounter(el);
+    const store = c.store;
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    expect(store.id).toBe("wo-1"); // loadFrom adopted the retrieved order's id
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    // the adopted id is the pay-idempotency key — this FAILS against the pre-fix random-uuid line.
+    expect(currentApi.recordSale).toHaveBeenCalledWith(
+      [{ productId: "cafe", quantity: "2" }],
+      { method: "cash", amount: "5" },
+      "wo-1",
+    );
+  });
+
+  it("walk-up pay retry: a re-tapped confirm sends the SAME store id (idempotent replay, never two ids)", async () => {
+    // A lost pay response then an operator re-tap must replay against the same working-order id, not
+    // mint a second one — otherwise a second POST /api/sales files a second chained fiscal record
+    // (spec §3: the client holds the id stable across retries). The first attempt rejects (response
+    // lost); the re-tap succeeds. Both must carry the identical store id.
+    const recordSale = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "sale.rejected" })
+      .mockResolvedValueOnce(saleResult);
+    const { el } = await mountApp({ recordSale });
+    const c = await toCounter(el);
+    const store = c.store;
+    store.addProduct(cafe, "2");
+    await el.updateComplete;
+    const stableId = store.id;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" }); // first — rejects, basket intact
+    await flush(el);
+    emit(c, "confirm-payment", { method: "cash", amount: "5" }); // re-tap — succeeds
+    await flush(el);
+
+    expect(recordSale).toHaveBeenCalledTimes(2);
+    // the SAME id both times (not two random uuids) — a re-tap replays rather than double-files.
+    expect(recordSale.mock.calls[0]![2]).toBe(stableId);
+    expect(recordSale.mock.calls[1]![2]).toBe(stableId);
   });
 
   it("new-sale: clears the basket and returns to an empty counter", async () => {
@@ -451,6 +504,24 @@ describe("till-app", () => {
     // the recovery refresh runs even though the discard rejected, so the stale row drops off
     expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
     expect(c.heldOrders).toEqual([]);
+  });
+
+  it("discard success clears a stale banner left by a prior failed action", async () => {
+    // A failed retrieve sets a `held.stale` banner; a SUCCESSFUL discard must clear it, like every
+    // sibling handler. Without the `errorKey = undefined` at the top of `#onDiscardOrder`, the banner
+    // would persist — this fails against the pre-fix handler.
+    const { el } = await mountApp({
+      retrieveWorkingOrder: vi.fn().mockRejectedValue({ code: "working_order.not_found" }),
+    });
+    const c = await toCounter(el);
+
+    emit(c, "retrieve-order", { id: "wo-1" }); // fails → held.stale banner
+    await flush(el);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull();
+
+    emit(c, "discard-order", { id: "wo-1" }); // succeeds → clears the banner
+    await flush(el);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 
   it("logout: calls logout, returns to lock, and KEEPS the basket", async () => {

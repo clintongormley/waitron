@@ -189,10 +189,13 @@ export class TillApp extends LitElement {
       this.result = await this.api.recordSale(
         lines.map((line) => ({ productId: line.product.id, quantity: line.quantity })),
         tender,
-        // Task 9 placeholder: a walk-up mints a fresh idempotency id per sale (the same default the
-        // server applies when none is sent). Task 10/11 replaces this with the store's held
-        // working-order id, so paying a RETRIEVED parked order settles under that order's own id.
-        crypto.randomUUID(),
+        // The store's STABLE working-order id — its own client-minted uuid for a walk-up, or a
+        // retrieved order's id after `loadFrom` adopted it (see `#onRetrieveOrder`). Sending it (never
+        // a fresh uuid) is the pay-idempotency key (spec §3): a lost-response re-tap replays against
+        // the same row rather than filing a second chained record, and paying a RETRIEVED order
+        // settles under that order's own id instead of orphaning it `open`. `#onParkOrder` sends the
+        // same `#store.id`.
+        this.#store.id,
       );
       this.ticketLines = lines;
       this.screen = "ticket";
@@ -301,6 +304,10 @@ export class TillApp extends LitElement {
    */
   async #onDiscardOrder(event: Event): Promise<void> {
     const { id } = (event as CustomEvent<{ id: string }>).detail;
+    // Clear any prior non-fatal banner on the way in, exactly as `#onRetrieveOrder` does — a
+    // successful discard must not leave a stale error (e.g. a `held.stale` from an earlier dead tap)
+    // showing over the counter.
+    this.errorKey = undefined;
     try {
       await this.api.abandonWorkingOrder(id);
     } catch {

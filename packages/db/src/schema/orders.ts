@@ -51,12 +51,15 @@ export const workingOrders = pgTable(
       .notNull()
       /* v8 ignore next */
       .references(() => tills.id, { onDelete: "restrict" }),
-    // Nullable in this task (node rekey scaffolding), and stays nullable in this slice — no
-    // writer yet (design §5). Bare column: the FK is the tenant-consistent COMPOSITE
-    // (tenant_id, node_id) → nodes(tenant_id, id) declared in extraConfig below (mirroring
-    // `working_order_lines_order_fk`), so a set node_id must belong to THIS order's tenant, not
-    // merely exist somewhere in `nodes`. MATCH SIMPLE (the default) means a NULL node_id skips the
-    // check, so the column stays nullable. No `.references()` here, so nothing for v8 to track.
+    // Nullable at the schema level, and stays that way — but now WRITTEN on the till park path:
+    // `createOpenOrder` (apps/server/src/working-order.ts) always sets it to the till's node on every
+    // parked AND walk-up order, so in practice a working order carries one. It stays nullable for
+    // MATCH SIMPLE, not because nothing writes it (design §5): MATCH SIMPLE (the default) means a NULL
+    // node_id skips the composite FK check below, leaving room for a future non-till writer to omit
+    // it. Bare column: the FK is the tenant-consistent COMPOSITE (tenant_id, node_id) →
+    // nodes(tenant_id, id) declared in extraConfig below (mirroring `working_order_lines_order_fk`),
+    // so a set node_id must belong to THIS order's tenant, not merely exist somewhere in `nodes`. No
+    // `.references()` here, so nothing for v8 to track.
     nodeId: uuid("node_id"),
     // The human-facing order number the counter parks against (park & retrieve, sub-project 7b):
     // allocated from working_order_counters per node, printed on the ticket, and typed back in to

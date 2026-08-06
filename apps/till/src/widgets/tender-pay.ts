@@ -119,9 +119,11 @@ export class TillTenderPay extends LitElement {
   @property({ attribute: false }) store!: WorkingOrderStore;
   /**
    * A sale is in flight — the app is awaiting `recordSale` (see `till-app`'s `submitting`). While set,
-   * both the Pay and the Confirm-payment buttons are disabled so the operator cannot start or re-fire
-   * a settlement mid-submit. This is the VISIBLE half of the double-file guard; the real safety is the
-   * app-level single-flight flag, which blocks a second `confirm-payment` regardless of this state.
+   * the idle Pay and Hold buttons AND the Confirm-payment button are all disabled (`#renderIdle` gates
+   * both idle actions on `busy`, `#renderPaying` gates Confirm), so mid-submit the operator can neither
+   * start a new settlement, park the basket, nor re-fire the settlement. This is the VISIBLE half of
+   * the double-file guard; the real safety is the app-level single-flight flag, which blocks a second
+   * `confirm-payment` regardless of this state.
    */
   @property({ type: Boolean }) busy = false;
 

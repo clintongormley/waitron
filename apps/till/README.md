@@ -96,6 +96,14 @@ record).
 
 ## What this slice does and does not do
 
+> **As of 7b (park & retrieve, 2026-08-06):** the scope below was written for slice 1 (7a). Since then
+> **7b park & retrieve** has landed on this package — the Hold/Park control, the **cross-till**
+> held-orders list, and retrieve/discard/pay of a parked order. Two "out of scope" items below are
+> lifted by 7b and no longer appear in that list: park & retrieve itself, and "one till per server"
+> (the held list is now shared across every register on a node, spec §4). 7c (prepare & collect) is
+> still out. Design:
+> [`2026-08-05-counter-pos-park-retrieve-and-card-design.md`](../../docs/superpowers/specs/2026-08-05-counter-pos-park-retrieve-and-card-design.md).
+
 **In scope (slice 1 / 7a):** one walk-up **cash** sale — choose products, weigh or count them, take
 cash, print the filed ticket with its Veri\*Factu QR.
 
@@ -108,9 +116,8 @@ cash, print the filed ticket with its Veri\*Factu QR.
 - **No layout or receipt editors.** The counter screen is layout-driven and each widget already
   carries a `config` seam, but the editor that authors those layouts (and reads that per-widget
   config) is a later slice.
-- **The other Counter POS slices** — **7b park & retrieve** and **7c prepare & collect** (kitchen
-  states) — are not here.
-- **One till per server.** Multi-till-per-server is later.
+- **7c prepare & collect** (kitchen states) — the remaining Counter POS slice — is not here. (7b park
+  & retrieve HAS landed; see the note above.)
 - **TLS termination, LAN binding and serving the built bundle are deployment (#9).** In dev the app
   is served by Vite on loopback over plain HTTP, so the session cookie is not marked `Secure` (boot
   derives that from whether TLS is configured); production HTTPS, LAN exposure and serving the built
