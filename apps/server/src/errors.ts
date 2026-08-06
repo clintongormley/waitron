@@ -307,5 +307,21 @@ declare module "@waitron/shared" {
      * other than this host throws it — the note `working_order.not_open` carries.
      */
     "working_order.reason_required": { workingOrderId: string };
+    /**
+     * A prep operation is not legal given the order's current prep state (design §5's prep surface):
+     *  - `advancePrep`: the requested `to` is not the order's IMMEDIATE next state
+     *    (queued → preparing → ready → collected — no skip, no repeat, no jump backwards), or the
+     *    order has no prep record to advance at all (never sent to prep, or an absent/foreign id RLS
+     *    hides — the same fail-closed shape `working_order.not_open` uses), or `to` is `"queued"`
+     *    itself: no prep state legally advances TO queued — reaching `queued` is `sendToPrep`'s job
+     *    (an INSERT), never a transition.
+     *  - `sendToPrep`: the order already has a prep record (`order_prep_pk`) — a double send-to-prep,
+     *    not a fresh enqueue.
+     * A fact about the order's PREP, not the process. Mapped to 409 (the id may be valid, but the
+     * prep state forbids the move — the same shape `working_order.not_open`/`not_placed` use for their
+     * own state machines). `order_prep.*` names the domain concept (order preparation), the rule
+     * `tenant.not_found`'s note above gives.
+     */
+    "order_prep.invalid_transition": { workingOrderId: string };
   }
 }

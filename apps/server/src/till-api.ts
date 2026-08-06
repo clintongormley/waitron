@@ -1,7 +1,7 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { eq } from "drizzle-orm";
-import { isAppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { asAppUser, tenants, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { endSession, listActiveStaff, loginWithPin } from "@waitron/identity";
@@ -10,15 +10,21 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { codeOf } from "./error-code.js";
 import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
-import { recordTillSale } from "./till-sale.js";
-import type { TillSaleRequest } from "./till-sale.js";
+import { collectOrder, recordTillSale } from "./till-sale.js";
+import type { TillSaleRequest, TillTender } from "./till-sale.js";
 import {
   abandonHeldOrder,
+  advancePrep,
+  cancelPlacedOrder,
   getHeldOrder,
   listHeldOrders,
+  listPrepQueue,
   parkOrder,
+  placeOrder,
+  sendToPrep,
   updateHeldOrder,
 } from "./working-order.js";
+import type { PrepState } from "./working-order.js";
 import {
   clearSessionCookie,
   isUuid,
@@ -53,10 +59,13 @@ export interface TillApiDeps {
  * this table defaults to 400 (a client fault not yet given a more specific status), which is why
  * `run` needs the `?? 400`.
  *
- * The two working-order codes are given SPECIFIC statuses rather than the 400 default: a retrieve of
- * an id that names no open order is a 404 (`working_order.not_found`), and a MODIFY of an order that
- * is not open is a 409 (`working_order.not_open`) — the id may be valid, but the order's state
- * forbids the edit (see their notes in `errors.ts`).
+ * The working-order and prep codes are given SPECIFIC statuses rather than the 400 default: a
+ * retrieve of an id that names no open order is a 404 (`working_order.not_found`); a MODIFY of an
+ * order that is not open (`working_order.not_open`), not placed (`working_order.not_placed`), or a
+ * prep move the order's current prep state forbids (`order_prep.invalid_transition`) are all 409 —
+ * the id may be valid, but the order's (or its prep row's) STATE forbids the operation (see each
+ * code's own note in `errors.ts`). `working_order.reason_required` is listed explicitly at 400 despite
+ * being the table's own default, matching every other `working_order.*`/`sale.*` entry here.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "pin.invalid": 401,
@@ -71,6 +80,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "working_order.not_found": 404,
   "working_order.not_open": 409,
+  "working_order.not_placed": 409,
+  "working_order.reason_required": 400,
+  "order_prep.invalid_transition": 409,
 };
 
 /**
@@ -299,6 +311,117 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       await abandonHeldOrder({ db: deps.db }, deps.cfg, c.req.param("id"));
+      return c.body(null, 200);
+    }),
+  );
+
+  // Place a working order (7c prepare & collect, design §3): `open → placed`, freezing composition
+  // and opening the amendment log — and, for Modes I/T, enqueueing the node-scoped prep row at
+  // `queued` (send-to-prep = placing, inside `placeOrder` itself). SESSION-GUARDED — `operatorId` is
+  // `session.personId`, never a browser-sent value, both for the amendment's `actor_id` and (Mode I)
+  // the deferred invoice's attribution. The id is `isUuid`-screened BEFORE any query: passed straight
+  // into `eq(workingOrders.id, id)` a malformed one would `22P02` in the DB → an opaque 500 (the 7b
+  // follow-up docs/backlog.md names), so it is refused as `working_order.not_open` instead — the SAME
+  // code an absent id gets, the fail-closed shape that code's own note in `errors.ts` describes.
+  app.post("/api/working-orders/:id/place", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) {
+        throw new AppError("working_order.not_open", { workingOrderId: id });
+      }
+      const result = await placeOrder(
+        { db: deps.db, backend: deps.backend, clock: deps.clock },
+        deps.cfg,
+        id,
+        personId,
+      );
+      return c.json(result);
+    }),
+  );
+
+  // Advance an order's prep state, or (an EMPTY body) ENQUEUE it (7c, design §5). A body carrying
+  // `{ to }` calls `advancePrep`; `to` absent (`{}`) calls `sendToPrep` — the Mode-P pickup for an
+  // order that never places. SESSION-GUARDED. The id is `isUuid`-screened before any query, refused
+  // as `order_prep.invalid_transition` — the code every other illegal prep move surfaces, since a
+  // malformed id names no prep row exactly as legitimately as an absent one. Returns 200 with an
+  // empty body (like `updateHeldOrder`'s PUT); the caller re-reads `GET /api/prep-queue` for the new
+  // state.
+  app.post("/api/working-orders/:id/prep", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) {
+        throw new AppError("order_prep.invalid_transition", { workingOrderId: id });
+      }
+      const body = await c.req.json<{ to?: PrepState }>();
+      if (body.to === undefined) {
+        await sendToPrep({ db: deps.db }, deps.cfg, id);
+      } else {
+        await advancePrep({ db: deps.db }, deps.cfg, id, body.to);
+      }
+      return c.body(null, 200);
+    }),
+  );
+
+  // The node-scoped prep queue (7c, design §5) — every order still ACTIVE in prep on this node
+  // (queued/preparing/ready, not yet collected), oldest first. SESSION-GUARDED; `listPrepQueue` is
+  // node- and (via RLS) tenant-scoped from `deps.cfg` — the browser names nothing.
+  app.get("/api/prep-queue", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const queue = await listPrepQueue({ db: deps.db }, deps.cfg);
+      return c.json(queue);
+    }),
+  );
+
+  // Collect and finalise a PLACED order (7c prepare & collect): Mode I settles the ALREADY-issued
+  // deferred invoice, Mode T files `recordSale` immediate — `collectOrder`'s own mode dispatch
+  // (design §3). SESSION-GUARDED; `operatorId` is `session.personId`. The body carries only the
+  // tender: `collectOrder` ignores `req.lines` entirely (a placed order files its frozen stored
+  // composition, never a client basket — see `PayWorkingOrderRequest`'s own doc comment), so this
+  // route need not even ask the till for one. The id is `isUuid`-screened before any query, refused
+  // as `working_order.not_placed` — the SAME code an absent or non-placed id gets from `collectOrder`
+  // itself.
+  app.post("/api/working-orders/:id/collect", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) {
+        throw new AppError("working_order.not_placed", { workingOrderId: id });
+      }
+      const body = await c.req.json<{ tender: TillTender }>();
+      const result = await collectOrder(
+        { db: deps.db, backend: deps.backend, clock: deps.clock },
+        deps.cfg,
+        { id, lines: [], tender: body.tender },
+        personId,
+      );
+      return c.json(result);
+    }),
+  );
+
+  // Cancel a PLACED order (7c, spec §4): `placed → abandoned`, appending an `order_cancelled`
+  // amendment carrying the operator's reason. SESSION-GUARDED; `operatorId` is `session.personId`. An
+  // absent/empty/whitespace reason is refused by `cancelPlacedOrder` itself with
+  // `working_order.reason_required` (400) BEFORE any transition or amendment. The id is
+  // `isUuid`-screened before any query, refused as `working_order.not_placed` — the SAME code a
+  // non-placed or absent id gets.
+  app.post("/api/working-orders/:id/cancel", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) {
+        throw new AppError("working_order.not_placed", { workingOrderId: id });
+      }
+      const body = await c.req.json<{ reason: string }>();
+      await cancelPlacedOrder(
+        { db: deps.db, backend: deps.backend, clock: deps.clock },
+        deps.cfg,
+        id,
+        body.reason,
+        personId,
+      );
       return c.body(null, 200);
     }),
   );

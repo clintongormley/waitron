@@ -2,14 +2,16 @@
 // them — the reachability convention `till-sale.ts`/`till-config.ts` follow (a bare import, no value
 // used here). See the note atop `errors.ts`.
 import "./errors.js";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { AppError, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import {
   allocateOrderNumber,
   appendOrderAmendment,
   asAppUser,
   invoiceSeries,
+  isUniqueViolation,
   orderPrep,
+  prepState,
   sales,
   withTenant,
   workingOrderLines,
@@ -707,5 +709,189 @@ export async function cancelPlacedOrder(
       eventAt: now.instant,
       eventOffsetMinutes: now.offsetMinutes,
     });
+  });
+}
+
+/**
+ * The prep lifecycle (design §5), mirrored from `@waitron/db`'s `prepState` pgEnum via its own
+ * `enumValues` — the same derive-don't-duplicate shape `till-config.ts`'s `OrderFlow` uses for the
+ * identical reason, so the two can never drift. `send-to-prep` (= placing for Modes I/T, or
+ * `sendToPrep` for Mode P, which never places) enqueues at `queued`; the cook advances
+ * queued → preparing → ready → collected.
+ */
+export type PrepState = (typeof prepState.enumValues)[number];
+
+/**
+ * One row of the node-scoped prep-queue view (design §5): what a cook's screen shows for a single
+ * order still ACTIVE in prep (not yet collected). `id` is the working order's own id — the prep
+ * queue addresses orders the same way the held list does, so a route can chain straight from one to
+ * the other. `queuedAt` is when the order FIRST entered prep (`order_prep.queued_at`, the column the
+ * queue is ordered by), not when it reached its CURRENT `state`.
+ */
+export interface PrepQueueEntry {
+  id: string;
+  orderNumber: number;
+  label: string | null;
+  state: PrepState;
+  queuedAt: string;
+}
+
+/**
+ * Enqueue a SETTLED order into prep (design §5) — the Mode-P counterpart to `placeOrder`'s own
+ * enqueue. Modes I/T enqueue `order_prep` at `queued` INSIDE `placeOrder` (open → placed), because
+ * placing is where their order becomes an order of record. Mode P (prepay) never places at all — it
+ * pays and issues at ORDER via `payWorkingOrder` (open → settled, no placed state) — so its order has
+ * no `placeOrder` call to pick a prep row up from, and this is that pickup: called once the order is
+ * already `settled`.
+ *
+ * A plain INSERT, not a state-machine transition: `order_prep`'s PK is `(tenant_id,
+ * working_order_id)` (one row per order), so a SECOND send-to-prep for the same order collides on
+ * it. Rather than let that surface as a raw `23505`, it is caught and reported as the domain
+ * `order_prep.invalid_transition` — the same code `advancePrep` uses for every other illegal prep
+ * move, since "this order already has a prep record" is exactly as illegal a move as "the target
+ * isn't the next state" (see that code's own note in `errors.ts`).
+ *
+ * Deliberately does NOT re-check `working_orders.status` first: `order_prep` carries no FK or CHECK
+ * tying it to the order's fiscal status, and validating it here would duplicate a check the CALLER —
+ * the till route, immediately after a successful settle — already satisfies by construction. An id
+ * naming NO working order at all still fails closed, via `order_prep_order_fk`'s composite FK — a raw
+ * FK-violation 500 for that shape (not the domain code), acceptable because this function is only
+ * ever reached from a route that just settled the very id it is passed.
+ */
+export async function sendToPrep(
+  deps: WorkingOrderDeps,
+  cfg: TillConfig,
+  id: string,
+): Promise<void> {
+  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    try {
+      await tx.insert(orderPrep).values({
+        tenantId: cfg.tenantId,
+        workingOrderId: id,
+        nodeId: cfg.nodeId,
+        state: "queued",
+      });
+    } catch (error) {
+      if (!isUniqueViolation(error)) {
+        throw error;
+      }
+      throw new AppError("order_prep.invalid_transition", { workingOrderId: id });
+    }
+  });
+}
+
+/**
+ * Advance a working order's prep state one step (design §5): `queued → preparing → ready →
+ * collected`. Each branch is a single conditional UPDATE — `set state = to, <to>_at = now() where
+ * working_order_id = id and state = <the one legal predecessor of to>` — so the legality of the move
+ * IS the write: a skip, a repeat, a jump backwards, or an absent/foreign prep row (RLS hides another
+ * tenant's) all match no row, and the empty `returning` throws `order_prep.invalid_transition`. The
+ * same fail-closed shape `abandonHeldOrder`'s conditional UPDATE uses for `working_orders`.
+ *
+ * `to = "queued"` is refused immediately, before any query: no prep state legally advances TO queued
+ * (only `sendToPrep`'s INSERT reaches it), so that case throws the same domain code the empty-
+ * `returning` branch would. The switch (rather than a table keyed by a computed column name) keeps
+ * each branch's `.set()` call fully typed against Drizzle's inferred update shape.
+ *
+ * Advances freely regardless of the order's FISCAL status (open/placed/settled) — `order_prep` is a
+ * separate MUTABLE table precisely so prep can progress on an already-`settled` Mode-P order without
+ * touching the frozen `working_orders` row (design §5, "where prep state lives"). Node-scoping is not
+ * needed here: the id addresses one prep row directly and RLS still confines it to the tenant,
+ * mirroring `getHeldOrder`/`updateHeldOrder`'s by-id family.
+ */
+export async function advancePrep(
+  deps: WorkingOrderDeps,
+  cfg: TillConfig,
+  id: string,
+  to: PrepState,
+): Promise<void> {
+  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+
+    let updated: { id: string }[];
+    switch (to) {
+      case "preparing":
+        updated = await tx
+          .update(orderPrep)
+          .set({ state: to, preparingAt: sql`now()` })
+          .where(and(eq(orderPrep.workingOrderId, id), eq(orderPrep.state, "queued")))
+          .returning({ id: orderPrep.workingOrderId });
+        break;
+      case "ready":
+        updated = await tx
+          .update(orderPrep)
+          .set({ state: to, readyAt: sql`now()` })
+          .where(and(eq(orderPrep.workingOrderId, id), eq(orderPrep.state, "preparing")))
+          .returning({ id: orderPrep.workingOrderId });
+        break;
+      case "collected":
+        updated = await tx
+          .update(orderPrep)
+          .set({ state: to, collectedAt: sql`now()` })
+          .where(and(eq(orderPrep.workingOrderId, id), eq(orderPrep.state, "ready")))
+          .returning({ id: orderPrep.workingOrderId });
+        break;
+      case "queued":
+      default:
+        // No prep state advances TO queued — reaching it is `sendToPrep`'s job (an INSERT).
+        throw new AppError("order_prep.invalid_transition", { workingOrderId: id });
+    }
+
+    if (updated.length === 0) {
+      throw new AppError("order_prep.invalid_transition", { workingOrderId: id });
+    }
+  });
+}
+
+/**
+ * The node-scoped prep-queue view (design §5): every ACTIVE (not yet collected) prep row on THIS
+ * node, joined to its working order for the display fields a cook's screen needs — reusing 7b's
+ * `listHeldOrders` node-scoping SHAPE (`node_id = cfg.nodeId`, RLS confines the tenant) over a
+ * DIFFERENT storage table: prep lives in `order_prep`, not `working_orders`, for the reason that
+ * table's own schema comment gives (a Mode-P order is already fiscally frozen `settled` when prep
+ * runs, so a `working_orders` column could not advance on it). Ordered by `queued_at` — when the
+ * order FIRST entered prep — so the queue reads oldest-first regardless of which state each row has
+ * since advanced to.
+ *
+ * `collected` rows are excluded (`state in ('queued','preparing','ready')`): once collected, an order
+ * leaves the ACTIVE queue a cook's screen shows, mirroring `listHeldOrders` dropping a `settled`
+ * order from the held list. PGlite is enough for THIS behaviour — the join, the state filter and the
+ * ordering are plain SQL a single backend proves; the node/tenant SCOPING is real-Postgres's job, the
+ * same split `listHeldOrders` uses (CLAUDE.md §4).
+ */
+export async function listPrepQueue(
+  deps: WorkingOrderDeps,
+  cfg: TillConfig,
+): Promise<PrepQueueEntry[]> {
+  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return (
+      tx
+        .select({
+          id: workingOrders.id,
+          orderNumber: workingOrders.orderNumber,
+          label: workingOrders.label,
+          state: orderPrep.state,
+          queuedAt: orderPrep.queuedAt,
+        })
+        .from(orderPrep)
+        // Composite join predicate (tenant_id too, not the order id alone) — the same tenant-consistency
+        // `listHeldOrders`'s own line join enforces, matching `order_prep_order_fk`'s composite shape.
+        .innerJoin(
+          workingOrders,
+          and(
+            eq(orderPrep.workingOrderId, workingOrders.id),
+            eq(orderPrep.tenantId, workingOrders.tenantId),
+          ),
+        )
+        .where(
+          and(
+            eq(orderPrep.nodeId, cfg.nodeId),
+            inArray(orderPrep.state, ["queued", "preparing", "ready"]),
+          ),
+        )
+        .orderBy(orderPrep.queuedAt)
+    );
   });
 }
