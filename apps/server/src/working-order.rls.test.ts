@@ -431,6 +431,11 @@ describe("payWorkingOrder", () => {
     expect(res.total).toBe("1.50");
     expect(res.change).toBe("3.50");
     expect(res.vatBreakdown).toEqual([{ rate: "21.00", base: "1.24", tax: "0.26" }]);
+    // The FILED line list the receipt renders (Finding 2): the priced walk-up composition — name, the
+    // display quantity, and the GROSS the line was filed at. Σ(gross) == total.
+    expect(res.lines).toEqual([
+      { descriptions: { [LOCALE]: "Café" }, quantity: "1", gross: "1.50" },
+    ]);
 
     // The working order was created AND settled in the one transaction; exactly one sale + one
     // registro reference it.
@@ -471,8 +476,54 @@ describe("payWorkingOrder", () => {
     expect(res.total).toBe("3.50");
     expect(res.total).toBe(parkedTotal);
     expect(res.change).toBe("1.50");
+    // The receipt line list is the STORED lock (Finding 2), not any client basket the till sent (it
+    // sent none). The stored numeric(_,3) quantities ("1.000") print trailing-zero-trimmed ("1").
+    expect(res.lines).toEqual([
+      { descriptions: { [LOCALE]: "Café" }, quantity: "1", gross: "1.50" },
+      { descriptions: { [LOCALE]: "Agua" }, quantity: "1", gross: "2.00" },
+    ]);
     expect(res.invoiceNumber).toBe("A/1");
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(id)).toBe(1);
+    expect(await registroCount(id)).toBe(1);
+  });
+
+  it("retrieve → edit → pay files the RE-LOCKED edit, not the pre-edit lock (Finding 2 — no silent drop)", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+
+    // Park café×1 (locked 1.50) — the composition a retrieve loads onto the till.
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    expect((await draftAggregate(id)).total).toBe("1.50");
+
+    // The operator EDITS the retrieved basket (café×1 → café×2); the till re-syncs it BEFORE paying
+    // (`updateWorkingOrder` → `updateHeldOrder`), re-locking the new composition. WITHOUT this sync the
+    // retrieved-order pay path files the pre-edit lock and the edit is SILENTLY DROPPED — the 7c
+    // regression this closes (the till-app side is pinned by `retrieve → edit → pay re-syncs …`).
+    await updateHeldOrder({ db: suite.admin }, cfg, id, {
+      lines: [{ productId: cafe.id, quantity: "2" }],
+    });
+    expect((await draftAggregate(id)).total).toBe("3.00"); // the lock now reflects the edit
+
+    // Pay the retrieved order (no client basket — files from the stored lock, which is now the edit).
+    const res = await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "5.00" },
+    });
+
+    // The EDIT is what was charged AND filed: 3.00 (café×2), never the pre-edit 1.50. Its receipt line
+    // list carries the edited quantity, and the immutable record's total matches — the edit reached the
+    // fiscal record rather than being dropped.
+    expect(res.total).toBe("3.00");
+    expect(res.change).toBe("2.00");
+    expect(res.lines).toEqual([
+      { descriptions: { [LOCALE]: "Café" }, quantity: "2", gross: "3.00" },
+    ]);
+    expect(await filedSaleTotal(id)).toBe("3.00");
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
   });
@@ -534,6 +585,11 @@ describe("payWorkingOrder", () => {
     expect(first.total).toBe("5.50");
     expect(first.vatBreakdown).toEqual([{ rate: "21.00", base: "4.55", tax: "0.95" }]);
     expect(first.qr.length).toBeGreaterThan(0); // a genuine first filing carries the AEAT QR
+    // The FILED line list (Finding 2): café×1 (gross 1.50) + agua×2 (gross 4.00). Σ(gross) == 5.50.
+    expect(first.lines).toEqual([
+      { descriptions: { [LOCALE]: "Café" }, quantity: "1", gross: "1.50" },
+      { descriptions: { [LOCALE]: "Agua" }, quantity: "2", gross: "4.00" },
+    ]);
 
     // The retry — same id, same body. Files NOTHING; returns the first ticket.
     const second = await payWorkingOrder(deps, cfg, req);
@@ -544,6 +600,9 @@ describe("payWorkingOrder", () => {
     // The replay now reads the EXACT filed desglose (Task 14), so it equals the original's — the
     // divergence between the difference method and a recompute is gone.
     expect(second.vatBreakdown).toEqual(first.vatBreakdown);
+    // The replayed ticket's line list is read back from the order's stored lock (Finding 2), so it is
+    // byte-identical to the original's — filed lines both times, never a client basket the retry sent.
+    expect(second.lines).toEqual(first.lines);
     // The replayed ticket carries the SAME mandatory Veri*Factu QR the original did, re-derived from
     // the filed record. `change` stays 0.00 — a documented replay limitation: the tendered cash is not
     // persisted and the drawer change was handed over at the ORIGINAL sale.
@@ -1219,6 +1278,12 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(collected.invoiceNumber).toBe("A/1"); // the SAME invoice, read back
     expect(collected.total).toBe("3.50");
     expect(collected.change).toBe("0.00");
+    // The receipt line list is read back from the order's stored lock (Finding 2 — Mode-I collect
+    // returns the already-filed ticket), so it matches the deferred invoice's composition.
+    expect(collected.lines).toEqual([
+      { descriptions: { [LOCALE]: "Café" }, quantity: "1", gross: "1.50" },
+      { descriptions: { [LOCALE]: "Agua" }, quantity: "1", gross: "2.00" },
+    ]);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1); // STILL one sale — no second file at collect
     expect(await registroCount(id)).toBe(1); // STILL one registro
@@ -1386,6 +1451,11 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(collected.invoiceNumber).toBe("A/1"); // the FIRST filing is at collect
     expect(collected.total).toBe("1.50");
     expect(collected.change).toBe("0.00");
+    // The receipt line list is the just-filed composition (Finding 2 — Mode-T files immediate at
+    // collect from the stored lock).
+    expect(collected.lines).toEqual([
+      { descriptions: { [LOCALE]: "Café" }, quantity: "1", gross: "1.50" },
+    ]);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1); // filed at collect
     expect(await registroCount(id)).toBe(1);

@@ -87,12 +87,26 @@ export interface CardTender {
 /** Either tender `POST /api/sales` accepts. The server distinguishes them on `method`. */
 export type Tender = CashTender | CardTender;
 
+/**
+ * One line of the FILED composition the receipt identifies (RD 1619/2012 art. 7.1.e). Mirrors the
+ * server's `TillSaleLine`: goods `descriptions` (locale → text, resolved in the invoice locale), the
+ * display `quantity`, and the GROSS per-line total (Σ equals `total`). The receipt renders THESE, never
+ * the mutable client basket, so the printed line list can never diverge from the invoice.
+ */
+export interface TillSaleLine {
+  descriptions: Record<string, string>;
+  quantity: string;
+  gross: string;
+}
+
 /** `POST /api/sales` success — the ticket payload the receipt view renders. */
 export interface TillSaleResult {
   invoiceNumber: string;
   issuedAt: string;
   total: string;
   vatBreakdown: VatBreakdownEntry[];
+  /** The filed line list (goods identification), rendered by the receipt instead of the client basket. */
+  lines: TillSaleLine[];
   change: string;
   qr: string;
 }

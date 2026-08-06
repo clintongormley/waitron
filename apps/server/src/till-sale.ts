@@ -78,6 +78,27 @@ export interface TillSaleRequest {
   workingOrderId?: string;
 }
 
+/**
+ * One line of the FILED composition, for the receipt's goods-identification list (RD 1619/2012
+ * art. 7.1.e). It comes from the priced/locked lines the server FILED — never a client basket — so the
+ * printed line list can never diverge from the invoice (the whole point of Finding 2's fix). A
+ * catalogue price change between a park/place and pay moves neither this nor the filed total: both are
+ * derived from the ADD-TIME lock (`priceLockedLines`) or, for a walk-up, the single price the sale was
+ * filed at.
+ */
+export interface TillSaleLine {
+  /** locale → text: the line's goods descriptions, snapshotted at add-time and filed verbatim. The
+   *  receipt resolves the invoice locale from this map (art. 7.1.e). */
+  descriptions: Record<string, string>;
+  /** The filed quantity, trailing-zero-trimmed for display so a walk-up ("2") and a retrieved order
+   *  (stored "2.000") read alike ("2"); a weighed "0.320" reads "0.32". */
+  quantity: string;
+  /** The GROSS (VAT-inclusive) line total the line was filed at, as a decimal string. Σ over the
+   *  lines equals `total` exactly (both sum the same per-line gross), so the receipt's line list adds
+   *  up to the printed total. */
+  gross: string;
+}
+
 export interface TillSaleResult {
   /** `NumSerieFactura`-shaped "A/1", read back from the sale row + its series after filing. */
   invoiceNumber: string;
@@ -86,12 +107,41 @@ export interface TillSaleResult {
   /** Taxable base + VAT, the authoritative figure the fiscal record carries. */
   total: string;
   vatBreakdown: { rate: string; base: string; tax: string }[];
+  /** The FILED line list (goods identification, art. 7.1.e) — the priced/locked composition, so the
+   *  receipt prints what was invoiced rather than the mutable client basket (Finding 2). */
+  lines: TillSaleLine[];
   /** Cash to hand back. `cash`: `tendered − total`, ≥ 0 (an under-tender is refused before this is
    * read). `card`: always "0.00" — a card is charged the exact total, so there is nothing to hand
    * back. */
   change: string;
   /** Where a customer can verify the record, or "" when the regime offers none. */
   qr: string;
+}
+
+/**
+ * Trim a filed quantity to a display string: drop trailing zeros (and a bare trailing dot) so a
+ * walk-up's "2" and a retrieved order's stored "2.000" both read "2", and a weighed "0.320" reads
+ * "0.32". Same normalisation the till's `displayQuantity` applies on retrieve, done here for EVERY
+ * path so the receipt's line list is uniform regardless of which path filed it. Display only — the
+ * fiscal figures (`total`, `vatBreakdown`) are untouched.
+ */
+function trimQuantityForDisplay(quantity: string): string {
+  return quantity.includes(".") ? quantity.replace(/0+$/, "").replace(/\.$/, "") : quantity;
+}
+
+/**
+ * Project the FILED priced lines onto the receipt's line list (`TillSaleResult.lines`) — the goods
+ * identification (art. 7.1.e). `priced` is exactly what was filed (a walk-up/collect `priceBasket`, or
+ * a stored-lock `priceLockedLines`), so the receipt prints the invoiced composition, never the mutable
+ * client basket (Finding 2). `grossLineTotals[i]` is parallel to `lines[i]` (see `PricedLines`), so the
+ * per-line gross is the exact figure filed, not a recompute that could drift by a cent.
+ */
+function ticketLinesFrom(priced: PricedLines): TillSaleLine[] {
+  return priced.lines.map((line, i) => ({
+    descriptions: line.descriptions,
+    quantity: trimQuantityForDisplay(line.quantity),
+    gross: priced.grossLineTotals[i]!,
+  }));
 }
 
 /**
@@ -297,6 +347,13 @@ async function readSettledTicket(
   }
   /* v8 ignore stop */
 
+  // The FILED line list (art. 7.1.e goods identification), reconstructed from the order's stored lock
+  // via the SAME `priceLockedLines` the file used — byte-identical to what was filed for both a
+  // walk-up (`createOpenOrder` stored the priced lock) and a retrieved/placed order. Read straight
+  // back rather than recomputed from `sale_lines` (which stores the NET base, so recovering the gross
+  // would drift by a cent), so the replayed receipt's line list matches the invoice exactly.
+  const ticketLines = ticketLinesFrom(priceLockedLines(await readLockedLines(tx, workingOrderId)));
+
   // Read the QR + the exact filed desglose back from the immutable fiscal record, in this same
   // transaction. This reads nothing but the already-filed alta — never re-files, never re-hashes.
   const filed = await backend.filedReceiptFor(tx, brandSaleId(issued.saleId));
@@ -320,6 +377,7 @@ async function readSettledTicket(
     issuedAt: new Date(issued.issuedAt).toISOString(),
     total: issued.total,
     vatBreakdown: filed.vatBreakdown.map((v) => ({ rate: v.rate, base: v.base, tax: v.tax })),
+    lines: ticketLines,
     change,
     qr: filed.verificationUrl,
   };
@@ -440,6 +498,9 @@ async function fileImmediateSale(
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,
     vatBreakdown: priced.vatBreakdown.map((v) => ({ rate: v.rate, base: v.base, tax: v.tax })),
+    // The FILED line list (art. 7.1.e) straight from the price just filed, so the receipt's line list
+    // is the invoiced composition rather than the client basket (Finding 2).
+    lines: ticketLinesFrom(priced),
     change,
     qr: fiscal.verificationUrl ?? "",
   };

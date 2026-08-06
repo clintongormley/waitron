@@ -42,6 +42,8 @@ const saleResult: TillSaleResult = {
   issuedAt: "2026-08-05T10:00:00.000Z",
   total: "3.00",
   vatBreakdown: [{ rate: "21", base: "2.48", tax: "0.52" }],
+  // The FILED line list the ticket renders (server's composition), never the client basket.
+  lines: [{ descriptions: { "es-ES": "Café" }, quantity: "2", gross: "3.00" }],
   change: "2.00",
   qr: "https://example.test/vf?nif=B1&num=F-0001&fecha=05-08-2026&total=3.00",
 };
@@ -194,14 +196,43 @@ describe("till-app", () => {
       // below). A `expect.any(String)` here was satisfied by the old `crypto.randomUUID()` bug.
       workingOrderId,
     );
+    // A FRESH walk-up (never persisted) is filed straight from its lines — no pre-pay re-lock. Only a
+    // RETRIEVED/parked basket is synced first (see the retrieve→edit→pay test); syncing a walk-up here
+    // would try to update a working order the server has never seen.
+    expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
     const view = ticket(el)!;
     expect(view).not.toBeNull();
+    // The ticket renders the SERVER result (its `lines` are the filed composition), not a client basket.
     expect(view.result).toBe(saleResult);
     expect(view.issuer).toEqual({ venueName: "Bar Pepe", nif: "B12345678" });
-    // the ticket carries the line snapshot taken at pay time
-    expect(view.lines).toHaveLength(1);
-    expect(view.lines[0]!.product).toBe(cafe);
-    expect(view.lines[0]!.quantity).toBe("2");
+  });
+
+  it("the printed receipt line list comes from the SERVER result, not the client basket (Finding 2)", async () => {
+    // The client basket and the FILED lines deliberately DIVERGE: the store holds café×2, but the
+    // server's filed result reports a different composition (agua×3). The rendered ticket must show the
+    // FILED "Agua"/"3"/"6,00 €" — proof the receipt renders `result.lines`, never the mutable basket, so
+    // a local edit can never make the printed goods list disagree with the invoice.
+    const filed: TillSaleResult = {
+      ...saleResult,
+      total: "6.00",
+      lines: [{ descriptions: { "es-ES": "Agua" }, quantity: "3", gross: "6.00" }],
+    };
+    const norm = (s: string): string => s.replace(/[\u00A0\u202F]/g, " ");
+    const { el } = await mountApp({ recordSale: vi.fn().mockResolvedValue(filed) });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2"); // client basket — different from the filed lines
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "10" });
+    await flush(el);
+
+    const rows = ticket(el)!.shadowRoot!.querySelectorAll(".line");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.textContent).toContain("Agua");
+    expect(rows[0]!.textContent).toContain("3");
+    expect(norm(rows[0]!.textContent!)).toContain("6,00 €");
+    // The client basket's "Café" never reaches the receipt.
+    expect(ticket(el)!.shadowRoot!.textContent).not.toContain("Café");
   });
 
   it("confirm-payment: a CARD tender forwards intact (method, amount, externalRef) with the store's stable id", async () => {
@@ -298,6 +329,51 @@ describe("till-app", () => {
       [{ productId: "cafe", quantity: "2" }],
       { method: "cash", amount: "5" },
       "wo-1",
+    );
+  });
+
+  it("retrieve → edit → pay re-syncs the edited basket BEFORE paying, so the edit is not dropped (Finding 2)", async () => {
+    // 7c regression: the server's retrieved-order pay files from the STORED lock and IGNORES the sent
+    // basket, so an edit made after retrieve must be re-locked (`updateWorkingOrder`) BEFORE the pay or
+    // it is SILENTLY DROPPED from both the charge and the filed record. Retrieve wo-1 (café×2), add a
+    // second café, then pay: `updateWorkingOrder` must carry the EDITED composition and run BEFORE
+    // `recordSale`. Deleting the persisted-sync in `#onConfirmPayment` makes this fail (the edit is lost).
+    const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+    const recordSale = vi.fn().mockResolvedValue(saleResult);
+    const { el } = await mountApp({ updateWorkingOrder, recordSale });
+    const c = await toCounter(el);
+    const store = c.store;
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    expect(store.persisted).toBe(true); // a retrieved order is persisted server-side
+
+    store.addProduct(cafe, "1"); // the edit AFTER retrieve
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    // The edited composition was re-locked: café×2 (retrieved) + café×1 (the edit), under the order's id.
+    expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
+      lines: [
+        { productId: "cafe", quantity: "2" },
+        { productId: "cafe", quantity: "1" },
+      ],
+      label: "Mesa 4",
+    });
+    // recordSale files the SAME edited composition under the same id, and the sync ran FIRST — the
+    // server needs the lock updated before it files from it.
+    expect(recordSale).toHaveBeenCalledWith(
+      [
+        { productId: "cafe", quantity: "2" },
+        { productId: "cafe", quantity: "1" },
+      ],
+      { method: "cash", amount: "5" },
+      "wo-1",
+    );
+    expect(updateWorkingOrder.mock.invocationCallOrder[0]!).toBeLessThan(
+      recordSale.mock.invocationCallOrder[0]!,
     );
   });
 
@@ -894,8 +970,9 @@ describe("till-app", () => {
       expect(currentApi.collectOrder).toHaveBeenCalledWith(id, { method: "cash", amount: "5" });
       const view = ticket(el)!;
       expect(view).not.toBeNull();
+      // The ticket renders the SERVER collect result (its `lines` are the filed placed composition),
+      // not the local basket — a local edit between place and collect can't diverge the printed list.
       expect(view.result).toBe(saleResult);
-      expect(view.lines).toHaveLength(1);
     });
 
     it("a failed collect keeps the counter (collect stage) and the basket, showing a non-fatal error", async () => {

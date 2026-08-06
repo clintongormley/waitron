@@ -134,10 +134,9 @@ export class TillApp extends LitElement {
    * follow-up — see `#refreshPrepQueue`), so a prepay till never issues the request.
    */
   @state() private prepQueue: PrepQueueEntry[] = [];
-  /** The filed sale to print; set on a successful `recordSale`, read by the ticket view. */
+  /** The filed sale to print; set on a successful `recordSale`, read by the ticket view. The ticket's
+   * line list comes from THIS result's `lines` (the filed composition), never the client basket. */
   @state() private result?: TillSaleResult;
-  /** The basket lines snapshotted at pay time — the goods the ticket identifies (art. 7.1.e). */
-  @state() private ticketLines: readonly OrderLine[] = [];
   /**
    * The receipt (invoice) locale for the ticket, from `GET /api/till` — the language the legal
    * receipt renders in. Threaded to `till-ticket-view` SEPARATELY from the operator-UI `setLocale`,
@@ -233,8 +232,10 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * Settle the basket. The lines are snapshotted BEFORE the await so the ticket prints exactly what was
-   * rung up, and so a rejection can leave that same basket untouched on the counter.
+   * Settle the basket (Mode P). A persisted/retrieved basket is SYNCED before paying so a local edit
+   * takes effect; a fresh walk-up is filed straight from its lines. The ticket's line list comes from
+   * the server RESULT (`result.lines`, the filed composition), so nothing is snapshotted from the
+   * client basket here — a rejection simply leaves that same basket untouched on the counter.
    */
   async #onConfirmPayment(event: Event): Promise<void> {
     // Single-flight: a second confirm-payment fired before the first sale settles is a no-op, so the
@@ -243,22 +244,27 @@ export class TillApp extends LitElement {
     if (this.submitting) return;
     this.submitting = true;
     const tender = (event as CustomEvent<ConfirmPaymentDetail>).detail;
-    // `store.lines` already returns a fresh defensive copy, so this snapshot needs no second spread.
-    const lines = this.#store.lines;
+    // The store's STABLE working-order id — its own client-minted uuid for a walk-up, or a retrieved
+    // order's id after `loadFrom` adopted it (see `#onRetrieveOrder`). Sending it (never a fresh uuid)
+    // is the pay-idempotency key (spec §3): a lost-response re-tap replays against the same row rather
+    // than filing a second chained record, and paying a RETRIEVED order settles under that order's own
+    // id instead of orphaning it `open`. `#onParkOrder` sends the same `#store.id`.
+    const id = this.#store.id;
+    const lines = this.#currentSaleLines();
+    const label = this.#store.label;
+    const persisted = this.#store.persisted;
     this.errorKey = undefined;
     try {
-      this.result = await this.api.recordSale(
-        lines.map((line) => ({ productId: line.product.id, quantity: line.quantity })),
-        tender,
-        // The store's STABLE working-order id — its own client-minted uuid for a walk-up, or a
-        // retrieved order's id after `loadFrom` adopted it (see `#onRetrieveOrder`). Sending it (never
-        // a fresh uuid) is the pay-idempotency key (spec §3): a lost-response re-tap replays against
-        // the same row rather than filing a second chained record, and paying a RETRIEVED order
-        // settles under that order's own id instead of orphaning it `open`. `#onParkOrder` sends the
-        // same `#store.id`.
-        this.#store.id,
-      );
-      this.ticketLines = lines;
+      // A PERSISTED (retrieved/parked) basket must be re-synced before paying: the server's
+      // retrieved-order pay path files from the STORED lock and IGNORES `req.lines`, so an edit made
+      // after retrieve would be SILENTLY DROPPED from both the charge and the filed record without this
+      // (7b→7c regression). `updateWorkingOrder` re-locks the current composition at edit time, exactly
+      // as `#onPlaceOrder`'s persisted-sync does, so the edit is what gets filed. A fresh walk-up (not
+      // persisted) needs no sync — the server creates its order from the sent `lines`.
+      if (persisted) {
+        await this.api.updateWorkingOrder(id, { lines, label });
+      }
+      this.result = await this.api.recordSale(lines, tender, id);
       this.screen = "ticket";
       // A settled PARKED order must drop off the cross-till held list immediately — mirror the
       // park/retrieve/discard refresh (the four moments the node's open set changes). Without this a
@@ -333,20 +339,20 @@ export class TillApp extends LitElement {
    * deferred invoice, Mode T files immediate — `collectOrder`'s own dispatch, unreached by this call.
    * Reuses `submitting`, the SAME single-flight guard `#onConfirmPayment` uses — both are terminal
    * fiscal-file moments (CLAUDE.md §5's double-file safety) — so a re-fired `collect-order` before the
-   * first settles is a no-op exactly like a re-fired `confirm-payment`. The lines are snapshotted for
-   * the ticket exactly like a walk-up pay; the basket itself is left untouched either way (like
-   * `#onConfirmPayment`), so `#onNewSale` remains the one place that clears it and resets `stage`.
+   * first settles is a no-op exactly like a re-fired `confirm-payment`. Collect files the order's FROZEN
+   * placed composition (never `req.lines`), and the ticket's line list comes from that filed result
+   * (`result.lines`) — so a local edit made after placing does NOT reach the receipt, which shows the
+   * invoiced goods. The basket itself is left untouched either way (like `#onConfirmPayment`), so
+   * `#onNewSale` remains the one place that clears it and resets `stage`.
    */
   async #onCollectOrder(event: Event): Promise<void> {
     if (this.submitting) return;
     this.submitting = true;
     const tender = (event as CustomEvent<ConfirmPaymentDetail>).detail;
-    const lines = this.#store.lines;
     const id = this.#store.id;
     this.errorKey = undefined;
     try {
       this.result = await this.api.collectOrder(id, tender);
-      this.ticketLines = lines;
       this.screen = "ticket";
     } catch {
       this.errorKey = "sale.error";
@@ -549,7 +555,6 @@ export class TillApp extends LitElement {
         return html`<till-ticket-view
           .result=${this.result}
           .issuer=${this.issuer}
-          .lines=${this.ticketLines}
           .invoiceLocale=${this.invoiceLocale}
         ></till-ticket-view>`;
     }

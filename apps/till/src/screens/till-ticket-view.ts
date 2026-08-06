@@ -5,16 +5,24 @@ import { baseStyles } from "@waitron/ui";
 import { addDecimal, decimal } from "@waitron/shared";
 import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
-import { productName } from "../widgets/product-name.js";
-import { lineGross, quantityLabel } from "../state/order-line.js";
 import { qrSvg } from "../qr.js";
 import type { TillSaleResult } from "../api/client.js";
-import type { OrderLine } from "../state/working-order.js";
 
 /** The receipt issuer's legally-printed identity (RD 1619/2012 art. 7.1.d): venue name + NIF. */
 export interface TicketIssuer {
   venueName: string;
   nif: string;
+}
+
+/**
+ * A filed line's goods name in the invoice locale (art. 7.1.e), resolved from the line's snapshotted
+ * `descriptions` map exactly as `productName` resolves a product's — the invoice locale, then any
+ * description the line carries, degrading to "" only for an empty map (a catalogue defect that still
+ * prints something). The line comes from the SERVER's filed composition, so this reads its map rather
+ * than a `TillProduct`.
+ */
+function lineName(descriptions: Record<string, string>, locale: string): string {
+  return descriptions[locale] ?? Object.values(descriptions)[0] ?? "";
 }
 
 /**
@@ -184,8 +192,6 @@ export class TillTicketView extends LitElement {
   @property({ attribute: false }) result!: TillSaleResult;
   /** The issuer identity legally printed on the ticket — from `GET /api/till` (`venueName` + `nif`). */
   @property({ attribute: false }) issuer!: TicketIssuer;
-  /** The basket that was rung up — the goods this ticket identifies (art. 7.1.e). */
-  @property({ attribute: false }) lines!: OrderLine[];
   /**
    * The locale the receipt is RENDERED in — the money, date and product names (see the class doc's
    * INVOICE LOCALE note). Fed from the server till config by the parent (`GET /api/till`), NEVER the
@@ -221,20 +227,18 @@ export class TillTicketView extends LitElement {
         </div>
 
         <ul class="lines">
-          ${this.lines.map(
-            // LINE-GROSS SOURCE (slice-1 assumption, §1). Each per-line gross is computed CLIENT-side
-            // from the login-time `TillProduct.unitPrice` (via `lineGross`), NOT read from the sale
-            // response — `POST /api/sales` returns only `total` + `vatBreakdown`, no per-line amounts.
-            // In slice 1 the catalogue is fixed at provisioning and cannot be edited mid-session, so
-            // `unitPrice` here is exactly what the server re-priced with and Σ(line grosses) == the
-            // server `total`. A future mid-session price change would break that identity: the server
-            // would then have to return priced lines for the receipt to stay authoritative (backlog:
-            // Counter POS follow-ups → "return priced lines from POST /api/sales").
+          ${r.lines.map(
+            // LINE-LIST SOURCE. Each line is the FILED composition returned by the server
+            // (`TillSaleResult.lines`) — name (invoice locale), display quantity and the GROSS the line
+            // was filed at — NOT the mutable client basket. So the printed goods list can never diverge
+            // from the invoice, even after a local edit between place and collect, or a retrieved-order
+            // edit before pay (Finding 2 — this replaced the earlier client-side `lineGross` render that
+            // assumed a fixed, uneditable catalogue). Σ(line.gross) == r.total by construction.
             (line) => html`
               <li class="line">
-                <span class="line-name">${productName(line.product, locale)}</span>
-                <span class="line-qty">${quantityLabel(line)}</span>
-                <span class="line-gross">${formatMoney(lineGross(line), locale)}</span>
+                <span class="line-name">${lineName(line.descriptions, locale)}</span>
+                <span class="line-qty">${line.quantity}</span>
+                <span class="line-gross">${formatMoney(line.gross, locale)}</span>
               </li>
             `,
           )}
