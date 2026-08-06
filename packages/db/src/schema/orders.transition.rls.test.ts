@@ -170,6 +170,24 @@ describe("working_orders state machine (enforce_transition)", () => {
     expect(row!.status).toBe("abandoned");
   });
 
+  it("permits open → settled directly (the Mode-P walk-up, never entering placed)", async () => {
+    // The #60 cash-sale path (design §3, §5): a walk-up order settles in one instant without ever
+    // being placed. open → settled is an allowed edge in its own right, so this must NOT require a
+    // placed intermediate. settled_at is set alongside status to satisfy the settled_at biconditional.
+    const id = await open();
+    await asApp((tx) =>
+      tx.execute(
+        sql`update working_orders set status = 'settled', settled_at = now() where id = ${id}`,
+      ),
+    );
+    const [row] = await asApp((tx) =>
+      tx
+        .execute<{ status: string }>(sql`select status from working_orders where id = ${id}`)
+        .then((r) => r.rows),
+    );
+    expect(row!.status).toBe("settled");
+  });
+
   it("rejects every transition out of settled/abandoned", async () => {
     const id = await open();
     await asApp((tx) =>
