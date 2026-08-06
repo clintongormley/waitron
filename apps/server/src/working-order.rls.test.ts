@@ -15,7 +15,8 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, verifyAmendmentChain, withTenant } from "@waitron/db";
+import type { VerifiableAmendment } from "@waitron/db";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -25,7 +26,14 @@ import {
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import type { TillConfig } from "./till-config.js";
-import { getHeldOrder, listHeldOrders, parkOrder } from "./working-order.js";
+import {
+  cancelPlacedOrder,
+  getHeldOrder,
+  listHeldOrders,
+  parkOrder,
+  placeOrder,
+  updateHeldOrder,
+} from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
 import { startRealPostgres } from "./testing/postgres.js";
 import "./errors.js";
@@ -37,6 +45,12 @@ import "./errors.js";
 // backend via `suite.pg.connect()`, and `startRealPostgres` THROWS rather than skipping when Docker is
 // absent, so a vanished suite fails loudly instead of reporting a green that proves nothing.
 const LOCALE = "es-ES";
+
+// The accountable operator every placing/cancel amendment is attributed to. `order_amendments.actor_id`
+// is a plain uuid with NO FK (the sale_voids.voided_by shape), so a fixed fixture uuid stands in for
+// the session's `personId` the till supplies in production — the value is only ever compared, never
+// joined.
+const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
 const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: 180_000 });
 
@@ -238,6 +252,60 @@ async function orderState(id: string): Promise<{ status: string; settledAtSet: b
     select status, (settled_at is not null) as settled from working_orders where id = ${id}
   `);
   return { status: rows[0]!.status, settledAtSet: rows[0]!.settled };
+}
+
+/**
+ * This order's whole amendment chain, read back as verifiable rows in chain-position order, as the
+ * owner (bypasses RLS — a read-back for verification, not the isolation assertion). `event_at` is
+ * projected to a UTC ISO instant with a millisecond field (always `.000`, the stored value being
+ * whole-second-truncated) so `verifyAmendmentChain`'s `Date.parse` sees exactly the instant the stored
+ * hash committed. Ported verbatim from `append-order-amendment.rls.test.ts`'s own `readAmendments`.
+ */
+async function readAmendments(id: string): Promise<VerifiableAmendment[]> {
+  // An inline row TYPE LITERAL, not `execute<VerifiableAmendment>`: `execute`'s generic is constrained
+  // to `Record<string, unknown>`, which an INTERFACE does not satisfy while a structurally-identical
+  // type literal does. The literal's fields mirror VerifiableAmendment exactly.
+  const { rows } = await suite.admin.execute<{
+    sequenceNo: number;
+    workingOrderId: string;
+    kind: "order_placed" | "order_cancelled";
+    actorId: string;
+    reason: string | null;
+    capturedByTillId: string;
+    capturedByNodeId: string;
+    eventAt: string;
+    eventOffsetMinutes: number;
+    entryHash: string;
+    prevEntryHash: string | null;
+    isFirstEntry: boolean;
+  }>(sql`
+    select
+      sequence_no as "sequenceNo",
+      working_order_id as "workingOrderId",
+      kind,
+      actor_id as "actorId",
+      reason,
+      captured_by_till_id as "capturedByTillId",
+      captured_by_node_id as "capturedByNodeId",
+      to_char(event_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "eventAt",
+      event_offset_minutes as "eventOffsetMinutes",
+      entry_hash as "entryHash",
+      prev_entry_hash as "prevEntryHash",
+      is_first_entry as "isFirstEntry"
+    from order_amendments
+    where working_order_id = ${id}
+    order by sequence_no
+  `);
+  return rows;
+}
+
+/** The prep queue row's state for this order, or null when placing enqueued none — owner read. Placing
+ *  (= send-to-prep) enqueues exactly one `queued` row (design §5); a walk-up never places, so none. */
+async function prepStateOf(id: string): Promise<string | null> {
+  const { rows } = await suite.admin.execute<{ state: string }>(sql`
+    select state from order_prep where working_order_id = ${id}
+  `);
+  return rows[0]?.state ?? null;
 }
 
 /**
@@ -827,5 +895,219 @@ describe("cross-till end-to-end", () => {
 
     expect((await listHeldOrders({ db: suite.admin }, nodeA)).map((o) => o.id)).toContain(orderId);
     expect(await listHeldOrders({ db: suite.admin }, nodeB)).toEqual([]);
+  });
+});
+
+// Placing (open → placed) opens the art. 29.2.j amendment log with its `order_placed` genesis and
+// freezes composition (for free — a placed order's lines are already frozen by require_open_parent);
+// cancelling a placed order (placed → abandoned) appends an `order_cancelled` amendment. Real Postgres
+// because the amendment writes run as `app_user` under FORCE RLS against an append-only, REVOKE-guarded
+// table — exactly what PGlite's superuser connection cannot exercise (CLAUDE.md §4). This slice files
+// NO fiscal doc at placing (Mode T / generic); Mode-I's deferred file and the mode dispatch are Task 8.
+describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
+  it("placeOrder: open → placed, freezes composition, opens the log with a genesis order_placed entry", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+
+    expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
+
+    // Composition freeze: a line write on the now-placed order is rejected. `updateHeldOrder` locks the
+    // row, reads status = 'placed' and refuses with `working_order.not_open` (its own app check); the
+    // `require_open_parent` trigger is the DB backstop underneath — placing freezes for free (design §3).
+    await expect(
+      updateHeldOrder({ db: suite.admin }, cfg, id, {
+        lines: [{ productId: cafe.id, quantity: "2" }],
+      }),
+    ).rejects.toMatchObject({ code: "working_order.not_open" });
+
+    // The log opened: exactly one amendment, the genesis `order_placed` (seq 1, isFirstEntry, no
+    // contest reason), attributed to the operator, and the chain verifies against its stored hash.
+    const rows = await readAmendments(id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      kind: "order_placed",
+      sequenceNo: 1,
+      isFirstEntry: true,
+      actorId: OPERATOR,
+      reason: null,
+    });
+    expect(verifyAmendmentChain(rows)).toEqual({ ok: true });
+
+    // send-to-prep = placing enqueued the node-scoped prep row at `queued` (design §5) — the row Task 9's
+    // prep routes advance.
+    expect(await prepStateOf(id)).toBe("queued");
+  });
+
+  it("placeOrder refuses a non-open order — a re-place of a placed one, and an absent id — writing no second log", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+
+    // Placing is NOT idempotent in Task 7 (Mode-I double-place idempotency arrives with the mode
+    // dispatch, Task 8): a second place of the now-`placed` order is refused with
+    // `working_order.not_open` (wrong status), before any transition or amendment — so the log still
+    // holds exactly its one genesis entry.
+    await expect(
+      placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR),
+    ).rejects.toMatchObject({ code: "working_order.not_open", params: { workingOrderId: id } });
+    expect(await readAmendments(id)).toHaveLength(1);
+
+    // An ABSENT id — the FOR UPDATE locks nothing — is the same fail-closed code (the undefined branch),
+    // and opens no log.
+    const missing = randomUUID();
+    await expect(
+      placeOrder({ db: suite.admin, backend, clock }, cfg, missing, OPERATOR),
+    ).rejects.toMatchObject({
+      code: "working_order.not_open",
+      params: { workingOrderId: missing },
+    });
+    expect(await readAmendments(missing)).toHaveLength(0);
+  });
+
+  it("cancelPlacedOrder: placed → abandoned, appends an order_cancelled amendment with the reason", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+
+    await cancelPlacedOrder(
+      { db: suite.admin, backend, clock },
+      cfg,
+      id,
+      "customer left",
+      OPERATOR,
+    );
+
+    expect(await orderState(id)).toEqual({ status: "abandoned", settledAtSet: false });
+
+    const rows = await readAmendments(id);
+    expect(rows.map((r) => r.kind)).toEqual(["order_placed", "order_cancelled"]);
+    expect(rows[1]).toMatchObject({
+      sequenceNo: 2,
+      kind: "order_cancelled",
+      reason: "customer left",
+      actorId: OPERATOR,
+      prevEntryHash: rows[0]!.entryHash,
+    });
+    // A genuine 2-entry chain — the cancel links to the genesis's stored hash and re-verifies end to end.
+    expect(verifyAmendmentChain(rows)).toEqual({ ok: true });
+  });
+
+  it("cancelPlacedOrder refuses an empty or whitespace reason (working_order.reason_required), changing nothing", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+
+    // `order_amendments` carries NO DB CHECK forcing a reason on `order_cancelled` (the column is
+    // nullable — null is the genesis's own legitimate value), so the APP contract is the only thing
+    // stopping a reasonless cancel (7c carry-forward from Task 3's review). An empty string AND a
+    // whitespace-only reason are both refused, with `working_order.reason_required` — NOT `not_placed`,
+    // because the order genuinely IS placed here (a false label is the §1 defect class).
+    for (const reason of ["", "   "]) {
+      await expect(
+        cancelPlacedOrder({ db: suite.admin, backend, clock }, cfg, id, reason, OPERATOR),
+      ).rejects.toMatchObject({
+        code: "working_order.reason_required",
+        params: { workingOrderId: id },
+      });
+    }
+
+    // The refusal is total: the order stays `placed` (no transition) and only the genesis entry exists
+    // (no reasonless `order_cancelled` was written). Deleting the reason guard makes this case SUCCEED —
+    // the order abandons and a reasonless amendment appends — which is how the guard is proven by
+    // deletion (CLAUDE.md §4): these two assertions flip to failing.
+    expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
+    expect((await readAmendments(id)).map((r) => r.kind)).toEqual(["order_placed"]);
+  });
+
+  it("cancelPlacedOrder refuses a non-placed order — an open one, a settled one, and an absent id", async () => {
+    const { cfg, cafe } = await setupVenue();
+
+    // An OPEN (parked, never placed) order — the wrong-status branch. A non-empty reason, so the reason
+    // guard passes and the STATE check is what refuses. It reports `not_placed`, not `not_open`: cancel
+    // is a placed-order operation, and an open order is edited/discarded via update/abandon instead.
+    const openId = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id: openId,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await expect(
+      cancelPlacedOrder({ db: suite.admin, backend, clock }, cfg, openId, "changed mind", OPERATOR),
+    ).rejects.toMatchObject({
+      code: "working_order.not_placed",
+      params: { workingOrderId: openId },
+    });
+    // The refused open order opened NO amendment log.
+    expect(await readAmendments(openId)).toHaveLength(0);
+
+    // A SETTLED (walk-up) order — also not placed.
+    const settledId = randomUUID();
+    await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id: settledId,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+      tender: { method: "cash", amount: "5.00" },
+    });
+    await expect(
+      cancelPlacedOrder(
+        { db: suite.admin, backend, clock },
+        cfg,
+        settledId,
+        "changed mind",
+        OPERATOR,
+      ),
+    ).rejects.toMatchObject({
+      code: "working_order.not_placed",
+      params: { workingOrderId: settledId },
+    });
+
+    // An ABSENT id — the FOR UPDATE locks nothing (the undefined branch), same fail-closed code.
+    const missing = randomUUID();
+    await expect(
+      cancelPlacedOrder(
+        { db: suite.admin, backend, clock },
+        cfg,
+        missing,
+        "changed mind",
+        OPERATOR,
+      ),
+    ).rejects.toMatchObject({
+      code: "working_order.not_placed",
+      params: { workingOrderId: missing },
+    });
+  });
+
+  it("a pure walk-up never enters placed and opens no amendment log", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+
+    // A walk-up settles open → settled in one transaction (till-sale.ts), never passing through
+    // `placed`, so placing's log never opens and no prep row is enqueued (design §3 — a walk-up
+    // finalises, pays and issues in one instant, with no placing gap).
+    await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+      tender: { method: "cash", amount: "5.00" },
+    });
+
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await readAmendments(id)).toHaveLength(0); // no placing → no log (design §3)
+    expect(await prepStateOf(id)).toBeNull();
   });
 });

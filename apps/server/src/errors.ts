@@ -281,5 +281,31 @@ declare module "@waitron/shared" {
      * this host throws it — the same note `working_order.not_found` and `sale.unknown_product` carry.
      */
     "working_order.not_open": { workingOrderId: string };
+    /**
+     * A working order this caller tried to CANCEL or AMEND is not `placed` — it names one still `open`
+     * (edit it silently via updateHeldOrder instead), one already `settled`/`abandoned`, or none at all
+     * (absent, or another tenant's, RLS-hidden). All report THIS one code, the same fail-closed shape
+     * `working_order.not_open` uses for the modify side. Mapped to 409 (the state forbids the operation).
+     * `working_order.*`, not `server.*`, and destined for @waitron/core once a package other than this
+     * host throws it — the note `working_order.not_open` carries.
+     */
+    "working_order.not_placed": { workingOrderId: string };
+    /**
+     * A logged amendment (a cancel, art. 29.2.j) was requested with no reason — the field was absent,
+     * empty, or whitespace-only. The app enforces it because `order_amendments` carries NO DB CHECK
+     * forcing a reason on `order_cancelled` (that column is nullable, null being the genesis
+     * `order_placed`'s legitimate value — see the schema comment), so nothing but this guard stops a
+     * reasonless cancel from writing an accountability-empty entry. Its OWN code, deliberately NOT
+     * `working_order.not_placed`: at the point this fires the order genuinely IS placed, so reporting
+     * "not placed" would be a false label (CLAUDE.md §1). Carried through 7c's carry-forward from
+     * Task 3's review, which required the reason-non-null contract be enforced by the app.
+     *
+     * A client error (the request omitted a required field), distinct from `not_placed`'s state
+     * conflict — a 400 to that code's 409, mapped in the route layer (Task 8+). `workingOrderId` is
+     * echoed and qualified for the same reasons the family's other codes give (a caller-supplied uuid,
+     * not a secret). `working_order.*`, not `server.*`, and destined for `@waitron/core` once a package
+     * other than this host throws it — the note `working_order.not_open` carries.
+     */
+    "working_order.reason_required": { workingOrderId: string };
   }
 }

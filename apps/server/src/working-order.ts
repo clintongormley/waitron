@@ -6,7 +6,9 @@ import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
   allocateOrderNumber,
+  appendOrderAmendment,
   asAppUser,
+  orderPrep,
   withTenant,
   workingOrderLines,
   workingOrders,
@@ -14,6 +16,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { listAvailableProducts, priceBasket } from "@waitron/catalogue";
 import type { TillConfig } from "./till-config.js";
+import type { TillSaleDeps } from "./till-sale.js";
 
 export interface WorkingOrderDeps {
   db: Database;
@@ -437,5 +440,177 @@ export async function abandonHeldOrder(
     if (updated.length === 0) {
       throw new AppError("working_order.not_open", { workingOrderId: id });
     }
+  });
+}
+
+/**
+ * The result of placing an order. In Task 7 (Mode T / generic placing) an order goes `open → placed`
+ * and NO fiscal document is filed, so only `id` and `status: "placed"` are returned. The optional
+ * fiscal fields are the shape Task 8's mode dispatch fills for the modes that DO file at placing:
+ * Mode P (prepay) pays + issues → `settled`, and Mode I (invoice-first) issues the deferred invoice.
+ * Kept on this interface now so the placing surface does not change shape when those modes land.
+ */
+export interface PlaceOrderResult {
+  id: string;
+  status: "placed" | "settled";
+  invoiceNumber?: string;
+  issuedAt?: string;
+  total?: string;
+  qr?: string;
+  vatBreakdown?: { rate: string; base: string; tax: string }[];
+}
+
+/**
+ * Place a working order (spec §3): `open → placed`, which FREEZES its composition and OPENS the
+ * art. 29.2.j amendment log with an `order_placed` genesis entry — all in ONE `withTenant`/`asAppUser`
+ * transaction, so the transition, the genesis amendment and the prep enqueue commit as one unit (or
+ * roll back together, leaving the order open and un-logged).
+ *
+ * The freeze is FREE: once the row is `placed`, `working_orders_enforce_transition` rejects a
+ * non-status update of it and `working_order_lines_require_open_parent` rejects any line write under
+ * it, so the stored composition can no longer be silently rewritten — a further edit must become a
+ * logged amendment (the future correction slice), not a line rewrite. `updateHeldOrder` also refuses
+ * a placed order at the app layer with `working_order.not_open`.
+ *
+ * This is the Mode-T / generic placing: it files NO fiscal document here (design §3's state-machine
+ * table). Task 8 adds the mode dispatch — Mode I files `recordSale` deferred and Mode P files + settles
+ * — which is why `deps` is the fuller `TillSaleDeps` (its `backend` is unused in Task 7). The order is
+ * locked `for update` and its status read off the locked row: a non-`open` order (already
+ * placed/settled/abandoned, or absent / another tenant's, RLS-hidden) fails closed with
+ * `working_order.not_open`, the same shape `payWorkingOrder`/`updateHeldOrder` use for the modify side.
+ * Placing is NOT idempotent in Task 7 — Mode-I double-place idempotency (via `sales_working_order_id_key`)
+ * arrives with the mode dispatch.
+ *
+ * `operatorId` is REQUIRED: `order_amendments.actor_id` is NOT NULL and the genesis entry's
+ * accountability rests on a real operator (the session's `personId`, wired by the till), so there is
+ * no system sentinel to fall back to. The amendment's local wall-clock is `deps.clock.now()` — the
+ * venue's trusted clock, the same source `recordSale` reads for a sale's `issued_at`/offset.
+ */
+export async function placeOrder(
+  deps: TillSaleDeps,
+  cfg: TillConfig,
+  id: string,
+  operatorId: string,
+): Promise<PlaceOrderResult> {
+  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+
+    // Lock the order for the life of the tx and read its status off the locked copy. Absent (nothing
+    // to lock) or not-open → `working_order.not_open`; the enforce_transition trigger is the DB
+    // backstop if this app check is ever wrong.
+    const [locked] = await tx
+      .select({ status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id))
+      .for("update");
+    if (locked === undefined || locked.status !== "open") {
+      throw new AppError("working_order.not_open", { workingOrderId: id });
+    }
+
+    // Mode T / generic placing files no fiscal document here (design §3). Mode I files `recordSale`
+    // deferred and Mode P files + settles — both added in Task 8's mode dispatch, in this same spot.
+    await tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id));
+
+    // Open the amendment log with its `order_placed` genesis. `appendOrderAmendment` owns the
+    // parent-row-lock serialisation, the per-order sequence and the tamper-evident hash (Task 3); the
+    // genesis carries NO contest reason (a placement has none). The venue's trusted-clock instant +
+    // wall offset are hashed and stored so the entry reprints in venue time (#52).
+    const now = deps.clock.now();
+    await appendOrderAmendment(tx, {
+      tenantId: cfg.tenantId,
+      workingOrderId: id,
+      kind: "order_placed",
+      actorId: operatorId,
+      reason: null,
+      capturedByTillId: cfg.tillId,
+      capturedByNodeId: cfg.nodeId,
+      eventAt: now.instant,
+      eventOffsetMinutes: now.offsetMinutes,
+    });
+
+    // send-to-prep = placing enqueues the node-scoped prep row at `queued` (design §5); the cook's prep
+    // routes (Task 9) advance it queued → preparing → ready → collected. One row per order (the PK is
+    // the order), and prep advances even after the order is fiscally frozen, so it lives in its own
+    // MUTABLE table rather than a `working_orders` column.
+    await tx.insert(orderPrep).values({
+      tenantId: cfg.tenantId,
+      workingOrderId: id,
+      nodeId: cfg.nodeId,
+      state: "queued",
+    });
+
+    return { id, status: "placed" };
+  });
+}
+
+/**
+ * Cancel a PLACED working order (spec §4): `placed → abandoned`, appending an `order_cancelled`
+ * amendment that carries the operator's reason — both in ONE `withTenant`/`asAppUser` transaction, so
+ * the transition and the logged amendment commit as one unit (or roll back together).
+ *
+ * The reason is REQUIRED and non-empty, enforced HERE by the app: `order_amendments.reason` is
+ * nullable (null is the `order_placed` genesis's own legitimate value) and no DB CHECK forces a reason
+ * on `order_cancelled`, so this guard is the ONLY thing stopping a reasonless cancel from writing an
+ * accountability-empty entry (art. 29.2.j — the reason is the contestable content; 7c carry-forward
+ * from Task 3's review). An absent, empty or whitespace-only reason is refused with
+ * `working_order.reason_required` — deliberately its OWN code, not `working_order.not_placed`: at this
+ * point the order genuinely IS placed, so reporting "not placed" would be a false label (CLAUDE.md §1).
+ * The guard runs BEFORE any database work, so a reasonless cancel neither transitions the order nor
+ * touches the log.
+ *
+ * The order is locked `for update` and its status read off the locked row: a non-`placed` order (still
+ * `open` — edit it via `updateHeldOrder` or discard it via `abandonHeldOrder` instead — or already
+ * `settled`/`abandoned`, or absent / another tenant's, RLS-hidden) fails closed with
+ * `working_order.not_placed`, the fail-closed shape `working_order.not_open` uses for the modify side.
+ *
+ * `deps` is `TillSaleDeps` so the venue's trusted clock is available for the amendment's local
+ * wall-clock (its `backend` is unused), keeping the dep shape consistent with `placeOrder` — cancel is
+ * a till operation beside place and pay. `operatorId` is the accountable actor, required for the same
+ * reason `placeOrder`'s is.
+ */
+export async function cancelPlacedOrder(
+  deps: TillSaleDeps,
+  cfg: TillConfig,
+  id: string,
+  reason: string,
+  operatorId: string,
+): Promise<void> {
+  // Refused before any database work: a cancel with no reason is not a loggable amendment (its reason
+  // is the accountable content), so an empty/whitespace reason neither transitions the order nor
+  // appends a reasonless entry. Its own code — the order IS placed, so `not_placed` would be false (§1).
+  if (reason.trim() === "") {
+    throw new AppError("working_order.reason_required", { workingOrderId: id });
+  }
+
+  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+
+    const [locked] = await tx
+      .select({ status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id))
+      .for("update");
+    if (locked === undefined || locked.status !== "placed") {
+      throw new AppError("working_order.not_placed", { workingOrderId: id });
+    }
+
+    // Terminal transition `placed → abandoned` (enforce_transition permits it; no `settled_at`, which
+    // the biconditional requires stay NULL for a non-settled status).
+    await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
+
+    // Append the `order_cancelled` amendment — the cancel is itself a logged amendment (design §4),
+    // carrying the operator's reason, linked to the genesis via `appendOrderAmendment`'s per-order hash.
+    const now = deps.clock.now();
+    await appendOrderAmendment(tx, {
+      tenantId: cfg.tenantId,
+      workingOrderId: id,
+      kind: "order_cancelled",
+      actorId: operatorId,
+      reason,
+      capturedByTillId: cfg.tillId,
+      capturedByNodeId: cfg.nodeId,
+      eventAt: now.instant,
+      eventOffsetMinutes: now.offsetMinutes,
+    });
   });
 }
