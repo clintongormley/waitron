@@ -329,6 +329,39 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     wait — already noted under the #33 SIF follow-ups), and **tips-on-card** wiring. A separate slice;
     the hardware choice (SumUp Solo vs Stripe Terminal) is itself open, and `packages/payments-stripe`
     already carries the provider adapters.
+  - **Bank datáfono (Redsys / TPV-PC) — a SECOND topology, not "the same shape" as the cloud readers
+    (investigation, 2026-08-06).** A bank-branded datáfono in Spain almost always routes through
+    **Redsys** (the network the major Spanish banks share), so a single Redsys adapter would in
+    principle integrate terminals across many banks at once — the strategic upside, and why a bank's
+    own terminal is reachable at all. Two caveats to "support Redsys → every bank datáfono works":
+    **most, not all** Spanish acquiring runs on Redsys (Comercia/Worldline, Adyen and bank-specific
+    stacks exist — an *inference*, not source-confirmed here), and each venue's terminal only
+    integrates once its **acquiring bank enables the integrated mode and issues the merchant
+    credentials** (merchant code + terminal id + merchant key), so it is contracted per merchant, not
+    a blanket unlock. **The engineering catch the deli-hardware design understates:** the integrated
+    Redsys product is **"TPV-PC" (TPVpc)**, a **USB-cable-attached local device** — the till software
+    talks to a terminal plugged into the counter and the *terminal* holds the line to Redsys. That is
+    the OPPOSITE topology to Stripe/SumUp/Square, which our `PaymentProvider` / `provider.collect` seam
+    assumes: our *server* makes an HTTPS call out to the processor's *cloud*, which relays to the
+    reader. So [the deli-hardware design](superpowers/specs/2026-07-30-deli-hardware-design.md) §8's
+    "Adyen or **Redsys** later on the same shape" is optimistic for the USB case — the
+    `PaymentProvider` **interface** (collect → outcome-as-data) can stay, but the **implementation** is
+    a local-device driver that must run **till-side** (where the cable is), not on `apps/server`, a
+    local agent/bridge no cloud adapter needs. And unlike Stripe/SumUp, TPV-PC's integration spec is
+    obtained **from the acquiring bank on request** (not openly published); real integrations go
+    through prebuilt connectors (Odoo/Sage/QFgest each ship a TPVpc module). Integrated datáfonos *can*
+    also connect over the **local network (ethernet/wifi)**; the classic Redsys TPV-PC these sources
+    describe is **USB**, matching an in-person sighting of one wired to a till. **Not scoped** — its
+    own investigation/spec if pursued, *after* the Stripe integrated slice; the Stripe/SumUp cloud
+    readers stay the first vendors. Sources (read 2026-08-06): TPV-PC connects by USB, amount pushed
+    automatically, results/refunds return to the POS —
+    [Odoo `edyma_pos_dataphone`](https://apps.odoo.com/apps/modules/18.0/edyma_pos_dataphone) and
+    [tpvnorte "cómo conectar el datáfono al TPV"](https://tpvnorte.com/tpv/como-conectar-el-datafono-al-tpv/)
+    (cable USB/serial vs. local-network vs. software-integrated); module integration —
+    [QFgest TPV-PC](https://www.qfgest.net/product/modulo-de-integracion-con-tpv-pc-de-redsys/) and
+    [Sage 50 TPVpc](https://communityhub.sage.com/es/sage-50/f/discusion-general/225898/configurar-tpvpc-redsys-pinpads);
+    Redsys network / Android POS / TPV-Virtual —
+    [redsys.es products](https://redsys.es/en/products-and-services).
   - **Offline-first store-and-forward.** The till needs the server reachable; there is no local queue
     that rings while disconnected and forwards later. It belongs with the app-level sync subsystem
     (the `sync_log` design), not the till alone.
