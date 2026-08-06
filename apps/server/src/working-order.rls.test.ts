@@ -1245,6 +1245,55 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await saleCount(id)).toBe(1);
   });
 
+  it("Mode I: a card tender at collect records exactly one captured payment linked to the sale; cash records none", async () => {
+    const { cfg, cafe } = await modeVenue("invoice_first");
+
+    // CARD collect: the invoice issued deferred at placing, then a manual-card ("datáfono") tender at
+    // collect. The card charges the EXACT invoice total on the separate terminal — no change.
+    const cardId = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id: cardId,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, cardId, OPERATOR);
+    const collected = await collectOrder({ db: suite.admin, backend, clock }, cfg, {
+      id: cardId,
+      lines: [],
+      tender: { method: "card", amount: "1.50", externalRef: "OP-INV-1" },
+    });
+    expect(collected.change).toBe("0.00");
+    expect(await orderState(cardId)).toEqual({ status: "settled", settledAtSet: true });
+
+    // The card tender AND a captured manual `payments` row linked to the settled sale — the #62
+    // side-write, now symmetric with the immediate card paths. Deleting the card branch in
+    // `collectOrder` makes `paymentCount`/`paymentsFor` fail here (the invoice-first card collect would
+    // become invisible to reconciliation), the regression this fix closes.
+    expect(await tendersFor(cardId)).toEqual([{ method: "card", amount: "1.50" }]);
+    expect(await paymentCount(cardId)).toBe(1);
+    expect(await paymentsFor(cardId)).toEqual([
+      { provider: "manual", state: "captured", amount: "1.50", linkedToSale: true },
+    ]);
+    // Still exactly ONE sale + ONE registro — the ledger row rides ALONGSIDE the settlement, never a
+    // second fiscal file (§5).
+    expect(await saleCount(cardId)).toBe(1);
+    expect(await registroCount(cardId)).toBe(1);
+
+    // CASH collect of a SEPARATE invoice-first order → NO payments row (cash is a tender only), the
+    // other branch of the card side-write. Same-state divergence (CLAUDE.md §1): card writes 1, cash 0.
+    const cashId = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id: cashId,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, cashId, OPERATOR);
+    await collectOrder({ db: suite.admin, backend, clock }, cfg, {
+      id: cashId,
+      lines: [],
+      tender: { method: "cash", amount: "1.50" },
+    });
+    expect(await paymentCount(cashId)).toBe(0);
+  });
+
   it("Mode I: a double-tap place issues exactly ONE deferred invoice (FOR UPDATE serialises)", async () => {
     const { cfg, cafe } = await modeVenue("invoice_first");
     const id = randomUUID();

@@ -451,7 +451,9 @@ async function fileImmediateSale(
  * one `withTenant`/`asAppUser` transaction:
  *  - `invoice_first` (Mode I): the invoice was ALREADY issued (deferred) at placing, so collect
  *    SETTLES the existing sale (`settleSale`) and moves `placed → settled`. It files NO second fiscal
- *    record — a double-file would be an unrepairable defect (§5).
+ *    record — a double-file would be an unrepairable defect (§5). A `card` tender ALSO writes the
+ *    captured manual-card `payments` ledger row (the #62 side-write), so an invoice-first card collect
+ *    is symmetric with the immediate card paths and auditable by reconciliation; cash writes none.
  *  - `ticket_then_pay` (Mode T): no fiscal doc exists yet, so collect FILES `recordSale` immediate
  *    from the order's stored locked lines and moves `placed → settled` (the shared `fileImmediateSale`).
  *
@@ -532,6 +534,31 @@ export async function collectOrder(
           { method: req.tender.method, amount: settledAmount, tipAmount: "0.00", settledAt },
         ],
       });
+
+      // Card ONLY: a manual-card tender at collect records the captured `payments` ledger row and links
+      // it to the just-settled sale, in THIS same transaction — the identical #62 side-write
+      // `fileImmediateSale` makes for an immediate card sale, so an invoice-first card collect is
+      // symmetric with every other card path and visible to reconciliation (`reconcile.ts`) rather than
+      // an unauditable settlement. The FISCAL settlement stays `settleSale` above (unchanged); this only
+      // adds the ledger row alongside. Cash gets none — cash is a tender only. The card charges the
+      // EXACT invoice total (`sale.total`, the amount `settlementFor` settled at), and `settledAt` is the
+      // SAME reading the tender carries. `recordManualCardPayment` makes no network call, so it commits
+      // inline with the settlement.
+      if (req.tender.method === "card") {
+        const { provider, paymentRef } = await recordManualCardPayment(tx, {
+          tenantId: cfg.tenantId,
+          workingOrderId: req.id,
+          amount: decimal(sale.total),
+          settledAt,
+          externalRef: req.tender.externalRef,
+        });
+        await associatePaymentWithSale(tx, {
+          provider,
+          paymentRef,
+          saleId: brandSaleId(sale.id),
+          tenantId: cfg.tenantId,
+        });
+      }
 
       await tx
         .update(workingOrders)
