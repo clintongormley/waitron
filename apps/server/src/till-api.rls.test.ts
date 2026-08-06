@@ -1,7 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, sales, withTenant } from "@waitron/db";
+import { asAppUser, sales, withTenant, workingOrders } from "@waitron/db";
 import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import {
   assignCatalogueToLocation,
@@ -30,13 +31,15 @@ import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
 import { startRealPostgres } from "./testing/postgres.js";
 
-// Real Postgres, not PGlite: this drives `POST /api/sales` through the HTTP surface to a GENUINE
-// chained fiscal record written by the app role under RLS. PGlite runs every connection as a
-// superuser, which bypasses RLS and cannot prove the deployment role is permitted to write
-// `registros_facturacion` (CLAUDE.md §4). The 401-without-session guards and the products list live
-// in the hermetic `till-api.test.ts`; only the chained-write happy path needs a container. Setup
-// mirrors `till-sale.test.ts` (Task 3) — a provisioned venue + a seeded catalogue, a real
-// `VerifactuBackend` and the system clock — and then adds a login person and the HTTP driving.
+// Real Postgres, not PGlite: this drives `POST /api/sales` and the `/api/working-orders` routes
+// through the HTTP surface to a GENUINE chained fiscal record written by the app role under RLS.
+// PGlite runs every connection as a superuser, which bypasses RLS and cannot prove the deployment
+// role is permitted to write `registros_facturacion` (CLAUDE.md §4). The 401-without-session guards,
+// the products list and the park/list/retrieve/update/abandon route LOGIC live in the hermetic
+// `till-api.test.ts`; what needs a container is the chained-write happy path AND the pay-idempotency
+// crux (a lost-response pay retry must REPLAY the ticket, filing no second chained record — spec §3),
+// which only a real fiscal write proves. Setup mirrors `till-sale.test.ts` (Task 3) — a provisioned
+// venue + a seeded catalogue, a real `VerifactuBackend` and the system clock — plus a login person.
 const LOCALE = "es-ES";
 
 const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: 180_000 });
@@ -66,7 +69,7 @@ function systemClock(): TrustedClock {
       };
     },
     anchor: () => {
-      throw new Error("till-api.realpg.test: anchor() is not used by recordSale");
+      throw new Error("till-api.rls.test: anchor() is not used by recordSale");
     },
     currentAnchor: () => null,
   };
@@ -185,7 +188,7 @@ beforeAll(() => {
     deploymentEnvironment: deploymentEnvironment(process.env),
     resolveClient: () =>
       Promise.reject(
-        new Error("till-api.realpg.test: resolveClient must never be called by recordSale"),
+        new Error("till-api.rls.test: resolveClient must never be called by recordSale"),
       ),
   });
 });
@@ -370,5 +373,112 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // …and the chain links: the second's predecessor pointer IS the first's actual huella.
     expect(second!.anteriorHuella).toBe(first!.huella);
     expect(second!.anteriorNumSerieFactura).toBe("A/1");
+  });
+});
+
+describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", () => {
+  it("parks an order, retrieves it, pays it via POST /api/sales, and a replay refiles nothing", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
+
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+
+    // 1. Log in and capture the session cookie.
+    const login = await app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ personId: operatorId, pin: "5555" }),
+    });
+    expect(login.status).toBe(200);
+    const cookie = login.headers.get("set-cookie")!;
+
+    // 2. Park an order (client-minted id, its own idempotency key) with 2 × 1.50. Fresh tenant+node
+    //    per test, so the allocated order number is deterministically 1.
+    const workingOrderId = randomUUID();
+    const parkRes = await app.request("/api/working-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        id: workingOrderId,
+        lines: [{ productId: each.id, quantity: "2" }],
+        label: "Mesa 3",
+      }),
+    });
+    expect(parkRes.status).toBe(200);
+    expect(await parkRes.json()).toEqual({ id: workingOrderId, orderNumber: 1 });
+
+    // 3. Retrieve it — the held list carries it, and GET /:id rebuilds its basket inputs.
+    const list = await app.request("/api/working-orders", { headers: { cookie } });
+    expect(((await list.json()) as { id: string }[]).map((o) => o.id)).toContain(workingOrderId);
+    const got = await app.request(`/api/working-orders/${workingOrderId}`, { headers: { cookie } });
+    expect(got.status).toBe(200);
+    expect(await got.json()).toMatchObject({ id: workingOrderId, orderNumber: 1, label: "Mesa 3" });
+
+    // 4. Pay it: POST /api/sales carrying the SAME workingOrderId, so the settle lands on THIS parked
+    //    order (not a fresh walk-up). 2 × 1.50 = 3.00 total, 5.00 tendered → 2.00 change.
+    const pay = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        workingOrderId,
+        lines: [{ productId: each.id, quantity: "2" }],
+        tender: { method: "cash", amount: "5.00" },
+      }),
+    });
+    expect(pay.status).toBe(200);
+    const ticket = await pay.json();
+    expect(ticket.invoiceNumber).toMatch(/^A\/\d+$/);
+    expect(ticket.total).toBe("3.00");
+    expect(ticket.change).toBe("2.00");
+    expect(ticket.qr.length).toBeGreaterThan(0); // a genuine first filing carries the AEAT QR
+
+    // 5. Exactly ONE chained fiscal record; the working order is now `settled` and the sale is filed
+    //    under its id and attributed to the logged-in operator.
+    const after = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return {
+        registros: await tx.select().from(registrosFacturacion),
+        wo: await tx
+          .select({ status: workingOrders.status })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, workingOrderId)),
+        saleRows: await tx
+          .select({ workingOrderId: sales.workingOrderId, operatorId: sales.operatorId })
+          .from(sales),
+      };
+    });
+    expect(after.registros).toHaveLength(1);
+    expect(after.wo).toEqual([{ status: "settled" }]);
+    expect(after.saleRows).toEqual([{ workingOrderId, operatorId }]);
+
+    // 6. REPLAY: the till lost the response and re-sends the identical pay. It must REPLAY the ticket
+    //    (same invoice number, same total) and file NO second chained record — the crux of park &
+    //    retrieve (spec §3): invoice numbers are never reused, so a double filing is unrepairable.
+    const replay = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        workingOrderId,
+        lines: [{ productId: each.id, quantity: "2" }],
+        tender: { method: "cash", amount: "5.00" },
+      }),
+    });
+    expect(replay.status).toBe(200);
+    const replayTicket = await replay.json();
+    expect(replayTicket.invoiceNumber).toBe(ticket.invoiceNumber);
+    expect(replayTicket.total).toBe("3.00");
+    // Documented replay limitations (Task 14 restores the qr): the replayed ticket carries qr "" and
+    // change "0.00" — the verification URL and the tendered cash are not re-derivable without
+    // re-filing, and the drawer change was handed over at the ORIGINAL sale. See `readSettledTicket`.
+    expect(replayTicket.qr).toBe("");
+    expect(replayTicket.change).toBe("0.00");
+
+    // Still exactly ONE record — the replay filed nothing.
+    const stillOne = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return tx.select().from(registrosFacturacion);
+    });
+    expect(stillOne).toHaveLength(1);
   });
 });

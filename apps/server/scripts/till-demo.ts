@@ -1,6 +1,6 @@
 // Self-contained, human-checkable demonstration of the Counter POS till's walk-up cash sale — driven
 // through the till's OWN HTTP surface exactly as the browser does. Modelled on `catalogue-demo.ts`
-// (self-migrating, tsx-run, a real `VerifactuBackend`) and on `till-api.realpg.test.ts` (which mounts
+// (self-migrating, tsx-run, a real `VerifactuBackend`) and on `till-api.rls.test.ts` (which mounts
 // `mountTillApi` on a `new Hono()` and drives it with `app.request(...)`), it:
 //
 //   1. connects to a FRESH postgres (via `DATABASE_URL`) and applies the core, identity and fiscal
@@ -73,7 +73,7 @@ const noopLog: Logger = () => {};
 
 /**
  * The wall clock at the moment this process runs, reported as already confident and anchored — the
- * identical stub shape `catalogue-demo.ts`/`till-api.realpg.test.ts` document. `recordSale` reads
+ * identical stub shape `catalogue-demo.ts`/`till-api.rls.test.ts` document. `recordSale` reads
  * `now()` once and touches neither `anchor` nor `currentAnchor`, so both are stubs.
  */
 function systemClock(): TrustedClock {

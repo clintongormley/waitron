@@ -13,6 +13,13 @@ import type { TillConfig } from "./till-config.js";
 import { recordTillSale } from "./till-sale.js";
 import type { TillSaleRequest } from "./till-sale.js";
 import {
+  abandonHeldOrder,
+  getHeldOrder,
+  listHeldOrders,
+  parkOrder,
+  updateHeldOrder,
+} from "./working-order.js";
+import {
   clearSessionCookie,
   isUuid,
   readSessionId,
@@ -40,10 +47,16 @@ export interface TillApiDeps {
 
 /**
  * Every AppError CODE the till API answers, and the HTTP status it maps to. CLIENT faults only: the
- * identity credential codes (`pin.invalid`/`person.*`/`session.*`) and the `sale.*` request codes
- * Tasks 5/6 raise are all 4xx. A genuine SERVER fault never appears here — it reaches `run` as a
- * NON-AppError and becomes an opaque 500. A registered code absent from this table defaults to 400
- * (a client fault not yet given a more specific status), which is why `run` needs the `?? 400`.
+ * identity credential codes (`pin.invalid`/`person.*`/`session.*`), the `sale.*` request codes and
+ * the `working_order.*` park-and-retrieve codes are all 4xx. A genuine SERVER fault never appears
+ * here — it reaches `run` as a NON-AppError and becomes an opaque 500. A registered code absent from
+ * this table defaults to 400 (a client fault not yet given a more specific status), which is why
+ * `run` needs the `?? 400`.
+ *
+ * The two working-order codes are given SPECIFIC statuses rather than the 400 default: a retrieve of
+ * an id that names no open order is a 404 (`working_order.not_found`), and a MODIFY of an order that
+ * is not open is a 409 (`working_order.not_open`) — the id may be valid, but the order's state
+ * forbids the edit (see their notes in `errors.ts`).
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "pin.invalid": 401,
@@ -56,6 +69,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "sale.unsupported_tender": 400,
   "sale.tender_shortfall": 400,
   "authorization.not_permitted": 403,
+  "working_order.not_found": 404,
+  "working_order.not_open": 409,
 };
 
 /**
@@ -205,6 +220,83 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         personId,
       );
       return c.json(result);
+    }),
+  );
+
+  // Park a working order to pay later (park & retrieve, sub-project 7b). SESSION-GUARDED like the
+  // sale routes: `requireSession` runs FIRST, and the guard — not the browser — supplies the
+  // attribution, so `operatorId` is `session.personId`. The client mints `body.id` (so a retry is
+  // idempotent against the primary key); `parkOrder` re-reads the catalogue and prices authoritatively
+  // (the request carries no price), opening its OWN `withTenant`/`asAppUser` transaction, so it is
+  // called OUTSIDE any transaction here. Returns the persisted `{ id, orderNumber }`.
+  app.post("/api/working-orders", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const body = await c.req.json<{
+        id: string;
+        lines: { productId: string; quantity: string }[];
+        label?: string;
+      }>();
+      const result = await parkOrder({ db: deps.db }, deps.cfg, {
+        id: body.id,
+        lines: body.lines,
+        label: body.label,
+        operatorId: personId,
+      });
+      return c.json(result);
+    }),
+  );
+
+  // The cross-till held list for this node: every OPEN working order any register on the node can
+  // retrieve. SESSION-GUARDED — the operator must be logged in to see parked orders. `listHeldOrders`
+  // is node- and (via RLS) tenant-scoped from `deps.cfg`; the browser names nothing.
+  app.get("/api/working-orders", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const orders = await listHeldOrders({ db: deps.db }, deps.cfg);
+      return c.json(orders);
+    }),
+  );
+
+  // Retrieve one parked order to rebuild its basket. SESSION-GUARDED. An id naming no OPEN order (an
+  // absent, settled/abandoned, or another tenant's order — RLS hides it) surfaces `working_order.not_found`,
+  // which `STATUS` maps to 404. Returns `{ id, orderNumber, label, lines }` — the pricing INPUTS only,
+  // never a stored price, so the till re-prices on retrieve.
+  app.get("/api/working-orders/:id", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const order = await getHeldOrder({ db: deps.db }, deps.cfg, c.req.param("id"));
+      return c.json(order);
+    }),
+  );
+
+  // Edit a parked order — the whole new basket plus an optional new label, a full REPLACEMENT.
+  // SESSION-GUARDED. Only an `open` order may change; a non-open or unknown id surfaces
+  // `working_order.not_open` → 409. `updateHeldOrder` re-prices authoritatively (the request carries
+  // no price) and returns nothing, so this answers 200 with an empty body.
+  app.put("/api/working-orders/:id", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const body = await c.req.json<{
+        lines: { productId: string; quantity: string }[];
+        label?: string;
+      }>();
+      await updateHeldOrder({ db: deps.db }, deps.cfg, c.req.param("id"), {
+        lines: body.lines,
+        label: body.label,
+      });
+      return c.body(null, 200);
+    }),
+  );
+
+  // Discard a parked order (`open → abandoned`). SESSION-GUARDED. A non-open or unknown id surfaces
+  // `working_order.not_open` → 409, the same open-only guard `updateHeldOrder` makes. Returns 200 with
+  // an empty body.
+  app.delete("/api/working-orders/:id", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      await abandonHeldOrder({ db: deps.db }, deps.cfg, c.req.param("id"));
+      return c.body(null, 200);
     }),
   );
 }

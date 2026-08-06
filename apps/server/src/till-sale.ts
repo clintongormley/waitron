@@ -43,10 +43,18 @@ export interface TillSaleDeps {
  * tender. Deliberately carries NO price of any kind — the server re-reads the catalogue and prices
  * authoritatively (`priceBasket`), so a browser cannot influence the filed total. `quantity` is a
  * count for an `each` product and a measured kg weight (e.g. "0.320") for a `weight` product.
+ *
+ * `workingOrderId` is the pay-idempotency key (park & retrieve, sub-project 7b). The till mints it and
+ * holds it stable across a lost-response retry, so a re-sent pay REPLAYS against the same
+ * `working_orders`/`sales` row rather than filing a second chained record. It is optional: absent (a
+ * till that has not adopted it), `recordTillSale` mints a fresh one per call, which still keys the
+ * same guard — a call that never retries simply never collides. To PAY a parked order, the till sends
+ * that order's own id here, so the settle lands on the retrieved order rather than a fresh walk-up one.
  */
 export interface TillSaleRequest {
   lines: { productId: string; quantity: string }[];
   tender: { method: "cash"; amount: string };
+  workingOrderId?: string;
 }
 
 export interface TillSaleResult {
@@ -349,13 +357,15 @@ function reconstructVatBreakdown(
 
 /**
  * Ring one walk-up sale — the 7a entry point, now a thin walk-up special case of `payWorkingOrder`.
- * It keeps 7a's two fail-fast guards and its `TillSaleRequest`/`TillSaleResult` shape (so `till-api.ts`
- * is unchanged until Task 8), mints a fresh working-order id (a walk-up carries none), and delegates.
+ * It keeps 7a's two fail-fast guards and its `TillSaleRequest`/`TillSaleResult` shape, and delegates.
  *
- * The minted id keys the same idempotency guard a parked pay uses: `payWorkingOrder` creates the
+ * The working-order id it pays under is `req.workingOrderId` when the till supplied one, else a fresh
+ * `randomUUID()` minted here. Either keys the same idempotency guard: `payWorkingOrder` creates the
  * `working_orders` row OPEN and settles it in one transaction, and a lost-response retry that re-sent
- * this id would REPLAY rather than file a second chained record. (Task 8 lets the till supply a stable
- * id of its own so a retry re-sends the same one; this producer mints one per call.)
+ * this id REPLAYS rather than filing a second chained record. A till holding a stable id across
+ * retries gets that protection; a till that sends none simply never retries onto the same id. (This
+ * is also how a PARKED order is paid: the till sends the parked order's id, so the settle lands on the
+ * retrieved order — created above by `parkOrder` — rather than a fresh walk-up one.)
  *
  * `operatorId` is the person who rang the sale, for attribution — supplied by the session (Task 5);
  * a parameter here, `undefined` until the till wires it in.
@@ -381,7 +391,7 @@ export async function recordTillSale(
   return payWorkingOrder(
     deps,
     cfg,
-    { id: randomUUID(), lines: req.lines, tender: req.tender },
+    { id: req.workingOrderId ?? randomUUID(), lines: req.lines, tender: req.tender },
     operatorId,
   );
 }
