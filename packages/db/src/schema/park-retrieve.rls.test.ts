@@ -170,9 +170,9 @@ describe("park & retrieve schema", () => {
     await suite.admin.execute(
       sql`insert into working_order_lines
         (tenant_id, working_order_id, line_no, product_id, descriptions,
-         quantity, unit_price, vat_rate, line_total)
+         quantity, unit_price, unit_price_gross, vat_rate, line_total)
         values (${TENANT_A}, ${wo}, 1, ${productA}, ${DESCRIPTIONS_A}::jsonb,
-         '1.000', '1.00', '10.00', '1.00')`,
+         '1.000', '1.00', '1.10', '10.00', '1.00')`,
     );
     // Negative: a product_id with no products row is refused 23503. The BEFORE triggers
     // (require_open_parent, check_locales) pass first — open parent, matching locales — so the row
@@ -181,9 +181,9 @@ describe("park & retrieve schema", () => {
       suite.admin.execute(
         sql`insert into working_order_lines
           (tenant_id, working_order_id, line_no, product_id, descriptions,
-           quantity, unit_price, vat_rate, line_total)
+           quantity, unit_price, unit_price_gross, vat_rate, line_total)
           values (${TENANT_A}, ${wo}, 2, ${BOGUS_PRODUCT}, ${DESCRIPTIONS_A}::jsonb,
-           '1.000', '1.00', '10.00', '1.00')`,
+           '1.000', '1.00', '1.10', '10.00', '1.00')`,
       ),
     );
     expect(pgErrorCode(error)).toBe("23503");

@@ -7,6 +7,8 @@ export * from "./schema/tenants.js";
 export { nodes } from "./schema/nodes.js";
 export { invoiceSeries } from "./schema/series.js";
 export { workingOrderLines, workingOrders, workingOrderStatus } from "./schema/orders.js";
+export { orderAmendmentKind, orderAmendments } from "./schema/order-amendments.js";
+export { orderPrep, prepState } from "./schema/order-prep.js";
 export { catalogues, categories, products } from "./schema/catalogue.js";
 export { workingOrderCounters } from "./schema/working-order-counters.js";
 export {
