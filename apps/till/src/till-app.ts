@@ -256,31 +256,56 @@ export class TillApp extends LitElement {
    *
    * Each `quantity` arrives at numeric(_,3) scale ("2.000"); {@link displayQuantity} cleans an EACH
    * count's trailing zeros for display without touching re-pricing (a weight keeps its decimals).
+   *
+   * CROSS-TILL STALE-LIST RACE. The held list has no live push (by design — replication is future
+   * shared infra), so between our last `listWorkingOrders` and this tap another register may have paid
+   * or discarded the order, and `retrieveWorkingOrder` then rejects (`working_order.not_found`). Like
+   * `#onParkOrder`/`#onConfirmPayment`, that must fail GRACEFULLY: surface a non-fatal `held.stale` (never
+   * the raw code) and leave the current basket UNTOUCHED — `loadFrom` runs only after the successful
+   * await, so a rejection never half-loads it. The refresh below then runs on both paths, so the
+   * vanished order drops off the list rather than sitting there inviting another dead tap.
    */
   async #onRetrieveOrder(event: Event): Promise<void> {
     const { id } = (event as CustomEvent<{ id: string }>).detail;
-    const order = await this.api.retrieveWorkingOrder(id);
     this.errorKey = undefined;
-    const lines: OrderLine[] = [];
-    let droppedAProduct = false;
-    for (const line of order.lines) {
-      const product = this.products.find((candidate) => candidate.id === line.productId);
-      if (product === undefined) {
-        // The product was deactivated since the order was parked: drop the line, flag it, keep going.
-        droppedAProduct = true;
-        continue;
+    try {
+      const order = await this.api.retrieveWorkingOrder(id);
+      const lines: OrderLine[] = [];
+      let droppedAProduct = false;
+      for (const line of order.lines) {
+        const product = this.products.find((candidate) => candidate.id === line.productId);
+        if (product === undefined) {
+          // The product was deactivated since the order was parked: drop the line, flag it, keep going.
+          droppedAProduct = true;
+          continue;
+        }
+        lines.push({ product, quantity: displayQuantity(product, line.quantity) });
       }
-      lines.push({ product, quantity: displayQuantity(product, line.quantity) });
+      if (droppedAProduct) this.errorKey = "held.product_gone";
+      this.#store.loadFrom(order.id, lines, order.label ?? undefined);
+    } catch {
+      // The order was paid/discarded on another register since our list was refreshed: non-fatal
+      // notice, basket left intact (loadFrom never ran), never leak the raw code.
+      this.errorKey = "held.stale";
     }
-    if (droppedAProduct) this.errorKey = "held.product_gone";
-    this.#store.loadFrom(order.id, lines, order.label ?? undefined);
+    // Runs on both paths: on success the list is re-read; on the stale race the vanished row drops off.
     await this.#refreshHeldOrders();
   }
 
-  /** Discard a parked order (`open → abandoned`), then refresh the held list so it drops off. */
+  /**
+   * Discard a parked order (`open → abandoned`), then refresh the held list so it drops off. The same
+   * cross-till stale-list race as {@link TillApp.#onRetrieveOrder} applies: if the order was already
+   * paid/discarded on another register, `abandonWorkingOrder` rejects (`working_order.not_open`) — a
+   * non-fatal `held.stale`, never the raw code. The refresh runs on both paths, so a stale row drops
+   * off whether the discard landed or the order was already gone.
+   */
   async #onDiscardOrder(event: Event): Promise<void> {
     const { id } = (event as CustomEvent<{ id: string }>).detail;
-    await this.api.abandonWorkingOrder(id);
+    try {
+      await this.api.abandonWorkingOrder(id);
+    } catch {
+      this.errorKey = "held.stale";
+    }
     await this.#refreshHeldOrders();
   }
 

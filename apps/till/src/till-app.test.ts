@@ -398,6 +398,61 @@ describe("till-app", () => {
     expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
   });
 
+  it("retrieve-order: a stale row (order gone on another till) shows held.stale, refreshes, keeps the basket, leaks no code", async () => {
+    const { el } = await mountApp({
+      retrieveWorkingOrder: vi.fn().mockRejectedValue({ code: "working_order.not_found" }),
+      listWorkingOrders: vi
+        .fn()
+        .mockResolvedValueOnce([heldSummary]) // on entering the counter
+        .mockResolvedValueOnce([]), // recovery refresh drops the vanished row
+    });
+    const c = await toCounter(el);
+    expect(c.heldOrders).toEqual([heldSummary]);
+    const store = c.store;
+    store.addProduct(cafe, "2"); // a basket already in progress
+    await el.updateComplete;
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+
+    // non-fatal, translated banner — never the raw code
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("held.stale"));
+    expect(el.shadowRoot!.textContent).not.toContain("working_order.not_found");
+    // the vanished order drops off the list on the recovery refresh
+    expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
+    expect(c.heldOrders).toEqual([]);
+    // the in-progress basket is UNTOUCHED — loadFrom never ran on the rejected retrieve
+    expect(store.lines).toHaveLength(1);
+    expect(store.lines[0]!.product).toBe(cafe);
+    // still on the counter
+    expect(counter(el)).not.toBeNull();
+    expect(ticket(el)).toBeNull();
+  });
+
+  it("discard-order: a stale row (order gone on another till) shows held.stale, refreshes, leaks no code", async () => {
+    const { el } = await mountApp({
+      abandonWorkingOrder: vi.fn().mockRejectedValue({ code: "working_order.not_open" }),
+      listWorkingOrders: vi
+        .fn()
+        .mockResolvedValueOnce([heldSummary]) // on entering the counter
+        .mockResolvedValueOnce([]), // recovery refresh drops the vanished row
+    });
+    const c = await toCounter(el);
+    expect(c.heldOrders).toEqual([heldSummary]);
+
+    emit(c, "discard-order", { id: "wo-1" });
+    await flush(el);
+
+    expect(currentApi.abandonWorkingOrder).toHaveBeenCalledWith("wo-1");
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("held.stale"));
+    expect(el.shadowRoot!.textContent).not.toContain("working_order.not_open");
+    // the recovery refresh runs even though the discard rejected, so the stale row drops off
+    expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
+    expect(c.heldOrders).toEqual([]);
+  });
+
   it("logout: calls logout, returns to lock, and KEEPS the basket", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);

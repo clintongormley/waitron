@@ -113,6 +113,9 @@ export class TillHeldOrders extends LitElement {
                   <wt-button
                     class="retrieve"
                     variant="primary"
+                    aria-label=${`${t("held.retrieve")} #${order.orderNumber}${
+                      order.label ? ` ${order.label}` : ""
+                    }`}
                     @click=${() => this.#retrieve(order.id)}
                   >
                     ${t("held.retrieve")}
@@ -120,6 +123,9 @@ export class TillHeldOrders extends LitElement {
                   <wt-button
                     class="discard"
                     variant="danger"
+                    aria-label=${`${t("held.discard")} #${order.orderNumber}${
+                      order.label ? ` ${order.label}` : ""
+                    }`}
                     @click=${() => this.#discard(order.id)}
                   >
                     ${t("held.discard")}
