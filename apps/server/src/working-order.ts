@@ -94,13 +94,56 @@ export interface ParkOrderResult {
 }
 
 /**
+ * Persist an OPEN working order plus its priced lines on the CALLER's transaction: re-read the
+ * catalogue, re-price `lines` with `priceBasket`, allocate the next per-node order number, and INSERT
+ * the `working_orders` row (status `open`) and its `working_order_lines`. Returns the allocated order
+ * number. The server never trusts a browser-computed price; `lines` carry none.
+ *
+ * Shared by `parkOrder` (a counter parks an order to pay later) and `payWorkingOrder` (a WALK-UP,
+ * which creates the order `open` and settles it in the same transaction) — extracted so a walk-up
+ * order is IDENTICAL in shape to a parked one: same allocated number, same priced lines, same triggers
+ * (`require_open_parent`/`check_locales` fire on the inserted lines because their parent was inserted
+ * just above). The empty-basket refusal stays with each caller (it is checked before any database
+ * work), as does the surrounding `withTenant`/`asAppUser` scope; this helper owns only the two inserts.
+ */
+export async function createOpenOrder(
+  tx: Transaction,
+  cfg: TillConfig,
+  id: string,
+  lines: { productId: string; quantity: string }[],
+  label: string | null,
+): Promise<number> {
+  // Resolve + price the basket authoritatively (refusing an unknown product) into the line rows —
+  // `priceOrderLines`'s own doc-comment explains the zip.
+  const lineRows = await priceOrderLines(tx, cfg, id, lines);
+  const orderNumber = await allocateOrderNumber(tx, cfg.tenantId, cfg.nodeId);
+
+  await tx.insert(workingOrders).values({
+    id,
+    tenantId: cfg.tenantId,
+    tillId: cfg.tillId,
+    nodeId: cfg.nodeId,
+    orderNumber,
+    label,
+    status: "open",
+  });
+
+  // The parent order was inserted just above, so the composite FK and the
+  // `require_open_parent`/`check_locales` triggers all resolve it.
+  await tx.insert(workingOrderLines).values(lineRows);
+
+  return orderNumber;
+}
+
+/**
  * Park a working order: re-read the catalogue, re-price with `priceBasket`, allocate the next per-node
  * order number, and persist an OPEN `working_orders` row plus its priced `working_order_lines` — all
  * inside ONE `withTenant`/`asAppUser` transaction, so the order and every line commit as a single unit
  * (or roll back together, leaving nothing parked). The server never trusts a browser-computed price;
  * `req` carries none. The persisted line keeps `product_id` (a pricing INPUT a later repricing
  * re-resolves) alongside the frozen display snapshot (`descriptions`, `unit_price`, `vat_rate`,
- * `line_total`, `category`) that came straight from `priceBasket`.
+ * `line_total`, `category`) that came straight from `priceBasket`. The persist itself is
+ * `createOpenOrder`, shared verbatim with `payWorkingOrder`'s walk-up path.
  */
 export async function parkOrder(
   deps: WorkingOrderDeps,
@@ -115,26 +158,7 @@ export async function parkOrder(
 
   return withTenant(deps.db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-
-    // Resolve + price the basket authoritatively (refusing an unknown product) into the line rows —
-    // the block `updateHeldOrder` shares. `priceOrderLines`'s own doc-comment explains the zip.
-    const lineRows = await priceOrderLines(tx, cfg, req.id, req.lines);
-    const orderNumber = await allocateOrderNumber(tx, cfg.tenantId, cfg.nodeId);
-
-    await tx.insert(workingOrders).values({
-      id: req.id,
-      tenantId: cfg.tenantId,
-      tillId: cfg.tillId,
-      nodeId: cfg.nodeId,
-      orderNumber,
-      label: req.label ?? null,
-      status: "open",
-    });
-
-    // The parent order was inserted just above, so the composite FK and the
-    // `require_open_parent`/`check_locales` triggers all resolve it.
-    await tx.insert(workingOrderLines).values(lineRows);
-
+    const orderNumber = await createOpenOrder(tx, cfg, req.id, req.lines, req.label ?? null);
     return { id: req.id, orderNumber };
   });
 }
