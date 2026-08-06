@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { AppError, addDecimal, compareDecimal, decimal, sumDecimals } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
@@ -298,19 +298,25 @@ export interface CapturedPaymentForOrder {
 }
 
 const CAPTURED_FOR_ORDER_COLUMNS = {
-  id: payments.id,
+  ...PAYMENT_COLUMNS,
   paymentRef: payments.paymentRef,
-  amount: payments.amount,
-  saleId: payments.saleId,
-  externalRef: payments.externalRef,
-  settledAt: payments.settledAt,
-  state: payments.state,
 };
 
 /** The §4 capture-idempotency pre-check: has this working order already got a captured (or
  * offline-accepted) payment for this provider? Read-only, over existing columns/`payments_working_order_idx`.
  * A `failed`/`attempting` row is NOT captured, so a legitimately-declined card stays re-chargeable and
- * a lost-T2 `attempting` orphan is never mistaken for a completed capture (§4). */
+ * a lost-T2 `attempting` orphan is never mistaken for a completed capture (§4).
+ *
+ * At most one captured/accepted_offline payment exists per working order BY CONSTRUCTION, not by a DB
+ * constraint (`payments` carries no unique index over `(tenant_id, provider, working_order_id)`
+ * restricted to those states): Task 1 derives the Stripe PaymentIntent-creation idempotency key from
+ * the working-order id (`wo_<id>`, `packages/payments-stripe`), so every retry drives the SAME
+ * PaymentIntent to at most one capture — and this pre-check is itself the thing that stops a caller
+ * from proceeding to a second `collect` once the first capture exists (spec §4). Split-tender (more
+ * than one payment per working order) is out of scope for this slice. `ORDER BY settled_at DESC`
+ * makes the read deterministic regardless, and if that invariant is ever violated it returns the MOST
+ * RECENT captured row rather than an arbitrary one — this is a pre-check, so it degrades rather than
+ * throwing on an unexpected second row. */
 export async function findCapturedPaymentForWorkingOrder(
   tx: Transaction,
   key: { tenantId: string; provider: string; workingOrderId: string },
@@ -326,6 +332,7 @@ export async function findCapturedPaymentForWorkingOrder(
         inArray(payments.state, ["captured", "accepted_offline"]),
       ),
     )
+    .orderBy(desc(payments.settledAt))
     .limit(1);
   return row as CapturedPaymentForOrder | undefined;
 }

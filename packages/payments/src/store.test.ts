@@ -457,6 +457,34 @@ describe("findCapturedPaymentForWorkingOrder", () => {
       await pg.db.transaction((tx) => findCapturedPaymentForWorkingOrder(tx, key)),
     ).toBeUndefined();
   });
+
+  it("returns the MOST RECENT captured row if the one-capture-per-order invariant is ever violated", async () => {
+    // The design (spec §4) guarantees at most one captured/accepted_offline payment per working
+    // order by construction (Task 1's wo_<id> Stripe idempotency key + this very pre-check), not by
+    // a DB constraint — nothing stops two rows existing here. `ORDER BY settled_at DESC` is what
+    // makes the read deterministic in that case, so this seeds two captured rows out of insertion
+    // order (the later-settled one inserted FIRST) and asserts the more recently settled one wins.
+    const s = await seedWorkingOrder(pg.db, freshNif());
+    const key = { tenantId: s.tenantId, provider: "stripe", workingOrderId: s.workingOrderId };
+    await pg.db.transaction((tx) =>
+      insertCapturedPayment(tx, {
+        ...key,
+        paymentRef: "older",
+        amount: decimal("5.00"),
+        settledAt: new Date("2026-07-24T09:00:00Z"),
+      }),
+    );
+    await pg.db.transaction((tx) =>
+      insertCapturedPayment(tx, {
+        ...key,
+        paymentRef: "newer",
+        amount: decimal("7.00"),
+        settledAt: new Date("2026-07-24T11:00:00Z"),
+      }),
+    );
+    const found = await pg.db.transaction((tx) => findCapturedPaymentForWorkingOrder(tx, key));
+    expect(found?.paymentRef).toBe("newer");
+  });
 });
 
 describe("insertCapturedPayment external_ref", () => {
