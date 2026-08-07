@@ -421,6 +421,121 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
     expect(res.headers.get("set-cookie")).toBeNull();
   });
 
+  // ── null / non-object request bodies map to the route's own 4xx, never a 500 ────────────────────
+  // A body of the literal JSON `null` parses (via `c.req.json()`) to `null`, on which a field access
+  // or destructure throws a TypeError → `run`'s non-AppError branch → opaque `server.internal` 500.
+  // Each route coerces the parsed body with `?? {}` so a degenerate body yields its documented 4xx
+  // (or, for PATCH, the empty-body 204) instead. `body: "null"` is 4 bytes of valid JSON — confirmed
+  // against Hono here that `c.req.json()` returns `null` for it, the exact shape these guards defend.
+
+  it("login with a null JSON body → 401 password.invalid, no cookie", async () => {
+    const { tenantId } = await setupTenant();
+    const app = mountApp(tenantId);
+
+    const res = await app.request("/management-api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "null",
+    });
+    expect(res.status).toBe(401);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "password.invalid" },
+    });
+    // A rejected login must mint nothing, so no cookie is set.
+    expect(res.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("login with a non-string totp → 401 password.invalid (screened before loginManager)", async () => {
+    const { tenantId, managerId } = await setupTenant();
+    const app = mountApp(tenantId);
+
+    // The seeded manager has a correct password and is NOT TOTP-enrolled, so `loginManager` would
+    // otherwise ignore `totp` entirely and mint a session (200). This proves the new typecheck
+    // rejects a non-string `totp` at the API boundary — as `password.invalid`, leaking no field —
+    // before it can reach `loginManager`/`verifyTotp`.
+    const res = await app.request("/management-api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ personId: managerId, password: PASSWORD, totp: 123 }),
+    });
+    expect(res.status).toBe(401);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "password.invalid" },
+    });
+    expect(res.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("create with a null JSON body → 400 management.request_invalid", async () => {
+    const { tenantId, managerId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, managerId);
+
+    const res = await app.request("/management-api/staff", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: "null",
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "management.request_invalid" },
+    });
+  });
+
+  it("reset-pin and password with a null JSON body → 400 each", async () => {
+    const { tenantId, managerId, staffId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, managerId);
+
+    const resetPin = await app.request(`/management-api/staff/${staffId}/reset-pin`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: "null",
+    });
+    expect(resetPin.status).toBe(400);
+    expect((await resetPin.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "management.request_invalid" },
+    });
+
+    const setPw = await app.request(`/management-api/staff/${staffId}/password`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: "null",
+    });
+    expect(setPw.status).toBe(400);
+    expect((await setPw.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "management.request_invalid" },
+    });
+  });
+
+  it("PATCH with a null JSON body → 204 no-op, person unchanged", async () => {
+    const { tenantId, managerId, staffId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, managerId);
+
+    const readRow = async () =>
+      withTenant(suite.admin, tenantId, async (tx) => {
+        await asAppUser(tx);
+        const r = await tx.execute<{ role: string; status: string }>(
+          sql`select role, status from persons where id = ${staffId}`,
+        );
+        return r.rows[0]!;
+      });
+
+    // The seeded staff person starts at the schema defaults (role 'staff', status 'active').
+    const before = await readRow();
+    expect(before).toMatchObject({ role: "staff", status: "active" });
+
+    const res = await app.request(`/management-api/staff/${staffId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: "null",
+    });
+    // A null body is coerced to `{}`, so both `role` and `status` are undefined: nothing is written
+    // and the route answers the empty-body 204 — never a 400 and never a 500.
+    expect(res.status).toBe(204);
+    expect(await readRow()).toEqual(before);
+  });
+
   it("maps an unparseable request body to an opaque 500 (run's server-fault branch)", async () => {
     const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);

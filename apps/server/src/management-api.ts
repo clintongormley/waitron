@@ -161,16 +161,30 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // Login: password (+ TOTP iff the person is enrolled) → management-session cookie. Runs as the app
   // role under the dashboard's tenant (`withTenant` + `asAppUser`), so RLS scopes the person lookup and
   // a wrong password, missing/wrong TOTP, unknown or suspended person surfaces as the identity
-  // credential codes `STATUS` maps to 401/403/404. The body is screened first: a non-string or
-  // non-UUID `personId`, or a non-string `password`, is refused as `password.invalid` — the SAME code a
-  // wrong password gets, so nothing in the response tells an unauthenticated caller which field failed.
+  // credential codes `STATUS` maps to 401/403/404. The parsed body is coerced to `{}` (`?? {}`) FIRST,
+  // and this is the representative site for WHY every body-parsing route below does the same: a valid
+  // JSON `null` body (the 4-byte string `null`) parses to `null`, and reading a field off `null` — or
+  // destructuring it — throws a `TypeError` that `run` cannot tell from a server fault, turning a
+  // client's degenerate body into an opaque 500. `?? {}` makes a `null`/`undefined` body fall through
+  // the screen as the route's own 4xx instead; a JSON primitive/array body needs no coercion, since a
+  // field access on it is `undefined` rather than a throw. The body is then screened: a non-string or
+  // non-UUID `personId`, a non-string `password`, or a `totp` present but not a string, is refused as
+  // `password.invalid` — the SAME code a wrong password gets, so nothing in the response tells an
+  // unauthenticated caller which field failed. (Screening `totp` does NOT avert a 500: `verifyTotp`
+  // fails closed — probed against otplib@12.0.1, a non-string token returns `false`, never throws — so
+  // a non-string `totp` reaching `loginManager` yields `totp.invalid` when the person is enrolled and
+  // is ignored when they are not, never a throw. It is screened for response uniformity and to keep the
+  // runtime value matching its declared `string` type; see this task's fix report for the correction to
+  // the review's "totp → 500" claim.)
   app.post("/management-api/session", (c) =>
     run(c, log, async () => {
-      const body = await c.req.json<{ personId?: string; password?: string; totp?: string }>();
+      const body =
+        (await c.req.json<{ personId?: string; password?: string; totp?: string }>()) ?? {};
       if (
         typeof body.personId !== "string" ||
         !isUuid(body.personId) ||
-        typeof body.password !== "string"
+        typeof body.password !== "string" ||
+        (body.totp !== undefined && typeof body.totp !== "string")
       ) {
         throw new AppError("password.invalid", {});
       }
@@ -228,18 +242,20 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // Create a person. Gated (401 before any DB work; `createPerson` then enforces `person.manage`).
-  // The body is screened first: a missing or non-string `displayName`, `role` or `pin` is refused as
-  // `management.request_invalid` naming the FIELDS, never their values. The narrowed fields are bound
-  // to locals AFTER the guard because that narrowing does not survive into the `withTenant` closure —
-  // the same pattern the login route above uses. Returns the new id at 201.
+  // The parsed body is coerced to `{}` (`?? {}`, see the login route for why) and screened: a missing
+  // or non-string `displayName`, `role` or `pin` — every field of a `null`/non-object body included —
+  // is refused as `management.request_invalid` naming the FIELDS, never their values. The narrowed
+  // fields are bound to locals AFTER the guard because that narrowing does not survive into the
+  // `withTenant` closure — the same pattern the login route above uses. Returns the new id at 201.
   app.post("/management-api/staff", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const body = await c.req.json<{
-        displayName?: string;
-        role?: PersonRoleValue;
-        pin?: string;
-      }>();
+      const body =
+        (await c.req.json<{
+          displayName?: string;
+          role?: PersonRoleValue;
+          pin?: string;
+        }>()) ?? {};
       if (
         typeof body.displayName !== "string" ||
         typeof body.role !== "string" ||
@@ -265,14 +281,19 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // Update a person's role and/or status. Gated. `:id` is screened with `isUuid` first — a
   // non-UUID names no row, so it is `person.not_found` (the id is a caller-supplied uuid, safe to
   // echo) rather than a request-shape error. Each field is optional: `role` present drives `setRole`,
-  // `status` "suspended"/"active" drives suspend/reactivate; an empty body is a no-op that still 204s.
-  // `role`/`status` are bound to locals before the closure and narrowed inside it, so no field
-  // narrowing has to cross the closure boundary. The identity calls enforce `person.manage`.
+  // `status` "suspended"/"active" drives suspend/reactivate. The parsed body is coerced to `{}`
+  // (`?? {}`, see the login route): an empty JSON object `{}`, or a `null`/non-object body, leaves both
+  // `role` and `status` undefined → no writes → a no-op 204. (Only a JSON `null` body would otherwise
+  // throw on the destructure below; a truly empty or unparseable HTTP body is the separate
+  // SyntaxError→500 case that `run` maps to `server.internal`, out of scope here.) `role`/`status` are
+  // bound to locals before the closure and narrowed inside it, so no field narrowing has to cross the
+  // closure boundary. The identity calls enforce `person.manage`.
   app.patch("/management-api/staff/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requirePersonId(c.req.param("id"));
-      const body = await c.req.json<{ role?: PersonRoleValue; status?: "active" | "suspended" }>();
+      const body =
+        (await c.req.json<{ role?: PersonRoleValue; status?: "active" | "suspended" }>()) ?? {};
       const { role, status } = body;
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
@@ -290,15 +311,16 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Reset a person's PIN. Gated. `:id` screened with `isUuid` (→ `person.not_found`); the body's
-  // `pin` must be a string else `management.request_invalid` naming the FIELD, never the PIN itself.
-  // The narrowed `pin` is bound to a local before the closure; `resetPin` enforces `person.manage`
-  // and length-checks the value.
+  // Reset a person's PIN. Gated. `:id` screened with `isUuid` (→ `person.not_found`); the body is
+  // coerced to `{}` (`?? {}`, see the login route) so a `null`/non-object body hits the same guard,
+  // then `pin` must be a string else `management.request_invalid` naming the FIELD, never the PIN
+  // itself. The narrowed `pin` is bound to a local before the closure; `resetPin` enforces
+  // `person.manage` and length-checks the value.
   app.post("/management-api/staff/:id/reset-pin", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requirePersonId(c.req.param("id"));
-      const body = await c.req.json<{ pin?: string }>();
+      const body = (await c.req.json<{ pin?: string }>()) ?? {};
       if (typeof body.pin !== "string") {
         throw new AppError("management.request_invalid", { field: "pin" });
       }
@@ -312,14 +334,15 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // Set a person's dashboard password. Gated. `:id` screened with `isUuid` (→ `person.not_found`);
-  // the body's `password` must be a string else `management.request_invalid` naming the FIELD, never
-  // the password itself. The narrowed `password` is bound to a local before the closure; `setPassword`
-  // enforces `person.manage` and length-checks the value.
+  // the body is coerced to `{}` (`?? {}`, see the login route) so a `null`/non-object body hits the
+  // same guard, then `password` must be a string else `management.request_invalid` naming the FIELD,
+  // never the password itself. The narrowed `password` is bound to a local before the closure;
+  // `setPassword` enforces `person.manage` and length-checks the value.
   app.post("/management-api/staff/:id/password", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requirePersonId(c.req.param("id"));
-      const body = await c.req.json<{ password?: string }>();
+      const body = (await c.req.json<{ password?: string }>()) ?? {};
       if (typeof body.password !== "string") {
         throw new AppError("management.request_invalid", { field: "password" });
       }
