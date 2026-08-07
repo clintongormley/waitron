@@ -280,14 +280,24 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
 
   // Update a person's role and/or status. Gated. `:id` is screened with `isUuid` first — a
   // non-UUID names no row, so it is `person.not_found` (the id is a caller-supplied uuid, safe to
-  // echo) rather than a request-shape error. Each field is optional: `role` present drives `setRole`,
-  // `status` "suspended"/"active" drives suspend/reactivate. The parsed body is coerced to `{}`
-  // (`?? {}`, see the login route): an empty JSON object `{}`, or a `null`/non-object body, leaves both
-  // `role` and `status` undefined → no writes → a no-op 204. (Only a JSON `null` body would otherwise
-  // throw on the destructure below; a truly empty or unparseable HTTP body is the separate
-  // SyntaxError→500 case that `run` maps to `server.internal`, out of scope here.) `role`/`status` are
-  // bound to locals before the closure and narrowed inside it, so no field narrowing has to cross the
-  // closure boundary. The identity calls enforce `person.manage`.
+  // echo) rather than a request-shape error. Both fields are OPTIONAL, but each is type-screened the
+  // way the three sibling write routes screen their required fields: a field PRESENT with a
+  // non-string value is refused as `management.request_invalid` naming the FIELD (never the value),
+  // so `{ role: 123 }`/`{ status: 123 }` are a 400 rather than flowing on to the `person_role`
+  // pgEnum (a non-string `role` → `22P02` → opaque 500) or silently no-op'ing (a non-string
+  // `status` matches neither branch below). An ABSENT field is left `undefined` and is a legitimate
+  // no-op — that is where PATCH differs from create/reset-pin/set-password, whose fields are
+  // required. Given a well-formed value the writes fire: `role` present drives `setRole`, `status`
+  // "suspended"/"active" drives suspend/reactivate (a STRING `status` outside that pair, e.g.
+  // "frozen", matches neither branch and is a deliberate 204 no-op — a value check the pgEnum would
+  // catch on `role` is intentionally NOT applied here, keeping the screen typeof-only like create).
+  // The parsed body is coerced to `{}` (`?? {}`, see the login route): an empty JSON object `{}`, or
+  // a `null`/non-object body, leaves both `role` and `status` undefined → no writes → a no-op 204.
+  // (Only a JSON `null` body would otherwise throw on the destructure below; a truly empty or
+  // unparseable HTTP body is the separate SyntaxError→500 case that `run` maps to `server.internal`,
+  // out of scope here.) `role`/`status` are bound to locals before the closure and narrowed inside
+  // it, so no field narrowing has to cross the closure boundary. The identity calls enforce
+  // `person.manage`.
   app.patch("/management-api/staff/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -295,6 +305,17 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const body =
         (await c.req.json<{ role?: PersonRoleValue; status?: "active" | "suspended" }>()) ?? {};
       const { role, status } = body;
+      // Typeof screen mirroring the create/reset-pin/set-password routes: refuse a PRESENT field that
+      // is not a string (leaving an absent one as the no-op it should be). This is where a non-string
+      // `role` would otherwise reach the `person_role` pgEnum and 500; a non-string `status` would
+      // silently no-op. An out-of-enum STRING is left to flow through (create screens `role` the same
+      // typeof-only way), so `role: "chef"` still reaches the pgEnum by design.
+      if (role !== undefined && typeof role !== "string") {
+        throw new AppError("management.request_invalid", { field: "role" });
+      }
+      if (status !== undefined && typeof status !== "string") {
+        throw new AppError("management.request_invalid", { field: "status" });
+      }
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         if (role !== undefined) {

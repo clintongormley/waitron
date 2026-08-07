@@ -329,6 +329,70 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
     });
   });
 
+  it("PATCH with a non-string role → 400 management.request_invalid, person unchanged", async () => {
+    const { tenantId, managerId, staffId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, managerId);
+
+    const readRow = async () =>
+      withTenant(suite.admin, tenantId, async (tx) => {
+        await asAppUser(tx);
+        const r = await tx.execute<{ role: string; status: string }>(
+          sql`select role, status from persons where id = ${staffId}`,
+        );
+        return r.rows[0]!;
+      });
+
+    // The typeof screen refuses a PRESENT-but-non-string `role` before any DB work, so it never
+    // reaches `setRole` → the `person_role` pgEnum (a `22P02` → opaque 500). The staff person starts
+    // at the schema defaults; the row must be untouched.
+    const before = await readRow();
+    expect(before).toMatchObject({ role: "staff", status: "active" });
+
+    const res = await app.request(`/management-api/staff/${staffId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ role: 123 }),
+    });
+    expect(res.status).toBe(400);
+    expect(
+      (await res.json()) as { error: { code: string; params: { field: string } } },
+    ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "role" } } });
+    // No write happened: the role is still 'staff'.
+    expect(await readRow()).toEqual(before);
+  });
+
+  it("PATCH with a non-string status → 400 management.request_invalid, person unchanged", async () => {
+    const { tenantId, managerId, staffId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, managerId);
+
+    const readRow = async () =>
+      withTenant(suite.admin, tenantId, async (tx) => {
+        await asAppUser(tx);
+        const r = await tx.execute<{ role: string; status: string }>(
+          sql`select role, status from persons where id = ${staffId}`,
+        );
+        return r.rows[0]!;
+      });
+
+    // A non-string `status` would otherwise silently no-op (matching neither the suspend nor the
+    // reactivate branch); the typeof screen turns it into an explicit 400 naming the field.
+    const before = await readRow();
+    expect(before).toMatchObject({ role: "staff", status: "active" });
+
+    const res = await app.request(`/management-api/staff/${staffId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ status: 123 }),
+    });
+    expect(res.status).toBe(400);
+    expect(
+      (await res.json()) as { error: { code: string; params: { field: string } } },
+    ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "status" } } });
+    expect(await readRow()).toEqual(before);
+  });
+
   it("resets a PIN and sets a password, then the new password logs in", async () => {
     const { tenantId, managerId, staffId } = await setupTenant();
     const app = mountApp(tenantId);
