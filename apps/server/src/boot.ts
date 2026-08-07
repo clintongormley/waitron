@@ -36,6 +36,7 @@ import {
 import type { StripeAccountDeps } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
+import { mountManagementApi } from "./management-api.js";
 import { readOrderFlow } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
@@ -243,6 +244,18 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       secureCookies: config.tls !== undefined,
       cardProvider,
     },
+    log,
+  );
+  // The dashboard's management HTTP surface (manager login, staff/person management) on the SAME app,
+  // the identical convention `mountWebhook` and `mountTillApi` above follow. It reuses the EXACT values
+  // `mountTillApi` receives so the two cannot drift: the same `db`, the same tenant (`till.tenantId`,
+  // this venue's one tenant) and the same `secureCookies` expression (`config.tls !== undefined` — the
+  // cookie is `Secure` only when TLS is configured). No fiscal backend, clock or card provider: the
+  // management routes read and write only the tenant's own identity records. Routes only — no database
+  // work at boot.
+  mountManagementApi(
+    app,
+    { db, cfg: { tenantId: till.tenantId }, secureCookies: config.tls !== undefined },
     log,
   );
   // `buildServeOptions` turns the plain-HTTP options into HTTPS ones when `config.tls` is set,
