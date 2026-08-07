@@ -31,12 +31,13 @@ import {
 } from "@waitron/shared";
 import { insertCapturedPayment } from "@waitron/payments";
 import type { PaymentProvider, PaymentResult, PaymentResultState } from "@waitron/payments";
+import { listOutstandingSales } from "@waitron/core";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { deploymentEnvironment } from "./config.js";
 import type { OrderFlow, TillConfig } from "./till-config.js";
 import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
-import { payWorkingOrder, payWorkingOrderIntegrated } from "./till-sale.js";
+import { collectOrder, payWorkingOrder, payWorkingOrderIntegrated } from "./till-sale.js";
 import type { IntegratedPayDeps } from "./till-sale.js";
 import { startRealPostgres } from "./testing/postgres.js";
 import "./errors.js";
@@ -300,6 +301,27 @@ async function paymentCount(workingOrderId: string): Promise<number> {
     sql`select count(*)::text as count from payments where working_order_id = ${workingOrderId}`,
   );
   return Number(rows[0]!.count);
+}
+
+/** The `sales.id` filed for this order — the witness that `listOutstandingSales` lists (or no longer
+ *  lists) the invoice-first sale, and the seed target for a lost-T2 recovery. */
+async function saleIdFor(workingOrderId: string): Promise<string> {
+  const { rows } = await suite.admin.execute<{ id: string }>(
+    sql`select id from sales where working_order_id = ${workingOrderId}`,
+  );
+  return rows[0]!.id;
+}
+
+/** This tenant's outstanding (issued-but-unsettled) sales, read as the app role — the "what is owed?"
+ *  list a decline must leave intact. Each test owns its tenant, so it lists only this test's sales. */
+async function outstandingSalesFor(
+  cfg: TillConfig,
+): Promise<{ saleId: string; amountDue: string }[]> {
+  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const rows = await listOutstandingSales(tx, cfg.tenantId);
+    return rows.map((r) => ({ saleId: String(r.saleId), amountDue: String(r.amountDue) }));
+  });
 }
 
 /** Every `payments` row for this order — state + whether it carries a `sale_id` — WITHOUT the sales
@@ -884,5 +906,331 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
       await appA.close();
       await appB.close();
     }
+  });
+});
+
+// ORDERING 1 (invoice-first): the sale/invoice is issued (chained, filed) AT PLACING and sits
+// OUTSTANDING; the integrated card collect must SETTLE that already-issued invoice (`settleSale`, NOT a
+// second `recordSale`) and associate the captured payment. The real hazard this closes is NOT a
+// double-file (`sales_working_order_id_key` UNIQUE 23505s a second file for one order) — it is an
+// ORPHANED captured payment beside an UNSETTLED issued invoice (money taken, invoice left outstanding).
+// A decline files/voids nothing: the issued invoice stays outstanding, retryable (§5). Real Postgres,
+// not PGlite (§4): the settle writes as the deployment role under RLS, and the double-settle replay and
+// the concurrent recovery need distinct app-role connections racing one order.
+describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)", () => {
+  /** Arrange an OUTSTANDING invoice-first sale: park, then `placeOrder` issues the DEFERRED invoice at
+   *  placing (open → placed), leaving one chained-but-unsettled sale. Returns the order id + its saleId. */
+  async function placeInvoiceFirst(
+    cfg: TillConfig,
+    cafe: AvailableProduct,
+    quantity = "1",
+  ): Promise<{ id: string; saleId: string }> {
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+    return { id, saleId: await saleIdFor(id) };
+  }
+
+  it("settles the already-issued outstanding invoice on capture (settleSale, not recordSale)", async () => {
+    const { cfg, cafe } = await modeVenue("invoice_first");
+    const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
+      // The deferred invoice is issued at placing: one sale + registro, order placed, OUTSTANDING.
+      expect(await saleCount(id)).toBe(1);
+      expect(await registroCount(id)).toBe(1);
+      expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
+      expect(await outstandingSalesFor(cfg)).toEqual([{ saleId, amountDue: "1.50" }]);
+
+      const { deps, client } = integratedDeps(cfg, app);
+      const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
+
+      expect(out.outcome).toBe("captured");
+      if (out.outcome !== "captured") throw new Error("unreachable");
+      expect(out.ticket.invoiceNumber).toBe("A/1"); // the SAME invoice, read back
+      expect(out.ticket.total).toBe("1.50");
+      expect(out.ticket.change).toBe("0.00");
+      // NO second sale/registro — the invoice was SETTLED, not re-filed. The card charged the exact
+      // invoice total; the captured stripe payment links to the ISSUED sale; the order is now settled
+      // and no longer outstanding.
+      expect(await saleCount(id)).toBe(1);
+      expect(await registroCount(id)).toBe(1);
+      expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+      expect(await outstandingSalesFor(cfg)).toEqual([]);
+      expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
+      const payments = await paymentsFor(id);
+      expect(payments).toHaveLength(1);
+      expect(payments[0]!.state).toBe("captured");
+      expect(payments[0]!.linkedToSale).toBe(true);
+      expect(payments[0]!.externalRef).toMatch(/^pi_/);
+      expect(client.lastCreateIntent?.amount).toBe("1.50");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("tips on: charges amountDue+tip, settles the invoice at the total, records the tip on the tender", async () => {
+    const { cfg, cafe } = await modeVenue("invoice_first");
+    const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const { id } = await placeInvoiceFirst(cfg, cafe);
+      const { deps, client } = integratedDeps(cfg, app, new FakeStripe(), true);
+
+      const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [], tip: "0.30" });
+
+      expect(out.outcome).toBe("captured");
+      // The reader was charged the GROSS 1.80 (amount due 1.50 + tip 0.30)…
+      expect(client.lastCreateIntent?.amount).toBe("1.80");
+      // …while the FISCAL total stays the ex-tip invoice total 1.50 (a settle files nothing new), and the
+      // tender carries amount 1.80 / tip 0.30 (coverage identity sum(amount) = total + sum(tip) holds).
+      expect(await filedSaleTotal(id)).toBe("1.50");
+      expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.80", tipAmount: "0.30" }]);
+      expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("a decline leaves the invoice OUTSTANDING — nothing re-filed or voided; listOutstandingSales still lists it", async () => {
+    const { cfg, cafe } = await modeVenue("invoice_first");
+    const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
+
+      const client = new FakeStripe();
+      client.declineNext();
+      const { deps } = integratedDeps(cfg, app, client);
+      const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
+
+      expect(out.outcome).toBe("declined");
+      // A decline files/voids NOTHING (§5): still one sale + registro, the order stays PLACED (not
+      // settled), the invoice is still unsettled and STILL LISTED as outstanding — retryable.
+      expect(await saleCount(id)).toBe(1);
+      expect(await registroCount(id)).toBe(1);
+      expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
+      expect(await outstandingSalesFor(cfg)).toEqual([{ saleId, amountDue: "1.50" }]);
+      // No tender was written (nothing settled); the provider's T2 wrote a `failed` audit row, unlinked.
+      expect(await tendersFor(id)).toEqual([]);
+      expect(await rawPaymentsFor(id)).toEqual([{ state: "failed", hasSale: false }]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("a concurrent collect that settles the invoice first makes finalizeSettle REPLAY via sale.already_settled", async () => {
+    const { cfg, cafe } = await modeVenue("invoice_first");
+    const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const { id } = await placeInvoiceFirst(cfg, cafe);
+
+      // Mid-`collect` (AFTER P1 detected settle, BEFORE P3), a concurrent CASH collect settles the
+      // already-issued invoice and moves placed → settled. finalizeSettle's `settleSale` then trips
+      // `sale.already_settled` (the sale_settlements UNIQUE / post-settlement trigger) and REPLAYS the
+      // settled ticket in a fresh transaction rather than double-settling.
+      const provider = cannedProvider(async () => {
+        await collectOrder({ db: suite.admin, backend, clock }, cfg, {
+          id,
+          lines: [],
+          tender: { method: "cash", amount: "1.50" },
+        });
+      }, "captured");
+      const deps: IntegratedPayDeps = { db: app, backend, clock, provider, tipsEnabled: false };
+
+      const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
+
+      expect(out.outcome).toBe("captured");
+      if (out.outcome !== "captured") throw new Error("unreachable");
+      expect(out.ticket.total).toBe("1.50");
+      // Replayed the CONCURRENT winner's CASH settlement: still one sale + registro, one settlement, one
+      // CASH tender — the integrated pay filed/settled nothing of its own.
+      expect(await saleCount(id)).toBe(1);
+      expect(await registroCount(id)).toBe(1);
+      expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+      expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "1.50", tipAmount: "0.00" }]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("a settle whose payment cannot be associated rolls back — the invoice stays OUTSTANDING (P3 is atomic)", async () => {
+    const { cfg, cafe } = await modeVenue("invoice_first");
+    const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
+
+      // A provider that reports `captured` but wrote NO `payments` row — so `associatePaymentWithSale`
+      // throws the domain `payment.not_found` (a non-`already_settled` error). finalizeSettle must
+      // re-raise it, NOT swallow it as a replay, and the settlement it half-wrote must roll back with the
+      // transaction — leaving the invoice unsettled and outstanding.
+      const provider = cannedProvider(() => Promise.resolve(), "captured");
+      const deps: IntegratedPayDeps = { db: app, backend, clock, provider, tipsEnabled: false };
+
+      await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toMatchObject({
+        code: "payment.not_found",
+      });
+
+      // The settlement rolled back: no tender, the order stays PLACED, the invoice is still outstanding.
+      expect(await tendersFor(id)).toEqual([]);
+      expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
+      expect(await outstandingSalesFor(cfg)).toEqual([{ saleId, amountDue: "1.50" }]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  // A lost-T2 capture on an invoice-first order: `collect`'s T2 committed a captured payment (sale_id
+  // NULL) but P3 never ran. A naive retry must NOT re-charge AND must NOT `recordSale` (which would
+  // 23505 against the issued invoice) — it RECOVERS by SETTLING the existing invoice.
+  describe("lost-T2 recovery settles (never re-files)", () => {
+    /** Seed the lost-T2 state on an already-placed invoice-first order: a captured stripe payment for it
+     *  whose sale_id is NULL. `capturedAmount` is the GROSS the card was charged (amount due, or +tip). */
+    async function seedLostCaptureOnPlaced(
+      cfg: TillConfig,
+      id: string,
+      capturedAmount: string,
+    ): Promise<string> {
+      const externalRef = `pi_lost_${randomUUID()}`;
+      await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await insertCapturedPayment(tx, {
+          tenantId: cfg.tenantId,
+          workingOrderId: id,
+          provider: "stripe",
+          paymentRef: `pi-ref-${randomUUID()}`,
+          amount: decimal(capturedAmount),
+          settledAt: new Date(),
+          externalRef,
+        });
+      });
+      return externalRef;
+    }
+
+    it("recovers by settling the issued invoice: no re-charge, no second file, links the existing row", async () => {
+      const { cfg, cafe } = await modeVenue("invoice_first");
+      const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+      try {
+        const { id } = await placeInvoiceFirst(cfg, cafe);
+        const externalRef = await seedLostCaptureOnPlaced(cfg, id, "1.50"); // charged exactly the total
+
+        const { deps, client } = integratedDeps(cfg, app);
+        const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
+
+        expect(out.outcome).toBe("captured");
+        // collect was NEVER driven (recovery skips P2): no PaymentIntent created, no re-charge.
+        expect(client.lastCreateIntent).toBeUndefined();
+        // Still ONE sale + registro (SETTLED, not re-filed) and ONE payment — the lost capture, now linked.
+        expect(await saleCount(id)).toBe(1);
+        expect(await registroCount(id)).toBe(1);
+        expect(await paymentCount(id)).toBe(1);
+        expect(await filedSaleTotal(id)).toBe("1.50");
+        expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+        expect(await outstandingSalesFor(cfg)).toEqual([]);
+        expect(await tendersFor(id)).toEqual([
+          { method: "card", amount: "1.50", tipAmount: "0.00" },
+        ]);
+        const payments = await paymentsFor(id);
+        expect(payments).toHaveLength(1);
+        expect(payments[0]!.externalRef).toBe(externalRef); // the EXISTING lost row, not a fresh one
+        expect(payments[0]!.linkedToSale).toBe(true);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it("reconstructs a tip when the captured amount exceeds the amount due", async () => {
+      const { cfg, cafe } = await modeVenue("invoice_first");
+      const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+      try {
+        const { id } = await placeInvoiceFirst(cfg, cafe);
+        await seedLostCaptureOnPlaced(cfg, id, "1.80"); // amount due 1.50 → tip reconstructed as 0.30
+
+        const { deps, client } = integratedDeps(cfg, app);
+        const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
+
+        expect(out.outcome).toBe("captured");
+        expect(client.lastCreateIntent).toBeUndefined(); // no re-charge
+        // The FISCAL total stays the ex-tip invoice total 1.50; the tender carries the whole 1.80 with
+        // tip 0.30 (coverage identity holds).
+        expect(await filedSaleTotal(id)).toBe("1.50");
+        expect(await tendersFor(id)).toEqual([
+          { method: "card", amount: "1.80", tipAmount: "0.30" },
+        ]);
+        expect(await paymentCount(id)).toBe(1);
+        expect((await paymentsFor(id))[0]!.linkedToSale).toBe(true);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it("a captured amount BELOW the amount due is corruption: settles nothing, leaves the payment for reconcile", async () => {
+      const { cfg, cafe } = await modeVenue("invoice_first");
+      const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+      try {
+        const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
+        await seedLostCaptureOnPlaced(cfg, id, "1.00"); // below the 1.50 amount due — cannot even cover it
+
+        const { deps, client } = integratedDeps(cfg, app);
+        await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toBeDefined();
+
+        expect(client.lastCreateIntent).toBeUndefined(); // never re-charged
+        // Nothing settled: no tender, the order stays placed, the invoice is still outstanding, and the
+        // captured payment is untouched (still a sale_id-NULL orphan for reconcile).
+        expect(await tendersFor(id)).toEqual([]);
+        expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
+        expect(await outstandingSalesFor(cfg)).toEqual([{ saleId, amountDue: "1.50" }]);
+        expect(await rawPaymentsFor(id)).toEqual([{ state: "captured", hasSale: false }]);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it("two concurrent recoveries settle the invoice ONCE; the loser replays", async () => {
+      const { cfg, cafe } = await modeVenue("invoice_first");
+      const appA = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+      const appB = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+      try {
+        const { id } = await placeInvoiceFirst(cfg, cafe);
+        await seedLostCaptureOnPlaced(cfg, id, "1.50");
+
+        // ONE lost capture, TWO retries. Both P1s pass the pre-check (sale_id NULL) with an outstanding
+        // invoice → recover-settle; finalizeSettleRecovery's FOR UPDATE fully serialises them, so one
+        // settles + associates + moves placed → settled, and the other blocks, re-reads `settled`, and
+        // REPLAYS — one settlement, no double-associate.
+        const { deps: depsA } = integratedDeps(cfg, appA);
+        const { deps: depsB } = integratedDeps(cfg, appB);
+        const req = { id, lines: [] };
+
+        const [a, b] = await Promise.allSettled([
+          payWorkingOrderIntegrated(depsA, cfg, req),
+          payWorkingOrderIntegrated(depsB, cfg, req),
+        ]);
+
+        if (a.status !== "fulfilled" || b.status !== "fulfilled") {
+          throw new Error(
+            `both recoveries should settle: a=${JSON.stringify(a)} b=${JSON.stringify(b)}`,
+          );
+        }
+        expect(a.value.outcome).toBe("captured");
+        expect(b.value.outcome).toBe("captured");
+        if (a.value.outcome !== "captured" || b.value.outcome !== "captured") {
+          throw new Error("unreachable");
+        }
+        expect(a.value.ticket.invoiceNumber).toBe(b.value.ticket.invoiceNumber);
+        // Exactly one sale + registro; ONE settlement (one tender); the SINGLE lost capture is linked.
+        expect(await saleCount(id)).toBe(1);
+        expect(await registroCount(id)).toBe(1);
+        expect(await tendersFor(id)).toEqual([
+          { method: "card", amount: "1.50", tipAmount: "0.00" },
+        ]);
+        expect(await paymentCount(id)).toBe(1);
+        expect((await paymentsFor(id))[0]!.linkedToSale).toBe(true);
+      } finally {
+        await appA.close();
+        await appB.close();
+      }
+    });
   });
 });
