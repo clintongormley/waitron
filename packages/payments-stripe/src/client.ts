@@ -44,3 +44,16 @@ export function fromMinorUnits(minor: number): Decimal {
   const frac = s.slice(-2);
   return decimal(`${minor < 0 ? "-" : ""}${whole}.${frac}`);
 }
+
+/**
+ * The Stripe idempotency key for an integrated card collect — derived from the STABLE working-order
+ * id, NOT any per-call random ref (§4): a retry after a lost response re-drives the SAME Stripe
+ * operation (PaymentIntent creation) to completion, so the card is charged once. Shared by
+ * `StripeTerminalProvider.collect` and `StripeOnDeviceProvider.collect`, which both key their
+ * PaymentIntent creation off this value; each keeps its own separate, per-attempt random
+ * `paymentRef` (the `payments` row's own idempotency anchor), so the two are deliberately decoupled
+ * — one PaymentIntent per working order, many `payments` rows across retries.
+ */
+export function workingOrderIdempotencyKey(workingOrderId: string): string {
+  return `wo_${workingOrderId}`;
+}

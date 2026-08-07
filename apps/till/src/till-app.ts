@@ -14,8 +14,10 @@ import type { StringKey } from "./i18n/strings.js";
 import type {
   HeldOrderSummary,
   OrderFlow,
+  PayOutcome,
   PrepQueueEntry,
   PrepState,
+  TillInfo,
   TillProduct,
   TillSaleResult,
 } from "./api/client.js";
@@ -23,7 +25,11 @@ import type { LayoutDef } from "./layout.js";
 import type { OrderLine } from "./state/working-order.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
-import type { ConfirmPaymentDetail, ParkOrderDetail } from "./widgets/tender-pay.js";
+import type {
+  CollectCardDetail,
+  ConfirmPaymentDetail,
+  ParkOrderDetail,
+} from "./widgets/tender-pay.js";
 
 /** The three faces of the till: sign in, ring up, print. The app shows exactly one at a time. */
 type Screen = "lock" | "counter" | "ticket";
@@ -58,6 +64,11 @@ function displayQuantity(product: TillProduct, quantity: string): string {
  *  - `confirm-payment` (Mode P) → `recordSale` the basket, then show the `ticket` and refresh the held
  *    list so a settled parked order drops off (or, on a rejected `{code}`, stay on the counter with the
  *    basket intact and surface a non-fatal error — a till must never lose a sale in progress);
+ *  - `collect-card` (integrated card terminal, sub-project 7 Task 8) → `pay` the basket over the
+ *    provider; same success shape as `confirm-payment`, but a decline/timeout/network-unavailable is
+ *    DATA, not a throw — stay on the counter with the basket intact and record the outcome
+ *    ({@link cardOutcome}) instead of an error (CLAUDE.md §5: nothing may block a sale but the sale
+ *    itself);
  *  - `place-order` (Modes I/T) → park-or-sync then `placeOrder` the basket, move to the `"collect"`
  *    stage for the SAME order and refresh the prep queue;
  *  - `collect-order` (Modes I/T) → `collectOrder` the placed order, then show the `ticket` — the same
@@ -120,6 +131,17 @@ export class TillApp extends LitElement {
    */
   @state() private orderFlow: OrderFlow = "prepay";
   /**
+   * The till's integrated-card wiring (Task 9), read once from `GET /api/till` on boot alongside
+   * {@link orderFlow} — threaded to `till-tender-pay` (via `till-counter-screen`) so it can choose
+   * between the #62 manual (datáfono) Card path and the integrated `collect-card` one. Defaults
+   * `"none"`, same reasoning as `orderFlow`'s default: a boot that has not yet resolved (or a stub
+   * that omits it) never shows the integrated affordances by accident.
+   */
+  @state() private cardProvider: TillInfo["cardProvider"] = "none";
+  /** Whether the till prompts for a tip on an integrated-card collection (Task 9), read once from
+   * `GET /api/till` alongside {@link cardProvider}. Defaults `false`, same reasoning. */
+  @state() private tipsEnabled = false;
+  /**
    * Where the CURRENT basket sits in a Mode-I/T order's life: `"order"` (composing/placing, the
    * default) or `"collect"` (this basket's order was placed and now awaits its tender). Ignored by
    * `tender-pay` under Mode P (`orderFlow === "prepay"`), which has no separate collect stage. Reset
@@ -145,6 +167,26 @@ export class TillApp extends LitElement {
   @state() private invoiceLocale = "es-ES";
   /** The string key of a non-fatal error to show over the counter, or `undefined` for none. */
   @state() private errorKey?: StringKey;
+  /**
+   * The outcome of the most recent DECLINED/`timeout`/`network_unavailable` `collect-card` attempt
+   * (integrated card terminal, sub-project 7 Task 8) — `undefined` once none is pending. Set by
+   * {@link TillApp.#onCollectCard} on a non-`captured` outcome. Cleared wherever the basket it
+   * describes stops being the one on the counter — at the top of `#onCollectCard` itself (a fresh
+   * attempt clears any prior banner, like {@link errorKey}), and on the SUCCESS path of every handler
+   * that swaps or empties `#store`: {@link TillApp.#onParkOrder} (`store.clear()` empties it for the
+   * next customer), {@link TillApp.#onRetrieveOrder} (`store.loadFrom` swaps in a different order's
+   * lines), and {@link TillApp.#onNewSale}. Deliberately NOT reset by
+   * {@link TillApp.#onDiscardOrder}: that handler discards a held order named by the event's OWN `id`
+   * and never touches `#store` — the currently loaded basket (and any outcome it carries) is
+   * unaffected by discarding some other parked order. Read by `till-tender-pay` (Task 9, threaded
+   * through `#renderScreen`/`till-counter-screen`) to render retry / switch-tender / wait.
+   *
+   * Marked `private` like every other `@state()` field on this class — safe now that `#renderScreen`
+   * reads it (below), satisfying `tsconfig.base.json`'s `noUnusedLocals` the same way every sibling
+   * field does. It was temporarily NOT `private` while Task 9's widget (the first reader) did not yet
+   * exist; see git history on this line for the receipt that justified that, now moot.
+   */
+  @state() private cardOutcome?: Exclude<PayOutcome, { outcome: "captured" }>["outcome"];
   /**
    * SINGLE-FLIGHT GUARD for sale confirmation — the fiscal double-file safety (CLAUDE.md §5: two
    * chained `registros_facturacion` records for one purchase are UNREPAIRABLE). Set synchronously at
@@ -180,9 +222,10 @@ export class TillApp extends LitElement {
   /**
    * Read the public till info once: set the OPERATOR-UI locale (`setLocale`), remember the receipt
    * (invoice) locale for the ticket, remember the ticket issuer, and (7c) remember the location's
-   * pay-timing mode. `setLocale` and `invoiceLocale` both take the SAME server `locale`, but they
-   * drive different things and are threaded separately — the receipt uses its `invoiceLocale` PROP and
-   * must never follow the operator UI (see `till-ticket-view`'s INVOICE LOCALE note).
+   * pay-timing mode plus (Task 9) its integrated-card wiring. `setLocale` and `invoiceLocale` both
+   * take the SAME server `locale`, but they drive different things and are threaded separately — the
+   * receipt uses its `invoiceLocale` PROP and must never follow the operator UI (see
+   * `till-ticket-view`'s INVOICE LOCALE note).
    */
   async #boot(): Promise<void> {
     const till = await this.api.getTill();
@@ -194,6 +237,8 @@ export class TillApp extends LitElement {
     this.invoiceLocale = till.locale;
     this.issuer = { venueName: till.venueName, nif: till.nif };
     this.orderFlow = till.orderFlow;
+    this.cardProvider = till.cardProvider;
+    this.tipsEnabled = till.tipsEnabled;
   }
 
   /** A confirmed login: load the catalogue, remember the operator, show the counter, list held orders
@@ -281,9 +326,63 @@ export class TillApp extends LitElement {
     }
   }
 
+  /**
+   * Settle the basket over the INTEGRATED card terminal (sub-project 7 Task 8). Same shape as
+   * {@link TillApp.#onConfirmPayment} — single-flight via `submitting` (the SAME flag: both are
+   * terminal fiscal-file moments, CLAUDE.md §5's double-file safety), the same pre-pay `#syncIfDirty`
+   * re-lock for an edited retrieved order (`payWorkingOrderIntegrated` ignores `req.lines` for a
+   * retrieved/placed order exactly like `recordSale` does — `IntegratedPayRequest`'s own doc,
+   * `apps/server/src/till-sale.ts:185-187`), and the same post-success held-list refresh.
+   *
+   * It diverges only in what a NON-success answer means: `recordSale` rejects with a thrown `{ code }`
+   * on any failure, but `pay` answers 200 with the outcome as DATA even on a decline
+   * (`IntegratedPayOutcome`'s own doc — nothing may block a sale on anything but the sale itself,
+   * CLAUDE.md §5). So this handler branches on `out.outcome` instead of assuming a ticket:
+   *  - `captured`: identical to `#onConfirmPayment`'s success path — show the ticket, refresh the held
+   *    list.
+   *  - `declined` / `timeout` / `network_unavailable`: nothing was filed and the order stays `open`, so
+   *    simply STAY on the counter with the basket intact and record the outcome in {@link cardOutcome}
+   *    for Task 9's widget to render retry / switch-tender (cash or manual card is one tap away) /
+   *    wait — never an error banner; this is not a fault.
+   *  - a THROWN fault (a genuine server error, incl. the recovery-window corruption 500 — Task 5) falls
+   *    to the `catch`, exactly like `#onConfirmPayment`: the generic `sale.error`, basket intact, never
+   *    the raw code.
+   */
+  async #onCollectCard(event: Event): Promise<void> {
+    if (this.submitting) return;
+    this.submitting = true;
+    const detail = (event as CustomEvent<CollectCardDetail>).detail;
+    const id = this.#store.id;
+    const lines = this.#currentSaleLines();
+    const label = this.#store.label;
+    this.errorKey = undefined;
+    this.cardOutcome = undefined;
+    try {
+      await this.#syncIfDirty(id, lines, label);
+      const out: PayOutcome = await this.api.pay({
+        id,
+        lines,
+        ...(detail.tip ? { tip: detail.tip } : {}),
+        ...(detail.allowOffline ? { allowOffline: true } : {}),
+      });
+      if (out.outcome === "captured") {
+        this.result = out.ticket;
+        this.screen = "ticket";
+        await this.#refreshHeldOrders();
+      } else {
+        this.cardOutcome = out.outcome;
+      }
+    } catch {
+      this.errorKey = "sale.error";
+    } finally {
+      this.submitting = false;
+    }
+  }
+
   /** Maps the current basket to the `{ productId, quantity }` line shape every server call takes
-   * (`parkOrder`, `updateWorkingOrder`, `placeOrder`, `recordSale`) — never a price, since the server
-   * always re-prices. Shared by `#onParkOrder`, `#onPlaceOrder`/`#syncIfDirty` and `#onConfirmPayment`. */
+   * (`parkOrder`, `updateWorkingOrder`, `placeOrder`, `recordSale`, `pay`) — never a price, since the
+   * server always re-prices. Shared by `#onParkOrder`, `#onPlaceOrder`/`#syncIfDirty`,
+   * `#onConfirmPayment` and `#onCollectCard`. */
   #currentSaleLines(): { productId: string; quantity: string }[] {
     return this.#store.lines.map((line) => ({
       productId: line.product.id,
@@ -293,9 +392,9 @@ export class TillApp extends LitElement {
 
   /**
    * Re-sync a PERSISTED (retrieved) working order to the server before a terminal fiscal step — pay
-   * (`#onConfirmPayment`) or place (`#onPlaceOrder`) — but ONLY when the basket was actually EDITED
-   * since it was retrieved. The one place both call sites express that rule, so neither re-implements
-   * it. Two guards, both load-bearing:
+   * (`#onConfirmPayment`/`#onCollectCard`) or place (`#onPlaceOrder`) — but ONLY when the basket was
+   * actually EDITED since it was retrieved. The one place every call site expresses that rule, so none
+   * re-implements it. Two guards, both load-bearing:
    *  - `persisted`: a fresh walk-up (not persisted) has no server row to update — pay creates its order
    *    from the sent `lines`, place PARKS it first — so this is a no-op for it (each call site owns the
    *    fresh-basket branch; this helper only ever runs the update).
@@ -306,10 +405,13 @@ export class TillApp extends LitElement {
    *
    * A `working_order.not_open` rejection is SWALLOWED (never re-thrown): it means the order is already
    * non-open — settled, or placed (a lost-response re-tap, or the loser of a two-till concurrent
-   * pay/place on the same order). What the caller's NEXT step does with that differs, and only the PAY
-   * path is made whole by it:
-   *  - PAY: swallowing lets `recordSale`'s settled branch REPLAY the filed ticket (spec §3) instead of
-   *    surfacing an error — that replay is the whole point of the swallow. Never a double-file.
+   * pay/place on the same order). What the caller's NEXT step does with that differs, and only the two
+   * PAY paths are made whole by it:
+   *  - PAY (`recordSale` and the integrated `pay`): swallowing lets each server route's own settled
+   *    branch REPLAY the filed ticket (spec §3 for `recordSale`; `payWorkingOrderIntegrated`'s step 2,
+   *    `apps/server/src/till-sale.ts:644-650`, for `pay` — same "already settled → idempotent replay,
+   *    files nothing" shape) instead of surfacing an error — that replay is the whole point of the
+   *    swallow. Never a double-file.
    *  - PLACE: server `placeOrder` is NOT idempotent — for a non-open order it re-raises the SAME
    *    `working_order.not_open` (working-order.ts refuses any non-open row; there is no
    *    `sales_working_order_id_key` replay for placing), which `#onPlaceOrder` surfaces as `place.error`.
@@ -427,9 +529,12 @@ export class TillApp extends LitElement {
    * Park the current basket to pay later, then empty it for the next customer — staying on the counter
    * (a parked order is NOT a completed sale, so there is no ticket). The store's stable `id` is sent as
    * the park-idempotency key; on success `store.clear()` empties the basket AND re-mints that id, so the
-   * next park/pay keys a fresh working order rather than colliding with the parked one. A rejected park
-   * must not lose the order: like `#onConfirmPayment`, it surfaces a non-fatal error and leaves the
-   * basket intact (no `clear`) so the operator can retry.
+   * next park/pay keys a fresh working order rather than colliding with the parked one — `cardOutcome`
+   * is cleared alongside it, so a declined card on THIS basket never carries over into the next
+   * customer's unrelated sale (fix round 1). A rejected park must not lose the order: like
+   * `#onConfirmPayment`, it surfaces a non-fatal error and leaves the basket intact (no `clear`) so the
+   * operator can retry — `cardOutcome` is left untouched on that path too, since the same basket (and
+   * any decline it carries) is still the one on the counter.
    */
   async #onParkOrder(event: Event): Promise<void> {
     // Reentry guard: a second park-order fired before the first settles is a no-op (see `parking`).
@@ -444,6 +549,7 @@ export class TillApp extends LitElement {
     try {
       await this.api.parkOrder({ id, lines: this.#currentSaleLines(), label });
       this.#store.clear();
+      this.cardOutcome = undefined;
       await this.#refreshHeldOrders();
     } catch {
       // A rejected park must not lose the order: stay on the counter, basket intact, generic message.
@@ -476,6 +582,12 @@ export class TillApp extends LitElement {
    * the raw code) and leave the current basket UNTOUCHED — `loadFrom` runs only after the successful
    * await, so a rejection never half-loads it. The refresh below then runs on both paths, so the
    * vanished order drops off the list rather than sitting there inviting another dead tap.
+   *
+   * `loadFrom` swaps in a DIFFERENT order's lines, so a decline recorded against the basket being
+   * replaced (`cardOutcome`) is cleared alongside it (fix round 1) — otherwise the newly retrieved
+   * order would inherit a banner that describes a sale it was never part of. Cleared only on this
+   * success path, not in the `catch`: a rejected retrieve leaves the current basket untouched, so
+   * whatever `cardOutcome` it already carries is still describing the basket still on the counter.
    */
   async #onRetrieveOrder(event: Event): Promise<void> {
     const { id } = (event as CustomEvent<{ id: string }>).detail;
@@ -495,6 +607,7 @@ export class TillApp extends LitElement {
       }
       if (droppedAProduct) this.errorKey = "held.product_gone";
       this.#store.loadFrom(order.id, lines, order.label ?? undefined);
+      this.cardOutcome = undefined;
     } catch {
       // The order was paid/discarded on another register since our list was refreshed: non-fatal
       // notice, basket left intact (loadFrom never ran), never leak the raw code.
@@ -526,11 +639,13 @@ export class TillApp extends LitElement {
   }
 
   /** Start the next sale: empty the basket (and, with it, its `persisted` flag), reset the place/collect
-   * stage back to `"order"`, back to the counter. */
+   * stage back to `"order"`, back to the counter. `cardOutcome` is cleared too — a new, unrelated
+   * basket must never inherit a decline/timeout/network-unavailable banner from the sale before it. */
   #onNewSale(): void {
     this.#store.clear();
     this.stage = "order";
     this.errorKey = undefined;
+    this.cardOutcome = undefined;
     this.screen = "counter";
   }
 
@@ -561,6 +676,7 @@ export class TillApp extends LitElement {
         class="app"
         @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
         @confirm-payment=${(event: Event) => void this.#onConfirmPayment(event)}
+        @collect-card=${(event: Event) => void this.#onCollectCard(event)}
         @place-order=${() => void this.#onPlaceOrder()}
         @collect-order=${(event: Event) => void this.#onCollectOrder(event)}
         @advance-prep=${(event: Event) => void this.#onAdvancePrep(event)}
@@ -591,6 +707,9 @@ export class TillApp extends LitElement {
           .stage=${this.stage}
           .busy=${this.submitting || this.placing}
           .layout=${this.#layoutFor()}
+          .cardProvider=${this.cardProvider}
+          .tipsEnabled=${this.tipsEnabled}
+          .cardOutcome=${this.cardOutcome}
         ></till-counter-screen>`;
       case "ticket":
         return html`<till-ticket-view

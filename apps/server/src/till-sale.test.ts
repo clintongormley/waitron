@@ -86,6 +86,9 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
+    // No integrated card terminal — the walk-up sale path neither builds nor drives one.
+    cardProvider: "none",
+    tipsEnabled: false,
     // The walk-up sale path is mode-agnostic; the provisioned venue defaults to prepay.
     orderFlow: "prepay",
   };

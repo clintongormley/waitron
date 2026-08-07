@@ -11,6 +11,7 @@ import type {
   ProviderCapabilities,
 } from "@waitron/payments";
 import { captureAttempting, failAttempting, insertAttempting } from "@waitron/payments";
+import { workingOrderIdempotencyKey } from "./client.js";
 import type { StripeClient } from "./client.js";
 import "./errors.js";
 import { reverseViaStripe } from "./reverse.js";
@@ -101,6 +102,8 @@ export class StripeTerminalProvider implements PaymentProvider {
     this.requireOwnTenant(params.tenantId);
     const readerId = await this.opts.resolveReader(params.tenantId, params.tillId);
     const paymentRef = randomUUID();
+    // See `workingOrderIdempotencyKey`'s own doc for the rationale (shared with the on-device provider).
+    const stripeIdempotencyKey = workingOrderIdempotencyKey(params.workingOrderId);
     const key = { tenantId: params.tenantId, provider: PROVIDER, paymentRef };
 
     // T1 — commit the attempt before any network call.
@@ -115,7 +118,7 @@ export class StripeTerminalProvider implements PaymentProvider {
     );
 
     // Network — outside any transaction (T1/T2).
-    const outcome = await this.drive(readerId, params.amount, paymentRef);
+    const outcome = await this.drive(readerId, params.amount, stripeIdempotencyKey);
 
     // T2 — persist the terminal outcome.
     const row = await this.inTenant((tx) =>
@@ -151,13 +154,13 @@ export class StripeTerminalProvider implements PaymentProvider {
   private async drive(
     readerId: string,
     amount: Decimal,
-    paymentRef: string,
+    idempotencyKey: string,
   ): Promise<{ captured: true; settledAt: Date; piId: string } | { captured: false }> {
     try {
       const intent = await this.opts.client.createPaymentIntent({
         amount,
         currency: CURRENCY,
-        idempotencyKey: paymentRef,
+        idempotencyKey,
       });
       const piId = intent.id;
       await this.opts.client.processPaymentIntent(readerId, piId);

@@ -7,11 +7,12 @@ import type { Database } from "@waitron/db";
 import { endSession, listActiveStaff, loginWithPin } from "@waitron/identity";
 import { listAvailableProducts } from "@waitron/catalogue";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import type { PaymentProvider } from "@waitron/payments";
 import { codeOf } from "./error-code.js";
 import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
-import { collectOrder, recordTillSale } from "./till-sale.js";
-import type { TillSaleRequest, TillTender } from "./till-sale.js";
+import { collectOrder, payWorkingOrderIntegrated, recordTillSale } from "./till-sale.js";
+import type { IntegratedPayRequest, TillSaleRequest, TillTender } from "./till-sale.js";
 import {
   abandonHeldOrder,
   advancePrep,
@@ -49,6 +50,14 @@ export interface TillApiDeps {
   clock: TrustedClock;
   cfg: TillConfig;
   secureCookies: boolean;
+  /**
+   * The integrated card-payment provider `boot.ts` built for this till's tenant, or `undefined` when
+   * `WAITRON_TILL_CARD_PROVIDER=none`. Unused by the routes below — the card-collect route (Task 8)
+   * drives it — but wired into this one interface now, beside the fiscal `backend`/`clock`, so the
+   * shape and every caller stay stable across the slice. `deps.cfg.cardProvider` carries the STRING
+   * form `GET /api/till` echoes; THIS is the built object the collect path invokes.
+   */
+  cardProvider?: PaymentProvider;
 }
 
 /**
@@ -227,6 +236,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         venueName: issuer.venueName,
         nif: issuer.nif,
         orderFlow: deps.cfg.orderFlow,
+        // The integrated card terminal (sub-project 7): the STRING provider selector and the tip flag
+        // the till app reads BEFORE login to pick its card-collect route and show/hide the tip
+        // affordance (Task 8). `cardProvider` is the config selector (`deps.cfg.cardProvider`), not the
+        // built `PaymentProvider` on `deps` — the client needs the mode name, not the server object.
+        // `tipsEnabled` comes from `deps.cfg` too — the single source (`TillConfig.tipsEnabled`,
+        // set at boot from `config.till`), not a second copy on `deps` that could drift from it.
+        cardProvider: deps.cfg.cardProvider,
+        tipsEnabled: deps.cfg.tipsEnabled,
       });
     }),
   );
@@ -263,6 +280,40 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         personId,
       );
       return c.json(result);
+    }),
+  );
+
+  // Pay over the INTEGRATED card terminal (sub-project 7, Task 7) — a DELIBERATE divergence from
+  // /api/sales's throw-or-ticket shape: a payment outcome (declined / network-unavailable) is neither
+  // a client (4xx) nor a server (5xx) fault, so `payWorkingOrderIntegrated` returns it as DATA and this
+  // route answers 200 with the outcome UNCHANGED, even a decline (nothing may block a sale on anything
+  // but the sale itself, CLAUDE.md §5). Genuine faults still throw and map through `run`: an empty
+  // walk-up basket surfaces `sale.empty_basket` (400), a non-open/placed order `working_order.not_open`
+  // (409), and corruption or any other unexpected failure the opaque `server.internal` (500) every
+  // route gets — the same `STATUS` table above, unchanged. SESSION-GUARDED like `/api/sales`;
+  // `operatorId` is `session.personId`, never a browser-sent value.
+  app.post("/api/pay", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const body = await c.req.json<IntegratedPayRequest>();
+      // `deps.cardProvider` is `undefined` on a till booted with `WAITRON_TILL_CARD_PROVIDER=none`
+      // (`boot.ts`'s `buildCardProvider`). `mountTillApi` mounts this route on EVERY till regardless of
+      // `cardProvider` (`boot.ts` calls it unconditionally), so this branch stays reachable at the HTTP
+      // layer even on a "none" till — only the till UI's own affordance is expected not to post here.
+      // A request that does is therefore a genuine misconfiguration/foreign-request fault, never a
+      // payment outcome, refused BEFORE any DB write. Covered directly by
+      // `till-api.test.ts` ("500s server.internal when the till has no integrated card provider
+      // configured"), not ignored.
+      if (deps.cardProvider === undefined) {
+        throw new Error("/api/pay: no integrated card provider configured");
+      }
+      const outcome = await payWorkingOrderIntegrated(
+        { db: deps.db, backend: deps.backend, clock: deps.clock, provider: deps.cardProvider },
+        deps.cfg,
+        body,
+        personId,
+      );
+      return c.json(outcome); // 200 with the discriminated outcome — even a decline.
     }),
   );
 

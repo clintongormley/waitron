@@ -89,4 +89,42 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
     );
     await expectNoA11yViolations(host);
   });
+
+  // Integrated card terminal (sub-project 7, Task 9): the collecting spinner (entered via a real
+  // Card tap) and the card_outcome screen (entered reactively off `cardOutcome`, driven directly into
+  // the state below rather than through a round trip — see the widget's own `willUpdate` doc), plus
+  // the idle-screen tip/offline-consent affordances, in BOTH themes.
+  it("has no violations on the collecting screen (integrated card, entered via a real Card tap)", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el, host } = await mountWidget<TillTenderPay>(
+      "till-tender-pay",
+      { store, cardProvider: "stripe_terminal" },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations on the card_outcome screen (retry / switch-tender / wait)", async () => {
+    const store = new WorkingOrderStore();
+    const { host } = await mountWidget<TillTenderPay>(
+      "till-tender-pay",
+      { store, cardOutcome: "declined" },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations on the idle screen with the tip field and offline-consent toggle shown", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { host } = await mountWidget<TillTenderPay>(
+      "till-tender-pay",
+      { store, cardProvider: "stripe_on_device", tipsEnabled: true },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
 });

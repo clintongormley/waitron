@@ -23,13 +23,19 @@ export type FetchLike = typeof fetch;
  * `GET /api/till` — the public boot info the app reads before login. `orderFlow` (7c prepare &
  * collect) is the location's pay-timing mode — see {@link OrderFlow}'s own doc — needed BEFORE login
  * so the app can select which pay control (Place/Collect vs Pay) to render once the operator reaches
- * the counter.
+ * the counter. `cardProvider`/`tipsEnabled` (integrated card terminal, sub-project 7 Task 8) are the
+ * till's card wiring — mirrors the server's `deps.cfg.cardProvider`/`deps.tipsEnabled`
+ * (`apps/server/src/till-api.ts`), both always present (a till with no integrated reader still echoes
+ * `cardProvider: "none"`) — needed so the counter can choose whether to render the integrated-card
+ * pay control at all, and whether that control prompts for a tip.
  */
 export interface TillInfo {
   locale: string;
   venueName: string;
   nif: string;
   orderFlow: OrderFlow;
+  cardProvider: "none" | "stripe_terminal" | "stripe_on_device";
+  tipsEnabled: boolean;
 }
 
 /** One `GET /api/staff` roster entry — no PIN, role or status (the server strips them). */
@@ -188,6 +194,23 @@ export interface PrepQueueEntry {
   queuedAt: string;
 }
 
+/**
+ * `POST /api/pay` outcome (integrated card terminal, sub-project 7 Task 8). Mirrors the server's
+ * `IntegratedPayOutcome` (`apps/server/src/till-sale.ts`) as a LOCAL copy — same decoupling rationale
+ * as every other type in this file. A DELIBERATE divergence from {@link TillSaleResult}'s
+ * throw-or-ticket shape: a decline/stall/offline-refusal is DATA, never a thrown `{ code }` — nothing
+ * may block a sale on anything but the sale itself (CLAUDE.md §5) — so the caller branches on
+ * `outcome` instead of catching. `timeout` is reserved: the server currently collapses a poll-window
+ * stall into `declined` too (`toPayOutcome`'s own doc, `apps/server/src/till-sale.ts:1217-1225`) —
+ * "every other non-terminal state — today just `failed` … maps to `declined`" — so a client that
+ * branches on `timeout` today would never see it fire.
+ */
+export type PayOutcome =
+  | { outcome: "captured"; ticket: TillSaleResult }
+  | { outcome: "declined" }
+  | { outcome: "timeout" }
+  | { outcome: "network_unavailable" };
+
 export class TillApi {
   readonly #baseUrl: string;
   readonly #fetchImpl: FetchLike;
@@ -231,6 +254,25 @@ export class TillApi {
    */
   recordSale(lines: SaleLine[], tender: Tender, workingOrderId: string): Promise<TillSaleResult> {
     return this.#request<TillSaleResult>("/api/sales", "POST", { lines, tender, workingOrderId });
+  }
+
+  /**
+   * Pay over the INTEGRATED card terminal (sub-project 7 Task 8) → `POST /api/pay`. Same
+   * pay-idempotency shape as {@link recordSale}: `id` is the till's stable working-order id, kept
+   * across a lost-response retry so a re-sent pay replays rather than filing a second chained fiscal
+   * record; `lines` is the walk-up basket to price and file, IGNORED server-side for a
+   * retrieved/placed order (it files its own stored locked lines). `tip` is the till-entered gross
+   * tip (clamped to none when the till has tips disabled); `allowOffline` is per-transaction staff
+   * consent to accept the card offline if the network is down. Unlike `recordSale`, the outcome is
+   * always a 200 — see {@link PayOutcome}'s own doc for why a decline is data, not a throw.
+   */
+  pay(req: {
+    id: string;
+    lines: SaleLine[];
+    tip?: string;
+    allowOffline?: boolean;
+  }): Promise<PayOutcome> {
+    return this.#request<PayOutcome>("/api/pay", "POST", req);
   }
 
   /**

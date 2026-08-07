@@ -50,6 +50,10 @@ describe("loadTillConfig", () => {
     const config = loadTillConfig(base);
     // toEqual, not toMatchObject: it also asserts there is no SIXTH id field and nothing extra —
     // the branded ids are plain strings at runtime, so each is compared against its raw value.
+    // With no WAITRON_TILL_CARD_* set, the card fields take their defaults: `cardProvider: "none"`,
+    // `tipsEnabled: false`, and NO `stripeReaderId` key at all (the optional field is absent, not
+    // `undefined`, so `toEqual` would fail if the parser materialised it — the terminal branch is the
+    // only one that carries a reader id).
     expect(config).toEqual({
       tenantId: TENANT,
       tillId: TILL,
@@ -58,6 +62,8 @@ describe("loadTillConfig", () => {
       locationId: LOCATION,
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
+      cardProvider: "none",
+      tipsEnabled: false,
     });
   });
 
@@ -74,6 +80,98 @@ describe("loadTillConfig", () => {
     const config = loadTillConfig({ ...base, WAITRON_TILL_LOCALE: "" });
     expect(config.locale).toBe("es-ES");
     expect(config.invoiceLocales).toEqual(["es-ES"]);
+  });
+
+  describe("card provider + tips (WAITRON_TILL_CARD_*)", () => {
+    it("defaults cardProvider to 'none' and tipsEnabled to false, with no reader id", () => {
+      const config = loadTillConfig(base); // no WAITRON_TILL_CARD_* set
+      expect(config.cardProvider).toBe("none");
+      expect(config.tipsEnabled).toBe(false);
+      expect(config.stripeReaderId).toBeUndefined();
+    });
+
+    it("treats an empty WAITRON_TILL_CARD_PROVIDER as unset, defaulting to 'none'", () => {
+      // Same "absent OR empty string is unset" rule the ids' `required` uses — an operator's
+      // `WAITRON_TILL_CARD_PROVIDER=` line falls back to `none` rather than reaching the invalid
+      // branch on an empty value.
+      const config = loadTillConfig({ ...base, WAITRON_TILL_CARD_PROVIDER: "" });
+      expect(config.cardProvider).toBe("none");
+      expect(config.stripeReaderId).toBeUndefined();
+    });
+
+    it("accepts an explicit 'none'", () => {
+      const config = loadTillConfig({ ...base, WAITRON_TILL_CARD_PROVIDER: "none" });
+      expect(config.cardProvider).toBe("none");
+      expect(config.stripeReaderId).toBeUndefined();
+    });
+
+    it("reads stripe_terminal + reader id + tips", () => {
+      const config = loadTillConfig({
+        ...base,
+        WAITRON_TILL_CARD_PROVIDER: "stripe_terminal",
+        WAITRON_TILL_STRIPE_READER_ID: "tmr_1",
+        WAITRON_TILL_TIPS: "true",
+      });
+      expect(config.cardProvider).toBe("stripe_terminal");
+      expect(config.stripeReaderId).toBe("tmr_1");
+      expect(config.tipsEnabled).toBe(true);
+    });
+
+    it("reads stripe_on_device and mints no reader id (the device holds its own connection token)", () => {
+      const config = loadTillConfig({
+        ...base,
+        WAITRON_TILL_CARD_PROVIDER: "stripe_on_device",
+      });
+      expect(config.cardProvider).toBe("stripe_on_device");
+      // No reader id required — the on-device flow creates its own connection token, so there is no
+      // server-side reader to name (unlike stripe_terminal, which drives a specific reader).
+      expect(config.stripeReaderId).toBeUndefined();
+    });
+
+    it("enables tips on the literal '1' as well as 'true'", () => {
+      const config = loadTillConfig({ ...base, WAITRON_TILL_TIPS: "1" });
+      expect(config.tipsEnabled).toBe(true);
+    });
+
+    it("leaves tips disabled on any other WAITRON_TILL_TIPS value", () => {
+      // Only "true"/"1" enable — a stray "yes" is NOT tips-on, so a typo fails safe (off).
+      const config = loadTillConfig({ ...base, WAITRON_TILL_TIPS: "yes" });
+      expect(config.tipsEnabled).toBe(false);
+    });
+
+    it("refuses a stripe_terminal provider with no reader id (server.till_config_missing)", () => {
+      const error = captureThrow(() =>
+        loadTillConfig({ ...base, WAITRON_TILL_CARD_PROVIDER: "stripe_terminal" }),
+      );
+      expect(codeOf(error)).toBe("server.till_config_missing");
+      // toEqual (not toMatchObject): the env var NAME is the only field the code may carry, so a
+      // leaked reader value alongside `key` would fail here.
+      expect(isAppError(error) && error.params).toEqual({ key: "WAITRON_TILL_STRIPE_READER_ID" });
+    });
+
+    it("refuses a stripe_terminal provider with an EMPTY reader id (server.till_config_missing)", () => {
+      // The `required` "absent OR empty" rule: a `WAITRON_TILL_STRIPE_READER_ID=` line is missing,
+      // not a valid empty reader — the same treatment the five ids get.
+      const error = captureThrow(() =>
+        loadTillConfig({
+          ...base,
+          WAITRON_TILL_CARD_PROVIDER: "stripe_terminal",
+          WAITRON_TILL_STRIPE_READER_ID: "",
+        }),
+      );
+      expect(codeOf(error)).toBe("server.till_config_missing");
+      expect(isAppError(error) && error.params).toEqual({ key: "WAITRON_TILL_STRIPE_READER_ID" });
+    });
+
+    it("refuses an unknown provider value (server.till_config_invalid)", () => {
+      const error = captureThrow(() =>
+        loadTillConfig({ ...base, WAITRON_TILL_CARD_PROVIDER: "square" }),
+      );
+      expect(codeOf(error)).toBe("server.till_config_invalid");
+      // The variable NAME only — the rejected value ("square") is never echoed, the same no-leak
+      // discipline the id-branding invalid case follows.
+      expect(isAppError(error) && error.params).toEqual({ key: "WAITRON_TILL_CARD_PROVIDER" });
+    });
   });
 
   describe.each(ID_VARS)("%s", (key) => {

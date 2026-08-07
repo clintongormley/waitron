@@ -13,6 +13,7 @@ import "../widgets/held-orders.js";
 import "../widgets/prep-queue.js";
 import type { HeldOrderSummary, OrderFlow, PrepQueueEntry, TillProduct } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
+import type { CardOutcome, CardProvider } from "../widgets/tender-pay.js";
 
 /**
  * The till's product WORDMARK — the venue/till label slot in the header. Slice 1 has no venue prop
@@ -131,6 +132,19 @@ export class TillCounterScreen extends LitElement {
   @property({ type: Boolean }) busy = false;
   /** The arrangement to render. Defaults to slice 1's {@link LAYOUT_A}; a later editor supplies its own. */
   @property({ attribute: false }) layout: LayoutDef = LAYOUT_A;
+  /**
+   * The till's integrated-card wiring (Task 9), threaded straight through to the pay widget's own
+   * `cardProvider` — see `till-tender-pay`'s INTEGRATED CARD doc for what each value does. Defaults
+   * `"none"`, reproducing the #62 manual (datáfono) Card path unchanged.
+   */
+  @property() cardProvider: CardProvider = "none";
+  /** Whether the till prompts for a tip on an integrated-card collection (Task 9), threaded straight
+   * through to the pay widget's own `tipsEnabled`. Ignored under the manual path. */
+  @property({ type: Boolean }) tipsEnabled = false;
+  /** The outcome of the most recent non-captured `collect-card` attempt (Task 8/9), threaded
+   * straight through to the pay widget's own `cardOutcome` — see its doc for how a fresh value drives
+   * the retry / switch-tender / wait screen. */
+  @property() cardOutcome?: CardOutcome;
 
   /** Announce that the operator wants to end their shift. The app (Task 19) tears the session down. */
   #logout(): void {
@@ -159,6 +173,9 @@ export class TillCounterScreen extends LitElement {
           .busy=${this.busy}
           .mode=${this.orderFlow}
           .stage=${this.stage}
+          .cardProvider=${this.cardProvider}
+          .tipsEnabled=${this.tipsEnabled}
+          .cardOutcome=${this.cardOutcome}
         ></till-tender-pay>`;
       case "held-orders":
         return html`<till-held-orders .orders=${this.heldOrders}></till-held-orders>`;

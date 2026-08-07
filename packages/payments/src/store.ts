@@ -283,6 +283,64 @@ export async function getPaymentByRef(
   return row;
 }
 
+/** A captured (or offline-accepted) payment found for a working order — the §4 capture-idempotency
+ * pre-check's result. `saleId` NULL is the "collect committed, P3 never ran" recovery window; set
+ * means the sale is already filed and the pay is a replay. `amount`/`settledAt`/`externalRef` are the
+ * raw column strings, so the recovery path can reconstruct the tender and associate this exact row. */
+export interface CapturedPaymentForOrder {
+  id: string;
+  paymentRef: string;
+  amount: string; // numeric(12,2) as text
+  saleId: string | null;
+  externalRef: string | null;
+  settledAt: string | null; // always set for captured/accepted_offline, but typed nullable like the column
+  state: "captured" | "accepted_offline";
+}
+
+const CAPTURED_FOR_ORDER_COLUMNS = {
+  ...PAYMENT_COLUMNS,
+  paymentRef: payments.paymentRef,
+};
+
+/** The §4 capture-idempotency pre-check: has this working order already got a captured (or
+ * offline-accepted) payment for this provider? Read-only, over existing columns/`payments_working_order_idx`.
+ * A `failed`/`attempting` row is NOT captured, so a legitimately-declined card stays re-chargeable and
+ * a lost-T2 `attempting` orphan is never mistaken for a completed capture (§4).
+ *
+ * At most one captured/accepted_offline payment exists per working order BY CONSTRUCTION, not by a DB
+ * constraint (`payments` carries no unique index over `(tenant_id, provider, working_order_id)`
+ * restricted to those states): Task 1 derives the Stripe PaymentIntent-creation idempotency key from
+ * the working-order id (`wo_<id>`, `packages/payments-stripe`), so every retry drives the SAME
+ * PaymentIntent to at most one capture — and this pre-check is itself the thing that stops a caller
+ * from proceeding to a second `collect` once the first capture exists (spec §4). Split-tender (more
+ * than one payment per working order) is out of scope for this slice. `ORDER BY settled_at DESC
+ * NULLS LAST` makes the read deterministic regardless, and if that invariant is ever violated it
+ * returns the MOST RECENT captured row rather than an arbitrary one — this is a pre-check, so it
+ * degrades rather than throwing on an unexpected second row. `NULLS LAST` is load-bearing despite
+ * `settled_at` always being set for `captured`/`accepted_offline` "by construction": Postgres sorts
+ * `DESC` as NULLS FIRST by default, so a plain `desc()` would rank a hypothetical NULL-`settled_at`
+ * captured row ahead of a genuinely settled one — the opposite of "most recent" — the moment that
+ * invariant is ever violated. */
+export async function findCapturedPaymentForWorkingOrder(
+  tx: Transaction,
+  key: { tenantId: string; provider: string; workingOrderId: string },
+): Promise<CapturedPaymentForOrder | undefined> {
+  const [row] = await tx
+    .select(CAPTURED_FOR_ORDER_COLUMNS)
+    .from(payments)
+    .where(
+      and(
+        eq(payments.tenantId, key.tenantId),
+        eq(payments.provider, key.provider),
+        eq(payments.workingOrderId, key.workingOrderId),
+        inArray(payments.state, ["captured", "accepted_offline"]),
+      ),
+    )
+    .orderBy(sql`${payments.settledAt} desc nulls last`)
+    .limit(1);
+  return row as CapturedPaymentForOrder | undefined;
+}
+
 /** A payment row plus its tenant, looked up by (provider, paymentRef) WITHOUT a tenant filter — the
  * lookup a provider uses when it holds only its own reference (e.g. the fake's `void`/`refund`, or a
  * real adapter's webhook). Under RLS with no tenant set this returns nothing (the policy hides every

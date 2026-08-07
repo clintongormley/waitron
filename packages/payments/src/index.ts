@@ -24,6 +24,7 @@ export {
   existingReferences,
   expireInitiated,
   failAttempting,
+  findCapturedPaymentForWorkingOrder,
   findPaymentByRef,
   getPaymentByRef,
   insertAcceptedOffline,
@@ -43,6 +44,7 @@ export {
   tillsForWorkingOrders,
 } from "./store.js";
 export type {
+  CapturedPaymentForOrder,
   ForwardablePayment,
   PaymentRecord,
   PaymentRow,

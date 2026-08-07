@@ -7,7 +7,13 @@ import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillPrepQueue } from "./widgets/prep-queue.js";
-import type { HeldOrderSummary, TillApi, TillProduct, TillSaleResult } from "./api/client.js";
+import type {
+  HeldOrderSummary,
+  PayOutcome,
+  TillApi,
+  TillProduct,
+  TillSaleResult,
+} from "./api/client.js";
 import type { WorkingOrderStore } from "./state/working-order.js";
 
 const cafe: TillProduct = {
@@ -53,6 +59,11 @@ const till = {
   venueName: "Bar Pepe",
   nif: "B12345678",
   orderFlow: "prepay" as const,
+  // Both always present on the real `GET /api/till` (`TillInfo`'s own doc) — defaulted here to the
+  // manual (datáfono) Card path, `"none"`, so every pre-Task-9 test below (which never touches these
+  // two fields) keeps exercising #62's unchanged behaviour rather than the integrated one.
+  cardProvider: "none" as const,
+  tipsEnabled: false,
 };
 
 const placedResult = {
@@ -85,6 +96,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
     listProducts: vi.fn().mockResolvedValue([cafe]),
     recordSale: vi.fn().mockResolvedValue(saleResult),
+    pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult }),
     parkOrder: vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 }),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     retrieveWorkingOrder: vi.fn().mockResolvedValue({
@@ -880,6 +892,364 @@ describe("till-app", () => {
     emit(counter(el)!, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     expect(currentApi.recordSale).toHaveBeenCalledTimes(2);
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  // collect-card (integrated card terminal, sub-project 7 Task 8): same shape as confirm-payment
+  // (single-flight, dirty-retrieved-order re-sync, held-list refresh on success) but branching on the
+  // server's DATA outcome instead of assuming a ticket — a decline/timeout/network_unavailable must
+  // never wedge the till (CLAUDE.md §5: nothing may block a sale but the sale itself). The widget that
+  // EMITS `collect-card` is Task 9; these tests dispatch the synthetic event directly.
+  // ---------------------------------------------------------------------------------------------
+
+  describe("collect-card (integrated card terminal, Task 8)", () => {
+    it("pays over the integrated terminal with the mapped lines(+tip+allowOffline), then shows the ticket", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      const store = c.store;
+      store.addProduct(cafe, "2");
+      await el.updateComplete;
+      const workingOrderId = store.id; // the walk-up's stable id — the same pay-idempotency key
+
+      emit(c, "collect-card", { tip: "0.50", allowOffline: true });
+      await flush(el);
+
+      expect(pay).toHaveBeenCalledWith({
+        id: workingOrderId,
+        lines: [{ productId: "cafe", quantity: "2" }],
+        tip: "0.50",
+        allowOffline: true,
+      });
+      const view = ticket(el)!;
+      expect(view).not.toBeNull();
+      expect(view.result).toBe(saleResult);
+    });
+
+    it("omits tip/allowOffline from the request when the event detail carries neither", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "1");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      expect(pay).toHaveBeenCalledWith({
+        id: c.store.id,
+        lines: [{ productId: "cafe", quantity: "1" }],
+      });
+    });
+
+    it("success: refreshes the held-orders list so a just-paid parked order drops off", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
+      const { el } = await mountApp({
+        pay,
+        listWorkingOrders: vi.fn().mockResolvedValueOnce([heldSummary]).mockResolvedValue([]),
+      });
+      const c = await toCounter(el);
+      expect(c.heldOrders).toEqual([heldSummary]); // one call on entering the counter
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      // once on entering the counter, once after the successful pay — the settled order drops off.
+      expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
+      expect(ticket(el)).not.toBeNull();
+    });
+
+    it("declined: stays on the counter with the basket intact and records the outcome for the widget", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      // A decline is data, never a fault: no ticket, still on the counter, basket untouched, and no
+      // sale.error banner — the operator retries the card or switches tender, nothing is lost.
+      expect(ticket(el)).toBeNull();
+      expect(counter(el)).not.toBeNull();
+      expect(c.store.lines).toHaveLength(1);
+      expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+      // `cardOutcome` is `private` (TS's `private` is compile-time only, so the cast through
+      // `unknown` still reads its real runtime value). `till-tender-pay` (Task 9) is the real reader
+      // now — its own tests cover the rendered retry/switch-tender/wait output — so this layer stays
+      // scoped to till-app's own state, the same way every other assertion in this file does.
+      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe("declined");
+      // The held list is re-read only on a captured outcome — nothing settled here, so no re-read.
+      expect(currentApi.listWorkingOrders).toHaveBeenCalledOnce();
+    });
+
+    it.each(["timeout", "network_unavailable"] as const)(
+      "%s: also stays on the counter with the basket intact and records the outcome",
+      async (outcome) => {
+        const pay = vi.fn().mockResolvedValue({ outcome });
+        const { el } = await mountApp({ pay });
+        const c = await toCounter(el);
+        c.store.addProduct(cafe, "2");
+        await el.updateComplete;
+
+        emit(c, "collect-card", {});
+        await flush(el);
+
+        expect(ticket(el)).toBeNull();
+        expect(counter(el)).not.toBeNull();
+        expect(c.store.lines).toHaveLength(1);
+        expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+        expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe(outcome);
+      },
+    );
+
+    it("clears a prior declined outcome when the next collect-card attempt starts", async () => {
+      const pay = vi
+        .fn()
+        .mockResolvedValueOnce({ outcome: "declined" })
+        .mockResolvedValueOnce({ outcome: "captured", ticket: saleResult });
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {}); // first — declines
+      await flush(el);
+      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe("declined");
+
+      emit(counter(el)!, "collect-card", {}); // retry — captures
+      await flush(el);
+      expect(ticket(el)).not.toBeNull();
+    });
+
+    // Fix round 1 (Important): cardOutcome must not survive the basket it describes being replaced.
+    // errorKey is reset at every user action; cardOutcome was only reset in #onCollectCard itself and
+    // #onNewSale, so a decline on basket A leaked into whatever basket the operator moved to next via
+    // Park or Retrieve. Task 9 now threads `.cardOutcome` through `till-counter-screen`/`till-tender-pay`,
+    // so a stale value here would reach the rendered card_outcome screen without this reset.
+    it("park: a declined cardOutcome does not survive into the NEXT (empty) basket", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe("declined");
+
+      // Switch tender instead of retrying the card: park the (still-declined) basket for later.
+      emit(counter(el)!, "park-order", { label: "Mesa 4" });
+      await flush(el);
+
+      // store.clear() re-minted a fresh id — this is now an UNRELATED next-customer basket, and it
+      // must not show the previous basket's decline.
+      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBeUndefined();
+    });
+
+    it("retrieve: a declined cardOutcome does not survive into a DIFFERENT retrieved order's basket", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe("declined");
+
+      // Retrieve a DIFFERENT order (wo-1) into the basket instead of retrying the card.
+      emit(counter(el)!, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+
+      // loadFrom swapped in wo-1's lines — the decline described the basket that was just replaced,
+      // not this one.
+      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBeUndefined();
+      expect(c.store.id).toBe("wo-1");
+    });
+
+    it("discard: an UNRELATED held order being discarded does not touch the current basket's cardOutcome", async () => {
+      // The deliberate non-fix: #onDiscardOrder addresses a held order by the EVENT's own id, never
+      // `#store` — discarding some other parked order must not wipe a decline that still correctly
+      // describes the basket that is still on the counter. Proves the deviation from treating discard
+      // like park/retrieve is intentional, not an oversight.
+      const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      const declinedBasketId = c.store.id;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe("declined");
+
+      emit(counter(el)!, "discard-order", { id: "some-other-held-order" });
+      await flush(el);
+
+      // The current basket (and its decline) is untouched — discard never reached `#store`.
+      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe("declined");
+      expect(c.store.id).toBe(declinedBasketId);
+      expect(c.store.lines).toHaveLength(1);
+    });
+
+    it("a genuine fault (thrown, incl. the recovery-corruption 500) surfaces sale.error, basket intact, no ticket", async () => {
+      const pay = vi.fn().mockRejectedValue({ code: "server.internal" });
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      expect(ticket(el)).toBeNull();
+      expect(counter(el)).not.toBeNull();
+      expect(c.store.lines).toHaveLength(1);
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("sale.error"));
+      expect(el.shadowRoot!.textContent).not.toContain("server.internal"); // never leaks the raw code
+    });
+
+    it("single-flight: a second collect-card while pay is pending fires exactly once", async () => {
+      // Same double-file safety as confirm-payment's single-flight test (CLAUDE.md §5): the first pay
+      // never resolves, so a second collect-card dispatched in that window (double-tap / laggy link)
+      // must be a no-op.
+      const pay = vi.fn(() => new Promise<PayOutcome>(() => {})); // never resolves
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {}); // first — raises submitting, awaits
+      await el.updateComplete;
+      expect(counter(el)!.busy).toBe(true); // in flight → the pay affordance is disabled
+
+      emit(c, "collect-card", {}); // second — guarded, a no-op
+      await el.updateComplete;
+
+      expect(pay).toHaveBeenCalledOnce();
+    });
+
+    it("resets the busy state after a declined outcome so the counter re-enables for a retry", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      expect(counter(el)!.busy).toBe(false);
+    });
+
+    it("retrieve → edit → collect-card re-syncs the edited basket BEFORE paying, so the edit is not dropped", async () => {
+      // The same 7c regression #onConfirmPayment guards against (its own "Finding 2" test above): the
+      // server's retrieved-order pay path files from the STORED lock and IGNORES req.lines for the
+      // integrated route too (IntegratedPayRequest's own doc), so an edit made after retrieve must be
+      // re-locked (updateWorkingOrder) BEFORE the pay or it is silently dropped from both the charge and
+      // the filed record. Deleting the #syncIfDirty call in #onCollectCard makes this fail (the edit is
+      // lost from both assertions below).
+      const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+      const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
+      const { el } = await mountApp({ updateWorkingOrder, pay });
+      const c = await toCounter(el);
+      const store = c.store;
+
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+      store.addProduct(cafe, "1"); // the edit AFTER retrieve
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
+        lines: [
+          { productId: "cafe", quantity: "2" },
+          { productId: "cafe", quantity: "1" },
+        ],
+        label: "Mesa 4",
+      });
+      expect(pay).toHaveBeenCalledWith({
+        id: "wo-1",
+        lines: [
+          { productId: "cafe", quantity: "2" },
+          { productId: "cafe", quantity: "1" },
+        ],
+      });
+      expect(updateWorkingOrder.mock.invocationCallOrder[0]!).toBeLessThan(
+        pay.mock.invocationCallOrder[0]!,
+      );
+    });
+
+    it("retrieve → collect-card (unedited): no re-sync, files the stored lock straight through", async () => {
+      // Behaviour 1's mirror for the integrated route: an UNEDITED retrieve must NOT re-sync — that
+      // would re-price against the live catalogue and defeat the add-time lock (design §3).
+      const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+      const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
+      const { el } = await mountApp({ updateWorkingOrder, pay });
+      const c = await toCounter(el);
+
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      expect(updateWorkingOrder).not.toHaveBeenCalled();
+      expect(pay).toHaveBeenCalledWith({
+        id: "wo-1",
+        lines: [{ productId: "cafe", quantity: "2" }],
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  // Integrated card wiring (Task 9): `cardProvider`/`tipsEnabled`, read once from `GET /api/till`
+  // (#boot), and `cardOutcome` (Task 8's state) all reach the REAL nested `till-tender-pay` — through
+  // `till-counter-screen`, exactly like `orderFlow`/`stage` above (per-mode pay control).
+  // ---------------------------------------------------------------------------------------------
+
+  describe("integrated card wiring (Task 9): threaded from GET /api/till to the widget", () => {
+    it("defaults cardProvider 'none'/tipsEnabled false, reproducing the #62 manual path unchanged", async () => {
+      const { el } = await mountApp(); // the till fixture defaults cardProvider: "none"
+      await toCounter(el);
+      expect(tenderPay(el).cardProvider).toBe("none");
+      expect(tenderPay(el).tipsEnabled).toBe(false);
+    });
+
+    it("threads a real integrated cardProvider + tipsEnabled through to the widget", async () => {
+      const { el } = await mountApp({
+        getTill: vi
+          .fn()
+          .mockResolvedValue({ ...till, cardProvider: "stripe_on_device", tipsEnabled: true }),
+      });
+      await toCounter(el);
+      expect(tenderPay(el).cardProvider).toBe("stripe_on_device");
+      expect(tenderPay(el).tipsEnabled).toBe(true);
+    });
+
+    it("threads a declined cardOutcome through to the widget, driving its card_outcome view", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, cardProvider: "stripe_terminal" }),
+        pay,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      expect(tenderPay(el).cardOutcome).toBe("declined");
+      expect(tenderPay(el).shadowRoot!.querySelector(".retry")).not.toBeNull();
+    });
   });
 
   // ---------------------------------------------------------------------------------------------

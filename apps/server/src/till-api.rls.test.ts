@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { asAppUser, sales, withTenant, workingOrders } from "@waitron/db";
+import type { Database } from "@waitron/db";
 import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import {
   assignCatalogueToLocation,
@@ -24,6 +25,8 @@ import {
   tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
+import { StripeTerminalProvider } from "@waitron/payments-stripe";
+import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
@@ -42,7 +45,21 @@ import { startRealPostgres } from "./testing/postgres.js";
 // venue + a seeded catalogue, a real `VerifactuBackend` and the system clock — plus a login person.
 const LOCALE = "es-ES";
 
-const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: 180_000 });
+// A non-superuser LOGIN role that inherits `app_user`'s grants, for Task 7's `/api/pay` tests: the
+// `StripeTerminalProvider` this file wires in for those tests does NOT run its own writes through
+// `withTenant` + `asAppUser` (`insertAttempting`/`captureAttempting`/`failAttempting` execute at
+// whatever role its `db` handle carries — see that class's own "Present because…" doc comment), so
+// `suite.admin` there would write the `payments` ledger as a superuser and bypass its FORCE RLS
+// entirely — the same reasoning `till-sale-integrated.rls.test.ts`'s `integratedDeps` documents for
+// its own identically-named probe role (a different container, so no name collision).
+const PROBE_ROLE = "rls_probe";
+const PROBE_PASSWORD = "probe";
+
+const suite = useRealPostgres({
+  start: startRealPostgres,
+  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
+  timeoutMs: 180_000,
+});
 
 let backend: FiscalBackend;
 let clock: TrustedClock;
@@ -94,6 +111,9 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
+    // No integrated card terminal for these RLS API suites.
+    cardProvider: "none",
+    tipsEnabled: false,
     // These API tests exercise routes that do not dispatch on the mode; the venue defaults to prepay.
     orderFlow: "prepay",
   };
@@ -178,7 +198,39 @@ async function setupVenue(): Promise<{
  * themselves via `withTenant` + `asAppUser`), the real fiscal backend + system clock the sale path
  * files through, and `secureCookies:false` so the session cookie rides the non-TLS `app.request`. */
 function apiDeps(cfg: TillConfig): TillApiDeps {
+  // No integrated card provider built for these suites (`cfg.tipsEnabled` is `false` — see
+  // `tillConfigFromVenue`). `cardProvider` (the built PaymentProvider) is optional and left undefined.
   return { db: suite.admin, backend, clock, cfg, secureCookies: false };
+}
+
+/**
+ * `apiDeps` plus a built `StripeTerminalProvider` over `FakeStripe`, for Task 7's `POST /api/pay`
+ * tests — `deps.db` stays `suite.admin` (the routes' own DB ops all run through `withTenant` +
+ * `asAppUser`, exactly as `apiDeps` above), but the provider is given its OWN `providerDb` handle
+ * (a `PROBE_ROLE` connection the test opens and closes itself), since the provider's writes run at
+ * whatever role THAT handle carries (see `PROBE_ROLE`'s doc comment above).
+ */
+function apiDepsWithCardProvider(
+  cfg: TillConfig,
+  providerDb: Database,
+  client: FakeStripe,
+): TillApiDeps {
+  const cardProvider = new StripeTerminalProvider({
+    client,
+    db: providerDb,
+    tenantId: cfg.tenantId,
+    resolveReader: () => Promise.resolve("reader_1"),
+    // No real waiting: FakeStripe resolves synchronously, so a poll never actually stalls.
+    poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
+  });
+  return {
+    db: suite.admin,
+    backend,
+    clock,
+    cfg,
+    secureCookies: false,
+    cardProvider,
+  };
 }
 
 beforeAll(() => {
@@ -486,6 +538,142 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
       return tx.select().from(registrosFacturacion);
     });
     expect(stillOne).toHaveLength(1);
+  });
+});
+
+// POST /api/pay (Task 7): the integrated-card-terminal pay route, driven through the SAME real venue
+// + real `payWorkingOrderIntegrated` split-transaction flow (P1 commit → network collect → P3
+// file/settle) the login/pay routes above exercise for cash/manual card — but over a `FakeStripe`-backed
+// `StripeTerminalProvider`, so a capture/decline genuinely round-trips the reader adapter rather than
+// being stubbed. Real Postgres for the same reason every suite in this file is: the split flow's
+// separate P1/P3 transactions and the provider's own FK-before-attempting ordering need a real
+// multi-backend Postgres, which a single-backend, superuser-only PGlite would misrepresent (CLAUDE.md
+// §4). The 401-without-session and no-provider-configured guards are hermetic, in `till-api.test.ts`.
+describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
+  it("captures over the reader and returns 200 { outcome: 'captured', ticket }", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
+    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const app = new Hono();
+      mountTillApi(app, apiDepsWithCardProvider(cfg, providerDb, new FakeStripe()), noopLog);
+
+      const login = await app.request("/api/session", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ personId: operatorId, pin: "5555" }),
+      });
+      expect(login.status).toBe(200);
+      const cookie = login.headers.get("set-cookie")!;
+
+      const workingOrderId = randomUUID();
+      const payRes = await app.request("/api/pay", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({
+          id: workingOrderId,
+          lines: [{ productId: each.id, quantity: "1" }],
+        }),
+      });
+
+      expect(payRes.status).toBe(200);
+      const outcome = (await payRes.json()) as { outcome: string; ticket?: { total: string } };
+      expect(outcome.outcome).toBe("captured");
+      expect(outcome.ticket?.total).toBe("1.50");
+
+      // A genuine chained fiscal record was filed and the order settled — the capture is real, not a
+      // stub reporting success with nothing behind it.
+      const after = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return {
+          registros: await tx.select().from(registrosFacturacion),
+          wo: await tx
+            .select({ status: workingOrders.status })
+            .from(workingOrders)
+            .where(eq(workingOrders.id, workingOrderId)),
+        };
+      });
+      expect(after.registros).toHaveLength(1);
+      expect(after.wo).toEqual([{ status: "settled" }]);
+    } finally {
+      await providerDb.close();
+    }
+  });
+
+  it("returns 200 { outcome: 'declined' } on a decline — NOT a 4xx, and files nothing", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const client = new FakeStripe();
+      client.declineNext();
+      const app = new Hono();
+      mountTillApi(app, apiDepsWithCardProvider(cfg, providerDb, client), noopLog);
+
+      const login = await app.request("/api/session", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ personId: operatorId, pin: "5555" }),
+      });
+      const cookie = login.headers.get("set-cookie")!;
+
+      const workingOrderId = randomUUID();
+      const payRes = await app.request("/api/pay", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({
+          id: workingOrderId,
+          lines: [{ productId: each.id, quantity: "1" }],
+        }),
+      });
+
+      expect(payRes.status).toBe(200);
+      expect(await payRes.json()).toEqual({ outcome: "declined" });
+
+      // Nothing filed; the working order stays open (retryable) — a decline is DATA, never a fault
+      // that blocks the sale (CLAUDE.md §5).
+      const after = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return {
+          registros: await tx.select().from(registrosFacturacion),
+          wo: await tx
+            .select({ status: workingOrders.status })
+            .from(workingOrders)
+            .where(eq(workingOrders.id, workingOrderId)),
+        };
+      });
+      expect(after.registros).toHaveLength(0);
+      expect(after.wo).toEqual([{ status: "open" }]);
+    } finally {
+      await providerDb.close();
+    }
+  });
+
+  it("still 400s an empty walk-up basket — a genuine fault, mapped through run, not a payment outcome", async () => {
+    const { cfg, operatorId } = await setupVenue();
+    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const app = new Hono();
+      mountTillApi(app, apiDepsWithCardProvider(cfg, providerDb, new FakeStripe()), noopLog);
+
+      const login = await app.request("/api/session", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ personId: operatorId, pin: "5555" }),
+      });
+      const cookie = login.headers.get("set-cookie")!;
+
+      const payRes = await app.request("/api/pay", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ id: randomUUID(), lines: [] }),
+      });
+
+      expect(payRes.status).toBe(400);
+      expect(await payRes.json()).toMatchObject({ error: { code: "sale.empty_basket" } });
+    } finally {
+      await providerDb.close();
+    }
   });
 });
 

@@ -11,6 +11,7 @@ import {
   existingReferences,
   expireInitiated,
   failAttempting,
+  findCapturedPaymentForWorkingOrder,
   findPaymentByRef,
   getPaymentByRef,
   insertAcceptedOffline,
@@ -394,6 +395,123 @@ describe("findPaymentByRef", () => {
     await seedTenant();
     const row = await pg.db.transaction((tx) => findPaymentByRef(tx, "fake", "unknown"));
     expect(row).toBeUndefined();
+  });
+});
+
+describe("findCapturedPaymentForWorkingOrder", () => {
+  // PGlite: this asserts the STATE filter and column projection only — no RLS, no concurrency — so
+  // the hermetic superuser target is the right one (CLAUDE.md §4). Tenant isolation is proven on
+  // real Postgres in payments.rls.test.ts.
+  it("returns a captured payment for the working order, ignoring non-captured states", async () => {
+    const s = await seedWorkingOrder(pg.db, freshNif());
+    const key = { tenantId: s.tenantId, provider: "stripe", workingOrderId: s.workingOrderId };
+    // A failed attempt must NOT match (a legitimately-declined card is re-chargeable).
+    await pg.db.transaction((tx) =>
+      insertFailedPayment(tx, { ...key, paymentRef: "f1", amount: decimal("5.00") }),
+    );
+    expect(
+      await pg.db.transaction((tx) => findCapturedPaymentForWorkingOrder(tx, key)),
+    ).toBeUndefined();
+    // A captured payment matches, carrying its ref/amount/saleId(null)/externalRef.
+    await pg.db.transaction((tx) =>
+      insertCapturedPayment(tx, {
+        ...key,
+        paymentRef: "c1",
+        amount: decimal("12.10"),
+        settledAt: new Date("2026-07-24T12:00:00Z"),
+        externalRef: "pi_x",
+      }),
+    );
+    const found = await pg.db.transaction((tx) => findCapturedPaymentForWorkingOrder(tx, key));
+    expect(found).toMatchObject({
+      paymentRef: "c1",
+      amount: "12.10",
+      saleId: null,
+      externalRef: "pi_x",
+      state: "captured",
+    });
+  });
+
+  it("matches an accepted_offline payment that is still unassociated (saleId null)", async () => {
+    const s = await seedWorkingOrder(pg.db, freshNif());
+    const key = { tenantId: s.tenantId, provider: "stripe", workingOrderId: s.workingOrderId };
+    await pg.db.transaction((tx) =>
+      insertAcceptedOffline(tx, {
+        ...key,
+        paymentRef: "o1",
+        amount: decimal("8.00"),
+        settledAt: new Date("2026-07-24T12:00:00Z"),
+      }),
+    );
+    const found = await pg.db.transaction((tx) => findCapturedPaymentForWorkingOrder(tx, key));
+    expect(found).toMatchObject({ paymentRef: "o1", state: "accepted_offline", saleId: null });
+  });
+
+  it("returns undefined when the only payment is attempting (the lost-T2 window is not yet captured)", async () => {
+    const s = await seedWorkingOrder(pg.db, freshNif());
+    const key = { tenantId: s.tenantId, provider: "stripe", workingOrderId: s.workingOrderId };
+    await pg.db.transaction((tx) =>
+      insertAttempting(tx, { ...key, paymentRef: "a1", amount: decimal("9.00") }),
+    );
+    expect(
+      await pg.db.transaction((tx) => findCapturedPaymentForWorkingOrder(tx, key)),
+    ).toBeUndefined();
+  });
+
+  it("returns the MOST RECENT captured row if the one-capture-per-order invariant is ever violated", async () => {
+    // The design (spec §4) guarantees at most one captured/accepted_offline payment per working
+    // order by construction (Task 1's wo_<id> Stripe idempotency key + this very pre-check), not by
+    // a DB constraint — nothing stops two rows existing here. `ORDER BY settled_at DESC NULLS LAST`
+    // is what makes the read deterministic in that case, so this seeds two captured rows out of
+    // insertion order (the later-settled one inserted FIRST) and asserts the more recently settled
+    // one wins.
+    const s = await seedWorkingOrder(pg.db, freshNif());
+    const key = { tenantId: s.tenantId, provider: "stripe", workingOrderId: s.workingOrderId };
+    await pg.db.transaction((tx) =>
+      insertCapturedPayment(tx, {
+        ...key,
+        paymentRef: "older",
+        amount: decimal("5.00"),
+        settledAt: new Date("2026-07-24T09:00:00Z"),
+      }),
+    );
+    await pg.db.transaction((tx) =>
+      insertCapturedPayment(tx, {
+        ...key,
+        paymentRef: "newer",
+        amount: decimal("7.00"),
+        settledAt: new Date("2026-07-24T11:00:00Z"),
+      }),
+    );
+    const found = await pg.db.transaction((tx) => findCapturedPaymentForWorkingOrder(tx, key));
+    expect(found?.paymentRef).toBe("newer");
+  });
+
+  it("prefers a genuinely settled row over a captured row with settled_at NULL", async () => {
+    // Postgres sorts `DESC` as NULLS FIRST by default, so a plain `desc(payments.settledAt)` would
+    // rank a NULL-settled_at captured row ahead of a really-settled one — backwards from "most
+    // recent". `settled_at` is always set for captured/accepted_offline "by construction", never by
+    // a DB constraint (see the doc comment on CapturedPaymentForOrder), so a NULL row is otherwise
+    // unreachable through the store's own insert helpers (insertCapturedPayment requires
+    // `settledAt: Date`) — this seeds one with a raw insert to exercise the defensive case and
+    // proves `NULLS LAST` earns its place: delete it from the query's `orderBy` and this test fails,
+    // returning "null-settled" instead of "real-settled".
+    const s = await seedWorkingOrder(pg.db, freshNif());
+    const key = { tenantId: s.tenantId, provider: "stripe", workingOrderId: s.workingOrderId };
+    await pg.db.execute(sql`
+      insert into payments (tenant_id, working_order_id, provider, payment_ref, amount, state, settled_at)
+      values (${key.tenantId}, ${key.workingOrderId}, ${key.provider}, 'null-settled', '3.00', 'captured', null)
+    `);
+    await pg.db.transaction((tx) =>
+      insertCapturedPayment(tx, {
+        ...key,
+        paymentRef: "real-settled",
+        amount: decimal("4.00"),
+        settledAt: new Date("2026-07-24T10:00:00Z"),
+      }),
+    );
+    const found = await pg.db.transaction((tx) => findCapturedPaymentForWorkingOrder(tx, key));
+    expect(found?.paymentRef).toBe("real-settled");
   });
 });
 

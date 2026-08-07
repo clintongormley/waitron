@@ -3,8 +3,12 @@ import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { TenantId } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
-import { stripeClient, stripeReportClient } from "@waitron/payments-stripe";
-import type { StripeReconcileAccount } from "@waitron/payments-stripe";
+import { stripeClient, stripeDeviceClient, stripeReportClient } from "@waitron/payments-stripe";
+import type {
+  StripeClient,
+  StripeDeviceClient,
+  StripeReconcileAccount,
+} from "@waitron/payments-stripe";
 import type { DeploymentEnvironment } from "./config.js";
 import { readCredential } from "./credentials.js";
 import "./errors.js";
@@ -80,6 +84,22 @@ export function stripeSecretKeyFrom(
 }
 
 /**
+ * The shared `readCredential` → `stripeSecretKeyFrom` sequence every resolver below runs: read this
+ * tenant's `payments.stripe` credential from the vault and validate/decrypt it into a usable secret
+ * key. The environment-prefix guard (`sk_live_`/`sk_test_` vs this host) lives inside
+ * `stripeSecretKeyFrom` and is preserved unchanged here — this only extracts the steps common to all
+ * three callers, never the wrap around the returned key (each caller's own `makeStripe` + client
+ * wrapper differs, so that stays with the caller).
+ */
+async function resolveStripeSecretKey(
+  deps: StripeAccountDeps,
+  tenantId: TenantId,
+): Promise<string> {
+  const payload = await readCredential(deps.db, deps.ring, tenantId, "payments.stripe");
+  return stripeSecretKeyFrom(payload, { tenantId, purpose: "payments.stripe" }, deps.environment);
+}
+
+/**
  * `StripeReconcilerOptions.resolveAccount`, wired to the vault. One reconciler is built for the
  * whole settlement identity and swept across tenants, so the resolved ACCOUNT is what scopes each
  * sweep — the accounts are standalone, one per merchant, with no Connect layer to carry the scope.
@@ -91,13 +111,41 @@ export function stripeAccountResolver(
   deps: StripeAccountDeps,
 ): (tenantId: TenantId) => Promise<StripeReconcileAccount> {
   return async (tenantId) => {
-    const payload = await readCredential(deps.db, deps.ring, tenantId, "payments.stripe");
-    const secretKey = stripeSecretKeyFrom(
-      payload,
-      { tenantId, purpose: "payments.stripe" },
-      deps.environment,
-    );
+    const secretKey = await resolveStripeSecretKey(deps, tenantId);
     const stripe = deps.makeStripe(secretKey);
     return { report: stripeReportClient(stripe), refund: stripeClient(stripe) };
+  };
+}
+
+/**
+ * A COLLECT-side `StripeClient` built from the till's single tenant credential — the server-driven
+ * (Terminal) counterpart of `stripeAccountResolver`, resolving the SAME `payments.stripe` key the
+ * same way (`resolveStripeSecretKey` -> `makeStripe`), then wrapping it as the collect surface
+ * `StripeTerminalProvider` drives rather than the report/refund pair reconcile needs. The
+ * environment-prefix guard (`sk_live_`/`sk_test_` vs this host) lives inside `stripeSecretKeyFrom`,
+ * so a mismatched key fails loudly here before any client is built. `boot.ts` calls this ONCE for the
+ * till's own tenant.
+ */
+export function cardClientResolver(
+  deps: StripeAccountDeps,
+): (tenantId: TenantId) => Promise<StripeClient> {
+  return async (tenantId) => {
+    const secretKey = await resolveStripeSecretKey(deps, tenantId);
+    return stripeClient(deps.makeStripe(secretKey));
+  };
+}
+
+/**
+ * The on-device (Tap-to-Pay) counterpart of `cardClientResolver`: identical key resolution, wrapped as
+ * a `StripeDeviceClient` for `StripeOnDeviceProvider`. Separate from `cardClientResolver` only in the
+ * wrapper it returns — the device client exposes the connection-token / on-device-collect surface the
+ * handheld flow needs, which the server-driven `StripeClient` does not.
+ */
+export function cardDeviceClientResolver(
+  deps: StripeAccountDeps,
+): (tenantId: TenantId) => Promise<StripeDeviceClient> {
+  return async (tenantId) => {
+    const secretKey = await resolveStripeSecretKey(deps, tenantId);
+    return stripeDeviceClient(deps.makeStripe(secretKey));
   };
 }

@@ -53,6 +53,20 @@ async function typeInput(el: TillTenderPay, selector: string, text: string): Pro
 const typeLabel = (el: TillTenderPay, text: string) => typeInput(el, ".label-input", text);
 /** Types free text into the card operation-number (externalRef) field. */
 const typeRef = (el: TillTenderPay, text: string) => typeInput(el, ".ref-input", text);
+/** Types a gross tip into the integrated-card idle screen's tip field (Task 9). */
+const typeTip = (el: TillTenderPay, text: string) => typeInput(el, ".tip-input", text);
+
+/** Toggles a `wt-switch` (matched by `selector`) by clicking its inner native checkbox — the same
+ * pattern `wt-switch.test.ts` itself uses (a real `click()` toggles `checked` before `change` fires,
+ * unlike a synthetic `change` event on an unchanged checkbox). */
+async function toggleSwitch(el: TillTenderPay, selector: string): Promise<void> {
+  const sw = el.shadowRoot!.querySelector(selector) as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  await sw.updateComplete;
+  sw.shadowRoot!.querySelector<HTMLInputElement>("input")!.click();
+  await el.updateComplete;
+}
 
 const query = (el: TillTenderPay, selector: string) => el.shadowRoot!.querySelector(selector);
 const click = (el: TillTenderPay, selector: string) =>
@@ -630,5 +644,213 @@ describe("till-tender-pay", () => {
     await el.updateComplete;
     expect(query(el, ".pay")!.hasAttribute("disabled")).toBe(true); // never heard the add
     expect(el.shadowRoot!.textContent).not.toContain(t("weigh.prompt")); // never heard the pick
+  });
+
+  // -----------------------------------------------------------------------------------------------
+  // Integrated card terminal (sub-project 7, Task 9): the collecting / card_outcome state machine,
+  // Cancel as a client-side abort, and the tip/offline-consent affordances. UI-unit (@vitest/browser):
+  // this is a pure DOM+event concern — no DB, no privilege — so the hermetic browser target used by
+  // this whole file is the right one (CLAUDE.md §4), unchanged from every other test above.
+  // -----------------------------------------------------------------------------------------------
+  describe("integrated card terminal (Task 9)", () => {
+    it("with cardProvider 'none' (default), Card stays the #62 manual path — no collecting state", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1"); // total 1.50
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+      const collectSpy = vi.fn();
+      const confirmSpy = vi.fn();
+      el.addEventListener("collect-card", collectSpy);
+      el.addEventListener("confirm-payment", (e) => confirmSpy((e as CustomEvent).detail));
+      click(el, ".pay-card");
+      await el.updateComplete;
+      expect(query(el, ".collecting")).toBeNull();
+      expect(query(el, ".ref-input")).not.toBeNull(); // the manual screen, unchanged
+      click(el, ".confirm");
+      expect(confirmSpy).toHaveBeenCalledWith({ method: "card", amount: "1.50" });
+      expect(collectSpy).not.toHaveBeenCalled();
+    });
+
+    it("integrated Card (stripe_terminal) enters the collecting state and emits collect-card", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+      });
+      const spy = vi.fn();
+      el.addEventListener("collect-card", (e) => spy((e as CustomEvent).detail));
+      click(el, ".pay-card");
+      await el.updateComplete;
+      expect(query(el, ".collecting")).not.toBeNull();
+      expect(query(el, ".cancel")).not.toBeNull();
+      expect(spy).toHaveBeenCalledWith({});
+    });
+
+    it("Cancel on collecting returns to idle (client-side abort, no event)", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+      });
+      const spy = vi.fn();
+      el.addEventListener("collect-card", spy);
+      click(el, ".pay-card");
+      await el.updateComplete;
+      spy.mockClear(); // only re-firing on Cancel would count from here
+      click(el, ".cancel");
+      await el.updateComplete;
+      expect(query(el, ".pay-card")).not.toBeNull(); // back to the idle view
+      expect(query(el, ".collecting")).toBeNull();
+      expect(spy).not.toHaveBeenCalled(); // a client-side abort emits nothing
+    });
+
+    it("a declined cardOutcome (driven purely by the prop) shows retry / switch-tender / wait", async () => {
+      const store = new WorkingOrderStore();
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardOutcome: "declined",
+      });
+      expect(query(el, ".retry")).not.toBeNull();
+      expect(query(el, ".switch-tender")).not.toBeNull();
+      expect(query(el, ".wait")).not.toBeNull();
+      expect(el.shadowRoot!.textContent).toContain(t("card.declined"));
+    });
+
+    it("Retry re-emits collect-card with the SAME detail and returns to collecting", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+        tipsEnabled: true,
+      });
+      // The tip is entered on the IDLE screen, before the first attempt — it is not re-readable once
+      // card_outcome shows (the idle screen, and its field, are gone by then).
+      await typeTip(el, "0.50");
+      click(el, ".pay-card");
+      await el.updateComplete;
+      el.cardOutcome = "declined";
+      await el.updateComplete;
+      const spy = vi.fn();
+      el.addEventListener("collect-card", (e) => spy((e as CustomEvent).detail));
+      click(el, ".retry");
+      await el.updateComplete;
+      expect(spy).toHaveBeenCalledWith({ tip: "0.50" }); // replayed, not re-read (idle field is gone)
+      expect(query(el, ".collecting")).not.toBeNull(); // back to the spinner, not idle
+    });
+
+    it("Switch tender returns to idle, leaving cash/manual card one tap away (CLAUDE.md §5)", async () => {
+      const store = new WorkingOrderStore();
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardOutcome: "declined",
+      });
+      const spy = vi.fn();
+      el.addEventListener("collect-card", spy);
+      click(el, ".switch-tender");
+      await el.updateComplete;
+      expect(query(el, ".pay")).not.toBeNull();
+      expect(query(el, ".pay-card")).not.toBeNull();
+      expect(query(el, ".retry")).toBeNull(); // the SAME still-"declined" prop does not bounce back
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it("Wait returns to the collecting spinner, not idle", async () => {
+      const store = new WorkingOrderStore();
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardOutcome: "declined",
+      });
+      click(el, ".wait");
+      await el.updateComplete;
+      expect(query(el, ".collecting")).not.toBeNull();
+      expect(query(el, ".retry")).toBeNull();
+    });
+
+    it("shows a tip entry only when tipsEnabled (integrated only)", async () => {
+      const store = new WorkingOrderStore();
+      const { el: withTip } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+        tipsEnabled: true,
+      });
+      expect(query(withTip, ".tip-input")).not.toBeNull();
+
+      const { el: noTip } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+        tipsEnabled: false,
+      });
+      expect(query(noTip, ".tip-input")).toBeNull();
+
+      const { el: manual } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        tipsEnabled: true, // ignored under the manual path
+      });
+      expect(query(manual, ".tip-input")).toBeNull();
+    });
+
+    it("shows the offline-consent toggle only for stripe_on_device", async () => {
+      const store = new WorkingOrderStore();
+      const { el: onDevice } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_on_device",
+      });
+      expect(query(onDevice, ".offline-consent")).not.toBeNull();
+
+      const { el: terminal } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_terminal",
+      });
+      expect(query(terminal, ".offline-consent")).toBeNull();
+    });
+
+    it("reads the entered tip and offline-consent onto the emitted collect-card detail", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_on_device",
+        tipsEnabled: true,
+      });
+      await typeTip(el, "0.30");
+      await toggleSwitch(el, ".offline-consent");
+      const spy = vi.fn();
+      el.addEventListener("collect-card", (e) => spy((e as CustomEvent).detail));
+      click(el, ".pay-card");
+      expect(spy).toHaveBeenCalledWith({ tip: "0.30", allowOffline: true });
+    });
+
+    it("omits tip/allowOffline from the emitted detail when neither is entered/enabled", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "stripe_on_device",
+        tipsEnabled: true,
+      });
+      const spy = vi.fn();
+      el.addEventListener("collect-card", (e) => spy((e as CustomEvent).detail));
+      click(el, ".pay-card"); // no tip typed, offline-consent left off
+      expect(spy).toHaveBeenCalledWith({});
+    });
+
+    it("Modes I/T at the collect stage also route the integrated Card tap through collect-card", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        mode: "invoice_first",
+        stage: "collect",
+        cardProvider: "stripe_terminal",
+      });
+      const spy = vi.fn();
+      el.addEventListener("collect-card", spy);
+      click(el, ".pay-card");
+      await el.updateComplete;
+      expect(query(el, ".collecting")).not.toBeNull();
+      expect(spy).toHaveBeenCalledOnce();
+    });
   });
 });

@@ -97,6 +97,34 @@ describe("StripeOnDeviceProvider.collect", () => {
     });
   });
 
+  it("derives a stable wo idempotency key across two collects, decoupled from the random payment_ref (§4)", async () => {
+    // §4 capture idempotency, on-device half: the device PaymentIntent-creation idempotency key is
+    // derived from the working order (stable across retries → one PI → charged once), DECOUPLED from
+    // the per-attempt random `paymentRef`. `metadata.payment_ref` stays that random ref (the
+    // attribution hint the reconcile audit reads). `lastCollect` records what the device was handed.
+    const s = await seedWorkingOrder(pg.db, freshNif());
+    const client = new FakeStripeDevice();
+    const provider = providerFor(client, s);
+
+    const first = await provider.collect(collectParams(s));
+    const firstKey = client.lastCollect?.idempotencyKey;
+    const firstMetaRef = client.lastCollect?.metadata.payment_ref;
+    const second = await provider.collect(collectParams(s));
+    const secondKey = client.lastCollect?.idempotencyKey;
+    const secondMetaRef = client.lastCollect?.metadata.payment_ref;
+
+    // The Stripe key is derived from the working order and identical across retries...
+    expect(firstKey).toBe(`wo_${s.workingOrderId}`);
+    expect(secondKey).toBe(firstKey);
+    // ...while metadata.payment_ref stays the random local ref (== PaymentResult.paymentRef) and moves.
+    expect(firstMetaRef).toBe(first.paymentRef);
+    expect(secondMetaRef).toBe(second.paymentRef);
+    expect(secondMetaRef).not.toBe(firstMetaRef);
+    // Decoupling: the Stripe key is neither random ref, and working_order_id is stamped unchanged.
+    expect(firstKey).not.toBe(firstMetaRef);
+    expect(client.lastCollect?.metadata.working_order_id).toBe(s.workingOrderId);
+  });
+
   it("declined writes a failed row", async () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
     const client = new FakeStripeDevice();

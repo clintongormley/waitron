@@ -137,6 +137,9 @@ function makeCfg(
     locationId: brandLocationId(locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
+    // No integrated card terminal for the default cfg — these routes don't build or drive one.
+    cardProvider: "none",
+    tipsEnabled: false,
     // These API tests exercise the session/roster/park routes, none of which dispatch on the mode.
     orderFlow: "prepay",
   };
@@ -180,6 +183,9 @@ function deps(db: Database): TillApiDeps {
     // FALSE so the Set-Cookie is issued over the non-TLS `app.request` — it must still carry HttpOnly
     // and SameSite=Strict, and must NOT carry Secure.
     secureCookies: false,
+    // No integrated card terminal here (the `cardProvider` PaymentProvider is left undefined). `GET
+    // /api/till` echoes `deps.cfg.tipsEnabled` (this suite's `cfg` has it `false`); a separate test
+    // below drives `cfg.tipsEnabled` to `true` to prove the route reads it rather than hardcoding.
   };
 }
 
@@ -415,7 +421,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(JSON.stringify(staff)).not.toMatch(/pin|secret|password|url|cert|role|status|hash/i);
   });
 
-  it("GET /api/till returns locale + issuer identity + orderFlow, and no secret", async () => {
+  it("GET /api/till returns locale + issuer identity + orderFlow + card fields, and no secret", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
@@ -423,16 +429,39 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(res.status).toBe(200);
     const body = await res.json();
     // The receipt-issuer identity Task 17's ticket view needs: the legal name + NIF printed on every
-    // customer receipt, the till's UI locale, and (7c) the location's pay-timing mode — this suite's
-    // seeded location carries the schema default, `prepay`, matching `deps`' cfg.
+    // customer receipt, the till's UI locale, (7c) the location's pay-timing mode, and (integrated
+    // card terminal) the card provider + tips flag the client picks its collect route / UI from. This
+    // suite's `deps` cfg carries no terminal (`cardProvider: "none"`) and tips off.
     expect(body).toEqual({
       locale: "es-ES",
       venueName: "Test SL",
       nif: venueTaxId,
       orderFlow: "prepay",
+      cardProvider: "none",
+      tipsEnabled: false,
     });
     // Nothing sensitive: no pin, certificate, connection string or verification url reaches the wire.
     expect(JSON.stringify(body)).not.toMatch(/pin|secret|password|url|cert/i);
+  });
+
+  it("GET /api/till echoes a non-default cardProvider and cfg.tipsEnabled, proving it reads config rather than a hardcoded value", async () => {
+    // A default of `none`/`false` would pass even if the route hardcoded those values, so drive both
+    // to their OTHER value. Both now come off `deps.cfg` — `cardProvider` always did, and
+    // `tipsEnabled` does too since `TillApiDeps.tipsEnabled` (a second copy that could never diverge
+    // from `cfg.tipsEnabled`, since `boot.ts` set both from the SAME `till` object) was dropped as
+    // redundant. Driving `cfg.tipsEnabled` to `true` here, against the suite default `false` asserted
+    // above, still proves the route reads config rather than a constant.
+    const app = new Hono();
+    mountTillApi(
+      app,
+      { ...deps(suite.db), cfg: { ...cfg, cardProvider: "stripe_terminal", tipsEnabled: true } },
+      collect([]),
+    );
+
+    const res = await app.request("/api/till");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ cardProvider: "stripe_terminal", tipsEnabled: true });
   });
 });
 
@@ -502,6 +531,47 @@ describe("POST /api/sales (session-guarded sale)", () => {
     });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+});
+
+describe("POST /api/pay (session-guarded integrated card pay)", () => {
+  it("REJECTS (401 session.required) when no cookie is present — a pay never runs unauthenticated", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+
+    // The guard runs BEFORE the body is even read, matching every other session-guarded route. The
+    // capture/decline/empty-basket happy paths are proven end-to-end over real Postgres in
+    // `till-api.rls.test.ts` (PGlite runs as a superuser and cannot exercise the deployment role's
+    // chained write or the provider's own FORCE RLS, CLAUDE.md §4).
+    const res = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: randomUUID(), lines: [] }),
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+
+  it("500s server.internal when the till has no integrated card provider configured", async () => {
+    // `deps(suite.db)` leaves `cardProvider` undefined — the shape a till boots with when
+    // `WAITRON_TILL_CARD_PROVIDER=none` (`boot.ts`'s `buildCardProvider`). `mountTillApi` mounts this
+    // route on EVERY till regardless of `cardProvider` (`boot.ts`'s `startServer`, which always calls
+    // it), so `/api/pay` stays reachable on such a till: nothing at the HTTP layer stops a client from
+    // posting here even though the till UI's own affordance is not expected to. That makes a request
+    // reaching this branch a genuine misconfiguration/foreign-request fault — never a payment outcome
+    // — refused BEFORE any DB write, with the SAME opaque `server.internal` 500 every other
+    // non-AppError failure gets from `run`.
+    const id = await openSession(suite.db);
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+
+    const res = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
+      body: JSON.stringify({ id: randomUUID(), lines: [] }),
+    });
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: { code: "server.internal" } });
   });
 });
 

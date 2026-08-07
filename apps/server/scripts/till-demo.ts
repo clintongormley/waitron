@@ -168,6 +168,9 @@ async function main(): Promise<void> {
       locationId: brandLocationId(venue.locationId),
       locale: LOCALE,
       invoiceLocales: [LOCALE],
+      // No integrated card terminal — this demo uses cash/manual tenders only.
+      cardProvider: "none",
+      tipsEnabled: false,
       // The venue's default pay-timing mode (design §3); this demo drives the prepay walk-up path.
       orderFlow: "prepay",
     };
