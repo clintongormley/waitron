@@ -4,7 +4,14 @@ import { CORE_MIGRATIONS, captureError, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { isAppError } from "@waitron/shared";
-import { defaultMakeStripe, stripeAccountResolver, stripeSecretKeyFrom } from "./stripe-account.js";
+import type { TenantId } from "@waitron/shared";
+import {
+  cardClientResolver,
+  cardDeviceClientResolver,
+  defaultMakeStripe,
+  stripeAccountResolver,
+  stripeSecretKeyFrom,
+} from "./stripe-account.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
 const KEY_ENV = {
@@ -64,6 +71,109 @@ describe("stripeAccountResolver", () => {
     });
     const error = await captureError(() => resolve(tenantId));
     expect(isAppError(error) && error.code).toBe("credentials.missing");
+  });
+});
+
+/** Seeds a `payments.stripe` credential for a fresh tenant and returns its id — the same write path
+ * `stripeAccountResolver`'s test above uses, factored out because both card-client resolvers need it. */
+async function seedTenantWithStripeKey(secretKey: string): Promise<TenantId> {
+  const tenantId = await seedTenant(suite.db);
+  await withTenant(suite.db, tenantId, (tx) =>
+    putCredential(tx, ring, {
+      tenantId,
+      purpose: "payments.stripe",
+      value: {
+        secretKey,
+        webhookSecret: "whsec_x",
+        successUrl: "https://example.test/ok",
+        cancelUrl: "https://example.test/no",
+      },
+    }),
+  );
+  return tenantId;
+}
+
+describe("cardClientResolver (server-driven terminal)", () => {
+  it("builds a collect-side StripeClient from the tenant's own secret key", async () => {
+    const tenantId = await seedTenantWithStripeKey("sk_test_terminal_tenant");
+    const keys: string[] = [];
+    const resolve = cardClientResolver({
+      db: suite.db,
+      ring,
+      environment: "preproduction",
+      makeStripe: (secretKey) => {
+        keys.push(secretKey);
+        return {} as Stripe;
+      },
+    });
+
+    const client = await resolve(tenantId);
+    // The KEY is the whole of the tenant scoping on this path (Stripe accounts are standalone, one
+    // per merchant), so building the client from the wrong tenant's key would collect on the wrong
+    // account with no error anywhere.
+    expect(keys).toEqual(["sk_test_terminal_tenant"]);
+    // A server-driven StripeClient, not the reconcile-side report/refund pair: it exposes the
+    // collect surface `StripeTerminalProvider` drives.
+    expect(typeof client.createPaymentIntent).toBe("function");
+    expect(typeof client.processPaymentIntent).toBe("function");
+  });
+
+  it("refuses a test key on a production deployment, before any client is built", async () => {
+    const tenantId = await seedTenantWithStripeKey("sk_test_terminal_tenant");
+    const resolve = cardClientResolver({
+      db: suite.db,
+      ring,
+      environment: "production",
+      makeStripe: () => ({}) as Stripe,
+    });
+    const error = await captureError(() => resolve(tenantId));
+    expect(isAppError(error) && error.code).toBe("payment.credential_environment_mismatch");
+  });
+
+  it("surfaces the vault's own code when the tenant has no Stripe credential", async () => {
+    const tenantId = await seedTenant(suite.db);
+    const resolve = cardClientResolver({
+      db: suite.db,
+      ring,
+      environment: "preproduction",
+      makeStripe: () => ({}) as Stripe,
+    });
+    const error = await captureError(() => resolve(tenantId));
+    expect(isAppError(error) && error.code).toBe("credentials.missing");
+  });
+});
+
+describe("cardDeviceClientResolver (on-device / Tap-to-Pay)", () => {
+  it("builds a StripeDeviceClient from the tenant's own secret key", async () => {
+    const tenantId = await seedTenantWithStripeKey("sk_test_device_tenant");
+    const keys: string[] = [];
+    const resolve = cardDeviceClientResolver({
+      db: suite.db,
+      ring,
+      environment: "preproduction",
+      makeStripe: (secretKey) => {
+        keys.push(secretKey);
+        return {} as Stripe;
+      },
+    });
+
+    const client = await resolve(tenantId);
+    expect(keys).toEqual(["sk_test_device_tenant"]);
+    // A device client, distinguished from the server-driven one by the connection-token method the
+    // handheld flow needs — `StripeOnDeviceProvider`'s surface.
+    expect(typeof client.createConnectionToken).toBe("function");
+  });
+
+  it("refuses a live key on a pre-production deployment, before any client is built", async () => {
+    const tenantId = await seedTenantWithStripeKey("sk_live_device_tenant");
+    const resolve = cardDeviceClientResolver({
+      db: suite.db,
+      ring,
+      environment: "preproduction",
+      makeStripe: () => ({}) as Stripe,
+    });
+    const error = await captureError(() => resolve(tenantId));
+    expect(isAppError(error) && error.code).toBe("payment.credential_environment_mismatch");
   });
 });
 

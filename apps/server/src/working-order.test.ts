@@ -117,6 +117,9 @@ async function setupVenue(): Promise<SeededVenue> {
     locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
+    // No integrated card terminal; these park routes never read it.
+    cardProvider: "none",
+    tipsEnabled: false,
     // This PGlite suite covers park/list/retrieve/update/abandon, none of which dispatch on the mode.
     orderFlow: "prepay",
   };

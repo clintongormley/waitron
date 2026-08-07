@@ -3,7 +3,12 @@ import { serve } from "@hono/node-server";
 import { createPostgresDb } from "@waitron/db";
 import { credentialTenants, loadKeyRing } from "@waitron/credentials";
 import { runDue } from "@waitron/scheduler";
-import { StripeReconciler } from "@waitron/payments-stripe";
+import {
+  StripeOnDeviceProvider,
+  StripeReconciler,
+  StripeTerminalProvider,
+} from "@waitron/payments-stripe";
+import type { PaymentProvider } from "@waitron/payments";
 import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
@@ -22,7 +27,13 @@ import {
 import { runLoop, realSleep } from "./loop.js";
 import { reconcilerAsDuty } from "./reconcile-duty.js";
 import { runPass, DRAIN_DUTY } from "./pass.js";
-import { stripeAccountResolver, defaultMakeStripe } from "./stripe-account.js";
+import {
+  cardClientResolver,
+  cardDeviceClientResolver,
+  stripeAccountResolver,
+  defaultMakeStripe,
+} from "./stripe-account.js";
+import type { StripeAccountDeps } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
 import { readOrderFlow } from "./till-config.js";
@@ -56,6 +67,47 @@ export interface StartedServer {
  * than a second copy of the expression that could silently drift from it.
  */
 export const DEFAULT_MIGRATIONS_ROOT = fileURLToPath(new URL("drizzle", import.meta.url));
+
+/**
+ * The one integrated card-payment provider this till drives (sub-project 7), or `undefined` when
+ * `WAITRON_TILL_CARD_PROVIDER=none`. A till serves exactly ONE tenant (`cfg.tenantId`), so ONE
+ * provider is built up front at boot rather than per request — the same "resolve provisioning-time
+ * config once, not on the hot path" shape `readOrderFlow` follows. The collect-side client is built
+ * from that tenant's own `payments.stripe` credential via the `cardClientResolver` /
+ * `cardDeviceClientResolver` seams (which also apply the `sk_live_`/`sk_test_` environment guard), so
+ * a missing or wrong-environment key fails the boot loudly here rather than on the first sale.
+ *
+ * Exported, not inlined into `startServer`: `startServer`'s only test subject (`boot.test.ts`) boots
+ * against a real container with `cardProvider=none`, so it exercises only the `undefined` branch —
+ * unit-testing THIS function directly (`boot-card-provider.test.ts`, PGlite + a seeded credential) is
+ * what reaches the terminal / on-device branches without a full boot per provider, the same
+ * "exported for a direct test subject" reasoning `DEFAULT_MIGRATIONS_ROOT` below carries.
+ */
+export async function buildCardProvider(
+  cfg: TillConfig,
+  deps: StripeAccountDeps,
+): Promise<PaymentProvider | undefined> {
+  if (cfg.cardProvider === "none") return undefined;
+  if (cfg.cardProvider === "stripe_terminal") {
+    const client = await cardClientResolver(deps)(cfg.tenantId);
+    // Present because `cfg.cardProvider === "stripe_terminal"`: `loadTillConfig` `required`s
+    // `WAITRON_TILL_STRIPE_READER_ID` on exactly that branch (till-config.ts's `stripeReaderId`
+    // resolution), so a terminal cfg that reached here always carries one. `resolveReader` ignores
+    // its `(tenantId, tillId)` args — this till drives one fixed, provisioned reader, not one
+    // selected per collect.
+    const readerId = cfg.stripeReaderId!;
+    return new StripeTerminalProvider({
+      client,
+      db: deps.db,
+      tenantId: cfg.tenantId,
+      resolveReader: () => Promise.resolve(readerId),
+    });
+  }
+  // `stripe_on_device` — the handheld Tap-to-Pay flow, which mints its own connection token and needs
+  // no server-side reader id (till-config.ts requires none for this branch).
+  const client = await cardDeviceClientResolver(deps)(cfg.tenantId);
+  return new StripeOnDeviceProvider({ client, db: deps.db, tenantId: cfg.tenantId });
+}
 
 /**
  * The one place the real implementations meet. Everything above is injected, so this function is
@@ -171,6 +223,16 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // the type demands (`config.till` is `Omit<TillConfig, "orderFlow">`, see `till-config.ts`). A
   // boot-time read, not per request: the mode is stable provisioning-time config.
   const till: TillConfig = { ...config.till, orderFlow: await readOrderFlow(db, config.till) };
+  // The till's ONE integrated card provider (or none), built from its tenant's own Stripe credential
+  // — `makeStripe` is `defaultMakeStripe`, the same SDK factory `stripeAccountResolver` above uses. A
+  // missing or wrong-environment key fails the boot here (§8's "everything escapes"), never the first
+  // card sale. `tipsEnabled` rides the same boot-resolved config onto the deps.
+  const cardProvider = await buildCardProvider(till, {
+    db,
+    ring,
+    environment: config.environment,
+    makeStripe: defaultMakeStripe,
+  });
   mountTillApi(
     app,
     {
@@ -179,6 +241,8 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       clock: systemClock(),
       cfg: till,
       secureCookies: config.tls !== undefined,
+      cardProvider,
+      tipsEnabled: till.tipsEnabled,
     },
     log,
   );

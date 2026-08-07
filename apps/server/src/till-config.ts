@@ -20,6 +20,17 @@ import type { Database } from "@waitron/db";
 export type OrderFlow = (typeof orderFlow.enumValues)[number];
 
 /**
+ * Which card-payment provider this till drives, if any (integrated card terminal, sub-project 7).
+ * Per-NODE config (a node runs one till hardware setup), read from the environment provisioning
+ * stamped: `none` is a till with no integrated terminal (cash + the manual "datáfono" card tender
+ * only), `stripe_terminal` drives a specific server-side Stripe reader by id, and `stripe_on_device`
+ * is the handheld Tap-to-Pay flow that mints its own connection token. It selects which
+ * `PaymentProvider` (if any) `boot.ts` builds and which pay control the till UI renders (Task 8), so
+ * it rides on the till's config beside the fiscal ids.
+ */
+export type CardProvider = "none" | "stripe_terminal" | "stripe_on_device";
+
+/**
  * The deployed till's identity, resolved once at boot from the environment provisioning stamped it
  * with. The four fiscal ids are branded (a bare uuid string cannot be passed where one of these is
  * expected), and `locationId` rides alongside because the sale path needs it: `recordTillSale`
@@ -38,6 +49,27 @@ export interface TillConfig {
   locationId: LocationId;
   locale: string;
   invoiceLocales: string[];
+  /**
+   * Which integrated card-payment provider this till drives (`WAITRON_TILL_CARD_PROVIDER`), or
+   * `none`. Unlike the fiscal ids and `orderFlow`, this is env-only (there is no per-location card
+   * column), so `loadTillConfig` resolves it directly. `boot.ts` reads it to build the one
+   * `PaymentProvider` this till's tenant needs (or none), and `GET /api/till` echoes it so the client
+   * selects the card-collect route + UI affordances (Task 8).
+   */
+  cardProvider: CardProvider;
+  /**
+   * The server-side Stripe reader this till drives (`WAITRON_TILL_STRIPE_READER_ID`). Present iff
+   * `cardProvider === "stripe_terminal"` — `loadTillConfig` REQUIRES it there and leaves it absent
+   * otherwise: a server-driven reader is named by id, while `stripe_on_device` mints its own
+   * connection token and has no server-side reader to name.
+   */
+  stripeReaderId?: string;
+  /**
+   * Whether the till offers a tip prompt at card collect (`WAITRON_TILL_TIPS`). Default false; only
+   * the literal `"true"` or `"1"` enable it, so a typo fails safe (off). `GET /api/till` echoes it so
+   * the client shows or hides the tip affordance (Task 8).
+   */
+  tipsEnabled: boolean;
   /**
    * The venue's pay-timing / service mode, read from the till's LOCATION rather than the environment
    * (the env carries no `order_flow` — the location does), so it is NOT set by `loadTillConfig` and is
@@ -94,6 +126,31 @@ export function loadTillConfig(env: NodeJS.ProcessEnv): Omit<TillConfig, "orderF
   // would only catch `undefined`.
   const rawLocale = env.WAITRON_TILL_LOCALE;
   const locale = rawLocale === undefined || rawLocale === "" ? "es-ES" : rawLocale;
+
+  // The integrated card terminal (sub-project 7). Same "absent OR empty is unset" rule the ids use,
+  // so a `WAITRON_TILL_CARD_PROVIDER=` line falls back to `none` rather than reaching the invalid
+  // branch. An unrecognised value is `server.till_config_invalid` (naming the variable, never the
+  // value — the no-leak discipline the id-branding path already follows).
+  const rawProvider = env.WAITRON_TILL_CARD_PROVIDER;
+  const cardProvider: CardProvider =
+    rawProvider === undefined || rawProvider === ""
+      ? "none"
+      : rawProvider === "stripe_terminal" ||
+          rawProvider === "stripe_on_device" ||
+          rawProvider === "none"
+        ? rawProvider
+        : (() => {
+            throw new AppError("server.till_config_invalid", { key: "WAITRON_TILL_CARD_PROVIDER" });
+          })();
+  // A server-driven reader is named by id and REQUIRED; on-device mints its own connection token, so
+  // it carries no reader id. `required` throws `server.till_config_missing` (naming the variable) on
+  // an absent or empty value, exactly as it does for the fiscal ids.
+  const stripeReaderId =
+    cardProvider === "stripe_terminal" ? required(env, "WAITRON_TILL_STRIPE_READER_ID") : undefined;
+  // Only the literal "true" or "1" enable tips; anything else (including a typo) fails safe to off.
+  const rawTips = env.WAITRON_TILL_TIPS;
+  const tipsEnabled = rawTips === "true" || rawTips === "1";
+
   return {
     tenantId: brand("WAITRON_TILL_TENANT_ID", tenantId, required(env, "WAITRON_TILL_TENANT_ID")),
     tillId: brand("WAITRON_TILL_TILL_ID", tillId, required(env, "WAITRON_TILL_TILL_ID")),
@@ -106,6 +163,12 @@ export function loadTillConfig(env: NodeJS.ProcessEnv): Omit<TillConfig, "orderF
     ),
     locale,
     invoiceLocales: [locale],
+    cardProvider,
+    // Omit the key entirely when absent (rather than materialising `stripeReaderId: undefined`), so
+    // the optional field stays truly absent for a non-terminal provider — the shape the config tests'
+    // `toEqual` pins.
+    ...(stripeReaderId === undefined ? {} : { stripeReaderId }),
+    tipsEnabled,
   };
 }
 

@@ -94,6 +94,9 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
+    // No integrated card terminal for these RLS API suites.
+    cardProvider: "none",
+    tipsEnabled: false,
     // These API tests exercise routes that do not dispatch on the mode; the venue defaults to prepay.
     orderFlow: "prepay",
   };
@@ -178,7 +181,9 @@ async function setupVenue(): Promise<{
  * themselves via `withTenant` + `asAppUser`), the real fiscal backend + system clock the sale path
  * files through, and `secureCookies:false` so the session cookie rides the non-TLS `app.request`. */
 function apiDeps(cfg: TillConfig): TillApiDeps {
-  return { db: suite.admin, backend, clock, cfg, secureCookies: false };
+  // No integrated card provider built for these suites; tips off. `cardProvider` (the built
+  // PaymentProvider) is optional and left undefined.
+  return { db: suite.admin, backend, clock, cfg, secureCookies: false, tipsEnabled: false };
 }
 
 beforeAll(() => {

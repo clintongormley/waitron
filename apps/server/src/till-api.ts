@@ -7,6 +7,7 @@ import type { Database } from "@waitron/db";
 import { endSession, listActiveStaff, loginWithPin } from "@waitron/identity";
 import { listAvailableProducts } from "@waitron/catalogue";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import type { PaymentProvider } from "@waitron/payments";
 import { codeOf } from "./error-code.js";
 import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
@@ -49,6 +50,21 @@ export interface TillApiDeps {
   clock: TrustedClock;
   cfg: TillConfig;
   secureCookies: boolean;
+  /**
+   * The integrated card-payment provider `boot.ts` built for this till's tenant, or `undefined` when
+   * `WAITRON_TILL_CARD_PROVIDER=none`. Unused by the routes below — the card-collect route (Task 8)
+   * drives it — but wired into this one interface now, beside the fiscal `backend`/`clock`, so the
+   * shape and every caller stay stable across the slice. `deps.cfg.cardProvider` carries the STRING
+   * form `GET /api/till` echoes; THIS is the built object the collect path invokes.
+   */
+  cardProvider?: PaymentProvider;
+  /**
+   * Whether the till offers a tip prompt at card collect (`config.till.tipsEnabled`). Echoed on
+   * `GET /api/till` so the client shows or hides the tip affordance (Task 8). Carried on the deps
+   * alongside `cardProvider` — both are the boot-resolved card wiring — rather than read off
+   * `deps.cfg`, keeping the two card facts the route exposes side by side.
+   */
+  tipsEnabled: boolean;
 }
 
 /**
@@ -227,6 +243,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         venueName: issuer.venueName,
         nif: issuer.nif,
         orderFlow: deps.cfg.orderFlow,
+        // The integrated card terminal (sub-project 7): the STRING provider selector and the tip flag
+        // the till app reads BEFORE login to pick its card-collect route and show/hide the tip
+        // affordance (Task 8). `cardProvider` is the config selector (`deps.cfg.cardProvider`), not the
+        // built `PaymentProvider` on `deps` — the client needs the mode name, not the server object.
+        cardProvider: deps.cfg.cardProvider,
+        tipsEnabled: deps.tipsEnabled,
       });
     }),
   );

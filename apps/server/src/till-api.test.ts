@@ -137,6 +137,9 @@ function makeCfg(
     locationId: brandLocationId(locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
+    // No integrated card terminal for the default cfg — these routes don't build or drive one.
+    cardProvider: "none",
+    tipsEnabled: false,
     // These API tests exercise the session/roster/park routes, none of which dispatch on the mode.
     orderFlow: "prepay",
   };
@@ -180,6 +183,10 @@ function deps(db: Database): TillApiDeps {
     // FALSE so the Set-Cookie is issued over the non-TLS `app.request` — it must still carry HttpOnly
     // and SameSite=Strict, and must NOT carry Secure.
     secureCookies: false,
+    // No integrated card terminal here (the `cardProvider` PaymentProvider is left undefined); tips
+    // off, matching `cfg`. `GET /api/till` echoes `deps.tipsEnabled`, so a separate test below drives
+    // a non-default value to prove the route reads it rather than hardcoding.
+    tipsEnabled: false,
   };
 }
 
@@ -415,7 +422,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(JSON.stringify(staff)).not.toMatch(/pin|secret|password|url|cert|role|status|hash/i);
   });
 
-  it("GET /api/till returns locale + issuer identity + orderFlow, and no secret", async () => {
+  it("GET /api/till returns locale + issuer identity + orderFlow + card fields, and no secret", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
@@ -423,16 +430,37 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(res.status).toBe(200);
     const body = await res.json();
     // The receipt-issuer identity Task 17's ticket view needs: the legal name + NIF printed on every
-    // customer receipt, the till's UI locale, and (7c) the location's pay-timing mode — this suite's
-    // seeded location carries the schema default, `prepay`, matching `deps`' cfg.
+    // customer receipt, the till's UI locale, (7c) the location's pay-timing mode, and (integrated
+    // card terminal) the card provider + tips flag the client picks its collect route / UI from. This
+    // suite's `deps` cfg carries no terminal (`cardProvider: "none"`) and tips off.
     expect(body).toEqual({
       locale: "es-ES",
       venueName: "Test SL",
       nif: venueTaxId,
       orderFlow: "prepay",
+      cardProvider: "none",
+      tipsEnabled: false,
     });
     // Nothing sensitive: no pin, certificate, connection string or verification url reaches the wire.
     expect(JSON.stringify(body)).not.toMatch(/pin|secret|password|url|cert/i);
+  });
+
+  it("GET /api/till echoes a non-default cardProvider and tipsEnabled, proving it reads them (not hardcoded)", async () => {
+    // A default of `none`/`false` would pass even if the route hardcoded those values, so drive both
+    // to their OTHER value: the string comes from `deps.cfg.cardProvider`, the flag from
+    // `deps.tipsEnabled` (which `boot.ts` sets from `config.till.tipsEnabled`). The two are read from
+    // DIFFERENT places, so this pins both wirings.
+    const app = new Hono();
+    mountTillApi(
+      app,
+      { ...deps(suite.db), cfg: { ...cfg, cardProvider: "stripe_terminal" }, tipsEnabled: true },
+      collect([]),
+    );
+
+    const res = await app.request("/api/till");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ cardProvider: "stripe_terminal", tipsEnabled: true });
   });
 });
 

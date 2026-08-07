@@ -29,6 +29,11 @@ const EXPECTED_TILL = {
   locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
   locale: "es-ES",
   invoiceLocales: ["es-ES"],
+  // MIN_ENV sets no WAITRON_TILL_CARD_* vars, so the integrated-terminal fields take their defaults:
+  // no card provider and tips off (and NO stripeReaderId key — the terminal branch is the only one
+  // that carries a reader). `toEqual` would fail if `loadTillConfig` materialised any of them.
+  cardProvider: "none",
+  tipsEnabled: false,
 };
 
 function codeOf(error: unknown): string {

@@ -73,14 +73,17 @@ The till is a same-origin front end: run the server's till API on `:8080` and th
 
 ### The `WAITRON_TILL_*` variables
 
-| Variable                   | Required | Default | What it is                                    |
-| -------------------------- | -------- | ------- | --------------------------------------------- |
-| `WAITRON_TILL_TENANT_ID`   | yes      | —       | The venue's tenant.                           |
-| `WAITRON_TILL_LOCATION_ID` | yes      | —       | The location this till sells from.            |
-| `WAITRON_TILL_TILL_ID`     | yes      | —       | This physical till.                           |
-| `WAITRON_TILL_NODE_ID`     | yes      | —       | The compute node whose SIF/chain it files to. |
-| `WAITRON_TILL_SERIES_ID`   | yes      | —       | The standard invoice series.                  |
-| `WAITRON_TILL_LOCALE`      | no       | `es-ES` | The till's UI + invoice locale.               |
+| Variable                        | Required              | Default | What it is                                                                         |
+| ------------------------------- | --------------------- | ------- | ---------------------------------------------------------------------------------- |
+| `WAITRON_TILL_TENANT_ID`        | yes                   | —       | The venue's tenant.                                                                |
+| `WAITRON_TILL_LOCATION_ID`      | yes                   | —       | The location this till sells from.                                                 |
+| `WAITRON_TILL_TILL_ID`          | yes                   | —       | This physical till.                                                                |
+| `WAITRON_TILL_NODE_ID`          | yes                   | —       | The compute node whose SIF/chain it files to.                                      |
+| `WAITRON_TILL_SERIES_ID`        | yes                   | —       | The standard invoice series.                                                       |
+| `WAITRON_TILL_LOCALE`           | no                    | `es-ES` | The till's UI + invoice locale.                                                    |
+| `WAITRON_TILL_CARD_PROVIDER`    | no                    | `none`  | Integrated card terminal: `none`, `stripe_terminal`, or `stripe_on_device`.        |
+| `WAITRON_TILL_STRIPE_READER_ID` | iff `stripe_terminal` | —       | The server-driven Stripe reader this till drives (required for `stripe_terminal`). |
+| `WAITRON_TILL_TIPS`             | no                    | off     | Offer a tip prompt at card collect. Only `true` or `1` enable it.                  |
 
 Each is resolved once at boot by `loadTillConfig` (`apps/server/src/till-config.ts`); a missing or
 malformed value fails the boot loudly (`server.till_config_missing` / `server.till_config_invalid`),
