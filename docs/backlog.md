@@ -21,33 +21,34 @@ through a PR (where CI + Copilot run). The other rules (no force-push, no deleti
 
 ## Current direction
 
-**Finish the fiscal story before building anything user-facing.**
+**Reprioritised 2026-08-07 — Menu & allergens (18) and the reporting *cierre Z* (8), in parallel.**
 
-The reasoning that set this order: the till has to be built against the invoicing model, so building a
-counter screen while that model was mid-change meant building it twice. **That premise has now
-expired (2026-08-03).** The **SIF topology** is settled (#33) and the four-piece fiscal sequence below
-is complete — #55 landed the last of it — so the invoicing model the till builds against is no longer
-moving. The fiscal-first ordering has therefore done its job; what comes next is the **"then reassess"**
-inflection the fiscal sequence names (keep going fiscal — reporting, daily close — or turn to the
-till), and it is deliberately **not decided here** — that is the next reprioritisation's call. The
-fiscal work was also the part that cannot be repaired afterwards — invoice numbers are never reused
-and records are hash-chained — which is why it went first, where care pays best.
+The fiscal-first ordering has done its job. The **fiscal sequence** is complete (settlement #39,
+rectificativas #46, F3 canje #51, invoice-first #55), the **SIF topology** is settled (#33, `node_id`
+re-key #54), and the **operable Counter POS** is built end to end — walk-up cash #60,
+park/retrieve #61, manual card #62, prepare & collect #63, integrated Stripe card #64. A person can
+ring up a
+sandwich, hold an order, take cash or card, and hand over a legal Veri\*Factu ticket. The invoicing
+model the till builds against is no longer moving, and the unrepairable fiscal work — hash-chained
+records, never-reused invoice numbers — is done, which is where care paid best.
+
+With both the fiscal story and the operable till complete, the owner chose the next two slices:
+
+- **Menu & allergens (sub-project 18)** — a launch-day legal duty (EU 1169/2011, RD 126/2015), no code
+  yet, seeding off the catalogue (#59). Recipes/BOM is the linchpin; the allergen list is a
+  food-safety-advisor call.
+- **Reporting — *cierre Z* (sub-project 8)** — the frozen/signed daily close (numbered, immutable,
+  counted-cash / opening float / *descuadre*). `computeDailyClose` (#56) deliberately left the seam.
+
+Run in parallel at the feature level. **Caveat:** both likely add a `packages/db` migration, and
+`packages/db/drizzle/meta/_journal.json` conflicts on every concurrent branch touching the same
+package — the collision is per-package (five packages carry their own `drizzle/`), so their migration
+files must be sequenced (rebase one on the other) even while the feature work proceeds concurrently.
 
 **Prioritisation is by soundness, not the calendar (decided 2026-08-02).** Waitron will be finished
 before the deli is ready to trade, so the deli's 1-Jan-2027 legal deadline is *not* a reason to rank
 one piece of work above another — order by dependency, correctness, and de-risking the most-reused /
-most-uncertain foundations first. The fiscal-first ordering above stands on the **dependency** it
-names (the till is built against the invoicing model), not on the deadline. This is the principle
-under which the app-level replication mechanism was proven (see the SIF follow-ups) *before* more
-feature work resumed.
-
-**The trade being accepted:** there is no application a person can use. Thirteen packages and one
-server app exist; `packages/ui` has six primitives and nothing consumes them; there is no
-`apps/till`. The system can reconcile a Stripe account and file with AEAT, and cannot ring up a
-sandwich. That is a deliberate ordering, not an oversight, but it should be revisited at each
-reprioritisation rather than assumed. **(Superseded 2026-08-05:** the Counter POS walk-up cash-sale
-slice — `apps/till`, consuming `packages/ui` — **landed as #60**; a person can now ring up a sandwich.
-See *Now* and sub-project 7 under *Not started*.**)**
+most-uncertain foundations first.
 
 ---
 
@@ -55,61 +56,51 @@ See *Now* and sub-project 7 under *Not started*.**)**
 
 | What | State |
 | --- | --- |
-| **Sale settlement model** — design | **Merged** (#20) |
-| **This backlog** | **Merged** (#21) |
-| **Pre-push hook skips deletions** | **Merged** (#23) |
-| **Scoped CI** — stop running every check on every push | **Done.** Both merged: #25 (the `ci` gate) and #27 (the scoping). Against the 7m20s baseline: a documentation-only pull request now takes **44s**, and a full unfiltered `push` on `main` **4m12s**. The scope resolution it shipped skipped every package's tests on a root-config pull request; that is fixed under **Debt and odd jobs**, where one follow-up (what `test-light` reports) remains |
-| **Scoped pre-push hook** — the same treatment for the local gate | **Merged** (#31). Scopes `typecheck` and `test:coverage` to the changed packages and their dependents, adds the sign-off (DCO) check CI was catching for us, runs `test:coverage` rather than `test`, adds `pnpm install --frozen-lockfile`, and skips `lint` on a documentation-only push. Measured on this machine on 2026-08-01, one crafted push per shape, `TESTCONTAINERS_RYUK_DISABLED=true`, wall clock bracketed in `time.time()` — `main`'s hook (`558c62b`, one run each) → #31's: deletions-only 9ms → 7-9ms (unchanged, #23 already did that); an **unsigned commit 104s and exit 0 → 27-36ms and exit 1**, because `main`'s hook has no sign-off check at all and so charged a full run and then let it through; documentation-only 105s → **3.1-3.5s**; a push to `packages/ui`, which no other package depends on, 105s → **8.2-8.8s**. **It is not faster everywhere.** A `packages/db` push is 112s and a root-config or lockfile push 116s — both SLOWER than `main`'s 105s, because this hook also runs `test:coverage` rather than `test` and installs first. Scoping pays on the leaves, not on the trunk; **Debt and odd jobs** carries the expansion sizes and what the hook still does not cover. **Re-measured the same way on 2026-08-01**, after the tree-wide guards moved into the repo-level project and the hook grew a step for it (two runs per shape): documentation-only **3.17-3.59s** and an unsigned commit **30ms, exit 1**, both unchanged — neither path reaches that step; `packages/ui` **10.75-11.20s**, the whole of the ~2.4s being the step; `packages/db` **113.22-116.81s** and root config **116.48-117.98s**, where it costs nothing at all, because the root `test:coverage` script was already running that project on the global path |
-| **Cloud storage model** — design | **Merged** (#19), corrected by **#22** |
-| **Local server as SIF, active-active + failover** — design | **Merged** (#33). Promotes the arch-design fallback (the *server* is the SIF, not each till) to the primary model; adds active-active chaining, a single relocatable submitter, human-driven boot-time failover, and an optional dedicated cloud server that can hold any role. **Topology only** — the buildable pieces are follow-ups below |
-| **Sale settlement model** — implementation | **Merged** (#39). Piece 1 of the fiscal sequence done: tip and amount-charged off the frozen `sales` row, tip onto `tenders.tip_amount`, append-only `sale_settlements`, one `settleSale` writer (immediate mode calls it in the same transaction, so the two paths cannot drift — design D6). Coverage moved to the `sale_settlements` INSERT plus a `tenders` post-settlement guard (SQLSTATE WT002). [plan](superpowers/plans/2026-08-01-sale-settlement-model.md), [design](superpowers/specs/2026-07-31-sale-settlement-model-design.md) (with a "Ratified in implementation" note recording three decisions settled during the build) |
-| **Rectificativas** — implementation | **Merged** (#46). Fiscal sequence **piece 2 done**: R5 corrective invoices for simplified tickets — `corrects_sale_id` link + negative-total allowance, the four AEAT rectificativa columns round-tripped so a filing carries its mandatory `TipoRectificativa`, `recordCorrection` backend + core entry point, and the mandatory separate `rectificative` series guarded. [plan](superpowers/plans/2026-08-02-rectificativas.md). Cross-till/SIF corrections: AEAT permits a correction from a **different SIF** (subsanación/anulación, dev FAQ 4-Dec-2025); the rectificativa extension is a sound **inference** (identity-linkage) pending asesor confirmation — findings §13. R1/B2B and R2–R4/accounting deferred |
-| **Workforce — registro de jornada** — implementation | **Merged** (#47). Sub-project 16 legal floor: new `packages/workforce` + `packages/workforce-es`, immutable append-only `time_entries` (role-revocation floor), clock in/out/break, supervisor-gated append-only corrections + registro export, **both-model** overtime (daily-accrual + period-net, convenio-selectable), and a single-active-writer tamper-evidence hash chain. [plan](superpowers/plans/2026-08-02-workforce.md). A migration-isolated parallel lane to the fiscal work |
-| **App-level cross-server sync** — design | **Designed** (this session). Application **outbox** (`sync_log` + generic capture trigger, apply as the app role under `withTenant`) — one reusable mechanism, no new DB privilege. Decisions settled with the owner: explicit `server_id` on the commercial tables too, **true active-active** for the deli, and a **payments fast lane**. Built later (the `server_id`/node rekey it waited on **landed as #54**; still needs the feature schemas to settle); the **9 container gates RAN 2026-08-06 — all pass, outbox validated with no new privilege** ([findings](superpowers/specs/2026-08-06-sync-container-gates-findings.md); one routing rule found — `envios`/`acks` are ordered-lane-only, never the payments fast lane). Spec: [2026-08-02-app-level-sync-design.md](superpowers/specs/2026-08-02-app-level-sync-design.md) |
-| **Close Q13 and Q15 on primary source** | **Done** (#37). Q13 (tips) and Q15's core CLOSED on primary/official source ([findings](compliance/verifactu-findings.md) §§11–12); Q14 (precuenta) stays open — see the advisor gap below |
-| **Consolidate the session-memory notes** | Not started. They predate this file and now overlap it — see below |
-| **Reporting — daily close** (sub-project 8, first slice) | **Merged** (#56). Read-only `@waitron/reporting`: `computeDailyClose(tx, input)` → a per-`(tenant, node, business-day)` close — a VAT summary (base + tax per rate, corrections netted) anchored on **issuance**, and an operational cash-up (by till + tender method) anchored on **settlement**, plus record counts. Derived, no new tables/migration; DST-aware business-day bucketing with a configurable cutover; headless (a till/UI consumes it later). The F3-canje VAT exclusion is confirmed on primary source (FAQ v1.3 §27 — *modelo 303* counts R1–R5, not F3). [design](superpowers/specs/2026-08-04-daily-close-reporting-design.md), [plan](superpowers/plans/2026-08-04-daily-close-reporting.md). Two follow-ups under *Debt* |
-| **Locations — provision a sellable venue** (sub-project 6) | **Merged as #57** (2026-08-04). Reshapes fiscal identity to country/territory-driven: `tenants.nif` → `country` (ISO-3166 alpha-2) + `tax_id`, unique on `(country, tax_id)`; `locations` gain `fiscal_territory` + address + `time_zone` (IANA) + `day_cutover`; `nodes` record the resolved `filing_module` + `tax_module`. Adds `resolveFiscalModules` (`"ES-common"` → Veri\*Factu + IVA, **every other territory refused** — new `fiscal.regime_not_implemented`, fired both as a provisioning input refusal and as a runtime hard-error, defence in depth), a deterministic `obligadoTenantId(country, tax_id)` (so insert-and-catch-unique reuse works under RLS without a forbidden NIF lookup), `planVenue` (pure planner) / `applyVenue` (one transaction; idempotent for the obligado via `ON CONFLICT DO NOTHING`, but each run otherwise ADDS a shop — location/till/node/SIF at installation #2/fresh chain), and the `waitron-provision venue` CLI. Retires and **deletes** the stale `apps/server/sql/bootstrap-tenant.sql`. A venue is now provisionable such that `recordSale` can immediately chain a sale. [design](superpowers/specs/2026-08-04-locations-provisioning-design.md), [plan](superpowers/plans/2026-08-04-locations-provisioning.md) |
-| **Catalogue — priced products the till can sell** (sub-project 7 unblocker / 18 seed) | **Merged as #59** (2026-08-05). New headless `@waitron/catalogue`: a **catalogue** (named menu) → **products** model a till reads to build a basket. A tenant owns catalogues; products belong to a catalogue; a **location is assigned a catalogue** (N identical delis share one; a deli + restaurant get one each, so the restaurant never sees deli products). **Categories** are a tenant-wide analytics taxonomy **snapshotted onto each sale line** (the no-`product_id` snapshot rule leaves nothing to join back through). Prices are stored **VAT-inclusive (gross)** and reversed to base/cuota by the **difference method** (cuota = gross − base, so `total == Σ(base+cuota)` exactly and the customer is charged the marked/weighed gross to the céntimo). Weighed items are in the model now (`pricing_unit ∈ {each,weight}`); VAT via a semantic `vat_class` → a minimal ES-común IVA rate resolver (21/10/4/0, primary-source receipted). `recordSale` gains an optional caller-supplied `vatBreakdown` (used verbatim; else `buildVatBreakdown` as before) + a line `category`, plus a `sale.total_mismatch` guard — **no fiscal-backend change**. Proven end-to-end (integration test + a demo that ran live: chained `alta A/1`, `total == Σ(base+tax)`). Headless: no till UI, no working-order producer, no management surface. [design](superpowers/specs/2026-08-05-catalogue-model-design.md), [plan](superpowers/plans/2026-08-05-catalogue-model.md). Follow-ups under *Debt* |
-| **Counter POS — walk-up cash sale** (sub-project 7, slice 1 / 7a) | **Merged as #60** (2026-08-05). The first thing a person can actually operate: a new browser app **`@waitron/till`** (Lit + Vite) driving a same-origin till HTTP surface in `@waitron/server` (`src/till-api.ts`). Lock-screen PIN login (pre-login staff roster + `POST /api/session`) → a **layout-driven** counter screen composing product-grid / basket / total / pay widgets from a `LayoutDef` → one **cash** tender → a filed Veri\*Factu **ticket** with its AEAT QR → new sale. The server re-prices the basket **authoritatively** (`recordTillSale` — the browser sends no price), files through the real `VerifactuBackend` chain in one transaction, and attributes the sale to the **logged-in operator** (never a browser-sent id). Stands on the three foundations that just landed: Identity (#58) for the roster + PIN login, Catalogue (#59) for priced products, Locations (#57) for the venue the till points at via `WAITRON_TILL_*`. Proven end to end over real Postgres (login → menu → mixed-rate sale → legal ticket + an intact fiscal chain across two sales) and by a runnable `pnpm --filter @waitron/server demo:till` script; `apps/till/README.md` documents the dev run. **Cash only**, no offline/card/hardware/refunds; the layout & receipt **editors** and slices **7b/7c** are later — deferred edges under *Debt and odd jobs* → **Counter POS follow-ups**. [design](superpowers/specs/2026-08-05-counter-pos-walkup-sale-design.md), [plan](superpowers/plans/2026-08-05-counter-pos-walkup-sale.md) |
-| **Counter POS — park & retrieve + sale idempotency** (sub-project 7, slice 2 / 7b) | **Merged as #61** (2026-08-06). Persists the working order and shares it **across registers on one server**: park an order, retrieve it from any till, edit it, pay it. Lands the **sale-idempotency** guard 7a deferred — `sales.working_order_id` + `UNIQUE(tenant_id, working_order_id)`; `payWorkingOrder` locks the order, **replays** an already-settled one (files nothing), files+settles an open one, and catches a concurrent `23505` as a replay (three DB backstops — UNIQUE + PK + the state-transition trigger — behind the app guards). A lost-response pay retry now reprints the **same** ticket instead of filing a second chained `registros_facturacion` record. The client mints a stable working-order id per basket; parked lines store `product_id` + quantity and **re-price at pay** at current catalogue prices (the filed `sale_lines` stay snapshot-based; `working_order_lines.line_total` deliberately stores **gross** for the customer-facing held-list total, diverging from `sale_lines`' net). New read-only `FiscalBackend.filedReceiptFor(tx, saleId)` fills the **replay** ticket's Veri\*Factu QR + the **filed** difference-method VAT breakdown (not a recompute). Cross-till held list **lifts the "one till per server" limit**. `apps/till` Hold/park control + held-orders widget (retrieve/discard, graceful `held.stale` on a cross-till race); server `/api/working-orders` routes; a new tenant-scoped `working_order_counters` table (FORCE RLS + policy + grants) for the per-`(tenant, node)` order number. `sales` stays immutable (`working_order_id` written once, never in a huella). Proven on real Postgres (walk-up, parked, replay, two concurrency shapes, cross-till, tenant + node isolation) + a `demo:park-retrieve` script. Reviewed by a 14-task-plus-whole-branch multi-agent pass (caught the client paying under a random id), a simplify + two-lens review (caught the held-list total showing net instead of gross), and Copilot (two comment-accuracy fixes). **The manual card tender landed next as #62.** [design](superpowers/specs/2026-08-05-counter-pos-park-retrieve-and-card-design.md), [plan](superpowers/plans/2026-08-05-counter-pos-7b-park-retrieve.md) |
-| **Counter POS — manual card tender** (sub-project 7, the *datáfono* case) | **Merged as #62** (2026-08-06). A manual (unintegrated) card tender beside cash: the operator runs the card on a *separate* standalone bank terminal, taps **Card**, and the till files the same legal Veri\*Factu ticket with a `card` tender **and** a captured `payments` ledger row. `payWorkingOrder`/`recordTillSale` widen the tender to `{ method: "cash" \| "card"; amount; externalRef? }`; both guards still refuse `voucher`/`transfer`/`other` (`sale.unsupported_tender`). The card path settles at the server's re-priced **`priced.total`** (server-authoritative — a card is charged the exact total, **no change**, `req.tender.amount` never consulted, proven by a divergent-input test), and — in the **same** sale transaction, after the sale exists — creates a captured `payments` row (`recordManualCardPayment`, `provider='manual'`) linked via `associatePaymentWithSale`; cash gets no payments row. `recordManualCardPayment` makes **no network call**, so the capture is atomic with no orphan window; a card lost-response retry replays via **7b's** `working_order_id` idempotency (no second capture). Till: a `Tender = CashTender \| CardTender` union + a **Card** button → a card-confirm view (total, optional bank-terminal `externalRef`, no keypad/no change). **No migration, no new error code** (the `payments` table + the `card` enum value already existed). Proven on real Postgres (captured payment linked under the non-superuser role, refusals, idempotency) + a `demo:till` card sale. **The integrated card terminal** (Stripe Terminal / SumUp — network capture, timed-out-card UX, hardware) is the next card slice; `packages/payments-stripe` already carries the providers. [design](superpowers/specs/2026-08-05-counter-pos-park-retrieve-and-card-design.md), [plan](superpowers/plans/2026-08-05-counter-pos-card-tender.md) |
-| **Counter POS — prepare & collect + line-add price-snapshot foundation** (sub-project 7, slice 7c) | **Merged as #63** (2026-08-07). Two things at once: the shared **line-add price-snapshot / placing / per-location pay-timing** foundation the integrated-card slice builds on, and **prepare & collect** (kitchen prep + the working-order amendment log). **Line-add snapshot** revises 7b's re-price-at-pay — each `working_order_line` locks its **gross** unit price at add time (`unit_price_gross`), and the filed `sale_lines` derive from that lock via `priceLockedLines` (`@waitron/catalogue`, byte-identical difference-method desglose), so the filed invoice equals what the customer was shown *by construction*; a retrieved order files from its stored locks (ignores the client basket) and the pay path re-syncs only an **edited** retrieved basket (dirty-gate + a swallowed `not_open`). **Placing** (`open → placed`) freezes composition, opens the amendment log, and anchors issuance; a walk-up never places. **Per-location pay-timing** (`locations.order_flow` enum): **prepay** (pay + issue at order), **invoice_first** (deferred invoice at placing, `settleSale` at collect), **ticket_then_pay** (no fiscal doc at placing, immediate sale at collect) — one fiscal record per order, idempotent. **Amendment log** (art. 29.2.j LGT): append-only, FORCE-RLS, tamper-evident per-order hash chain (the #52 lessons), attached at placing. **Prep surface**: send-to-prep / advance / a node-scoped prep queue + till routes. **Till UI**: per-mode pay (place → collect), a prep-queue widget, en+es; the receipt line list is server-sourced (filed composition). One additive migration `0030` (`placed` state + rewritten `enforce_transition`, `unit_price_gross`, `order_flow`, `order_amendments`, `order_prep`); **no `computeHuella` change**. Built by an 11-task subagent-driven pass + whole-branch review + fix wave + 4-lens simplify + a final fresh-context review (which caught a place-path re-price bug, a receipt-line divergence, and a false-claim + impossible-mock test I had introduced in a simplify commit — all closed). Landed through a ~4h GitHub Actions outage (local gate green throughout). Follow-ups under *Debt* → **Counter POS follow-ups (7c)**. [design](superpowers/specs/2026-08-06-counter-pos-prepare-collect-design.md), [plan](superpowers/plans/2026-08-06-counter-pos-prepare-collect.md) |
-| **Counter POS — integrated card terminal (Stripe)** (sub-project 7, the card slice) | **Merged as #64** (2026-08-07). Drives a real Stripe reader (Terminal) or Tap-to-Pay / on-device **from** the till pay flow, with the network capture split **out** of the fiscal transaction — the card slice after #62's manual *datáfono* tender. **Split-transaction pay** (`payWorkingOrderIntegrated`): P1 price → P2 `provider.collect` (network, **outside** the fiscal tx) → P3 file+associate+settle, atomically; P1 dispatches five arms (`replay` / `recover` / `recover-settle` / `settle` / `collect`) keyed on DB state, covering both 7c pay-timing orderings (issue-at-pay via `recordSale`, invoice-first via `settleSale` of the already-issued invoice). **Capture idempotency** (the one genuinely-new guard): the Stripe PaymentIntent key is derived from the working-order id (`wo_<id>`) so Stripe charges once across retries; a `findCapturedPaymentForWorkingOrder` pre-check + `finalizeRecovery`/`finalizeSettleRecovery` recover a lost-response window (captured but P3 never ran) by filing/settling from the stored 7c-locked lines **without re-charging**, with a corruption guard that files **nothing** (never a divergent fiscal total) on a shortfall. Per-node provider config (`WAITRON_TILL_CARD_PROVIDER` none/stripe_terminal/stripe_on_device + `WAITRON_TILL_TIPS`); a blocking **`POST /api/pay`** returning 200-with-discriminated-outcome (captured/declined/network_unavailable), genuine faults still throw+map via `run`; till UI: client `pay()`, `#onCollectCard`, a `tender-pay` widget with collecting/declined states, client-abort Cancel, tip entry, offline consent (on-device only), en+es. **Nothing blocks a sale** — a decline leaves cash/manual one tap away. **No `packages/db` migration, no `computeHuella` change** (the `payments` table + `card` tender pre-existed). Fiscal atomicity proven on real Postgres (the huella insert shares P3's tx with the `sales`/`sale_settlements` write → a 23505/WT002 rolls back with no orphan/double huella; ≤1 huella per order); the tip stays outside every fiscal total. Built by a 10-task subagent-driven pass (each task spec+quality reviewed) + a base-to-tip whole-branch review (APPROVE, caught a stale cross-task P1 comment) + a 4-lens simplify + Copilot (4 findings incl. a **false `app_user`-role claim** in the demo that no other layer caught). Deferred edges under *Debt* → **Counter POS follow-ups (integrated card)**. [design](superpowers/specs/2026-08-06-integrated-card-terminal-design.md), [plan](superpowers/plans/2026-08-06-integrated-card-terminal.md) |
+| **Menu & allergens** (sub-project 18) — launch-day legal duty (EU 1169/2011, RD 126/2015) | Chosen 2026-08-07, not started. Seeds off the catalogue (#59); recipes/BOM is the linchpin; the allergen list is a food-safety-advisor call |
+| **Reporting — *cierre Z*** (sub-project 8) — frozen/signed daily close | Chosen 2026-08-07, not started. Numbered, immutable, counted-cash / opening float / *descuadre*; `computeDailyClose` (#56) left the seam |
+| **Backlog cleanup** — prune finished work; promote the two above | In flight (this change) |
 
 ---
 
-## Next — the fiscal sequence
+## Recently shipped
 
-Four pieces, in this order. **All four have now landed** — 1 (#39), 2 (#46), 3 (F3 canje, #51) and 4
-(invoice-first, #55, headless). They were sequenced rather than parallelised because each adds
-a migration to `packages/db`, and `packages/db/drizzle/meta/_journal.json` conflicts on every
-concurrent branch. The collision is **per package**, not repo-wide — five packages carry their own
-`drizzle/` directory and journal (`credentials`, `db`, `fiscal-verifactu`, `payments`, `scheduler`),
-so work touching a different package's migrations can still run alongside these.
+One line per landed PR, newest first. The git log, the linked designs/plans, and the
+[architecture design](superpowers/specs/2026-07-18-pos-architecture-design.md) §2 table hold the
+detail — **this file is not a history** (see *How to keep this file honest*). Open follow-ups from
+these live under *Debt and odd jobs*; their designs/plans stay in `docs/superpowers/`.
 
-| # | Piece | Why here |
-| --- | --- | --- |
-| 1 | **Sale settlement model** — **done (#39)** | Everything else assumes it. Took the tip and the amount charged off the frozen sale row so an invoice can exist before payment does |
-| 2 | **Rectificativas** — R5 (simplified tickets) — **done (#46)** | The only lawful way to change an issued invoice. Unblocked piece 4. R1/B2B and R2–R4/accounting deferred (need F1 issuance / the asesor) |
-| 3 | **F3 canje** — "can I have a proper invoice?" — **done (#51)** | Was unmodelled, and issuing an ordinary invoice instead would double-declare the sale. Ordinary trade in a restaurant, not an edge case. `recordSubstitution` files a positive-total F3 alta with `FacturasSustituidas` + `Destinatarios`, reading the substituted F2 tickets without annulling them (at-most-once, F2-only, series-purpose-guarded, unsettled) |
-| 4 | **Invoice-first mode** — **done (#55, headless)** | The fiscal/DB half shipped earlier (#39): a deferred `recordSale` chains and files the invoice with no payment, `settleSale` closes it later. This slice filled the headless remainder — settling a *corrected* invoice-first sale: migration 0021 nets rectificativas into the `SECURITY DEFINER` coverage function (`due = total + Σcorrections + tips`), `settleSale` nets corrections in lockstep (an app-level check in the same identity), `listOutstandingSales` (`@waitron/core`) excludes correctives / F3 canje substitutes / settled / voided and nets corrections into `amountDue`, and a `settle-invoice-first` demo script walks issue → list → correct → list → settle-at-net → list. The **till UI stays out** (sub-project 7) |
+- **#64** Counter POS — integrated card terminal (Stripe Terminal / Tap-to-Pay): split-transaction pay (collect outside the fiscal tx), working-order-derived capture idempotency + lost-response recovery, `POST /api/pay`.
+- **#63** Counter POS 7c — prepare & collect: line-add price-snapshot lock, placing, per-location pay-timing (prepay / invoice-first / ticket-then-pay), amendment log, prep surface.
+- **#62** Counter POS — manual (*datáfono*) card tender + captured `payments` row.
+- **#61** Counter POS 7b — park & retrieve across registers + sale idempotency.
+- **#60** Counter POS 7a — walk-up cash sale; new `@waitron/till` + the server till API.
+- **#59** Catalogue — priced products (gross-inclusive, difference-method VAT).
+- **#58** Identity — headless first slice (persons/sessions, PIN login, `authorize()`).
+- **#57** Locations — provision a sellable venue (country/territory fiscal identity, `waitron-provision venue`).
+- **#56** Reporting — daily-close first slice (`computeDailyClose`).
+- **#55** Invoice-first settlement — headless remainder (settle a corrected invoice-first sale).
+- **#54** `node_id` re-key — SIF / chain / series keyed to `nodes`, not `till_id`.
+- **#52** Workforce floor — four review-fix corrections (UTC render, tamper-chain gaps, clock TOCTOU).
+- **#51** F3 canje — "can I have a proper invoice?" (`recordSubstitution`).
+- **#50** Workforce D2 — scheduling (rosters, guardrails, planned-vs-actual).
+- **#49** Payments — Mode 3 inbound Stripe webhook (security half).
+- **#47** Workforce — *registro de jornada* legal floor.
+- **#46** Rectificativas — R5 corrective invoices.
+- **#39** Sale settlement model — tip/amount off the frozen sale, `settleSale`.
+- **#37** Fiscal Q13/Q15 closed on primary source.
+- **#33** Local server as SIF, active-active + failover (topology only; buildable pieces under *SIF topology follow-ups*).
+- **#31** Scoped pre-push hook · **#27 / #25** Scoped CI · **#23** Pre-push skips deletions · **#32** CI scope fail-open fix.
+- **#22 / #19** Cloud storage model · **#21** This backlog · **#20** Sale settlement design.
+- Plus provisioning / CI / docs PRs (e.g. #11, #16, #35, #44) — the git log is the full record.
 
-Design and sources for all four:
-[2026-07-31-sale-settlement-model-design.md](superpowers/specs/2026-07-31-sale-settlement-model-design.md)
-§8, and [compliance/verifactu-findings.md](compliance/verifactu-findings.md) §§7-10. Invoice-first
-carries its own design and plan:
-[2026-08-03-invoice-first-settlement-design.md](superpowers/specs/2026-08-03-invoice-first-settlement-design.md)
-and [2026-08-03-invoice-first-settlement.md](superpowers/plans/2026-08-03-invoice-first-settlement.md).
-
-**Reassessed 2026-08-04 — reporting AND the till track, in parallel.** With the fiscal sequence
-complete, the owner chose to run both directions at once: **reporting** (sub-project 8) and the **till
-track** (Locations 6 → Identity 5 → Counter POS 7), starting with Locations as the foundational
-unblocker (nothing could provision a sellable venue then). Prioritisation stayed by soundness, not the
-calendar. Reporting's first slice — the daily close — **landed as #56**; **Locations 6 landed** (merged as #57,
-2026-08-04); and **Identity 5's headless first slice has now landed** (merged as #58, 2026-08-05), so
-the till track's remaining foundational step is **Counter POS 7** — the first thing a person can
-actually operate. See *Now* and *Not started* for each.
+**The fiscal sequence is complete** — its four pieces (#39 settlement, #46 rectificativas, #51 F3
+canje, #55 invoice-first) are all above. They were sequenced rather than parallelised
+because each adds a `packages/db` migration and `packages/db/drizzle/meta/_journal.json` conflicts on
+every concurrent branch touching that package (the collision is per-package; five packages carry their
+own `drizzle/`). Designs and sources:
+[settlement](superpowers/specs/2026-07-31-sale-settlement-model-design.md) §8,
+[verifactu-findings](compliance/verifactu-findings.md) §§7-10,
+[invoice-first](superpowers/specs/2026-08-03-invoice-first-settlement-design.md).
 
 ---
 
@@ -119,34 +110,18 @@ The [server-as-SIF + failover design](superpowers/specs/2026-08-01-local-server-
 decided the **topology only**; its §14 defers the buildable pieces, each to its own spec:
 
 - **The sync / replication protocol** between the two local servers and the cloud mirror — the
-  largest piece. **Both gating container prototypes are now DONE (2026-08-02) and they DECIDE the
-  mechanism: cross-replication must be APPLICATION-LEVEL, not native Postgres logical replication.**
-  Proven on real `postgres:18-alpine` and independently re-verified
-  ([findings](superpowers/specs/2026-08-02-replication-force-rls-prototype-findings.md)): (1) a
-  non-BYPASSRLS app role with the tenant context set INSERTs a foreign server's same-tenant rows
-  verbatim under FORCE RLS — app-level apply works; (2) native logical replication's apply worker
-  **categorically refuses** to write into any RLS-enabled table under a non-BYPASSRLS role
-  (`cannot replicate into relation with row-level security enabled`) — the only native lever is
-  BYPASSRLS/superuser, which the deployment-role constraint forbids. The block keys on RLS being
-  enabled *at all*, so it hits **all ~8 RLS tables**, not only the fiscal chain. The cheaper fork
-  (turn RLS off on the replica copies + native replication) strips the fiscal tables' defense-in-depth
-  and is declined deliberately. **The app-level sync layer is now **designed and reviewed** (this session):
-  [2026-08-02-app-level-sync-design.md](superpowers/specs/2026-08-02-app-level-sync-design.md). It
-  finalises the held first draft (`2026-08-01-sif-sync-replication-protocol-design.md`, branch
-  `docs/sif-sync-protocol-design`) with an application **outbox** (`sync_log` + one generic capture
-  trigger; apply as the app role under `withTenant`, the proven path), the FK apply-ordering rule
-  (origin seq-order is a topological order for free — fixes the held draft's missing `sales`/
-  `working_orders`), and one reusable enrolment mechanism. **Owner decisions settled (2026-08-02):**
-  explicit `server_id` on the commercial tables too, **true active-active** for the deli, and a
-  **payments fast lane**. Carries **9 container prototype gates** (§11 — esp. the capture trigger +
-  echo-suppression under FORCE RLS, and non-superuser logical-slot consumption for the native-decode
-  backfill option) that come before any build. **They RAN 2026-08-06 — all pass; the outbox path is
-  validated with no new privilege** ([findings](superpowers/specs/2026-08-06-sync-container-gates-findings.md),
-  folded into spec §11). One design change: `envios`/`acks` carry no monotonic column, so they are
-  **ordered-lane-only** (never the payments fast lane) and §6's enrolment registry must encode that. The
-  `server_id`/node rekey it depended on has **LANDED
-  (#54, 2026-08-03, under the term `node`)**, so the sync spec can now assume the `node_id` columns
-  exist rather than treating the rekey as a prerequisite.
+  largest unbuilt piece. **Designed and reviewed**
+  ([spec](superpowers/specs/2026-08-02-app-level-sync-design.md)); the mechanism is decided:
+  cross-replication is **application-level** (an outbox — `sync_log` + a generic capture trigger,
+  apply as the app role under `withTenant`), **not** native Postgres logical replication, which
+  categorically refuses to write into an RLS-enabled table under a non-BYPASSRLS role (proven on real
+  Postgres — [findings](superpowers/specs/2026-08-02-replication-force-rls-prototype-findings.md)).
+  Its **9 container gates RAN 2026-08-06 — all pass, outbox validated with no new privilege**
+  ([findings](superpowers/specs/2026-08-06-sync-container-gates-findings.md)). Owner decisions:
+  explicit `server_id` on the commercial tables, **true active-active** for the deli, a **payments
+  fast lane** — with `envios`/`acks` ordered-lane-only (no monotonic column). The `node_id` re-key it
+  depended on landed (#54), so the columns already exist. **Still needs the feature schemas to settle
+  before the build** (7c's amendment log and the catalogue just landed).
 - **Promotion + fencing tooling and the till-side failover list** — boot-time role resolution,
   continuous conflict-detection, the "one primary" invariant.
 - **The submitter as a relocatable role** — one venue submitter, certificate resolved from wherever
@@ -164,34 +139,6 @@ Also left open by that design:
 - The **reconcile remediation UI** and the **orphan-drift hold** (both already under *Debt and odd
   jobs*) are the backstop for the design's double-charge-across-failover path (§10) — no new work, but
   now they have a second caller.
-- **#33's "the SIF is the server" premise now has schema support — the rekey LANDED as #54
-  (2026-08-03), under the term `node`.** A `nodes` table plus a re-key of the fiscal chain / series /
-  SIF identity from `till_id` to a new `node_id`: `registro_sif` (one live SIF per node), `cadenas`
-  (chain head `(tenant, node)`), `registros_facturacion` (`(tenant, node, secuencia)`),
-  `invoice_series` (`(tenant, node, code)`); `till_id` kept as an informational snapshot on
-  `registros_facturacion`/`sales`. **The code says `node`, not `server`** — #33's "server" IS this
-  `node` (US "server" = waiter; Waitron's staff concept is `persons`/`employments`, and this is a
-  machine). The container prototype the gap called for became the real-PG concurrency gate
-  (`chain.node-rekey.concurrency.test.ts`); the huella is byte-identical (`node_id` is our metadata,
-  stamped after hashing, never in the hash). Design/plan:
-  [2026-08-03-node-id-rekey-design.md](superpowers/specs/2026-08-03-node-id-rekey-design.md). Node
-  references are tenant-consistent composite FKs `(tenant_id, node_id) → nodes(tenant_id, id)` on the
-  commercial/series tables (`sales`, `working_orders`, `payments`, `invoice_series`); the immutable
-  chain tables (`cadenas`/`registro_sif`/`registros_facturacion`) keep plain `node_id` FKs (written
-  only through the guarded chain-append path). Scope was **rekey + wire one node per venue**;
-  active-active, failover, two concurrent SIFs + disjoint-series, and the submitter role stay out (the
-  follow-ups above).
-  - **CLOSED (2026-08-04, #57) by Locations sub-project 6 — production node-provisioning is now wired.** The
-    earlier gap read "`apps/server/sql/bootstrap-tenant.sql` still creates a till, not a node, and a
-    first-class `provision node` CLI is unbuilt … nothing provisions a production node yet." Resolved:
-    `waitron-provision venue` now `insert into nodes …` under a location and registers its SIF
-    (`applyVenue` → `registerSif`) as part of standing a venue up, and `bootstrap-tenant.sql` was
-    **deleted**. `apps/server/src/provision-till.ts` (`provisionNode`) remains the standalone
-    registration path for a reimaged or bare node. The file is still named `provision-till.ts`; a
-    first-class `provision node` subcommand rename stays a nicety (see the follow-ups below). See *Now*.
-  - **Deferred follow-up — `CLAUDE.md` §5's "nothing blocks a sale" rewrite** stays open (see the bullet
-    above): this slice changed no sale-blocking behaviour, so the rewrite lands with the server-as-SIF
-    *behaviour* (failover), not this schema slice.
 
 ---
 
@@ -281,26 +228,24 @@ not payment method); a short payment agreed as payment-in-full before the factur
 
 ## Not started
 
-Nothing below has any code, **except: sub-project 16 (workforce) — *registro de jornada* floor (#47),
-D2 scheduling (#50), only D3 remains; sub-project 8 (reporting) — the daily-close first slice landed
-(#56); sub-project 6 (Locations) — the provision-a-sellable-venue slice merged
-as #57 (2026-08-04); sub-project 5 (Identity) — the headless first slice merged as #58 (2026-08-05)
-(persons + sessions, PIN login, `authorize()`, staff API, void/refund authorization); and sub-project 7
-(Counter POS) — the walk-up cash-sale slice (7a) merged as #60 (2026-08-05)
-(`@waitron/till` + the server till API).**
+Most of the till track now has code — see *Recently shipped* (sub-projects 5 Identity, 6 Locations,
+7 Counter POS, 8 Reporting, 16 Workforce all have landed slices). What remains genuinely unstarted is
+below. **Two are now in flight (see *Now*):** sub-project 18 (menu & allergens) and sub-project 8's
+*cierre Z*.
 
 | Sub-project | Note |
 | --- | --- |
-| **7 — Counter POS UI** | **Slices 7a (#60), 7b (#61) and the manual card tender (#62) landed** (see *Now*): `@waitron/till` + the server till API ring a cash sale end to end (7a), park/retrieve a working order across registers with sale idempotency (7b), and take a manual (datáfono) card tender (#62). Remaining slices: the **integrated card terminal** (Stripe Terminal / SumUp — network capture, timed-out-card UX, hardware; `packages/payments-stripe` has the providers) and **7c prepare & collect** (kitchen prep states + the working-order **amendment log**, art. 29.2.j LGT — the log rides with 7c deliberately; 7b now produces persisted working orders, so 7c has the producer it needs). **7c prepare & collect LANDED as #63 (2026-08-07)** — the shared line-add-snapshot / placing / three-mode pay-timing / amendment-log / prep-surface foundation (see *Now*), so 7b's re-price-at-pay is now superseded by the line-add lock. **The integrated card terminal LANDED as #64 (2026-08-07)** (Stripe; a SumUp provider stays a future slice) — the split-transaction pay (collect outside the fiscal tx), both pay-timing orderings, working-order-derived capture idempotency + lost-T2 recovery, `POST /api/pay`, and the `tender-pay` collecting/declined UX (see *Now*). **With 7a/7b/#62/7c/#64 landed, the operable counter POS is complete**; the remaining sub-project-7 work is the layout & receipt **editors** (and a future SumUp provider). Both were DESIGNED 2026-08-06: [integrated card terminal](superpowers/specs/2026-08-06-integrated-card-terminal-design.md) (both Stripe modes behind one config knob, the split-transaction network capture, working-order-derived capture idempotency, the timed-out-card UX) and [7c prepare & collect](superpowers/specs/2026-08-06-counter-pos-prepare-collect-design.md) — the latter also owns the shared **line-add price-snapshot / placing / per-location pay-timing** foundation (revising 7b's re-price-at-pay) and builds the amendment log now. The two are parallel branches (7c in the `packages/db` lane lands first; the card in the `packages/payments` lane rebases onto it). Deferred edges under *Debt and odd jobs* → **Counter POS follow-ups** |
+| **7 — Counter POS** | **Operable counter POS complete** — 7a walk-up cash (#60), 7b park/retrieve + idempotency (#61), manual card (#62), 7c prepare & collect (#63), integrated Stripe card (#64); all in *Recently shipped*. **Remaining:** the layout & receipt **editors** (the counter screen is layout-driven from a `LayoutDef` with empty per-widget config bags) and a **SumUp** card provider (a future vendor beside Stripe). Deferred edges under *Debt and odd jobs* → **Counter POS follow-ups** (7a / 7b / 7c / integrated card) |
 | **5 — Identity** | **Headless first slice merged (#58, 2026-08-05).** `@waitron/identity` owns `persons` + `sessions` (FORCE-RLS tenant isolation, now also scanned by fiscal-verifactu's `inmutabilidad` guard), salted-PIN hashing, a role/permission catalog, `authorize()` (operator session + supervisor `{personId, pin}` override), `loginWithPin` / `endSession`, and a `person.manage`-gated staff API. `recordVoid` / `recordCorrection` now require `sale.void` / `sale.rectify` authorization; `sales.authorized_by` / `sales.operator_id` + `payment_refunds.authorized_by` seams and a `waitron-provision venue` admin seed are in place. Remaining sub-project 5 scope (mid-shift-suspension enforcement, the discount gate, till-refund enforcement, the workforce-gate consolidation, branded ids) is under *Debt and odd jobs* → **Identity follow-ups**. The human-facing call sites (must-be-logged-in to ring, till refunds must be authorized) land with the counter POS (#7) |
 | **6 — Locations** | **Provision-a-sellable-venue slice merged (#57)** (2026-08-04; see *Now*) — the foundational till-track unblocker. Country/territory-driven fiscal identity, `resolveFiscalModules` (común → Veri\*Factu + IVA, others refused), `planVenue` / `applyVenue` and the `waitron-provision venue` CLI stand up tenant → location → till → node → SIF → series so `recordSale` can chain a sale; the stale `bootstrap-tenant.sql` was **deleted**. Remaining sub-project 6 scope (multiple locations, editing/deactivation, the #33 SIF-topology deferrals) is under *Debt and odd jobs* → **Locations follow-ups** |
-| **8 — Reporting** | **Daily-close first slice DONE (#56)** — `@waitron/reporting`'s `computeDailyClose` (VAT summary + operational cash-up, two anchors). Unstarted next slices: a **frozen/signed *cierre Z*** (numbered, immutable, with counted-cash / opening float / *descuadre* — the derived close deliberately leaves a clean seam for it), date **ranges** + the **monthly VAT return** (*modelo 303*) aggregation, and the reporting **UI** (belongs to the till, sub-project 7) |
+| **8 — Reporting** | **Daily-close first slice done (#56)** — `@waitron/reporting`'s `computeDailyClose`. ***Cierre Z* (frozen/signed daily close) is now in flight — see *Now***; the derived close left a clean seam for it. Further unstarted slices: date **ranges** + the **monthly VAT return** (*modelo 303*) aggregation, and the reporting **UI** (belongs to the till, #7). Reporting follow-ups + the catalogue-desglose divergence are under *Debt* |
 | **16 — Workforce** | *Registro de jornada* legal floor **DONE (#47)**; **D2 scheduling DONE (#50)** — `convenio_config` surface (overtime de-hard-coded, single-sourced), shifts + `roster_versions` + `publishRoster`, absences/availability/shift_templates/shift_swaps, an **advisory** guardrail engine (`validateRoster` → `RosterBreach[]`; publish surfaces breaches but proceeds — owner chose warn+override) + a planned-vs-actual read model, and supersede-on-republish (partial unique index, one published roster per `(location, period)`). The overtime *rule* the both-model projection computes stays convenio-driven — an **asesor-laboral** call, not code. Remaining: **D3 payroll export** (integrate-not-build), plus the workforce follow-ups under *Debt and odd jobs*. Deferred edges from the floor: the registro export doesn't yet surface overtime (belongs to the payslip/D3); the correction period-fetch is a ±1-day window (a >1-day-relocation correction is out of the floor's scope, chained but maybe missed by the period fetch). A post-#47 `/finish-branch` review (landed as #52) corrected four floor defects: the registro export rendered UTC instead of local wall-clock; the tamper chain omitted a correction's reason/actor and the capturing till; correction precedence tie-broke on the unhashed `ingest_seq` (a floor-bypasser could reorder corrections undetected) — now on the hashed `sequence_no`; and a `clockIn`/`clockOut` TOCTOU (an unlocked state read before the chain-head lock let two concurrent same-person clock-ins append a double-`in` that undercounts worked time) — now serialized per person with a `persons` row lock proven by a real-PG concurrency test |
-| **18 — Menu and allergens** | Allergen declaration is a **launch-day legal duty** (EU 1169/2011, RD 126/2015) |
+| **18 — Menu and allergens** | **Now in flight — see *Now*.** Allergen declaration is a **launch-day legal duty** (EU 1169/2011, RD 126/2015); the allergen list is a food-safety-advisor call and recipes/BOM is the linchpin |
 | 10-15, 17, 19, 20 | Tabs, floor plan, KDS, tip payroll, bookings, online ordering, accounting export, opening hours, procurement |
 
-The two marked **launch-day legal duty** are worth watching: they are not fiscal, they are not
-optional, and they are currently as unstarted as the restaurant-phase items they sit beside.
+**#18 (allergens) is a launch-day legal duty** — not fiscal, not optional — which is why it was
+picked next (see *Now*). The registro de jornada, the other launch-day legal floor, already landed
+(#47).
 
 **Card-collected tips are business income (new, 2026-08-01, #37).** A tip taken through the card
 terminal — unlike cash handed straight to a waiter — is *ingreso* for the Impuesto sobre Sociedades and
@@ -661,326 +606,27 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   (`start + interval '1 day'` is wrong on a transition day — compute `end` from the next day's local
   cutover) and only the VAT query has a matching index anyway (cash-up/voids would also need new
   indexes). **Gated on scale**, consistent with the 'sargable reconcile period filter' entry below.
-- **The pre-push hook is scoped now, and its DECISIONS are tested — most of the shell still is not.**
-  The hook maps the push's changed paths onto workspace packages and runs `typecheck` and
-  `test:coverage` against those packages and their dependents, skipping those two, **`lint`** and
-  the repo-level suite entirely on a documentation-only push. `lint` is skipped there on a
-  measurement, not a hunch:
-  `pnpm exec eslint . --format json` lints zero Markdown files and zero files under `docs/`, so of
-  what is in the tree today eslint reads nothing such a push contains. (Only the zeros are recorded
-  here — a file count moves on the next commit, and `CLAUDE.md` §2 already carries what a receipt
-  that goes stale costs.) The two configurations do not actually agree, and the hook's header
-  records the gap: `eslint.config.js` does not ignore `docs/`, so a `docs/**/*.ts` file would be
-  linted by `pnpm lint` and skipped by this path.
-  `format:check` is NOT skipped, because `.prettierignore` covers `docs/` but not a root-level
-  `CLAUDE.md` or `README.md` (`prettier --file-info` says `ignored: true` for the first and
-  `ignored: false` for the other two, and a mis-formatted heading appended to `CLAUDE.md` makes
-  `prettier --check` exit 1). It also closes two things that reached CI this session: a commit with
-  no `Signed-off-by` (`git revert --no-edit` writes none), and coverage thresholds, which the hook
-  never ran because `pnpm test` is not `pnpm test:coverage`.
-
-  **How much a scoped push actually saves depends entirely on which package it touched**, and the
-  spread is the whole width of the workspace. Expansion sizes, every member measured on 2026-08-01
-  with `pnpm --filter "...<pkg>" ls -r --depth -1 --json` (15 members in total):
-
-  | `...<pkg>` selects | packages |
-  | --- | --- |
-  | `shared` | 12 |
-  | `db` | 11 |
-  | `fiscal` | 9 |
-  | `core` | 8 |
-  | `payments` | 6 |
-  | `verifactu` | 5 |
-  | `credentials`, `fiscal-verifactu`, `scheduler` | 4 |
-  | `migrations` | 3 |
-  | `payments-stripe` | 2 |
-  | `server`, `provisioning`, `ui`, `bench-pglite` | 1 |
-
-  So a `packages/ui` push narrows to one package and finishes in 8.2-8.8s, while a `packages/db` push
-  narrows to eleven and takes 112s against the whole workspace's 116s — a 4s saving on a change to a
-  package the history touches often (ten commits reach `packages/db` as of `558c62b`; only
-  `fiscal-verifactu` at fourteen and `payments` at twelve reach further). Scoping is close to free on
-  the leaves and close to worthless on the trunk, and the trunk is not the rare case.
-
-  The classifier `scripts/changed-packages.mjs` is fully tested by the root Vitest project, whose
-  `include` covers `scripts/` — one directory since 2026-08-01, when `.github/scripts/` was merged
-  into it. **Most of the shell still is not.** The sign-off walk left the hook that day and is
-  tested where it landed (`scripts/check-signoff.sh`, twelve assertions in
-  `scripts/check-signoff.test.mjs`, spawned the way both callers spawn it); the deletion guard
-  (#23) and the range computation are still backed only by having run the real hook against crafted
-  stdin and recorded the results — the same evidence #23 had, no better. Three things to know
-  before writing a suite for what is left: the root project's `include` has to be widened again to
-  reach `.husky/`; root config is linted but never typechecked (`pnpm typecheck` is
-  `pnpm -r typecheck`, and `pnpm -r` never visits the workspace root, see `CLAUDE.md` §2); and
-  husky runs the hook under `sh -e`, where an unguarded `x=$(false)` or a `grep` outside an `if`
-  kills the script silently mid-gate — the hook's own header records that measurement. The shape
-  that worked for the sign-off check is worth copying: what is testable is the PREDICATE, once it
-  is a file of its own, and the extraction is what made it testable rather than any new harness.
-
-  **Four entries below, and only the first two are live gaps** — both of them the honest answer to
-  what a local gate can be, rather than anything left undone. Entries 3 and 4 are closed, kept
-  because what replaced each is a rule someone has to know about. The hook's header states the live
-  ones in its "NOT RUN HERE" list rather than leaving them for a reader to discover; the first is a
-  cost rather than a gap in what runs, and the header's SCOPING paragraph covers it.
-
-  1. A `global` push — root config, `.github/`, `.husky/`, `scripts/`, the lockfile — runs
-     `pnpm -r test:coverage` over the whole workspace, which is the 116s in the row above (`-r`
-     since 2026-08-01: the repo-level project it used to reach through the root `test:coverage`
-     script is a step of its own now, so it runs on scoped pushes too rather than only here). The
-     heaviest single package in it is `packages/db`: `pnpm --filter @waitron/db test:coverage` on
-     its own measured **38s** on 2026-08-01 (two runs, 37.8s and 38.2s,
-     `TESTCONTAINERS_RYUK_DISABLED=true`). It is not 38s OF the 116s — `pnpm -r` runs the members
-     concurrently — and it is emphatically not the **189s** in
-     `scripts/changed-scope.mjs`, which is a CI-runner figure ("189s of the old 387s test
-     step, on its own runner"). An earlier version of this entry quoted that CI number as the local
-     one, where it could not fit inside the whole-workspace figure beside it. The whole-workspace
-     run is the honest answer for a change that can affect anything, and it is the CI entry below
-     that would make it cheap.
-  2. The hook still does not run mutation testing or the `bundle-smoke` builds, so a green hook does
-     not imply a green CI.
-  3. **CLOSED, 2026-08-01 — the two tree-wide guard suites are in the root Vitest project, so no
-     scope can skip them.** They were `packages/db/src/guarded-teardowns.test.ts` (scans `packages/`
-     and `apps/` from the repository root) and `english-only.test.ts` (scans the eight generic
-     packages), and living in `packages/db` meant they only loaded when `packages/db` was in scope:
-     `pnpm --filter "...@waitron/ui" ls -r --depth -1 --json` lists `@waitron/ui` alone and
-     `--filter "...@waitron/payments"` lists six packages, none of them `@waitron/db`, while CI
-     gates `test-heavy` the same way — so on those pull requests their first run was the unfiltered
-     `main` merge. Both are now `scripts/*.test.ts`, run by `pnpm vitest run --coverage`: ci.yml's
-     ungated `lint` job, and a new pre-push step on every push that is not documentation-only.
-     Demonstrated rather than asserted, by feeding the real hook a crafted `packages/ui` push — one
-     comment appended to `packages/ui/src/a11y-helpers.ts`, `sh -e .husky/pre-push` fed
-     `refs/heads/probe <new> refs/heads/probe <old>` — at `6d30ed2` and again here, both re-run on
-     2026-08-01. Both classified it `1 changed code path(s) map to @waitron/ui` and both exited 0,
-     10s → 12s. What changed is not the size of one set: BEFORE there was a single test step,
-     `tests with coverage (@waitron/ui + dependents)`, 21 files all in `packages/ui`. AFTER, that
-     step is unchanged and a new `repo-level suite` step runs AHEAD of it, over **five** files —
-     `guarded-teardowns.test.ts` (12 tests), `english-only.test.ts` (180),
-     `check-signoff.test.mjs` (16), `changed-scope.test.mjs` (48) and `changed-packages.test.mjs`
-     (66), 322 in total. A separate step rather than more files in the scoped one, because this one
-     must never be narrowed and that one always is.
-
-     **Three things it left behind.** The suites are TypeScript and nothing typechecks them now
-     (`pnpm typecheck` is `pnpm -r typecheck`, which never visits the workspace root, and there is
-     no root `tsconfig.json`) — measured in both directions, and deliberately not fixed here because
-     the hook's typecheck step is scoped too, so a root `tsconfig.json` would not cover the
-     `packages/ui` push this change exists for; the root `vitest.config.ts` carries that receipt and
-     what a fix would cost. **Unclaimed**, and worth doing with whatever un-scopes that step rather
-     than on its own. `packages/db/src/english-only.ts` stays in `packages/db` — two other
-     files reach for it there — so `packages/db`'s coverage config excludes it and the root
-     project's `coverage.include` names it, which is the one arrangement that measures it exactly
-     once. And `packages/db`'s weekly, ungated `mutation-db` job still mutates it
-     (`stryker.config.json` mutates `src/**/*.ts`), while the suite that exercises it no longer runs
-     under that job at all: Stryker's vitest runner is pointed at `packages/db/vitest.config.ts`,
-     whose `include` is Vitest's default, so it loads `packages/db`'s own suites and nothing else.
-     The only one of those that still imports the module is `src/schema/series.test.ts`, and it
-     imports `findSpanish` alone. So this is not "expect the score to fall", which is what this
-     entry said first — **the module effectively loses mutation testing**. The receipt is the
-     coverage run with the exclusion lifted: `english-only.ts` measures 92.25 statements and
-     **66.66 functions** there (2026-08-01), so two of its six functions are never executed in that
-     package, and a mutant in code no test executes cannot be killed. Nothing picks it up elsewhere
-     either — there is no Stryker config at the repository root and no root `mutation` script
-     (`find . -iname '*stryker*' ! -path '*/node_modules/*'` lists five configs, all under
-     `packages/`), so `scripts/english-only.test.ts` is not a mutation target anywhere. **Unclaimed**;
-     closing it means either a root Stryker project or narrowing `mutate` to drop the file
-  4. **CLOSED, 2026-08-01 — a scope of only script-less packages no longer makes the test step a
-     silent no-op.** It was one: `pnpm --filter "...@waitron/bench-pglite" test:coverage` prints
-     `None of the selected packages has a "test:coverage" script` and exits **0**, so the hook
-     reported the step as passed. Both gates now run a `scope is runnable` check first — one
-     `pnpm <the same filters> ls`, piped into `node scripts/changed-packages.mjs runnable
-     test:coverage` — which fails on a selection that would run nothing. The rule to know: a
-     workspace member that deliberately has no tests must be named in `PACKAGES_WITHOUT_TESTS`
-     (`scripts/changed-scope.mjs`), or every scoped run that selects it fails. `@waitron/bench-pglite`
-     is the only one, `changed-scope.test.mjs` pins the list against the real workspace in both
-     directions, and the `light` gate discounts it too, so a bench-only pull request now skips
-     `test-light` rather than provisioning a runner to select nothing
-- **CI SKIPPED `test-heavy` and both mutation runs on a root-config-only pull request — fixed on
-  2026-08-01 by [#32](https://github.com/clintongormley/waitron/pull/32), which rewrote this entry
-  in the same change.** Worth keeping because the SHAPE recurs: two mechanisms answering the same
-  question, and the one nobody exercised drifting in the quiet direction.
-
-  **What it was.** `ci.yml`'s `changes` job resolved scope with
-  `pnpm --filter "...[origin/$BASE_REF]" ls --depth -1 --json`, and a change belonging to no
-  workspace member resolves to the workspace ROOT — the one member that runs no tests. Reproduced in
-  a `git clone --no-hardlinks` of this repository (a clone, because that filter matches nothing in a
-  worktree — `CLAUDE.md` §2), one commit on top of `main` per shape:
-
-  | commit touches | that filter listed | gates |
-  | --- | --- | --- |
-  | `tsconfig.base.json` | `["waitron"]` | `heavy=false light=true verifactu=false shared=false` |
-  | `pnpm-lock.yaml` | `["waitron"]` | identical |
-  | `packages/ui/src/index.ts` | `["@waitron/ui"]` | `heavy=false light=true …` (control: narrowing was right) |
-  | `packages/shared/src/errors.ts` | 12 packages | `heavy=true … shared=true` (control) |
-
-  `test-light` was gated `true` and did get a runner, but selected nothing: pnpm does not run a
-  filtered script in the workspace root without `--include-workspace-root`, and
-  `pnpm --filter "waitron" --no-sort format:check` prints `No projects matched the filters in "…"`
-  and exits **0**. Add the ungated `lint` job running only the repo-level Vitest project, and **no
-  package's test suite ran at all** on a root-config-only or lockfile-only pull request.
-
-  **What replaced it.** The `changes` job now runs `scripts/changed-packages.mjs` — the same script,
-  the same call, that `.husky/pre-push` runs — which attributes each changed path to the workspace
-  member whose directory contains it and answers `scope=global` for anything outside every member.
-  Expanding a changed package to its DEPENDENTS is still pnpm's (`--filter "...<pkg>"`); only the
-  attribution moved. The docs gate `code=` comes out of the same call, so the two verdicts cannot
-  disagree. Verified by running `ci.yml`'s own step scripts — read out of the workflow file, not
-  transcribed — against crafted commits in a clone, with a `pnpm` shim capturing what the shards
-  would run:
-
-  | commit touches | `scope` | `test-heavy` | `test-light` selects | mutations |
-  | --- | --- | --- | --- | --- |
-  | `tsconfig.base.json` | `global` | RUNS | 13 packages | both RUN |
-  | `pnpm-lock.yaml` | `global` | RUNS | 13 packages | both RUN |
-  | `packages/ui/src/index.ts` | `packages` | skipped | `...@waitron/ui` | both skipped |
-  | `packages/shared/src/errors.ts` | `packages` | RUNS | 11 packages | `shared` RUNS |
-  | `docs/backlog.md` | `documentation` | skipped (`code=false`) | skipped | both skipped |
-  | `bench/pglite-throughput/**` | `packages` | skipped | skipped (`light=false`) | both skipped |
-  | a `push` on `main` | forced `global` | RUNS | 13 packages | both RUN |
-  | a `push` with an all-zero `before` | `global` | RUNS | 13 packages | both RUN |
-
-  Two negative controls ran too: a crafted new member declaring no `test:coverage` script made the
-  `test-light` step exit **1** naming it, and deleting each of the four new checks in turn failed
-  the tests written for it.
-
-  **Dated pointer, 2026-08-01:** the table above measured the TWO-shard arrangement and its numbers
-  no longer hold — `packages/ui` was split into a `test-ui` shard later the same day (see the
-  `packages/ui` hang entry below). Left as written rather than restated, because it is the record of
-  what that verification run actually produced. Under three shards the `test-light selects` column
-  drops by one everywhere it says 13, and the `packages/ui/src/index.ts` row changes shape rather
-  than degree: `test-ui` RUNS and `test-light` is **skipped** outright, because `light` now means
-  "the scope holds a package with no shard of its own" and a ui-only scope holds none.
-
-  **Verified on real GitHub Actions**, run `30692329110` on
-  [#32](https://github.com/clintongormley/waitron/pull/32) (`fix/ci-scope-fail-open`, merged as
-  `6d30ed2`) — which touches only root-level paths, so it is exactly the shape that used to run
-  nothing. `changes` printed `scope=global`, and `test-heavy` (3m30s), `mutation-verifactu` (3m28s)
-  and `mutation-shared` (56s) all **ran**. Under the mechanism this replaces, all three would have
-  been skipped
-- **`packages/ui` hung the whole-workspace `test-light` shard TWICE, on 2026-08-01. Mitigated the
-  same day by giving it its own `test-ui` shard — but the mitigation is unproven and can only be
-  judged from future runs.** The previous version of this entry recorded one occurrence, declined to
-  call it a shape, and named the fix to reach for if it recurred. It recurred, and that is the fix.
-
-  **First two runs with the shard in place, both green.** Run `30699486147` (head `e34d467`):
-  `test-ui` 12:20:50 → 12:21:35, **45s**, and `test-light` — now thirteen packages rather than
-  fourteen, with no Playwright step at all — 12:20:50 → 12:24:12, 3m22s. Run `30699812104`
-  (head `350f071`, the merged tip): all ten jobs green, 4m23s wall clock. Two green runs are not proof
-  against a hang that took two attempts to recur, so this stays open; the number to watch is
-  `test-ui`'s own duration, since a hang now shows up there rather than taking twelve other packages
-  with it. If it does hang there, the cause is inside the suite rather than contention, and the next
-  move is a per-test timeout plus a Playwright trace.
-
-  **Both runs, read back with `gh api repos/clintongormley/waitron/actions/runs/<id>/…` rather than
-  `gh run view --json`, which reports only the LATEST attempt and shows the first of these as a
-  success:**
-
-  | Run | Pull request | `test-light` | Outcome |
-  | --- | --- | --- | --- |
-  | `30692329110` attempt 1 | [#32](https://github.com/clintongormley/waitron/pull/32), head `e695a44` | 08:44:09 → 09:13:22 | cancelled after ~29m |
-  | `30697414129` | [#35](https://github.com/clintongormley/waitron/pull/35), head `add4097` | 11:18:11 → 11:38:08 | cancelled after ~20m |
-
-  **What the two job logs agree on, and it is more than the first entry had.** In both,
-  `playwright install --with-deps chromium` had already finished — its step group closed and the
-  next step opened, 08:44:29→08:44:41 and 11:18:31→11:18:43 — so it is not the install. In both,
-  exactly **twelve** packages printed `test:coverage: Done` and `packages/ui` was the only selected
-  package that never did. In both, `packages/ui` got *part* way: it printed individual passing test
-  files and then stopped, last output 08:47:04 and 11:21:23. And in both, the runner's shutdown
-  named **`chrome-headless-shell`** among the orphan processes it had to terminate — so the browser
-  was still alive, and still attached, when the job was killed. Attempt 2 of the first run, same
-  commit, went green in 3m58s.
-
-  **What is still NOT measured: the cause.** `pnpm --filter "!@waitron/db" --no-sort test:coverage`
-  started thirteen packages at once, several spinning up their own Testcontainers Postgres, so
-  contention starving a browser suite remains the plausible story — plausible, not demonstrated.
-  Nothing establishes that isolating `packages/ui` removes it, and a shard of its own would not help
-  at all if the cause is internal to that suite. **Treat this as open until several `test-ui` runs
-  have passed**; if it hangs there too, the cause is in the suite and the next thing to reach for is
-  a per-test timeout and a Playwright trace, not more isolation.
-
-  **What the split does buy with certainty**, whatever the cause: a wedged browser can no longer
-  take twelve other packages' results down with it, and `test-light` no longer resolves, caches or
-  installs Chromium at all — about 12s of cache-warm install per run, plus the two steps before it,
-  read off the two job logs above. Giving it its own shard rather than dropping `--no-sort`, because
-  §1.1 of the design measured the sort order as pure cost.
-
-  **The guard that came with it**, because splitting a shard is where a package silently stops being
-  tested: `scripts/ci-workflow.test.mjs` extracts every shard's real `--filter` arguments from
-  `ci.yml`, hands them to the real `pnpm ls`, and asserts the three shards cover every member
-  declaring `test:coverage` **exactly once** — none twice, none falling through. It also asserts
-  every job appears in `ci`'s `needs`, and that every `SCOPE_GATES` entry is both declared as a
-  `changes` output and read by some job's `if:`. Proven by deletion in five directions; deleting the
-  `test-ui` job alone fails it with `expected [ '@waitron/ui' ] to deeply equal []`
-- **CLOSED, 2026-08-01 — the sign-off (DCO) check is one script both gates call.** It was two
-  byte-identical copies of `grep -qiE '^Signed-off-by: .+ <.+@.+>'` and of the loop around it, in
-  `.husky/pre-push`'s `check_signoff` and `licence.yml`'s `dco` job. Now `scripts/check-signoff.sh`:
-  shas on stdin, the failing commits on stdout as `git log --oneline` renders them, exit 1 if any.
-  Each caller keeps what was never shared — CI builds the range from the pull request and wraps the
-  lines in `::error::` annotations, the hook accumulates a range per pushed ref and indents them.
-
-  **Three things to know before touching it.** It is `sh`, not `.mjs`, and that is about the
-  callers: the `dco` job installs nothing (no pnpm, no setup-node), and the hook runs this step
-  first, before `pnpm install`, with no node needed — re-run on 2026-08-01 under
-  `env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin`, where it still named the offending commit and still
-  exited 1. The job's `name:` — `Every commit is signed off` — IS the required-status-check context
-  in ruleset 19899160, so renaming the job silently unhooks branch protection. And
-  `scripts/check-signoff.test.mjs` tests both halves: twelve assertions spawning the script against
-  throwaway git repositories, and three that run the `dco` step's shell EXTRACTED from `licence.yml`
-  rather than transcribed, which is the only part of CI that can be exercised without pushing
+- **The pre-push hook's shell is largely untested (unclaimed).** The classifier
+  `scripts/changed-packages.mjs` and the sign-off check are tested; the deletion guard and the range
+  computation are backed only by running the real hook against crafted stdin. Before writing a suite:
+  the root Vitest project doesn't typecheck, and husky runs the hook under `sh -e` where an unguarded
+  `x=$(false)` kills it mid-gate. Also note a green hook ≠ a green CI — it runs neither **mutation
+  testing** nor the **`bundle-smoke`** builds (CI-only), and a `global` push runs `pnpm -r
+  test:coverage` over the whole workspace (~116s). Full receipts in `CLAUDE.md` §2/§6. Non-blocking.
+- **`packages/ui` can hang the `test-light` shard — watch `test-ui`.** It hung the whole-workspace
+  shard twice on 2026-08-01 (a wedged `chrome-headless-shell` under Testcontainers contention,
+  plausible-not-proven); mitigated by giving `packages/ui` its own `test-ui` shard so a hang can no
+  longer take twelve other packages down with it. **Still open** — the cause is unconfirmed; if it
+  hangs in `test-ui` too, the cause is inside the suite and the next move is a per-test timeout + a
+  Playwright trace. Guarded by `scripts/ci-workflow.test.mjs` (the three shards cover every
+  `test:coverage` member exactly once).
+- **`test-light` reports `success` without naming what it ran.** The skip-empty-scope half is done;
+  what remains is the *reporting* — a shard that ran two packages and one that ran the whole workspace
+  both report `success`, and only the step log tells them apart. Make the job name the packages it
+  selected. Non-blocking.
 - **`errors.reachability.test.ts` does not test reachability.** Proven by deletion. Eight packages
   carry a copy. Closing it needs a `tsc`-based downstream probe or a narrowed `include`. See
   `CLAUDE.md` §4 — do not cite these tests as evidence in the meantime
-- **Two cosmetic nits from a 2026-07-31 review pass.** (1)
-  `packages/provisioning/src/instance-state.ts` builds `any(array[...])` by string concatenation from
-  `INSTANCE_ROLES` where drizzle would bind a `$1` array — the one `sql.raw` site in the repo with a
-  real parameterised alternative unused. **No live risk** (module constant, ordinary `SELECT`), purely
-  cosmetic. (2) Four `~10-line` copies of the comment-stripper (`english-only.ts`'s private
-  `blankBlockComments`/`dropLineComment`, plus a `stripComments` each in `fiscal`/`payments`'s
-  vocabulary tests and `scripts/guarded-teardowns.test.ts`). The earlier divergence — a copy that had
-  dropped the URL guard — was fixed in-tree and every copy now carries a URL-guard regression test; the
-  two vocabulary tests carry a documented decision **not** to consolidate (`english-only.ts` sits on
-  neither the barrel nor the `exports` map, so reuse would need a deep non-barrel import or an export
-  addition — "neither is worth it"). Residual is only "four small strippers"; dedupe **only** if a
-  shared home appears. Neither blocks anything
-- **CI ran every check on every push — done, both PRs merged.** A Markdown-only change cost the same
-  7m20s as a migration. Designed in
-  [2026-07-31-scoped-ci-design.md](superpowers/specs/2026-07-31-scoped-ci-design.md), built to
-  [2026-07-31-scoped-ci.md](superpowers/plans/2026-07-31-scoped-ci.md). **Two PRs, deliberately** —
-  renaming `test` in the same PR that introduces the gate would block on a required check that can no
-  longer report. [#25](https://github.com/clintongormley/waitron/pull/25) added the aggregate `ci`
-  job, and ruleset 19899160 now requires `ci` alone rather than five job ids;
-  [#27](https://github.com/clintongormley/waitron/pull/27) added the `changes` gate, the
-  `static-analysis` split, the two-way test shard, and scoping for both mutation jobs and both test
-  shards. Measured — every row is a `CI`-workflow run, and only the last is a `push` on `main`; the
-  other three are `pull_request` runs on the branch named beside them:
-
-  | Change | Wall clock | Run |
-  | --- | --- | --- |
-  | documentation only | **44s** | `30664369447` — [#30](https://github.com/clintongormley/waitron/pull/30), on `docs/backlog-scoped-ci-landed` |
-  | one package, or CI/root config | **1m26s** | `30655777867` — on `feat/ci-scoped-testing` |
-  | a dependency of `packages/db` | 4m17s | `30652426111` — on the throwaway `probe/dependency` |
-  | **any code, merged to `main`** — full suite, nothing skipped | **4m12s** | `30663706544` — the `push` run for #27 |
-
-  That last row is the safety net and is not optional: the package scoping is exactly right about
-  package-graph coupling and blind to everything else — a root config, a shared fixture, an
-  environment variable — so `main` re-runs everything unfiltered and a too-narrow scope surfaces
-  within minutes of landing rather than never. A documentation-only merge skips there too, which is
-  why the docs gate and the scoping are two separate decisions
-- **`test-light` reports `success` without saying what it ran.** The larger half of this entry is
-  **done**: the shard now gates on a `light` boolean emitted from the `changes` job's existing
-  single `pnpm ls`, so a resolved scope that is empty, or that holds nothing but packages with a
-  shard of their own (`OWN_SHARD_PACKAGES` — `@waitron/db` and, since the split below,
-  `@waitron/ui`), skips it instead of provisioning a runner and running `pnpm install` before
-  finding nothing to do — 48s of run `30653487133` (18:01:36 → 18:02:24, its longest job) for zero
-  test execution. That run's 48s included a `playwright install --with-deps chromium`, which
-  `test-light` no longer does at all; the browser steps moved to `test-ui`. What is **still
-  open** is the reporting half: a `test-light` that ran two packages and one that ran the whole
-  workspace both report `success`, and only the step log tells them apart. **The `@waitron/bench-pglite`
-  half of this entry is closed** (2026-08-01): the `light` gate now discounts every member listed in
-  `PACKAGES_WITHOUT_TESTS`, so a change touching only that package gives `light=false` and skips the
-  shard rather than provisioning a runner to print `None of the selected packages has a
-  "test:coverage" script` and exit 0; and the shard's new `runnable` guard fails on any selection
-  that would run nothing. What remains is only the reporting — make the job NAME the packages it
-  selected, rather than leaving `success` to mean either. Found by the base-to-tip review of PR 2,
-  not by any per-task pass
 - **`packages/db`'s test suite is 189s**, mostly one Testcontainers Postgres per suite. It is now its
   own CI shard (`test-heavy`), which stops it blocking the other packages but does not make it any
   shorter. Sharing a container across suites beats every CI-config change combined, but it means
