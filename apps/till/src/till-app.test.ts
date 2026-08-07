@@ -1019,6 +1019,77 @@ describe("till-app", () => {
       expect(ticket(el)).not.toBeNull();
     });
 
+    // Fix round 1 (Important): cardOutcome must not survive the basket it describes being replaced.
+    // errorKey is reset at every user action; cardOutcome was only reset in #onCollectCard itself and
+    // #onNewSale, so a decline on basket A leaked into whatever basket the operator moved to next via
+    // Park or Retrieve. Zero blast radius today (the counter doesn't thread `.cardOutcome` anywhere
+    // yet), but Task 9 would inherit the staleness the moment it wires the field through.
+    it("park: a declined cardOutcome does not survive into the NEXT (empty) basket", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe("declined");
+
+      // Switch tender instead of retrying the card: park the (still-declined) basket for later.
+      emit(counter(el)!, "park-order", { label: "Mesa 4" });
+      await flush(el);
+
+      // store.clear() re-minted a fresh id — this is now an UNRELATED next-customer basket, and it
+      // must not show the previous basket's decline.
+      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBeUndefined();
+    });
+
+    it("retrieve: a declined cardOutcome does not survive into a DIFFERENT retrieved order's basket", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe("declined");
+
+      // Retrieve a DIFFERENT order (wo-1) into the basket instead of retrying the card.
+      emit(counter(el)!, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+
+      // loadFrom swapped in wo-1's lines — the decline described the basket that was just replaced,
+      // not this one.
+      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBeUndefined();
+      expect(c.store.id).toBe("wo-1");
+    });
+
+    it("discard: an UNRELATED held order being discarded does not touch the current basket's cardOutcome", async () => {
+      // The deliberate non-fix: #onDiscardOrder addresses a held order by the EVENT's own id, never
+      // `#store` — discarding some other parked order must not wipe a decline that still correctly
+      // describes the basket that is still on the counter. Proves the deviation from treating discard
+      // like park/retrieve is intentional, not an oversight.
+      const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      const declinedBasketId = c.store.id;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe("declined");
+
+      emit(counter(el)!, "discard-order", { id: "some-other-held-order" });
+      await flush(el);
+
+      // The current basket (and its decline) is untouched — discard never reached `#store`.
+      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe("declined");
+      expect(c.store.id).toBe(declinedBasketId);
+      expect(c.store.lines).toHaveLength(1);
+    });
+
     it("a genuine fault (thrown, incl. the recovery-corruption 500) surfaces sale.error, basket intact, no ticket", async () => {
       const pay = vi.fn().mockRejectedValue({ code: "server.internal" });
       const { el } = await mountApp({ pay });

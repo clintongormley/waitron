@@ -166,15 +166,26 @@ export class TillApp extends LitElement {
   /**
    * The outcome of the most recent DECLINED/`timeout`/`network_unavailable` `collect-card` attempt
    * (integrated card terminal, sub-project 7 Task 8) — `undefined` once none is pending. Set by
-   * {@link TillApp.#onCollectCard} on a non-`captured` outcome, reset at the top of that same handler
-   * (a fresh attempt clears any prior banner, like {@link errorKey}) and by {@link TillApp.#onNewSale}
-   * (a new sale must not carry a stale outcome from a previous, unrelated basket). Task 9's
-   * `collect-card`-emitting widget reads it to render retry / switch-tender / wait.
+   * {@link TillApp.#onCollectCard} on a non-`captured` outcome. Cleared wherever the basket it
+   * describes stops being the one on the counter — at the top of `#onCollectCard` itself (a fresh
+   * attempt clears any prior banner, like {@link errorKey}), and on the SUCCESS path of every handler
+   * that swaps or empties `#store`: {@link TillApp.#onParkOrder} (`store.clear()` empties it for the
+   * next customer), {@link TillApp.#onRetrieveOrder} (`store.loadFrom` swaps in a different order's
+   * lines), and {@link TillApp.#onNewSale}. Deliberately NOT reset by
+   * {@link TillApp.#onDiscardOrder}: that handler discards a held order named by the event's OWN `id`
+   * and never touches `#store` — the currently loaded basket (and any outcome it carries) is
+   * unaffected by discarding some other parked order. Task 9's `collect-card`-emitting widget reads
+   * this to render retry / switch-tender / wait.
    *
-   * NOT marked `private` (unlike every other `@state()` field on this class): Task 9's consuming
-   * widget does not exist yet, so there is no render path for a test to observe this through the
-   * DOM — every other state field here is validated via rendered output instead (see `till-app.test.ts`
-   * for the deliberate exception this makes).
+   * NOT marked `private` (unlike every other `@state()` field on this class): `tsconfig.base.json`
+   * sets `noUnusedLocals`, which TypeScript applies to a `private` class member too — it flags one
+   * that is only ever WRITTEN inside the class, never READ, as unused. Nothing in `till-app.ts` reads
+   * `cardOutcome` yet (Task 9's widget is the first reader, once wired in as a rendered prop).
+   * Confirmed, not assumed: marking this field `private` and running `pnpm --filter @waitron/till
+   * typecheck` gives `error TS6133: 'cardOutcome' is declared but its value is never read` — a test
+   * reading it via a type-erasing cast doesn't count, since that check runs over THIS class's own
+   * compiled body, not external consumers. Every sibling `@state()` field avoids this because
+   * `render()`/`#renderScreen()` already reads it. Restore `private` once Task 9 adds a real read site.
    */
   @state() cardOutcome?: Exclude<PayOutcome, { outcome: "captured" }>["outcome"];
   /**
@@ -516,9 +527,12 @@ export class TillApp extends LitElement {
    * Park the current basket to pay later, then empty it for the next customer — staying on the counter
    * (a parked order is NOT a completed sale, so there is no ticket). The store's stable `id` is sent as
    * the park-idempotency key; on success `store.clear()` empties the basket AND re-mints that id, so the
-   * next park/pay keys a fresh working order rather than colliding with the parked one. A rejected park
-   * must not lose the order: like `#onConfirmPayment`, it surfaces a non-fatal error and leaves the
-   * basket intact (no `clear`) so the operator can retry.
+   * next park/pay keys a fresh working order rather than colliding with the parked one — `cardOutcome`
+   * is cleared alongside it, so a declined card on THIS basket never carries over into the next
+   * customer's unrelated sale (fix round 1). A rejected park must not lose the order: like
+   * `#onConfirmPayment`, it surfaces a non-fatal error and leaves the basket intact (no `clear`) so the
+   * operator can retry — `cardOutcome` is left untouched on that path too, since the same basket (and
+   * any decline it carries) is still the one on the counter.
    */
   async #onParkOrder(event: Event): Promise<void> {
     // Reentry guard: a second park-order fired before the first settles is a no-op (see `parking`).
@@ -533,6 +547,7 @@ export class TillApp extends LitElement {
     try {
       await this.api.parkOrder({ id, lines: this.#currentSaleLines(), label });
       this.#store.clear();
+      this.cardOutcome = undefined;
       await this.#refreshHeldOrders();
     } catch {
       // A rejected park must not lose the order: stay on the counter, basket intact, generic message.
@@ -565,6 +580,12 @@ export class TillApp extends LitElement {
    * the raw code) and leave the current basket UNTOUCHED — `loadFrom` runs only after the successful
    * await, so a rejection never half-loads it. The refresh below then runs on both paths, so the
    * vanished order drops off the list rather than sitting there inviting another dead tap.
+   *
+   * `loadFrom` swaps in a DIFFERENT order's lines, so a decline recorded against the basket being
+   * replaced (`cardOutcome`) is cleared alongside it (fix round 1) — otherwise the newly retrieved
+   * order would inherit a banner that describes a sale it was never part of. Cleared only on this
+   * success path, not in the `catch`: a rejected retrieve leaves the current basket untouched, so
+   * whatever `cardOutcome` it already carries is still describing the basket still on the counter.
    */
   async #onRetrieveOrder(event: Event): Promise<void> {
     const { id } = (event as CustomEvent<{ id: string }>).detail;
@@ -584,6 +605,7 @@ export class TillApp extends LitElement {
       }
       if (droppedAProduct) this.errorKey = "held.product_gone";
       this.#store.loadFrom(order.id, lines, order.label ?? undefined);
+      this.cardOutcome = undefined;
     } catch {
       // The order was paid/discarded on another register since our list was refreshed: non-fatal
       // notice, basket left intact (loadFrom never ran), never leak the raw code.
