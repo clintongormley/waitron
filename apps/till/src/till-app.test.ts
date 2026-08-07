@@ -23,6 +23,7 @@ const cafe: TillProduct = {
   unitPrice: "1.50",
   vatClass: "general",
   category: null,
+  allergens: null,
 };
 
 const jamon: TillProduct = {
@@ -32,6 +33,7 @@ const jamon: TillProduct = {
   unitPrice: "10.00",
   vatClass: "reduced",
   category: "charcutería",
+  allergens: null,
 };
 
 const heldSummary: HeldOrderSummary = {

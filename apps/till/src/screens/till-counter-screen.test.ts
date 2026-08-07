@@ -13,6 +13,7 @@ const cafe: TillProduct = {
   unitPrice: "1.50",
   vatClass: "general",
   category: null,
+  allergens: null,
 };
 
 const products: TillProduct[] = [cafe];

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { TillApi } from "./client.js";
+import { TillApi, type TillProduct } from "./client.js";
 
 /** A stub `fetch` reply: JSON body at the given status, content-type set like the server's. */
 function jsonResponse(body: unknown, status = 200): Response {
@@ -170,8 +170,14 @@ describe("TillApi", () => {
     expect(r).toEqual(roster);
   });
 
-  it("listProducts GETs the sellable catalogue", async () => {
-    const products = [
+  it("listProducts GETs the sellable catalogue, carrying each product's allergens", async () => {
+    // Typed as `TillProduct[]` so the mock is a COMPILE-TIME proof the client shape carries
+    // `allergens` — the EU-14 declaration map keyed by allergen code (menu & allergens, Task 4).
+    // Before that field was added to `TillProduct` this literal failed `tsc` with an excess-property
+    // error; the runtime `.toEqual` then proves the client passes the map through the JSON body
+    // untouched. One product carries a declaration (both presences plus the optional `source`
+    // specificity), a second is unreviewed (`null`), so both shapes round-trip.
+    const products: TillProduct[] = [
       {
         id: "p",
         descriptions: { "es-ES": "Café" },
@@ -179,6 +185,19 @@ describe("TillApi", () => {
         unitPrice: "1.50",
         vatClass: "general",
         category: null,
+        allergens: {
+          milk: { presence: "contains" },
+          nuts: { presence: "may_contain", source: "almendra" },
+        },
+      },
+      {
+        id: "q",
+        descriptions: { "es-ES": "Agua mineral" },
+        pricingUnit: "each",
+        unitPrice: "1.20",
+        vatClass: "general",
+        category: "Bebidas",
+        allergens: null,
       },
     ];
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(products));
@@ -190,6 +209,12 @@ describe("TillApi", () => {
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
     expect(r).toEqual(products);
+    // The allergen map survives the round-trip typed — read a declaration off the returned product.
+    expect(r[0]!.allergens).toEqual({
+      milk: { presence: "contains" },
+      nuts: { presence: "may_contain", source: "almendra" },
+    });
+    expect(r[1]!.allergens).toBeNull();
   });
 
   it("logout DELETEs the session", async () => {

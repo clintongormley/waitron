@@ -13,6 +13,7 @@ const cafe: TillProduct = {
   unitPrice: "1.50",
   vatClass: "general",
   category: null,
+  allergens: null,
 };
 
 const jamon: TillProduct = {
@@ -22,6 +23,7 @@ const jamon: TillProduct = {
   unitPrice: "10.00",
   vatClass: "reduced",
   category: "charcutería",
+  allergens: null,
 };
 
 /** Taps one keypad key inside the widget and lets the parent re-render with the new value. */
