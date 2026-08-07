@@ -5,6 +5,7 @@ import { AppError } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
 import { authorizeManager } from "./manager-login.js";
 import { hashPin } from "./verify-pin.js";
+import { assertPasswordLength, hashPassword } from "./verify-password.js";
 import type { PersonRoleValue } from "./permissions.js";
 
 /** The shortest PIN accepted. Four digits is the floor a POS keypad expects; longer is allowed. */
@@ -76,6 +77,25 @@ export async function resetPin(
   await tx
     .update(persons)
     .set({ pinHash: hashPin(input.pin) })
+    .where(eq(persons.id, input.personId));
+}
+
+/** Grants (or replaces) a person's dashboard password. Gated on `person.manage`:
+ * `authorizeManager` runs FIRST, so a caller without the permission is rejected before any write.
+ * The password is length-checked, then stored hashed — never plaintext. This is the general
+ * admin-sets-password path; bootstrapping the FIRST admin's password is provisioning's job. */
+export async function setPassword(
+  tx: Transaction,
+  input: { managementSessionId: string; personId: string; password: string },
+): Promise<void> {
+  await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "person.manage",
+  });
+  assertPasswordLength(input.password);
+  await tx
+    .update(persons)
+    .set({ passwordHash: hashPassword(input.password) })
     .where(eq(persons.id, input.personId));
 }
 

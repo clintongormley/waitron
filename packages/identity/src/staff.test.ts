@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { authorize } from "./authorize.js";
 import { loginWithPin } from "./login.js";
+import { loginManager } from "./manager-login.js";
 import {
   MIN_PIN_LENGTH,
   createPerson,
@@ -14,6 +15,7 @@ import {
   listPersons,
   reactivatePerson,
   resetPin,
+  setPassword,
   setRole,
   suspendPerson,
 } from "./staff.js";
@@ -50,10 +52,15 @@ async function personCount(): Promise<number> {
 
 // The mutable columns the staff-admin API writes, read as the superuser owner (RLS bypassed on
 // PGlite). A gate that rejects BEFORE its write leaves every one of these unchanged.
-async function personRow(id: string): Promise<{ role: string; status: string; pin_hash: string }> {
-  const rows = await suite.db.execute<{ role: string; status: string; pin_hash: string }>(
-    sql`select role, status, pin_hash from persons where id = ${id}`,
-  );
+async function personRow(
+  id: string,
+): Promise<{ role: string; status: string; pin_hash: string; password_hash: string | null }> {
+  const rows = await suite.db.execute<{
+    role: string;
+    status: string;
+    pin_hash: string;
+    password_hash: string | null;
+  }>(sql`select role, status, pin_hash, password_hash from persons where id = ${id}`);
   return rows.rows[0]!;
 }
 
@@ -226,6 +233,58 @@ describe("resetPin", () => {
     expect(code).toBe("authorization.not_permitted");
 
     expect((await personRow(targetId)).pin_hash).toBe(before);
+  });
+});
+
+describe("setPassword", () => {
+  it("setPassword lets a manager grant dashboard access, then that person can log in", async () => {
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
+    const target = await seedPerson(suite.db, tenantId, "supervisor");
+    await run((tx) =>
+      setPassword(tx, {
+        managementSessionId: sessionId,
+        personId: target,
+        password: "second horse",
+      }),
+    );
+    const session = await run((tx) =>
+      loginManager(tx, { tenantId, personId: target, password: "second horse" }),
+    );
+    expect(session.personId).toBe(target);
+  });
+
+  it("setPassword rejects a too-short password", async () => {
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
+    const target = await seedPerson(suite.db, tenantId, "staff");
+    const code = await run((tx) =>
+      codeOf(() =>
+        setPassword(tx, { managementSessionId: sessionId, personId: target, password: "short" }),
+      ),
+    );
+    expect(code).toBe("password.too_short");
+  });
+
+  it("setPassword throws authorization.not_permitted for a staff actor, leaving password_hash unchanged", async () => {
+    const { sessionId: staffSession } = await openManagementSession(suite.db, tenantId, "staff");
+    const targetId = await seedPerson(suite.db, tenantId, "staff"); // password_hash null
+    const before = (await personRow(targetId)).password_hash;
+
+    // A genuine staff management session, no person.manage: granting a colleague dashboard access (a
+    // privilege-escalation vector) must be rejected before the UPDATE. "second horse" is a
+    // valid-length password, so ONLY the gate can be the cause here.
+    const code = await codeOf(() =>
+      run((tx) =>
+        setPassword(tx, {
+          managementSessionId: staffSession,
+          personId: targetId,
+          password: "second horse",
+        }),
+      ),
+    );
+    expect(code).toBe("authorization.not_permitted");
+
+    // authorizeManager() runs before the UPDATE, so a denied actor writes no password.
+    expect((await personRow(targetId)).password_hash).toBe(before);
   });
 });
 

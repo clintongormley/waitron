@@ -3,7 +3,9 @@
 The host process. It boots from environment config, loads the credential vault's key ring, applies
 every migration set behind an advisory lock, resolves per-tenant AEAT transports and Stripe
 accounts, then runs a loop: `drain` (the fiscal submission duty), the Stripe payments reconcile,
-fold the result into a sleep duration, repeat. It serves one unauthenticated route, `GET /health`.
+fold the result into a sleep duration, repeat. It also serves several HTTP routes on one Hono app:
+`GET /health` (unauthenticated), the till API under `/api/*`, the management-dashboard API under
+`/management-api/*`, and the inbound Stripe payments webhook at `POST /webhooks/stripe/:tenantId`.
 
 Design: [`docs/superpowers/specs/2026-07-26-server-host-design.md`](../../docs/superpowers/specs/2026-07-26-server-host-design.md).
 This document is the operational half of that spec — written for whoever deploys this process, not
@@ -350,8 +352,11 @@ never prints a decrypted credential.
 
 ## What `/health` means
 
-`GET /health` is the only route this process serves — no metrics, no auth, no readiness/liveness
-split (spec §9). It answers `200` when every duty is within its staleness budget, `503` otherwise:
+`GET /health` is unauthenticated — no metrics, no auth, no readiness/liveness split (spec §9). It is
+one of several routes the process serves (the till API under `/api/*`, the management-dashboard API
+under `/management-api/*`, and the Stripe webhook at `POST /webhooks/stripe/:tenantId` share the same
+Hono app); this endpoint answers `200` when every duty is within its staleness budget, `503`
+otherwise:
 
 ```json
 {
