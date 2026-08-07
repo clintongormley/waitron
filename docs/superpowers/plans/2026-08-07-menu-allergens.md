@@ -129,7 +129,9 @@ export interface AllergenDeclaration {
   /** Optional free-text specific substance ("wheat", "almonds"), for Annex II specificity. */
   source?: string;
 }
-export type ProductAllergens = Partial<Record<AllergenCode, AllergenDeclaration>>;
+// A plain string-keyed record (keys are AllergenCodes, enforced at RUNTIME by validateAllergens),
+// so it is byte-identical to the db column $type and TillProduct.allergens — no cast anywhere.
+export type ProductAllergens = Record<string, AllergenDeclaration>;
 
 const CODES = new Set<string>(ALLERGEN_CODES);
 const PRESENCES = new Set<AllergenPresence>(["contains", "may_contain"]);
