@@ -613,15 +613,23 @@ async function readOutstandingSaleForOrder(
  *  - P3 (tx B). On `captured`/`accepted_offline`, `finalizeCapture` files the immediate card sale,
  *    associates the just-captured payment, and settles the order — atomically.
  *
- * P1's `prepared` result is a small discriminated union kept deliberately extensible so the two
- * follow-on slices slot in WITHOUT restructuring this body:
- *  - Task 5 (recovery) adds a `recover` arm beside `replay`/`collect` — the §4 capture-idempotency
- *    pre-check (`findCapturedPaymentForWorkingOrder`) finding a captured-but-unassociated payment on an
- *    `open` order — and a `finalizeRecovery` beside `finalizeCapture`. It is NOT here: putting an
- *    untested `recover` branch + stub in this task would need a cross-task ignore.
- *  - Task 6 (ordering 1, invoice-first) adds the outstanding-sale detection that routes a placed
- *    invoice-first order to a SETTLE of its already-issued invoice, ahead of this task's `collect` arm
- *    (which is the ordering-2 / issue-at-pay branch it keeps).
+ * P1's `prepared` result is a small discriminated union covering every state the locked order can be
+ * in, dispatched into five arms:
+ *  - `replay` — the order is already `settled` (a retry whose first response was lost); returns the
+ *    stored ticket and files nothing.
+ *  - `recover` / `recover-settle` — the §4 capture-idempotency pre-check
+ *    (`findCapturedPaymentForWorkingOrder`) found a captured-but-unassociated payment on an
+ *    `open`/`placed` order (a lost-T2: `collect` committed its capture but P3 never ran). `recover`
+ *    files a fresh sale from the stored lock (ordering 2, via `finalizeRecovery`); `recover-settle`
+ *    instead SETTLES an already-issued invoice (ordering 1, via `finalizeSettleRecovery`) when one is
+ *    outstanding, since a second `recordSale` would 23505 against it. Neither re-drives P2 — the
+ *    capture already happened.
+ *  - `settle` — ordering 1 (invoice-first): a `placed` order already carries an unsettled issued
+ *    invoice (`readOutstandingSaleForOrder`) and no lost capture is pending, so P2 collects the
+ *    outstanding amount due and P3 SETTLES that invoice (`finalizeSettle`) rather than filing a new one.
+ *  - `collect` — the walk-up or ordering-2 (issue-at-pay) case: prices the lines (fresh for a walk-up,
+ *    the stored lock for a retrieved/placed order), P2 drives the reader for that price, and P3 files
+ *    the sale at pay (`finalizeCapture`).
  *
  * `operatorId` is the person who rang the sale, for attribution — threaded through to `recordSale`.
  */
@@ -774,9 +782,17 @@ export async function payWorkingOrderIntegrated(
  * `payWorkingOrder`'s: if another pay for this id filed its sale first (between P1's commit and here),
  * `recordSale` collides on that unique key and this replays the winner's settled ticket rather than
  * filing a second unrepairable record. The SEQUENTIAL retry never reaches here — P1's `for update` read
- * already saw the order `settled` and replayed there — so, unlike `payWorkingOrder` (whose lock+file
- * share one transaction) this needs no internal re-lock: the unique key is the only serialisation left,
- * and adding a `for update` re-read would make the 23505 path unreachable dead code. `readSettledTicket`
+ * already saw the order `settled` and replayed there. Two concurrent captures are ALSO serialised one
+ * level down, inside `recordSale` itself: `checkIntegrity` takes the (tenant, node) chain-head row lock
+ * as its first statement and holds it until commit (`packages/core/src/record-sale.ts:181-185`), so the
+ * second caller cannot even start its own `checkIntegrity` until the first has fully committed — by
+ * which point the first's `sales` row already exists, and the second's own insert (step 4, after the
+ * lock) is what hits the unique key. So, unlike `payWorkingOrder` (whose lock+file share one
+ * transaction) this needs no internal re-lock of its own, but the 23505 path is real and reachable
+ * rather than dead code: it is exercised end to end by "two concurrent pays for one parked order file
+ * ONE sale; the loser replays (one sale/settlement)" (`apps/server/src/till-sale-integrated.rls.test.ts`),
+ * which drives two real, concurrently-racing app-role connections and asserts `registroCount === 1`.
+ * `readSettledTicket`
  * defaults `change` to "0.00": a replay hands back nothing (the winner settled the drawer at its sale).
  *
  * The tender records the WHOLE card charge (`total + tip`) with the tip attributed on it, satisfying
