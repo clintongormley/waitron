@@ -32,18 +32,22 @@ sandwich, hold an order, take cash or card, and hand over a legal Veri\*Factu ti
 model the till builds against is no longer moving, and the unrepairable fiscal work — hash-chained
 records, never-reused invoice numbers — is done, which is where care paid best.
 
-With both the fiscal story and the operable till complete, the owner chose the next two slices:
+With both the fiscal story and the operable till complete, the owner chose the next two slices, and
+**both have now landed their first cut** (2026-08-07):
 
-- **Menu & allergens (sub-project 18)** — a launch-day legal duty (EU 1169/2011, RD 126/2015), no code
-  yet, seeding off the catalogue (#59). Recipes/BOM is the linchpin; the allergen list is a
+- **Menu & allergens (sub-project 18)** — a launch-day legal duty (EU 1169/2011, RD 126/2015).
+  **Slice 1 (EU-14 allergen declaration end-to-end) LANDED as #65.** Recipes/BOM (the linchpin),
+  variants, and customer-facing browse are the unstarted remainder; the allergen list stays a
   food-safety-advisor call.
 - **Reporting — *cierre Z* (sub-project 8)** — the frozen/signed daily close (numbered, immutable,
-  counted-cash / opening float / *descuadre*). `computeDailyClose` (#56) deliberately left the seam.
+  counted-cash / opening float / *descuadre*). `computeDailyClose` (#56) deliberately left the seam,
+  and it is now filled: **8a VAT-exact close LANDED as #66, 8b frozen cierre Z LANDED as #68.** The
+  unstarted reporting remainder (date ranges, *modelo 303*, the reporting UI) is under *Not started*.
 
-Run in parallel at the feature level. **Caveat:** both likely add a `packages/db` migration, and
-`packages/db/drizzle/meta/_journal.json` conflicts on every concurrent branch touching the same
-package — the collision is per-package (five packages carry their own `drizzle/`), so their migration
-files must be sequenced (rebase one on the other) even while the feature work proceeds concurrently.
+The two ran in parallel at the feature level without incident: the anticipated
+`packages/db/drizzle/meta/_journal.json` collision was avoided by sequencing the migrations
+(0031 allergens → 0032 8a → 0033 8b) as each branch landed. Active focus is now the **management
+dashboard** (slice 1b).
 
 **Management dashboard added 2026-08-07 (building).** The owner's off-premises management console —
 designed and fully planned this session
@@ -74,7 +78,6 @@ most-uncertain foundations first.
 
 | What | State |
 | --- | --- |
-| **Reporting — *cierre Z*** (sub-project 8) — frozen/signed daily close | **8a VAT-exact daily close LANDED as #66** (`sales.vat_breakdown` (0032) written from the filed value + `computeVatSummary` reads it — the derived close is now exact for catalogue difference-method sales). **8b frozen cierre Z is next** (implemented this session, landing): immutable numbered `daily_closes` + per-node hash chain + per-till cash reconciliation → *descuadre*, headless. English schema tokens (`daily_closes`/`cash_variance`/`entry_hash`); Spanish *cierre Z*/*descuadre* are UI-only |
 | **Management dashboard** — owner's off-premises console | **Slice 1a (identity auth foundation) LANDED as #67**; **1b (server management API) is next**, then 1c (dashboard app), 1d (passkeys). Spec + plans 1a–1d committed (see *Current direction*). Slice-1a follow-ups + the still-open first-admin-password provisioning gap under *Debt and odd jobs* |
 
 ---
@@ -86,6 +89,7 @@ One line per landed PR, newest first. The git log, the linked designs/plans, and
 detail — **this file is not a history** (see *How to keep this file honest*). Open follow-ups from
 these live under *Debt and odd jobs*; their designs/plans stay in `docs/superpowers/`.
 
+- **#68** Frozen *cierre Z* (sub-project 8, slice 8b) — immutable numbered `daily_closes` (0033, the immutability recipe: `REVOKE ALL` + `GRANT SELECT,INSERT` + append-only/anti-TRUNCATE triggers + FORCE RLS + tenant policy) freezing a snapshot of the derived close, a per-node `daily_close_chain` head that `recordDailyClose` advances in the **same transaction** as the close (single-active-writer `FOR UPDATE`, `UNIQUE(scope, sequence_no)` backstop), per-till counted-cash vs expected reconciliation → `cash_variance` (*descuadre*), and `verifyDailyCloseChain` which re-walks a `(tenant, node)` chain reporting the first break (`sequence`/`genesis`/`broken_link`/`hash_mismatch`/`tail_truncation`/`missing_head`). Headless; English schema tokens (`daily_closes`/`cash_variance`/`entry_hash`), Spanish *cierre Z*/*descuadre* UI-only. Copilot caught a tamper-detection gap in review — a deleted chain head with surviving closes read as `ok:true`; now caught as `missing_head`, proven by deletion in a real-PG test.
 - **#66** VAT-exact daily close (sub-project 8, slice 8a) — `sales.vat_breakdown jsonb NOT NULL` (0032) written from the *same* variable each sale-creating backend files (one source, cannot diverge from the huella); `computeVatSummary` reads it (`cross join lateral`, rate normalised as `numeric(5,2)::text`) so the daily close is exact per-rate for catalogue difference-method sales. No `computeHuella` change. Prerequisite for the frozen cierre Z (8b).
 - **#65** Menu & allergens (sub-project 18, slice 1) — EU-14 allergen declaration end-to-end: taxonomy + `validateAllergens` + `allergen.*` codes (`@waitron/catalogue`), a nullable `products.allergens jsonb` (0031), catalogue-ops threading, `/api/products` + `TillProduct` exposure, en/es names, a till **allergen screen** (matrix + operator lookup + print) with the `null`=PENDING-never-allergen-free invariant, and a demo. Legal basis (RD 126/2015 Art. 6.5) verified on primary source. Deferred: a `@media print` stylesheet so Print isolates the allergen sheet (convenience-only). Further sub-project-18 scope (recipes/BOM, variants, customer-facing browse) not started.
 - **#64** Counter POS — integrated card terminal (Stripe Terminal / Tap-to-Pay): split-transaction pay (collect outside the fiscal tx), working-order-derived capture idempotency + lost-response recovery, `POST /api/pay`.
@@ -248,23 +252,24 @@ not payment method); a short payment agreed as payment-in-full before the factur
 ## Not started
 
 Most of the till track now has code — see *Recently shipped* (sub-projects 5 Identity, 6 Locations,
-7 Counter POS, 8 Reporting, 16 Workforce all have landed slices). What remains genuinely unstarted is
-below. **Two are now in flight (see *Now*):** sub-project 18 (menu & allergens) and sub-project 8's
-*cierre Z*.
+7 Counter POS, 8 Reporting, 16 Workforce, 18 Menu & allergens all have landed slices). What remains
+genuinely unstarted is below. The two 2026-08-07 reprioritised slices have both landed their first cut
+(allergens #65; *cierre Z* 8a #66 + 8b #68); the **management dashboard** (slice 1b) is now the active
+work (see *Now*).
 
 | Sub-project | Note |
 | --- | --- |
 | **7 — Counter POS** | **Operable counter POS complete** — 7a walk-up cash (#60), 7b park/retrieve + idempotency (#61), manual card (#62), 7c prepare & collect (#63), integrated Stripe card (#64); all in *Recently shipped*. **Remaining:** the layout & receipt **editors** (the counter screen is layout-driven from a `LayoutDef` with empty per-widget config bags) and a **SumUp** card provider (a future vendor beside Stripe). Deferred edges under *Debt and odd jobs* → **Counter POS follow-ups** (7a / 7b / 7c / integrated card) |
 | **5 — Identity** | **Headless first slice merged (#58, 2026-08-05).** `@waitron/identity` owns `persons` + `sessions` (FORCE-RLS tenant isolation, now also scanned by fiscal-verifactu's `inmutabilidad` guard), salted-PIN hashing, a role/permission catalog, `authorize()` (operator session + supervisor `{personId, pin}` override), `loginWithPin` / `endSession`, and a `person.manage`-gated staff API. `recordVoid` / `recordCorrection` now require `sale.void` / `sale.rectify` authorization; `sales.authorized_by` / `sales.operator_id` + `payment_refunds.authorized_by` seams and a `waitron-provision venue` admin seed are in place. Remaining sub-project 5 scope (mid-shift-suspension enforcement, the discount gate, till-refund enforcement, the workforce-gate consolidation, branded ids) is under *Debt and odd jobs* → **Identity follow-ups**. The human-facing call sites (must-be-logged-in to ring, till refunds must be authorized) land with the counter POS (#7) |
 | **6 — Locations** | **Provision-a-sellable-venue slice merged (#57)** (2026-08-04; see *Now*) — the foundational till-track unblocker. Country/territory-driven fiscal identity, `resolveFiscalModules` (común → Veri\*Factu + IVA, others refused), `planVenue` / `applyVenue` and the `waitron-provision venue` CLI stand up tenant → location → till → node → SIF → series so `recordSale` can chain a sale; the stale `bootstrap-tenant.sql` was **deleted**. Remaining sub-project 6 scope (multiple locations, editing/deactivation, the #33 SIF-topology deferrals) is under *Debt and odd jobs* → **Locations follow-ups** |
-| **8 — Reporting** | **Daily-close first slice done (#56)** — `@waitron/reporting`'s `computeDailyClose`. ***Cierre Z* (frozen/signed daily close) is now in flight — see *Now***; the derived close left a clean seam for it. Further unstarted slices: date **ranges** + the **monthly VAT return** (*modelo 303*) aggregation, and the reporting **UI** (belongs to the till, #7). Reporting follow-ups + the catalogue-desglose divergence are under *Debt* |
+| **8 — Reporting** | **Daily-close first slice done (#56)** — `@waitron/reporting`'s `computeDailyClose`. ***Cierre Z* (frozen/signed daily close) DONE** — 8a VAT-exact close (#66, `sales.vat_breakdown`), 8b immutable numbered `daily_closes` + per-node hash chain + per-till *descuadre* (#68); both in *Recently shipped*. Further unstarted slices: date **ranges** + the **monthly VAT return** (*modelo 303*) aggregation, and the reporting **UI** (belongs to the till, #7). Reporting follow-ups + the catalogue-desglose divergence are under *Debt* |
 | **16 — Workforce** | *Registro de jornada* legal floor **DONE (#47)**; **D2 scheduling DONE (#50)** — `convenio_config` surface (overtime de-hard-coded, single-sourced), shifts + `roster_versions` + `publishRoster`, absences/availability/shift_templates/shift_swaps, an **advisory** guardrail engine (`validateRoster` → `RosterBreach[]`; publish surfaces breaches but proceeds — owner chose warn+override) + a planned-vs-actual read model, and supersede-on-republish (partial unique index, one published roster per `(location, period)`). The overtime *rule* the both-model projection computes stays convenio-driven — an **asesor-laboral** call, not code. Remaining: **D3 payroll export** (integrate-not-build), plus the workforce follow-ups under *Debt and odd jobs*. Deferred edges from the floor: the registro export doesn't yet surface overtime (belongs to the payslip/D3); the correction period-fetch is a ±1-day window (a >1-day-relocation correction is out of the floor's scope, chained but maybe missed by the period fetch). A post-#47 `/finish-branch` review (landed as #52) corrected four floor defects: the registro export rendered UTC instead of local wall-clock; the tamper chain omitted a correction's reason/actor and the capturing till; correction precedence tie-broke on the unhashed `ingest_seq` (a floor-bypasser could reorder corrections undetected) — now on the hashed `sequence_no`; and a `clockIn`/`clockOut` TOCTOU (an unlocked state read before the chain-head lock let two concurrent same-person clock-ins append a double-`in` that undercounts worked time) — now serialized per person with a `persons` row lock proven by a real-PG concurrency test |
-| **18 — Menu and allergens** | **Now in flight — see *Now*.** Allergen declaration is a **launch-day legal duty** (EU 1169/2011, RD 126/2015); the allergen list is a food-safety-advisor call and recipes/BOM is the linchpin |
+| **18 — Menu and allergens** | **Slice 1 (EU-14 allergen declaration) DONE (#65)** — taxonomy + `validateAllergens` + `allergen.*` codes (`@waitron/catalogue`), `products.allergens jsonb` (0031), `/api/products` + `TillProduct` exposure, en/es names, a till allergen screen (matrix + operator lookup + print), a demo; in *Recently shipped*. Allergen declaration is a **launch-day legal duty** (EU 1169/2011, RD 126/2015). **Remaining:** recipes/BOM (the linchpin), variants, customer-facing browse; the allergen list stays a food-safety-advisor call. Deferred `@media print` sheet-isolation edge under *Debt* |
 | 10-15, 17, 19, 20 | Tabs, floor plan, KDS, tip payroll, bookings, online ordering, accounting export, opening hours, procurement |
 
-**#18 (allergens) is a launch-day legal duty** — not fiscal, not optional — which is why it was
-picked next (see *Now*). The registro de jornada, the other launch-day legal floor, already landed
-(#47).
+**#18 (allergens) is a launch-day legal duty** — not fiscal, not optional — which is why its first
+slice was picked next and landed (#65). The registro de jornada, the other launch-day legal floor,
+already landed (#47).
 
 **Card-collected tips are business income (new, 2026-08-01, #37).** A tip taken through the card
 terminal — unlike cash handed straight to a waiter — is *ingreso* for the Impuesto sobre Sociedades and
