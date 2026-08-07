@@ -7,7 +7,13 @@ import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillPrepQueue } from "./widgets/prep-queue.js";
-import type { HeldOrderSummary, TillApi, TillProduct, TillSaleResult } from "./api/client.js";
+import type {
+  HeldOrderSummary,
+  PayOutcome,
+  TillApi,
+  TillProduct,
+  TillSaleResult,
+} from "./api/client.js";
 import type { WorkingOrderStore } from "./state/working-order.js";
 
 const cafe: TillProduct = {
@@ -85,6 +91,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
     listProducts: vi.fn().mockResolvedValue([cafe]),
     recordSale: vi.fn().mockResolvedValue(saleResult),
+    pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult }),
     parkOrder: vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 }),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     retrieveWorkingOrder: vi.fn().mockResolvedValue({
@@ -880,6 +887,249 @@ describe("till-app", () => {
     emit(counter(el)!, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     expect(currentApi.recordSale).toHaveBeenCalledTimes(2);
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  // collect-card (integrated card terminal, sub-project 7 Task 8): same shape as confirm-payment
+  // (single-flight, dirty-retrieved-order re-sync, held-list refresh on success) but branching on the
+  // server's DATA outcome instead of assuming a ticket — a decline/timeout/network_unavailable must
+  // never wedge the till (CLAUDE.md §5: nothing may block a sale but the sale itself). The widget that
+  // EMITS `collect-card` is Task 9; these tests dispatch the synthetic event directly.
+  // ---------------------------------------------------------------------------------------------
+
+  describe("collect-card (integrated card terminal, Task 8)", () => {
+    it("pays over the integrated terminal with the mapped lines(+tip+allowOffline), then shows the ticket", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      const store = c.store;
+      store.addProduct(cafe, "2");
+      await el.updateComplete;
+      const workingOrderId = store.id; // the walk-up's stable id — the same pay-idempotency key
+
+      emit(c, "collect-card", { tip: "0.50", allowOffline: true });
+      await flush(el);
+
+      expect(pay).toHaveBeenCalledWith({
+        id: workingOrderId,
+        lines: [{ productId: "cafe", quantity: "2" }],
+        tip: "0.50",
+        allowOffline: true,
+      });
+      const view = ticket(el)!;
+      expect(view).not.toBeNull();
+      expect(view.result).toBe(saleResult);
+    });
+
+    it("omits tip/allowOffline from the request when the event detail carries neither", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "1");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      expect(pay).toHaveBeenCalledWith({
+        id: c.store.id,
+        lines: [{ productId: "cafe", quantity: "1" }],
+      });
+    });
+
+    it("success: refreshes the held-orders list so a just-paid parked order drops off", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
+      const { el } = await mountApp({
+        pay,
+        listWorkingOrders: vi.fn().mockResolvedValueOnce([heldSummary]).mockResolvedValue([]),
+      });
+      const c = await toCounter(el);
+      expect(c.heldOrders).toEqual([heldSummary]); // one call on entering the counter
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      // once on entering the counter, once after the successful pay — the settled order drops off.
+      expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
+      expect(ticket(el)).not.toBeNull();
+    });
+
+    it("declined: stays on the counter with the basket intact and records the outcome for the widget", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      // A decline is data, never a fault: no ticket, still on the counter, basket untouched, and no
+      // sale.error banner — the operator retries the card or switches tender, nothing is lost.
+      expect(ticket(el)).toBeNull();
+      expect(counter(el)).not.toBeNull();
+      expect(c.store.lines).toHaveLength(1);
+      expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+      // Not marked `private` (unlike errorKey/screen/result): Task 9's consuming widget does not exist
+      // yet, so there is no rendered DOM to read this outcome through — every other state field in this
+      // file is asserted via rendered output instead.
+      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe("declined");
+      // The held list is re-read only on a captured outcome — nothing settled here, so no re-read.
+      expect(currentApi.listWorkingOrders).toHaveBeenCalledOnce();
+    });
+
+    it.each(["timeout", "network_unavailable"] as const)(
+      "%s: also stays on the counter with the basket intact and records the outcome",
+      async (outcome) => {
+        const pay = vi.fn().mockResolvedValue({ outcome });
+        const { el } = await mountApp({ pay });
+        const c = await toCounter(el);
+        c.store.addProduct(cafe, "2");
+        await el.updateComplete;
+
+        emit(c, "collect-card", {});
+        await flush(el);
+
+        expect(ticket(el)).toBeNull();
+        expect(counter(el)).not.toBeNull();
+        expect(c.store.lines).toHaveLength(1);
+        expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+        expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe(outcome);
+      },
+    );
+
+    it("clears a prior declined outcome when the next collect-card attempt starts", async () => {
+      const pay = vi
+        .fn()
+        .mockResolvedValueOnce({ outcome: "declined" })
+        .mockResolvedValueOnce({ outcome: "captured", ticket: saleResult });
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {}); // first — declines
+      await flush(el);
+      expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe("declined");
+
+      emit(counter(el)!, "collect-card", {}); // retry — captures
+      await flush(el);
+      expect(ticket(el)).not.toBeNull();
+    });
+
+    it("a genuine fault (thrown, incl. the recovery-corruption 500) surfaces sale.error, basket intact, no ticket", async () => {
+      const pay = vi.fn().mockRejectedValue({ code: "server.internal" });
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      expect(ticket(el)).toBeNull();
+      expect(counter(el)).not.toBeNull();
+      expect(c.store.lines).toHaveLength(1);
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("sale.error"));
+      expect(el.shadowRoot!.textContent).not.toContain("server.internal"); // never leaks the raw code
+    });
+
+    it("single-flight: a second collect-card while pay is pending fires exactly once", async () => {
+      // Same double-file safety as confirm-payment's single-flight test (CLAUDE.md §5): the first pay
+      // never resolves, so a second collect-card dispatched in that window (double-tap / laggy link)
+      // must be a no-op.
+      const pay = vi.fn(() => new Promise<PayOutcome>(() => {})); // never resolves
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {}); // first — raises submitting, awaits
+      await el.updateComplete;
+      expect(counter(el)!.busy).toBe(true); // in flight → the pay affordance is disabled
+
+      emit(c, "collect-card", {}); // second — guarded, a no-op
+      await el.updateComplete;
+
+      expect(pay).toHaveBeenCalledOnce();
+    });
+
+    it("resets the busy state after a declined outcome so the counter re-enables for a retry", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+      const { el } = await mountApp({ pay });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      expect(counter(el)!.busy).toBe(false);
+    });
+
+    it("retrieve → edit → collect-card re-syncs the edited basket BEFORE paying, so the edit is not dropped", async () => {
+      // The same 7c regression #onConfirmPayment guards against (its own "Finding 2" test above): the
+      // server's retrieved-order pay path files from the STORED lock and IGNORES req.lines for the
+      // integrated route too (IntegratedPayRequest's own doc), so an edit made after retrieve must be
+      // re-locked (updateWorkingOrder) BEFORE the pay or it is silently dropped from both the charge and
+      // the filed record. Deleting the #syncIfDirty call in #onCollectCard makes this fail (the edit is
+      // lost from both assertions below).
+      const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+      const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
+      const { el } = await mountApp({ updateWorkingOrder, pay });
+      const c = await toCounter(el);
+      const store = c.store;
+
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+      store.addProduct(cafe, "1"); // the edit AFTER retrieve
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
+        lines: [
+          { productId: "cafe", quantity: "2" },
+          { productId: "cafe", quantity: "1" },
+        ],
+        label: "Mesa 4",
+      });
+      expect(pay).toHaveBeenCalledWith({
+        id: "wo-1",
+        lines: [
+          { productId: "cafe", quantity: "2" },
+          { productId: "cafe", quantity: "1" },
+        ],
+      });
+      expect(updateWorkingOrder.mock.invocationCallOrder[0]!).toBeLessThan(
+        pay.mock.invocationCallOrder[0]!,
+      );
+    });
+
+    it("retrieve → collect-card (unedited): no re-sync, files the stored lock straight through", async () => {
+      // Behaviour 1's mirror for the integrated route: an UNEDITED retrieve must NOT re-sync — that
+      // would re-price against the live catalogue and defeat the add-time lock (design §3).
+      const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+      const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
+      const { el } = await mountApp({ updateWorkingOrder, pay });
+      const c = await toCounter(el);
+
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      expect(updateWorkingOrder).not.toHaveBeenCalled();
+      expect(pay).toHaveBeenCalledWith({
+        id: "wo-1",
+        lines: [{ productId: "cafe", quantity: "2" }],
+      });
+    });
   });
 
   // ---------------------------------------------------------------------------------------------

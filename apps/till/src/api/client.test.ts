@@ -47,6 +47,60 @@ describe("TillApi", () => {
     expect(result.invoiceNumber).toBe("A/1");
   });
 
+  it("pay POSTs id+lines(+tip+allowOffline) to /api/pay and returns the captured outcome with its ticket", async () => {
+    const ticket = {
+      invoiceNumber: "A/1",
+      issuedAt: "2026-08-06T10:00:00.000Z",
+      total: "3.00",
+      vatBreakdown: [],
+      lines: [{ descriptions: { "es-ES": "Café" }, quantity: "2", gross: "3.00" }],
+      change: "0.00",
+      qr: "x",
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ outcome: "captured", ticket }));
+    const api = new TillApi("", fetchStub);
+
+    const out = await api.pay({
+      id: "wo1",
+      lines: [{ productId: "cafe", quantity: "2" }],
+      tip: "0.50",
+      allowOffline: true,
+    });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/pay",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id: "wo1",
+          lines: [{ productId: "cafe", quantity: "2" }],
+          tip: "0.50",
+          allowOffline: true,
+        }),
+      }),
+    );
+    expect(out).toEqual({ outcome: "captured", ticket });
+  });
+
+  it("pay returns a non-captured outcome verbatim, with no ticket (declined — a card terminal has no exceptional/error shape, CLAUDE.md §5)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ outcome: "declined" }));
+    const api = new TillApi("", fetchStub);
+
+    const out = await api.pay({ id: "wo1", lines: [] });
+
+    // A no-tip/no-allowOffline call sends only id+lines — JSON.stringify drops the undefined-valued
+    // optional fields rather than sending them as explicit nulls.
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/pay",
+      expect.objectContaining({
+        body: JSON.stringify({ id: "wo1", lines: [] }),
+      }),
+    );
+    expect(out).toEqual({ outcome: "declined" });
+  });
+
   it("throws { code } from a 4xx error body (login with a bad PIN)", async () => {
     const fetchStub = vi
       .fn()
