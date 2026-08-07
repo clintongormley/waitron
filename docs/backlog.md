@@ -47,7 +47,7 @@ With both the fiscal story and the operable till complete, the owner chose the n
 The two ran in parallel at the feature level without incident: the anticipated
 `packages/db/drizzle/meta/_journal.json` collision was avoided by sequencing the migrations
 (0031 allergens → 0032 8a → 0033 8b) as each branch landed. Active focus is now the **management
-dashboard** (slice 1b).
+dashboard** (slice 1c — the dashboard app).
 
 **Management dashboard added 2026-08-07 (building).** The owner's off-premises management console —
 designed and fully planned this session
@@ -64,8 +64,11 @@ LANDED as #67** (2026-08-07): the `management_sessions` table with FORCE RLS, th
 credentials + verifier seam (`loginManager`/`authorizeManager`, passkey plugs in at 1d), the session
 lifecycle (idle timeout + mid-session `persons.status` re-check), the staff mutations repointed off
 till sessions, and a `person.manage`-gated `listPersons` — `@waitron/identity` at 100% coverage.
-**1b (server management API) is next**, then 1c (dashboard app) and 1d (passkeys). Slice-1a follow-ups
-(incl. the still-open first-admin-password provisioning gap) are under *Debt and odd jobs*.
+**1b (server management API) LANDED as #69** (2026-08-08): the slice-1a auth exposed over HTTP as a
+`/management-api/*` Hono route group on `apps/server` (a `waitron_management_session` cookie,
+login/logout, `person.manage`-gated staff CRUD), plus `setPassword` in `@waitron/identity`. **1c (the
+dashboard app) is next**, then 1d (passkeys). Slice-1a/1b follow-ups (incl. the still-open
+first-admin-password provisioning gap) are under *Debt and odd jobs*.
 
 **Prioritisation is by soundness, not the calendar (decided 2026-08-02).** Waitron will be finished
 before the deli is ready to trade, so the deli's 1-Jan-2027 legal deadline is *not* a reason to rank
@@ -78,7 +81,7 @@ most-uncertain foundations first.
 
 | What | State |
 | --- | --- |
-| **Management dashboard** — owner's off-premises console | **Slice 1a (identity auth foundation) LANDED as #67**; **1b (server management API) is next**, then 1c (dashboard app), 1d (passkeys). Spec + plans 1a–1d committed (see *Current direction*). Slice-1a follow-ups + the still-open first-admin-password provisioning gap under *Debt and odd jobs* |
+| **Management dashboard** — owner's off-premises console | **Slice 1a (#67) + 1b (server management API, #69) LANDED**; **1c (the dashboard app) is next**, then 1d (passkeys). Spec + plans 1a–1d committed (see *Current direction*). Slice-1a/1b follow-ups + the still-open first-admin-password provisioning gap under *Debt and odd jobs* |
 
 ---
 
@@ -89,6 +92,7 @@ One line per landed PR, newest first. The git log, the linked designs/plans, and
 detail — **this file is not a history** (see *How to keep this file honest*). Open follow-ups from
 these live under *Debt and odd jobs*; their designs/plans stay in `docs/superpowers/`.
 
+- **#69** Dashboard slice 1b — server management API — the slice-1a identity auth exposed over HTTP as a `/management-api/*` Hono route group on `apps/server` mirroring `mountTillApi`: a `waitron_management_session` cookie (httpOnly / SameSite=Strict / Secure-iff-TLS), login/logout, and `person.manage`-gated staff CRUD (list/create/patch/reset-pin/set-password), plus `setPassword` in `@waitron/identity` (an admin grants dashboard access). New `management.request_invalid` body-shape code; every handler scoped to the one venue tenant via `withTenant` + `asAppUser`. Real-PG e2e incl. a **differential** cross-tenant isolation proof (fails if `asAppUser` is dropped) + refusal proofs (unauth 401, wrong-password 401 + no cookie, staff-role 403). Finish-branch fixed a null/non-object-body → 500 class (now the routes' own 4xx), the PATCH type-screening gap (`role`/`status` now 400 not pgEnum-500) + its false errors.ts doc, and three overstating comments; a Copilot NIF-collision flag was verified a **false positive** (one PG container per file → isolated DBs). Headless — the UI is 1c.
 - **#68** Frozen *cierre Z* (sub-project 8, slice 8b) — immutable numbered `daily_closes` (0033, the immutability recipe: `REVOKE ALL` + `GRANT SELECT,INSERT` + append-only/anti-TRUNCATE triggers + FORCE RLS + tenant policy) freezing a snapshot of the derived close, a per-node `daily_close_chain` head that `recordDailyClose` advances in the **same transaction** as the close (single-active-writer `FOR UPDATE`, `UNIQUE(scope, sequence_no)` backstop), per-till counted-cash vs expected reconciliation → `cash_variance` (*descuadre*), and `verifyDailyCloseChain` which re-walks a `(tenant, node)` chain reporting the first break (`sequence`/`genesis`/`broken_link`/`hash_mismatch`/`tail_truncation`/`missing_head`). Headless; English schema tokens (`daily_closes`/`cash_variance`/`entry_hash`), Spanish *cierre Z*/*descuadre* UI-only. Copilot caught a tamper-detection gap in review — a deleted chain head with surviving closes read as `ok:true`; now caught as `missing_head`, proven by deletion in a real-PG test.
 - **#66** VAT-exact daily close (sub-project 8, slice 8a) — `sales.vat_breakdown jsonb NOT NULL` (0032) written from the *same* variable each sale-creating backend files (one source, cannot diverge from the huella); `computeVatSummary` reads it (`cross join lateral`, rate normalised as `numeric(5,2)::text`) so the daily close is exact per-rate for catalogue difference-method sales. No `computeHuella` change. Prerequisite for the frozen cierre Z (8b).
 - **#65** Menu & allergens (sub-project 18, slice 1) — EU-14 allergen declaration end-to-end: taxonomy + `validateAllergens` + `allergen.*` codes (`@waitron/catalogue`), a nullable `products.allergens jsonb` (0031), catalogue-ops threading, `/api/products` + `TillProduct` exposure, en/es names, a till **allergen screen** (matrix + operator lookup + print) with the `null`=PENDING-never-allergen-free invariant, and a demo. Legal basis (RD 126/2015 Art. 6.5) verified on primary source. Deferred: a `@media print` stylesheet so Print isolates the allergen sheet (convenience-only). Further sub-project-18 scope (recipes/BOM, variants, customer-facing browse) not started.
@@ -297,17 +301,47 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     at import), so it needs a `totp.ts` rewrite + re-probe of v13's fail-closed behaviour — its own small
     follow-up, not a dep bump. Warnings are install-time only; CI is green.
   - **First admin has no dashboard password.** `waitron-provision venue` seeds an admin with a PIN, not
-    a password, so there is no true end-to-end first login until an admin password exists. **A
-    provisioning follow-up** (extend `venue`, or a `set-password` command) unblocks it; 1b's `setPassword`
-    covers every subsequent person.
-  - **Deferred to 1b/later (recorded so they aren't rediscovered):** stamp `ended_at` when a management
-    session expires (today the idle timeout is enforced at read time — matters once 1b adds the
-    `(tenant_id, person_id) WHERE ended_at IS NULL` open-session lookup); fold `resolveManagementSession`'s
-    SELECT-then-UPDATE into one `UPDATE … RETURNING` (a low-frequency dashboard path, correctness-sensitive
-    — its own TDD'd optimisation); extract a shared `assertPermission(role, permission)` and dedup the
-    `not_found→suspended` lookup against the till's `verifyPersonCredential` (both touch `authorize.ts`,
-    which 1a deliberately left untouched); add a NEGATIVE `WITH CHECK` test (cross-tenant INSERT refusal)
-    to `management-sessions.rls.test.ts` (the sibling `sessions.rls` doesn't test it either).
+    a password, so there is no true end-to-end first login until an admin password exists. **Slice 1b's
+    `setPassword` (#69) now covers every SUBSEQUENT person**; only the FIRST admin's initial password
+    remains — **a provisioning follow-up** (extend `venue`, or a `set-password` command) unblocks it. This
+    is the one thing between #69 and a real dashboard login.
+  - **Deferred (untouched by 1b, which was the HTTP-API layer only — these touch the session internals /
+    `authorize.ts`):** stamp `ended_at` when a management session expires (today the idle timeout is
+    enforced at read time — matters once a `(tenant_id, person_id) WHERE ended_at IS NULL` open-session
+    lookup is added); fold `resolveManagementSession`'s SELECT-then-UPDATE into one `UPDATE … RETURNING`
+    (a low-frequency dashboard path, correctness-sensitive — its own TDD'd optimisation); extract a shared
+    `assertPermission(role, permission)` and dedup the `not_found→suspended` lookup against the till's
+    `verifyPersonCredential` (both touch `authorize.ts`, which 1a/1b deliberately left untouched); add a
+    NEGATIVE `WITH CHECK` test (cross-tenant INSERT refusal) to `management-sessions.rls.test.ts` (the
+    sibling `sessions.rls` doesn't test it either).
+- **Dashboard slice 1b follow-ups (#69, server management API). None blocking; each deferred with a
+  reason during the SDD build / simplify / finish-branch / Copilot review chain.**
+  - **Share the `run` error boundary.** `management-api.ts` and `till-api.ts` carry byte-identical `run`
+    boundaries differing only in their `STATUS` map and the log tag (`management.failed` / `till.failed`);
+    extract a `createErrorBoundary(status, tag)` both call. Deferred from simplify as a cross-file refactor
+    of shared infra (touches till-api.ts) that wants its own reviewed change.
+  - **PATCH `/staff/:id` re-runs authz per field + double-`UPDATE`.** A combined `{role, status}` PATCH
+    calls `authorizeManager` (→ `resolveManagementSession` SELECT+UPDATE) twice and issues two
+    `UPDATE persons`; authorize once up front + one combined `UPDATE`. Low-frequency admin path — the
+    direct analogue of the till-api "consolidate the two per-request transactions" item.
+  - **Enum-membership validation gap (by-design typeof-only).** create + PATCH `typeof`-screen `role`/`status`
+    but NOT enum membership, so a valid-typed-but-invalid `role:"chef"` reaches the `person_role` pgEnum →
+    opaque 500 (and `status:"frozen"` → silent 204). Safe (pgEnum rejects, no corruption/leak) and
+    consistent across both routes. A stricter 400 belongs with the validation/tax-module layer, not a
+    one-off here.
+  - **Malformed (UNPARSEABLE) JSON body → 500 (cross-cutting).** A body that fails `c.req.json()` throws a
+    SyntaxError → opaque `server.internal` 500 via `run`, shared verbatim with till-api's `run`. Whether it
+    should be 400 is a decision to make across BOTH `run` copies. (The parseable-but-`null`/non-object case
+    WAS fixed in #69 → the routes' own 4xx.)
+  - **Minors (non-blocking):** the `setPassword` negative test's "password_hash unchanged" re-read runs
+    after a rolled-back tx so it can't catch a hypothetical write-before-reject — the load-bearing proof is
+    the thrown code + a gate-deletion proof (`setPassword` authorizes before it writes), and the four sibling
+    negative tests share the pattern (Copilot, held); `run`'s `?? 400` unmapped-code fallback is honestly
+    uncovered (every code a route throws is in `STATUS`) until a future route throws an unmapped one.
+  - **Test-infra flaky (not 1b-specific, surfaced by #69's CI):** `packages/fiscal-verifactu`'s
+    `drain — batching (the 1001-split)` test can exceed its 30s `testTimeout` under a contended CI shard
+    (measured 32s in CI, ~1.2s locally). A heavy 1001-record test; bump its per-test timeout or shrink the
+    fixture. Passes on re-run — a flaky timeout, not a regression.
 - **Counter POS follow-ups (sub-project 7, slice 1 / 7a — the walk-up cash sale). None blocking; each
   is a deliberate slice-1 boundary or a small review Minor, deferred rather than dropped.**
   - **TLS termination, LAN binding and serving the built bundle are deployment (#9).** In dev the till
