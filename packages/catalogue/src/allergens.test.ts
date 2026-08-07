@@ -45,4 +45,23 @@ describe("validateAllergens", () => {
   it("rejects a non-object value", () => {
     expect(() => validateAllergens("gluten")).toThrow(AppError);
   });
+
+  it("rejects a non-string source", () => {
+    try {
+      validateAllergens({ gluten: { presence: "contains", source: 42 } });
+      throw new Error("should have thrown");
+    } catch (e) {
+      expect((e as AppError).code).toBe("allergen.invalid_source");
+    }
+  });
+
+  it("accepts a string source unchanged", () => {
+    const a = { gluten: { presence: "contains", source: "wheat" } };
+    expect(validateAllergens(a)).toEqual(a);
+  });
+
+  it("accepts an entry with no source", () => {
+    const a = { gluten: { presence: "contains" } };
+    expect(validateAllergens(a)).toEqual(a);
+  });
 });

@@ -46,6 +46,10 @@ export function validateAllergens(value: unknown): ProductAllergens {
     if (typeof presence !== "string" || !PRESENCES.has(presence as AllergenPresence)) {
       throw new AppError("allergen.invalid_presence", { code, presence: String(presence) });
     }
+    const source = (decl as { source?: unknown })?.source;
+    if (source !== undefined && typeof source !== "string") {
+      throw new AppError("allergen.invalid_source", { code });
+    }
   }
   return value as ProductAllergens;
 }

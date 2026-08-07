@@ -8,5 +8,7 @@ declare module "@waitron/shared" {
     "allergen.invalid_code": { code: string };
     /** An allergen's presence is not "contains" | "may_contain". */
     "allergen.invalid_presence": { code: string; presence: string };
+    /** An allergen's optional `source` is present but is not a string. */
+    "allergen.invalid_source": { code: string };
   }
 }

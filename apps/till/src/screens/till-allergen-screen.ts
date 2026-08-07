@@ -60,9 +60,11 @@ type Chrome = "title" | "notice" | "pending" | "contains" | "may_contain" | "pri
  *    may-contain in its column; the row's detail dialog spells them out with their sources.
  *
  * LOCALE. On-screen the matrix renders in the OPERATOR locale ({@link locale}); a Print re-renders in
- * the INVOICE locale ({@link invoiceLocale}) before handing off to the browser, mirroring how
- * `till-ticket-view` renders the legal receipt in `invoiceLocale` independent of the operator UI — the
- * printed allergen sheet is a customer document, so it follows the customer's language. Product names,
+ * the INVOICE locale ({@link invoiceLocale}) before handing off to the browser. Only the invoice-locale
+ * RENDERING approach is shared with `till-ticket-view`, which likewise renders its legal receipt in
+ * `invoiceLocale` independent of the operator UI; the `globalThis.print()` hand-off is this component's
+ * own — `till-ticket-view` has no print path. The printed allergen sheet is a customer document, so it
+ * follows the customer's language. Product names,
  * the UI chrome and ALLERGEN names all resolve against the full region locale ("es-ES"): `allergenName`
  * strips the region subtag internally (its table keys on `en`/`es`), so "es-ES" yields "Leche" (proven
  * in the suite), and `t()` maps both `es` and `es-ES` in its catalogues.
@@ -203,9 +205,9 @@ export class TillAllergenScreen extends LitElement {
   @state() private selected?: TillProduct;
   /**
    * Whether the screen is currently rendering its PRINTABLE form (invoice locale). Flipped true by
-   * {@link print}; {@link updated} then hands the committed render to the browser. Deliberately NOT
-   * reverted — the sheet stays in the invoice locale until the operator leaves; reopening from the
-   * counter re-mounts this element fresh in the operator locale.
+   * {@link print}; {@link updated} then hands the committed render to the browser and immediately flips
+   * it back to false. Resetting the latch is what lets a repeat Print tap re-fire (a stuck-true latch
+   * would print only once per mount), and it reverts the on-screen render to the operator locale.
    */
   @state() private printing = false;
 
@@ -242,11 +244,18 @@ export class TillAllergenScreen extends LitElement {
   }
 
   override updated(changed: PropertyValues): void {
-    // The invoice-locale render has just committed; hand the printable sheet to the browser. This is
-    // the moment-of-print the `till-ticket-view` invoice-locale path stands in for. Only when `printing`
-    // has just become true — never on the first render (it starts false) or any unrelated update.
+    // The invoice-locale render has just committed; hand the printable sheet to the browser. The
+    // invoice-locale RENDERING is shared with `till-ticket-view`; the `globalThis.print()` hand-off is
+    // this component's own — `till-ticket-view` only renders in the invoice locale, it never prints.
+    // Fire only when `printing` has just become true — never on the first render (it starts false) or
+    // any unrelated update.
     if (changed.has("printing") && this.printing) {
       globalThis.print?.();
+      // Drop the latch straight back so a SECOND Print tap flips false→true again and re-fires — a
+      // latch that stayed true would set true→true, Lit would see no change, and nothing would print.
+      // The false-transition re-render is inert here (the guard above requires `printing` to be true),
+      // so this cannot loop; it also reverts the on-screen render to the operator locale, as wanted.
+      this.printing = false;
     }
   }
 

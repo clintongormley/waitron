@@ -274,6 +274,27 @@ describe("till-allergen-screen", () => {
     }
   });
 
+  it("prints again on a second Print tap (the printing latch is reset)", async () => {
+    // The screen used to latch `printing` true and never reset it, so a SECOND Print tap set true→true,
+    // Lit saw no change, and nothing printed. Resetting the latch in updated() restores re-tap printing.
+    const printSpy = vi.spyOn(window, "print").mockImplementation(() => {});
+    try {
+      const { el } = await mountWidget<TillAllergenScreen>("till-allergen-screen", {
+        products,
+        locale: "en",
+        invoiceLocale: "es-ES",
+      });
+      el.shadowRoot!.querySelector<HTMLElement>("wt-button.print")!.click();
+      await el.updateComplete;
+      expect(printSpy).toHaveBeenCalledTimes(1);
+      el.shadowRoot!.querySelector<HTMLElement>("wt-button.print")!.click();
+      await el.updateComplete;
+      expect(printSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      printSpy.mockRestore();
+    }
+  });
+
   it("Close emits a composed close-allergens event", async () => {
     const { el } = await mountWidget<TillAllergenScreen>("till-allergen-screen", { products });
     let captured: Event | undefined;
