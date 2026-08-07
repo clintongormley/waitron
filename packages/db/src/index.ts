@@ -29,6 +29,8 @@ export {
   tenders,
 } from "./schema/sales.js";
 export { saleVoids } from "./schema/sale-voids.js";
+export { dailyCloseChain, dailyCloses } from "./schema/daily-closes.js";
+export type { DailyCloseSnapshot } from "./schema/daily-closes.js";
 export { incidents } from "./schema/incidents.js";
 export type { IncidentSeverity } from "./schema/incidents.js";
 export { readDeploymentEnvironment, stampDeployment } from "./deployment.js";

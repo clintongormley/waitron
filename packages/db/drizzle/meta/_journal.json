@@ -232,6 +232,13 @@
       "when": 1786123306261,
       "tag": "0032_perpetual_manta",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1786125592995,
+      "tag": "0033_furry_silver_samurai",
+      "breakpoints": true
     }
   ]
 }
