@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
-import { authorize } from "./authorize.js";
+import { authorizeManager } from "./manager-login.js";
 import { hashPin } from "./verify-pin.js";
 import type { PersonRoleValue } from "./permissions.js";
 
@@ -18,21 +18,24 @@ export function assertPinLength(pin: string): void {
 }
 
 /**
- * Creates a staff member. Gated on `person.manage`: `authorize` runs FIRST, so a caller without the
- * permission is rejected before any write. The PIN is length-checked, then stored hashed — never
- * plaintext. Bootstrapping the FIRST admin is provisioning's job, not this gated path.
+ * Creates a staff member. Gated on `person.manage`: `authorizeManager` runs FIRST, so a caller
+ * without the permission is rejected before any write. The PIN is length-checked, then stored
+ * hashed — never plaintext. Bootstrapping the FIRST admin is provisioning's job, not this gated path.
  */
 export async function createPerson(
   tx: Transaction,
   input: {
     tenantId: string;
-    actorSessionId: string;
+    managementSessionId: string;
     displayName: string;
     role: PersonRoleValue;
     pin: string;
   },
 ): Promise<{ id: string }> {
-  await authorize(tx, { sessionId: input.actorSessionId, permission: "person.manage" });
+  await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "person.manage",
+  });
   assertPinLength(input.pin);
   const [row] = await tx
     .insert(persons)
@@ -46,13 +49,16 @@ export async function createPerson(
   return { id: row!.id };
 }
 
-/** Changes a person's role. Gated on `person.manage`. authorize reads a role live, so an open
- * session sees the change on its next authorize. */
+/** Changes a person's role. Gated on `person.manage`. authorizeManager reads a role live (via
+ * resolveManagementSession), so an open management session sees the change on its next call. */
 export async function setRole(
   tx: Transaction,
-  input: { actorSessionId: string; personId: string; role: PersonRoleValue },
+  input: { managementSessionId: string; personId: string; role: PersonRoleValue },
 ): Promise<void> {
-  await authorize(tx, { sessionId: input.actorSessionId, permission: "person.manage" });
+  await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "person.manage",
+  });
   await tx.update(persons).set({ role: input.role }).where(eq(persons.id, input.personId));
 }
 
@@ -60,9 +66,12 @@ export async function setRole(
  * hashed. */
 export async function resetPin(
   tx: Transaction,
-  input: { actorSessionId: string; personId: string; pin: string },
+  input: { managementSessionId: string; personId: string; pin: string },
 ): Promise<void> {
-  await authorize(tx, { sessionId: input.actorSessionId, permission: "person.manage" });
+  await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "person.manage",
+  });
   assertPinLength(input.pin);
   await tx
     .update(persons)
@@ -74,18 +83,24 @@ export async function resetPin(
  * `person.manage`. */
 export async function suspendPerson(
   tx: Transaction,
-  input: { actorSessionId: string; personId: string },
+  input: { managementSessionId: string; personId: string },
 ): Promise<void> {
-  await authorize(tx, { sessionId: input.actorSessionId, permission: "person.manage" });
+  await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "person.manage",
+  });
   await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, input.personId));
 }
 
 /** Reactivates a suspended person, restoring login. Gated on `person.manage`. */
 export async function reactivatePerson(
   tx: Transaction,
-  input: { actorSessionId: string; personId: string },
+  input: { managementSessionId: string; personId: string },
 ): Promise<void> {
-  await authorize(tx, { sessionId: input.actorSessionId, permission: "person.manage" });
+  await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "person.manage",
+  });
   await tx.update(persons).set({ status: "active" }).where(eq(persons.id, input.personId));
 }
 

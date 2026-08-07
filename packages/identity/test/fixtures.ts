@@ -3,7 +3,10 @@ import type { Database } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { loginWithPin } from "../src/login.js";
+import { loginManager } from "../src/manager-login.js";
 import { hashPin } from "../src/verify-pin.js";
+import { hashPassword } from "../src/verify-password.js";
+import type { PersonRoleValue } from "../src/permissions.js";
 
 /**
  * Seed helpers shared by the identity LOGIC suites (authorize / login / staff), which drive
@@ -52,6 +55,30 @@ export async function openSession(
     loginWithPin(tx, { tenantId, tillId, personId, pin: "1234" }),
   );
   return session.id;
+}
+
+/**
+ * Seeds a person of `role` with a known password and returns an OPEN management session for them —
+ * the dashboard analogue of `openSession`. `seedPerson` leaves `password_hash` null, so it is set
+ * here via a raw update (under `withTenant`) before `loginManager` verifies it. "correct horse" is
+ * length 11, above `MIN_PASSWORD_LENGTH`, so a real login path accepts it. Default role `manager`
+ * holds `person.manage`; pass `"staff"` for the refusal cases.
+ */
+export async function openManagementSession(
+  db: Database,
+  tenantId: string,
+  role: PersonRoleValue = "manager",
+): Promise<{ personId: string; sessionId: string }> {
+  const personId = await seedPerson(db, tenantId, role);
+  await withTenant(db, tenantId, (tx) =>
+    tx.execute(
+      sql`update persons set password_hash = ${hashPassword("correct horse")} where id = ${personId}`,
+    ),
+  );
+  const session = await withTenant(db, tenantId, (tx) =>
+    loginManager(tx, { tenantId, personId, password: "correct horse" }),
+  );
+  return { personId, sessionId: session.id };
 }
 
 /** The AppError code a rejected call threw, or a describing string when it was not an AppError. */
