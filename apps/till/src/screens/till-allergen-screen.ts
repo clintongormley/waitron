@@ -6,6 +6,7 @@ import { t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { productName } from "../widgets/product-name.js";
 import type { TillProduct } from "../api/client.js";
+import type { AllergenCode } from "@waitron/catalogue";
 
 /**
  * The 14 EU allergens (Regulation (EU) No 1169/2011, Annex II) in DISPLAY order — the matrix's column
@@ -16,9 +17,11 @@ import type { TillProduct } from "../api/client.js";
  * its barrel — and through it `@waitron/db` and Node builtins — into the browser bundle. The order
  * mirrors `i18n/allergen-names.ts` (Task 5), which the suite pins to catalogue's canonical list, so a
  * drift in either is caught: `till-allergen-screen.test.ts` asserts this array's key set equals
- * `Object.keys(ALLERGEN_NAMES)`.
+ * `Object.keys(ALLERGEN_NAMES)`. The `readonly AllergenCode[]` type — a type-only import, fully erased
+ * at build, so no catalogue barrel reaches the bundle — additionally makes a misspelled or non-EU code
+ * a COMPILE error.
  */
-export const ALLERGEN_DISPLAY_ORDER = [
+export const ALLERGEN_DISPLAY_ORDER: readonly AllergenCode[] = [
   "gluten",
   "crustaceans",
   "eggs",
@@ -36,11 +39,10 @@ export const ALLERGEN_DISPLAY_ORDER = [
 ] as const;
 
 /** One product's declaration for a single allergen — the value type of `TillProduct.allergens`. */
-type AllergenPresence = { presence: "contains" | "may_contain"; source?: string };
+type AllergenPresence = NonNullable<TillProduct["allergens"]>[string];
 
 /** The short keys of the allergen-screen UI chrome (`allergens.<key>` in `strings.ts`). */
-type Chrome =
-  "open" | "title" | "notice" | "pending" | "contains" | "may_contain" | "print" | "close";
+type Chrome = "title" | "notice" | "pending" | "contains" | "may_contain" | "print" | "close";
 
 /**
  * The customer-facing ALLERGEN SCREEN — the operator's food-safety lookup (menu & allergens). A
@@ -60,12 +62,10 @@ type Chrome =
  * LOCALE. On-screen the matrix renders in the OPERATOR locale ({@link locale}); a Print re-renders in
  * the INVOICE locale ({@link invoiceLocale}) before handing off to the browser, mirroring how
  * `till-ticket-view` renders the legal receipt in `invoiceLocale` independent of the operator UI — the
- * printed allergen sheet is a customer document, so it follows the customer's language. Product names
- * and the UI chrome resolve against the full region locale ("es-ES"), but ALLERGEN names resolve
- * against the language subtag ("es"): `allergenName` does an exact-key match and only carries `en`/`es`,
- * so `allergenName("milk", "es-ES")` would fall back to English — {@link nameLocale} reduces the region
- * tag so "es-ES" yields "Leche" (proven in the suite). `t()` accepts either, since its catalogues map
- * both `es` and `es-ES`.
+ * printed allergen sheet is a customer document, so it follows the customer's language. Product names,
+ * the UI chrome and ALLERGEN names all resolve against the full region locale ("es-ES"): `allergenName`
+ * strips the region subtag internally (its table keys on `en`/`es`), so "es-ES" yields "Leche" (proven
+ * in the suite), and `t()` maps both `es` and `es-ES` in its catalogues.
  */
 @customElement("till-allergen-screen")
 export class TillAllergenScreen extends LitElement {
@@ -209,15 +209,10 @@ export class TillAllergenScreen extends LitElement {
    */
   @state() private printing = false;
 
-  /** The locale in force for the current render — the invoice locale while printing, else the operator's. */
+  /** The locale in force for the current render — the invoice locale while printing, else the operator's.
+   * Passed straight to `allergenName`, which strips the region subtag itself (see the class doc). */
   #activeLocale(): string {
     return this.printing ? this.invoiceLocale : this.locale;
-  }
-
-  /** The language subtag of {@link activeLocale} for `allergenName` (which keys on `en`/`es` exactly, so
-   * a region tag like "es-ES" must reduce to "es" or it falls back to English — see the class doc). */
-  #nameLocale(): string {
-    return this.#activeLocale().replace(/-.*$/, "");
   }
 
   /** Resolve one UI-chrome key in the active locale. */
@@ -298,7 +293,7 @@ export class TillAllergenScreen extends LitElement {
   #detailItem(code: string, entry: AllergenPresence) {
     const contains = entry.presence === "contains";
     const label = contains ? this.#t("contains") : this.#t("may_contain");
-    const name = allergenName(code, this.#nameLocale());
+    const name = allergenName(code, this.#activeLocale());
     const text = entry.source ? `${name} (${entry.source})` : name;
     return html`<li class="detail-item ${contains ? "contains" : "may-contain"}">
       <span class="detail-presence">${label}</span>
@@ -348,7 +343,7 @@ export class TillAllergenScreen extends LitElement {
   }
 
   override render() {
-    const nameLocale = this.#nameLocale();
+    const activeLocale = this.#activeLocale();
     return html`
       <wt-card class="screen">
         <header class="head">
@@ -372,7 +367,7 @@ export class TillAllergenScreen extends LitElement {
                 <td class="corner"></td>
                 ${ALLERGEN_DISPLAY_ORDER.map(
                   (code) =>
-                    html`<th scope="col" class="col-head">${allergenName(code, nameLocale)}</th>`,
+                    html`<th scope="col" class="col-head">${allergenName(code, activeLocale)}</th>`,
                 )}
               </tr>
             </thead>

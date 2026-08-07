@@ -21,4 +21,9 @@ describe("allergen names", () => {
     expect(allergenName("milk", "fr")).toBe(ALLERGEN_NAMES.milk!.en);
     expect(allergenName("unknown", "es")).toBe("unknown");
   });
+
+  it("strips a BCP-47 region subtag before the lookup (es-ES → Spanish)", () => {
+    // A region tag must resolve to its language name, not fall back to English.
+    expect(allergenName("milk", "es-ES")).toBe("Leche");
+  });
 });

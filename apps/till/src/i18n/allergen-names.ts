@@ -1,3 +1,5 @@
+import type { AllergenCode } from "@waitron/catalogue";
+
 // Canonical display names for the 14 EU allergens (Regulation (EU) No 1169/2011, Annex II).
 //
 // This lives in `apps/till`, NOT in `@waitron/catalogue`, on purpose: the Spanish
@@ -14,9 +16,11 @@
 // short label "Cereales con gluten"; the Annex's full noun phrase is
 // "Cereales que contengan gluten", abbreviated here for a compact allergen chip.
 //
-// Keys MUST stay in step with `@waitron/catalogue`'s `ALLERGEN_CODES` (Task 1) — the test
-// pins the key set to that list, so adding a code there without a name here fails the suite.
-export const ALLERGEN_NAMES: Record<string, { en: string; es: string }> = {
+// Keys MUST stay in step with `@waitron/catalogue`'s `ALLERGEN_CODES` (Task 1). The `AllergenCode`
+// key type makes a missing, extra or misspelled code a COMPILE error here (the runtime test pins the
+// same set). The import is `import type`, fully erased at build, so it adds NO runtime dependency and
+// keeps the catalogue barrel out of the browser bundle — the deliberate decoupling this file relies on.
+export const ALLERGEN_NAMES: Record<AllergenCode, { en: string; es: string }> = {
   gluten: { en: "Cereals containing gluten", es: "Cereales con gluten" },
   crustaceans: { en: "Crustaceans", es: "Crustáceos" },
   eggs: { en: "Eggs", es: "Huevos" },
@@ -36,12 +40,15 @@ export const ALLERGEN_NAMES: Record<string, { en: string; es: string }> = {
 /**
  * Resolve an allergen code to its display name for `locale`.
  *
- * Resolution: the locale's name if present, else the English name, else — for a code that
- * isn't one of the EU-14 at all — the raw code, so an unknown value renders as itself
- * rather than as an empty string or a throw.
+ * `locale` may be a full BCP-47 tag ("es-ES"): the region subtag is stripped before the lookup, so
+ * "es-ES" resolves to the "es" name — matching how `t()`/the catalogues alias map already treat a
+ * region tag as its language. Resolution: the language's name if present, else the English name,
+ * else — for a code that isn't one of the EU-14 at all — the raw code, so an unknown value renders
+ * as itself rather than as an empty string or a throw.
  */
 export function allergenName(code: string, locale: string): string {
-  const entry = ALLERGEN_NAMES[code];
+  const entry = (ALLERGEN_NAMES as Record<string, { en: string; es: string }>)[code];
   if (!entry) return code;
-  return (entry as Record<string, string>)[locale] ?? entry.en;
+  const lang = locale.replace(/-.*$/, "");
+  return (entry as Record<string, string>)[lang] ?? entry.en;
 }

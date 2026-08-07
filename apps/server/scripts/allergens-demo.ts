@@ -112,12 +112,9 @@ function printMatrix(products: AvailableProduct[]): void {
   console.log("-".repeat(header.length));
 
   for (const p of products) {
+    const state = reviewState(p);
     const status =
-      reviewState(p) === "pending"
-        ? "PENDING"
-        : reviewState(p) === "none"
-          ? "reviewed: none"
-          : "reviewed";
+      state === "pending" ? "PENDING" : state === "none" ? "reviewed: none" : "reviewed";
     const row = [
       pad(label(p), nameWidth),
       ...columns.map((code, i) => pad(cell(p, code), colWidth[i]!)),
@@ -128,7 +125,9 @@ function printMatrix(products: AvailableProduct[]): void {
 
   console.log("");
   console.log("Legend:  YES = contains   YES* = contains (specific source; see lookup)");
-  console.log("         may = may contain   -  = reviewed, allergen absent   ?  = NOT yet reviewed");
+  console.log(
+    "         may = may contain   -  = reviewed, allergen absent   ?  = NOT yet reviewed",
+  );
   console.log("A `?` row is PENDING review — never treat it as allergen-free.");
 }
 
@@ -139,7 +138,9 @@ function printOperatorLookup(p: AvailableProduct): void {
 
   if (p.allergens === null) {
     console.log("  Review status: PENDING — allergens have NOT been reviewed for this product.");
-    console.log("  Do NOT treat as allergen-free. Ask the kitchen before serving an allergy guest.");
+    console.log(
+      "  Do NOT treat as allergen-free. Ask the kitchen before serving an allergy guest.",
+    );
     return;
   }
 
@@ -251,8 +252,7 @@ async function main(): Promise<void> {
     console.log("");
     // The richest product (a `contains` with a specific source) — proves the source survives the
     // db round-trip. The matrix above already shows the PENDING product distinctly.
-    const lookup =
-      products.find((p) => label(p) === "Empanada de trigo") ?? products[0];
+    const lookup = products.find((p) => label(p) === "Empanada de trigo") ?? products[0];
     if (lookup !== undefined) printOperatorLookup(lookup);
   } finally {
     await db.close();
