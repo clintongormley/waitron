@@ -13,5 +13,6 @@ export * from "./catalogue.js";
 export * from "./working-order-counters.js";
 export * from "./sales.js";
 export * from "./sale-voids.js";
+export * from "./daily-closes.js";
 export * from "./incidents.js";
 // deployment.js is deliberately NOT re-exported here — see its own file for why.
