@@ -20,6 +20,12 @@ export {
 } from "./staff.js";
 export type { StaffListEntry } from "./staff.js";
 export { hashPin, verifyPin } from "./verify-pin.js";
+export {
+  MIN_PASSWORD_LENGTH,
+  assertPasswordLength,
+  hashPassword,
+  verifyPassword,
+} from "./verify-password.js";
 
 // Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable
 // from this package's own public barrel, per the reachability rule in packages/shared/src/errors.ts.

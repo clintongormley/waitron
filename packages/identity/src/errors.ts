@@ -16,6 +16,10 @@ declare module "@waitron/shared" {
     /** A PIN below the minimum length was supplied to create/reset. `min` is the policy, never the
      * PIN. */
     "pin.too_short": { min: number };
+    /** A password below the minimum length was supplied. `min` is the policy, never the password. */
+    "password.too_short": { min: number };
+    /** The password did not verify against the stored hash. */
+    "password.invalid": Record<string, never>;
     /** No such person in this tenant (RLS-scoped): unknown id, or another tenant's. */
     "person.not_found": { personId: string };
     /** The person exists but is suspended — cannot log in or authorize. */
