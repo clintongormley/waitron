@@ -58,23 +58,35 @@ export async function openSession(
 }
 
 /**
- * Seeds a person of `role` with a known password and returns an OPEN management session for them —
- * the dashboard analogue of `openSession`. `seedPerson` leaves `password_hash` null, so it is set
- * here via a raw update (under `withTenant`) before `loginManager` verifies it. "correct horse" is
- * length 13, above `MIN_PASSWORD_LENGTH`, so a real login path accepts it. Default role `manager`
- * holds `person.manage`; pass `"staff"` for the refusal cases.
+ * Seeds a person of `role` and sets the known dashboard password "correct horse" via a raw update —
+ * `seedPerson` leaves `password_hash` null. "correct horse" is length 13, above `MIN_PASSWORD_LENGTH`,
+ * so a real login path accepts it. Returns the person id. Default role `manager` holds `person.manage`;
+ * pass `"staff"` for the refusal cases.
  */
-export async function openManagementSession(
+export async function seedPersonWithPassword(
   db: Database,
   tenantId: string,
   role: PersonRoleValue = "manager",
-): Promise<{ personId: string; sessionId: string }> {
+): Promise<string> {
   const personId = await seedPerson(db, tenantId, role);
   await withTenant(db, tenantId, (tx) =>
     tx.execute(
       sql`update persons set password_hash = ${hashPassword("correct horse")} where id = ${personId}`,
     ),
   );
+  return personId;
+}
+
+/**
+ * Seeds a person of `role` with a known password and returns an OPEN management session for them —
+ * the dashboard analogue of `openSession`.
+ */
+export async function openManagementSession(
+  db: Database,
+  tenantId: string,
+  role: PersonRoleValue = "manager",
+): Promise<{ personId: string; sessionId: string }> {
+  const personId = await seedPersonWithPassword(db, tenantId, role);
   const session = await withTenant(db, tenantId, (tx) =>
     loginManager(tx, { tenantId, personId, password: "correct horse" }),
   );

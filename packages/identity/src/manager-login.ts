@@ -35,7 +35,8 @@ export async function loginManager(
       throw new AppError("totp.invalid", {});
     }
   }
-  // Verifier seam: a passkey path (slice 1d) adds an alternative branch here that also ends in startManagementSession.
+  // Verifier seam: password (+ TOTP when enrolled) is one way to mint a management session; slice 1d's
+  // finishPasskeyAuthentication is a sibling entry point that likewise ends in startManagementSession.
   return startManagementSession(tx, { tenantId: input.tenantId, personId: input.personId });
 }
 

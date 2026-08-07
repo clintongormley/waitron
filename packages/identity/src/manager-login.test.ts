@@ -6,8 +6,7 @@ import { authenticator } from "otplib";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
-import { codeOf, seedPerson } from "../test/fixtures.js";
-import { hashPassword } from "./verify-password.js";
+import { codeOf, seedPerson, seedPersonWithPassword } from "../test/fixtures.js";
 import { authorizeManager, loginManager } from "./manager-login.js";
 
 // PGlite, not real Postgres: this suite tests the verifier LOGIC — the password/TOTP/suspended
@@ -24,13 +23,7 @@ const run = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
   withTenant(suite.db, tenantId, fn);
 
 async function seedManagerWithPassword(role: "manager" | "staff" = "manager"): Promise<string> {
-  const personId = await seedPerson(suite.db, tenantId, role);
-  await run((tx) =>
-    tx.execute(
-      sql`update persons set password_hash = ${hashPassword("correct horse")} where id = ${personId}`,
-    ),
-  );
-  return personId;
+  return seedPersonWithPassword(suite.db, tenantId, role);
 }
 
 describe("loginManager", () => {
