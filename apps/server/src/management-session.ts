@@ -1,8 +1,9 @@
-// Side-effect only: keeps this host's error-code registry (errors.ts) loaded from the file that
-// throws — the reachability convention `till-session.ts` follows (a bare import, no value used
-// here). `management_session.required` itself is DECLARED in `@waitron/identity`'s errors.ts (1a),
-// whose augmentation reaches this file transitively via `./till-session.js` importing from
-// `@waitron/identity`. See the note atop `errors.ts`.
+// This file throws only `management_session.required`, which is DECLARED in `@waitron/identity`'s
+// errors.ts (1a) and reaches here transitively via `./till-session.js` importing from
+// `@waitron/identity` — so that code is already reachable WITHOUT this line. The `import "./errors.js"`
+// is kept for consistency with `till-session.ts`, whose thrown `session.required` IS a host code that
+// makes the import genuinely load-bearing there; here it is convention only, not reachability. See the
+// note atop `errors.ts`.
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import type { Context } from "hono";

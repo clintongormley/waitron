@@ -120,10 +120,15 @@ async function run(c: Context, log: Logger, fn: () => Promise<Response>): Promis
 /**
  * Screen a `/management-api/staff/:id` path param as a UUID before it reaches a query, returning it. A
  * malformed id passed straight into a `uuid` column would `22P02` → an opaque 500; refusing it here as
- * `person.not_found` (a caller-supplied uuid, safe to echo) matches the code an absent id gets from the
- * identity call. The three gated `/staff/:id/…` routes (patch, reset-pin, set-password) pass
- * `c.req.param("id")` (a `string` in their route-typed context) and share this one guard — the
- * management parallel of till-api.ts's `requireUuidId`.
+ * `person.not_found` (a caller-supplied uuid, safe to echo) turns that 500 into a clean 404. This
+ * screens SHAPE only — it does NOT check existence: a WELL-FORMED id that names no row (a person that
+ * does not exist, or another tenant's row RLS hides) passes this guard, reaches the identity
+ * `UPDATE persons … WHERE id = <id>` (which matches zero rows and throws nothing — the staff mutations
+ * carry no `.returning()`/row-count check), and the route answers 204, the same silent no-op an
+ * out-of-range PATCH `status` gets. This is where the guard DIVERGES from till-api.ts's `requireUuidId`:
+ * that file's routes then look the row up and throw on absence; the identity staff mutations do not.
+ * The three gated `/staff/:id/…` routes (patch, reset-pin, set-password) pass `c.req.param("id")` (a
+ * `string` in their route-typed context) and share this one guard.
  */
 function requirePersonId(id: string): string {
   if (!isUuid(id)) throw new AppError("person.not_found", { personId: id });
