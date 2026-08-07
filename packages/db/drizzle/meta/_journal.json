@@ -225,6 +225,13 @@
       "when": 1786114239451,
       "tag": "0031_dusty_ronan",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1786123306261,
+      "tag": "0032_perpetual_manta",
+      "breakpoints": true
     }
   ]
 }
