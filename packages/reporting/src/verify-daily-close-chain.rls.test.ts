@@ -114,4 +114,23 @@ describe("verifyDailyCloseChain against a tampered committed chain (real Postgre
     // The rows [1, 2] walk clean; the head still says the tip is 3.
     expect(await verify()).toEqual({ ok: false, brokenAt: 3, reason: "tail_truncation" });
   });
+
+  it("catches the chain head itself deleted while closes survive", async () => {
+    // The tail-truncation check leans on the head as its authority; delete the head AND the head
+    // cross-check has nothing to compare against — the survivors [1, 2] walk clean and would report
+    // ok. But because `recordDailyClose` writes the head and the first close in ONE transaction,
+    // closes-without-head never occurs naturally, so it is unambiguously a tamper.
+    await record("2026-08-04", []);
+    await record("2026-08-05", []);
+    expect(await verify()).toEqual({ ok: true }); // control: head present, chain intact
+
+    await bypassingImmutability((tx) =>
+      tx.execute(
+        sql`delete from daily_close_chain where tenant_id = ${venue.tenantId} and node_id = ${venue.nodeId}`,
+      ),
+    );
+
+    // `brokenAt` is the surviving tip's sequence_no.
+    expect(await verify()).toEqual({ ok: false, brokenAt: 2, reason: "missing_head" });
+  });
 });

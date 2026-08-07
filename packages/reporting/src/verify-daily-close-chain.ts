@@ -14,11 +14,13 @@ import type { DailyCloseSnapshot } from "./close-types.js";
  * own frozen content (a tampered snapshot, a fabricated row). `tail_truncation` is the case the walk
  * over `daily_closes` alone is blind to — the most recent close(s) deleted, leaving the surviving
  * rows internally consistent — caught by cross-checking the `daily_close_chain` head, which records
- * the true tip. English tokens — this chain is generic (`entry_hash`/`prev_entry_hash`/`sequence_no`),
- * unlike the fiscal chain's regime vocabulary.
+ * the true tip. `missing_head` is the head row itself deleted while closes survive — a deletion of the
+ * very authority the tail-truncation check relies on, which `recordDailyClose` (head + first close in
+ * one transaction) never produces benignly. English tokens — this chain is generic
+ * (`entry_hash`/`prev_entry_hash`/`sequence_no`), unlike the fiscal chain's regime vocabulary.
  */
 export type CloseChainBreakReason =
-  "sequence" | "genesis" | "broken_link" | "hash_mismatch" | "tail_truncation";
+  "sequence" | "genesis" | "broken_link" | "hash_mismatch" | "tail_truncation" | "missing_head";
 
 /**
  * The result of re-walking a whole `(tenant, node)` close chain: `ok: true`, or the FIRST break with
@@ -45,9 +47,14 @@ export type DailyCloseChainVerification =
  * a perfectly consistent chain, so the walk returns `ok: true`; but the head still records
  * `sequence_no = 3` / `last_entry_hash = <hash 3>`, because `recordDailyClose` writes the close and
  * advances the head in ONE transaction, so the head is always exactly the true tip. So the last walked
- * close's `(sequence_no, entry_hash)` must equal the head's — a shortfall is `tail_truncation`. The
- * head is only consulted when it exists: a never-closed `(tenant, node)` has no head row and no
- * closes, and returns `ok: true` vacuously (a fresh node's chain is not broken, it is unstarted).
+ * close's `(sequence_no, entry_hash)` must equal the head's — a shortfall is `tail_truncation`.
+ *
+ * An ABSENT head is a never-closed `(tenant, node)` ONLY when there are no closes — then, and only
+ * then, `ok: true` vacuously (a fresh node's chain is not broken, it is unstarted). An absent head
+ * WITH surviving closes is not benign: because the head and the first close are written in the same
+ * transaction, closes without a head never occur naturally, so it is a deletion of the very authority
+ * the tail-truncation check depends on — a tamper that could otherwise mask a truncated tail — and is
+ * caught as `missing_head`.
  */
 export async function verifyDailyCloseChain(
   tx: Transaction,
@@ -116,13 +123,10 @@ export async function verifyDailyCloseChain(
     expectedPrev = row.entryHash;
   }
 
-  // 5. Tail-truncation cross-check against the mutable chain head. After a clean walk, `rows.length`
-  //    is the last close's `sequence_no` (contiguity guaranteed it) and `expectedPrev` is the last
-  //    close's `entry_hash` ("" for an empty chain). Both must equal what the head records as the
-  //    tip — the head is advanced in the SAME transaction as the close, so it is the authority the
-  //    surviving `daily_closes` rows cannot contradict without a shortfall showing here. Only an
-  //    EXISTING head is treated as authority; its absence means a never-closed node (no closes
-  //    either), which the empty walk already passed. Read-only, no lock — verify never mutates.
+  // 5. Cross-check the mutable chain head — the authority the surviving `daily_closes` rows cannot
+  //    contradict. After a clean walk, `rows.length` is the last close's `sequence_no` (contiguity
+  //    guaranteed it) and `expectedPrev` is its `entry_hash` ("" for an empty chain). Read-only, no
+  //    lock — verify never mutates.
   const [head] = await tx
     .select({
       sequenceNo: dailyCloseChain.sequenceNo,
@@ -131,10 +135,18 @@ export async function verifyDailyCloseChain(
     .from(dailyCloseChain)
     .where(and(eq(dailyCloseChain.tenantId, tenantId), eq(dailyCloseChain.nodeId, nodeId)));
 
-  if (
-    head !== undefined &&
-    (rows.length !== head.sequenceNo || expectedPrev !== head.lastEntryHash)
-  ) {
+  if (head === undefined) {
+    // No head. Benign ONLY for a never-closed node (no closes either). With surviving closes it is a
+    // tamper: the head and the first close are written in one transaction, so closes-without-head
+    // never occurs naturally — the authority the tail-truncation check depends on has been deleted
+    // (which could otherwise mask a truncated tail). `brokenAt` is the surviving tip's `sequence_no`.
+    if (rows.length > 0) {
+      return { ok: false, brokenAt: rows.length, reason: "missing_head" };
+    }
+    return { ok: true };
+  }
+
+  if (rows.length !== head.sequenceNo || expectedPrev !== head.lastEntryHash) {
     // The head says the chain reaches `sequenceNo`; the rows fall short (deleted tip) or their tip
     // hash disagrees (a replaced tip). `brokenAt` is the true tip the chain should have reached.
     return { ok: false, brokenAt: head.sequenceNo, reason: "tail_truncation" };
