@@ -65,6 +65,21 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.expired": 401,
   "password.invalid": 401,
   "totp.invalid": 401,
+  // Login-enumeration trade-off, ACCEPTED and recorded here (not changed). This map is SHARED with the
+  // authenticated staff routes, where 404/403 are the CORRECT semantics: the write routes
+  // (PATCH/reset-pin/password `/management-api/staff/:id`) screen `:id` with `isUuid` and refuse a
+  // malformed one as `person.not_found` (404), and `resolveManagementSession` re-reads `persons.status`
+  // on every gated request and throws `person.suspended` (403) when the logged-in manager was
+  // suspended mid-session (`packages/identity/src/management-session.ts`). A global remap to 401 to
+  // hide enumeration would mislabel both. The cost falls on the LOGIN route
+  // (`POST /management-api/session`): an unknown `personId` surfaces 404 and a suspended one 403, so a
+  // caller can distinguish either from a wrong password (`password.invalid`, 401) — where the till
+  // login deliberately maps `person.not_found → 401` instead (till-api.ts's `STATUS`). The enumeration
+  // value is negligible: active person ids are ALREADY public via the unauthenticated
+  // `GET /management-api/staff-roster` (`listActiveStaff` returns `{personId, displayName}` for every
+  // active person), so a 404-vs-401 split reveals nothing new about them; a suspended person is
+  // excluded from that roster, so a 403 can only be provoked by already holding their id — a 122-bit
+  // random v4 UUID (`persons.id` is `gen_random_uuid()`), infeasible to guess.
   "person.suspended": 403,
   "person.not_found": 404,
   "authorization.not_permitted": 403,

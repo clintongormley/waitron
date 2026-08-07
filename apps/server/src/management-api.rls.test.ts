@@ -205,6 +205,40 @@ describe("Management API over real Postgres (RLS end-to-end)", () => {
     expect(await countPersonsNamed(tenantId, "Nope")).toBe(0);
   });
 
+  it("isolates staff across tenants — a manager's roster shows only their OWN tenant's persons", async () => {
+    // Cross-tenant staff isolation (spec §2/§3/§9). Two independent provisioned venues, each with its
+    // own manager + staff. Every person across both tenants shares the same seeded display names, so
+    // the assertions key on personId — the one field that differs — rather than on displayName.
+    const a = await setupTenant();
+    const b = await setupTenant();
+    // Each `mountManagementApi` binds ONE tenant via `cfg.tenantId`, so each tenant needs its own app.
+    const appA = mountApp(a.tenantId);
+    const appB = mountApp(b.tenantId);
+
+    // Tenant A's manager lists staff: exactly A's own persons, and NEITHER of B's. This is the
+    // load-bearing differential — `listPersons` has no explicit tenant filter and relies entirely on
+    // `withTenant` + `asAppUser` RLS, so were `asAppUser` ever dropped from the handler the list would
+    // run as the superuser `suite.admin` connection (which bypasses FORCE RLS) and would leak B's rows,
+    // failing the `not.toContain` assertions below.
+    const cookieA = await login(appA, a.managerId);
+    const listedA = await appA.request("/management-api/staff", { headers: { cookie: cookieA } });
+    expect(listedA.status).toBe(200);
+    const idsA = ((await listedA.json()) as { personId: string }[]).map((p) => p.personId);
+    expect(idsA).toEqual(expect.arrayContaining([a.managerId, a.staffId]));
+    expect(idsA).not.toContain(b.managerId);
+    expect(idsA).not.toContain(b.staffId);
+
+    // The reverse direction: tenant B's manager sees only B's persons, never A's — proving the
+    // isolation is symmetric and not an artefact of which tenant was provisioned first.
+    const cookieB = await login(appB, b.managerId);
+    const listedB = await appB.request("/management-api/staff", { headers: { cookie: cookieB } });
+    expect(listedB.status).toBe(200);
+    const idsB = ((await listedB.json()) as { personId: string }[]).map((p) => p.personId);
+    expect(idsB).toEqual(expect.arrayContaining([b.managerId, b.staffId]));
+    expect(idsB).not.toContain(a.managerId);
+    expect(idsB).not.toContain(a.staffId);
+  });
+
   // ── Additional coverage: the remaining routes + guard branches ─────────────────────────────────
 
   it("logs out — ends the session, clears the cookie, and a reused cookie is refused", async () => {
