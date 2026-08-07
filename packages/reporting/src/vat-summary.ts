@@ -1,85 +1,48 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import {
-  MONEY_SCALE,
-  addDecimal,
-  compareDecimal,
-  decimal,
-  divideDecimal,
-  multiplyDecimal,
-} from "@waitron/shared";
-import type { Decimal } from "@waitron/shared";
+import { addDecimal, compareDecimal, decimal } from "@waitron/shared";
 import { activeSalesClause, businessDayClause } from "./business-day.js";
 import type { DailyCloseInput, VatSummary } from "./types.js";
 
 /**
- * `ratePercent`% of `base` (the VAT tax amount — the fiscal *cuota*), exact, half away from zero at
- * money scale. Identical composition to `@waitron/core`'s `percentOf` (packages/core/src/vat.ts) —
- * kept local so reporting depends only on db + shared, not the write layer. It reuses the same rounding
- * primitive (`divideDecimal`) as `buildVatBreakdown`, applied at the per-`(invoice, rate)` grain (the
- * `group by s.id, sl.vat_rate` below, §4).
- *
- * CAVEAT (2026-08-05, feat/catalogue-model): this MULTIPLICATIVE recompute (`base × rate`) reproduces
- * the filed cuota ONLY for a sale filed via `buildVatBreakdown` (its default). A gross-inclusive
- * catalogue sale files its cuota by the DIFFERENCE method (`gross − base`, `@waitron/catalogue`'s
- * `priceBasket` → `recordSale`'s supplied `vatBreakdown`), which can differ by a rounding céntimo per
- * (invoice, rate) group — so for such sales this daily VAT summary does NOT equal the filed
- * per-invoice cuotas. The filed difference-method desglose is not persisted queryably (it lives only
- * inside the hash-chained `registros_facturacion`; the per-rate *gross* is not stored, only the
- * per-rate base via `sale_lines.line_total`), so reporting cannot yet recompute it. Closing this needs
- * the filed desglose persisted and read here — tracked in docs/backlog.md. Not reachable until the
- * till (#7) rings catalogue sales; no such sale exists today. Named in English (not `cuotaOf`) so this
- * generic package stays inside the english-only guard.
- */
-function taxOf(base: Decimal, ratePercent: Decimal): Decimal {
-  return divideDecimal(multiplyDecimal(base, ratePercent), "100" as Decimal, MONEY_SCALE);
-}
-
-/**
- * VAT summary for one (tenant, node) over one business day, anchored on issuance. Reads `sale_lines`
- * joined to `sales`; groups by (sale, rate) so the tax (cuota) is rounded PER INVOICE and then summed
- * (design §4). Corrections (negative lines) net in for free; voided sales and F3-canje substitutes are
- * excluded. The explicit tenant/node predicates are belt-and-suspenders over RLS (mirrors
- * listOutstandingSales).
+ * VAT summary for one (tenant, node) over one business day, anchored on issuance. Reads the filed
+ * per-rate desglose from `sales.vat_breakdown` (migration 0031) — the exact cuota AEAT received,
+ * whichever method (direct or difference) filed it — by unnesting the jsonb array and summing base
+ * and tax per rate. Corrections (negative breakdowns) net in for free; voided sales and F3-canje
+ * substitutes are excluded. The explicit tenant/node predicates are belt-and-suspenders over RLS
+ * (mirrors listOutstandingSales).
  */
 export async function computeVatSummary(
   tx: Transaction,
   input: DailyCloseInput,
 ): Promise<VatSummary> {
-  const { rows } = await tx.execute<{ rate: string; base: string }>(sql`
+  const { rows } = await tx.execute<{ rate: string; base: string; tax: string }>(sql`
     select
-      sl.vat_rate::text as rate,
-      sum(sl.line_total)::numeric(12, 2)::text as base
+      b->>'rate' as rate,
+      sum((b->>'base')::numeric(12, 2))::numeric(12, 2)::text as base,
+      sum((b->>'tax')::numeric(12, 2))::numeric(12, 2)::text as tax
     from sales s
-    join sale_lines sl on sl.sale_id = s.id and sl.tenant_id = ${input.tenantId}
+    cross join lateral jsonb_array_elements(s.vat_breakdown) as b
     where s.tenant_id = ${input.tenantId}
       and s.node_id = ${input.nodeId}
       and ${businessDayClause(sql`s.issued_at`, input)}
       and ${activeSalesClause(input)}
-    group by s.id, sl.vat_rate
+    group by b->>'rate'
   `);
 
-  // Per (sale, rate) rows → tax per row (per-invoice rounding) → accumulate by rate.
-  const byRate = new Map<string, { rate: Decimal; base: Decimal; tax: Decimal }>();
+  // One row per rate already (grouped in SQL); build VatRateLine[] straight from the filed figures,
+  // sorted numerically (compareDecimal, not the SQL text order — 4.00 must precede 21.00).
+  const lines = rows
+    .map((r) => ({ rate: decimal(r.rate), base: decimal(r.base), tax: decimal(r.tax) }))
+    .sort((a, b) => compareDecimal(a.rate, b.rate));
+
   let baseTotal = decimal("0.00");
   let taxTotal = decimal("0.00");
-  for (const r of rows) {
-    const rate = decimal(r.rate);
-    const base = decimal(r.base);
-    const tax = taxOf(base, rate);
-    const acc = byRate.get(r.rate);
-    if (acc === undefined) {
-      byRate.set(r.rate, { rate, base, tax });
-    } else {
-      acc.base = addDecimal(acc.base, base);
-      acc.tax = addDecimal(acc.tax, tax);
-    }
-    baseTotal = addDecimal(baseTotal, base);
-    taxTotal = addDecimal(taxTotal, tax);
+  for (const line of lines) {
+    baseTotal = addDecimal(baseTotal, line.base);
+    taxTotal = addDecimal(taxTotal, line.tax);
   }
 
-  // The map values are already exactly VatRateLine; return them sorted, no rebuild.
-  const lines = [...byRate.values()].sort((a, b) => compareDecimal(a.rate, b.rate));
   return {
     byRate: lines,
     baseTotal,

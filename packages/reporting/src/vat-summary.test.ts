@@ -197,4 +197,64 @@ describe("computeVatSummary", () => {
     // Close runs for the venue's node A — only its 100.00, never node B's 200.00.
     expect((await run()).byRate).toEqual([{ rate: "21.00", base: "100.00", tax: "21.00" }]);
   });
+
+  it("reports the filed difference-method tax exactly for catalogue sales", async () => {
+    // A gross-inclusive catalogue sale files its cuota by the DIFFERENCE method (gross − base), which
+    // can land a rounding céntimo away from round(base × rate). We file such a desglose directly and
+    // assert the summary returns THAT figure, not the multiplicative recompute the old sale_lines
+    // query produced (21.00 and 5.00 below).
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "176.00",
+      lines: [
+        { vatRate: "21.00", lineTotal: "100.00" },
+        { vatRate: "10.00", lineTotal: "50.00" },
+      ],
+      vatBreakdown: [
+        { rate: "21.00", base: "100.00", tax: "20.99" }, // multiplicative would be 21.00
+        { rate: "10.00", base: "50.00", tax: "5.01" }, // multiplicative would be 5.00
+      ],
+    });
+    const vat = await run();
+    expect(vat.byRate).toEqual([
+      { rate: "10.00", base: "50.00", tax: "5.01" },
+      { rate: "21.00", base: "100.00", tax: "20.99" },
+    ]);
+    expect(vat).toMatchObject({ baseTotal: "150.00", taxTotal: "26.00", grossTotal: "176.00" });
+  });
+
+  it("nets a correction's negative filed breakdown into the rate", async () => {
+    // Both original and correction file difference-method cuotas. The filed net (18.89) differs from
+    // the multiplicative net the old query gave (21.00 − 2.10 = 18.90), so this fails until the
+    // summary reads the filed breakdown.
+    const original = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "120.99",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+      vatBreakdown: [{ rate: "21.00", base: "100.00", tax: "20.99" }],
+    });
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: noonUtc,
+      total: "-12.10",
+      correctsSaleId: original,
+      lines: [{ vatRate: "21.00", lineTotal: "-10.00" }],
+      vatBreakdown: [{ rate: "21.00", base: "-10.00", tax: "-2.10" }],
+    });
+    expect((await run()).byRate).toEqual([{ rate: "21.00", base: "90.00", tax: "18.89" }]);
+  });
+
+  it("still matches a direct-method sale (default buildVatBreakdown-shaped breakdown)", async () => {
+    // Regression: with no override the fixture derives base × rate — the direct method — so the
+    // summary must equal it. Non-round base to exercise the per-invoice rounding on the read path.
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "40.33",
+      lines: [{ vatRate: "21.00", lineTotal: "33.33" }],
+    });
+    expect((await run()).byRate).toEqual([{ rate: "21.00", base: "33.33", tax: "7.00" }]);
+  });
 });
