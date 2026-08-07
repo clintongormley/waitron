@@ -302,6 +302,10 @@ describe("recordVoid — numbering", () => {
           issuedAt: BASE.toISOString(),
           issuedOffsetMinutes: 60,
           total: "1.00",
+          // The filed per-rate desglose; `[]` — supplied so the insert reaches the
+          // duplicate-invoice-number unique violation (23505) under test rather than tripping the
+          // column's own NOT NULL (23502) first.
+          vatBreakdown: [],
           locale: "es-ES",
           invoiceLocales: ["es-ES"],
           fiscalBackend: "fake",

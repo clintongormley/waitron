@@ -262,11 +262,11 @@ export async function seedSale(
 ): Promise<string> {
   const { rows } = await db.execute<{ id: string }>(sql`
     insert into sales (tenant_id, till_id, node_id, series_id, invoice_number, issued_at,
-                       issued_offset_minutes, total, locale, invoice_locales, fiscal_backend,
-                       fiscal_state)
+                       issued_offset_minutes, total, vat_breakdown, locale, invoice_locales,
+                       fiscal_backend, fiscal_state)
     values (${till.tenantId}, ${till.tillId}, ${till.nodeId}, ${till.seriesId}, ${invoiceNumber},
             '2026-07-20T19:20:30+02:00', 120,
-            '0.00',
+            '0.00', '[]'::jsonb,
             'es', array['es'], 'verifactu', 'recorded')
     returning id
   `);

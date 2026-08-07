@@ -1,9 +1,14 @@
 import { sql } from "drizzle-orm";
 import {
+  MONEY_SCALE,
+  addDecimal,
   locationId as brandLocationId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
+  decimal,
+  divideDecimal,
+  multiplyDecimal,
 } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { saleLines, saleSubstitutions, saleVoids, sales, tenders } from "@waitron/db";
@@ -67,6 +72,31 @@ export async function seedTill(
   return brandTillId(till.rows[0]!.id);
 }
 
+/**
+ * The filed per-rate desglose a real sale would carry on `sales.vat_breakdown`,
+ * derived here from the fixture's own lines so the seeded breakdown is COHERENT with them: lines are
+ * grouped by `vatRate`, each group's `base` is the summed `lineTotal`, and its `tax` is
+ * `base * rate / 100` rounded to money scale — the same direct-method grouping `@waitron/core`'s
+ * `buildVatBreakdown` performs (inlined, not imported: reporting does not depend on core).
+ */
+function breakdownFromLines(
+  lines: Array<{ vatRate: string; lineTotal: string }>,
+): { rate: string; base: string; tax: string }[] {
+  const bases = new Map<string, string>();
+  for (const line of lines) {
+    const prev = bases.get(line.vatRate);
+    bases.set(
+      line.vatRate,
+      prev === undefined ? line.lineTotal : addDecimal(decimal(prev), decimal(line.lineTotal)),
+    );
+  }
+  return [...bases.entries()].map(([rate, base]) => ({
+    rate,
+    base,
+    tax: divideDecimal(multiplyDecimal(decimal(base), decimal(rate)), decimal("100"), MONEY_SCALE),
+  }));
+}
+
 export async function seedSale(
   db: Database,
   seed: { tenantId: TenantId; tillId: TillId; nodeId: NodeId; seriesId: SeriesId },
@@ -76,6 +106,8 @@ export async function seedSale(
     total: string;
     lines: Array<{ vatRate: string; lineTotal: string }>;
     correctsSaleId?: SaleId;
+    /** Overrides the breakdown derived from `lines`, for a test that needs a specific desglose. */
+    vatBreakdown?: { rate: string; base: string; tax: string }[];
   },
 ): Promise<SaleId> {
   const [row] = await db
@@ -89,6 +121,7 @@ export async function seedSale(
       issuedAt: opts.issuedAt,
       issuedOffsetMinutes: 0,
       total: opts.total,
+      vatBreakdown: opts.vatBreakdown ?? breakdownFromLines(opts.lines),
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
       fiscalBackend: "fake",

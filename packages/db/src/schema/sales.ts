@@ -105,6 +105,12 @@ export const sales = pgTable(
     issuedAt: timestamp("issued_at", { withTimezone: true, mode: "string" }).notNull(),
     issuedOffsetMinutes: integer("issued_offset_minutes").notNull(),
     total: numeric("total", { precision: 12, scale: 2 }).notNull(),
+    // The filed per-rate VAT desglose ({rate, base, tax}[]) — the SAME breakdown written into the
+    // hash-chained registro, stored here queryably for reporting. Written once at INSERT (sales is
+    // immutable); NOT a recompute. Reporting reads this for an exact VAT summary (spec 8a).
+    vatBreakdown: jsonb("vat_breakdown")
+      .$type<{ rate: string; base: string; tax: string }[]>()
+      .notNull(),
     locale: text("locale").notNull(),
     invoiceLocales: text("invoice_locales").array().notNull(),
     fiscalBackend: text("fiscal_backend").notNull(),

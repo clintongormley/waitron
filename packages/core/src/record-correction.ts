@@ -226,6 +226,11 @@ export async function recordCorrection(
   // persistent lock, so they do not affect that order.
   const invoiceNumber = await allocateInvoiceNumber(tx, input.seriesId);
 
+  // The corrective's VAT desglose, resolved ONCE so the SAME value feeds both the `sales` row below
+  // and `backend.recordCorrection` further down (spec 8a's single-source rule): storing it on
+  // `sales.vat_breakdown` is a queryable copy of the already-filed data, never a second recompute.
+  const vatBreakdown = buildVatBreakdown(input.lines);
+
   // Step 6. The corrective sale: a negative `total` (allowed by the relaxed CHECK because
   // `corrects_sale_id` is set), `fiscalState: "recorded"`, and `locale`/`invoiceLocales` inherited
   // from the original. NO settlement and NO tenders — the refund is decoupled (spec §4).
@@ -236,6 +241,7 @@ export async function recordCorrection(
       tillId: input.tillId,
       nodeId: input.nodeId,
       seriesId: input.seriesId,
+      vatBreakdown,
       invoiceNumber,
       issuedAt: now.instant.toISOString(),
       issuedOffsetMinutes: now.offsetMinutes,
@@ -323,7 +329,8 @@ export async function recordCorrection(
       offsetMinutes: now.offsetMinutes,
       descriptionOfOperation: location.operationDescription,
       total: decimal(input.total),
-      vatBreakdown: buildVatBreakdown(input.lines),
+      // The SAME breakdown stored on `sales.vat_breakdown` above — one variable feeds both (spec 8a).
+      vatBreakdown,
       counterparty: null,
     },
     { correctsSaleId: input.correctsSaleId },

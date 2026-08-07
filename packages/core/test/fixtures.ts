@@ -123,7 +123,12 @@ export async function seedRectificativeSeries(
 export async function seedBareSale(
   db: Database,
   seed: { tenantId: TenantId; tillId: TillId; nodeId: NodeId; seriesId: SeriesId },
-  overrides: { total?: string; invoiceNumber?: number; correctsSaleId?: SaleId } = {},
+  overrides: {
+    total?: string;
+    invoiceNumber?: number;
+    correctsSaleId?: SaleId;
+    vatBreakdown?: { rate: string; base: string; tax: string }[];
+  } = {},
 ): Promise<SaleId> {
   const [row] = await db
     .insert(sales)
@@ -136,6 +141,10 @@ export async function seedBareSale(
       issuedAt: new Date("2026-03-01T12:00:00Z").toISOString(),
       issuedOffsetMinutes: 0,
       total: overrides.total ?? "65.00",
+      // The filed per-rate desglose. Defaults to `[]`: a bare original planted for a
+      // correction test carries no line detail here, and the correction's OWN breakdown is what those
+      // tests exercise (via recordCorrection). Overridable for a test that needs a specific one.
+      vatBreakdown: overrides.vatBreakdown ?? [],
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
       fiscalBackend: "fake",

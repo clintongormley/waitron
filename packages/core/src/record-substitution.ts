@@ -237,6 +237,11 @@ export async function recordSubstitution(
   // persistent lock.
   const invoiceNumber = await allocateInvoiceNumber(tx, input.seriesId);
 
+  // The F3's VAT desglose, resolved ONCE so the SAME value feeds both the `sales` row below and
+  // `backend.recordSubstitution` further down (spec 8a's single-source rule): storing it on
+  // `sales.vat_breakdown` is a queryable copy of the already-filed data, never a second recompute.
+  const vatBreakdown = buildVatBreakdown(input.lines);
+
   // Step 6. The F3 sale: a POSITIVE `total` (the ordinary `total >= 0` arm applies — `corrects_sale_id`
   // stays NULL, an F3 is not a rectificativa), `fiscalState: "recorded"`, the recipient written to the
   // three `counterparty_*` columns, and the caller-supplied `locale`/`invoiceLocales`. NO settlement
@@ -248,6 +253,7 @@ export async function recordSubstitution(
       tillId: input.tillId,
       nodeId: input.nodeId,
       seriesId: input.seriesId,
+      vatBreakdown,
       invoiceNumber,
       issuedAt: now.instant.toISOString(),
       issuedOffsetMinutes: now.offsetMinutes,
@@ -357,7 +363,8 @@ export async function recordSubstitution(
       offsetMinutes: now.offsetMinutes,
       descriptionOfOperation: location.operationDescription,
       total: decimal(input.total),
-      vatBreakdown: buildVatBreakdown(input.lines),
+      // The SAME breakdown stored on `sales.vat_breakdown` above — one variable feeds both (spec 8a).
+      vatBreakdown,
       counterparty: input.counterparty,
     },
     { substitutedSaleIds: input.substitutedSaleIds },

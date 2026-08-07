@@ -357,6 +357,61 @@ describe("recordSale — the happy path", () => {
     const [record] = await backend.recordsFor(nodeId);
     expect(record?.total).toBe("9.68");
   });
+
+  it("stores the filed vatBreakdown on sales, equal to what the backend filed", async () => {
+    // The single-source guarantee (spec 8a): the breakdown written to `sales.vat_breakdown` is the
+    // SAME variable filed into the hash-chained registro — never a second, recomputed one. Proven by
+    // filing a mixed-rate sale with a caller-supplied DIFFERENCE-METHOD breakdown whose 21% cuota
+    // (1.74) is deliberately NOT `percentOf(base, rate)` (8.26 * 21% = 1.73), then reading BOTH the
+    // stored `sales.vat_breakdown` and the filed desglose (`FakeFiscalBackend.filedReceiptFor`,
+    // inverted from `fake_fiscal_records`) back and asserting they carry the same per-rate base and
+    // tax. Were the sale insert to recompute from `lines` (or file any second breakdown), the stored
+    // 21% tax would read 1.73 and this would fail — which is exactly what the mutation in this task's
+    // report exercises. Reconciles with `total` (8.26 + 1.74 + 5.00 + 0.50 = 15.50), so it passes
+    // `recordSale`'s own `sale.total_mismatch` precondition; `deferred` settlement keeps the sale off
+    // the tender-coverage identity so the breakdown is the only thing under test.
+    const backend = new FakeFiscalBackend(suite.db);
+    const filedBreakdown: VatBreakdownLine[] = [
+      { rate: decimal("21.00"), base: decimal("8.26"), tax: decimal("1.74") },
+      { rate: decimal("10.00"), base: decimal("5.00"), tax: decimal("0.50") },
+    ];
+    const { saleId } = await run(backend, {
+      total: "15.50",
+      vatBreakdown: filedBreakdown,
+      lines: [
+        {
+          lineNo: 1,
+          descriptions: { "es-ES": "Café solo" },
+          quantity: "1",
+          unitPrice: "8.26",
+          vatRate: "21.00",
+          lineTotal: "8.26",
+        },
+        {
+          lineNo: 2,
+          descriptions: { "es-ES": "Agua" },
+          quantity: "1",
+          unitPrice: "5.00",
+          vatRate: "10.00",
+          lineTotal: "5.00",
+        },
+      ],
+      settlement: { kind: "deferred" },
+    });
+
+    const sortByRate = <T extends { rate: string }>(g: readonly T[]): T[] =>
+      [...g].sort((a, b) => a.rate.localeCompare(b.rate));
+
+    const [saleRow] = await suite.db
+      .select({ vb: sales.vatBreakdown })
+      .from(sales)
+      .where(eq(sales.id, saleId));
+    const filed = await suite.db.transaction((tx) => backend.filedReceiptFor(tx, saleId));
+
+    expect(sortByRate(saleRow!.vb)).toEqual(sortByRate(filed!.vatBreakdown));
+    // And it is the FILED difference-method cuota, not `percentOf(base, rate)`: 1.74, not 1.73.
+    expect(saleRow!.vb.find((g) => g.rate === "21.00")?.tax).toBe("1.74");
+  });
 });
 
 describe("recordSale — operator attribution", () => {
@@ -742,6 +797,10 @@ describe("recordSale — numbering", () => {
           issuedAt: BASE.toISOString(),
           issuedOffsetMinutes: 60,
           total: "1.00",
+          // The filed per-rate desglose; `[]` — supplied so the insert reaches the
+          // duplicate-invoice-number unique violation (23505) under test rather than tripping the
+          // column's own NOT NULL (23502) first.
+          vatBreakdown: [],
           locale: "es-ES",
           invoiceLocales: ["es-ES"],
           fiscalBackend: "fake",

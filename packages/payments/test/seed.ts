@@ -79,10 +79,10 @@ export async function seedSale(db: Database, seeded: Seeded): Promise<string> {
     const sale = await tx.execute<{ id: string }>(sql`
       insert into sales (
         tenant_id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes,
-        total, locale, invoice_locales, fiscal_backend, fiscal_state
+        total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state
       ) values (
         ${seeded.tenantId}, ${seeded.tillId}, ${seeded.nodeId}, ${seriesId}, 1, now(), 60,
-        '10.00', 'es', array['es'], 'fake', 'not_applicable'
+        '10.00', '[]'::jsonb, 'es', array['es'], 'fake', 'not_applicable'
       ) returning id`);
     const saleId = sale.rows[0].id;
     await tx.execute(sql`

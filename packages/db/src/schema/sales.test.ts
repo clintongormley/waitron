@@ -82,6 +82,11 @@ function saleValues(overrides: Record<string, unknown> = {}) {
     issuedAt: AT,
     issuedOffsetMinutes: 120,
     total: "1.00",
+    // The filed per-rate desglose. `[]` here because these fixtures do not exercise
+    // the breakdown — the column is just NOT NULL and must carry a valid jsonb array; the tests that
+    // DO care about its content are record-sale.test.ts (the equality-to-filed proof) and the
+    // information_schema column assertion below.
+    vatBreakdown: [] as { rate: string; base: string; tax: string }[],
     locale: "es",
     invoiceLocales: ["es", "ca"],
     fiscalBackend: "verifactu",
@@ -215,6 +220,19 @@ describeEachTarget("sales — the commercial record", (target) => {
     }
   });
 
+  it("stores vat_breakdown as a NOT NULL jsonb column", async () => {
+    // vat_breakdown: the filed per-rate desglose ({rate, base, tax}[]), a queryable copy of what the
+    // hash-chained registro carries, so reporting can compute an exact VAT summary without a
+    // cross-boundary join (spec 8a). NOT NULL is load-bearing — it is the forcing function that made
+    // every sale-creating path populate it — so both the type AND the nullability are pinned here.
+    const [meta] = await rows<{ data_type: string; is_nullable: string }>(
+      db,
+      sql`select data_type, is_nullable from information_schema.columns
+           where table_name = 'sales' and column_name = 'vat_breakdown'`,
+    );
+    expect(meta).toEqual({ data_type: "jsonb", is_nullable: "NO" });
+  });
+
   it("sums line totals exactly, with no float drift", async () => {
     // 0.10, 0.20 and 0.70 are not exactly representable in binary64. This
     // test's actual bite, though, is not the drift value itself: verified
@@ -312,10 +330,10 @@ describeEachTarget("sales — the commercial record", (target) => {
       db.execute(
         sql`insert into sales (
                tenant_id, till_id, series_id, invoice_number, issued_at, issued_offset_minutes,
-               total, locale, invoice_locales, fiscal_backend, fiscal_state
+               total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state
              ) values (
                ${TENANT_A}, ${TILL_A1}, ${seriesA}, 2, ${AT}, 120,
-               '1.00', 'es', array['es', 'ca']::text[], 'verifactu', 'recorded'
+               '1.00', '[]'::jsonb, 'es', array['es', 'ca']::text[], 'verifactu', 'recorded'
              )`,
       ),
     );
@@ -935,11 +953,11 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
       db,
       sql`insert into sales (
              tenant_id, till_id, node_id, series_id, invoice_number, issued_at,
-             issued_offset_minutes, total, locale, invoice_locales, fiscal_backend, fiscal_state,
-             corrects_sale_id
+             issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend,
+             fiscal_state, corrects_sale_id
            ) values (
              ${tenantId}, ${tillId}, ${nodeId}, ${seriesId}, ${opts.invoiceNumber}, ${AT}, 120,
-             ${opts.total}, 'es', ${localesArray}, 'verifactu', 'recorded',
+             ${opts.total}, '[]'::jsonb, 'es', ${localesArray}, 'verifactu', 'recorded',
              ${opts.correctsSaleId}
            ) returning id`,
     );

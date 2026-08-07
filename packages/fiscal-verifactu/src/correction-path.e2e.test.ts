@@ -123,10 +123,10 @@ async function seedCorrectiveRow(
 ): Promise<string> {
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
     insert into sales (tenant_id, till_id, node_id, series_id, invoice_number, issued_at,
-                       issued_offset_minutes, total, corrects_sale_id,
+                       issued_offset_minutes, total, vat_breakdown, corrects_sale_id,
                        locale, invoice_locales, fiscal_backend, fiscal_state)
     values (${till.tenantId}, ${till.tillId}, ${till.nodeId}, ${rectificativeSeriesId}, ${invoiceNumber},
-            '2026-03-02T12:05:00+01:00', 60, ${total}, ${correctsSaleId},
+            '2026-03-02T12:05:00+01:00', 60, ${total}, '[]'::jsonb, ${correctsSaleId},
             'es', array['es'], 'verifactu', 'recorded')
     returning id
   `);
