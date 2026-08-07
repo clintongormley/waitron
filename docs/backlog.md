@@ -45,6 +45,20 @@ Run in parallel at the feature level. **Caveat:** both likely add a `packages/db
 package — the collision is per-package (five packages carry their own `drizzle/`), so their migration
 files must be sequenced (rebase one on the other) even while the feature work proceeds concurrently.
 
+**Management dashboard added 2026-08-07 (building).** The owner's off-premises management console —
+designed and fully planned this session
+([spec](superpowers/specs/2026-08-07-management-dashboard-design.md); plans
+[1a](superpowers/plans/2026-08-07-dashboard-slice1a-identity-auth-foundation.md),
+[1b](superpowers/plans/2026-08-07-dashboard-slice1b-server-management-api.md),
+[1c](superpowers/plans/2026-08-07-dashboard-slice1c-dashboard-app.md),
+[1d](superpowers/plans/2026-08-07-dashboard-slice1d-passkeys.md)). It is a **local-server app**
+(`apps/dashboard`) consuming the existing headless APIs, with **remote access decoupled as a pluggable
+transport** (tunnel-first, snitun-pattern reimplemented in Node; Spain-hosted cloud removes ROF art.
+22.2). Slice 1 = staff admin + an offline-verifiable **passkey / password+TOTP** auth floor, delivered
+as four sub-slices (identity → server API → dashboard app → passkeys); **1a is in flight**. Known gap:
+a true first login is blocked on a small **provisioning** follow-up (the seeded admin has a PIN but no
+dashboard password) — every subsequent person is covered by 1b's `setPassword`.
+
 **Prioritisation is by soundness, not the calendar (decided 2026-08-02).** Waitron will be finished
 before the deli is ready to trade, so the deli's 1-Jan-2027 legal deadline is *not* a reason to rank
 one piece of work above another — order by dependency, correctness, and de-risking the most-reused /
@@ -58,7 +72,7 @@ most-uncertain foundations first.
 | --- | --- |
 | **Menu & allergens** (sub-project 18) — launch-day legal duty (EU 1169/2011, RD 126/2015) | Chosen 2026-08-07, not started. Seeds off the catalogue (#59); recipes/BOM is the linchpin; the allergen list is a food-safety-advisor call |
 | **Reporting — *cierre Z*** (sub-project 8) — frozen/signed daily close | Chosen 2026-08-07, not started. Numbered, immutable, counted-cash / opening float / *descuadre*; `computeDailyClose` (#56) left the seam |
-| **Backlog cleanup** — prune finished work; promote the two above | In flight (this change) |
+| **Management dashboard** — owner's off-premises console (slice 1a) | Designed + fully planned 2026-08-07 (spec + plans 1a–1d, see *Current direction*). **Slice 1a (identity auth foundation) in flight**; local-server `apps/dashboard`, remote via a pluggable tunnel. Blocked end-to-end on a provisioning follow-up (first-admin password) |
 
 ---
 
