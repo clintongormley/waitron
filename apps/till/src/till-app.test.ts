@@ -59,6 +59,11 @@ const till = {
   venueName: "Bar Pepe",
   nif: "B12345678",
   orderFlow: "prepay" as const,
+  // Both always present on the real `GET /api/till` (`TillInfo`'s own doc) — defaulted here to the
+  // manual (datáfono) Card path, `"none"`, so every pre-Task-9 test below (which never touches these
+  // two fields) keeps exercising #62's unchanged behaviour rather than the integrated one.
+  cardProvider: "none" as const,
+  tipsEnabled: false,
 };
 
 const placedResult = {
@@ -972,9 +977,10 @@ describe("till-app", () => {
       expect(counter(el)).not.toBeNull();
       expect(c.store.lines).toHaveLength(1);
       expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
-      // Not marked `private` (unlike errorKey/screen/result): Task 9's consuming widget does not exist
-      // yet, so there is no rendered DOM to read this outcome through — every other state field in this
-      // file is asserted via rendered output instead.
+      // `cardOutcome` is `private` (TS's `private` is compile-time only, so the cast through
+      // `unknown` still reads its real runtime value). `till-tender-pay` (Task 9) is the real reader
+      // now — its own tests cover the rendered retry/switch-tender/wait output — so this layer stays
+      // scoped to till-app's own state, the same way every other assertion in this file does.
       expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe("declined");
       // The held list is re-read only on a captured outcome — nothing settled here, so no re-read.
       expect(currentApi.listWorkingOrders).toHaveBeenCalledOnce();
@@ -1022,8 +1028,8 @@ describe("till-app", () => {
     // Fix round 1 (Important): cardOutcome must not survive the basket it describes being replaced.
     // errorKey is reset at every user action; cardOutcome was only reset in #onCollectCard itself and
     // #onNewSale, so a decline on basket A leaked into whatever basket the operator moved to next via
-    // Park or Retrieve. Zero blast radius today (the counter doesn't thread `.cardOutcome` anywhere
-    // yet), but Task 9 would inherit the staleness the moment it wires the field through.
+    // Park or Retrieve. Task 9 now threads `.cardOutcome` through `till-counter-screen`/`till-tender-pay`,
+    // so a stale value here would reach the rendered card_outcome screen without this reset.
     it("park: a declined cardOutcome does not survive into the NEXT (empty) basket", async () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
       const { el } = await mountApp({ pay });
@@ -1200,6 +1206,49 @@ describe("till-app", () => {
         id: "wo-1",
         lines: [{ productId: "cafe", quantity: "2" }],
       });
+    });
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  // Integrated card wiring (Task 9): `cardProvider`/`tipsEnabled`, read once from `GET /api/till`
+  // (#boot), and `cardOutcome` (Task 8's state) all reach the REAL nested `till-tender-pay` — through
+  // `till-counter-screen`, exactly like `orderFlow`/`stage` above (per-mode pay control).
+  // ---------------------------------------------------------------------------------------------
+
+  describe("integrated card wiring (Task 9): threaded from GET /api/till to the widget", () => {
+    it("defaults cardProvider 'none'/tipsEnabled false, reproducing the #62 manual path unchanged", async () => {
+      const { el } = await mountApp(); // the till fixture defaults cardProvider: "none"
+      await toCounter(el);
+      expect(tenderPay(el).cardProvider).toBe("none");
+      expect(tenderPay(el).tipsEnabled).toBe(false);
+    });
+
+    it("threads a real integrated cardProvider + tipsEnabled through to the widget", async () => {
+      const { el } = await mountApp({
+        getTill: vi
+          .fn()
+          .mockResolvedValue({ ...till, cardProvider: "stripe_on_device", tipsEnabled: true }),
+      });
+      await toCounter(el);
+      expect(tenderPay(el).cardProvider).toBe("stripe_on_device");
+      expect(tenderPay(el).tipsEnabled).toBe(true);
+    });
+
+    it("threads a declined cardOutcome through to the widget, driving its card_outcome view", async () => {
+      const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, cardProvider: "stripe_terminal" }),
+        pay,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      expect(tenderPay(el).cardOutcome).toBe("declined");
+      expect(tenderPay(el).shadowRoot!.querySelector(".retry")).not.toBeNull();
     });
   });
 

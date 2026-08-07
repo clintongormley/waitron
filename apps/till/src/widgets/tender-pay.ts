@@ -6,8 +6,9 @@ import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import "./numeric-pad.js";
 import { StoreChangeController } from "../state/store-controller.js";
-import type { OrderFlow, TillProduct } from "../api/client.js";
+import type { OrderFlow, PayOutcome, TillProduct } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
+import type { PropertyValues } from "lit";
 
 /**
  * The payload of the `confirm-payment` event — either tender the widget can settle:
@@ -26,16 +27,45 @@ export interface ParkOrderDetail {
   label?: string;
 }
 
+/**
+ * The payload of the `collect-card` event (integrated card terminal, sub-project 7 Task 8/9) — the
+ * till-entered gross tip and any per-transaction staff consent to accept the card offline if the
+ * network is down, both optional. Emitted by `#onCardTap`/`#retryCard` below and consumed by
+ * `till-app`'s `#onCollectCard`, which posts it to `POST /api/pay` almost verbatim. Owned here, like
+ * `ConfirmPaymentDetail`/`ParkOrderDetail` above, because this widget is the one that emits it — it
+ * used to live on `till-app.ts` (Task 8, before this widget existed to own it).
+ */
+export interface CollectCardDetail {
+  tip?: string;
+  allowOffline?: boolean;
+}
+
+/**
+ * The till's integrated-card wiring (Task 8/9), mirroring `GET /api/till`'s `cardProvider`
+ * (`TillInfo`, `../api/client.js`) as a LOCAL type — same decoupling as every alias in that file.
+ * `"none"` keeps the Card button on the #62 manual (datáfono) path; the other two make it emit
+ * `collect-card` instead.
+ */
+export type CardProvider = "none" | "stripe_terminal" | "stripe_on_device";
+
+/**
+ * The non-`captured` variants of `POST /api/pay`'s outcome (`PayOutcome`, `../api/client.js`) — the
+ * shape `till-app`'s `cardOutcome` carries and this widget reads to drive the `"card_outcome"` view
+ * (see `willUpdate`).
+ */
+export type CardOutcome = Exclude<PayOutcome, { outcome: "captured" }>["outcome"];
+
 /** Zero, precomputed — the floor a kg entry must clear to be a real weight. */
 const ZERO = decimal("0");
 
 /**
- * One widget, five VIEWS: the idle buttons, the cash-tender screen, the kg-weight screen, the hold
- * label prompt, and the card-tender screen. Named `View` (not `Mode`) to keep it distinct from the
- * {@link TillTenderPay.mode} property below, which is the per-VENUE pay-timing mode (7c) — an
- * unrelated axis the widget also renders against.
+ * One widget, seven VIEWS: the idle buttons, the cash-tender screen, the kg-weight screen, the hold
+ * label prompt, the manual card-tender screen, and (Task 9, integrated card terminal) the
+ * `"collecting"` spinner and the `"card_outcome"` decline/timeout/network-unavailable screen. Named
+ * `View` (not `Mode`) to keep it distinct from the {@link TillTenderPay.mode} property below, which
+ * is the per-VENUE pay-timing mode (7c) — an unrelated axis the widget also renders against.
  */
-type View = "idle" | "paying" | "weighing" | "holding" | "card";
+type View = "idle" | "paying" | "weighing" | "holding" | "card" | "collecting" | "card_outcome";
 
 /**
  * The pay flow and the kg-weight entry — the two moments the walk-up sale needs a numeric keypad.
@@ -68,6 +98,15 @@ type View = "idle" | "paying" | "weighing" | "holding" | "card";
  *    uses (keypad, change, the optional card ref field) are reused — only their idle button's label
  *    and their terminal event's name differ: `collect-order` instead of `confirm-payment` (see
  *    `#confirm`/`#confirmCard`). No Hold (a placed order is not something you park again).
+ *
+ * INTEGRATED CARD (Task 9, sub-project 7). When {@link cardProvider} is not `"none"`, the SAME idle
+ * Card button takes a different path: `#onCardTap` reads the idle screen's tip/offline-consent
+ * fields and emits `collect-card` (not `confirm-payment`/`collect-order`) instead of opening the
+ * manual `#renderCard` screen, and the widget enters `"collecting"` (a spinner + a Cancel that is a
+ * CLIENT-SIDE ABORT ONLY — see `#cancel`'s own doc). `willUpdate` reacts to {@link cardOutcome} —
+ * data on a prop from `till-app`'s `#onCollectCard` (Task 8), not an event — by entering
+ * `"card_outcome"`, which offers Retry / Switch tender / Wait. `cardProvider === "none"` leaves every
+ * one of these untouched: `#onCardTap` falls straight through to `#startCard`.
  */
 @customElement("till-tender-pay")
 export class TillTenderPay extends LitElement {
@@ -129,12 +168,22 @@ export class TillTenderPay extends LitElement {
       .park,
       .confirm,
       .add,
-      .cancel {
+      .cancel,
+      .retry,
+      .switch-tender,
+      .wait {
         width: 100%;
       }
 
       .label-input,
       .ref-input {
+        margin-bottom: var(--wt-space-3);
+      }
+
+      .card-extras {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
         margin-bottom: var(--wt-space-3);
       }
     `,
@@ -164,6 +213,22 @@ export class TillTenderPay extends LitElement {
    * Ignored entirely when {@link mode} is `"prepay"` — a prepay sale has no separate collect stage.
    */
   @property() stage: "order" | "collect" = "order";
+  /**
+   * The till's integrated-card wiring (Task 9, threaded from `till-app`'s `GET /api/till` via
+   * `till-counter-screen`). `"none"` (the default) keeps the Card button on the #62 manual
+   * (datáfono) path — every earlier slice's behaviour is unchanged until a real value is threaded.
+   */
+  @property() cardProvider: CardProvider = "none";
+  /** Whether the till prompts for a tip on an integrated-card collection (Task 9, mirrors
+   * `GET /api/till`'s `tipsEnabled`). Ignored under the manual path (`cardProvider === "none"`). */
+  @property({ type: Boolean }) tipsEnabled = false;
+  /**
+   * The outcome of the most recent non-captured `collect-card` attempt (Task 8's
+   * `till-app.cardOutcome`, threaded through `till-counter-screen`) — `undefined` while none is
+   * pending. A fresh (CHANGED) value drives this widget into the `"card_outcome"` view; see
+   * `willUpdate`.
+   */
+  @property() cardOutcome?: CardOutcome;
 
   @state() private view: View = "idle";
   /** The digits the keypad has entered — a partial number string shared by both keypad screens. */
@@ -174,6 +239,17 @@ export class TillTenderPay extends LitElement {
   @state() private refEntry = "";
   /** The weight product awaiting a kg entry; set only while {@link view} is `"weighing"`. */
   @state() private selected?: TillProduct;
+  /** The gross tip typed into the integrated-card idle screen (Task 9); read at `#onCardTap` time,
+   * shown only when {@link tipsEnabled}. */
+  @state() private tipEntry = "";
+  /** Per-transaction staff consent to accept the card offline if the network is down (Task 9); read
+   * at `#onCardTap` time, shown only for `cardProvider === "stripe_on_device"`. */
+  @state() private allowOffline = false;
+  /** The detail of the most recent `collect-card` emission (Task 9) — replayed verbatim by
+   * `#retryCard` so a retry doesn't silently drop a tip/offline-consent the operator already entered
+   * on the idle screen, which is no longer on screen by the time Retry is tapped. Not `@state`: it
+   * never drives a render on its own. */
+  #lastCollectDetail: CollectCardDetail = {};
 
   constructor() {
     super();
@@ -195,6 +271,22 @@ export class TillTenderPay extends LitElement {
     this.selected = product;
     this.entry = "";
     this.view = "weighing";
+  }
+
+  /**
+   * Enter the `"card_outcome"` view the moment {@link cardOutcome} CHANGES to a defined value (Task
+   * 9) — a decline/timeout/network-unavailable is DATA on a prop (Task 8), not an event, so there is
+   * no click handler to drive this transition. Lit's default `hasChanged` (`!==`) means
+   * re-committing the SAME outcome string is not a change, which is what lets "switch tender"
+   * (`#cancel`, → `"idle"`) and "keep waiting" (`#wait`, → `"collecting"`) leave {@link view} where
+   * the operator put it instead of snapping straight back to the outcome screen — neither touches
+   * `cardOutcome` itself; only a genuinely NEW attempt (`#onCardTap`/`#retryCard`, via `till-app`'s
+   * `#onCollectCard` clearing it first) produces a fresh value for this to react to.
+   */
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("cardOutcome") && this.cardOutcome !== undefined) {
+      this.view = "card_outcome";
+    }
   }
 
   /**
@@ -227,6 +319,63 @@ export class TillTenderPay extends LitElement {
   #startCard(): void {
     this.refEntry = "";
     this.view = "card";
+  }
+
+  /** Card tapped from idle (Task 9): the manual path (`cardProvider === "none"`) is the #62 screen,
+   * UNCHANGED; otherwise read the tip/offline-consent fields entered alongside the idle Card button
+   * (`#renderCardExtras`) and start an integrated collection. */
+  #onCardTap(): void {
+    if (this.cardProvider === "none") {
+      this.#startCard();
+      return;
+    }
+    const tip = this.tipEntry.trim();
+    this.#collectCard({
+      ...(this.tipsEnabled && tip !== "" ? { tip } : {}),
+      ...(this.cardProvider === "stripe_on_device" && this.allowOffline
+        ? { allowOffline: true }
+        : {}),
+    });
+  }
+
+  /** Emit `collect-card` with `detail` and enter the collecting spinner (Task 9) — the ONE place
+   * that fires the event, shared by the first attempt (`#onCardTap`) and a replay (`#retryCard`). */
+  #collectCard(detail: CollectCardDetail): void {
+    this.#lastCollectDetail = detail;
+    this.view = "collecting";
+    this.dispatchEvent(
+      new CustomEvent<CollectCardDetail>("collect-card", { detail, bubbles: true, composed: true }),
+    );
+  }
+
+  /** Retry (card_outcome screen, Task 9): replay the SAME detail the failed attempt sent, rather
+   * than re-reading the idle screen's fields (no longer on screen) — safe against a double-charge
+   * via the capture-idempotency guard (spec §4: a replayed attempt settles the same PaymentIntent,
+   * never a second one). */
+  #retryCard(): void {
+    this.#collectCard(this.#lastCollectDetail);
+  }
+
+  /**
+   * "Keep waiting" (card_outcome screen, Task 9): return to the collecting spinner without retrying
+   * or switching tender. The `POST /api/pay` this outcome came from has already resolved — `pay()`
+   * (`till-app`'s `#onCollectCard`) never leaves a request in flight past its one `await` — so
+   * nothing is actually running to wait ON; this only lets the operator sit on the spinner (e.g.
+   * while they check the physical terminal) instead of the decline banner, until they pick Retry or
+   * Switch tender.
+   */
+  #wait(): void {
+    this.view = "collecting";
+  }
+
+  #onTipChange(event: Event): void {
+    event.stopPropagation();
+    this.tipEntry = (event as CustomEvent<{ value: string }>).detail.value;
+  }
+
+  #onOfflineChange(event: Event): void {
+    event.stopPropagation();
+    this.allowOffline = (event as CustomEvent<{ checked: boolean }>).detail.checked;
   }
 
   /**
@@ -270,10 +419,23 @@ export class TillTenderPay extends LitElement {
   }
 
   /**
-   * Abandon the cash, weigh, or hold-label screen and return to idle WITHOUT settling anything — no
-   * terminal tender event, no `park-order`, no line added. It is the way back from any of those views
-   * for an operator who opened Pay/Collect/Hold (or picked a weight tile) by mistake; without it those
-   * views are one-way. The basket is left exactly as it was.
+   * Abandon the cash, weigh, hold-label or card screen and return to idle WITHOUT settling anything —
+   * no terminal tender event, no `park-order`, no line added. It is the way back from any of those
+   * views for an operator who opened Pay/Collect/Hold/Card (or picked a weight tile) by mistake;
+   * without it those views are one-way. The basket is left exactly as it was.
+   *
+   * Also the handler for TWO integrated-card actions (Task 9), both a plain return to idle with no
+   * event of their own:
+   *  - Cancel, from the `"collecting"` spinner — a CLIENT-SIDE ABORT ONLY. `PaymentProvider` has no
+   *    `cancel` method — its methods are `collect`/`forward`/`void`/`refund`/`partialRefund`
+   *    (`packages/payments/src/provider.ts:113-137`) — so there is nothing to tell the reader or the
+   *    server; the in-flight `POST /api/pay` (`till-app`'s `#onCollectCard`) keeps running to its own
+   *    terminal outcome regardless, and a later retry replays safely (capture idempotency, spec §4).
+   *    A server-side reader-cancel endpoint is a DEFERRED `PaymentProvider` extension, not built here.
+   *  - Switch tender, from the `"card_outcome"` screen — leaves cash / manual card one tap away
+   *    (CLAUDE.md §5: a card decline must never wedge the till). `cardOutcome` itself is left
+   *    untouched (only `till-app` clears it); see `willUpdate` for why that does not immediately snap
+   *    the view back to `"card_outcome"`.
    */
   #cancel(): void {
     this.selected = undefined;
@@ -360,6 +522,8 @@ export class TillTenderPay extends LitElement {
     if (this.view === "weighing") return this.#renderWeighing();
     if (this.view === "holding") return this.#renderHolding();
     if (this.view === "card") return this.#renderCard();
+    if (this.view === "collecting") return this.#renderCollecting();
+    if (this.view === "card_outcome") return this.#renderCardOutcome();
     return this.#renderIdle();
   }
 
@@ -409,6 +573,7 @@ export class TillTenderPay extends LitElement {
    */
   #renderIdleCollect(disabled: boolean) {
     return html`
+      ${this.#renderCardExtras()}
       <div class="actions">
         <wt-button
           class="pay"
@@ -424,7 +589,7 @@ export class TillTenderPay extends LitElement {
           variant="primary"
           size="lg"
           ?disabled=${disabled}
-          @click=${() => this.#startCard()}
+          @click=${() => this.#onCardTap()}
         >
           ${t("tender.card")}
         </wt-button>
@@ -438,6 +603,7 @@ export class TillTenderPay extends LitElement {
     // (cash) and Card are the two tender options; Hold is secondary (parking is the lesser action).
     // All size "lg" like Pay so every one clears the 44px POS touch minimum.
     return html`
+      ${this.#renderCardExtras()}
       <div class="actions">
         <wt-button
           class="pay"
@@ -453,7 +619,7 @@ export class TillTenderPay extends LitElement {
           variant="primary"
           size="lg"
           ?disabled=${disabled}
-          @click=${() => this.#startCard()}
+          @click=${() => this.#onCardTap()}
         >
           ${t("tender.card")}
         </wt-button>
@@ -465,6 +631,90 @@ export class TillTenderPay extends LitElement {
           @click=${() => this.#startHolding()}
         >
           ${t("action.hold")}
+        </wt-button>
+      </div>
+    `;
+  }
+
+  /**
+   * The integrated-card affordances shown ALONGSIDE the idle Card button (Task 9) — never for the
+   * manual path (`cardProvider === "none"` returns `nothing`, so #62's idle screens are pixel-for-
+   * pixel unchanged). The tip field shows only when {@link tipsEnabled}; the offline-consent toggle
+   * only for `"stripe_on_device"` — a server-driven `"stripe_terminal"` fixed-counter reader has no
+   * device-local offline queue to consent INTO (`StripeTerminalProvider.forward`'s own doc: "no
+   * device-local offline queue... the pass is always a no-op",
+   * `packages/payments-stripe/src/provider.ts:142-145`). Read at tap time by `#onCardTap`, not bound
+   * into the emitted event until then.
+   */
+  #renderCardExtras() {
+    if (this.cardProvider === "none") return nothing;
+    return html`
+      <div class="card-extras">
+        ${
+          this.tipsEnabled
+            ? html`
+                <wt-input
+                  class="tip-input"
+                  type="number"
+                  .value=${this.tipEntry}
+                  .label=${t("card.tip")}
+                  @wt-change=${(event: Event) => this.#onTipChange(event)}
+                ></wt-input>
+              `
+            : nothing
+        }
+        ${
+          this.cardProvider === "stripe_on_device"
+            ? html`
+                <wt-switch
+                  class="offline-consent"
+                  .checked=${this.allowOffline}
+                  .label=${t("card.offline_consent")}
+                  @wt-change=${(event: Event) => this.#onOfflineChange(event)}
+                ></wt-switch>
+              `
+            : nothing
+        }
+      </div>
+    `;
+  }
+
+  /** The `"collecting"` view (Task 9): a spinner-equivalent status line plus a client-side-abort
+   * Cancel — see `#cancel`'s own doc for why Cancel fires no event. */
+  #renderCollecting() {
+    return html`
+      <div class="summary collecting">
+        <p class="prompt">${t("card.collecting")}</p>
+      </div>
+      <div class="actions">
+        <wt-button class="cancel" variant="secondary" @click=${() => this.#cancel()}>
+          ${t("card.cancel")}
+        </wt-button>
+      </div>
+    `;
+  }
+
+  /**
+   * The `"card_outcome"` view (Task 9) — a decline/timeout/network-unavailable, ENTERED reactively
+   * by `willUpdate` off {@link cardOutcome}, never by a click. One message regardless of WHICH of
+   * the three it was (only `card.declined` is specced; `PayOutcome`'s own doc notes `"timeout"`
+   * never fires today — a poll-window stall already collapses into `"declined"` server-side), and
+   * three actions: Retry (`#retryCard`), Switch tender (`#cancel` — see its doc), Wait (`#wait`).
+   */
+  #renderCardOutcome() {
+    return html`
+      <div class="summary card-outcome">
+        <p class="prompt">${t("card.declined")}</p>
+      </div>
+      <div class="actions">
+        <wt-button class="retry" variant="primary" size="lg" @click=${() => this.#retryCard()}>
+          ${t("card.retry")}
+        </wt-button>
+        <wt-button class="switch-tender" variant="secondary" @click=${() => this.#cancel()}>
+          ${t("card.switch_tender")}
+        </wt-button>
+        <wt-button class="wait" variant="secondary" @click=${() => this.#wait()}>
+          ${t("card.wait")}
         </wt-button>
       </div>
     `;

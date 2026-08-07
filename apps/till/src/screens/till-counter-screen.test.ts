@@ -118,6 +118,26 @@ describe("till-counter-screen", () => {
     expect(pay.store).toBe(store);
   });
 
+  it("threads cardProvider, tipsEnabled and cardOutcome through to the pay widget (Task 9)", async () => {
+    const { el } = await mount({
+      cardProvider: "stripe_on_device",
+      tipsEnabled: true,
+      cardOutcome: "declined",
+    });
+    const pay = el.shadowRoot!.querySelector("till-tender-pay")!;
+    expect(pay.cardProvider).toBe("stripe_on_device");
+    expect(pay.tipsEnabled).toBe(true);
+    expect(pay.cardOutcome).toBe("declined");
+  });
+
+  it("defaults cardProvider 'none'/tipsEnabled false, reproducing the #62 manual path unchanged", async () => {
+    const { el } = await mount();
+    const pay = el.shadowRoot!.querySelector("till-tender-pay")!;
+    expect(pay.cardProvider).toBe("none");
+    expect(pay.tipsEnabled).toBe(false);
+    expect(pay.cardOutcome).toBeUndefined();
+  });
+
   it("passes the products through to the product grid", async () => {
     const { el } = await mount();
     const grid = el.shadowRoot!.querySelector("till-product-grid")!;

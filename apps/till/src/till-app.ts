@@ -17,6 +17,7 @@ import type {
   PayOutcome,
   PrepQueueEntry,
   PrepState,
+  TillInfo,
   TillProduct,
   TillSaleResult,
 } from "./api/client.js";
@@ -24,22 +25,14 @@ import type { LayoutDef } from "./layout.js";
 import type { OrderLine } from "./state/working-order.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
-import type { ConfirmPaymentDetail, ParkOrderDetail } from "./widgets/tender-pay.js";
+import type {
+  CollectCardDetail,
+  ConfirmPaymentDetail,
+  ParkOrderDetail,
+} from "./widgets/tender-pay.js";
 
 /** The three faces of the till: sign in, ring up, print. The app shows exactly one at a time. */
 type Screen = "lock" | "counter" | "ticket";
-
-/**
- * The payload of the `collect-card` event (integrated card terminal, sub-project 7 Task 8) — the
- * till-entered gross tip and any per-transaction staff consent to accept the card offline if the
- * network is down, both optional. The widget that EMITS this event is Task 9 (not yet built); it
- * lives here rather than in a widget file for that reason — `ConfirmPaymentDetail`/`ParkOrderDetail`
- * above are owned by `tender-pay.ts` because that widget already exists.
- */
-export interface CollectCardDetail {
-  tip?: string;
-  allowOffline?: boolean;
-}
 
 /**
  * The quantity string to DISPLAY for a retrieved parked line. The server stores and returns every
@@ -138,6 +131,17 @@ export class TillApp extends LitElement {
    */
   @state() private orderFlow: OrderFlow = "prepay";
   /**
+   * The till's integrated-card wiring (Task 9), read once from `GET /api/till` on boot alongside
+   * {@link orderFlow} — threaded to `till-tender-pay` (via `till-counter-screen`) so it can choose
+   * between the #62 manual (datáfono) Card path and the integrated `collect-card` one. Defaults
+   * `"none"`, same reasoning as `orderFlow`'s default: a boot that has not yet resolved (or a stub
+   * that omits it) never shows the integrated affordances by accident.
+   */
+  @state() private cardProvider: TillInfo["cardProvider"] = "none";
+  /** Whether the till prompts for a tip on an integrated-card collection (Task 9), read once from
+   * `GET /api/till` alongside {@link cardProvider}. Defaults `false`, same reasoning. */
+  @state() private tipsEnabled = false;
+  /**
    * Where the CURRENT basket sits in a Mode-I/T order's life: `"order"` (composing/placing, the
    * default) or `"collect"` (this basket's order was placed and now awaits its tender). Ignored by
    * `tender-pay` under Mode P (`orderFlow === "prepay"`), which has no separate collect stage. Reset
@@ -174,20 +178,15 @@ export class TillApp extends LitElement {
    * lines), and {@link TillApp.#onNewSale}. Deliberately NOT reset by
    * {@link TillApp.#onDiscardOrder}: that handler discards a held order named by the event's OWN `id`
    * and never touches `#store` — the currently loaded basket (and any outcome it carries) is
-   * unaffected by discarding some other parked order. Task 9's `collect-card`-emitting widget reads
-   * this to render retry / switch-tender / wait.
+   * unaffected by discarding some other parked order. Read by `till-tender-pay` (Task 9, threaded
+   * through `#renderScreen`/`till-counter-screen`) to render retry / switch-tender / wait.
    *
-   * NOT marked `private` (unlike every other `@state()` field on this class): `tsconfig.base.json`
-   * sets `noUnusedLocals`, which TypeScript applies to a `private` class member too — it flags one
-   * that is only ever WRITTEN inside the class, never READ, as unused. Nothing in `till-app.ts` reads
-   * `cardOutcome` yet (Task 9's widget is the first reader, once wired in as a rendered prop).
-   * Confirmed, not assumed: marking this field `private` and running `pnpm --filter @waitron/till
-   * typecheck` gives `error TS6133: 'cardOutcome' is declared but its value is never read` — a test
-   * reading it via a type-erasing cast doesn't count, since that check runs over THIS class's own
-   * compiled body, not external consumers. Every sibling `@state()` field avoids this because
-   * `render()`/`#renderScreen()` already reads it. Restore `private` once Task 9 adds a real read site.
+   * Marked `private` like every other `@state()` field on this class — safe now that `#renderScreen`
+   * reads it (below), satisfying `tsconfig.base.json`'s `noUnusedLocals` the same way every sibling
+   * field does. It was temporarily NOT `private` while Task 9's widget (the first reader) did not yet
+   * exist; see git history on this line for the receipt that justified that, now moot.
    */
-  @state() cardOutcome?: Exclude<PayOutcome, { outcome: "captured" }>["outcome"];
+  @state() private cardOutcome?: Exclude<PayOutcome, { outcome: "captured" }>["outcome"];
   /**
    * SINGLE-FLIGHT GUARD for sale confirmation — the fiscal double-file safety (CLAUDE.md §5: two
    * chained `registros_facturacion` records for one purchase are UNREPAIRABLE). Set synchronously at
@@ -223,9 +222,10 @@ export class TillApp extends LitElement {
   /**
    * Read the public till info once: set the OPERATOR-UI locale (`setLocale`), remember the receipt
    * (invoice) locale for the ticket, remember the ticket issuer, and (7c) remember the location's
-   * pay-timing mode. `setLocale` and `invoiceLocale` both take the SAME server `locale`, but they
-   * drive different things and are threaded separately — the receipt uses its `invoiceLocale` PROP and
-   * must never follow the operator UI (see `till-ticket-view`'s INVOICE LOCALE note).
+   * pay-timing mode plus (Task 9) its integrated-card wiring. `setLocale` and `invoiceLocale` both
+   * take the SAME server `locale`, but they drive different things and are threaded separately — the
+   * receipt uses its `invoiceLocale` PROP and must never follow the operator UI (see
+   * `till-ticket-view`'s INVOICE LOCALE note).
    */
   async #boot(): Promise<void> {
     const till = await this.api.getTill();
@@ -237,6 +237,8 @@ export class TillApp extends LitElement {
     this.invoiceLocale = till.locale;
     this.issuer = { venueName: till.venueName, nif: till.nif };
     this.orderFlow = till.orderFlow;
+    this.cardProvider = till.cardProvider;
+    this.tipsEnabled = till.tipsEnabled;
   }
 
   /** A confirmed login: load the catalogue, remember the operator, show the counter, list held orders
@@ -705,6 +707,9 @@ export class TillApp extends LitElement {
           .stage=${this.stage}
           .busy=${this.submitting || this.placing}
           .layout=${this.#layoutFor()}
+          .cardProvider=${this.cardProvider}
+          .tipsEnabled=${this.tipsEnabled}
+          .cardOutcome=${this.cardOutcome}
         ></till-counter-screen>`;
       case "ticket":
         return html`<till-ticket-view
