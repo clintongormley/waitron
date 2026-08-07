@@ -226,7 +226,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // The till's ONE integrated card provider (or none), built from its tenant's own Stripe credential
   // — `makeStripe` is `defaultMakeStripe`, the same SDK factory `stripeAccountResolver` above uses. A
   // missing or wrong-environment key fails the boot here (§8's "everything escapes"), never the first
-  // card sale. `tipsEnabled` rides the same boot-resolved config onto the deps.
+  // card sale. Tips read off `till.tipsEnabled` (part of `cfg`) wherever needed — no separate copy.
   const cardProvider = await buildCardProvider(till, {
     db,
     ring,
@@ -242,7 +242,6 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       cfg: till,
       secureCookies: config.tls !== undefined,
       cardProvider,
-      tipsEnabled: till.tipsEnabled,
     },
     log,
   );

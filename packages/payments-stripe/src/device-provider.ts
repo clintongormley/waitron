@@ -30,6 +30,7 @@ import {
 } from "@waitron/payments";
 import "./errors.js";
 import { reverseViaStripe } from "./reverse.js";
+import { workingOrderIdempotencyKey } from "./client.js";
 import type { StripeDeviceClient } from "./device-client.js";
 
 // Same provider id as the server-driven adapter: one Stripe account = one settlement identity for a
@@ -140,12 +141,10 @@ export class StripeOnDeviceProvider implements PaymentProvider {
     // policy instead would be caught one statement too late.
     this.requireOwnTenant(params.tenantId);
     const paymentRef = randomUUID();
-    // The device PaymentIntent-creation idempotency key is derived from the STABLE working-order id,
-    // NOT the per-call random `paymentRef` (§4): a retry after a lost response re-drives the SAME
-    // PaymentIntent, so the card is charged once. The local `paymentRef` stays random (the `payments`
-    // row's idempotency anchor, one row per attempt) and remains the `metadata.payment_ref`
-    // attribution hint below — the two are deliberately decoupled.
-    const stripeIdempotencyKey = `wo_${params.workingOrderId}`;
+    // See `workingOrderIdempotencyKey`'s own doc for the rationale (shared with the terminal
+    // provider); `paymentRef` stays the separate, per-attempt random ref that also feeds the
+    // `metadata.payment_ref` attribution hint below.
+    const stripeIdempotencyKey = workingOrderIdempotencyKey(params.workingOrderId);
     // Gate up front: the neutral policy decides whether offline is permitted for THIS transaction,
     // which configures the device's offline behaviour BEFORE anything is stored.
     const offlineAllowed = await this.inTenant(async (tx) => {

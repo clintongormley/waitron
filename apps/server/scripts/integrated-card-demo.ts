@@ -339,7 +339,6 @@ async function main(): Promise<void> {
       backend,
       clock,
       provider: capturedProvider,
-      tipsEnabled: cfg.tipsEnabled,
     };
 
     const captured = await payWorkingOrderIntegrated(capturedDeps, cfg, {
@@ -382,7 +381,6 @@ async function main(): Promise<void> {
       backend,
       clock,
       provider: declinedProvider,
-      tipsEnabled: cfg.tipsEnabled,
     };
 
     const declined = await payWorkingOrderIntegrated(declinedDeps, cfg, {

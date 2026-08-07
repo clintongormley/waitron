@@ -178,12 +178,14 @@ async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
 
 /** Build the split-flow deps + a real `StripeTerminalProvider` over `FakeStripe`, sharing ONE
  * app-role handle for both the provider's writes and the orchestrator's P1/P3 (CLAUDE.md §4 — the
- * provider's writes run under a real RLS-subject role, not a superuser). */
+ * provider's writes run under a real RLS-subject role, not a superuser). Tips are driven by
+ * `cfg.tipsEnabled` (the sibling `TillConfig` every caller passes to `payWorkingOrderIntegrated`
+ * alongside these deps), not a deps-level flag — `IntegratedPayDeps` carries no `tipsEnabled` of its
+ * own; a "tips on" test overrides `cfg` instead (see the two below). */
 function integratedDeps(
   cfg: TillConfig,
   app: Database,
   client = new FakeStripe(),
-  tipsEnabled = false,
 ): { deps: IntegratedPayDeps; client: FakeStripe } {
   const provider = new StripeTerminalProvider({
     client,
@@ -192,7 +194,7 @@ function integratedDeps(
     resolveReader: () => Promise.resolve("reader_1"),
     poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
   });
-  return { deps: { db: app, backend, clock, provider, tipsEnabled }, client };
+  return { deps: { db: app, backend, clock, provider }, client };
 }
 
 /** A provider that runs `onCollect` (to simulate a concurrent settle) then returns a canned result —
@@ -444,10 +446,13 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 
   it("tips on: charges total+tip, files the sale at the total, records the tip on the tender", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg: baseCfg, cafe } = await setupVenue();
+    // Tips are read off `cfg.tipsEnabled` (the single source), not a deps-level flag — override it
+    // here rather than passing a `tipsEnabled` argument to `integratedDeps`.
+    const cfg = { ...baseCfg, tipsEnabled: true };
     const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      const { deps, client } = integratedDeps(cfg, app, new FakeStripe(), true);
+      const { deps, client } = integratedDeps(cfg, app);
       const id = randomUUID();
 
       const out = await payWorkingOrderIntegrated(deps, cfg, {
@@ -472,7 +477,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const { cfg, cafe } = await setupVenue();
     const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      const { deps, client } = integratedDeps(cfg, app); // tipsEnabled: false
+      const { deps, client } = integratedDeps(cfg, app); // cfg.tipsEnabled: false (setupVenue's default)
       const id = randomUUID();
 
       const out = await payWorkingOrderIntegrated(deps, cfg, {
@@ -616,7 +621,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
           tender: { method: "cash", amount: "5.00" },
         });
       }, "captured");
-      const deps: IntegratedPayDeps = { db: app, backend, clock, provider, tipsEnabled: false };
+      const deps: IntegratedPayDeps = { db: app, backend, clock, provider };
 
       const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
@@ -643,7 +648,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       // finds nothing and throws the domain `payment.not_found` (a non-unique error). P3 must re-raise
       // it, NOT swallow it as a replay, and the sale it half-filed must roll back with the transaction.
       const provider = cannedProvider(() => Promise.resolve(), "captured");
-      const deps: IntegratedPayDeps = { db: app, backend, clock, provider, tipsEnabled: false };
+      const deps: IntegratedPayDeps = { db: app, backend, clock, provider };
 
       await expect(
         payWorkingOrderIntegrated(deps, cfg, {
@@ -683,13 +688,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
         resolveReader: () => Promise.resolve("reader_1"),
         poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
       });
-      const deps: IntegratedPayDeps = {
-        db: app,
-        backend: fake,
-        clock,
-        provider,
-        tipsEnabled: false,
-      };
+      const deps: IntegratedPayDeps = { db: app, backend: fake, clock, provider };
 
       const out = await payWorkingOrderIntegrated(deps, cfg, {
         id: randomUUID(),
@@ -973,11 +972,15 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
   });
 
   it("tips on: charges amountDue+tip, settles the invoice at the total, records the tip on the tender", async () => {
-    const { cfg, cafe } = await modeVenue("invoice_first");
+    const { cfg: baseCfg, cafe } = await modeVenue("invoice_first");
+    // Tips are read off `cfg.tipsEnabled` (the single source) — override it rather than passing a
+    // `tipsEnabled` argument to `integratedDeps`. `placeInvoiceFirst` only dispatches on `orderFlow`,
+    // so placing under this overridden cfg is unaffected.
+    const cfg = { ...baseCfg, tipsEnabled: true };
     const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const { id } = await placeInvoiceFirst(cfg, cafe);
-      const { deps, client } = integratedDeps(cfg, app, new FakeStripe(), true);
+      const { deps, client } = integratedDeps(cfg, app);
 
       const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [], tip: "0.30" });
 
@@ -1037,7 +1040,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
           tender: { method: "cash", amount: "1.50" },
         });
       }, "captured");
-      const deps: IntegratedPayDeps = { db: app, backend, clock, provider, tipsEnabled: false };
+      const deps: IntegratedPayDeps = { db: app, backend, clock, provider };
 
       const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
@@ -1066,7 +1069,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       // re-raise it, NOT swallow it as a replay, and the settlement it half-wrote must roll back with the
       // transaction — leaving the invoice unsettled and outstanding.
       const provider = cannedProvider(() => Promise.resolve(), "captured");
-      const deps: IntegratedPayDeps = { db: app, backend, clock, provider, tipsEnabled: false };
+      const deps: IntegratedPayDeps = { db: app, backend, clock, provider };
 
       await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toMatchObject({
         code: "payment.not_found",

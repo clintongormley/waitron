@@ -198,9 +198,9 @@ async function setupVenue(): Promise<{
  * themselves via `withTenant` + `asAppUser`), the real fiscal backend + system clock the sale path
  * files through, and `secureCookies:false` so the session cookie rides the non-TLS `app.request`. */
 function apiDeps(cfg: TillConfig): TillApiDeps {
-  // No integrated card provider built for these suites; tips off. `cardProvider` (the built
-  // PaymentProvider) is optional and left undefined.
-  return { db: suite.admin, backend, clock, cfg, secureCookies: false, tipsEnabled: false };
+  // No integrated card provider built for these suites (`cfg.tipsEnabled` is `false` — see
+  // `tillConfigFromVenue`). `cardProvider` (the built PaymentProvider) is optional and left undefined.
+  return { db: suite.admin, backend, clock, cfg, secureCookies: false };
 }
 
 /**
@@ -229,7 +229,6 @@ function apiDepsWithCardProvider(
     clock,
     cfg,
     secureCookies: false,
-    tipsEnabled: false,
     cardProvider,
   };
 }

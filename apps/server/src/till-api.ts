@@ -58,13 +58,6 @@ export interface TillApiDeps {
    * form `GET /api/till` echoes; THIS is the built object the collect path invokes.
    */
   cardProvider?: PaymentProvider;
-  /**
-   * Whether the till offers a tip prompt at card collect (`config.till.tipsEnabled`). Echoed on
-   * `GET /api/till` so the client shows or hides the tip affordance (Task 8). Carried on the deps
-   * alongside `cardProvider` — both are the boot-resolved card wiring — rather than read off
-   * `deps.cfg`, keeping the two card facts the route exposes side by side.
-   */
-  tipsEnabled: boolean;
 }
 
 /**
@@ -247,8 +240,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // the till app reads BEFORE login to pick its card-collect route and show/hide the tip
         // affordance (Task 8). `cardProvider` is the config selector (`deps.cfg.cardProvider`), not the
         // built `PaymentProvider` on `deps` — the client needs the mode name, not the server object.
+        // `tipsEnabled` comes from `deps.cfg` too — the single source (`TillConfig.tipsEnabled`,
+        // set at boot from `config.till`), not a second copy on `deps` that could drift from it.
         cardProvider: deps.cfg.cardProvider,
-        tipsEnabled: deps.tipsEnabled,
+        tipsEnabled: deps.cfg.tipsEnabled,
       });
     }),
   );
@@ -313,13 +308,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         throw new Error("/api/pay: no integrated card provider configured");
       }
       const outcome = await payWorkingOrderIntegrated(
-        {
-          db: deps.db,
-          backend: deps.backend,
-          clock: deps.clock,
-          provider: deps.cardProvider,
-          tipsEnabled: deps.tipsEnabled,
-        },
+        { db: deps.db, backend: deps.backend, clock: deps.clock, provider: deps.cardProvider },
         deps.cfg,
         body,
         personId,

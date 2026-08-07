@@ -183,10 +183,9 @@ function deps(db: Database): TillApiDeps {
     // FALSE so the Set-Cookie is issued over the non-TLS `app.request` — it must still carry HttpOnly
     // and SameSite=Strict, and must NOT carry Secure.
     secureCookies: false,
-    // No integrated card terminal here (the `cardProvider` PaymentProvider is left undefined); tips
-    // off, matching `cfg`. `GET /api/till` echoes `deps.tipsEnabled`, so a separate test below drives
-    // a non-default value to prove the route reads it rather than hardcoding.
-    tipsEnabled: false,
+    // No integrated card terminal here (the `cardProvider` PaymentProvider is left undefined). `GET
+    // /api/till` echoes `deps.cfg.tipsEnabled` (this suite's `cfg` has it `false`); a separate test
+    // below drives `cfg.tipsEnabled` to `true` to prove the route reads it rather than hardcoding.
   };
 }
 
@@ -445,15 +444,17 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(JSON.stringify(body)).not.toMatch(/pin|secret|password|url|cert/i);
   });
 
-  it("GET /api/till echoes a non-default cardProvider and tipsEnabled, proving it reads them (not hardcoded)", async () => {
+  it("GET /api/till echoes a non-default cardProvider and cfg.tipsEnabled, proving it reads config rather than a hardcoded value", async () => {
     // A default of `none`/`false` would pass even if the route hardcoded those values, so drive both
-    // to their OTHER value: the string comes from `deps.cfg.cardProvider`, the flag from
-    // `deps.tipsEnabled` (which `boot.ts` sets from `config.till.tipsEnabled`). The two are read from
-    // DIFFERENT places, so this pins both wirings.
+    // to their OTHER value. Both now come off `deps.cfg` — `cardProvider` always did, and
+    // `tipsEnabled` does too since `TillApiDeps.tipsEnabled` (a second copy that could never diverge
+    // from `cfg.tipsEnabled`, since `boot.ts` set both from the SAME `till` object) was dropped as
+    // redundant. Driving `cfg.tipsEnabled` to `true` here, against the suite default `false` asserted
+    // above, still proves the route reads config rather than a constant.
     const app = new Hono();
     mountTillApi(
       app,
-      { ...deps(suite.db), cfg: { ...cfg, cardProvider: "stripe_terminal" }, tipsEnabled: true },
+      { ...deps(suite.db), cfg: { ...cfg, cardProvider: "stripe_terminal", tipsEnabled: true } },
       collect([]),
     );
 

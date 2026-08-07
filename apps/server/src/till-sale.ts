@@ -192,7 +192,7 @@ export interface IntegratedPayRequest {
   /** The walk-up basket to price and file; IGNORED for a retrieved/placed order (files its stored lock). */
   lines: { productId: string; quantity: string }[];
   /** The till-entered gross tip. CLAMPED to "0.00" when the till has tips disabled
-   *  (`IntegratedPayDeps.tipsEnabled === false`), so a client cannot add a tip the venue does not take. */
+   *  (`TillConfig.tipsEnabled === false`), so a client cannot add a tip the venue does not take. */
   tip?: string;
   /** Per-transaction staff consent to accept the card offline if the network is down — meaningful only
    *  for a device-local offline queue (`StripeOnDeviceProvider`); a fixed-counter reader ignores it. */
@@ -214,11 +214,12 @@ export type IntegratedPayOutcome =
 
 /**
  * {@link payWorkingOrderIntegrated}'s deps: the fiscal {@link TillSaleDeps} plus the card `provider`
- * driving the reader, and the till's `tipsEnabled` flag (both wired at boot from `TillConfig`, Task 3).
+ * driving the reader. Tips are read off `cfg.tipsEnabled` (the sibling `TillConfig` parameter every
+ * caller already passes) rather than carried here too — `boot.ts` set both from the SAME `till`
+ * object, so a second copy on the deps could never diverge from it and was dead weight.
  */
 export type IntegratedPayDeps = TillSaleDeps & {
   provider: PaymentProvider;
-  tipsEnabled: boolean;
 };
 
 /**
@@ -742,7 +743,7 @@ export async function payWorkingOrderIntegrated(
   // Resolve the nullish tip default OUTSIDE the ternary so it is exercised on every tips-OFF call (the
   // till's common case), not only on a tips-on call that happens to omit a tip.
   const tipInput = req.tip ?? "0.00";
-  const tip = deps.tipsEnabled ? decimal(tipInput) : decimal("0.00");
+  const tip = cfg.tipsEnabled ? decimal(tipInput) : decimal("0.00");
   // The card-charge base: ORDERING 1 collects the outstanding invoice's amount due (`total +
   // corrections`); ORDERING 2 collects the freshly-priced total. Both add the tip on top.
   const baseAmount =

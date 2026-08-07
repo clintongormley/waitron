@@ -11,6 +11,7 @@ import type {
   ProviderCapabilities,
 } from "@waitron/payments";
 import { captureAttempting, failAttempting, insertAttempting } from "@waitron/payments";
+import { workingOrderIdempotencyKey } from "./client.js";
 import type { StripeClient } from "./client.js";
 import "./errors.js";
 import { reverseViaStripe } from "./reverse.js";
@@ -101,13 +102,8 @@ export class StripeTerminalProvider implements PaymentProvider {
     this.requireOwnTenant(params.tenantId);
     const readerId = await this.opts.resolveReader(params.tenantId, params.tillId);
     const paymentRef = randomUUID();
-    // The Stripe PaymentIntent-creation idempotency key is derived from the STABLE working-order id,
-    // NOT the per-call random `paymentRef` (§4): a retry after a lost response re-drives the SAME
-    // PaymentIntent to completion, so Stripe charges once. The local `paymentRef` stays random — it
-    // is the `payments` row's (tenant, provider, payment_ref) idempotency anchor, one row per
-    // attempt — so the two are deliberately decoupled: one PaymentIntent per working order, many
-    // `payments` rows across retries.
-    const stripeIdempotencyKey = `wo_${params.workingOrderId}`;
+    // See `workingOrderIdempotencyKey`'s own doc for the rationale (shared with the on-device provider).
+    const stripeIdempotencyKey = workingOrderIdempotencyKey(params.workingOrderId);
     const key = { tenantId: params.tenantId, provider: PROVIDER, paymentRef };
 
     // T1 — commit the attempt before any network call.
