@@ -74,4 +74,13 @@ describeEachTarget("catalogue — menu, taxonomy and priced items", (target) => 
     );
     expect(cols).toHaveLength(3);
   });
+
+  it("products carries a nullable allergens jsonb column", async () => {
+    const [col] = await rows<{ data_type: string; is_nullable: string }>(
+      db,
+      sql`select data_type, is_nullable from information_schema.columns
+          where table_name = 'products' and column_name = 'allergens'`,
+    );
+    expect(col).toMatchObject({ data_type: "jsonb", is_nullable: "YES" });
+  });
 });
