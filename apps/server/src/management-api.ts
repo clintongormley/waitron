@@ -9,7 +9,19 @@ import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError, isAppError } from "@waitron/shared";
 import { asAppUser, withTenant, type Database } from "@waitron/db";
-import { endManagementSession, listActiveStaff, loginManager } from "@waitron/identity";
+import {
+  createPerson,
+  endManagementSession,
+  listActiveStaff,
+  listPersons,
+  loginManager,
+  reactivatePerson,
+  resetPin,
+  setPassword,
+  setRole,
+  suspendPerson,
+  type PersonRoleValue,
+} from "@waitron/identity";
 import { codeOf } from "./error-code.js";
 import {
   clearManagementCookie,
@@ -58,6 +70,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "pin.too_short": 400,
   "password.too_short": 400,
+  "management.request_invalid": 400,
   "shared.invalid_id": 400,
 };
 
@@ -175,6 +188,129 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         });
       }
       clearManagementCookie(c);
+      return c.body(null, 204);
+    }),
+  );
+
+  // List every person of the tenant (roles, status, credential BOOLEANS — never secrets). Gated:
+  // `requireManagementSession` refuses an unauthenticated request with 401 before any DB work, then
+  // `listPersons`'s own `authorizeManager` enforces `person.manage` under RLS. The admin-roster
+  // counterpart of the unauthenticated `staff-roster` above.
+  app.get("/management-api/staff", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const people = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return listPersons(tx, { managementSessionId: sessionId });
+      });
+      return c.json(people);
+    }),
+  );
+
+  // Create a person. Gated (401 before any DB work; `createPerson` then enforces `person.manage`).
+  // The body is screened first: a missing or non-string `displayName`, `role` or `pin` is refused as
+  // `management.request_invalid` naming the FIELDS, never their values. The narrowed fields are bound
+  // to locals AFTER the guard because that narrowing does not survive into the `withTenant` closure —
+  // the same pattern the login route above uses. Returns the new id at 201.
+  app.post("/management-api/staff", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body = await c.req.json<{
+        displayName?: string;
+        role?: PersonRoleValue;
+        pin?: string;
+      }>();
+      if (
+        typeof body.displayName !== "string" ||
+        typeof body.role !== "string" ||
+        typeof body.pin !== "string"
+      ) {
+        throw new AppError("management.request_invalid", { field: "displayName|role|pin" });
+      }
+      const { displayName, role, pin } = body;
+      const created = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return createPerson(tx, {
+          tenantId: deps.cfg.tenantId,
+          managementSessionId: sessionId,
+          displayName,
+          role,
+          pin,
+        });
+      });
+      return c.json(created, 201);
+    }),
+  );
+
+  // Update a person's role and/or status. Gated. `:id` is screened with `isUuid` first — a
+  // non-UUID names no row, so it is `person.not_found` (the id is a caller-supplied uuid, safe to
+  // echo) rather than a request-shape error. Each field is optional: `role` present drives `setRole`,
+  // `status` "suspended"/"active" drives suspend/reactivate; an empty body is a no-op that still 204s.
+  // `role`/`status` are bound to locals before the closure and narrowed inside it, so no field
+  // narrowing has to cross the closure boundary. The identity calls enforce `person.manage`.
+  app.patch("/management-api/staff/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("person.not_found", { personId: id });
+      const body = await c.req.json<{ role?: PersonRoleValue; status?: "active" | "suspended" }>();
+      const { role, status } = body;
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        if (role !== undefined) {
+          await setRole(tx, { managementSessionId: sessionId, personId: id, role });
+        }
+        if (status === "suspended") {
+          await suspendPerson(tx, { managementSessionId: sessionId, personId: id });
+        }
+        if (status === "active") {
+          await reactivatePerson(tx, { managementSessionId: sessionId, personId: id });
+        }
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  // Reset a person's PIN. Gated. `:id` screened with `isUuid` (→ `person.not_found`); the body's
+  // `pin` must be a string else `management.request_invalid` naming the FIELD, never the PIN itself.
+  // The narrowed `pin` is bound to a local before the closure; `resetPin` enforces `person.manage`
+  // and length-checks the value.
+  app.post("/management-api/staff/:id/reset-pin", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("person.not_found", { personId: id });
+      const body = await c.req.json<{ pin?: string }>();
+      if (typeof body.pin !== "string") {
+        throw new AppError("management.request_invalid", { field: "pin" });
+      }
+      const { pin } = body;
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await resetPin(tx, { managementSessionId: sessionId, personId: id, pin });
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  // Set a person's dashboard password. Gated. `:id` screened with `isUuid` (→ `person.not_found`);
+  // the body's `password` must be a string else `management.request_invalid` naming the FIELD, never
+  // the password itself. The narrowed `password` is bound to a local before the closure; `setPassword`
+  // enforces `person.manage` and length-checks the value.
+  app.post("/management-api/staff/:id/password", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("person.not_found", { personId: id });
+      const body = await c.req.json<{ password?: string }>();
+      if (typeof body.password !== "string") {
+        throw new AppError("management.request_invalid", { field: "password" });
+      }
+      const { password } = body;
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await setPassword(tx, { managementSessionId: sessionId, personId: id, password });
+      });
       return c.body(null, 204);
     }),
   );

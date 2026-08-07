@@ -341,5 +341,28 @@ declare module "@waitron/shared" {
      * `tenant.not_found`'s note above gives.
      */
     "order_prep.invalid_transition": { workingOrderId: string };
+    /**
+     * A request to the management-dashboard surface (the gated staff routes in `management-api.ts` —
+     * create, patch, reset-pin, set-password) carried a body whose SHAPE is wrong: a required field
+     * absent or not the declared type (`displayName`/`role`/`pin` on create, `pin` on reset-pin,
+     * `password` on set-password). Refused with HTTP 400 before any DB work — the request-shape
+     * counterpart of the credential codes those same routes surface (`pin.too_short`,
+     * `password.too_short`), which fire only once a well-formed value reaches the identity layer.
+     *
+     * `management.*` names the DOMAIN CONCEPT — a request to the management surface — not the package
+     * that throws it. `server.*` is reserved for facts about the PROCESS itself (its config, its
+     * listener, its shutdown); a malformed request body is a fact about the REQUEST, the rule
+     * `tenant.not_found`'s note above gives. It is a DELIBERATELY DISTINCT namespace from
+     * `@waitron/identity`'s `management_session.*`, which names the session LIFECYCLE
+     * (`required`/`expired`); this names the request SHAPE, a separate concern, so the two do not share
+     * a prefix even though both belong to the management dashboard.
+     *
+     * `field` carries a field NAME only — `"displayName|role|pin"`, `"pin"`, or `"password"` — and
+     * NEVER the value behind it. A PIN or a password is exactly the kind of secret a caller can
+     * mis-send, and it must not land in an error's params: the same no-leak discipline
+     * `server.till_config_missing` and `credentials.invalid_field` follow by echoing names, never
+     * values.
+     */
+    "management.request_invalid": { field: string };
   }
 }
