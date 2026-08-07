@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import * as barrel from "./index.js";
 
-/** The augmentation is only real if it is reachable from the public barrel — a declaration in a
- * file nothing imports type-checks locally and vanishes for every consumer. Mirrors
- * packages/identity/src/errors.reachability.test.ts. */
-describe("the reporting close error codes reach the public barrel", () => {
+/** A SMOKE test: it constructs the `close.*` codes via `AppError` and confirms the barrel loads. It
+ * does NOT prove the augmentation is reachable from external consumers — per CLAUDE.md §4 this pattern
+ * (mirrored across the repo) can pass even if the barrel stops importing `./errors.js`, because
+ * tsconfig `include: ["src"]` makes the declaration visible regardless of the import graph. Do not
+ * cite it as a reachability receipt. Mirrors packages/identity/src/errors.reachability.test.ts. */
+describe("the reporting close error codes construct via the barrel (smoke, not reachability)", () => {
   it("constructs a close AppError (close.already_closed) with typed params", () => {
     const error = new AppError("close.already_closed", { businessDay: "2026-08-04" });
     expect(error.code).toBe("close.already_closed");

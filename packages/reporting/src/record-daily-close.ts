@@ -1,7 +1,8 @@
 // Side-effect only: registers this package's `close.*` codes on the shared `ErrorParams` registry by
-// declaration merging. See ./errors.ts for the codes and the reasoning, and
-// ./errors.reachability.test.ts for the mechanical check that keeps that augmentation reachable from
-// the public barrel. Every file that throws a code imports its registry directly.
+// declaration merging. See ./errors.ts for the codes and the reasoning. THIS direct `import
+// "./errors.js"` is what loads the augmentation (CLAUDE.md §3: every file that throws a code imports
+// its registry directly) — not ./errors.reachability.test.ts, which per CLAUDE.md §4 is only a smoke
+// test that the codes construct and does NOT prove barrel reachability.
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
 import { AppError, addDecimal, compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
