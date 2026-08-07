@@ -20,9 +20,15 @@ export default defineConfig({
       //
       // `src/boot.ts` is deliberately NOT here. It was the one file with no test subject at all
       // when this threshold was added; `boot.test.ts` (a real `startServer` + `close()` against a
-      // real container, as the deployment role) closed that, and `boot.ts` now reports 100%
-      // statements/functions/lines/branches — comfortably inside the thresholds below without help
-      // from an exclusion. `server.close()`'s own callback rejecting (`try { … server.close((error)
+      // real container, as the deployment role) closed that. `boot.ts` reports 100%
+      // statements/lines/branches and — since Task 3 (integrated card terminal) — ~90% FUNCTIONS:
+      // `buildCardProvider`'s `resolveReader: () => Promise.resolve(readerId)` closure is invoked
+      // only by the Task-8 card-collect flow, so no suite here calls it yet and that ONE function
+      // stays uncovered. The `apps/server` aggregate still clears the 98/98/98/95 thresholds below
+      // (~98.1% functions) WITHOUT an exclusion, which is why `boot.ts` stays off this list rather
+      // than gaining a `resolveReader`-shaped one — a real exclusion would be paper over a gap Task 8
+      // closes for real, the opposite of the "cover it, don't exclude it" posture the rest of this
+      // comment records. `server.close()`'s own callback rejecting (`try { … server.close((error)
       // => error ? reject(error) : resolve()) } finally { db.close() }`) was, for a while, the one
       // branch nothing reached: Node only invokes that callback with an error when the raw HTTP
       // server is closed while not listening, which needs the server stopped out from under
