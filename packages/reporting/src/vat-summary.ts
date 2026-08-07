@@ -16,9 +16,12 @@ export async function computeVatSummary(
   tx: Transaction,
   input: DailyCloseInput,
 ): Promise<VatSummary> {
+  // The rate is grouped as `numeric(5,2)::text`, not the raw jsonb string, so two spellings of the
+  // same rate ("21" vs "21.00") can never split into two byRate lines. Every production rate is
+  // already a fixed 2-dp literal (`buildVatBreakdown`/`priceRows`), so this is defensive normalisation.
   const { rows } = await tx.execute<{ rate: string; base: string; tax: string }>(sql`
     select
-      b->>'rate' as rate,
+      (b->>'rate')::numeric(5, 2)::text as rate,
       sum((b->>'base')::numeric(12, 2))::numeric(12, 2)::text as base,
       sum((b->>'tax')::numeric(12, 2))::numeric(12, 2)::text as tax
     from sales s
@@ -27,7 +30,7 @@ export async function computeVatSummary(
       and s.node_id = ${input.nodeId}
       and ${businessDayClause(sql`s.issued_at`, input)}
       and ${activeSalesClause(input)}
-    group by b->>'rate'
+    group by (b->>'rate')::numeric(5, 2)::text
   `);
 
   // One row per rate already (grouped in SQL); build VatRateLine[] straight from the filed figures,
