@@ -25,6 +25,7 @@ export {
   listPersons,
   reactivatePerson,
   resetPin,
+  setPassword,
   setRole,
   suspendPerson,
 } from "./staff.js";
