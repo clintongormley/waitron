@@ -264,10 +264,10 @@ describe("RLS under the non-superuser app role", () => {
     const error = await captureError(() =>
       suite.admin.execute(sql`
         insert into sales (tenant_id, till_id, node_id, series_id, invoice_number, issued_at,
-                           issued_offset_minutes, total, locale, invoice_locales, fiscal_backend,
-                           fiscal_state)
+                           issued_offset_minutes, total, vat_breakdown, locale, invoice_locales,
+                           fiscal_backend, fiscal_state)
         values (${node.tenantId}, ${node.tillId}, ${other.nodeId}, ${node.seriesId}, 99,
-                '2026-07-20T19:20:30+02:00', 120, '0.00', 'es', array['es'], 'verifactu', 'recorded')
+                '2026-07-20T19:20:30+02:00', 120, '0.00', '[]'::jsonb, 'es', array['es'], 'verifactu', 'recorded')
       `),
     );
     expect(pgErrorCode(error)).toBe("23503"); // foreign_key_violation

@@ -268,6 +268,14 @@ export async function recordSale(
     pending.push({ error: now.warning, severity: "warning" });
   }
 
+  // The filed VAT desglose, resolved ONCE here so the SAME value feeds both the `sales` row below
+  // and `backend.recordSale` further down (spec 8a's single-source rule): supplied verbatim when the
+  // caller computed its own (already asserted to reconcile with `total` at the top of this function),
+  // otherwise derived from `lines` exactly as before. Storing it on `sales.vat_breakdown` is a
+  // queryable copy of already-filed data — nothing hashed moves — so a Z-report reads the exact
+  // filed figures without re-deriving a second breakdown that could silently disagree.
+  const vatBreakdown = input.vatBreakdown ?? buildVatBreakdown(input.lines);
+
   // Step 4. `total` is the only money column left on the sale: the tip moved to
   // `tenders.tip_amount` and `amount_charged` is derived, never stored (design D1-D3, migration
   // 0012) — which is exactly what lets the sale be written before payment settles.
@@ -278,6 +286,7 @@ export async function recordSale(
       tillId: input.tillId,
       nodeId: input.nodeId,
       seriesId: input.seriesId,
+      vatBreakdown,
       // The parked working order this sale was filed from, or NULL for a walk-up sale with no draft
       // (park & retrieve, sub-project 7b). Written once here, never updated — `sales` is immutable
       // (§5) and this is its sale-idempotency key. Only the till supplies it (Task 7); every other
@@ -380,9 +389,9 @@ export async function recordSale(
     offsetMinutes: now.offsetMinutes,
     descriptionOfOperation: location.operationDescription,
     total: decimal(input.total),
-    // Supplied verbatim when the caller computed its own desglose (asserted to reconcile with
-    // `total` at the top of this function); otherwise derived from `lines` exactly as before.
-    vatBreakdown: input.vatBreakdown ?? buildVatBreakdown(input.lines),
+    // The SAME breakdown stored on `sales.vat_breakdown` above — one variable feeds both, so the
+    // stored copy and the filed desglose cannot diverge (spec 8a).
+    vatBreakdown,
     // Null for a simplified invoice, which is the ordinary case at a till (spec's own framing on
     // `FiscalBackend.recordSale`'s `SaleForFiscalRecord.counterparty`). This task does not wire
     // up a recipient-identified (B2B) sale at all; a future task that does supplies a real

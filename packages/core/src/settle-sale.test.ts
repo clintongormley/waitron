@@ -56,6 +56,9 @@ async function seedSale(
       issuedAt: new Date("2026-08-01T11:00:00Z").toISOString(),
       issuedOffsetMinutes: 0,
       total: overrides.total ?? "65.00",
+      // The filed per-rate desglose (migration 0031); `[]` — this file exercises settlement, not the
+      // breakdown, and the column just needs a valid NOT NULL jsonb array.
+      vatBreakdown: [],
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
       fiscalBackend: "fake",

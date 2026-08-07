@@ -174,6 +174,9 @@ async function recordSale(
         issuedAt: AT,
         issuedOffsetMinutes: 120,
         total,
+        // The filed per-rate desglose (migration 0031); `[]` — this file stages mis-summed
+        // settlements, not the breakdown, and the column just needs a valid NOT NULL jsonb array.
+        vatBreakdown: [],
         locale: "es",
         invoiceLocales: ["es", "ca"],
         fiscalBackend: "verifactu",

@@ -45,10 +45,10 @@ function insertSaleSql(opts: {
   // does not exist" — the real cause — rather than on a TypeScript shape mismatch.
   return sql`insert into sales (
       tenant_id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes,
-      total, locale, invoice_locales, fiscal_backend, fiscal_state, working_order_id
+      total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, working_order_id
     ) values (
       ${TENANT_A}, ${TILL_A1}, ${nodeA}, ${seriesA}, ${opts.invoiceNumber}, ${AT}, 120,
-      '1.00', 'es', array['es','ca']::text[], 'verifactu', 'recorded', ${opts.workingOrderId}
+      '1.00', '[]'::jsonb, 'es', array['es','ca']::text[], 'verifactu', 'recorded', ${opts.workingOrderId}
     )`;
 }
 
