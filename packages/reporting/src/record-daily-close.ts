@@ -134,10 +134,11 @@ interface ParsedCount {
   countedCash: Decimal;
 }
 
-/** Parses a supplied money figure and rejects a negative or non-numeric one. The field is typed
- * `Decimal` on the interface, but an operator's input crosses the boundary as an untrusted string, so
- * it is validated here rather than trusted (the §3 defect class: "safe values" is a property of the
- * caller, not the code). `reason` is a stable English discriminator, never a user sentence. */
+/** Parses a supplied money figure and rejects a negative or non-numeric one. The field is a plain
+ * `string` on the input interface — an operator's cash count crosses the boundary as untrusted text —
+ * so it is validated here into a `Decimal` rather than trusted (the §3 defect class: "safe values" is
+ * a property of the caller, not the code). `reason` is a stable English discriminator, never a user
+ * sentence. */
 function requireNonNegativeMoney(tillId: TillId, field: string, raw: string): Decimal {
   let value: Decimal;
   try {
