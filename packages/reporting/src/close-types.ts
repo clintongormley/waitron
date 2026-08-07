@@ -41,12 +41,20 @@ export interface DailyCloseSnapshot {
   };
 }
 
-/** One till's supplied cash count — the raw operator input `recordDailyClose` reconciles. */
+/**
+ * One till's supplied cash count — the RAW operator input `recordDailyClose` reconciles. The money
+ * fields are plain `string`, not `Decimal`: they cross the boundary unvalidated (a till screen, an
+ * API body), and `recordDailyClose` is what proves each one is a non-negative money literal —
+ * rejecting a negative or non-numeric value with `close.invalid_cash_input` and only then branding it.
+ * Typing them `Decimal` here would assert a validation that has not happened yet — precisely the "safe
+ * values is a property of the caller, not the code" defect class the house guards against. The
+ * validated, canonical figures live on {@link TillReconciliation} (the output), which IS `Decimal`.
+ */
 export interface CashCountInput {
   tillId: TillId;
-  openingFloat: Decimal;
-  payouts: Decimal;
-  countedCash: Decimal;
+  openingFloat: string;
+  payouts: string;
+  countedCash: string;
 }
 
 /**
