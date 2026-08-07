@@ -140,4 +140,29 @@ describe("verifyDailyCloseChain — the chain re-walk", () => {
     });
     expect(await verify()).toEqual({ ok: false, brokenAt: 2, reason: "hash_mismatch" });
   });
+
+  it("detects tail truncation: the head records more closes than survive", async () => {
+    // Two valid closes leave the head at sequence_no = 2. Advance the head as if a THIRD close had
+    // been recorded and its row then deleted — the surviving rows [1, 2] walk clean, so ONLY the head
+    // cross-check catches that the tip is gone. `daily_close_chain` is the mutable head (no
+    // append-only trigger), so a plain UPDATE stages this.
+    await record("2026-08-04", []);
+    await record("2026-08-05", []);
+    await suite.db.execute(sql`
+      update daily_close_chain set sequence_no = 3, last_entry_hash = ${"F".repeat(64)}
+       where tenant_id = ${venue.tenantId} and node_id = ${venue.nodeId}`);
+    expect(await verify()).toEqual({ ok: false, brokenAt: 3, reason: "tail_truncation" });
+  });
+
+  it("detects a head whose recorded tip hash disagrees with the surviving last close", async () => {
+    // Row count matches the head (both say 2), so the shortfall check on length passes — but the
+    // head's last_entry_hash no longer equals close 2's entry_hash, the signature of a tip replaced
+    // under a reused sequence number. Exercises the hash arm of the head cross-check.
+    await record("2026-08-04", []);
+    await record("2026-08-05", []);
+    await suite.db.execute(sql`
+      update daily_close_chain set last_entry_hash = ${"E".repeat(64)}
+       where tenant_id = ${venue.tenantId} and node_id = ${venue.nodeId}`);
+    expect(await verify()).toEqual({ ok: false, brokenAt: 2, reason: "tail_truncation" });
+  });
 });

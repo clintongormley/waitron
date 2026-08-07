@@ -1,5 +1,5 @@
 import { and, asc, eq } from "drizzle-orm";
-import { dailyCloses } from "@waitron/db";
+import { dailyCloseChain, dailyCloses } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { NodeId, TenantId } from "@waitron/shared";
 import { computeCloseEntryHash } from "./daily-close-hash.js";
@@ -11,10 +11,14 @@ import type { DailyCloseSnapshot } from "./close-types.js";
  * removed or inserted close); `genesis` is a first close whose `prev_entry_hash` is not "";
  * `broken_link` is a later close whose `prev_entry_hash` does not point at its predecessor's
  * `entry_hash`; `hash_mismatch` is a close whose stored `entry_hash` no longer recomputes from its
- * own frozen content (a tampered snapshot, a fabricated row). English tokens — this chain is generic
- * (`entry_hash`/`prev_entry_hash`/`sequence_no`), unlike the fiscal chain's regime vocabulary.
+ * own frozen content (a tampered snapshot, a fabricated row). `tail_truncation` is the case the walk
+ * over `daily_closes` alone is blind to — the most recent close(s) deleted, leaving the surviving
+ * rows internally consistent — caught by cross-checking the `daily_close_chain` head, which records
+ * the true tip. English tokens — this chain is generic (`entry_hash`/`prev_entry_hash`/`sequence_no`),
+ * unlike the fiscal chain's regime vocabulary.
  */
-export type CloseChainBreakReason = "sequence" | "genesis" | "broken_link" | "hash_mismatch";
+export type CloseChainBreakReason =
+  "sequence" | "genesis" | "broken_link" | "hash_mismatch" | "tail_truncation";
 
 /**
  * The result of re-walking a whole `(tenant, node)` close chain: `ok: true`, or the FIRST break with
@@ -32,11 +36,18 @@ export type DailyCloseChainVerification =
  *
  * The closes are ordered by `sequence_no` (their chain POSITION), never by `business_day` or
  * `closed_at`: the sequence is what the chain is defined by, and a close of a later day can be
- * recorded before an earlier one. The four checks are the workforce/fiscal precedent
- * (`packages/workforce/src/chain-hash.ts`'s `verifyChain`): an inserted, removed, reordered, or
- * content-edited close breaks at least one. A never-closed `(tenant, node)` returns `ok: true`
- * vacuously — the empty walk falls straight through, which is correct: a fresh node's chain is not
- * broken, it is unstarted.
+ * recorded before an earlier one. The four in-walk checks are the workforce/fiscal precedent
+ * (`packages/workforce/src/chain-hash.ts`'s `verifyChain`): an inserted, removed (from the middle),
+ * reordered, or content-edited close breaks at least one.
+ *
+ * A FIFTH check, after the walk, cross-checks the `daily_close_chain` head — the tamper the walk over
+ * `daily_closes` alone cannot see. Delete the LAST close of a 1-2-3 chain and the survivors [1, 2] are
+ * a perfectly consistent chain, so the walk returns `ok: true`; but the head still records
+ * `sequence_no = 3` / `last_entry_hash = <hash 3>`, because `recordDailyClose` writes the close and
+ * advances the head in ONE transaction, so the head is always exactly the true tip. So the last walked
+ * close's `(sequence_no, entry_hash)` must equal the head's — a shortfall is `tail_truncation`. The
+ * head is only consulted when it exists: a never-closed `(tenant, node)` has no head row and no
+ * closes, and returns `ok: true` vacuously (a fresh node's chain is not broken, it is unstarted).
  */
 export async function verifyDailyCloseChain(
   tx: Transaction,
@@ -103,6 +114,30 @@ export async function verifyDailyCloseChain(
     }
 
     expectedPrev = row.entryHash;
+  }
+
+  // 5. Tail-truncation cross-check against the mutable chain head. After a clean walk, `rows.length`
+  //    is the last close's `sequence_no` (contiguity guaranteed it) and `expectedPrev` is the last
+  //    close's `entry_hash` ("" for an empty chain). Both must equal what the head records as the
+  //    tip — the head is advanced in the SAME transaction as the close, so it is the authority the
+  //    surviving `daily_closes` rows cannot contradict without a shortfall showing here. Only an
+  //    EXISTING head is treated as authority; its absence means a never-closed node (no closes
+  //    either), which the empty walk already passed. Read-only, no lock — verify never mutates.
+  const [head] = await tx
+    .select({
+      sequenceNo: dailyCloseChain.sequenceNo,
+      lastEntryHash: dailyCloseChain.lastEntryHash,
+    })
+    .from(dailyCloseChain)
+    .where(and(eq(dailyCloseChain.tenantId, tenantId), eq(dailyCloseChain.nodeId, nodeId)));
+
+  if (
+    head !== undefined &&
+    (rows.length !== head.sequenceNo || expectedPrev !== head.lastEntryHash)
+  ) {
+    // The head says the chain reaches `sequenceNo`; the rows fall short (deleted tip) or their tip
+    // hash disagrees (a replaced tip). `brokenAt` is the true tip the chain should have reached.
+    return { ok: false, brokenAt: head.sequenceNo, reason: "tail_truncation" };
   }
 
   return { ok: true };

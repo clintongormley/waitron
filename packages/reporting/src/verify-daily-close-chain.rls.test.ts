@@ -97,4 +97,21 @@ describe("verifyDailyCloseChain against a tampered committed chain (real Postgre
     // The chain is now [1, 3]: the walk expects 2 at the second position and finds 3.
     expect(await verify()).toEqual({ ok: false, brokenAt: 2, reason: "sequence" });
   });
+
+  it("catches the LATEST close deleted (tail truncation the row walk cannot see)", async () => {
+    // The gap a `daily_closes`-only walk is blind to: delete the tip and the survivors [1, 2] are a
+    // perfectly consistent chain. Only the head — advanced in the SAME transaction as the close, so
+    // it still records sequence_no = 3 / last_entry_hash = <hash 3> — reveals the shortfall.
+    await record("2026-08-04", []);
+    await record("2026-08-05", []);
+    const third = await record("2026-08-06", []);
+    expect(await verify()).toEqual({ ok: true }); // control: 1-2-3 intact
+
+    await bypassingImmutability((tx) =>
+      tx.execute(sql`delete from daily_closes where id = ${third.id}`),
+    );
+
+    // The rows [1, 2] walk clean; the head still says the tip is 3.
+    expect(await verify()).toEqual({ ok: false, brokenAt: 3, reason: "tail_truncation" });
+  });
 });
