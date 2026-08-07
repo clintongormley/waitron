@@ -55,9 +55,13 @@ designed and fully planned this session
 (`apps/dashboard`) consuming the existing headless APIs, with **remote access decoupled as a pluggable
 transport** (tunnel-first, snitun-pattern reimplemented in Node; Spain-hosted cloud removes ROF art.
 22.2). Slice 1 = staff admin + an offline-verifiable **passkey / password+TOTP** auth floor, delivered
-as four sub-slices (identity → server API → dashboard app → passkeys); **1a is in flight**. Known gap:
-a true first login is blocked on a small **provisioning** follow-up (the seeded admin has a PIN but no
-dashboard password) — every subsequent person is covered by 1b's `setPassword`.
+as four sub-slices (identity → server API → dashboard app → passkeys). **1a (identity auth foundation)
+LANDED as #67** (2026-08-07): the `management_sessions` table with FORCE RLS, the password/TOTP
+credentials + verifier seam (`loginManager`/`authorizeManager`, passkey plugs in at 1d), the session
+lifecycle (idle timeout + mid-session `persons.status` re-check), the staff mutations repointed off
+till sessions, and a `person.manage`-gated `listPersons` — `@waitron/identity` at 100% coverage.
+**1b (server management API) is next**, then 1c (dashboard app) and 1d (passkeys). Slice-1a follow-ups
+(incl. the still-open first-admin-password provisioning gap) are under *Debt and odd jobs*.
 
 **Prioritisation is by soundness, not the calendar (decided 2026-08-02).** Waitron will be finished
 before the deli is ready to trade, so the deli's 1-Jan-2027 legal deadline is *not* a reason to rank
@@ -71,7 +75,7 @@ most-uncertain foundations first.
 | What | State |
 | --- | --- |
 | **Reporting — *cierre Z*** (sub-project 8) — frozen/signed daily close | **8a VAT-exact daily close LANDED as #66** (`sales.vat_breakdown` (0032) written from the filed value + `computeVatSummary` reads it — the derived close is now exact for catalogue difference-method sales). **8b frozen cierre Z is next** (implemented this session, landing): immutable numbered `daily_closes` + per-node hash chain + per-till cash reconciliation → *descuadre*, headless. English schema tokens (`daily_closes`/`cash_variance`/`entry_hash`); Spanish *cierre Z*/*descuadre* are UI-only |
-| **Management dashboard** — owner's off-premises console (slice 1a) | Designed + fully planned 2026-08-07 (spec + plans 1a–1d, see *Current direction*). **Slice 1a (identity auth foundation) in flight**; local-server `apps/dashboard`, remote via a pluggable tunnel. Blocked end-to-end on a provisioning follow-up (first-admin password) |
+| **Management dashboard** — owner's off-premises console | **Slice 1a (identity auth foundation) LANDED as #67**; **1b (server management API) is next**, then 1c (dashboard app), 1d (passkeys). Spec + plans 1a–1d committed (see *Current direction*). Slice-1a follow-ups + the still-open first-admin-password provisioning gap under *Debt and odd jobs* |
 
 ---
 
@@ -276,6 +280,29 @@ putting the tip on `tenders`).
 
 Carried from finished work. None of it blocks anything; all of it makes later work cheaper.
 
+- **Dashboard slice 1a follow-ups (#67, identity auth foundation). None blocking; each deferred with a
+  reason during the SDD build / finish-branch / Copilot review chain.**
+  - **`totp_secret` is stored PLAINTEXT and `app_user` holds SELECT on `persons`.** A TOTP secret must
+    be recoverable to verify (can't be hashed like the PIN/password), so a `persons` leak would expose
+    every enrolled second factor. Latent — nothing writes `totp_secret` in 1a. **The enrollment slice
+    must encrypt `totp_secret` at rest via the credentials vault (AES-256-GCM), decrypting on the box
+    before `verifyTotp`** (keeps the offline-verifiable property). A comment on the column records it.
+  - **otplib is pinned to `^12.0.1`, whose transitive deps are deprecated (v13 guidance).** Copilot
+    flagged it; **v13 is a breaking API change** (restructured `authenticator` export — `totp.ts` fails
+    at import), so it needs a `totp.ts` rewrite + re-probe of v13's fail-closed behaviour — its own small
+    follow-up, not a dep bump. Warnings are install-time only; CI is green.
+  - **First admin has no dashboard password.** `waitron-provision venue` seeds an admin with a PIN, not
+    a password, so there is no true end-to-end first login until an admin password exists. **A
+    provisioning follow-up** (extend `venue`, or a `set-password` command) unblocks it; 1b's `setPassword`
+    covers every subsequent person.
+  - **Deferred to 1b/later (recorded so they aren't rediscovered):** stamp `ended_at` when a management
+    session expires (today the idle timeout is enforced at read time — matters once 1b adds the
+    `(tenant_id, person_id) WHERE ended_at IS NULL` open-session lookup); fold `resolveManagementSession`'s
+    SELECT-then-UPDATE into one `UPDATE … RETURNING` (a low-frequency dashboard path, correctness-sensitive
+    — its own TDD'd optimisation); extract a shared `assertPermission(role, permission)` and dedup the
+    `not_found→suspended` lookup against the till's `verifyPersonCredential` (both touch `authorize.ts`,
+    which 1a deliberately left untouched); add a NEGATIVE `WITH CHECK` test (cross-tenant INSERT refusal)
+    to `management-sessions.rls.test.ts` (the sibling `sessions.rls` doesn't test it either).
 - **Counter POS follow-ups (sub-project 7, slice 1 / 7a — the walk-up cash sale). None blocking; each
   is a deliberate slice-1 boundary or a small review Minor, deferred rather than dropped.**
   - **TLS termination, LAN binding and serving the built bundle are deployment (#9).** In dev the till
