@@ -11,6 +11,7 @@ import {
   MIN_PIN_LENGTH,
   createPerson,
   listActiveStaff,
+  listPersons,
   reactivatePerson,
   resetPin,
   setRole,
@@ -327,6 +328,50 @@ describe("listActiveStaff", () => {
     expect(cohort.map((s) => s.displayName)).toEqual(["Ana", "Zoe"]);
     // Only id + name reach the pre-login lock screen: no pinHash, no role, no status.
     expect(Object.keys(cohort[0]!)).toEqual(["personId", "displayName"]);
+  });
+});
+
+describe("listPersons", () => {
+  it("listPersons returns a roster with credential booleans, no secrets", async () => {
+    const { sessionId, personId: manager } = await openManagementSession(
+      suite.db,
+      tenantId,
+      "manager",
+    );
+    await run((tx) =>
+      createPerson(tx, {
+        tenantId,
+        managementSessionId: sessionId,
+        displayName: "Ada",
+        role: "staff",
+        pin: "4321",
+      }),
+    );
+    const roster = await run((tx) => listPersons(tx, { managementSessionId: sessionId }));
+    const names = roster.map((p) => p.displayName);
+    expect(names).toContain("Ada");
+    const self = roster.find((p) => p.personId === manager)!;
+    expect(self.hasPassword).toBe(true);
+    expect(self.hasTotp).toBe(false);
+    expect(Object.keys(roster[0]!)).toEqual(
+      expect.arrayContaining([
+        "personId",
+        "displayName",
+        "role",
+        "status",
+        "hasPassword",
+        "hasTotp",
+      ]),
+    );
+    expect(JSON.stringify(roster)).not.toContain("scrypt$");
+  });
+
+  it("listPersons refuses a staff role", async () => {
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "staff");
+    const code = await run((tx) =>
+      codeOf(() => listPersons(tx, { managementSessionId: sessionId })),
+    );
+    expect(code).toBe("authorization.not_permitted");
   });
 });
 

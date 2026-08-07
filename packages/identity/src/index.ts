@@ -22,12 +22,13 @@ export {
   assertPinLength,
   createPerson,
   listActiveStaff,
+  listPersons,
   reactivatePerson,
   resetPin,
   setRole,
   suspendPerson,
 } from "./staff.js";
-export type { StaffListEntry } from "./staff.js";
+export type { PersonSummary, StaffListEntry } from "./staff.js";
 export { hashPin, verifyPin } from "./verify-pin.js";
 export {
   MIN_PASSWORD_LENGTH,

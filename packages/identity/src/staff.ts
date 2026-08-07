@@ -126,3 +126,52 @@ export async function listActiveStaff(tx: Transaction): Promise<StaffListEntry[]
     .orderBy(persons.displayName);
   return rows.map((r) => ({ personId: r.personId, displayName: r.displayName }));
 }
+
+/** One row of the admin roster (Task 10). Carries the person's role and status plus credential
+ * BOOLEANS — never the hash or secret behind them. */
+export interface PersonSummary {
+  personId: string;
+  displayName: string;
+  role: PersonRoleValue;
+  status: "active" | "suspended";
+  hasPassword: boolean;
+  hasTotp: boolean;
+}
+
+/**
+ * Admin roster for the dashboard staff screen. Gated on `person.manage`: `authorizeManager` runs
+ * FIRST, so a caller without the permission is rejected before anything is selected. Returns EVERY
+ * person of the tenant (suspended included, unlike the pre-login `listActiveStaff`), ordered by name.
+ *
+ * `password_hash`/`totp_secret` are selected only to derive `hasPassword`/`hasTotp`; the returned
+ * `PersonSummary` carries the booleans and never the hash, the secret, or the PIN — a leak the suite
+ * pins by asserting `JSON.stringify` of the roster contains no `scrypt$` (the credential-hash prefix).
+ */
+export async function listPersons(
+  tx: Transaction,
+  args: { managementSessionId: string },
+): Promise<PersonSummary[]> {
+  await authorizeManager(tx, {
+    managementSessionId: args.managementSessionId,
+    permission: "person.manage",
+  });
+  const rows = await tx
+    .select({
+      personId: persons.id,
+      displayName: persons.displayName,
+      role: persons.role,
+      status: persons.status,
+      passwordHash: persons.passwordHash,
+      totpSecret: persons.totpSecret,
+    })
+    .from(persons)
+    .orderBy(persons.displayName);
+  return rows.map((r) => ({
+    personId: r.personId,
+    displayName: r.displayName,
+    role: r.role as PersonRoleValue,
+    status: r.status as "active" | "suspended",
+    hasPassword: r.passwordHash !== null,
+    hasTotp: r.totpSecret !== null,
+  }));
+}
