@@ -1,0 +1,181 @@
+// Side-effect only: keeps this host's `server.internal` code (and the rest of errors.ts) reachable
+// from the file that answers with it — the reachability convention till-api.ts and
+// management-session.ts follow. `@waitron/identity`'s own error-code augmentations
+// (`password.invalid`, `person.*`, `totp.invalid`, `management_session.*`, `authorization.*`, …)
+// load transitively via the value imports from that package below, so no bare
+// `import "@waitron/identity"` is needed on top of them.
+import "./errors.js";
+import type { Context, Hono } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { AppError, isAppError } from "@waitron/shared";
+import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { endManagementSession, listActiveStaff, loginManager } from "@waitron/identity";
+import { codeOf } from "./error-code.js";
+import {
+  clearManagementCookie,
+  requireManagementSession,
+  setManagementCookie,
+} from "./management-session.js";
+import { isUuid } from "./till-session.js";
+import type { Logger } from "./logger.js"; // the same Logger till-api.ts's routes take
+
+/**
+ * Everything the dashboard's management HTTP routes need. The management surface reads and writes only
+ * the tenant's own identity records, so — unlike `TillApiDeps` — it wires no fiscal backend, clock or
+ * card provider. `cfg.tenantId` is the dashboard's own tenant (provisioning stamped it), scoping every
+ * `withTenant` below. `secureCookies` decides the management cookie's `Secure` attribute (TRUE on a
+ * production HTTPS host, FALSE on loopback dev with no TLS), mirroring `TillApiDeps.secureCookies`.
+ */
+export interface ManagementApiDeps {
+  db: Database;
+  cfg: { tenantId: string };
+  secureCookies: boolean;
+}
+
+/**
+ * Every AppError CODE the management API answers, and the HTTP status it maps to — the management
+ * parallel of till-api.ts's `STATUS`. Defined ONCE here and shared by every route Task 4 adds to
+ * `mountManagementApi` too, which is why it already lists the credential codes those gated routes
+ * surface (`pin.too_short`, `password.too_short`, `person.not_found`, `authorization.not_permitted`).
+ * CLIENT faults only: a genuine SERVER fault never appears here — it reaches `run` as a NON-AppError
+ * and becomes an opaque 500. A registered code absent from this table defaults to 400, which is why
+ * `run` needs the `?? 400`.
+ *
+ * `shared.invalid_id` is listed for completeness of the branded-id family but is not, on today's
+ * routes, reachable on this surface: request ids are screened with `isUuid` and passed to the identity
+ * functions as plain strings, and `cfg.tenantId` arrives pre-validated from boot — the only thrower is
+ * `@waitron/shared`'s branded-id constructor, which no route here calls with request input. Left in
+ * rather than dropped so a future route that DOES construct a branded id gets the 400 rather than the
+ * `?? 400` default; see this task's report for the reviewer note.
+ */
+const STATUS: Record<string, ContentfulStatusCode> = {
+  "management_session.required": 401,
+  "management_session.expired": 401,
+  "password.invalid": 401,
+  "totp.invalid": 401,
+  "person.suspended": 403,
+  "person.not_found": 404,
+  "authorization.not_permitted": 403,
+  "pin.too_short": 400,
+  "password.too_short": 400,
+  "shared.invalid_id": 400,
+};
+
+/**
+ * The one error boundary every management route wraps its handler in — the local counterpart of
+ * till-api.ts's exported `run`, identical in shape but keyed on the management `STATUS` map and
+ * logging server faults under `management.failed`.
+ *
+ * An `AppError` becomes a structured `{ error: { code, params } }` at its mapped status (or 400 when
+ * unmapped), logged at `warn`: every code the API surfaces is a client 4xx by construction (see
+ * `STATUS`), so there is no `error`-level AppError to distinguish. Anything else IS a server fault:
+ * logged at `error` under `management.failed` with only `codeOf`'s classification (never the caught
+ * value's `.message`, which a driver can load with a connection string), and answered with an opaque
+ * `server.internal` 500 that leaks nothing. Local, not exported: Task 4's gated routes live in this
+ * same file and reach it directly.
+ */
+async function run(c: Context, log: Logger, fn: () => Promise<Response>): Promise<Response> {
+  try {
+    return await fn();
+  } catch (cause) {
+    if (isAppError(cause)) {
+      const status = STATUS[cause.code] ?? 400;
+      log("warn", cause.code, cause.params);
+      return c.json({ error: { code: cause.code, params: cause.params } }, status);
+    }
+    log("error", "management.failed", { errorCode: codeOf(cause) });
+    return c.json({ error: { code: "server.internal" } }, 500);
+  }
+}
+
+/**
+ * Reads the request's management cookie for the idempotent logout, returning its id or `null` when the
+ * cookie is absent or not UUID-shaped. `requireManagementSession` THROWS `management_session.required`
+ * on either — the right answer for a gated route (Task 4) but the wrong one for logout, which must
+ * still clear the cookie and answer 204 when there is nothing to end. Wrapping the throw here keeps the
+ * one anchored-UUID/absent-cookie screen in a single place rather than re-deriving it.
+ */
+function requireManagementSessionOrNull(c: Context): string | null {
+  try {
+    return requireManagementSession(c);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Mounts the dashboard's management-session routes on an existing Hono app: the pre-login staff
+ * roster, login and logout. Task 4 adds the gated staff CRUD routes to THIS same function, each
+ * handler wrapped in `run` (above) so the whole surface maps errors identically. Mirrors
+ * `mountTillApi`'s shape — `withTenant(deps.db, deps.cfg.tenantId, …)` + `asAppUser(tx)` on every DB
+ * touch, so RLS scopes each read/write to this dashboard's own tenant.
+ */
+export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logger): void {
+  // Pre-login roster for the login screen. Deliberately UNAUTHENTICATED — it is what the manager picks
+  // their name from before any session exists — so it calls `listActiveStaff` under `withTenant` +
+  // `asAppUser` (RLS scopes it to this dashboard's tenant) rather than `requireManagementSession`.
+  // `listActiveStaff` returns `{ personId, displayName }` only: no password material, role or status,
+  // so there is nothing here a bystander must not see. The till's `GET /api/staff` parallel.
+  app.get("/management-api/staff-roster", (c) =>
+    run(c, log, async () => {
+      const roster = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return listActiveStaff(tx);
+      });
+      return c.json(roster);
+    }),
+  );
+
+  // Login: password (+ TOTP iff the person is enrolled) → management-session cookie. Runs as the app
+  // role under the dashboard's tenant (`withTenant` + `asAppUser`), so RLS scopes the person lookup and
+  // a wrong password, missing/wrong TOTP, unknown or suspended person surfaces as the identity
+  // credential codes `STATUS` maps to 401/403/404. The body is screened first: a non-string or
+  // non-UUID `personId`, or a non-string `password`, is refused as `password.invalid` — the SAME code a
+  // wrong password gets, so nothing in the response tells an unauthenticated caller which field failed.
+  app.post("/management-api/session", (c) =>
+    run(c, log, async () => {
+      const body = await c.req.json<{ personId?: string; password?: string; totp?: string }>();
+      if (
+        typeof body.personId !== "string" ||
+        !isUuid(body.personId) ||
+        typeof body.password !== "string"
+      ) {
+        throw new AppError("password.invalid", {});
+      }
+      // Bind the validated fields to locals: the guard narrows `body.personId`/`body.password` to
+      // `string` HERE, but that narrowing does not survive into the `withTenant` closure below (TS
+      // resets a captured property to its declared `string | undefined`), so the closure reads these.
+      const { personId, password, totp } = body;
+      const session = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return loginManager(tx, {
+          tenantId: deps.cfg.tenantId,
+          personId,
+          password,
+          totp,
+        });
+      });
+      setManagementCookie(c, session.id, deps.secureCookies);
+      return c.json({ personId: session.personId });
+    }),
+  );
+
+  // Logout: end the management session and clear the cookie. Idempotent — a request with no cookie, or
+  // one whose cookie is not even UUID-shaped (so it names no `uuid` row), still clears the cookie and
+  // answers 204, so a double logout or a stale tab is never an error. `requireManagementSessionOrNull`
+  // gives `null` in exactly those cases, skipping the DB touch; a valid id ends its session under
+  // `withTenant` + `asAppUser`, and `endManagementSession` is itself a no-op on an already-ended one.
+  app.delete("/management-api/session", (c) =>
+    run(c, log, async () => {
+      const id = requireManagementSessionOrNull(c);
+      if (id !== null) {
+        await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+          await asAppUser(tx);
+          await endManagementSession(tx, id);
+        });
+      }
+      clearManagementCookie(c);
+      return c.body(null, 204);
+    }),
+  );
+}
