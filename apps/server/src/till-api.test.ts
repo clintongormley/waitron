@@ -533,6 +533,47 @@ describe("POST /api/sales (session-guarded sale)", () => {
   });
 });
 
+describe("POST /api/pay (session-guarded integrated card pay)", () => {
+  it("REJECTS (401 session.required) when no cookie is present — a pay never runs unauthenticated", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+
+    // The guard runs BEFORE the body is even read, matching every other session-guarded route. The
+    // capture/decline/empty-basket happy paths are proven end-to-end over real Postgres in
+    // `till-api.rls.test.ts` (PGlite runs as a superuser and cannot exercise the deployment role's
+    // chained write or the provider's own FORCE RLS, CLAUDE.md §4).
+    const res = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: randomUUID(), lines: [] }),
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  });
+
+  it("500s server.internal when the till has no integrated card provider configured", async () => {
+    // `deps(suite.db)` leaves `cardProvider` undefined — the shape a till boots with when
+    // `WAITRON_TILL_CARD_PROVIDER=none` (`boot.ts`'s `buildCardProvider`). `mountTillApi` mounts this
+    // route on EVERY till regardless of `cardProvider` (`boot.ts`'s `startServer`, which always calls
+    // it), so `/api/pay` stays reachable on such a till: nothing at the HTTP layer stops a client from
+    // posting here even though the till UI's own affordance is not expected to. That makes a request
+    // reaching this branch a genuine misconfiguration/foreign-request fault — never a payment outcome
+    // — refused BEFORE any DB write, with the SAME opaque `server.internal` 500 every other
+    // non-AppError failure gets from `run`.
+    const id = await openSession(suite.db);
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+
+    const res = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
+      body: JSON.stringify({ id: randomUUID(), lines: [] }),
+    });
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: { code: "server.internal" } });
+  });
+});
+
 // Park a fresh order for the logged-in operator over the real HTTP surface (never the working-order
 // module directly), so every assertion using it rides the route's own requireSession + run wrapper.
 // Module-scoped (not just `/api/working-orders`'s own describe) because Task 9's place/prep/cancel
