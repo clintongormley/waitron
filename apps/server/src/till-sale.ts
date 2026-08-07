@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
 import {
+  addDecimal,
   AppError,
   compareDecimal,
   decimal,
@@ -21,8 +22,10 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import type { Decimal } from "@waitron/shared";
 import type { PricedLines } from "@waitron/catalogue";
 import { associatePaymentWithSale, recordManualCardPayment } from "@waitron/payments";
+import type { PaymentProvider, PaymentResult } from "@waitron/payments";
 import { formatInvoiceNumber, recordSale, settleSale } from "@waitron/core";
 import type { FiscalBackend } from "@waitron/fiscal";
 import {
@@ -170,6 +173,49 @@ export interface PayWorkingOrderRequest {
    *  `card`, with `externalRef` the optional acquirer / terminal operation number for a card. */
   tender: TillTender;
 }
+
+/**
+ * A pay over an INTEGRATED card terminal (Stripe reader), keyed like {@link PayWorkingOrderRequest} by
+ * the working-order id. It carries NO tender — the tender IS the card, driven by the provider, so this
+ * request only names the basket to file and the (optional) tip. Same basket semantics as the pay path:
+ *  - WALK-UP (no `working_orders` row for `id`): `lines` is the basket to price and file.
+ *  - RETRIEVED / PLACED order (the row exists): `lines` is IGNORED — the order files its own STORED
+ *    locked lines (`priceStoredOrder`), so a catalogue price change between add and pay never moves the
+ *    filed total (line-add snapshot, 7c).
+ */
+export interface IntegratedPayRequest {
+  id: string;
+  /** The walk-up basket to price and file; IGNORED for a retrieved/placed order (files its stored lock). */
+  lines: { productId: string; quantity: string }[];
+  /** The till-entered gross tip. CLAMPED to "0.00" when the till has tips disabled
+   *  (`IntegratedPayDeps.tipsEnabled === false`), so a client cannot add a tip the venue does not take. */
+  tip?: string;
+  /** Per-transaction staff consent to accept the card offline if the network is down — meaningful only
+   *  for a device-local offline queue (`StripeOnDeviceProvider`); a fixed-counter reader ignores it. */
+  allowOffline?: boolean;
+}
+
+/**
+ * The outcome of an integrated pay, as DATA — a decline / stall / offline-refusal is never an
+ * exception (nothing may block a sale on anything but the sale itself, CLAUDE.md §5). `captured`
+ * carries the filed/replayed ticket; the three non-captured arms carry no ticket (nothing was filed
+ * and the order stays `open`, so the till simply retries). `timeout` is reserved — the provider
+ * currently collapses a poll-window stall into `failed`/`declined` (see {@link toPayOutcome}).
+ */
+export type IntegratedPayOutcome =
+  | { outcome: "captured"; ticket: TillSaleResult }
+  | { outcome: "declined" }
+  | { outcome: "timeout" }
+  | { outcome: "network_unavailable" };
+
+/**
+ * {@link payWorkingOrderIntegrated}'s deps: the fiscal {@link TillSaleDeps} plus the card `provider`
+ * driving the reader, and the till's `tipsEnabled` flag (both wired at boot from `TillConfig`, Task 3).
+ */
+export type IntegratedPayDeps = TillSaleDeps & {
+  provider: PaymentProvider;
+  tipsEnabled: boolean;
+};
 
 /**
  * Pay and settle a working order idempotently — the CRUX of park & retrieve (spec §3). It stops a
@@ -500,6 +546,248 @@ async function fileImmediateSale(
     change,
     qr: fiscal.verificationUrl ?? "",
   };
+}
+
+/**
+ * Pay and settle a working order over an INTEGRATED card terminal — the SPLIT-transaction path
+ * (design "ordering 2", issue-at-pay), built BESIDE {@link payWorkingOrder} (cash / manual card,
+ * which stays behaviourally identical). The network `collect` MUST run OUTSIDE any database transaction
+ * (T1/T2 — a lock is never held across a reader round-trip), so this is three phases in three separate
+ * transactions:
+ *
+ *  - P1 (tx A). Lock/resolve the order, decide the price, and — for a WALK-UP — create it `open` and
+ *    COMMIT, so the `working_orders` row exists before P2: the provider's `insertAttempting` carries a
+ *    composite FK to `working_orders` (`payments_working_order_fk`, `packages/payments`), which an
+ *    uncommitted row would violate. An already-`settled` order REPLAYS its ticket here (files nothing);
+ *    an `abandoned` (or any other non-`open`/`placed`) order is refused `working_order.not_open`; an
+ *    empty WALK-UP basket is refused `sale.empty_basket`. A retrieved/placed order files its STORED
+ *    locked lines (`priceStoredOrder`), never a re-price of `req.lines` (line-add snapshot, 7c).
+ *  - P2 (no tx). Drive the reader with `provider.collect` for `total + tip` (the tip clamped to 0 when
+ *    the till has tips disabled, so a client cannot add a gratuity the venue does not take). A
+ *    `failed`/`network_unavailable` result files NOTHING, leaves the order `open` (retryable), and
+ *    returns the mapped non-captured outcome — a decline is DATA, never a throw (nothing may block a
+ *    sale on anything but the sale itself, CLAUDE.md §5).
+ *  - P3 (tx B). On `captured`/`accepted_offline`, `finalizeCapture` files the immediate card sale,
+ *    associates the just-captured payment, and settles the order — atomically.
+ *
+ * P1's `prepared` result is a small discriminated union kept deliberately extensible so the two
+ * follow-on slices slot in WITHOUT restructuring this body:
+ *  - Task 5 (recovery) adds a `recover` arm beside `replay`/`collect` — the §4 capture-idempotency
+ *    pre-check (`findCapturedPaymentForWorkingOrder`) finding a captured-but-unassociated payment on an
+ *    `open` order — and a `finalizeRecovery` beside `finalizeCapture`. It is NOT here: putting an
+ *    untested `recover` branch + stub in this task would need a cross-task ignore.
+ *  - Task 6 (ordering 1, invoice-first) adds the outstanding-sale detection that routes a placed
+ *    invoice-first order to a SETTLE of its already-issued invoice, ahead of this task's `collect` arm
+ *    (which is the ordering-2 / issue-at-pay branch it keeps).
+ *
+ * `operatorId` is the person who rang the sale, for attribution — threaded through to `recordSale`.
+ */
+export async function payWorkingOrderIntegrated(
+  deps: IntegratedPayDeps,
+  cfg: TillConfig,
+  req: IntegratedPayRequest,
+  operatorId?: string,
+): Promise<IntegratedPayOutcome> {
+  // ---- P1 (tx A): resolve / replay / price; commit a walk-up order OPEN before the network call. ----
+  const prepared = await withTenant(deps.db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+
+    const [locked] = await tx
+      .select({ status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, req.id))
+      .for("update");
+
+    // Already settled → idempotent replay (a retry whose first response was lost). Files nothing.
+    if (locked?.status === "settled") {
+      return {
+        kind: "replay" as const,
+        ticket: await readSettledTicket(deps.backend, tx, cfg, req.id),
+      };
+    }
+
+    // A `placed` order is payable too — that is issue-at-pay (ordering 2). Only a terminal non-settled
+    // state (abandoned) — or any other unexpected status — refuses, the fail-closed shape
+    // `payWorkingOrder` uses; the settle UPDATE's `enforce_transition` trigger is the DB backstop.
+    if (locked !== undefined && locked.status !== "open" && locked.status !== "placed") {
+      throw new AppError("working_order.not_open", { workingOrderId: req.id });
+    }
+
+    // Empty-basket guard, WALK-UP shape only: a retrieved/placed order ignores `req.lines` and files its
+    // stored lock, so an empty `req.lines` there is normal (the till sends none), not a refusal.
+    if (req.lines.length === 0 && locked === undefined) {
+      throw new AppError("sale.empty_basket", {});
+    }
+
+    // Price exactly once. A WALK-UP creates the order OPEN with its freshly-priced lines (committing this
+    // tx below satisfies the provider's FK), reusing that price; a RETRIEVED/PLACED order files its
+    // STORED locked lines — `req.lines` is IGNORED, exactly as `payWorkingOrder`/`collectOrder` do.
+    let priced: PricedLines;
+    if (locked === undefined) {
+      ({ priced } = await createOpenOrder(tx, cfg, req.id, req.lines, null));
+    } else {
+      priced = await priceStoredOrder(tx, req.id);
+    }
+    return { kind: "collect" as const, priced };
+  });
+
+  if (prepared.kind === "replay") {
+    return { outcome: "captured", ticket: prepared.ticket };
+  }
+  const { priced } = prepared;
+
+  // ---- P2 (no tx): drive the reader. Decline / stall / offline-refused are DATA, never a throw. ----
+  // Resolve the nullish tip default OUTSIDE the ternary so it is exercised on every tips-OFF call (the
+  // till's common case), not only on a tips-on call that happens to omit a tip.
+  const tipInput = req.tip ?? "0.00";
+  const tip = deps.tipsEnabled ? decimal(tipInput) : decimal("0.00");
+  const result = await deps.provider.collect({
+    tenantId: cfg.tenantId,
+    tillId: cfg.tillId,
+    workingOrderId: brandWorkingOrderId(req.id),
+    amount: addDecimal(priced.total, tip),
+    allowOffline: req.allowOffline,
+  });
+  if (result.state !== "captured" && result.state !== "accepted_offline") {
+    return toPayOutcome(result, null);
+  }
+
+  // ---- P3 (tx B): file + associate + settle atomically; a concurrent winner's 23505 replays. ----
+  const ticket = await finalizeCapture(deps, cfg, req, priced, tip, result, operatorId);
+  return { outcome: "captured", ticket };
+}
+
+/**
+ * File the immediate card sale for a captured/offline-accepted integrated payment, LINK that payment,
+ * and settle the order — P3 (tx B) of {@link payWorkingOrderIntegrated}, in ONE transaction so the
+ * sale, its tender/settlement, its chained fiscal record, the payment association and the
+ * `open`/`placed` → `settled` transition commit as one unit (or roll back together — proven by the
+ * "association fails → the whole sale rolls back" case).
+ *
+ * Idempotency for a CONCURRENT winner is the `sales_working_order_id_key` 23505 backstop, mirroring
+ * `payWorkingOrder`'s: if another pay for this id filed its sale first (between P1's commit and here),
+ * `recordSale` collides on that unique key and this replays the winner's settled ticket rather than
+ * filing a second unrepairable record. The SEQUENTIAL retry never reaches here — P1's `for update` read
+ * already saw the order `settled` and replayed there — so, unlike `payWorkingOrder` (whose lock+file
+ * share one transaction) this needs no internal re-lock: the unique key is the only serialisation left,
+ * and adding a `for update` re-read would make the 23505 path unreachable dead code. `readSettledTicket`
+ * defaults `change` to "0.00": a replay hands back nothing (the winner settled the drawer at its sale).
+ *
+ * The tender records the WHOLE card charge (`total + tip`) with the tip attributed on it, satisfying
+ * `settleSale`'s coverage identity `sum(amount) = total + sum(tip)`; the fiscal `total` stays ex-tip
+ * (`priced.total`), a tip being non-taxable and on no invoice (design §9.2).
+ */
+async function finalizeCapture(
+  deps: IntegratedPayDeps,
+  cfg: TillConfig,
+  req: IntegratedPayRequest,
+  priced: PricedLines,
+  tip: Decimal,
+  result: PaymentResult,
+  operatorId?: string,
+): Promise<TillSaleResult> {
+  const settledAt = result.settledAt;
+  /* v8 ignore start -- unreachable: finalizeCapture is only called on a `captured`/`accepted_offline`
+     result, whose `settledAt` is always set (provider.ts:66-83). The guard mirrors `readSettledTicket`'s
+     own "impossible" throws — a defended contract, not a claim reasoned away (CLAUDE.md §1). */
+  if (settledAt === null) {
+    throw new Error(`finalizeCapture: a ${result.state} result carried no settledAt`);
+  }
+  /* v8 ignore stop */
+  try {
+    return await withTenant(deps.db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+
+      const { saleId, fiscal } = await recordSale(tx, deps.backend, {
+        tenantId: cfg.tenantId,
+        tillId: cfg.tillId,
+        nodeId: cfg.nodeId,
+        seriesId: cfg.seriesId,
+        // The persisted working order this sale is filed from — the sale-idempotency key
+        // (`sales_working_order_id_key`), and what the 23505 backstop below keys the replay on.
+        workingOrderId: brandWorkingOrderId(req.id),
+        locale: cfg.locale,
+        invoiceLocales: cfg.invoiceLocales,
+        total: priced.total,
+        lines: priced.lines,
+        vatBreakdown: priced.vatBreakdown,
+        fiscalBackend: "verifactu",
+        clock: deps.clock,
+        operatorId,
+        settlement: {
+          kind: "immediate",
+          tenders: [
+            { method: "card", amount: addDecimal(priced.total, tip), tipAmount: tip, settledAt },
+          ],
+        },
+      });
+
+      // Link the ALREADY-CAPTURED integrated payment (written by `provider.collect`'s T2) to the sale,
+      // in this same transaction — NOT a second manual `payments` row. `fileImmediateSale`'s #62
+      // side-write (`recordManualCardPayment`) is for an UNINTEGRATED card, which has no prior payment;
+      // here the reader already took the money and recorded the row, so this only points its `sale_id`.
+      await associatePaymentWithSale(tx, {
+        provider: result.provider,
+        paymentRef: result.paymentRef,
+        saleId,
+        tenantId: cfg.tenantId,
+      });
+
+      // → settled. `working_orders_enforce_transition` permits open → settled (walk-up) and
+      // placed → settled (issue-at-pay); the `settled_at` biconditional requires the timestamp be set.
+      await tx
+        .update(workingOrders)
+        .set({ status: "settled", settledAt: settledAt.toISOString() })
+        .where(eq(workingOrders.id, req.id));
+
+      return {
+        invoiceNumber: await readInvoiceNumber(tx, saleId),
+        issuedAt: fiscal.issuedAt.toISOString(),
+        total: priced.total,
+        vatBreakdown: toVatBreakdown(priced.vatBreakdown),
+        lines: ticketLinesFrom(priced),
+        change: "0.00",
+        qr: fiscal.verificationUrl ?? "",
+      };
+    });
+  } catch (error) {
+    // The CONCURRENT backstop. Anything but a unique violation is a real failure (a chain error, or a
+    // failed association) and surfaces unchanged — the transaction above already rolled back, so a
+    // half-filed sale never persists.
+    if (!isUniqueViolation(error)) {
+      throw error;
+    }
+    // A 23505 on `sales_working_order_id_key`: a concurrent pay for this id won the race and committed
+    // its sale first, aborting this one. Replay the winner's settled ticket in a fresh transaction
+    // (the unique violation fires only against a COMMITTED conflicting row, so it is readable now),
+    // filing nothing.
+    return withTenant(deps.db, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return readSettledTicket(deps.backend, tx, cfg, req.id);
+    });
+  }
+}
+
+/**
+ * Map a provider result onto an {@link IntegratedPayOutcome} — a PURE function (unit-tested in
+ * `till-sale-integrated.test.ts`, which needs no container, CLAUDE.md §4). `captured` and
+ * `accepted_offline` both chained a sale (their `settledAt` is set), so both map to the `captured` arm
+ * carrying the ticket the caller filed; `network_unavailable` maps to its own arm (nothing filed);
+ * every other non-terminal state — today just `failed`, which `provider.ts`'s `drive` uses for BOTH a
+ * decline and a poll-window stall — maps to `declined`. The `timeout` arm stays reserved for when a
+ * provider learns to tell those two apart; the till renders both the same today.
+ */
+export function toPayOutcome(
+  result: PaymentResult,
+  ticket: TillSaleResult | null,
+): IntegratedPayOutcome {
+  if (result.state === "captured" || result.state === "accepted_offline") {
+    return { outcome: "captured", ticket: ticket! };
+  }
+  if (result.state === "network_unavailable") {
+    return { outcome: "network_unavailable" };
+  }
+  return { outcome: "declined" };
 }
 
 /**
