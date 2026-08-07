@@ -42,6 +42,19 @@ describe("loginManager", () => {
     );
     expect(code).toBe("person.not_found");
   });
+  it("does not authenticate a person from another tenant (tenant filter)", async () => {
+    // A person with a valid password, but in a DIFFERENT tenant. Even on PGlite (superuser, RLS
+    // bypassed), loginManager scoped to `tenantId` must not find them — so a caller that forgets
+    // withTenant cannot mint a session with a mismatched tenant_id.
+    const otherTenant = await seedTenant(suite.db);
+    const foreignPerson = await seedPersonWithPassword(suite.db, otherTenant, "manager");
+    const code = await run((tx) =>
+      codeOf(() =>
+        loginManager(tx, { tenantId, personId: foreignPerson, password: "correct horse" }),
+      ),
+    );
+    expect(code).toBe("person.not_found");
+  });
   it("rejects a wrong password with password.invalid", async () => {
     const personId = await seedManagerWithPassword();
     const code = await run((tx) =>

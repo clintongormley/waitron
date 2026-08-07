@@ -64,7 +64,7 @@ export async function resolveManagementSession(
   await tx
     .update(managementSessions)
     .set({ lastSeenAt: sql`now()` })
-    .where(eq(managementSessions.id, sessionId));
+    .where(and(eq(managementSessions.id, sessionId), isNull(managementSessions.endedAt)));
   return { personId: row.personId, role: row.role as PersonRoleValue };
 }
 

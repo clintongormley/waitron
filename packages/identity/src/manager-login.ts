@@ -1,7 +1,7 @@
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { persons } from "./schema/persons.js";
 import { verifyPassword } from "./verify-password.js";
 import { verifyTotp } from "./totp.js";
@@ -23,7 +23,7 @@ export async function loginManager(
       totpSecret: persons.totpSecret,
     })
     .from(persons)
-    .where(eq(persons.id, input.personId));
+    .where(and(eq(persons.id, input.personId), eq(persons.tenantId, input.tenantId)));
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   if (person.status === "suspended")
     throw new AppError("person.suspended", { personId: input.personId });
