@@ -39,6 +39,14 @@ export const persons = pgTable(
      * empty value; the hash format is the caller's responsibility. */
     pinHash: text("pin_hash").notNull(),
     passwordHash: text("password_hash"),
+    /** Stored plaintext base32 — a TOTP secret must be RECOVERABLE to verify a rolling code, so it
+     * cannot be hashed the way `pinHash`/`passwordHash` are. `app_user` holds SELECT on persons
+     * (drizzle/0001_identity_rls.sql), so a table or app-role leak exposes every enrolled second
+     * factor. Latent in this slice: nothing writes it yet (TOTP enrollment is a later slice; only
+     * tests set it via raw SQL). DEFERRED — the enrollment slice MUST encrypt `totp_secret` at rest
+     * via the credentials vault (AES-256-GCM, the house pattern also cited in ./secret-hash.ts),
+     * decrypting on the box before `verifyTotp` — which keeps the "lives on the box /
+     * offline-verifiable" property. */
     totpSecret: text("totp_secret"),
     role: personRole("role").notNull().default("staff"),
     status: personStatus("status").notNull().default("active"),

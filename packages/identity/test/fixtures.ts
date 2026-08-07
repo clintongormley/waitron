@@ -61,7 +61,7 @@ export async function openSession(
  * Seeds a person of `role` with a known password and returns an OPEN management session for them —
  * the dashboard analogue of `openSession`. `seedPerson` leaves `password_hash` null, so it is set
  * here via a raw update (under `withTenant`) before `loginManager` verifies it. "correct horse" is
- * length 11, above `MIN_PASSWORD_LENGTH`, so a real login path accepts it. Default role `manager`
+ * length 13, above `MIN_PASSWORD_LENGTH`, so a real login path accepts it. Default role `manager`
  * holds `person.manage`; pass `"staff"` for the refusal cases.
  */
 export async function openManagementSession(

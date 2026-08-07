@@ -39,10 +39,12 @@ export const managementSessions = pgTable(
       name: "management_sessions_person_fk",
     }).onDelete("restrict"),
     index("management_sessions_tenant_id_idx").on(t.tenantId),
-    // The "open management session for a person" lookup filters on (tenant_id, person_id) then
-    // ended_at IS NULL; this composite covers the equality predicate. Kept plain (not a partial
-    // `WHERE ended_at IS NULL` index) so drizzle-kit round-trips it and db:generate stays a no-op,
-    // the same shape as sessions_open_idx.
+    // Forward-looking for slice 1b's "open management session for a person" lookup — filtering on
+    // (tenant_id, person_id) then ended_at IS NULL — whose equality predicate this composite would
+    // cover. No consumer does that lookup in this slice: `resolveManagementSession` and
+    // `endManagementSession` key on the PK `id`. Mirrors sessions.ts's `sessions_open_idx` on
+    // (tenant_id, till_id). Kept plain (not a partial `WHERE ended_at IS NULL` index) so drizzle-kit
+    // round-trips it and db:generate stays a no-op.
     index("management_sessions_open_idx").on(t.tenantId, t.personId),
   ],
 ).enableRLS();
