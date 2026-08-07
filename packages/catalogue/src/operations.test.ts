@@ -133,6 +133,101 @@ describe("catalogue operations", () => {
     });
   });
 
+  it("round-trips a product's allergens", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "Deli" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "bread" },
+        pricingUnit: "each",
+        unitPrice: "1.20",
+        vatClass: "general",
+        allergens: { gluten: { presence: "contains", source: "wheat" } },
+      });
+      expect(p.allergens).toEqual({ gluten: { presence: "contains", source: "wheat" } });
+      const [listed] = await listProducts(tx, cat.id);
+      expect(listed!.allergens).toEqual({ gluten: { presence: "contains", source: "wheat" } });
+    });
+  });
+
+  it("defaults allergens to null (unreviewed) when omitted", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "Deli" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "water" },
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      expect(p.allergens).toBeNull();
+    });
+  });
+
+  it("rejects an invalid allergen code on create", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "Deli" });
+      await expect(
+        createProduct(tx, {
+          catalogueId: cat.id,
+          categoryId: null,
+          descriptions: { en: "mystery" },
+          pricingUnit: "each",
+          unitPrice: "1.00",
+          vatClass: "general",
+          allergens: { nope: { presence: "contains" } } as never,
+        }),
+      ).rejects.toMatchObject({ code: "allergen.invalid_code" });
+    });
+  });
+
+  it("validates allergens on update and clears them with null", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "Deli" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "cake" },
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+        allergens: { eggs: { presence: "contains" } },
+      });
+      // An invalid code on update is rejected before the write.
+      await expect(
+        updateProduct(tx, p.id, { allergens: { nope: { presence: "contains" } } as never }),
+      ).rejects.toMatchObject({ code: "allergen.invalid_code" });
+      // A valid update is written back.
+      await updateProduct(tx, p.id, { allergens: { milk: { presence: "may_contain" } } });
+      const [afterSet] = await listProducts(tx, cat.id);
+      expect(afterSet!.allergens).toEqual({ milk: { presence: "may_contain" } });
+      // `null` clears the declaration back to unreviewed.
+      await updateProduct(tx, p.id, { allergens: null });
+      const [afterClear] = await listProducts(tx, cat.id);
+      expect(afterClear!.allergens).toBeNull();
+    });
+  });
+
+  it("listAvailableProducts returns allergens", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "Deli" });
+      await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "milk" },
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+        allergens: { milk: { presence: "contains" } },
+      });
+      await assignCatalogueToLocation(tx, locationId, cat.id);
+      const [available] = await listAvailableProducts(tx, locationId);
+      expect(available!.allergens).toEqual({ milk: { presence: "contains" } });
+    });
+  });
+
   it("renames a catalogue", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });
@@ -236,6 +331,7 @@ describe("catalogue operations", () => {
       unitPrice: "1.50",
       vatClass: "general",
       category: null,
+      allergens: null,
     };
     expect(widen(sample).unitPrice).toBe("1.50");
   });

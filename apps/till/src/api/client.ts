@@ -64,6 +64,14 @@ export interface TillProduct {
   unitPrice: string;
   vatClass: "general" | "reduced" | "super_reduced" | "zero";
   category: string | null;
+  /**
+   * EU-14 allergen declaration; null = not reviewed. Keyed by allergen code (menu & allergens). A
+   * LOCAL redefinition of catalogue's `ProductAllergens` shape, deliberately NOT imported from
+   * `@waitron/catalogue` — same bundle-decoupling rationale as every other type in this file (see the
+   * file header). `presence` is the contains/may-contain strength; `source` names the specific
+   * substance ("wheat", "almendra") when known. Task 6 renders these on the allergen screen.
+   */
+  allergens: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
 }
 
 /** One basket line the till sends to `POST /api/sales`: never a price — the server re-prices. */

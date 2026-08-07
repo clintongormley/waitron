@@ -12,6 +12,7 @@ const products: TillProduct[] = [
     unitPrice: "1.50",
     vatClass: "general",
     category: null,
+    allergens: null,
   },
 ];
 

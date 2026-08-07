@@ -703,6 +703,7 @@ export class TillApp extends LitElement {
           .heldOrders=${this.heldOrders}
           .prepQueue=${this.prepQueue}
           .operatorName=${this.operatorName}
+          .invoiceLocale=${this.invoiceLocale}
           .orderFlow=${this.orderFlow}
           .stage=${this.stage}
           .busy=${this.submitting || this.placing}

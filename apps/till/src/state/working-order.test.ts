@@ -14,6 +14,7 @@ const cafe: TillProduct = {
   unitPrice: "1.50",
   vatClass: "general",
   category: null,
+  allergens: null,
 };
 
 // A weight product priced per kg: 10.00/kg gross at the reduced rate.
@@ -24,6 +25,7 @@ const jamon: TillProduct = {
   unitPrice: "10.00",
   vatClass: "reduced",
   category: "charcutería",
+  allergens: null,
 };
 
 describe("WorkingOrderStore", () => {

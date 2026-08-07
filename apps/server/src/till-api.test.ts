@@ -45,7 +45,8 @@ let abel: { id: string };
 let venueTaxId: string;
 // The one product seeded into the counter location's catalogue, so `GET /api/products` (Task 6) has
 // something to return. Captured here so the success test can pin the exact `AvailableProduct` shape
-// the route reads back — id, descriptions, unit price, VAT class and the resolved category NAME.
+// the route reads back — id, descriptions, unit price, VAT class, the resolved category NAME, and its
+// EU-14 allergen declaration (menu & allergens, Task 4), which the route carries through unchanged.
 let aguaProduct: { id: string };
 
 const suite = usePgliteDb({
@@ -103,6 +104,10 @@ const suite = usePgliteDb({
         pricingUnit: "each",
         unitPrice: "1.50",
         vatClass: "general",
+        // An EU-14 allergen declaration on the seeded product, so `GET /api/products` has a non-null
+        // `allergens` map to carry back — the field this task proves flows through the route unchanged
+        // (no server code change: it rides `c.json(listAvailableProducts(...))`, Task 4).
+        allergens: { sulphites: { presence: "may_contain" } },
       });
       await assignCatalogueToLocation(tx, loc.rows[0]!.id, cat.id);
       return p;
@@ -500,7 +505,8 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     });
     expect(res.status).toBe(200);
     // The exact `AvailableProduct` shape the route reads back: the seeded product with its resolved
-    // category NAME (not id), priced from the catalogue, one entry for the one assigned product.
+    // category NAME (not id), priced from the catalogue, its EU-14 allergen declaration carried
+    // through unchanged, one entry for the one assigned product.
     expect(await res.json()).toEqual([
       {
         id: aguaProduct.id,
@@ -509,6 +515,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
         unitPrice: "1.50",
         vatClass: "general",
         category: "Bebidas",
+        allergens: { sulphites: { presence: "may_contain" } },
       },
     ]);
   });

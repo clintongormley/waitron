@@ -66,6 +66,14 @@ export const products = pgTable(
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
     vatClass: text("vat_class").notNull(),
     active: boolean("active").notNull().default(true),
+    // Allergen declaration (EU 1169/2011 Annex II). NULL = not yet reviewed (a compliance gap the
+    // till surfaces distinctly); {} = reviewed, contains none of the 14; else per-code presence +
+    // optional specific-substance source. Structural type only — the exact AllergenCode-keyed type
+    // lives in @waitron/catalogue (which depends on THIS package, so it cannot be imported here).
+    allergens:
+      jsonb("allergens").$type<
+        Record<string, { presence: "contains" | "may_contain"; source?: string }>
+      >(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },

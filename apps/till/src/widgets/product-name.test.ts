@@ -11,6 +11,7 @@ function product(descriptions: Record<string, string>): TillProduct {
     unitPrice: "1.00",
     vatClass: "general",
     category: null,
+    allergens: null,
   };
 }
 
