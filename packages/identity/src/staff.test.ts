@@ -11,17 +11,25 @@ import {
   MIN_PIN_LENGTH,
   createPerson,
   listActiveStaff,
+  listPersons,
   reactivatePerson,
   resetPin,
   setRole,
   suspendPerson,
 } from "./staff.js";
-import { codeOf, openSession, seedPerson, seedTill } from "../test/fixtures.js";
+import {
+  codeOf,
+  openManagementSession,
+  openSession,
+  seedPerson,
+  seedTill,
+} from "../test/fixtures.js";
 
-// PGlite, not real Postgres: the staff-admin API is LOGIC gated on authorize() — the person.manage
-// check, the PIN-length assertion, and the role/status writes. Nothing here depends on the privilege
-// set or on RLS enforcement (a PGlite connection is superuser, so RLS is a false pass, CLAUDE.md §4);
-// tenant-isolation of persons is proven as the app role in persons.rls.test.ts and is not re-proven.
+// PGlite, not real Postgres: the staff-admin API is LOGIC gated on authorizeManager() — the
+// person.manage check, the PIN-length assertion, and the role/status writes. Nothing here depends on
+// the privilege set or on RLS enforcement (a PGlite connection is superuser, so RLS is a false pass,
+// CLAUDE.md §4); tenant-isolation of persons is proven as the app role in persons.rls.test.ts and is
+// not re-proven.
 let tenantId: string;
 
 const suite = usePgliteDb({
@@ -50,15 +58,14 @@ async function personRow(id: string): Promise<{ role: string; status: string; pi
 }
 
 describe("createPerson", () => {
-  it("creates an active person of the given role whose PIN opens a session (admin actor)", async () => {
+  it("creates an active person of the given role whose PIN opens a session (manager actor)", async () => {
     const tillId = await seedTill(suite.db, tenantId);
-    const adminId = await seedPerson(suite.db, tenantId, "admin");
-    const adminSessionId = await openSession(suite.db, tenantId, tillId, adminId);
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
 
     const { id } = await run((tx) =>
       createPerson(tx, {
         tenantId,
-        actorSessionId: adminSessionId,
+        managementSessionId: sessionId,
         displayName: "Bea",
         role: "supervisor",
         pin: "5678",
@@ -80,16 +87,14 @@ describe("createPerson", () => {
   });
 
   it("throws authorization.not_permitted for a staff actor, writing nothing", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const staffId = await seedPerson(suite.db, tenantId, "staff");
-    const staffSessionId = await openSession(suite.db, tenantId, tillId, staffId);
+    const { sessionId: staffSession } = await openManagementSession(suite.db, tenantId, "staff");
     const before = await personCount();
 
     const code = await codeOf(() =>
       run((tx) =>
         createPerson(tx, {
           tenantId,
-          actorSessionId: staffSessionId,
+          managementSessionId: staffSession,
           displayName: "Ghost",
           role: "staff",
           pin: "5678",
@@ -98,14 +103,12 @@ describe("createPerson", () => {
     );
     expect(code).toBe("authorization.not_permitted");
 
-    // authorize() runs before the insert, so a denied actor creates no row.
+    // authorizeManager() runs before the insert, so a denied actor creates no row.
     expect(await personCount()).toBe(before);
   });
 
-  it("throws pin.too_short for a PIN below MIN_PIN_LENGTH (admin actor)", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const adminId = await seedPerson(suite.db, tenantId, "admin");
-    const adminSessionId = await openSession(suite.db, tenantId, tillId, adminId);
+  it("throws pin.too_short for a PIN below MIN_PIN_LENGTH (manager actor)", async () => {
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
     const before = await personCount();
 
     // "12" is length 2, below MIN_PIN_LENGTH (4). The actor IS permitted, so only the length gate
@@ -114,7 +117,7 @@ describe("createPerson", () => {
       run((tx) =>
         createPerson(tx, {
           tenantId,
-          actorSessionId: adminSessionId,
+          managementSessionId: sessionId,
           displayName: "TooShort",
           role: "staff",
           pin: "12",
@@ -129,8 +132,7 @@ describe("createPerson", () => {
 describe("setRole", () => {
   it("changes the role, seen by a later authorize on an already-open session", async () => {
     const tillId = await seedTill(suite.db, tenantId);
-    const adminId = await seedPerson(suite.db, tenantId, "admin");
-    const adminSessionId = await openSession(suite.db, tenantId, tillId, adminId);
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
     const targetId = await seedPerson(suite.db, tenantId, "staff");
     const targetSessionId = await openSession(suite.db, tenantId, tillId, targetId);
 
@@ -141,7 +143,7 @@ describe("setRole", () => {
     expect(before).toBe("authorization.not_permitted");
 
     await run((tx) =>
-      setRole(tx, { actorSessionId: adminSessionId, personId: targetId, role: "manager" }),
+      setRole(tx, { managementSessionId: sessionId, personId: targetId, role: "manager" }),
     );
 
     // authorize reads the role live, so the SAME open session now authorizes on the operator's own
@@ -157,21 +159,19 @@ describe("setRole", () => {
   });
 
   it("throws authorization.not_permitted for a staff actor, leaving the role unchanged", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const staffActorId = await seedPerson(suite.db, tenantId, "staff");
-    const staffSessionId = await openSession(suite.db, tenantId, tillId, staffActorId);
+    const { sessionId: staffSession } = await openManagementSession(suite.db, tenantId, "staff");
     const targetId = await seedPerson(suite.db, tenantId, "staff");
 
-    // A genuine staff session (authenticates fine) but no person.manage — the escalation attempt is
-    // staff→manager, so if the gate were absent the role would flip.
+    // A genuine staff management session (authenticates fine) but no person.manage — the escalation
+    // attempt is staff→manager, so if the gate were absent the role would flip.
     const code = await codeOf(() =>
       run((tx) =>
-        setRole(tx, { actorSessionId: staffSessionId, personId: targetId, role: "manager" }),
+        setRole(tx, { managementSessionId: staffSession, personId: targetId, role: "manager" }),
       ),
     );
     expect(code).toBe("authorization.not_permitted");
 
-    // authorize() runs before the UPDATE, so a denied actor changes no role.
+    // authorizeManager() runs before the UPDATE, so a denied actor changes no role.
     expect((await personRow(targetId)).role).toBe("staff");
   });
 });
@@ -179,12 +179,11 @@ describe("setRole", () => {
 describe("resetPin", () => {
   it("replaces the PIN: the new PIN logs in, the old one no longer does", async () => {
     const tillId = await seedTill(suite.db, tenantId);
-    const adminId = await seedPerson(suite.db, tenantId, "admin");
-    const adminSessionId = await openSession(suite.db, tenantId, tillId, adminId);
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
     const targetId = await seedPerson(suite.db, tenantId, "staff"); // PIN "1234"
 
     await run((tx) =>
-      resetPin(tx, { actorSessionId: adminSessionId, personId: targetId, pin: "8765" }),
+      resetPin(tx, { managementSessionId: sessionId, personId: targetId, pin: "8765" }),
     );
 
     const session = await run((tx) =>
@@ -198,15 +197,13 @@ describe("resetPin", () => {
     expect(oldPin).toBe("pin.invalid");
   });
 
-  it("throws pin.too_short for a PIN below MIN_PIN_LENGTH, leaving the hash unchanged (admin actor)", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const adminId = await seedPerson(suite.db, tenantId, "admin");
-    const adminSessionId = await openSession(suite.db, tenantId, tillId, adminId);
+  it("throws pin.too_short for a PIN below MIN_PIN_LENGTH, leaving the hash unchanged (manager actor)", async () => {
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
     const targetId = await seedPerson(suite.db, tenantId, "staff");
     const before = (await personRow(targetId)).pin_hash;
 
     const code = await codeOf(() =>
-      run((tx) => resetPin(tx, { actorSessionId: adminSessionId, personId: targetId, pin: "1" })),
+      run((tx) => resetPin(tx, { managementSessionId: sessionId, personId: targetId, pin: "1" })),
     );
     expect(code).toBe("pin.too_short");
 
@@ -215,17 +212,15 @@ describe("resetPin", () => {
   });
 
   it("throws authorization.not_permitted for a staff actor, leaving the hash unchanged", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const staffActorId = await seedPerson(suite.db, tenantId, "staff");
-    const staffSessionId = await openSession(suite.db, tenantId, tillId, staffActorId);
+    const { sessionId: staffSession } = await openManagementSession(suite.db, tenantId, "staff");
     const targetId = await seedPerson(suite.db, tenantId, "staff");
     const before = (await personRow(targetId)).pin_hash;
 
-    // A genuine staff session, no person.manage: an account-takeover attempt (rewrite the target's
-    // PIN) must be rejected before the UPDATE.
+    // A genuine staff management session, no person.manage: an account-takeover attempt (rewrite the
+    // target's PIN) must be rejected before the UPDATE.
     const code = await codeOf(() =>
       run((tx) =>
-        resetPin(tx, { actorSessionId: staffSessionId, personId: targetId, pin: "9999" }),
+        resetPin(tx, { managementSessionId: staffSession, personId: targetId, pin: "9999" }),
       ),
     );
     expect(code).toBe("authorization.not_permitted");
@@ -237,20 +232,19 @@ describe("resetPin", () => {
 describe("suspendPerson / reactivatePerson", () => {
   it("suspend blocks login; reactivate restores it", async () => {
     const tillId = await seedTill(suite.db, tenantId);
-    const adminId = await seedPerson(suite.db, tenantId, "admin");
-    const adminSessionId = await openSession(suite.db, tenantId, tillId, adminId);
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
     const targetId = await seedPerson(suite.db, tenantId, "staff"); // active, PIN "1234"
 
     // Active to begin with: login works.
     await run((tx) => loginWithPin(tx, { tenantId, tillId, personId: targetId, pin: "1234" }));
 
-    await run((tx) => suspendPerson(tx, { actorSessionId: adminSessionId, personId: targetId }));
+    await run((tx) => suspendPerson(tx, { managementSessionId: sessionId, personId: targetId }));
     const suspended = await codeOf(() =>
       run((tx) => loginWithPin(tx, { tenantId, tillId, personId: targetId, pin: "1234" })),
     );
     expect(suspended).toBe("person.suspended");
 
-    await run((tx) => reactivatePerson(tx, { actorSessionId: adminSessionId, personId: targetId }));
+    await run((tx) => reactivatePerson(tx, { managementSessionId: sessionId, personId: targetId }));
     const session = await run((tx) =>
       loginWithPin(tx, { tenantId, tillId, personId: targetId, pin: "1234" }),
     );
@@ -258,15 +252,13 @@ describe("suspendPerson / reactivatePerson", () => {
   });
 
   it("suspendPerson throws authorization.not_permitted for a staff actor, leaving status active", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const staffActorId = await seedPerson(suite.db, tenantId, "staff");
-    const staffSessionId = await openSession(suite.db, tenantId, tillId, staffActorId);
+    const { sessionId: staffSession } = await openManagementSession(suite.db, tenantId, "staff");
     const targetId = await seedPerson(suite.db, tenantId, "staff"); // active
 
-    // A genuine staff session, no person.manage: a lockout attempt (suspend a colleague) must be
-    // rejected before the UPDATE, so the target stays active.
+    // A genuine staff management session, no person.manage: a lockout attempt (suspend a colleague)
+    // must be rejected before the UPDATE, so the target stays active.
     const code = await codeOf(() =>
-      run((tx) => suspendPerson(tx, { actorSessionId: staffSessionId, personId: targetId })),
+      run((tx) => suspendPerson(tx, { managementSessionId: staffSession, personId: targetId })),
     );
     expect(code).toBe("authorization.not_permitted");
 
@@ -274,14 +266,12 @@ describe("suspendPerson / reactivatePerson", () => {
   });
 
   it("reactivatePerson throws authorization.not_permitted for a staff actor, leaving status suspended", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const staffActorId = await seedPerson(suite.db, tenantId, "staff");
-    const staffSessionId = await openSession(suite.db, tenantId, tillId, staffActorId);
+    const { sessionId: staffSession } = await openManagementSession(suite.db, tenantId, "staff");
     // A SUSPENDED target so reactivate would be a real change (active would hide a missing gate).
     const targetId = await seedPerson(suite.db, tenantId, "staff", "suspended");
 
     const code = await codeOf(() =>
-      run((tx) => reactivatePerson(tx, { actorSessionId: staffSessionId, personId: targetId })),
+      run((tx) => reactivatePerson(tx, { managementSessionId: staffSession, personId: targetId })),
     );
     expect(code).toBe("authorization.not_permitted");
 
@@ -292,16 +282,14 @@ describe("suspendPerson / reactivatePerson", () => {
 
 describe("listActiveStaff", () => {
   it("returns active persons' id + name, sorted, no secrets", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const adminId = await seedPerson(suite.db, tenantId, "admin");
-    const adminSessionId = await openSession(suite.db, tenantId, tillId, adminId);
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
 
     // Insert Zoe BEFORE Ana so an Ana-first result proves the orderBy(displayName), not insertion
     // order. "Gone" is created then suspended: it must NOT appear.
     const zoe = await run((tx) =>
       createPerson(tx, {
         tenantId,
-        actorSessionId: adminSessionId,
+        managementSessionId: sessionId,
         displayName: "Zoe",
         role: "staff",
         pin: "4444",
@@ -310,7 +298,7 @@ describe("listActiveStaff", () => {
     const ana = await run((tx) =>
       createPerson(tx, {
         tenantId,
-        actorSessionId: adminSessionId,
+        managementSessionId: sessionId,
         displayName: "Ana",
         role: "supervisor",
         pin: "5555",
@@ -319,13 +307,13 @@ describe("listActiveStaff", () => {
     const gone = await run((tx) =>
       createPerson(tx, {
         tenantId,
-        actorSessionId: adminSessionId,
+        managementSessionId: sessionId,
         displayName: "Gone",
         role: "staff",
         pin: "6666",
       }),
     );
-    await run((tx) => suspendPerson(tx, { actorSessionId: adminSessionId, personId: gone.id }));
+    await run((tx) => suspendPerson(tx, { managementSessionId: sessionId, personId: gone.id }));
 
     const staff = await run((tx) => listActiveStaff(tx));
 
@@ -340,6 +328,50 @@ describe("listActiveStaff", () => {
     expect(cohort.map((s) => s.displayName)).toEqual(["Ana", "Zoe"]);
     // Only id + name reach the pre-login lock screen: no pinHash, no role, no status.
     expect(Object.keys(cohort[0]!)).toEqual(["personId", "displayName"]);
+  });
+});
+
+describe("listPersons", () => {
+  it("listPersons returns a roster with credential booleans, no secrets", async () => {
+    const { sessionId, personId: manager } = await openManagementSession(
+      suite.db,
+      tenantId,
+      "manager",
+    );
+    await run((tx) =>
+      createPerson(tx, {
+        tenantId,
+        managementSessionId: sessionId,
+        displayName: "Ada",
+        role: "staff",
+        pin: "4321",
+      }),
+    );
+    const roster = await run((tx) => listPersons(tx, { managementSessionId: sessionId }));
+    const names = roster.map((p) => p.displayName);
+    expect(names).toContain("Ada");
+    const self = roster.find((p) => p.personId === manager)!;
+    expect(self.hasPassword).toBe(true);
+    expect(self.hasTotp).toBe(false);
+    expect(Object.keys(roster[0]!)).toEqual(
+      expect.arrayContaining([
+        "personId",
+        "displayName",
+        "role",
+        "status",
+        "hasPassword",
+        "hasTotp",
+      ]),
+    );
+    expect(JSON.stringify(roster)).not.toContain("scrypt$");
+  });
+
+  it("listPersons refuses a staff role", async () => {
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "staff");
+    const code = await run((tx) =>
+      codeOf(() => listPersons(tx, { managementSessionId: sessionId })),
+    );
+    expect(code).toBe("authorization.not_permitted");
   });
 });
 

@@ -4,3 +4,4 @@
 // duplicate CREATE TABLE. schema-ownership.test.ts enforces this.
 export { persons, personStatus, personRole } from "./persons.js";
 export { sessions } from "./sessions.js";
+export { managementSessions } from "./management-sessions.js";

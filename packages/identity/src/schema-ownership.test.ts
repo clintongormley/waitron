@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import * as schema from "./schema/index.js";
 
 /** Exactly the tables this package owns. Adding a table means editing this line, deliberately. */
-const OWNED = ["persons", "sessions"];
+const OWNED = ["persons", "sessions", "management_sessions"];
 
 /** Every core table this package's schema files import to declare foreign keys. None of these may
  * ever appear in this package's generated SQL. sessions imports `tills` (which pulls in `locations`

@@ -4,22 +4,39 @@ export { authorize } from "./authorize.js";
 export type { Authorization, AuthzInput, Override } from "./authorize.js";
 export { endSession, loginWithPin } from "./login.js";
 export type { Session } from "./login.js";
+export {
+  IDLE_TIMEOUT_MS,
+  startManagementSession,
+  resolveManagementSession,
+  endManagementSession,
+} from "./management-session.js";
+export type { ManagementSession } from "./management-session.js";
+export { loginManager, authorizeManager } from "./manager-login.js";
 export { PERMISSIONS, roleHasPermission } from "./permissions.js";
 export type { Permission, PersonRoleValue } from "./permissions.js";
 export { persons, personStatus, personRole } from "./schema/persons.js";
 export { sessions } from "./schema/sessions.js";
+export { managementSessions } from "./schema/management-sessions.js";
 export {
   MIN_PIN_LENGTH,
   assertPinLength,
   createPerson,
   listActiveStaff,
+  listPersons,
   reactivatePerson,
   resetPin,
   setRole,
   suspendPerson,
 } from "./staff.js";
-export type { StaffListEntry } from "./staff.js";
+export type { PersonSummary, StaffListEntry } from "./staff.js";
 export { hashPin, verifyPin } from "./verify-pin.js";
+export {
+  MIN_PASSWORD_LENGTH,
+  assertPasswordLength,
+  hashPassword,
+  verifyPassword,
+} from "./verify-password.js";
+export { generateTotpSecret, totpAuthUri, verifyTotp } from "./totp.js";
 
 // Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable
 // from this package's own public barrel, per the reachability rule in packages/shared/src/errors.ts.

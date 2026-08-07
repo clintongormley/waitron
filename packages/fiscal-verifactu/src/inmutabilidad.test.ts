@@ -207,6 +207,7 @@ describe("row-level security on every tenant-scoped table in this package (and i
     // rather than red, and the missing-FORCE guard would silently stop covering identity.
     expect(names).toContain("persons");
     expect(names).toContain("sessions");
+    expect(names).toContain("management_sessions");
 
     // Reported as formatted lines rather than a bare boolean: a failure needs to say WHICH table
     // is missing WHICH flag, or the next person deletes the test instead of fixing the migration.

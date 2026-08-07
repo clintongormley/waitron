@@ -11,11 +11,22 @@ declare module "@waitron/shared" {
   interface ErrorParams {
     /** No open session for this id — unknown, already ended, or another tenant's (RLS-hidden). */
     "session.not_open": { sessionId: string };
+    /** No live management session for this id — unknown, already ended, or another tenant's
+     * (RLS-hidden). The browser must sign in again. */
+    "management_session.required": Record<string, never>;
+    /** The management session idled past the timeout and is no longer live. Sign in again. */
+    "management_session.expired": Record<string, never>;
     /** The PIN did not verify against the stored hash (login or override). */
     "pin.invalid": Record<string, never>;
     /** A PIN below the minimum length was supplied to create/reset. `min` is the policy, never the
      * PIN. */
     "pin.too_short": { min: number };
+    /** A password below the minimum length was supplied. `min` is the policy, never the password. */
+    "password.too_short": { min: number };
+    /** The password did not verify against the stored hash. */
+    "password.invalid": Record<string, never>;
+    /** The TOTP token did not verify against the stored secret (or was malformed — fail-closed). */
+    "totp.invalid": Record<string, never>;
     /** No such person in this tenant (RLS-scoped): unknown id, or another tenant's. */
     "person.not_found": { personId: string };
     /** The person exists but is suspended — cannot log in or authorize. */
