@@ -20,6 +20,8 @@ declare module "@waitron/shared" {
     "password.too_short": { min: number };
     /** The password did not verify against the stored hash. */
     "password.invalid": Record<string, never>;
+    /** The TOTP token did not verify against the stored secret (or was malformed — fail-closed). */
+    "totp.invalid": Record<string, never>;
     /** No such person in this tenant (RLS-scoped): unknown id, or another tenant's. */
     "person.not_found": { personId: string };
     /** The person exists but is suspended — cannot log in or authorize. */

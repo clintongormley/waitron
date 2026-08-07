@@ -26,6 +26,7 @@ export {
   hashPassword,
   verifyPassword,
 } from "./verify-password.js";
+export { generateTotpSecret, totpAuthUri, verifyTotp } from "./totp.js";
 
 // Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable
 // from this package's own public barrel, per the reachability rule in packages/shared/src/errors.ts.
