@@ -313,12 +313,15 @@ export class TillAllergenScreen extends LitElement {
     if (declared === null) {
       return html`<p class="detail-pending">${this.#t("pending")}</p>`;
     }
-    const entries = Object.entries(declared);
-    if (entries.length === 0) {
+    // Iterate in ALLERGEN_DISPLAY_ORDER, not `Object.entries(declared)`: the dialog must list
+    // declarations in the SAME order as the matrix columns (and the order this const's doc guarantees),
+    // never the server's JSON key order — a payload keyed `{ milk, gluten }` still lists gluten first.
+    const codes = ALLERGEN_DISPLAY_ORDER.filter((code) => declared[code]);
+    if (codes.length === 0) {
       return html`<p class="detail-none">${this.#t("notice")}</p>`;
     }
     return html`<ul class="detail-list">
-      ${entries.map(([code, entry]) => this.#detailItem(code, entry))}
+      ${codes.map((code) => this.#detailItem(code, declared[code]))}
     </ul>`;
   }
 

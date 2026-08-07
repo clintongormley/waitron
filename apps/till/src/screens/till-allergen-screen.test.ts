@@ -121,6 +121,34 @@ describe("till-allergen-screen", () => {
     expect(dialog.textContent).toContain(t("allergens.may_contain", "en"));
   });
 
+  it("lists a product's declarations in ALLERGEN_DISPLAY_ORDER, not server key order", async () => {
+    // A payload whose keys are in REVERSE display order: milk (column 6) before gluten (column 0). The
+    // detail dialog must still list gluten first, matching the matrix column order — otherwise the
+    // dialog contradicts the matrix and the ALLERGEN_DISPLAY_ORDER doc's own guarantee.
+    const wrap: TillProduct = {
+      id: "wrap",
+      descriptions: { "es-ES": "Wrap", en: "Wrap" },
+      pricingUnit: "each",
+      unitPrice: "3.50",
+      vatClass: "reduced",
+      category: null,
+      allergens: {
+        milk: { presence: "contains" },
+        gluten: { presence: "may_contain", source: "barley" },
+      },
+    };
+    const { el } = await mountWidget<TillAllergenScreen>("till-allergen-screen", {
+      products: [wrap],
+      locale: "en",
+    });
+    rowFor(el, "Wrap").querySelector<HTMLElement>(".row-open")!.click();
+    await el.updateComplete;
+    const names = [...el.shadowRoot!.querySelectorAll("wt-dialog .detail-item .detail-name")].map(
+      (n) => n.textContent!.trim(),
+    );
+    expect(names).toEqual([`${allergenName("gluten", "en")} (barley)`, allergenName("milk", "en")]);
+  });
+
   it("renders allergens === null as the pending state, NOT an all-clear row", async () => {
     const { el } = await mountWidget<TillAllergenScreen>("till-allergen-screen", {
       products,
