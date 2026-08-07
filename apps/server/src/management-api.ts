@@ -25,6 +25,7 @@ import {
 import { codeOf } from "./error-code.js";
 import {
   clearManagementCookie,
+  readManagementSessionId,
   requireManagementSession,
   setManagementCookie,
 } from "./management-session.js";
@@ -117,18 +118,16 @@ async function run(c: Context, log: Logger, fn: () => Promise<Response>): Promis
 }
 
 /**
- * Reads the request's management cookie for the idempotent logout, returning its id or `null` when the
- * cookie is absent or not UUID-shaped. `requireManagementSession` THROWS `management_session.required`
- * on either — the right answer for a gated route (Task 4) but the wrong one for logout, which must
- * still clear the cookie and answer 204 when there is nothing to end. Wrapping the throw here keeps the
- * one anchored-UUID/absent-cookie screen in a single place rather than re-deriving it.
+ * Screen a `/management-api/staff/:id` path param as a UUID before it reaches a query, returning it. A
+ * malformed id passed straight into a `uuid` column would `22P02` → an opaque 500; refusing it here as
+ * `person.not_found` (a caller-supplied uuid, safe to echo) matches the code an absent id gets from the
+ * identity call. The three gated `/staff/:id/…` routes (patch, reset-pin, set-password) pass
+ * `c.req.param("id")` (a `string` in their route-typed context) and share this one guard — the
+ * management parallel of till-api.ts's `requireUuidId`.
  */
-function requireManagementSessionOrNull(c: Context): string | null {
-  try {
-    return requireManagementSession(c);
-  } catch {
-    return null;
-  }
+function requirePersonId(id: string): string {
+  if (!isUuid(id)) throw new AppError("person.not_found", { personId: id });
+  return id;
 }
 
 /**
@@ -190,13 +189,14 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
 
   // Logout: end the management session and clear the cookie. Idempotent — a request with no cookie, or
   // one whose cookie is not even UUID-shaped (so it names no `uuid` row), still clears the cookie and
-  // answers 204, so a double logout or a stale tab is never an error. `requireManagementSessionOrNull`
-  // gives `null` in exactly those cases, skipping the DB touch; a valid id ends its session under
-  // `withTenant` + `asAppUser`, and `endManagementSession` is itself a no-op on an already-ended one.
+  // answers 204, so a double logout or a stale tab is never an error. `readManagementSessionId` +
+  // `isUuid` skip the DB touch in exactly those cases (the till's `/api/session` logout shape); a valid
+  // id ends its session under `withTenant` + `asAppUser`, and `endManagementSession` is itself a no-op
+  // on an already-ended one.
   app.delete("/management-api/session", (c) =>
     run(c, log, async () => {
-      const id = requireManagementSessionOrNull(c);
-      if (id !== null) {
+      const id = readManagementSessionId(c);
+      if (id !== null && isUuid(id)) {
         await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
           await asAppUser(tx);
           await endManagementSession(tx, id);
@@ -266,8 +266,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.patch("/management-api/staff/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const id = c.req.param("id");
-      if (!isUuid(id)) throw new AppError("person.not_found", { personId: id });
+      const id = requirePersonId(c.req.param("id"));
       const body = await c.req.json<{ role?: PersonRoleValue; status?: "active" | "suspended" }>();
       const { role, status } = body;
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
@@ -293,8 +292,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.post("/management-api/staff/:id/reset-pin", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const id = c.req.param("id");
-      if (!isUuid(id)) throw new AppError("person.not_found", { personId: id });
+      const id = requirePersonId(c.req.param("id"));
       const body = await c.req.json<{ pin?: string }>();
       if (typeof body.pin !== "string") {
         throw new AppError("management.request_invalid", { field: "pin" });
@@ -315,8 +313,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.post("/management-api/staff/:id/password", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const id = c.req.param("id");
-      if (!isUuid(id)) throw new AppError("person.not_found", { personId: id });
+      const id = requirePersonId(c.req.param("id"));
       const body = await c.req.json<{ password?: string }>();
       if (typeof body.password !== "string") {
         throw new AppError("management.request_invalid", { field: "password" });

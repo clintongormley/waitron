@@ -39,6 +39,15 @@ export function clearManagementCookie(c: Context): void {
 }
 
 /**
+ * The management session id carried by the request's cookie, or `null` when the cookie is absent. The
+ * till's `readSessionId` parallel — the non-throwing read the idempotent logout composes with `isUuid`,
+ * and the base `requireManagementSession` builds its shape check on.
+ */
+export function readManagementSessionId(c: Context): string | null {
+  return getCookie(c, MANAGEMENT_COOKIE) ?? null;
+}
+
+/**
  * Reads the request's management cookie and returns its id, or throws `management_session.required`
  * when the cookie is absent OR not a UUID. This screens the cookie's SHAPE only — a real
  * live-session lookup happens in the route layer (Task 3/4). Reuses `isUuid` from `till-session.ts`
@@ -46,7 +55,7 @@ export function clearManagementCookie(c: Context): void {
  * raises `22P02` → an opaque 500, so the shape check keeps a forged cookie a clean fault instead.
  */
 export function requireManagementSession(c: Context): string {
-  const id = getCookie(c, MANAGEMENT_COOKIE) ?? null;
+  const id = readManagementSessionId(c);
   if (id === null || !isUuid(id)) throw new AppError("management_session.required", {});
   return id;
 }
