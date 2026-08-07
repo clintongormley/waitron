@@ -73,7 +73,7 @@ export async function seedTill(
 }
 
 /**
- * The filed per-rate desglose a real sale would carry on `sales.vat_breakdown` (migration 0031),
+ * The filed per-rate desglose a real sale would carry on `sales.vat_breakdown`,
  * derived here from the fixture's own lines so the seeded breakdown is COHERENT with them: lines are
  * grouped by `vatRate`, each group's `base` is the summed `lineTotal`, and its `tax` is
  * `base * rate / 100` rounded to money scale — the same direct-method grouping `@waitron/core`'s

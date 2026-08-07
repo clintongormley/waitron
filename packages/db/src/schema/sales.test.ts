@@ -82,7 +82,7 @@ function saleValues(overrides: Record<string, unknown> = {}) {
     issuedAt: AT,
     issuedOffsetMinutes: 120,
     total: "1.00",
-    // The filed per-rate desglose (migration 0031). `[]` here because these fixtures do not exercise
+    // The filed per-rate desglose. `[]` here because these fixtures do not exercise
     // the breakdown — the column is just NOT NULL and must carry a valid jsonb array; the tests that
     // DO care about its content are record-sale.test.ts (the equality-to-filed proof) and the
     // information_schema column assertion below.
@@ -221,7 +221,7 @@ describeEachTarget("sales — the commercial record", (target) => {
   });
 
   it("stores vat_breakdown as a NOT NULL jsonb column", async () => {
-    // Migration 0031: the filed per-rate desglose ({rate, base, tax}[]), a queryable copy of what the
+    // vat_breakdown: the filed per-rate desglose ({rate, base, tax}[]), a queryable copy of what the
     // hash-chained registro carries, so reporting can compute an exact VAT summary without a
     // cross-boundary join (spec 8a). NOT NULL is load-bearing — it is the forcing function that made
     // every sale-creating path populate it — so both the type AND the nullability are pinned here.

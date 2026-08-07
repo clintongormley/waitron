@@ -81,7 +81,7 @@ function saleValues(overrides: Record<string, unknown> = {}) {
     issuedAt: AT,
     issuedOffsetMinutes: 120,
     total: "1.00",
-    // The filed per-rate desglose (migration 0031); `[]` — this file exercises voids, not the
+    // The filed per-rate desglose; `[]` — this file exercises voids, not the
     // breakdown, and the column just needs a valid NOT NULL jsonb array.
     vatBreakdown: [] as { rate: string; base: string; tax: string }[],
     locale: "es",

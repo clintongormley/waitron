@@ -241,7 +241,7 @@ describe("recordCorrection — refusals", () => {
         issuedAt: "2026-03-01T12:05:00.000Z",
         issuedOffsetMinutes: 60,
         total: "0.00",
-        // The filed per-rate desglose (migration 0031); `[]` — this suite asserts against the
+        // The filed per-rate desglose; `[]` — this suite asserts against the
         // registro backend.recordSale builds, not the sales row's breakdown, so the column just
         // needs a valid NOT NULL jsonb array.
         vatBreakdown: [],
@@ -343,7 +343,7 @@ describe("recordSubstitution — refusals", () => {
         issuedAt: "2026-03-01T12:05:00.000Z",
         issuedOffsetMinutes: 60,
         total: "0.00",
-        // The filed per-rate desglose (migration 0031); `[]` — see the invoiceNumber 500 insert above.
+        // The filed per-rate desglose; `[]` — see the invoiceNumber 500 insert above.
         vatBreakdown: [],
         locale: "es-ES",
         invoiceLocales: ["es-ES"],
@@ -436,7 +436,7 @@ describe("recordSale — invoice type selection", () => {
         issuedAt: "2026-03-01T12:05:00.000Z",
         issuedOffsetMinutes: 60,
         total: "0.00",
-        // The filed per-rate desglose (migration 0031); `[]` — see the invoiceNumber 500 insert above.
+        // The filed per-rate desglose; `[]` — see the invoiceNumber 500 insert above.
         vatBreakdown: [],
         locale: "es-ES",
         invoiceLocales: ["es-ES"],
@@ -544,7 +544,7 @@ describe("filedReceiptFor", () => {
         issuedAt: "2026-03-01T12:05:00.000Z",
         issuedOffsetMinutes: 60,
         total: "110.00",
-        // The filed per-rate desglose (migration 0031); `[]` — see the invoiceNumber 500 insert above.
+        // The filed per-rate desglose; `[]` — see the invoiceNumber 500 insert above.
         vatBreakdown: [],
         locale: "es-ES",
         invoiceLocales: ["es-ES"],

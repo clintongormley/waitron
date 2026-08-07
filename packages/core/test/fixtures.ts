@@ -141,7 +141,7 @@ export async function seedBareSale(
       issuedAt: new Date("2026-03-01T12:00:00Z").toISOString(),
       issuedOffsetMinutes: 0,
       total: overrides.total ?? "65.00",
-      // The filed per-rate desglose (migration 0031). Defaults to `[]`: a bare original planted for a
+      // The filed per-rate desglose. Defaults to `[]`: a bare original planted for a
       // correction test carries no line detail here, and the correction's OWN breakdown is what those
       // tests exercise (via recordCorrection). Overridable for a test that needs a specific one.
       vatBreakdown: overrides.vatBreakdown ?? [],

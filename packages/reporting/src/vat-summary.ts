@@ -6,7 +6,7 @@ import type { DailyCloseInput, VatSummary } from "./types.js";
 
 /**
  * VAT summary for one (tenant, node) over one business day, anchored on issuance. Reads the filed
- * per-rate desglose from `sales.vat_breakdown` (migration 0031) — the exact cuota AEAT received,
+ * per-rate desglose from `sales.vat_breakdown` — the exact cuota AEAT received,
  * whichever method (direct or difference) filed it — by unnesting the jsonb array and summing base
  * and tax per rate. Corrections (negative breakdowns) net in for free; voided sales and F3-canje
  * substitutes are excluded. The explicit tenant/node predicates are belt-and-suspenders over RLS
