@@ -2,6 +2,11 @@ export { computeDailyClose } from "./daily-close.js";
 export { recordDailyClose } from "./record-daily-close.js";
 export { computeCloseEntryHash } from "./daily-close-hash.js";
 export type { CloseHashContent } from "./daily-close-hash.js";
+export { verifyDailyCloseChain } from "./verify-daily-close-chain.js";
+export type {
+  CloseChainBreakReason,
+  DailyCloseChainVerification,
+} from "./verify-daily-close-chain.js";
 export type {
   CashCountInput,
   DailyCloseRecord,
