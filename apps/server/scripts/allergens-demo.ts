@@ -3,7 +3,7 @@
 // Modelled on `daily-close-demo.ts` (in-memory PGlite, self-migrating, tsx-run) rather than
 // `catalogue-demo.ts` (real Postgres) — this demo never writes a fiscal record, so it needs neither a
 // real backend nor the RLS-as-deployment-role proof that forces catalogue-demo onto a real server.
-// `CORE_MIGRATIONS` alone suffices: it creates the catalogue tables (0027) and the `products.allergens`
+// `CORE_MIGRATIONS` alone suffices: it creates the catalogue tables (0026) and the `products.allergens`
 // jsonb column (0031), which is everything read here.
 //
 // It:
