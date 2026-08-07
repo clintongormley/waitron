@@ -2,7 +2,7 @@
 // "integrated card terminal" branch): a walk-up basket driven through `payWorkingOrderIntegrated`'s
 // split-transaction P1 (price/commit) → P2 (collect — the reader tap) → P3 (file+associate+settle)
 // flow, over a `StripeTerminalProvider` wired to `FakeStripe` (the deterministic reader double,
-// `@waitron/payments-stripe/testing/fake-stripe.js`). Modelled on `till-demo.ts` (self-migrating,
+// `@waitron/payments-stripe/src/testing/fake-stripe.js`). Modelled on `till-demo.ts` (self-migrating,
 // tsx-run, a real `VerifactuBackend`) and on `till-sale-integrated.rls.test.ts`'s `integratedDeps`
 // helper (the exact provider-construction shape this script mirrors), it:
 //
@@ -32,8 +32,17 @@
 // PostgreSQL, because the whole point is to file a genuine huella-chained, append-only
 // `registros_facturacion` row AS THE APP ROLE UNDER RLS — which PGlite's superuser-only connection
 // cannot prove (CLAUDE.md §4). `applyVenue` runs as the connection owner (this superuser owns the
-// tables it just migrated); `payWorkingOrderIntegrated` and the provider's own writes drop to
-// `app_user` via `withTenant` + `asAppUser` internally, the same as the deployed host.
+// tables it just migrated). `payWorkingOrderIntegrated`'s own P1/P3 phases drop to `app_user` via
+// `withTenant` + `asAppUser` internally, the same as the deployed host (`till-sale.ts:644-645` for
+// P1, inside the function itself; `821-822` for P3, inside `finalizeCapture`, which it calls). The
+// PROVIDER's own writes do not, here: `collect`'s T1/T2 (`insertAttempting`/`captureAttempting`/
+// `failAttempting`) go through `StripeTerminalProvider`'s private `inTenant`, which calls only
+// `withTenant(this.opts.db, …)` — never `asAppUser` (`provider.ts:97-98`). `this.opts.db` is the
+// plain connection-owner `db` this script passes into the provider's constructor below, so in THIS
+// demo those particular writes run as the connection owner, not as `app_user`. This demo therefore
+// proves the fiscal record and `payWorkingOrderIntegrated`'s own writes under the real app role, but
+// does NOT exercise the provider's writes under it — `stripe.rls.test.ts` (a non-superuser probe
+// role that is a member of `app_user`) is what proves those.
 // `resolveClient` is supplied but never reached: `recordSale` never contacts AEAT (that is `drain`'s
 // job), so the stub below throws if it is ever called.
 //

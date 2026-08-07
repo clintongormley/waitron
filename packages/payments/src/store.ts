@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { AppError, addDecimal, compareDecimal, decimal, sumDecimals } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
@@ -313,10 +313,14 @@ const CAPTURED_FOR_ORDER_COLUMNS = {
  * the working-order id (`wo_<id>`, `packages/payments-stripe`), so every retry drives the SAME
  * PaymentIntent to at most one capture — and this pre-check is itself the thing that stops a caller
  * from proceeding to a second `collect` once the first capture exists (spec §4). Split-tender (more
- * than one payment per working order) is out of scope for this slice. `ORDER BY settled_at DESC`
- * makes the read deterministic regardless, and if that invariant is ever violated it returns the MOST
- * RECENT captured row rather than an arbitrary one — this is a pre-check, so it degrades rather than
- * throwing on an unexpected second row. */
+ * than one payment per working order) is out of scope for this slice. `ORDER BY settled_at DESC
+ * NULLS LAST` makes the read deterministic regardless, and if that invariant is ever violated it
+ * returns the MOST RECENT captured row rather than an arbitrary one — this is a pre-check, so it
+ * degrades rather than throwing on an unexpected second row. `NULLS LAST` is load-bearing despite
+ * `settled_at` always being set for `captured`/`accepted_offline` "by construction": Postgres sorts
+ * `DESC` as NULLS FIRST by default, so a plain `desc()` would rank a hypothetical NULL-`settled_at`
+ * captured row ahead of a genuinely settled one — the opposite of "most recent" — the moment that
+ * invariant is ever violated. */
 export async function findCapturedPaymentForWorkingOrder(
   tx: Transaction,
   key: { tenantId: string; provider: string; workingOrderId: string },
@@ -332,7 +336,7 @@ export async function findCapturedPaymentForWorkingOrder(
         inArray(payments.state, ["captured", "accepted_offline"]),
       ),
     )
-    .orderBy(desc(payments.settledAt))
+    .orderBy(sql`${payments.settledAt} desc nulls last`)
     .limit(1);
   return row as CapturedPaymentForOrder | undefined;
 }
