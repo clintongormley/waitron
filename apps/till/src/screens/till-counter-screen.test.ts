@@ -3,8 +3,9 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillCounterScreen } from "./till-counter-screen.js";
 import { LAYOUT_A, type LayoutDef } from "../layout.js";
 import { WorkingOrderStore } from "../state/working-order.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import type { TillProduct } from "../api/client.js";
+import type { TillAllergenScreen } from "./till-allergen-screen.js";
 
 const cafe: TillProduct = {
   id: "p1",
@@ -164,5 +165,41 @@ describe("till-counter-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("wt-button.logout")!.click();
     expect(captured).toBeInstanceOf(CustomEvent);
     expect(captured!.composed).toBe(true);
+  });
+
+  it("labels the Allergens control with the localised action and shows the sale body by default", async () => {
+    const { el } = await mount();
+    expect(el.shadowRoot!.querySelector("wt-button.allergens")!.textContent).toContain(
+      t("allergens.open"),
+    );
+    // Default: the sale body, not the allergen screen.
+    expect(el.shadowRoot!.querySelector(".body")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-allergen-screen")).toBeNull();
+  });
+
+  it("tapping Allergens swaps the sale body for the allergen screen, passing products/locale/invoiceLocale", async () => {
+    const { el } = await mount({ invoiceLocale: "en" });
+    el.shadowRoot!.querySelector<HTMLElement>("wt-button.allergens")!.click();
+    await el.updateComplete;
+    const screen = el.shadowRoot!.querySelector<TillAllergenScreen>("till-allergen-screen");
+    expect(screen).not.toBeNull();
+    // The sale body (product tiles etc.) is gone — the allergen screen is NOT the tiles.
+    expect(el.shadowRoot!.querySelector(".body")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-product-grid")).toBeNull();
+    // The three inputs the screen needs are threaded through.
+    expect(screen!.products).toBe(products);
+    expect(screen!.locale).toBe(currentLocale());
+    expect(screen!.invoiceLocale).toBe("en");
+  });
+
+  it("returns to the sale body when the allergen screen asks to close", async () => {
+    const { el } = await mount();
+    el.shadowRoot!.querySelector<HTMLElement>("wt-button.allergens")!.click();
+    await el.updateComplete;
+    const screen = el.shadowRoot!.querySelector("till-allergen-screen")!;
+    screen.dispatchEvent(new CustomEvent("close-allergens", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-allergen-screen")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".body")).not.toBeNull();
   });
 });

@@ -74,6 +74,18 @@ export const en = {
   "card.wait": "Keep waiting",
   "card.tip": "Tip (optional)",
   "card.offline_consent": "Accept offline if the network is down",
+  // Allergens (menu & allergens) — UI chrome for the till allergen screen. `may_contain` follows the
+  // snake_case sibling convention every other multi-word key here uses (card_ref, switch_tender, …),
+  // not the camelCase the task brief spelled it; the allergen CODES/name strings are elsewhere
+  // (i18n/allergen-names.ts), so these are screen chrome only.
+  "allergens.open": "Allergens",
+  "allergens.title": "Allergens",
+  "allergens.notice": "Allergen information is available — please ask staff.",
+  "allergens.pending": "Allergen info pending",
+  "allergens.contains": "Contains",
+  "allergens.may_contain": "May contain",
+  "allergens.print": "Print",
+  "allergens.close": "Close",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
   "person.suspended": "Account suspended, ask a manager",
@@ -140,6 +152,14 @@ export const es: Record<StringKey, string> = {
   "card.wait": "Seguir esperando",
   "card.tip": "Propina (opcional)",
   "card.offline_consent": "Aceptar sin conexión si la red no funciona",
+  "allergens.open": "Alérgenos",
+  "allergens.title": "Alérgenos",
+  "allergens.notice": "Hay información sobre alérgenos disponible — pregunta al personal.",
+  "allergens.pending": "Información de alérgenos pendiente",
+  "allergens.contains": "Contiene",
+  "allergens.may_contain": "Puede contener",
+  "allergens.print": "Imprimir",
+  "allergens.close": "Cerrar",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "person.suspended": "Cuenta suspendida, avisa a un responsable",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",

@@ -1,7 +1,7 @@
 import { LitElement, type TemplateResult, css, html } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { LAYOUT_A, type LayoutDef, type WidgetInstance } from "../layout.js";
 // Side-effect imports: registering each widget element so the layout below can render its tag. The
 // screen names them only as tags in `#widget`, never as classes, so the layout stays the wiring.
@@ -11,6 +11,9 @@ import "../widgets/total.js";
 import "../widgets/tender-pay.js";
 import "../widgets/held-orders.js";
 import "../widgets/prep-queue.js";
+// The allergen screen the "Allergens" header button reveals (menu & allergens) — a full-body view, not
+// a layout widget, so it is registered here and toggled in `render`, never placed through `#widget`.
+import "./till-allergen-screen.js";
 import type { HeldOrderSummary, OrderFlow, PrepQueueEntry, TillProduct } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import type { CardOutcome, CardProvider } from "../widgets/tender-pay.js";
@@ -125,6 +128,17 @@ export class TillCounterScreen extends LitElement {
   /** The logged-in operator's display name, shown in the header. Data, never translated. */
   @property() operatorName = "";
   /**
+   * The INVOICE (customer) locale, threaded straight through to the allergen screen's own
+   * `invoiceLocale` — the language its Print re-renders in, independent of the operator UI (see
+   * `till-allergen-screen`'s LOCALE doc). Fed from the server till config by the app (`GET /api/till`),
+   * the same source `till-ticket-view` reads. Defaults to the deli's es-ES.
+   */
+  @property() invoiceLocale = "es-ES";
+
+  /** Whether the allergen lookup screen is showing in place of the sale body (menu & allergens). The
+   * "Allergens" header button opens it; the screen's own Close (`close-allergens`) returns to the sale. */
+  @state() private showAllergens = false;
+  /**
    * A sale is in flight (the app is awaiting `recordSale`). Threaded straight through to the pay
    * widget, which disables its Pay/Confirm affordances while set — the visible half of the app's
    * single-flight double-file guard (see `till-app`'s `submitting`).
@@ -149,6 +163,16 @@ export class TillCounterScreen extends LitElement {
   /** Announce that the operator wants to end their shift. The app (Task 19) tears the session down. */
   #logout(): void {
     this.dispatchEvent(new CustomEvent("logout", { bubbles: true, composed: true }));
+  }
+
+  /** Reveal the allergen lookup screen in place of the sale body. */
+  #openAllergens(): void {
+    this.showAllergens = true;
+  }
+
+  /** Return to the sale body when the allergen screen asks to close (`close-allergens`). */
+  #closeAllergens(): void {
+    this.showAllergens = false;
   }
 
   /**
@@ -192,20 +216,33 @@ export class TillCounterScreen extends LitElement {
         <div class="header">
           <span class="brand">${BRAND}</span>
           <div class="session">
+            <wt-button class="allergens" variant="secondary" @click=${() => this.#openAllergens()}>
+              ${t("allergens.open")}
+            </wt-button>
             <span class="operator">${this.operatorName}</span>
             <wt-button class="logout" variant="secondary" @click=${() => this.#logout()}>
               ${t("action.logout")}
             </wt-button>
           </div>
         </div>
-        <div class="body">
-          <div class="region region-main">
-            ${inRegion("main").map((widget) => this.#widget(widget))}
-          </div>
-          <div class="region region-aside">
-            ${inRegion("aside").map((widget) => this.#widget(widget))}
-          </div>
-        </div>
+        ${
+          this.showAllergens
+            ? html`<till-allergen-screen
+                class="allergen-screen"
+                .products=${this.products}
+                .locale=${currentLocale()}
+                .invoiceLocale=${this.invoiceLocale}
+                @close-allergens=${() => this.#closeAllergens()}
+              ></till-allergen-screen>`
+            : html`<div class="body">
+                <div class="region region-main">
+                  ${inRegion("main").map((widget) => this.#widget(widget))}
+                </div>
+                <div class="region region-aside">
+                  ${inRegion("aside").map((widget) => this.#widget(widget))}
+                </div>
+              </div>`
+        }
       </div>
     `;
   }
