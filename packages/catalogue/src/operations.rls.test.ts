@@ -2,7 +2,14 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { asAppUser, captureError, pgErrorCode, pgErrorMessage, withTenant } from "@waitron/db";
 import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
-import { createCatalogue, createProduct, listCatalogues, listProducts } from "./operations.js";
+import {
+  assignCatalogueToLocation,
+  createCatalogue,
+  createProduct,
+  listAvailableProducts,
+  listCatalogues,
+  listProducts,
+} from "./operations.js";
 import { startRealPostgres } from "./testing/postgres.js";
 import { seedVenue } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
@@ -53,6 +60,7 @@ describe("catalogue operations under real row-level security", () => {
           pricingUnit: "each",
           unitPrice: "1.50",
           vatClass: "general",
+          allergens: { gluten: { presence: "contains", source: "wheat" } },
         });
       });
     } finally {
@@ -92,6 +100,26 @@ describe("catalogue operations under real row-level security", () => {
       });
       expect(seenByB.catalogues).toEqual([]);
       expect(seenByB.products).toEqual([]);
+    } finally {
+      await probe.close();
+    }
+  });
+
+  it("round-trips a product's allergens through the app role's INSERT and SELECT", async () => {
+    // The allergens jsonb survives a create→listAvailableProducts entirely under the non-superuser
+    // probe role: the INSERT in beforeAll wrote them under the app_user grant + WITH CHECK, and this
+    // reads them back through the location→catalogue→product join under the USING half of the policy.
+    // `assignCatalogueToLocation` UPDATEs `locations`, for which app_user holds UPDATE (0001).
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const available = await withTenant(probe, tenantA.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await assignCatalogueToLocation(tx, tenantA.locationId, catalogueId);
+        return listAvailableProducts(tx, tenantA.locationId);
+      });
+      expect(available.map((p) => p.allergens)).toEqual([
+        { gluten: { presence: "contains", source: "wheat" } },
+      ]);
     } finally {
       await probe.close();
     }

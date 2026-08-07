@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { catalogues, categories, locations, products } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { validateAllergens, type ProductAllergens } from "./allergens.js";
 import type { PricingUnit, VatClass } from "./pricing.js";
 
 /**
@@ -41,6 +42,8 @@ export interface Product {
   unitPrice: string;
   vatClass: VatClass;
   active: boolean;
+  /** EU 1169/2011 Annex II declaration, or null when not yet reviewed (a compliance gap). */
+  allergens: ProductAllergens | null;
 }
 
 export interface CreateProductInput {
@@ -50,6 +53,8 @@ export interface CreateProductInput {
   pricingUnit: PricingUnit;
   unitPrice: string;
   vatClass: VatClass;
+  /** Omitted leaves it null (unreviewed); validated against the EU-14 taxonomy on insert. */
+  allergens?: ProductAllergens;
 }
 
 /** The mutable slice of a product. Absent keys are left unchanged (the object literal a caller
@@ -60,6 +65,8 @@ export interface UpdateProductInput {
   vatClass?: VatClass;
   pricingUnit?: PricingUnit;
   categoryId?: string | null;
+  /** `null` clears the declaration back to unreviewed; omitted leaves it unchanged. */
+  allergens?: ProductAllergens | null;
 }
 
 /**
@@ -74,6 +81,7 @@ export interface AvailableProduct {
   unitPrice: string;
   vatClass: VatClass;
   category: string | null;
+  allergens: ProductAllergens | null;
 }
 
 const CATALOGUE_COLUMNS = {
@@ -97,6 +105,7 @@ const PRODUCT_COLUMNS = {
   unitPrice: products.unitPrice,
   vatClass: products.vatClass,
   active: products.active,
+  allergens: products.allergens,
 };
 
 /** The product row as Drizzle types it back: `pricing_unit`/`vat_class` are `text` columns, so they
@@ -110,6 +119,7 @@ interface RawProduct {
   unitPrice: string;
   vatClass: string;
   active: boolean;
+  allergens: ProductAllergens | null;
 }
 
 // `pricing_unit`/`vat_class` are constrained to their unions by a CHECK (catalogue.ts), so the value
@@ -176,6 +186,10 @@ export async function renameCategory(tx: Transaction, id: string, name: string):
 }
 
 export async function createProduct(tx: Transaction, input: CreateProductInput): Promise<Product> {
+  // Validate before the write: an unreviewed product stores null, a supplied map is checked against
+  // the EU-14 taxonomy and rejected (throws `allergen.invalid_code`/`allergen.invalid_presence`)
+  // before any row is inserted.
+  const allergens = input.allergens === undefined ? null : validateAllergens(input.allergens);
   const [row] = await tx
     .insert(products)
     .values({
@@ -186,6 +200,7 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
       pricingUnit: input.pricingUnit,
       unitPrice: input.unitPrice,
       vatClass: input.vatClass,
+      allergens,
     })
     .returning(PRODUCT_COLUMNS);
   return toProduct(row!);
@@ -205,6 +220,9 @@ export async function updateProduct(
   id: string,
   patch: UpdateProductInput,
 ): Promise<void> {
+  // A supplied map is validated before the write; `null` (clear) and `undefined` (leave unchanged)
+  // both skip validation. `.set({...patch})` maps `allergens` straight to the jsonb column.
+  if (patch.allergens != null) validateAllergens(patch.allergens);
   await tx
     .update(products)
     .set({ ...patch, updatedAt: sql`now()` })
@@ -245,6 +263,7 @@ export async function listAvailableProducts(
       unitPrice: products.unitPrice,
       vatClass: products.vatClass,
       category: categories.name,
+      allergens: products.allergens,
     })
     .from(locations)
     .innerJoin(catalogues, eq(catalogues.id, locations.catalogueId))
@@ -261,5 +280,6 @@ export async function listAvailableProducts(
     unitPrice: row.unitPrice,
     vatClass: row.vatClass as VatClass,
     category: row.category,
+    allergens: row.allergens,
   }));
 }
