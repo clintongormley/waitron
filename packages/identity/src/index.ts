@@ -8,6 +8,7 @@ export { PERMISSIONS, roleHasPermission } from "./permissions.js";
 export type { Permission, PersonRoleValue } from "./permissions.js";
 export { persons, personStatus, personRole } from "./schema/persons.js";
 export { sessions } from "./schema/sessions.js";
+export { managementSessions } from "./schema/management-sessions.js";
 export {
   MIN_PIN_LENGTH,
   assertPinLength,

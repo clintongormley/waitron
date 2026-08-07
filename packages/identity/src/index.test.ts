@@ -57,3 +57,25 @@ describe("sessions constraint declarations (forces the lazy extraConfig callback
     expect(indexNames).toContain("sessions_open_idx");
   });
 });
+
+/**
+ * Same mechanism for management_sessions — its FK/index block is in the lazy extraConfig callback, so
+ * this both forces it to run and pins the names the generated migration (0005_thick_gamma_corps.sql)
+ * and the RLS policy (Task 6) reference. A management session belongs to a person within a tenant
+ * (browser dashboard login), so its two FKs are to tenants and persons — no till.
+ */
+describe("management_sessions constraint declarations (forces the lazy extraConfig callback)", () => {
+  it("declares management_sessions' primary key, its two foreign keys, and its tenant/open indexes", () => {
+    const config = getTableConfig(api.managementSessions);
+
+    expect(config.columns.find((c) => c.name === "id")?.primary).toBe(true);
+
+    const fkNames = config.foreignKeys.map((fk) => fk.getName());
+    expect(fkNames).toContain("management_sessions_tenant_fk");
+    expect(fkNames).toContain("management_sessions_person_fk");
+
+    const indexNames = config.indexes.map((i) => i.config.name);
+    expect(indexNames).toContain("management_sessions_tenant_id_idx");
+    expect(indexNames).toContain("management_sessions_open_idx");
+  });
+});

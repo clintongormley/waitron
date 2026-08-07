@@ -36,6 +36,13 @@
       "when": 1786119187773,
       "tag": "0004_nosy_naoko",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786119692117,
+      "tag": "0005_thick_gamma_corps",
+      "breakpoints": true
     }
   ]
 }
