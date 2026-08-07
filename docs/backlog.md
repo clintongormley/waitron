@@ -70,8 +70,7 @@ most-uncertain foundations first.
 
 | What | State |
 | --- | --- |
-| **Menu & allergens** (sub-project 18) — launch-day legal duty (EU 1169/2011, RD 126/2015) | Chosen 2026-08-07, not started. Seeds off the catalogue (#59); recipes/BOM is the linchpin; the allergen list is a food-safety-advisor call |
-| **Reporting — *cierre Z*** (sub-project 8) — frozen/signed daily close | Chosen 2026-08-07, not started. Numbered, immutable, counted-cash / opening float / *descuadre*; `computeDailyClose` (#56) left the seam |
+| **Reporting — *cierre Z*** (sub-project 8) — frozen/signed daily close | **Split into two slices, both in flight (implemented this session, landing now):** **8a VAT-exact daily close** (`sales.vat_breakdown` written from the filed value + `computeVatSummary` reads it — makes the derived close exact for catalogue difference-method sales) then **8b frozen cierre Z** (immutable numbered `daily_closes` + per-node hash chain + per-till cash reconciliation → *descuadre*, headless). English schema tokens (`daily_closes`/`cash_variance`/`entry_hash`); Spanish *cierre Z*/*descuadre* are UI-only |
 | **Management dashboard** — owner's off-premises console (slice 1a) | Designed + fully planned 2026-08-07 (spec + plans 1a–1d, see *Current direction*). **Slice 1a (identity auth foundation) in flight**; local-server `apps/dashboard`, remote via a pluggable tunnel. Blocked end-to-end on a provisioning follow-up (first-admin password) |
 
 ---
@@ -83,6 +82,7 @@ One line per landed PR, newest first. The git log, the linked designs/plans, and
 detail — **this file is not a history** (see *How to keep this file honest*). Open follow-ups from
 these live under *Debt and odd jobs*; their designs/plans stay in `docs/superpowers/`.
 
+- **#65** Menu & allergens (sub-project 18, slice 1) — EU-14 allergen declaration end-to-end: taxonomy + `validateAllergens` + `allergen.*` codes (`@waitron/catalogue`), a nullable `products.allergens jsonb` (0031), catalogue-ops threading, `/api/products` + `TillProduct` exposure, en/es names, a till **allergen screen** (matrix + operator lookup + print) with the `null`=PENDING-never-allergen-free invariant, and a demo. Legal basis (RD 126/2015 Art. 6.5) verified on primary source. Deferred: a `@media print` stylesheet so Print isolates the allergen sheet (convenience-only). Further sub-project-18 scope (recipes/BOM, variants, customer-facing browse) not started.
 - **#64** Counter POS — integrated card terminal (Stripe Terminal / Tap-to-Pay): split-transaction pay (collect outside the fiscal tx), working-order-derived capture idempotency + lost-response recovery, `POST /api/pay`.
 - **#63** Counter POS 7c — prepare & collect: line-add price-snapshot lock, placing, per-location pay-timing (prepay / invoice-first / ticket-then-pay), amendment log, prep surface.
 - **#62** Counter POS — manual (*datáfono*) card tender + captured `payments` row.
