@@ -54,6 +54,17 @@ export const en = {
   "held.empty": "No held orders",
   "held.retrieve": "Retrieve",
   "held.discard": "Discard",
+  // Placing & prep (7c prepare & collect)
+  "action.place": "Place order",
+  "action.send_to_prep": "Send to prep",
+  "action.collect": "Collect",
+  "prep.title": "Prep queue",
+  "prep.empty": "Nothing in prep",
+  "prep.state.queued": "Queued",
+  "prep.state.preparing": "Preparing",
+  "prep.state.ready": "Ready",
+  "prep.advance": "Advance",
+  "cancel.reason_prompt": "Reason for cancelling",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
   "person.suspended": "Account suspended, ask a manager",
@@ -61,6 +72,8 @@ export const en = {
   "held.park_error": "Could not hold the order, try again",
   "held.product_gone": "A product was removed and dropped from the order",
   "held.stale": "That order is no longer available",
+  "place.error": "Could not place the order, try again",
+  "prep.advance_error": "Could not update the order's status, try again",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -100,12 +113,24 @@ export const es: Record<StringKey, string> = {
   "held.empty": "No hay pedidos aparcados",
   "held.retrieve": "Recuperar",
   "held.discard": "Descartar",
+  "action.place": "Enviar pedido",
+  "action.send_to_prep": "Enviar a cocina",
+  "action.collect": "Entregar",
+  "prep.title": "Cola de preparación",
+  "prep.empty": "Nada en preparación",
+  "prep.state.queued": "En cola",
+  "prep.state.preparing": "Preparando",
+  "prep.state.ready": "Listo",
+  "prep.advance": "Avanzar",
+  "cancel.reason_prompt": "Motivo de la cancelación",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "person.suspended": "Cuenta suspendida, avisa a un responsable",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",
   "held.park_error": "No se pudo aparcar el pedido, inténtalo de nuevo",
   "held.product_gone": "Se quitó un producto y se eliminó del pedido",
   "held.stale": "Ese pedido ya no está disponible",
+  "place.error": "No se pudo enviar el pedido, inténtalo de nuevo",
+  "prep.advance_error": "No se pudo actualizar el estado del pedido, inténtalo de nuevo",
 };
 
 // Locale → catalogue. `en` is included as its own catalogue so an explicit

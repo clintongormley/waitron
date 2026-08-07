@@ -281,5 +281,65 @@ declare module "@waitron/shared" {
      * this host throws it — the same note `working_order.not_found` and `sale.unknown_product` carry.
      */
     "working_order.not_open": { workingOrderId: string };
+    /**
+     * A working order this caller tried to CANCEL or AMEND is not `placed` — it names one still `open`
+     * (edit it silently via updateHeldOrder instead), one already `settled`/`abandoned`, or none at all
+     * (absent, or another tenant's, RLS-hidden). All report THIS one code, the same fail-closed shape
+     * `working_order.not_open` uses for the modify side. Mapped to 409 (the state forbids the operation).
+     * `working_order.*`, not `server.*`, and destined for @waitron/core once a package other than this
+     * host throws it — the note `working_order.not_open` carries.
+     */
+    "working_order.not_placed": { workingOrderId: string };
+    /**
+     * A logged amendment (a cancel, art. 29.2.j) was requested with no reason — the field was absent,
+     * empty, or whitespace-only. The app enforces it because `order_amendments` carries NO DB CHECK
+     * forcing a reason on `order_cancelled` (that column is nullable, null being the genesis
+     * `order_placed`'s legitimate value — see the schema comment), so nothing but this guard stops a
+     * reasonless cancel from writing an accountability-empty entry. Its OWN code, deliberately NOT
+     * `working_order.not_placed`: this guard fires BEFORE the order is locked and its status read
+     * (`cancelPlacedOrder` checks the reason first), so the order's state is unknown at this point — it
+     * may be open, settled, abandoned or absent. A missing reason is a client/request-shape error
+     * independent of that state, so `not_placed` would mislabel it as a state conflict (CLAUDE.md §1).
+     * Carried through 7c's carry-forward from Task 3's review, which required the reason-non-null
+     * contract be enforced by the app.
+     *
+     * A client error (the request omitted a required field), distinct from `not_placed`'s state
+     * conflict — a 400 to that code's 409, mapped in the route layer (Task 8+). `workingOrderId` is
+     * echoed and qualified for the same reasons the family's other codes give (a caller-supplied uuid,
+     * not a secret). `working_order.*`, not `server.*`, and destined for `@waitron/core` once a package
+     * other than this host throws it — the note `working_order.not_open` carries.
+     */
+    "working_order.reason_required": { workingOrderId: string };
+    /**
+     * A working order this caller tried to SEND TO PREP (`sendToPrep`, the Mode-P pickup — design §5)
+     * is not `settled`. It names one still `open` (never paid), one `placed` (Modes I/T enqueue their
+     * OWN prep row at PLACING, via `placeOrder` — `sendToPrep` is never their route, so a `placed`
+     * order here means the wrong path was called, not a legitimate double-enqueue), one `abandoned`,
+     * or it names none at all (absent, or another tenant's order that RLS hides). All report THIS one
+     * code, the same fail-closed shape `working_order.not_open`/`not_placed` use for their own state
+     * guards — to a caller trying to enqueue a Mode-P pickup, "wrong status" and "doesn't exist" are
+     * the same fact ("there is no settled order here to send to prep"). Mapped to 409: the id may be
+     * valid, but the order's state forbids the move (fix round 1 — a valid-but-wrong-state or
+     * valid-but-absent id was previously reaching a raw `order_prep_order_fk` violation, an opaque
+     * 500). `working_order.*`, not `server.*`, for the reason `working_order.not_open`'s note gives.
+     */
+    "working_order.not_settled": { workingOrderId: string };
+    /**
+     * A prep operation is not legal given the order's current prep state (design §5's prep surface):
+     *  - `advancePrep`: the requested `to` is not the order's IMMEDIATE next state
+     *    (queued → preparing → ready → collected — no skip, no repeat, no jump backwards), or the
+     *    order has no prep record to advance at all (never sent to prep, or an absent/foreign id RLS
+     *    hides — the same fail-closed shape `working_order.not_open` uses), or `to` is `"queued"`
+     *    itself: no prep state legally advances TO queued — reaching `queued` is `sendToPrep`'s job
+     *    (an INSERT), never a transition.
+     *  - `sendToPrep`: the order is settled and ELIGIBLE (already past the `working_order.not_settled`
+     *    guard above) but already has a prep record (`order_prep_pk`) — a double send-to-prep, not a
+     *    fresh enqueue.
+     * A fact about the order's PREP, not the process. Mapped to 409 (the id may be valid, but the
+     * prep state forbids the move — the same shape `working_order.not_open`/`not_placed` use for their
+     * own state machines). `order_prep.*` names the domain concept (order preparation), the rule
+     * `tenant.not_found`'s note above gives.
+     */
+    "order_prep.invalid_transition": { workingOrderId: string };
   }
 }

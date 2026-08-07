@@ -15,7 +15,9 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, verifyAmendmentChain, withTenant } from "@waitron/db";
+import type { VerifiableAmendment } from "@waitron/db";
+import { listOutstandingSales } from "@waitron/core";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -24,9 +26,20 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
-import type { TillConfig } from "./till-config.js";
-import { getHeldOrder, listHeldOrders, parkOrder } from "./working-order.js";
-import { payWorkingOrder } from "./till-sale.js";
+import { readOrderFlow } from "./till-config.js";
+import type { OrderFlow, TillConfig } from "./till-config.js";
+import {
+  advancePrep,
+  cancelPlacedOrder,
+  getHeldOrder,
+  listHeldOrders,
+  listPrepQueue,
+  parkOrder,
+  placeOrder,
+  sendToPrep,
+  updateHeldOrder,
+} from "./working-order.js";
+import { collectOrder, payWorkingOrder } from "./till-sale.js";
 import { startRealPostgres } from "./testing/postgres.js";
 import "./errors.js";
 
@@ -37,6 +50,12 @@ import "./errors.js";
 // backend via `suite.pg.connect()`, and `startRealPostgres` THROWS rather than skipping when Docker is
 // absent, so a vanished suite fails loudly instead of reporting a green that proves nothing.
 const LOCALE = "es-ES";
+
+// The accountable operator every placing/cancel amendment is attributed to. `order_amendments.actor_id`
+// is a plain uuid with NO FK (the sale_voids.voided_by shape), so a fixed fixture uuid stands in for
+// the session's `personId` the till supplies in production — the value is only ever compared, never
+// joined.
+const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
 const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: 180_000 });
 
@@ -81,6 +100,9 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
+    // The venue provisions with the DEFAULT `prepay` mode; a mode-specific test overrides both the
+    // cfg field AND the location's `order_flow` column via `modeVenue` (below).
+    orderFlow: "prepay",
   };
 }
 
@@ -154,12 +176,46 @@ async function setupVenue(): Promise<SeededVenue> {
   return { cfg, available, cafe, agua };
 }
 
+/**
+ * A fresh venue set to a specific pay-timing `mode`: `setupVenue` provisions with the DEFAULT `prepay`
+ * (planVenue has no mode input), then this flips the location's `order_flow` column to `mode` (as the
+ * owner, RLS bypassed) AND sets `cfg.orderFlow` to match — so both the DB (what `readOrderFlow` reads)
+ * and the in-memory config (what `placeOrder`/`collectOrder` dispatch on) agree, exactly as boot wires
+ * them in production.
+ */
+async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
+  const venue = await setupVenue();
+  await suite.admin.execute(
+    sql`update locations set order_flow = ${mode} where id = ${venue.cfg.locationId}`,
+  );
+  return { ...venue, cfg: { ...venue.cfg, orderFlow: mode } };
+}
+
+/** This tenant's OUTSTANDING (issued-but-unsettled) sales, read as the app role under the tenant —
+ *  the surface an invoice-first order shows on between placing and collect. */
+async function outstandingFor(cfg: TillConfig): Promise<{ saleId: string; amountDue: string }[]> {
+  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const rows = await listOutstandingSales(tx, cfg.tenantId);
+    return rows.map((r) => ({ saleId: r.saleId, amountDue: r.amountDue }));
+  });
+}
+
 /** How many `sales` rows reference this working order — read as the superuser owner (bypasses RLS). */
 async function saleCount(workingOrderId: string): Promise<number> {
   const { rows } = await suite.admin.execute<{ count: string }>(sql`
     select count(*)::text as count from sales where working_order_id = ${workingOrderId}
   `);
   return Number(rows[0]!.count);
+}
+
+/** The IMMUTABLE filed `sales.total` for this working order's sale — read as the owner (bypasses RLS).
+ *  The witness that a retrieved order files at the LOCKED price, not a re-price at pay. */
+async function filedSaleTotal(workingOrderId: string): Promise<string> {
+  const { rows } = await suite.admin.execute<{ total: string }>(sql`
+    select total from sales where working_order_id = ${workingOrderId}
+  `);
+  return rows[0]!.total;
 }
 
 /** How many chained `registros_facturacion` rows exist for this working order's sale (superuser read). */
@@ -229,6 +285,60 @@ async function orderState(id: string): Promise<{ status: string; settledAtSet: b
     select status, (settled_at is not null) as settled from working_orders where id = ${id}
   `);
   return { status: rows[0]!.status, settledAtSet: rows[0]!.settled };
+}
+
+/**
+ * This order's whole amendment chain, read back as verifiable rows in chain-position order, as the
+ * owner (bypasses RLS — a read-back for verification, not the isolation assertion). `event_at` is
+ * projected to a UTC ISO instant with a millisecond field (always `.000`, the stored value being
+ * whole-second-truncated) so `verifyAmendmentChain`'s `Date.parse` sees exactly the instant the stored
+ * hash committed. Ported verbatim from `append-order-amendment.rls.test.ts`'s own `readAmendments`.
+ */
+async function readAmendments(id: string): Promise<VerifiableAmendment[]> {
+  // An inline row TYPE LITERAL, not `execute<VerifiableAmendment>`: `execute`'s generic is constrained
+  // to `Record<string, unknown>`, which an INTERFACE does not satisfy while a structurally-identical
+  // type literal does. The literal's fields mirror VerifiableAmendment exactly.
+  const { rows } = await suite.admin.execute<{
+    sequenceNo: number;
+    workingOrderId: string;
+    kind: "order_placed" | "order_cancelled";
+    actorId: string;
+    reason: string | null;
+    capturedByTillId: string;
+    capturedByNodeId: string;
+    eventAt: string;
+    eventOffsetMinutes: number;
+    entryHash: string;
+    prevEntryHash: string | null;
+    isFirstEntry: boolean;
+  }>(sql`
+    select
+      sequence_no as "sequenceNo",
+      working_order_id as "workingOrderId",
+      kind,
+      actor_id as "actorId",
+      reason,
+      captured_by_till_id as "capturedByTillId",
+      captured_by_node_id as "capturedByNodeId",
+      to_char(event_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "eventAt",
+      event_offset_minutes as "eventOffsetMinutes",
+      entry_hash as "entryHash",
+      prev_entry_hash as "prevEntryHash",
+      is_first_entry as "isFirstEntry"
+    from order_amendments
+    where working_order_id = ${id}
+    order by sequence_no
+  `);
+  return rows;
+}
+
+/** The prep queue row's state for this order, or null when placing enqueued none — owner read. Placing
+ *  (= send-to-prep) enqueues exactly one `queued` row (design §5); a walk-up never places, so none. */
+async function prepStateOf(id: string): Promise<string | null> {
+  const { rows } = await suite.admin.execute<{ state: string }>(sql`
+    select state from order_prep where working_order_id = ${id}
+  `);
+  return rows[0]?.state ?? null;
 }
 
 /**
@@ -321,6 +431,11 @@ describe("payWorkingOrder", () => {
     expect(res.total).toBe("1.50");
     expect(res.change).toBe("3.50");
     expect(res.vatBreakdown).toEqual([{ rate: "21.00", base: "1.24", tax: "0.26" }]);
+    // The FILED line list the receipt renders (Finding 2): the priced walk-up composition — name, the
+    // display quantity, and the GROSS the line was filed at. Σ(gross) == total.
+    expect(res.lines).toEqual([
+      { descriptions: { [LOCALE]: "Café" }, quantity: "1", gross: "1.50" },
+    ]);
 
     // The working order was created AND settled in the one transaction; exactly one sale + one
     // registro reference it.
@@ -329,33 +444,119 @@ describe("payWorkingOrder", () => {
     expect(await registroCount(id)).toBe(1);
   });
 
-  it("parked: pays an existing open order at CURRENT prices and settles it", async () => {
+  it("parked: pays the STORED composition at its LOCKED prices and settles it", async () => {
     const { cfg, cafe, agua } = await setupVenue();
     const id = randomUUID();
 
-    // Park an open order (its stored draft lines are café×1), then PAY a DIFFERENT current basket
-    // (café×1 + agua×1). The pay re-prices what is SENT, not the stored draft (spec §3/§4).
+    // Park café×1 + agua×1 — BOTH added, so both gross units are LOCKED onto their `working_order_lines`
+    // rows (design §2, line-add snapshot). Then pay the SAME id with NO client basket (`lines: []`): a
+    // retrieved order is filed from its STORED locked lines, not a re-price of anything the till sends.
+    // The old model re-priced the sent basket; this one cannot, which is the behaviour under test.
     await parkOrder({ db: suite.admin }, cfg, {
-      id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
-      label: "Mesa 4",
-    });
-    expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
-
-    const res = await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
       id,
       lines: [
         { productId: cafe.id, quantity: "1" },
         { productId: agua.id, quantity: "1" },
       ],
+      label: "Mesa 4",
+    });
+    expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
+    // What the customer was shown at park — the GROSS draft total (sum of the locked line totals).
+    const parkedTotal = (await draftAggregate(id)).total;
+    expect(parkedTotal).toBe("3.50"); // 1.50 café + 2.00 agua, locked
+
+    const res = await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id,
+      lines: [],
       tender: { method: "cash", amount: "5.00" },
     });
 
-    // 1.50 + 2.00 = 3.50 gross (the CURRENT basket), not the parked 1.50.
+    // The LOCKED composition, filed from the stored lines: 1.50 + 2.00 = 3.50. Round-trip invariant —
+    // the filed total EQUALS the gross the customer was shown at park (`parkedTotal`).
     expect(res.total).toBe("3.50");
+    expect(res.total).toBe(parkedTotal);
     expect(res.change).toBe("1.50");
+    // The receipt line list is the STORED lock (Finding 2), not any client basket the till sent (it
+    // sent none). The stored numeric(_,3) quantities ("1.000") print trailing-zero-trimmed ("1").
+    expect(res.lines).toEqual([
+      { descriptions: { [LOCALE]: "Café" }, quantity: "1", gross: "1.50" },
+      { descriptions: { [LOCALE]: "Agua" }, quantity: "1", gross: "2.00" },
+    ]);
     expect(res.invoiceNumber).toBe("A/1");
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(id)).toBe(1);
+    expect(await registroCount(id)).toBe(1);
+  });
+
+  it("retrieve → edit → pay files the RE-LOCKED edit, not the pre-edit lock (Finding 2 — no silent drop)", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+
+    // Park café×1 (locked 1.50) — the composition a retrieve loads onto the till.
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    expect((await draftAggregate(id)).total).toBe("1.50");
+
+    // The operator EDITS the retrieved basket (café×1 → café×2); the till re-syncs it BEFORE paying
+    // (`updateWorkingOrder` → `updateHeldOrder`), re-locking the new composition. WITHOUT this sync the
+    // retrieved-order pay path files the pre-edit lock and the edit is SILENTLY DROPPED — the 7c
+    // regression this closes (the till-app side is pinned by `retrieve → edit → pay re-syncs …`).
+    await updateHeldOrder({ db: suite.admin }, cfg, id, {
+      lines: [{ productId: cafe.id, quantity: "2" }],
+    });
+    expect((await draftAggregate(id)).total).toBe("3.00"); // the lock now reflects the edit
+
+    // Pay the retrieved order (no client basket — files from the stored lock, which is now the edit).
+    const res = await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "5.00" },
+    });
+
+    // The EDIT is what was charged AND filed: 3.00 (café×2), never the pre-edit 1.50. Its receipt line
+    // list carries the edited quantity, and the immutable record's total matches — the edit reached the
+    // fiscal record rather than being dropped.
+    expect(res.total).toBe("3.00");
+    expect(res.change).toBe("2.00");
+    expect(res.lines).toEqual([
+      { descriptions: { [LOCALE]: "Café" }, quantity: "2", gross: "3.00" },
+    ]);
+    expect(await filedSaleTotal(id)).toBe("3.00");
+    expect(await saleCount(id)).toBe(1);
+    expect(await registroCount(id)).toBe(1);
+  });
+
+  it("files a parked line at its LOCKED price after the catalogue price changes (line-add snapshot)", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+
+    // Park café×1 at the locked 1.50 — the gross unit is snapshotted onto the line here.
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+
+    // Change the catalogue price AFTER the lock — the exact mutation across the park→pay gap that
+    // separates the two pricing models (CLAUDE.md §1: a measurement where both answers look alike
+    // measures nothing). A re-price at pay would file 9.99; filing from the lock files 1.50.
+    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await tx.execute(sql`update products set unit_price = '9.99' where id = ${cafe.id}`);
+    });
+
+    // Pay — files at the LOCKED 1.50, never the new 9.99.
+    const res = await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "5.00" },
+    });
+
+    expect(res.total).toBe("1.50"); // the lock, not 9.99
+    expect(res.change).toBe("3.50");
+    // The IMMUTABLE fiscal record carries the locked price — read back as the owner (bypasses RLS).
+    expect(await filedSaleTotal(id)).toBe("1.50");
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
   });
@@ -384,6 +585,11 @@ describe("payWorkingOrder", () => {
     expect(first.total).toBe("5.50");
     expect(first.vatBreakdown).toEqual([{ rate: "21.00", base: "4.55", tax: "0.95" }]);
     expect(first.qr.length).toBeGreaterThan(0); // a genuine first filing carries the AEAT QR
+    // The FILED line list (Finding 2): café×1 (gross 1.50) + agua×2 (gross 4.00). Σ(gross) == 5.50.
+    expect(first.lines).toEqual([
+      { descriptions: { [LOCALE]: "Café" }, quantity: "1", gross: "1.50" },
+      { descriptions: { [LOCALE]: "Agua" }, quantity: "2", gross: "4.00" },
+    ]);
 
     // The retry — same id, same body. Files NOTHING; returns the first ticket.
     const second = await payWorkingOrder(deps, cfg, req);
@@ -394,6 +600,9 @@ describe("payWorkingOrder", () => {
     // The replay now reads the EXACT filed desglose (Task 14), so it equals the original's — the
     // divergence between the difference method and a recompute is gone.
     expect(second.vatBreakdown).toEqual(first.vatBreakdown);
+    // The replayed ticket's line list is read back from the order's stored lock (Finding 2), so it is
+    // byte-identical to the original's — filed lines both times, never a client basket the retry sent.
+    expect(second.lines).toEqual(first.lines);
     // The replayed ticket carries the SAME mandatory Veri*Factu QR the original did, re-derived from
     // the filed record. `change` stays 0.00 — a documented replay limitation: the tendered cash is not
     // persisted and the drawer change was handed over at the ORIGINAL sale.
@@ -502,32 +711,33 @@ describe("payWorkingOrder", () => {
     expect(await registroCount(id)).toBe(0);
   });
 
-  it("refuses an unknown product in a parked pay's basket, leaving the order open and nothing filed", async () => {
+  it("a retrieved pay IGNORES req.lines — even an unknown product there — and files the STORED lock", async () => {
     const { cfg, cafe } = await setupVenue();
     const id = randomUUID();
     await parkOrder({ db: suite.admin }, cfg, {
       id,
-      lines: [{ productId: cafe.id, quantity: "1" }],
+      lines: [{ productId: cafe.id, quantity: "1" }], // the STORED lock: café×1 at 1.50
     });
     const UUID_NOT_IN_CAT = "00000000-0000-0000-0000-000000000000";
 
-    // A parked pay re-prices the SENT basket; an unknown product there is refused at the filing step
-    // (the order already exists, so `createOpenOrder` is skipped and this is the first pricing).
-    await expect(
-      payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
-        id,
-        lines: [{ productId: UUID_NOT_IN_CAT, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      }),
-    ).rejects.toMatchObject({
-      code: "sale.unknown_product",
-      params: { productId: UUID_NOT_IN_CAT },
+    // A retrieved order files from its STORED locked lines; `req.lines` is IGNORED entirely (design §2,
+    // line-add snapshot). Under the OLD re-price-at-pay model this garbage basket — an unknown product —
+    // would have thrown `sale.unknown_product`; under the new one it is not even looked at, so the pay
+    // SUCCEEDS on the stored café×1. Divergent inputs, opposite outcomes (CLAUDE.md §1): this is the
+    // regression guard against anyone re-reading `req.lines` for a retrieved order.
+    const res = await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id,
+      lines: [{ productId: UUID_NOT_IN_CAT, quantity: "1" }],
+      tender: { method: "cash", amount: "5.00" },
     });
 
-    // The refusal aborts the transaction: the parked order is untouched (still open) and no sale filed.
-    expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
-    expect(await saleCount(id)).toBe(0);
-    expect(await registroCount(id)).toBe(0);
+    // Filed the stored lock (1.50), not the garbage basket — settled exactly once.
+    expect(res.total).toBe("1.50");
+    expect(res.change).toBe("3.50");
+    expect(await filedSaleTotal(id)).toBe("1.50");
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(id)).toBe(1);
+    expect(await registroCount(id)).toBe(1);
   });
 
   it("refuses an empty basket and any tender that is neither cash nor card (voucher/transfer/other)", async () => {
@@ -705,7 +915,8 @@ describe("cross-till end-to-end", () => {
     expect(retrieved.label).toBe("Mesa 7");
     expect(retrieved.lines.map((l) => l.productId)).toEqual([cafe.id, agua.id]);
 
-    // PAY on till B (Sale 2, A/2): re-price the retrieved basket authoritatively and file it. The
+    // PAY on till B (Sale 2, A/2): file the retrieved order from its STORED locked lines (design §2 —
+    // `req.lines` is ignored; `retrieved.lines` is passed only to mirror the real till round-trip). The
     // series is per-node, so till B's sale continues till A's chain — A/1 then A/2.
     const paid = await payWorkingOrder(deps, tillB, {
       id: orderId,
@@ -776,5 +987,876 @@ describe("cross-till end-to-end", () => {
 
     expect((await listHeldOrders({ db: suite.admin }, nodeA)).map((o) => o.id)).toContain(orderId);
     expect(await listHeldOrders({ db: suite.admin }, nodeB)).toEqual([]);
+  });
+});
+
+// Placing (open → placed) opens the art. 29.2.j amendment log with its `order_placed` genesis and
+// freezes composition (for free — a placed order's lines are already frozen by require_open_parent);
+// cancelling a placed order (placed → abandoned) appends an `order_cancelled` amendment. Real Postgres
+// because the amendment writes run as `app_user` under FORCE RLS against an append-only, REVOKE-guarded
+// table — exactly what PGlite's superuser connection cannot exercise (CLAUDE.md §4). This slice files
+// NO fiscal doc at placing (Mode T / generic); Mode-I's deferred file and the mode dispatch are Task 8.
+describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
+  it("placeOrder: open → placed, freezes composition, opens the log with a genesis order_placed entry", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+
+    expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
+
+    // Composition freeze: a line write on the now-placed order is rejected. `updateHeldOrder` locks the
+    // row, reads status = 'placed' and refuses with `working_order.not_open` (its own app check); the
+    // `require_open_parent` trigger is the DB backstop underneath — placing freezes for free (design §3).
+    await expect(
+      updateHeldOrder({ db: suite.admin }, cfg, id, {
+        lines: [{ productId: cafe.id, quantity: "2" }],
+      }),
+    ).rejects.toMatchObject({ code: "working_order.not_open" });
+
+    // The log opened: exactly one amendment, the genesis `order_placed` (seq 1, isFirstEntry, no
+    // contest reason), attributed to the operator, and the chain verifies against its stored hash.
+    const rows = await readAmendments(id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      kind: "order_placed",
+      sequenceNo: 1,
+      isFirstEntry: true,
+      actorId: OPERATOR,
+      reason: null,
+    });
+    expect(verifyAmendmentChain(rows)).toEqual({ ok: true });
+
+    // send-to-prep = placing enqueued the node-scoped prep row at `queued` (design §5) — the row Task 9's
+    // prep routes advance.
+    expect(await prepStateOf(id)).toBe("queued");
+  });
+
+  it("placeOrder refuses a non-open order — a re-place of a placed one, and an absent id — writing no second log", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+
+    // Placing is NOT idempotent in Task 7 (Mode-I double-place idempotency arrives with the mode
+    // dispatch, Task 8): a second place of the now-`placed` order is refused with
+    // `working_order.not_open` (wrong status), before any transition or amendment — so the log still
+    // holds exactly its one genesis entry.
+    await expect(
+      placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR),
+    ).rejects.toMatchObject({ code: "working_order.not_open", params: { workingOrderId: id } });
+    expect(await readAmendments(id)).toHaveLength(1);
+
+    // An ABSENT id — the FOR UPDATE locks nothing — is the same fail-closed code (the undefined branch),
+    // and opens no log.
+    const missing = randomUUID();
+    await expect(
+      placeOrder({ db: suite.admin, backend, clock }, cfg, missing, OPERATOR),
+    ).rejects.toMatchObject({
+      code: "working_order.not_open",
+      params: { workingOrderId: missing },
+    });
+    expect(await readAmendments(missing)).toHaveLength(0);
+  });
+
+  it("cancelPlacedOrder: placed → abandoned, appends an order_cancelled amendment with the reason", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+
+    await cancelPlacedOrder(
+      { db: suite.admin, backend, clock },
+      cfg,
+      id,
+      "customer left",
+      OPERATOR,
+    );
+
+    expect(await orderState(id)).toEqual({ status: "abandoned", settledAtSet: false });
+
+    const rows = await readAmendments(id);
+    expect(rows.map((r) => r.kind)).toEqual(["order_placed", "order_cancelled"]);
+    expect(rows[1]).toMatchObject({
+      sequenceNo: 2,
+      kind: "order_cancelled",
+      reason: "customer left",
+      actorId: OPERATOR,
+      prevEntryHash: rows[0]!.entryHash,
+    });
+    // A genuine 2-entry chain — the cancel links to the genesis's stored hash and re-verifies end to end.
+    expect(verifyAmendmentChain(rows)).toEqual({ ok: true });
+  });
+
+  it("cancelPlacedOrder refuses an empty or whitespace reason (working_order.reason_required), changing nothing", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+
+    // `order_amendments` carries NO DB CHECK forcing a reason on `order_cancelled` (the column is
+    // nullable — null is the genesis's own legitimate value), so the APP contract is the only thing
+    // stopping a reasonless cancel (7c carry-forward from Task 3's review). An empty string AND a
+    // whitespace-only reason are both refused, with `working_order.reason_required` — NOT `not_placed`,
+    // because the order genuinely IS placed here (a false label is the §1 defect class).
+    for (const reason of ["", "   "]) {
+      await expect(
+        cancelPlacedOrder({ db: suite.admin, backend, clock }, cfg, id, reason, OPERATOR),
+      ).rejects.toMatchObject({
+        code: "working_order.reason_required",
+        params: { workingOrderId: id },
+      });
+    }
+
+    // The refusal is total: the order stays `placed` (no transition) and only the genesis entry exists
+    // (no reasonless `order_cancelled` was written). Deleting the reason guard makes this case SUCCEED —
+    // the order abandons and a reasonless amendment appends — which is how the guard is proven by
+    // deletion (CLAUDE.md §4): these two assertions flip to failing.
+    expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
+    expect((await readAmendments(id)).map((r) => r.kind)).toEqual(["order_placed"]);
+  });
+
+  it("cancelPlacedOrder refuses a non-placed order — an open one, a settled one, and an absent id", async () => {
+    const { cfg, cafe } = await setupVenue();
+
+    // An OPEN (parked, never placed) order — the wrong-status branch. A non-empty reason, so the reason
+    // guard passes and the STATE check is what refuses. It reports `not_placed`, not `not_open`: cancel
+    // is a placed-order operation, and an open order is edited/discarded via update/abandon instead.
+    const openId = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id: openId,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await expect(
+      cancelPlacedOrder({ db: suite.admin, backend, clock }, cfg, openId, "changed mind", OPERATOR),
+    ).rejects.toMatchObject({
+      code: "working_order.not_placed",
+      params: { workingOrderId: openId },
+    });
+    // The refused open order opened NO amendment log.
+    expect(await readAmendments(openId)).toHaveLength(0);
+
+    // A SETTLED (walk-up) order — also not placed.
+    const settledId = randomUUID();
+    await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id: settledId,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+      tender: { method: "cash", amount: "5.00" },
+    });
+    await expect(
+      cancelPlacedOrder(
+        { db: suite.admin, backend, clock },
+        cfg,
+        settledId,
+        "changed mind",
+        OPERATOR,
+      ),
+    ).rejects.toMatchObject({
+      code: "working_order.not_placed",
+      params: { workingOrderId: settledId },
+    });
+
+    // An ABSENT id — the FOR UPDATE locks nothing (the undefined branch), same fail-closed code.
+    const missing = randomUUID();
+    await expect(
+      cancelPlacedOrder(
+        { db: suite.admin, backend, clock },
+        cfg,
+        missing,
+        "changed mind",
+        OPERATOR,
+      ),
+    ).rejects.toMatchObject({
+      code: "working_order.not_placed",
+      params: { workingOrderId: missing },
+    });
+  });
+
+  it("a pure walk-up never enters placed and opens no amendment log", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const id = randomUUID();
+
+    // A walk-up settles open → settled in one transaction (till-sale.ts), never passing through
+    // `placed`, so placing's log never opens and no prep row is enqueued (design §3 — a walk-up
+    // finalises, pays and issues in one instant, with no placing gap).
+    await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+      tender: { method: "cash", amount: "5.00" },
+    });
+
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await readAmendments(id)).toHaveLength(0); // no placing → no log (design §3)
+    expect(await prepStateOf(id)).toBeNull();
+  });
+});
+
+// The pay-timing config + the three-mode dispatch (Modes P/I/T — design §3's state-machine × config
+// table). FISCAL-CRITICAL: each mode must fire the right issuance primitive at the right point — a
+// wrong dispatch files the wrong kind of unrepairable fiscal record (CLAUDE.md §5). Real Postgres —
+// the fiscal writes run as `app_user` under RLS, and the idempotency proofs are genuine two-backend
+// races, both of which PGlite's superuser/single-backend connection cannot show (CLAUDE.md §4). No
+// primitive is reimplemented here: the dispatch ORCHESTRATES `recordSale` (immediate + deferred),
+// `settleSale` and `listOutstandingSales`.
+describe("prepare & collect — three-mode dispatch (order_flow)", () => {
+  it("readOrderFlow reads the venue's configured mode from its location", async () => {
+    const { cfg } = await modeVenue("invoice_first");
+    expect(await readOrderFlow(suite.admin, cfg)).toBe("invoice_first");
+  });
+
+  // MODE P (prepay): pay + issue at ORDER — open → settled, no placed state. The unchanged
+  // walk-up/park-pay `payWorkingOrder`, asserted under an explicit `prepay` cfg so P's contract is
+  // pinned beside I and T.
+  it("Mode P (prepay): pay at order files an immediate sale, open → settled, nothing outstanding", async () => {
+    const { cfg, cafe } = await modeVenue("prepay");
+    const id = randomUUID();
+
+    const res = await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+      tender: { method: "cash", amount: "5.00" },
+    });
+
+    expect(res.invoiceNumber).toBe("A/1");
+    expect(res.total).toBe("1.50");
+    expect(res.change).toBe("3.50");
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(id)).toBe(1);
+    expect(await registroCount(id)).toBe(1);
+    // Pay + issue are the same instant, so nothing is ever owed.
+    expect(await outstandingFor(cfg)).toEqual([]);
+  });
+
+  // MODE I (invoice_first): at PLACE issue a DEFERRED (unpaid) chained invoice, open → placed, and it
+  // shows as outstanding; at COLLECT `settleSale` closes it, placed → settled, filing NO second record.
+  it("Mode I (invoice_first): place issues a deferred invoice; collect settles it, no second file", async () => {
+    const { cfg, cafe, agua } = await modeVenue("invoice_first");
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [
+        { productId: cafe.id, quantity: "1" },
+        { productId: agua.id, quantity: "1" },
+      ],
+    });
+
+    // PLACE → the deferred invoice issues HERE (A/1); the order freezes at `placed`, unsettled.
+    const placed = await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+    expect(placed.status).toBe("placed");
+    expect(placed.invoiceNumber).toBe("A/1"); // the deferred invoice, issued at placing
+    expect(placed.total).toBe("3.50"); // 1.50 café + 2.00 agua
+    expect(placed.qr).not.toBe(""); // a genuine chained filing carries the AEAT QR
+    expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
+
+    // The chained record exists NOW, before any payment — one sale, one registro — and shows as
+    // OUTSTANDING (what is owed).
+    expect(await saleCount(id)).toBe(1);
+    expect(await registroCount(id)).toBe(1);
+    const outstanding = await outstandingFor(cfg);
+    expect(outstanding).toHaveLength(1);
+    expect(outstanding[0]!.amountDue).toBe("3.50");
+
+    // COLLECT → settle the EXISTING invoice, placed → settled, filing NOTHING new.
+    const collected = await collectOrder({ db: suite.admin, backend, clock }, cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "3.50" },
+    });
+    expect(collected.invoiceNumber).toBe("A/1"); // the SAME invoice, read back
+    expect(collected.total).toBe("3.50");
+    expect(collected.change).toBe("0.00");
+    // The receipt line list is read back from the order's stored lock (Finding 2 — Mode-I collect
+    // returns the already-filed ticket), so it matches the deferred invoice's composition.
+    expect(collected.lines).toEqual([
+      { descriptions: { [LOCALE]: "Café" }, quantity: "1", gross: "1.50" },
+      { descriptions: { [LOCALE]: "Agua" }, quantity: "1", gross: "2.00" },
+    ]);
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(id)).toBe(1); // STILL one sale — no second file at collect
+    expect(await registroCount(id)).toBe(1); // STILL one registro
+    expect(await outstandingFor(cfg)).toEqual([]); // settled → no longer owed
+    expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "3.50" }]);
+  });
+
+  it("Mode I: a covered cash over-tender at collect settles at the total and hands back change", async () => {
+    const { cfg, cafe } = await modeVenue("invoice_first");
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+
+    // 5.00 cash against the 1.50 invoice: the SALE settles at the invoice total (1.50) and 3.50 is
+    // drawer change — settling at the tendered cash would over-report the fiscal total (§5).
+    const collected = await collectOrder({ db: suite.admin, backend, clock }, cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "5.00" },
+    });
+    expect(collected.total).toBe("1.50");
+    expect(collected.change).toBe("3.50");
+    expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "1.50" }]);
+    expect(await saleCount(id)).toBe(1);
+  });
+
+  it("Mode I: a card tender at collect records exactly one captured payment linked to the sale; cash records none", async () => {
+    const { cfg, cafe } = await modeVenue("invoice_first");
+
+    // CARD collect: the invoice issued deferred at placing, then a manual-card ("datáfono") tender at
+    // collect. The card charges the EXACT invoice total on the separate terminal — no change.
+    const cardId = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id: cardId,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, cardId, OPERATOR);
+    const collected = await collectOrder({ db: suite.admin, backend, clock }, cfg, {
+      id: cardId,
+      lines: [],
+      tender: { method: "card", amount: "1.50", externalRef: "OP-INV-1" },
+    });
+    expect(collected.change).toBe("0.00");
+    expect(await orderState(cardId)).toEqual({ status: "settled", settledAtSet: true });
+
+    // The card tender AND a captured manual `payments` row linked to the settled sale — the #62
+    // side-write, now symmetric with the immediate card paths. Deleting the card branch in
+    // `collectOrder` makes `paymentCount`/`paymentsFor` fail here (the invoice-first card collect would
+    // become invisible to reconciliation), the regression this fix closes.
+    expect(await tendersFor(cardId)).toEqual([{ method: "card", amount: "1.50" }]);
+    expect(await paymentCount(cardId)).toBe(1);
+    expect(await paymentsFor(cardId)).toEqual([
+      { provider: "manual", state: "captured", amount: "1.50", linkedToSale: true },
+    ]);
+    // Still exactly ONE sale + ONE registro — the ledger row rides ALONGSIDE the settlement, never a
+    // second fiscal file (§5).
+    expect(await saleCount(cardId)).toBe(1);
+    expect(await registroCount(cardId)).toBe(1);
+
+    // CASH collect of a SEPARATE invoice-first order → NO payments row (cash is a tender only), the
+    // other branch of the card side-write. Same-state divergence (CLAUDE.md §1): card writes 1, cash 0.
+    const cashId = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id: cashId,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, cashId, OPERATOR);
+    await collectOrder({ db: suite.admin, backend, clock }, cfg, {
+      id: cashId,
+      lines: [],
+      tender: { method: "cash", amount: "1.50" },
+    });
+    expect(await paymentCount(cashId)).toBe(0);
+  });
+
+  it("Mode I: a double-tap place issues exactly ONE deferred invoice (FOR UPDATE serialises)", async () => {
+    const { cfg, cafe } = await modeVenue("invoice_first");
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+
+    // TWO distinct backends racing to place the SAME order. Load-bearing: distinct backend PROCESSES —
+    // on PGlite they collapse onto one and the race never happens (a false pass). The FOR UPDATE lock
+    // serialises them: the winner files the deferred invoice and moves the row to `placed`; the loser
+    // blocks, re-reads `placed`, and is refused `working_order.not_open` BEFORE it files.
+    const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
+    try {
+      const results = await Promise.allSettled([
+        placeOrder({ db: connA, backend, clock }, cfg, id, OPERATOR),
+        placeOrder({ db: connB, backend, clock }, cfg, id, OPERATOR),
+      ]);
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      const rejected = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0]!.reason).toMatchObject({ code: "working_order.not_open" });
+    } finally {
+      await Promise.all([connA.close(), connB.close()]);
+    }
+
+    // ONE deferred invoice, one registro — the unrepairable double-file the dispatch must prevent.
+    expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
+    expect(await saleCount(id)).toBe(1);
+    expect(await registroCount(id)).toBe(1);
+  });
+
+  it("Mode I: a concurrent double collect settles the invoice ONCE and both see the same ticket", async () => {
+    const { cfg, cafe } = await modeVenue("invoice_first");
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+
+    const req = { id, lines: [], tender: { method: "cash" as const, amount: "1.50" } };
+    const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
+    try {
+      // Both collect the placed order on distinct backends. FOR UPDATE serialises: one settles
+      // (placed → settled), the other blocks, sees `settled`, and REPLAYS the ticket — neither errors,
+      // ONE settlement (no 23505 backstop needed: the placed row always exists to lock).
+      const [rA, rB] = await Promise.all([
+        collectOrder({ db: connA, backend, clock }, cfg, req, OPERATOR),
+        collectOrder({ db: connB, backend, clock }, cfg, req, OPERATOR),
+      ]);
+      expect(rA.invoiceNumber).toBe(rB.invoiceNumber);
+    } finally {
+      await Promise.all([connA.close(), connB.close()]);
+    }
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(id)).toBe(1);
+    expect(await registroCount(id)).toBe(1);
+    expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "1.50" }]); // one settlement
+    expect(await outstandingFor(cfg)).toEqual([]);
+  });
+
+  // MODE T (ticket_then_pay): at PLACE no fiscal doc, open → placed; at COLLECT `recordSale` immediate
+  // files + settles, placed → settled.
+  it("Mode T (ticket_then_pay): place files no fiscal doc; collect files immediate at collect", async () => {
+    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+
+    // PLACE → NO fiscal document (design §3). The order freezes at `placed` with nothing filed.
+    const placed = await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+    expect(placed.status).toBe("placed");
+    expect(placed.invoiceNumber).toBeUndefined(); // no invoice issued at placing
+    expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
+    expect(await saleCount(id)).toBe(0); // nothing filed yet
+    expect(await outstandingFor(cfg)).toEqual([]); // no issued invoice → nothing outstanding
+
+    // COLLECT → file `recordSale` IMMEDIATE, placed → settled.
+    const collected = await collectOrder({ db: suite.admin, backend, clock }, cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "1.50" },
+    });
+    expect(collected.invoiceNumber).toBe("A/1"); // the FIRST filing is at collect
+    expect(collected.total).toBe("1.50");
+    expect(collected.change).toBe("0.00");
+    // The receipt line list is the just-filed composition (Finding 2 — Mode-T files immediate at
+    // collect from the stored lock).
+    expect(collected.lines).toEqual([
+      { descriptions: { [LOCALE]: "Café" }, quantity: "1", gross: "1.50" },
+    ]);
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(id)).toBe(1); // filed at collect
+    expect(await registroCount(id)).toBe(1);
+  });
+
+  it("Mode T: a concurrent double collect-pay files ONE sale, and a later sequential collect replays", async () => {
+    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR);
+
+    const req = { id, lines: [], tender: { method: "cash" as const, amount: "1.50" } };
+    const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
+    try {
+      // Two collects racing to FILE on distinct backends. FOR UPDATE serialises: one files + settles,
+      // the other blocks, sees `settled`, and REPLAYS — ONE sale, no 23505 needed (the placed row
+      // always exists to lock, unlike a walk-up).
+      const [rA, rB] = await Promise.all([
+        collectOrder({ db: connA, backend, clock }, cfg, req, OPERATOR),
+        collectOrder({ db: connB, backend, clock }, cfg, req, OPERATOR),
+      ]);
+      expect(rA.invoiceNumber).toBe(rB.invoiceNumber);
+    } finally {
+      await Promise.all([connA.close(), connB.close()]);
+    }
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(id)).toBe(1);
+    expect(await registroCount(id)).toBe(1);
+
+    // A further SEQUENTIAL collect of the now-settled order deterministically hits the settled-replay
+    // branch: it returns the same ticket and files nothing (change 0.00 — the drawer change was given
+    // at the original collect).
+    const replay = await collectOrder({ db: suite.admin, backend, clock }, cfg, req, OPERATOR);
+    expect(replay.invoiceNumber).toBe("A/1");
+    expect(replay.change).toBe("0.00");
+    expect(await saleCount(id)).toBe(1);
+  });
+
+  it("collectOrder refuses a non-placed order (open, absent) and an unsupported tender, filing nothing", async () => {
+    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+
+    // An OPEN (parked, never placed) order → `working_order.not_placed`, files nothing. `not_placed`,
+    // not `not_open`: collect is the placed → settled operation, so an open order is a placing-state
+    // error (a false "not open" label would be the §1 defect class).
+    const openId = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id: openId,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await expect(
+      collectOrder({ db: suite.admin, backend, clock }, cfg, {
+        id: openId,
+        lines: [],
+        tender: { method: "cash", amount: "1.50" },
+      }),
+    ).rejects.toMatchObject({
+      code: "working_order.not_placed",
+      params: { workingOrderId: openId },
+    });
+    expect(await saleCount(openId)).toBe(0);
+
+    // An ABSENT id → the FOR UPDATE locks nothing (the undefined branch), same fail-closed code.
+    const missing = randomUUID();
+    await expect(
+      collectOrder({ db: suite.admin, backend, clock }, cfg, {
+        id: missing,
+        lines: [],
+        tender: { method: "cash", amount: "1.50" },
+      }),
+    ).rejects.toMatchObject({
+      code: "working_order.not_placed",
+      params: { workingOrderId: missing },
+    });
+
+    // A PLACED order with an UNSUPPORTED tender → `sale.unsupported_tender`, files nothing. The `as
+    // unknown` cast is how an untrusted till sends one past the widened `"cash" | "card"` type.
+    const placedId = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id: placedId,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, placedId, OPERATOR);
+    await expect(
+      collectOrder({ db: suite.admin, backend, clock }, cfg, {
+        id: placedId,
+        lines: [],
+        tender: { method: "voucher" as unknown as "cash", amount: "1.50" },
+      }),
+    ).rejects.toMatchObject({ code: "sale.unsupported_tender", params: { method: "voucher" } });
+    expect(await saleCount(placedId)).toBe(0);
+  });
+});
+
+// The prep surface (Task 9, design §5): send-to-prep (the Mode-P pickup on an already-settled
+// order) / advancePrep's conditional-UPDATE state machine / the node-scoped queue view. Real
+// Postgres — `order_prep` is FORCE-RLS + tenant-isolation-policy scoped (Task 4), and the node
+// scoping below is exactly what PGlite's single-backend, all-superuser connection cannot show
+// (CLAUDE.md §4).
+describe("sendToPrep / advancePrep / listPrepQueue (prep surface)", () => {
+  it("advancePrep walks queued → preparing → ready → collected; an out-of-order jump is refused", async () => {
+    const { cfg, cafe } = await modeVenue("prepay");
+    const id = randomUUID();
+    await payWorkingOrder(
+      { db: suite.admin, backend, clock },
+      cfg,
+      {
+        id,
+        lines: [{ productId: cafe.id, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+
+    await sendToPrep({ db: suite.admin }, cfg, id); // enqueue on the SETTLED order (Mode P)
+    expect(await prepStateOf(id)).toBe("queued");
+
+    await advancePrep({ db: suite.admin }, cfg, id, "preparing");
+    expect(await prepStateOf(id)).toBe("preparing");
+    await advancePrep({ db: suite.admin }, cfg, id, "ready");
+    expect(await prepStateOf(id)).toBe("ready");
+    await expect(advancePrep({ db: suite.admin }, cfg, id, "collected")).resolves.toBeUndefined();
+    expect(await prepStateOf(id)).toBe("collected");
+
+    // Jumping backwards is refused: the order is `collected` (terminal), and `preparing`'s only legal
+    // predecessor is `queued`, which this row no longer is.
+    await expect(advancePrep({ db: suite.admin }, cfg, id, "preparing")).rejects.toMatchObject({
+      code: "order_prep.invalid_transition",
+      params: { workingOrderId: id },
+    });
+    expect(await prepStateOf(id)).toBe("collected"); // the refused jump changed nothing
+  });
+
+  it("advancePrep refuses to='queued' (no state legally advances INTO queued) and an order never sent to prep", async () => {
+    const { cfg, cafe } = await modeVenue("prepay");
+    const id = randomUUID();
+    await payWorkingOrder(
+      { db: suite.admin, backend, clock },
+      cfg,
+      {
+        id,
+        lines: [{ productId: cafe.id, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    await sendToPrep({ db: suite.admin }, cfg, id);
+
+    // Reaching `queued` is `sendToPrep`'s job (an INSERT) — `advancePrep` refuses `to: "queued"`
+    // unconditionally, before touching the row.
+    await expect(advancePrep({ db: suite.admin }, cfg, id, "queued")).rejects.toMatchObject({
+      code: "order_prep.invalid_transition",
+      params: { workingOrderId: id },
+    });
+    expect(await prepStateOf(id)).toBe("queued"); // unchanged
+
+    // A SEPARATE settled order that was NEVER sent to prep has no `order_prep` row at all — the same
+    // fail-closed code as an illegal jump, per `order_prep.invalid_transition`'s own doc comment.
+    const neverSent = randomUUID();
+    await payWorkingOrder(
+      { db: suite.admin, backend, clock },
+      cfg,
+      {
+        id: neverSent,
+        lines: [{ productId: cafe.id, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    expect(await prepStateOf(neverSent)).toBeNull();
+    await expect(
+      advancePrep({ db: suite.admin }, cfg, neverSent, "preparing"),
+    ).rejects.toMatchObject({
+      code: "order_prep.invalid_transition",
+      params: { workingOrderId: neverSent },
+    });
+  });
+
+  it("sendToPrep refuses a DOUBLE send-to-prep for the same order (order_prep_pk collision), not a raw 23505", async () => {
+    const { cfg, cafe } = await modeVenue("prepay");
+    const id = randomUUID();
+    await payWorkingOrder(
+      { db: suite.admin, backend, clock },
+      cfg,
+      {
+        id,
+        lines: [{ productId: cafe.id, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    await sendToPrep({ db: suite.admin }, cfg, id);
+    expect(await prepStateOf(id)).toBe("queued");
+
+    // A second send-to-prep for the SAME order collides on `order_prep_pk` (tenant_id,
+    // working_order_id) — caught and reported as the same domain code every other illegal prep move
+    // gets, never the raw driver's 23505.
+    await expect(sendToPrep({ db: suite.admin }, cfg, id)).rejects.toMatchObject({
+      code: "order_prep.invalid_transition",
+      params: { workingOrderId: id },
+    });
+    expect(await prepStateOf(id)).toBe("queued"); // the refused re-send changed nothing
+  });
+
+  it("sendToPrep refuses a still-OPEN or PLACED order (working_order.not_settled) and does not enqueue it", async () => {
+    const { cfg, cafe } = await modeVenue("prepay");
+
+    // OPEN — parked but never paid. `sendToPrep` is Mode P's own pickup (settle happens at ORDER via
+    // `payWorkingOrder`); an open order has never reached settlement at all.
+    const openId = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id: openId,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+    await expect(sendToPrep({ db: suite.admin }, cfg, openId)).rejects.toMatchObject({
+      code: "working_order.not_settled",
+      params: { workingOrderId: openId },
+    });
+    expect(await prepStateOf(openId)).toBeNull(); // nothing enqueued by the refused call
+
+    // PLACED — Modes I/T's own shape, whose prep row is already enqueued INSIDE `placeOrder` at
+    // placing. Calling `sendToPrep` on a placed (not yet settled) order is the WRONG route for it —
+    // refused the same way, not treated as a legitimate double-enqueue.
+    const { cfg: modeTCfg, cafe: modeTCafe } = await modeVenue("ticket_then_pay");
+    const placedId = randomUUID();
+    await parkOrder({ db: suite.admin }, modeTCfg, {
+      id: placedId,
+      lines: [{ productId: modeTCafe.id, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, modeTCfg, placedId, OPERATOR);
+    expect(await prepStateOf(placedId)).toBe("queued"); // placeOrder's OWN enqueue, already there
+    await expect(sendToPrep({ db: suite.admin }, modeTCfg, placedId)).rejects.toMatchObject({
+      code: "working_order.not_settled",
+      params: { workingOrderId: placedId },
+    });
+    expect(await prepStateOf(placedId)).toBe("queued"); // unchanged by the refused call
+  });
+
+  it("sendToPrep on a NONEXISTENT id is refused working_order.not_settled, not a raw FK-violation 500", async () => {
+    const { cfg } = await modeVenue("prepay");
+    const missing = randomUUID();
+
+    // No `working_orders` row exists for `missing` — the existence+status guard now catches this
+    // BEFORE the insert is ever attempted, so `order_prep_order_fk` is never reached (fix round 1: it
+    // previously WAS reached here, surfacing as an opaque, un-caught driver error).
+    await expect(sendToPrep({ db: suite.admin }, cfg, missing)).rejects.toMatchObject({
+      code: "working_order.not_settled",
+      params: { workingOrderId: missing },
+    });
+    expect(await prepStateOf(missing)).toBeNull();
+  });
+
+  it("sendToPrep surfaces a RAW error for a non-unique insert failure — a settled order but a phantom node (order_prep_node_fk)", async () => {
+    const { cfg, cafe } = await modeVenue("prepay");
+    const id = randomUUID();
+    await payWorkingOrder(
+      { db: suite.admin, backend, clock },
+      cfg,
+      {
+        id,
+        lines: [{ productId: cafe.id, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true }); // passes the guard
+
+    // `cfg.nodeId` names NO row in `nodes` for this tenant — the order itself genuinely IS settled
+    // (the existence+status guard passes), but the INSERT then violates `order_prep_node_fk`, which
+    // is NOT a unique violation, so `sendToPrep`'s catch re-throws it UNCHANGED rather than reporting
+    // either domain code. The backstop `isUniqueViolation` branch exists specifically to distinguish
+    // this from the double-send-to-prep case (`order_prep_pk`).
+    const badNodeCfg = { ...cfg, nodeId: brandNodeId(randomUUID()) };
+    const attempt = sendToPrep({ db: suite.admin }, badNodeCfg, id);
+    await expect(attempt).rejects.toBeTruthy();
+    await expect(attempt).rejects.not.toMatchObject({ code: "order_prep.invalid_transition" });
+    await expect(attempt).rejects.not.toMatchObject({ code: "working_order.not_settled" });
+  });
+
+  it("sendToPrep on ANOTHER tenant's settled order is refused the SAME code — RLS hides it, not a leak of its real state", async () => {
+    const { cfg: tenantA, cafe } = await modeVenue("prepay");
+    const { cfg: tenantB } = await modeVenue("prepay"); // a wholly separate venue + tenant
+
+    const foreignId = randomUUID();
+    await payWorkingOrder(
+      { db: suite.admin, backend, clock },
+      tenantA,
+      {
+        id: foreignId,
+        lines: [{ productId: cafe.id, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    expect(await orderState(foreignId)).toEqual({ status: "settled", settledAtSet: true }); // genuinely settled — under tenant A
+
+    // Tenant B's config cannot see it at all (RLS) — the SAME `working_order.not_settled` a
+    // nonexistent id gets, not a distinct "wrong tenant" code (the fail-closed reasoning
+    // `node.not_found`'s own note in `errors.ts` gives: a separate code would confirm another
+    // tenant's order exists).
+    await expect(sendToPrep({ db: suite.admin }, tenantB, foreignId)).rejects.toMatchObject({
+      code: "working_order.not_settled",
+      params: { workingOrderId: foreignId },
+    });
+    // And no prep row was created reachable from EITHER tenant's scope.
+    expect(await listPrepQueue({ db: suite.admin }, tenantB)).toEqual([]);
+  });
+
+  it("listPrepQueue lists this node's ACTIVE prep oldest-first and drops a collected order", async () => {
+    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+      label: "Mesa 7",
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR); // enqueues at queued
+
+    const queue = await listPrepQueue({ db: suite.admin }, cfg);
+    expect(queue).toEqual([
+      {
+        id,
+        orderNumber: expect.any(Number),
+        label: "Mesa 7",
+        state: "queued",
+        queuedAt: expect.any(String),
+      },
+    ]);
+
+    await advancePrep({ db: suite.admin }, cfg, id, "preparing");
+    expect(await listPrepQueue({ db: suite.admin }, cfg)).toEqual([
+      expect.objectContaining({ id, state: "preparing" }),
+    ]);
+    await advancePrep({ db: suite.admin }, cfg, id, "ready");
+    await advancePrep({ db: suite.admin }, cfg, id, "collected");
+    expect(await listPrepQueue({ db: suite.admin }, cfg)).toEqual([]); // collected leaves the active queue
+  });
+
+  it("listPrepQueue drops a CANCELLED order — cancelling doesn't leave it stuck in the active queue forever", async () => {
+    const { cfg, cafe } = await modeVenue("ticket_then_pay");
+    const id = randomUUID();
+    await parkOrder({ db: suite.admin }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+      label: "Mesa 3",
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR); // enqueues at queued
+    expect(await listPrepQueue({ db: suite.admin }, cfg)).toEqual([
+      expect.objectContaining({ id, state: "queued" }),
+    ]);
+
+    // `cancelPlacedOrder` (placed → abandoned) never touches `order_prep` at all — the row itself
+    // stays `queued`, UNCHANGED. It is `listPrepQueue`'s own join on `working_orders.status` that
+    // retires it, not a write this cancel makes (fix round 1: previously nothing did, so a cancelled
+    // order sat on the active queue forever).
+    await cancelPlacedOrder(
+      { db: suite.admin, backend, clock },
+      cfg,
+      id,
+      "customer left",
+      OPERATOR,
+    );
+    expect(await orderState(id)).toEqual({ status: "abandoned", settledAtSet: false });
+    expect(await prepStateOf(id)).toBe("queued"); // order_prep itself is untouched by cancel
+
+    expect(await listPrepQueue({ db: suite.admin }, cfg)).toEqual([]); // but no longer surfaced
+  });
+
+  it("listPrepQueue node scope is SYMMETRIC: each node sees only its own order, both non-empty", async () => {
+    const { cfg: nodeA, cafe } = await modeVenue("ticket_then_pay");
+    // A second node under the SAME tenant + location — `addNode`'s established 7b shape: it differs
+    // only in `node_id`, so RLS (tenant-scoped) would NOT hide either order from the other node; only
+    // the `node_id = cfg.nodeId` filter does. BOTH nodes get a genuine order in prep, so this proves
+    // "A shows A, B shows B" rather than "one empty, one not" — a measurement where both answers look
+    // alike measures nothing (CLAUDE.md §1), the exact gap Task 4's own review found and fixed for
+    // `order_prep`'s RLS suite.
+    const nodeB = await addNode(nodeA, "Servidor 2");
+
+    const idA = randomUUID();
+    await parkOrder({ db: suite.admin }, nodeA, {
+      id: idA,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+      label: "Node A order",
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, nodeA, idA, OPERATOR);
+
+    const idB = randomUUID();
+    await parkOrder({ db: suite.admin }, nodeB, {
+      id: idB,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+      label: "Node B order",
+    });
+    await placeOrder({ db: suite.admin, backend, clock }, nodeB, idB, OPERATOR);
+
+    const queueA = await listPrepQueue({ db: suite.admin }, nodeA);
+    const queueB = await listPrepQueue({ db: suite.admin }, nodeB);
+
+    // Same state on both sides (each has exactly one ACTIVE prep row), opposite membership.
+    expect(queueA.map((e) => e.id)).toEqual([idA]);
+    expect(queueB.map((e) => e.id)).toEqual([idB]);
   });
 });

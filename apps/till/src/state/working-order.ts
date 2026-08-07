@@ -14,9 +14,13 @@
  * would break the browser bundle; `pricing.ts` in isolation depends only on `@waitron/shared` (its
  * `@waitron/core`/`@waitron/fiscal` imports are `import type`, erased at build). `@waitron/catalogue`
  * has no `exports` map, so the deep subpath resolves, and Vite bundles only `pricing.ts` +
- * `@waitron/shared`. Using the real pricer — not a reimplementation — is what guarantees the preview
- * equals the total the server re-prices and files at pay time; they cannot drift because they are the
- * same function.
+ * `@waitron/shared`. Using the real pricer — not a reimplementation — is what keeps the preview equal
+ * to the total the server re-prices at pay time ON THE WALK-UP PATH: there both sides run the same
+ * `priceBasket` over the same live catalogue, so they cannot drift. It is NOT a guarantee for a
+ * PLACED or RETRIEVED order (7c): the server files those from `priceLockedLines` over the ADD-TIME
+ * lock (`working_order_lines.unit_price_gross`) while this preview reprices the CURRENT catalogue, so
+ * the two DIVERGE if the catalogue price changed between add and pay — the deliberate line-add
+ * snapshot, not a bug.
  */
 import { priceBasket } from "@waitron/catalogue/src/pricing.js";
 import type { Decimal } from "@waitron/shared";
@@ -65,6 +69,27 @@ export class WorkingOrderStore {
    * than once per getter per consumer. Set to `null` in every mutation and recomputed lazily.
    */
   #priced: Priced | null = null;
+  /**
+   * Whether {@link id} already names an OPEN row server-side (7c place/collect). A fresh store starts
+   * `false` — nothing has synced it yet; {@link loadFrom} sets it `true` (a RETRIEVED order already
+   * exists); {@link clear} resets it `false` (a fresh id is a fresh, unsynced basket); the app calls
+   * {@link markPersisted} after a successful `parkOrder`. Placing a basket (Task 11's `#onPlaceOrder`)
+   * reads this to decide whether it must park FIRST or can sync-then-place an already-parked one — a
+   * retrieved order re-parked with the same id would 23505 on the server's plain INSERT.
+   */
+  #persisted = false;
+  /**
+   * Whether the basket's LINES have changed since it last MATCHED the server's stored composition —
+   * i.e. since the last {@link loadFrom} (retrieve), {@link markPersisted} (park) or {@link clear}. A
+   * fresh or just-loaded/just-parked basket is clean (`false`); {@link addProduct} and
+   * {@link removeLine} set it `true`. The PAY flow (`till-app`'s `#onConfirmPayment`) reads this so it
+   * re-syncs a RETRIEVED order to the server ONLY when it was actually edited: an UNEDITED retrieved
+   * order pays straight from its stored ADD-TIME lock with no pay-time re-price, so a catalogue change
+   * between park and pay never moves the filed total. A LABEL change is deliberately NOT a line edit
+   * and does not set this — the label is held-list metadata that never reaches the filed sale, so it
+   * needs no re-lock.
+   */
+  #dirty = false;
 
   /** The stable client-minted working-order id for this basket. Changes only on {@link clear}. */
   get id(): string {
@@ -92,6 +117,27 @@ export class WorkingOrderStore {
     return this.#lines.length;
   }
 
+  /** Whether {@link id} already names an OPEN row server-side. See the field's own doc for why this
+   * exists. */
+  get persisted(): boolean {
+    return this.#persisted;
+  }
+
+  /** Whether the basket's lines have changed since it last matched the server (see {@link #dirty}). The
+   * pay flow re-syncs a retrieved order only when this is `true`. */
+  get dirty(): boolean {
+    return this.#dirty;
+  }
+
+  /** Record that {@link id} now names a persisted (parked) row. Not a rendering concern — no `"changed"`
+   * notification, unlike every basket mutation below. */
+  markPersisted(): void {
+    this.#persisted = true;
+    // A just-parked basket now MATCHES the server's stored composition, so it is clean — a later pay
+    // needs no re-sync until it is edited again.
+    this.#dirty = false;
+  }
+
   /** The memoised priced basket, recomputed only after a mutation cleared {@link #priced}. */
   get #pricedOrder(): Priced {
     if (this.#priced === null) {
@@ -114,6 +160,7 @@ export class WorkingOrderStore {
   addProduct(product: TillProduct, quantity: string): void {
     this.#lines.push({ product, quantity });
     this.#priced = null;
+    this.#dirty = true;
     this.emit("changed");
   }
 
@@ -124,6 +171,7 @@ export class WorkingOrderStore {
     }
     this.#lines.splice(index, 1);
     this.#priced = null;
+    this.#dirty = true;
     this.emit("changed");
   }
 
@@ -137,6 +185,8 @@ export class WorkingOrderStore {
     this.#id = crypto.randomUUID();
     this.#label = undefined;
     this.#priced = null;
+    this.#persisted = false;
+    this.#dirty = false;
     this.emit("changed");
   }
 
@@ -153,6 +203,10 @@ export class WorkingOrderStore {
     this.#lines.push(...lines);
     this.#label = label;
     this.#priced = null;
+    this.#persisted = true;
+    // A just-retrieved basket MATCHES the server's stored composition, so it starts clean — the pay
+    // flow re-syncs it only once the operator edits it (see {@link #dirty}).
+    this.#dirty = false;
     this.emit("changed");
   }
 

@@ -94,6 +94,8 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
+    // These API tests exercise routes that do not dispatch on the mode; the venue defaults to prepay.
+    orderFlow: "prepay",
   };
 }
 
@@ -484,5 +486,189 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
       return tx.select().from(registrosFacturacion);
     });
     expect(stillOne).toHaveLength(1);
+  });
+});
+
+// Task 9's prep surface over HTTP: place → prep-queue → advance → collect. Real Postgres because
+// `collect` under Mode T (`ticket_then_pay`) files `recordSale` IMMEDIATE at collect — a genuine
+// chained fiscal write as the app role under RLS, exactly what `till-api.test.ts`'s stub
+// `FiscalBackend` cannot exercise (that hermetic suite proves only the malformed-id short-circuit,
+// which never reaches the backend at all). `place`/`prep-queue`/`prep`-advance need no fiscal write
+// under Mode T (no doc issues until collect), but are driven through the SAME real venue here so the
+// one test walks the whole route surface end to end, the way an actual till session would.
+describe("/api/working-orders/:id/place → :id/prep → GET /api/prep-queue → :id/collect (Task 9, over HTTP)", () => {
+  it("Mode T: place files no fiscal doc; the prep queue tracks it; collect files the sale at collect", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    // Flip this venue's location to `ticket_then_pay` (Mode T) — `setupVenue` provisions the DEFAULT
+    // `prepay`, so both the DB column and the in-memory cfg are updated together, the same two-part
+    // flip `working-order.rls.test.ts`'s `modeVenue` makes.
+    await suite.admin.execute(
+      sql`update locations set order_flow = 'ticket_then_pay' where id = ${cfg.locationId}`,
+    );
+    const modeCfg: TillConfig = { ...cfg, orderFlow: "ticket_then_pay" };
+    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
+
+    const app = new Hono();
+    mountTillApi(app, apiDeps(modeCfg), noopLog);
+
+    // 1. Log in.
+    const login = await app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ personId: operatorId, pin: "5555" }),
+    });
+    expect(login.status).toBe(200);
+    const cookie = login.headers.get("set-cookie")!;
+
+    // 2. Park then PLACE: 2 × 1.50 = 3.00. Mode T files NO fiscal doc at placing.
+    const workingOrderId = randomUUID();
+    const park = await app.request("/api/working-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        id: workingOrderId,
+        lines: [{ productId: each.id, quantity: "2" }],
+        label: "Mesa 9",
+      }),
+    });
+    expect(park.status).toBe(200);
+    const placed = await app.request(`/api/working-orders/${workingOrderId}/place`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(placed.status).toBe(200);
+    expect(await placed.json()).toEqual({ id: workingOrderId, status: "placed" });
+
+    const noSaleYet = await withTenant(suite.admin, modeCfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return tx.select({ id: sales.id }).from(sales);
+    });
+    expect(noSaleYet).toEqual([]); // Mode T: nothing filed at placing
+
+    // 3. The NODE-SCOPED prep queue shows it `queued` — send-to-prep = placing (design §5).
+    const queue1 = await app.request("/api/prep-queue", { headers: { cookie } });
+    expect(queue1.status).toBe(200);
+    expect(await queue1.json()).toEqual([
+      {
+        id: workingOrderId,
+        orderNumber: expect.any(Number),
+        label: "Mesa 9",
+        state: "queued",
+        queuedAt: expect.any(String),
+      },
+    ]);
+
+    // 4. Advance the prep state over HTTP: queued → preparing → ready → collected.
+    for (const to of ["preparing", "ready", "collected"]) {
+      const advance = await app.request(`/api/working-orders/${workingOrderId}/prep`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ to }),
+      });
+      expect(advance.status).toBe(200);
+    }
+    // Collected leaves the ACTIVE queue.
+    const queue2 = await app.request("/api/prep-queue", { headers: { cookie } });
+    expect(await queue2.json()).toEqual([]);
+
+    // 5. COLLECT: Mode T files `recordSale` IMMEDIATE here, placed → settled — the genuine chained
+    // fiscal write this real-Postgres suite exists to prove.
+    const collect = await app.request(`/api/working-orders/${workingOrderId}/collect`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ tender: { method: "cash", amount: "5.00" } }),
+    });
+    expect(collect.status).toBe(200);
+    const ticket = await collect.json();
+    expect(ticket.invoiceNumber).toMatch(/^A\/\d+$/);
+    expect(ticket.total).toBe("3.00");
+    expect(ticket.change).toBe("2.00");
+    expect(ticket.qr.length).toBeGreaterThan(0); // a genuine fresh filing carries the AEAT QR
+
+    const after = await withTenant(suite.admin, modeCfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return {
+        wo: await tx
+          .select({ status: workingOrders.status })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, workingOrderId)),
+        registros: await tx.select().from(registrosFacturacion),
+      };
+    });
+    expect(after.wo).toEqual([{ status: "settled" }]);
+    expect(after.registros).toHaveLength(1); // exactly one chained record, filed at collect
+  });
+});
+
+// Fix round 1 (review): `sendToPrep` (a `{}` body to `POST /:id/prep`) is Mode P's own pickup — it
+// needs a genuinely SETTLED order, which under this suite's `prepay` cfg means a real fiscal write
+// (`POST /api/sales`, Mode P's walk-up path) that `till-api.test.ts`'s stub `FiscalBackend` cannot
+// make. Real Postgres, so this is the one place the SUCCESS path is proven end to end.
+describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route (fix round 1)", () => {
+  it("sends a genuinely SETTLED walk-up order to prep; a still-OPEN parked order is refused 409", async () => {
+    const { cfg, available, operatorId } = await setupVenue(); // default mode: prepay
+    const each = available.find((p) => p.pricingUnit === "each")!;
+
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+
+    const login = await app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ personId: operatorId, pin: "5555" }),
+    });
+    expect(login.status).toBe(200);
+    const cookie = login.headers.get("set-cookie")!;
+
+    // A genuine Mode-P walk-up: `POST /api/sales` settles it immediately (open → settled) — no
+    // `place` step at all, since Mode P never places.
+    const workingOrderId = randomUUID();
+    const sale = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        workingOrderId,
+        lines: [{ productId: each.id, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      }),
+    });
+    expect(sale.status).toBe(200);
+
+    // NOW send it to prep — the SETTLED-order pickup the fix's guard exists to allow.
+    const sent = await app.request(`/api/working-orders/${workingOrderId}/prep`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({}),
+    });
+    expect(sent.status).toBe(200);
+
+    const queue = await app.request("/api/prep-queue", { headers: { cookie } });
+    expect(await queue.json()).toEqual([
+      expect.objectContaining({ id: workingOrderId, state: "queued" }),
+    ]);
+
+    // A SEPARATE, still-OPEN (parked, unpaid) order is refused — the other half of the fix, over the
+    // real route rather than the library function directly.
+    const openId = randomUUID();
+    const park = await app.request("/api/working-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ id: openId, lines: [{ productId: each.id, quantity: "1" }] }),
+    });
+    expect(park.status).toBe(200);
+    const refused = await app.request(`/api/working-orders/${openId}/prep`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({}),
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "working_order.not_settled", params: { workingOrderId: openId } },
+    });
+    // Refused before any write — never appears on the prep queue.
+    const queueAfterRefusal = (await (
+      await app.request("/api/prep-queue", { headers: { cookie } })
+    ).json()) as { id: string }[];
+    expect(queueAfterRefusal.find((e) => e.id === openId)).toBeUndefined();
   });
 });

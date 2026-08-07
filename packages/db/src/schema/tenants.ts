@@ -2,14 +2,22 @@ import { sql } from "drizzle-orm";
 import {
   check,
   index,
+  pgEnum,
   pgTable,
   text,
   time,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { catalogues } from "./catalogue.js";
+
+/**
+ * The per-venue pay-timing / service mode — see the `orderFlow` column on `locations` below for the
+ * three modes and why the degenerate fourth cell is unrepresentable (design §3).
+ */
+export const orderFlow = pgEnum("order_flow", ["prepay", "invoice_first", "ticket_then_pay"]);
 
 /**
  * The obligado tributario. Fiscal identity is country + tax_id, regime-agnostic: for a Spanish
@@ -76,6 +84,14 @@ export const locations = pgTable(
     province: text("province"),
     timeZone: text("time_zone").notNull().default("Europe/Madrid"),
     dayCutover: time("day_cutover").notNull().default("06:00:00"),
+    // The per-venue pay-timing / service mode (design §3): WHEN payment happens (order vs collect) ×
+    // WHEN the invoice issues (placing vs pay), collapsed to three meaningful modes by a single enum
+    // (the degenerate fourth cell is structurally unrepresentable). `prepay` = pay+issue at order,
+    // open → settled, no placed state (today's walk-up/park-pay — Decision 3). `invoice_first` = issue
+    // deferred at placing, settle at collect (open → placed → settled). `ticket_then_pay` = place with
+    // no fiscal doc, pay+issue at collect. DEFAULT 'prepay' so existing location fixtures stay inert.
+    // No config-authoring UI in this slice (set at provisioning, like the layout editor).
+    orderFlow: orderFlow("order_flow").notNull().default("prepay"),
     // Which catalogue (menu) this venue sells from — nullable (a venue may exist before a menu is
     // assigned). This FK and `catalogue.ts`'s own `tenants` FK make the two schema modules import
     // each other; the cycle is harmless because every cross-module reference is a lazy
@@ -125,5 +141,10 @@ export const tills = pgTable(
     name: text("name").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
-  (t) => [index("tills_tenant_id_idx").on(t.tenantId)],
+  (t) => [
+    // Composite (tenant_id, id) UNIQUE — the target for order_amendments_till_fk's tenant-consistent
+    // FK (order-amendments.ts), the same role nodes_tenant_id_key plays for working_orders_node_fk.
+    unique("tills_tenant_id_key").on(t.tenantId, t.id),
+    index("tills_tenant_id_idx").on(t.tenantId),
+  ],
 ).enableRLS();

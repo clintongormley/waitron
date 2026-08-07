@@ -2,8 +2,22 @@
 // codes — the reachability convention `config.ts` and `webhook.ts` follow (a side-effect import, no
 // value used here). See the note atop `errors.ts`.
 import "./errors.js";
+import { eq } from "drizzle-orm";
 import { AppError, locationId, nodeId, seriesId, tenantId, tillId } from "@waitron/shared";
 import type { LocationId, NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import { asAppUser, locations, orderFlow, withTenant } from "@waitron/db";
+import type { Database } from "@waitron/db";
+
+/**
+ * The per-venue pay-timing / service mode (design §3), the union of the `order_flow` enum's values —
+ * derived from `@waitron/db`'s `orderFlow` pgEnum so the two can never drift (add a mode to the enum
+ * and this widens with it). `prepay` pays + issues at ORDER (open → settled, no placed state);
+ * `invoice_first` issues a deferred invoice at PLACE and settles it at COLLECT (open → placed →
+ * settled); `ticket_then_pay` files no fiscal doc at PLACE and files + settles at COLLECT
+ * (open → placed → settled). It decides WHICH issuance primitive fires and WHEN — a wrong dispatch
+ * files the wrong kind of unrepairable fiscal record (§5), which is why it rides on the till's config.
+ */
+export type OrderFlow = (typeof orderFlow.enumValues)[number];
 
 /**
  * The deployed till's identity, resolved once at boot from the environment provisioning stamped it
@@ -24,6 +38,15 @@ export interface TillConfig {
   locationId: LocationId;
   locale: string;
   invoiceLocales: string[];
+  /**
+   * The venue's pay-timing / service mode, read from the till's LOCATION rather than the environment
+   * (the env carries no `order_flow` — the location does), so it is NOT set by `loadTillConfig` and is
+   * merged in by `boot.ts` via `readOrderFlow` once the pool is open. That is why `loadTillConfig`
+   * returns `Omit<TillConfig, "orderFlow">`: the type forbids reading this off the env-only identity
+   * before the DB read has supplied its real value, so a wrong-mode dispatch cannot slip in from a
+   * placeholder default (§5 — the mode decides which unrepairable fiscal record is filed).
+   */
+  orderFlow: OrderFlow;
 }
 
 /**
@@ -58,8 +81,13 @@ function brand<T>(key: string, fn: (value: string) => T, raw: string): T {
  * Resolve the till's fiscal identity (+ location and locale) from the environment, failing loudly on
  * any missing or malformed value. Every id is required and branded; `WAITRON_TILL_LOCALE` is the one
  * optional value, defaulting to `es-ES`.
+ *
+ * Returns `Omit<TillConfig, "orderFlow">`: `order_flow` is a per-LOCATION column, not an env var, so
+ * it cannot be resolved here without a database. `boot.ts` reads it via `readOrderFlow` once the pool
+ * is open and spreads it in to form the full `TillConfig` the routes receive (see this file's
+ * `orderFlow` field comment for why the omission is deliberate and type-enforced).
  */
-export function loadTillConfig(env: NodeJS.ProcessEnv): TillConfig {
+export function loadTillConfig(env: NodeJS.ProcessEnv): Omit<TillConfig, "orderFlow"> {
   // "Unset" is absent OR the empty string — the same rule `required` applies to the ids, so an
   // operator's `WAITRON_TILL_LOCALE=` line falls back to the default rather than pushing an empty
   // locale into `invoiceLocales` (which downstream invoice rendering consumes). A bare `?? "es-ES"`
@@ -79,4 +107,34 @@ export function loadTillConfig(env: NodeJS.ProcessEnv): TillConfig {
     locale,
     invoiceLocales: [locale],
   };
+}
+
+/**
+ * Read the venue's pay-timing mode from the till's own LOCATION row — the DB half of the config
+ * `loadTillConfig` cannot resolve from the environment. Runs as the app role under the till's tenant
+ * (`withTenant` + `asAppUser`), so RLS scopes the lookup to this tenant and the `eq(id)` filter
+ * selects exactly the till's own location. Called ONCE at boot (`boot.ts`), not per request: the mode
+ * is provisioning-time config, stable for the process lifetime, so re-reading it on every place/collect
+ * would be a needless round trip on the till's hottest path.
+ */
+export async function readOrderFlow(
+  db: Database,
+  cfg: Pick<TillConfig, "tenantId" | "locationId">,
+): Promise<OrderFlow> {
+  return withTenant(db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const [row] = await tx
+      .select({ orderFlow: locations.orderFlow })
+      .from(locations)
+      .where(eq(locations.id, cfg.locationId));
+    /* v8 ignore start */
+    if (row === undefined) {
+      // Structurally unreachable: provisioning stamped this till with its own location, so the row
+      // always exists and RLS returns it. A till pointed at a nonexistent location is a
+      // misconfiguration that fails loudly at boot rather than dispatching against a guessed mode.
+      throw new Error(`readOrderFlow: no location ${cfg.locationId}`);
+    }
+    /* v8 ignore stop */
+    return row.orderFlow;
+  });
 }

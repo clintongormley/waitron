@@ -32,7 +32,7 @@ describe("till-counter-screen", () => {
     expect(customElements.get("till-counter-screen")).toBe(TillCounterScreen);
   });
 
-  it("renders the widgets per LAYOUT_A: product-grid in main, basket/total/tender-pay/held-orders in aside", async () => {
+  it("renders the widgets per LAYOUT_A: product-grid in main, basket/total/tender-pay/held-orders/prep-queue in aside", async () => {
     const { el } = await mount();
     const main = el.shadowRoot!.querySelector(".region-main")!;
     const aside = el.shadowRoot!.querySelector(".region-aside")!;
@@ -41,15 +41,33 @@ describe("till-counter-screen", () => {
     expect(main.querySelector("till-product-grid")).not.toBeNull();
     expect(aside.querySelector("till-product-grid")).toBeNull();
 
-    // basket, total, tender-pay and the held-orders list stack in the aside region and nowhere else
+    // basket, total, tender-pay, the held-orders list and the prep queue stack in the aside region
+    // and nowhere else
     expect(aside.querySelector("till-basket")).not.toBeNull();
     expect(aside.querySelector("till-total")).not.toBeNull();
     expect(aside.querySelector("till-tender-pay")).not.toBeNull();
     expect(aside.querySelector("till-held-orders")).not.toBeNull();
+    expect(aside.querySelector("till-prep-queue")).not.toBeNull();
     expect(main.querySelector("till-basket")).toBeNull();
     expect(main.querySelector("till-total")).toBeNull();
     expect(main.querySelector("till-tender-pay")).toBeNull();
     expect(main.querySelector("till-held-orders")).toBeNull();
+    expect(main.querySelector("till-prep-queue")).toBeNull();
+  });
+
+  it("threads the prep queue through to the prep-queue widget", async () => {
+    const prepQueue = [
+      {
+        id: "wo-1",
+        orderNumber: 5,
+        label: "Mesa 4",
+        state: "queued" as const,
+        queuedAt: "2026-08-06T10:00:00.000Z",
+      },
+    ];
+    const { el } = await mount({ prepQueue });
+    const queue = el.shadowRoot!.querySelector("till-prep-queue")!;
+    expect(queue.entries).toBe(prepQueue);
   });
 
   it("threads the held-orders list through to the held-orders widget", async () => {

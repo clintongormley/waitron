@@ -3,37 +3,16 @@ import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillTicketView } from "./till-ticket-view.js";
 import type { TicketIssuer } from "./till-ticket-view.js";
-import type { TillProduct, TillSaleResult } from "../api/client.js";
-import type { OrderLine } from "../state/working-order.js";
+import type { TillSaleResult } from "../api/client.js";
 
 // es-ES currency formatting separates the amount and € with a non-breaking space (U+00A0, or a
 // narrow no-break U+202F on some ICU builds); normalise both to a plain space before asserting.
 const norm = (s: string): string => s.replace(/[\u00A0\u202F]/g, " ");
 
-const cafe: TillProduct = {
-  id: "p1",
-  descriptions: { "es-ES": "Café", en: "Coffee" },
-  pricingUnit: "each",
-  unitPrice: "1.50",
-  vatClass: "general",
-  category: null,
-};
-const jamon: TillProduct = {
-  id: "p2",
-  descriptions: { "es-ES": "Jamón", en: "Ham" },
-  pricingUnit: "weight",
-  unitPrice: "20.00",
-  vatClass: "reduced",
-  category: null,
-};
-
-// A mixed-rate basket with a weighed line: café 2 × 1,50 = 3,00 (21 %), jamón 0,320 kg × 20 = 6,40
-// (10 %). Total 9,40; €10 cash tendered → 0,60 change.
-const lines: OrderLine[] = [
-  { product: cafe, quantity: "2" },
-  { product: jamon, quantity: "0.320" },
-];
-
+// The FILED line list as the server returns it (`TillSaleResult.lines`) — the receipt renders THESE,
+// never a client basket. A mixed-rate ticket with a weighed line: café 2 → 3,00 (21 %), jamón 0,320 kg
+// → 6,40 (10 %). Total 9,40; €10 cash tendered → 0,60 change. The weighed quantity arrives
+// trailing-zero-trimmed ("0.32"): the filed record carries no unit of measure to append "kg".
 const result: TillSaleResult = {
   invoiceNumber: "A/1",
   issuedAt: "2026-08-05T12:34:56.000Z",
@@ -41,6 +20,10 @@ const result: TillSaleResult = {
   vatBreakdown: [
     { rate: "21.00", base: "2.48", tax: "0.52" },
     { rate: "10.00", base: "5.82", tax: "0.58" },
+  ],
+  lines: [
+    { descriptions: { "es-ES": "Café", en: "Coffee" }, quantity: "2", gross: "3.00" },
+    { descriptions: { "es-ES": "Jamón", en: "Ham" }, quantity: "0.32", gross: "6.40" },
   ],
   change: "0.60",
   qr: "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B12345678&numserie=A%2F1&fecha=05-08-2026&importe=9.40",
@@ -52,7 +35,6 @@ const mount = (over: Partial<TillSaleResult> = {}) =>
   mountWidget<TillTicketView>("till-ticket-view", {
     result: { ...result, ...over },
     issuer,
-    lines,
     // The receipt renders in its INVOICE locale prop (fed from server config), never the operator UI.
     // Pin it explicitly so the "operator UI is English, ticket stays Spanish" test is unambiguous.
     invoiceLocale: "es-ES",
@@ -89,7 +71,11 @@ describe("till-ticket-view", () => {
     expect(text(el)).toContain(norm(expectedDate));
   });
 
-  it("identifies each good: name (invoice locale), quantity and per-line gross (art. 7.1.e)", async () => {
+  it("identifies each good from the FILED lines: name (invoice locale), quantity and per-line gross (art. 7.1.e)", async () => {
+    // The rows come from `result.lines` (the server's filed composition), NOT a client basket — so the
+    // printed line list is the invoiced one. Name resolves in the invoice locale, quantity is the filed
+    // display string (weighed "0.32", no "kg" — the fiscal record has no unit of measure), gross is the
+    // filed per-line total.
     const { el } = await mount();
     const rows = el.shadowRoot!.querySelectorAll(".line");
     expect(rows).toHaveLength(2);
@@ -97,8 +83,25 @@ describe("till-ticket-view", () => {
     expect(rows[0]!.textContent).toContain("2");
     expect(norm(rows[0]!.textContent!)).toContain("3,00 €");
     expect(rows[1]!.textContent).toContain("Jamón");
-    expect(rows[1]!.textContent).toContain("0.320 kg"); // weighed line shows kg
+    expect(rows[1]!.textContent).toContain("0.32");
     expect(norm(rows[1]!.textContent!)).toContain("6,40 €");
+  });
+
+  it("renders the SERVER's filed lines, not any client basket — a diverging line list follows result.lines", async () => {
+    // Finding 2, at the render seam: the receipt has no access to the client basket — it renders
+    // whatever `result.lines` carries. Overriding `lines` to a DIFFERENT composition (a single "Agua"
+    // line) proves the rows track the filed result, so a local basket edit can never diverge the printed
+    // list from the invoice.
+    const { el } = await mount({
+      lines: [{ descriptions: { "es-ES": "Agua" }, quantity: "3", gross: "6.00" }],
+    });
+    const rows = el.shadowRoot!.querySelectorAll(".line");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.textContent).toContain("Agua");
+    expect(rows[0]!.textContent).toContain("3");
+    expect(norm(rows[0]!.textContent!)).toContain("6,00 €");
+    expect(el.shadowRoot!.textContent).not.toContain("Café");
+    expect(el.shadowRoot!.textContent).not.toContain("Jamón");
   });
 
   it("shows the taxable base per rate, plus the (allowed extra) cuota per rate (art. 7.1.f)", async () => {

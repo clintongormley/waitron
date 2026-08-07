@@ -137,16 +137,45 @@ function makeCfg(
     locationId: brandLocationId(locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
+    // These API tests exercise the session/roster/park routes, none of which dispatch on the mode.
+    orderFlow: "prepay",
+  };
+}
+
+/** The system wall clock, reported confident/anchored — the identical stub shape
+ *  `working-order.rls.test.ts`/`till-api.rls.test.ts` use. Task 9's `place`/`cancel` routes call
+ *  `deps.clock.now()` unconditionally (the amendment's local wall-clock), even under `prepay` — this
+ *  suite's cfg — where no fiscal doc is filed, so the stub can no longer be the inert `{}` the
+ *  session-only routes got away with. */
+function systemClock(): TrustedClock {
+  return {
+    now: () => {
+      const instant = new Date();
+      return {
+        instant,
+        offsetMinutes: -instant.getTimezoneOffset(),
+        confident: true,
+        confidence: "anchored",
+        anchorAgeSeconds: 0,
+      };
+    },
+    anchor: () => {
+      throw new Error("till-api.test: anchor() is not used by placeOrder/cancelPlacedOrder");
+    },
+    currentAnchor: () => null,
   };
 }
 
 function deps(db: Database): TillApiDeps {
   return {
     db,
-    // `backend`/`clock` are unused by the session routes — Tasks 5/6's `POST /api/sales` wires real
-    // ones. Stubbed (never called) so this suite pulls in no fiscal backend.
+    // `backend` is unused by every route this suite drives: the session/roster/park routes never
+    // touch it, and `place`/`prep`/`cancel` only reach it under `invoice_first`/Mode-T-collect, which
+    // this suite's `prepay` cfg never dispatches into (Task 8's `placeOrder`/`collectOrder` dispatch).
+    // Stubbed (never called) so this suite pulls in no fiscal backend. `clock` IS real (see
+    // `systemClock`) — `place`/`cancel` need it regardless of mode.
     backend: {} as FiscalBackend,
-    clock: {} as TrustedClock,
+    clock: systemClock(),
     cfg,
     // FALSE so the Set-Cookie is issued over the non-TLS `app.request` — it must still carry HttpOnly
     // and SameSite=Strict, and must NOT carry Secure.
@@ -386,7 +415,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(JSON.stringify(staff)).not.toMatch(/pin|secret|password|url|cert|role|status|hash/i);
   });
 
-  it("GET /api/till returns locale + issuer identity (venueName + nif) and no secret", async () => {
+  it("GET /api/till returns locale + issuer identity + orderFlow, and no secret", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
@@ -394,8 +423,14 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(res.status).toBe(200);
     const body = await res.json();
     // The receipt-issuer identity Task 17's ticket view needs: the legal name + NIF printed on every
-    // customer receipt, plus the till's UI locale.
-    expect(body).toEqual({ locale: "es-ES", venueName: "Test SL", nif: venueTaxId });
+    // customer receipt, the till's UI locale, and (7c) the location's pay-timing mode — this suite's
+    // seeded location carries the schema default, `prepay`, matching `deps`' cfg.
+    expect(body).toEqual({
+      locale: "es-ES",
+      venueName: "Test SL",
+      nif: venueTaxId,
+      orderFlow: "prepay",
+    });
     // Nothing sensitive: no pin, certificate, connection string or verification url reaches the wire.
     expect(JSON.stringify(body)).not.toMatch(/pin|secret|password|url|cert/i);
   });
@@ -470,29 +505,32 @@ describe("POST /api/sales (session-guarded sale)", () => {
   });
 });
 
-describe("/api/working-orders (session-guarded park & retrieve)", () => {
-  // Park a fresh order for the logged-in operator over the real HTTP surface (never the working-order
-  // module directly), so every assertion below rides the route's own requireSession + run wrapper.
-  async function park(
-    app: Hono,
-    cookie: string,
-    body: { id: string; lines: { productId: string; quantity: string }[]; label?: string },
-  ): Promise<Response> {
-    return app.request("/api/working-orders", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify(body),
-    });
-  }
+// Park a fresh order for the logged-in operator over the real HTTP surface (never the working-order
+// module directly), so every assertion using it rides the route's own requireSession + run wrapper.
+// Module-scoped (not just `/api/working-orders`'s own describe) because Task 9's place/prep/cancel
+// suites below all need a parked order to place first.
+async function park(
+  app: Hono,
+  cookie: string,
+  body: { id: string; lines: { productId: string; quantity: string }[]; label?: string },
+): Promise<Response> {
+  return app.request("/api/working-orders", {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie },
+    body: JSON.stringify(body),
+  });
+}
 
+describe("/api/working-orders (session-guarded park & retrieve)", () => {
   it("REJECTS every route with 401 session.required when no cookie is present", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const id = randomUUID();
     const json = { "content-type": "application/json" };
     // The guard runs FIRST on each route (before any body is read or catalogue touched), so an
-    // unauthenticated park/list/retrieve/update/abandon all 401 with the one code. Deleting the
-    // `requireSession` call from any route flips that route's case to a 200/404, the deletion proof.
+    // unauthenticated park/list/retrieve/update/abandon/place/prep/prep-queue/collect/cancel all 401
+    // with the one code. Deleting the `requireSession` call from any route flips that route's case to
+    // a 200/404, the deletion proof.
     const cases = [
       app.request("/api/working-orders", {
         method: "POST",
@@ -507,6 +545,24 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
         body: JSON.stringify({ lines: [] }),
       }),
       app.request(`/api/working-orders/${id}`, { method: "DELETE" }),
+      // Task 9 — the prep surface.
+      app.request(`/api/working-orders/${id}/place`, { method: "POST" }),
+      app.request(`/api/working-orders/${id}/prep`, {
+        method: "POST",
+        headers: json,
+        body: JSON.stringify({}),
+      }),
+      app.request("/api/prep-queue"),
+      app.request(`/api/working-orders/${id}/collect`, {
+        method: "POST",
+        headers: json,
+        body: JSON.stringify({ tender: { method: "cash", amount: "1.50" } }),
+      }),
+      app.request(`/api/working-orders/${id}/cancel`, {
+        method: "POST",
+        headers: json,
+        body: JSON.stringify({ reason: "changed mind" }),
+      }),
     ];
     for (const res of await Promise.all(cases)) {
       expect(res.status).toBe(401);
@@ -642,5 +698,259 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     });
     expect(put.status).toBe(409);
     expect(await put.json()).toMatchObject({ error: { code: "working_order.not_open" } });
+  });
+});
+
+// Task 9 — the prep surface's till routes. This suite's cfg is `prepay` (never `invoice_first`), so
+// `placeOrder`/`cancelPlacedOrder` never dispatch into the fiscal backend (Task 8's mode dispatch) —
+// only `deps.clock` is genuinely needed (see `systemClock` above), so these routes are testable
+// hermetically. `collectOrder`'s NON-fiscal path (a malformed id, refused before any dispatch) is
+// tested here too, for the same reason; its FISCAL happy path needs a real backend and lives in
+// `till-api.rls.test.ts`.
+describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
+  it("POST places an open order (open → placed), enqueues prep at queued, and returns { id, status }", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const id = randomUUID();
+    await park(app, cookie, {
+      id,
+      lines: [{ productId: aguaProduct.id, quantity: "1" }],
+      label: "Mesa 2",
+    });
+
+    const placed = await app.request(`/api/working-orders/${id}/place`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(placed.status).toBe(200);
+    // `prepay` files nothing at placing (Task 8's dispatch) — just the bare transition result.
+    expect(await placed.json()).toEqual({ id, status: "placed" });
+
+    // The order really transitioned AND a prep row was enqueued — send-to-prep = placing (design §5).
+    // Read as the PGlite superuser (RLS bypassed), a plain state witness.
+    const order = await suite.db.execute<{ status: string }>(
+      sql`select status from working_orders where id = ${id}`,
+    );
+    expect(order.rows[0]).toEqual({ status: "placed" });
+    const prep = await suite.db.execute<{ state: string }>(
+      sql`select state from order_prep where working_order_id = ${id}`,
+    );
+    expect(prep.rows[0]).toEqual({ state: "queued" });
+  });
+
+  it("POST on a non-open order (a re-place of an already-placed one) is 409 working_order.not_open", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const id = randomUUID();
+    await park(app, cookie, { id, lines: [{ productId: aguaProduct.id, quantity: "1" }] });
+    await app.request(`/api/working-orders/${id}/place`, { method: "POST", headers: { cookie } });
+
+    const rePlace = await app.request(`/api/working-orders/${id}/place`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(rePlace.status).toBe(409);
+    expect(await rePlace.json()).toMatchObject({
+      error: { code: "working_order.not_open", params: { workingOrderId: id } },
+    });
+  });
+
+  it("POST with a malformed id is 409 working_order.not_open, not an opaque 500 (the 7b isUuid follow-up)", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+
+    // "not-a-uuid" passed straight into `eq(workingOrders.id, id)` would `22P02` in the DB → an
+    // opaque 500; the route's `isUuid` screen refuses it first.
+    const res = await app.request("/api/working-orders/not-a-uuid/place", {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "working_order.not_open", params: { workingOrderId: "not-a-uuid" } },
+    });
+  });
+});
+
+describe("/api/working-orders/:id/prep + GET /api/prep-queue", () => {
+  // `sendToPrep` (a `{}` body) needs a SETTLED order (fix round 1), and settling one under this
+  // suite's `prepay` cfg means a real fiscal write the stub `FiscalBackend` cannot make — so the
+  // send-to-prep SUCCESS path (a genuine Mode-P walk-up settled via `POST /api/sales`, then sent to
+  // prep) lives in `till-api.rls.test.ts`. This suite proves the REFUSAL the route now forwards, and
+  // the advance/malformed-id mechanics using `placeOrder`'s OWN enqueue (which needs no fiscal write
+  // under this suite's `prepay` cfg — Task 8's dispatch only reaches the backend for `invoice_first`)
+  // to seed a queued row instead of `sendToPrep`.
+  it("POST {} on a still-OPEN (parked, unpaid) order is refused 409 working_order.not_settled, not enqueued", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const id = randomUUID();
+    await park(app, cookie, {
+      id,
+      lines: [{ productId: aguaProduct.id, quantity: "1" }],
+      label: "Mesa 5",
+    });
+
+    const sent = await app.request(`/api/working-orders/${id}/prep`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({}),
+    });
+    expect(sent.status).toBe(409);
+    expect(await sent.json()).toMatchObject({
+      error: { code: "working_order.not_settled", params: { workingOrderId: id } },
+    });
+
+    // Refused BEFORE any write — the order never appears on the prep queue.
+    const queue = await app.request("/api/prep-queue", { headers: { cookie } });
+    const entries = (await queue.json()) as { id: string }[];
+    expect(entries.find((e) => e.id === id)).toBeUndefined();
+  });
+
+  it("POST { to } advances a prep-queued order one step; skipping straight to a later state is refused", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const id = randomUUID();
+    await park(app, cookie, {
+      id,
+      lines: [{ productId: aguaProduct.id, quantity: "1" }],
+      label: "Mesa 6",
+    });
+    // `placeOrder`'s OWN enqueue seeds the `queued` row — no fiscal write needed under `prepay` (Task
+    // 8's dispatch only reaches the backend for `invoice_first`), unlike `sendToPrep` (see above).
+    await app.request(`/api/working-orders/${id}/place`, { method: "POST", headers: { cookie } });
+
+    const queueBefore = await app.request("/api/prep-queue", { headers: { cookie } });
+    const before = (await queueBefore.json()) as {
+      id: string;
+      state: string;
+      label: string | null;
+    }[];
+    expect(before).toContainEqual(
+      expect.objectContaining({ id, state: "queued", label: "Mesa 6" }),
+    );
+
+    const advance = (to: string) =>
+      app.request(`/api/working-orders/${id}/prep`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ to }),
+      });
+
+    const toPreparing = await advance("preparing");
+    expect(toPreparing.status).toBe(200);
+    expect(await toPreparing.text()).toBe("");
+
+    // Skipping straight from `preparing` to `collected` (the legal next step is `ready`) is refused —
+    // 409 order_prep.invalid_transition, the domain code every illegal prep move surfaces.
+    const skip = await advance("collected");
+    expect(skip.status).toBe(409);
+    expect(await skip.json()).toMatchObject({
+      error: { code: "order_prep.invalid_transition", params: { workingOrderId: id } },
+    });
+  });
+
+  it("POST with a malformed id is 409 order_prep.invalid_transition, not an opaque 500", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+
+    const res = await app.request("/api/working-orders/not-a-uuid/prep", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "order_prep.invalid_transition", params: { workingOrderId: "not-a-uuid" } },
+    });
+  });
+});
+
+describe("/api/working-orders/:id/collect (malformed id — the fiscal happy path is till-api.rls.test.ts)", () => {
+  it("POST with a malformed id is 409 working_order.not_placed BEFORE any fiscal dispatch, not an opaque 500", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+
+    // The stub `backend: {} as FiscalBackend` would throw (a non-AppError → opaque 500) the moment
+    // `collectOrder` tried to use it — this 409, not a 500, is the witness that the `isUuid` screen
+    // refuses BEFORE `collectOrder` is even called.
+    const res = await app.request("/api/working-orders/not-a-uuid/collect", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ tender: { method: "cash", amount: "1.50" } }),
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "working_order.not_placed", params: { workingOrderId: "not-a-uuid" } },
+    });
+  });
+});
+
+describe("/api/working-orders/:id/cancel", () => {
+  it("POST cancels a PLACED order (placed → abandoned) given a reason", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const id = randomUUID();
+    await park(app, cookie, { id, lines: [{ productId: aguaProduct.id, quantity: "1" }] });
+    await app.request(`/api/working-orders/${id}/place`, { method: "POST", headers: { cookie } });
+
+    const cancel = await app.request(`/api/working-orders/${id}/cancel`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ reason: "customer left" }),
+    });
+    expect(cancel.status).toBe(200);
+    expect(await cancel.text()).toBe("");
+
+    const order = await suite.db.execute<{ status: string }>(
+      sql`select status from working_orders where id = ${id}`,
+    );
+    expect(order.rows[0]).toEqual({ status: "abandoned" });
+  });
+
+  it("POST with an empty reason is 400 working_order.reason_required, changing nothing", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const id = randomUUID();
+    await park(app, cookie, { id, lines: [{ productId: aguaProduct.id, quantity: "1" }] });
+    await app.request(`/api/working-orders/${id}/place`, { method: "POST", headers: { cookie } });
+
+    const cancel = await app.request(`/api/working-orders/${id}/cancel`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ reason: "" }),
+    });
+    expect(cancel.status).toBe(400);
+    expect(await cancel.json()).toMatchObject({ error: { code: "working_order.reason_required" } });
+
+    // Refused BEFORE any transition — still `placed`, the guard `cancelPlacedOrder` itself enforces.
+    const order = await suite.db.execute<{ status: string }>(
+      sql`select status from working_orders where id = ${id}`,
+    );
+    expect(order.rows[0]).toEqual({ status: "placed" });
+  });
+
+  it("POST with a malformed id is 409 working_order.not_placed, not an opaque 500", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+
+    const res = await app.request("/api/working-orders/not-a-uuid/cancel", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ reason: "changed mind" }),
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "working_order.not_placed", params: { workingOrderId: "not-a-uuid" } },
+    });
   });
 });

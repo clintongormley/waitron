@@ -168,6 +168,8 @@ async function main(): Promise<void> {
       locationId: brandLocationId(venue.locationId),
       locale: LOCALE,
       invoiceLocales: [LOCALE],
+      // The venue's default pay-timing mode (design §3); this demo drives the prepay walk-up path.
+      orderFlow: "prepay",
     };
 
     // Seed a catalogue and a staff person as the application role (not the owner): one weight-priced
@@ -248,8 +250,9 @@ async function main(): Promise<void> {
     const agua = products.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
 
     // 3. Ring a MIXED-rate cash basket: 0.200 kg jamón (4.98 gross @10%) + 2 × agua (3.00 gross @21%)
-    //    = 7.98, tendered 10.00 → 2.02 change. The server re-prices authoritatively; the request
-    //    carries no price.
+    //    = 7.98, tendered 10.00 → 2.02 change. This is a WALK-UP, so the server prices the sent basket
+    //    authoritatively and files from that fresh price (its lock IS the current price); the request
+    //    carries no price. (A RETRIEVED order instead files from its stored lock — see park-retrieve-demo.)
     const saleRes = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },

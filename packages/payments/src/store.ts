@@ -577,7 +577,13 @@ export interface ReconcilableRow {
   createdAt: string;
   auditedAt: string;
   workingOrderId: string;
-  workingOrderStatus: "open" | "settled" | "abandoned";
+  // Mirrors @waitron/db's working_order_status enum. `placed` was added by 0030 (7c) — a payment
+  // can join a placed order (Modes I/T), so the query's `workingOrders.status` now yields it and this
+  // pinned union must admit it too. The orphan rule below (`!== "open"`) and the auto-reverse gate
+  // (`!== "abandoned"`) both treat `placed` as a non-open, non-abandoned state by their existing
+  // inequalities; whether that is the right reconcile classification for a placed order is a
+  // question for the reconcile owner, not settled here.
+  workingOrderStatus: "open" | "placed" | "settled" | "abandoned";
   tillId: string;
   reconcileRemediatedAt: string | null;
 }

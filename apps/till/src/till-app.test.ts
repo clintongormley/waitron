@@ -5,6 +5,8 @@ import { currentLocale, setLocale, t } from "./i18n/t.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
+import type { TillTenderPay } from "./widgets/tender-pay.js";
+import type { TillPrepQueue } from "./widgets/prep-queue.js";
 import type { HeldOrderSummary, TillApi, TillProduct, TillSaleResult } from "./api/client.js";
 import type { WorkingOrderStore } from "./state/working-order.js";
 
@@ -40,11 +42,36 @@ const saleResult: TillSaleResult = {
   issuedAt: "2026-08-05T10:00:00.000Z",
   total: "3.00",
   vatBreakdown: [{ rate: "21", base: "2.48", tax: "0.52" }],
+  // The FILED line list the ticket renders (server's composition), never the client basket.
+  lines: [{ descriptions: { "es-ES": "Café" }, quantity: "2", gross: "3.00" }],
   change: "2.00",
   qr: "https://example.test/vf?nif=B1&num=F-0001&fecha=05-08-2026&total=3.00",
 };
 
-const till = { locale: "es-ES", venueName: "Bar Pepe", nif: "B12345678" };
+const till = {
+  locale: "es-ES",
+  venueName: "Bar Pepe",
+  nif: "B12345678",
+  orderFlow: "prepay" as const,
+};
+
+const placedResult = {
+  id: "wo-1",
+  status: "placed" as const,
+  invoiceNumber: "A/1",
+  issuedAt: "2026-08-06T10:00:00.000Z",
+  total: "3.00",
+  qr: "x",
+  vatBreakdown: [{ rate: "21", base: "2.48", tax: "0.52" }],
+};
+
+const prepEntry = {
+  id: "wo-1",
+  orderNumber: 5,
+  label: "Mesa 4",
+  state: "queued" as const,
+  queuedAt: "2026-08-06T10:00:00.000Z",
+};
 
 /**
  * A fake `TillApi` covering every method the app (and the lock screen it mounts) calls. Each defaults
@@ -67,6 +94,11 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       lines: [{ productId: "cafe", quantity: "2.000" }],
     }),
     abandonWorkingOrder: vi.fn().mockResolvedValue(undefined),
+    updateWorkingOrder: vi.fn().mockResolvedValue(undefined),
+    placeOrder: vi.fn().mockResolvedValue(placedResult),
+    collectOrder: vi.fn().mockResolvedValue(saleResult),
+    advancePrep: vi.fn().mockResolvedValue(undefined),
+    listPrepQueue: vi.fn().mockResolvedValue([]),
     logout: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;
@@ -82,6 +114,13 @@ const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen");
 const ticket = (el: TillApp) => el.shadowRoot!.querySelector<TillTicketView>("till-ticket-view");
+/** The pay widget nested inside the counter screen's OWN shadow root (7c per-mode control). */
+const tenderPay = (el: TillApp) =>
+  counter(el)!.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+/** The prep-queue widget nested inside the counter screen's shadow root, or `null` when the layout
+ * (Mode P) omits it. */
+const prepQueueWidget = (el: TillApp) =>
+  counter(el)!.shadowRoot!.querySelector<TillPrepQueue>("till-prep-queue");
 
 /** Fires a composed, bubbling CustomEvent from `source` — the shape every till screen emits. */
 function emit(source: Element, type: string, detail?: unknown): void {
@@ -157,14 +196,43 @@ describe("till-app", () => {
       // below). A `expect.any(String)` here was satisfied by the old `crypto.randomUUID()` bug.
       workingOrderId,
     );
+    // A FRESH walk-up (never persisted) is filed straight from its lines — no pre-pay re-lock. Only a
+    // RETRIEVED/parked basket is synced first (see the retrieve→edit→pay test); syncing a walk-up here
+    // would try to update a working order the server has never seen.
+    expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
     const view = ticket(el)!;
     expect(view).not.toBeNull();
+    // The ticket renders the SERVER result (its `lines` are the filed composition), not a client basket.
     expect(view.result).toBe(saleResult);
     expect(view.issuer).toEqual({ venueName: "Bar Pepe", nif: "B12345678" });
-    // the ticket carries the line snapshot taken at pay time
-    expect(view.lines).toHaveLength(1);
-    expect(view.lines[0]!.product).toBe(cafe);
-    expect(view.lines[0]!.quantity).toBe("2");
+  });
+
+  it("the printed receipt line list comes from the SERVER result, not the client basket (Finding 2)", async () => {
+    // The client basket and the FILED lines deliberately DIVERGE: the store holds café×2, but the
+    // server's filed result reports a different composition (agua×3). The rendered ticket must show the
+    // FILED "Agua"/"3"/"6,00 €" — proof the receipt renders `result.lines`, never the mutable basket, so
+    // a local edit can never make the printed goods list disagree with the invoice.
+    const filed: TillSaleResult = {
+      ...saleResult,
+      total: "6.00",
+      lines: [{ descriptions: { "es-ES": "Agua" }, quantity: "3", gross: "6.00" }],
+    };
+    const norm = (s: string): string => s.replace(/[\u00A0\u202F]/g, " ");
+    const { el } = await mountApp({ recordSale: vi.fn().mockResolvedValue(filed) });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2"); // client basket — different from the filed lines
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "10" });
+    await flush(el);
+
+    const rows = ticket(el)!.shadowRoot!.querySelectorAll(".line");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.textContent).toContain("Agua");
+    expect(rows[0]!.textContent).toContain("3");
+    expect(norm(rows[0]!.textContent!)).toContain("6,00 €");
+    // The client basket's "Café" never reaches the receipt.
+    expect(ticket(el)!.shadowRoot!.textContent).not.toContain("Café");
   });
 
   it("confirm-payment: a CARD tender forwards intact (method, amount, externalRef) with the store's stable id", async () => {
@@ -262,6 +330,118 @@ describe("till-app", () => {
       { method: "cash", amount: "5" },
       "wo-1",
     );
+    // Behaviour 1 (re-review): the order was retrieved but NOT edited, so it must NOT be re-synced —
+    // re-syncing re-prices with the live catalogue and would file at the pay-time price, defeating the
+    // add-time lock. An unedited retrieve→pay files from the stored lock (recordSale straight through).
+    expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
+  });
+
+  it("retrieve → edit → pay re-syncs the edited basket BEFORE paying, so the edit is not dropped (Finding 2)", async () => {
+    // 7c regression: the server's retrieved-order pay files from the STORED lock and IGNORES the sent
+    // basket, so an edit made after retrieve must be re-locked (`updateWorkingOrder`) BEFORE the pay or
+    // it is SILENTLY DROPPED from both the charge and the filed record. Retrieve wo-1 (café×2), add a
+    // second café, then pay: `updateWorkingOrder` must carry the EDITED composition and run BEFORE
+    // `recordSale`. Deleting the persisted-sync in `#onConfirmPayment` makes this fail (the edit is lost).
+    const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+    const recordSale = vi.fn().mockResolvedValue(saleResult);
+    const { el } = await mountApp({ updateWorkingOrder, recordSale });
+    const c = await toCounter(el);
+    const store = c.store;
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    expect(store.persisted).toBe(true); // a retrieved order is persisted server-side
+
+    store.addProduct(cafe, "1"); // the edit AFTER retrieve
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    // The edited composition was re-locked: café×2 (retrieved) + café×1 (the edit), under the order's id.
+    expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
+      lines: [
+        { productId: "cafe", quantity: "2" },
+        { productId: "cafe", quantity: "1" },
+      ],
+      label: "Mesa 4",
+    });
+    // recordSale files the SAME edited composition under the same id, and the sync ran FIRST — the
+    // server needs the lock updated before it files from it.
+    expect(recordSale).toHaveBeenCalledWith(
+      [
+        { productId: "cafe", quantity: "2" },
+        { productId: "cafe", quantity: "1" },
+      ],
+      { method: "cash", amount: "5" },
+      "wo-1",
+    );
+    expect(updateWorkingOrder.mock.invocationCallOrder[0]!).toBeLessThan(
+      recordSale.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("retrieve → edit → pay: a not_open re-sync FALLS THROUGH to the settled replay, not sale.error (Findings 3 & 4)", async () => {
+    // Behaviours 3 & 4 of the re-review: a lost-response retry, or the LOSER of a two-till concurrent
+    // pay on the same parked order (a normal 7b flow), finds the order ALREADY settled. The edit-gated
+    // re-sync then throws `working_order.not_open` — which must NOT surface. It means "already settled →
+    // let the pay path replay": `recordSale`'s settled branch returns the FILED ticket (no double-file,
+    // no error banner). Deleting the not_open swallow in `#onConfirmPayment` makes this fail (the throw
+    // reaches the sale.error handler and no ticket shows) — the replay-safety deletion proof.
+    const updateWorkingOrder = vi.fn().mockRejectedValue({ code: "working_order.not_open" });
+    const recordSale = vi.fn().mockResolvedValue(saleResult); // the server's settled-replay ticket
+    const { el } = await mountApp({ updateWorkingOrder, recordSale });
+    const c = await toCounter(el);
+    const store = c.store;
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    store.addProduct(cafe, "1"); // an edit → the basket is dirty, so the re-sync is attempted
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    // The re-sync was attempted and rejected `not_open` — but the pay REPLAYED: ticket shown, no error.
+    expect(updateWorkingOrder).toHaveBeenCalled();
+    expect(recordSale).toHaveBeenCalledWith(
+      [
+        { productId: "cafe", quantity: "2" },
+        { productId: "cafe", quantity: "1" },
+      ],
+      { method: "cash", amount: "5" },
+      "wo-1",
+    );
+    expect(ticket(el)).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull(); // no sale.error banner
+  });
+
+  it("retrieve → edit → pay: a NON-not_open re-sync failure surfaces as a non-fatal error (basket intact)", async () => {
+    // The other side of the swallow: only `working_order.not_open` falls through. Any OTHER re-sync
+    // rejection (a network error, some other domain code) is a real failure — it must surface as the
+    // generic sale.error, leave the basket intact, and NOT file (recordSale is never reached). Mutating
+    // the swallow to catch every code would let a genuine failure be silently paid past.
+    const updateWorkingOrder = vi.fn().mockRejectedValue({ code: "server.internal" });
+    const recordSale = vi.fn().mockResolvedValue(saleResult);
+    const { el } = await mountApp({ updateWorkingOrder, recordSale });
+    const c = await toCounter(el);
+    const store = c.store;
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    store.addProduct(cafe, "1"); // edit → dirty → re-sync attempted
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    expect(recordSale).not.toHaveBeenCalled(); // the failed sync short-circuits before filing
+    expect(ticket(el)).toBeNull();
+    expect(counter(el)).not.toBeNull();
+    expect(store.lines).toHaveLength(2); // basket intact — café×2 retrieved + café×1 edit
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("sale.error"));
+    expect(el.shadowRoot!.textContent).not.toContain("server.internal"); // never leaks the raw code
   });
 
   it("walk-up pay retry: a re-tapped confirm sends the SAME store id (idempotent replay, never two ids)", async () => {
@@ -700,6 +880,340 @@ describe("till-app", () => {
     emit(counter(el)!, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     expect(currentApi.recordSale).toHaveBeenCalledTimes(2);
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  // 7c prepare & collect: per-mode control selection (end-to-end, not just the widget in isolation)
+  // and the prep queue rendered from fetched data.
+  // ---------------------------------------------------------------------------------------------
+
+  describe("per-mode pay control + prep queue (7c)", () => {
+    it("boots into Mode P (prepay, the default): tender-pay shows the unchanged Pay flow, no prep queue fetched or rendered", async () => {
+      const { el } = await mountApp(); // the till fixture defaults orderFlow: "prepay"
+      const c = await toCounter(el);
+      expect(tenderPay(el).mode).toBe("prepay");
+      expect(tenderPay(el).stage).toBe("order");
+      expect(prepQueueWidget(el)).toBeNull(); // Mode P's layout omits the widget entirely
+      expect(currentApi.listPrepQueue).not.toHaveBeenCalled();
+      expect(c.products).toEqual([cafe]); // sanity: still a normal counter otherwise
+    });
+
+    it("boots into Mode I (invoice_first): tender-pay starts on the order stage; the prep queue is fetched and rendered", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+      });
+      await toCounter(el);
+      expect(tenderPay(el).mode).toBe("invoice_first");
+      expect(tenderPay(el).stage).toBe("order");
+      expect(prepQueueWidget(el)).not.toBeNull();
+      expect(currentApi.listPrepQueue).toHaveBeenCalledOnce(); // fetched on entering the counter
+    });
+
+    it("boots into Mode T (ticket_then_pay): the same per-mode selection applies", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+      });
+      await toCounter(el);
+      expect(tenderPay(el).mode).toBe("ticket_then_pay");
+      expect(prepQueueWidget(el)).not.toBeNull();
+    });
+
+    it("renders the prep queue from fetched data, not just an empty placeholder", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        listPrepQueue: vi.fn().mockResolvedValue([prepEntry]),
+      });
+      await toCounter(el);
+      expect(prepQueueWidget(el)!.entries).toEqual([prepEntry]);
+    });
+
+    it("place-order (fresh basket): parks then places, moves to the collect stage, refreshes the prep queue", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      const id = c.store.id;
+      expect(c.store.persisted).toBe(false); // a fresh walk-up basket, never parked
+
+      emit(c, "place-order");
+      await flush(el);
+
+      expect(currentApi.parkOrder).toHaveBeenCalledWith({
+        id,
+        lines: [{ productId: "cafe", quantity: "2" }],
+        label: undefined,
+      });
+      expect(currentApi.placeOrder).toHaveBeenCalledWith(id);
+      expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
+      expect(c.store.persisted).toBe(true); // marked persisted after the successful park
+      expect(tenderPay(el).stage).toBe("collect"); // Place → Collect
+      expect(counter(el)).not.toBeNull(); // stays on the counter (no ticket for a mere place)
+      expect(ticket(el)).toBeNull();
+      // once on entering the counter, once after the successful place (Modes I/T auto-enqueue).
+      expect(currentApi.listPrepQueue).toHaveBeenCalledTimes(2);
+    });
+
+    it("place-order on an UNEDITED retrieved order does NOT re-sync — placeOrder files the stored composition", async () => {
+      // Symmetric with the unedited retrieve→pay path (Behaviour 1 above): retrieving adopts the order's
+      // id and marks it persisted+clean (loadFrom). An UNEDITED retrieved order must NOT re-sync before
+      // placing — `updateWorkingOrder` re-prices with the LIVE catalogue and would replace the add-time
+      // lock, filing at the place-time price and defeating the line-add snapshot (design §3: placing does
+      // not re-lock price). It must never re-park either (a re-park of the same id would 23505 on the
+      // server's plain INSERT). `placeOrder` files the STORED composition straight. Removing the `dirty`
+      // gate in `#syncIfDirty` makes this fail (the unedited order re-syncs).
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+      });
+      const c = await toCounter(el);
+
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+      expect(c.store.persisted).toBe(true);
+      expect(c.store.dirty).toBe(false); // retrieved but never edited
+
+      emit(c, "place-order");
+      await flush(el);
+
+      expect(currentApi.parkOrder).not.toHaveBeenCalled();
+      expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
+      expect(currentApi.placeOrder).toHaveBeenCalledWith("wo-1");
+      expect(tenderPay(el).stage).toBe("collect");
+    });
+
+    it("place-order on an EDITED retrieved order re-syncs the edit via updateWorkingOrder before placing", async () => {
+      // The mirror of the pay path's retrieve→edit→pay: an edit made after retrieve must be re-locked
+      // (`updateWorkingOrder`) BEFORE placing, or the server places the STORED lock and silently drops
+      // the edit. Retrieve wo-1 (café×2), add a second café, then place: `updateWorkingOrder` carries the
+      // EDITED composition and runs BEFORE `placeOrder`. Deleting the `#syncIfDirty` call in the
+      // persisted branch of `#onPlaceOrder` makes this fail (the edit is lost).
+      const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+      const placeOrder = vi.fn().mockResolvedValue(placedResult);
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+        updateWorkingOrder,
+        placeOrder,
+      });
+      const c = await toCounter(el);
+
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+      c.store.addProduct(cafe, "1"); // the edit AFTER retrieve → the basket is dirty
+      await el.updateComplete;
+
+      emit(c, "place-order");
+      await flush(el);
+
+      expect(currentApi.parkOrder).not.toHaveBeenCalled();
+      expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
+        lines: [
+          { productId: "cafe", quantity: "2" }, // retrieved
+          { productId: "cafe", quantity: "1" }, // the edit
+        ],
+        label: "Mesa 4",
+      });
+      expect(placeOrder).toHaveBeenCalledWith("wo-1");
+      expect(updateWorkingOrder.mock.invocationCallOrder[0]!).toBeLessThan(
+        placeOrder.mock.invocationCallOrder[0]!,
+      );
+      expect(tenderPay(el).stage).toBe("collect");
+    });
+
+    it("place-order on an EDITED retrieved order already placed elsewhere: the re-tap surfaces place.error (placeOrder is not idempotent)", async () => {
+      // The concurrent-place race / lost-response re-tap: the order has already moved past `open` (placed
+      // on another register, or the first place landed and its response was lost). The edit-gated re-sync
+      // calls `updateWorkingOrder`, which returns `working_order.not_open` — SWALLOWED by `#syncIfDirty` —
+      // and then the server's `placeOrder`, which is NOT idempotent (it refuses ANY non-open order with
+      // the same `working_order.not_open`; till-api.test.ts pins that 409), returns `not_open` too. So
+      // `#onPlaceOrder` surfaces `place.error` and stays on the ORDER stage — it does NOT fall through to
+      // collect: placing has no `sales_working_order_id_key` replay the way pay does. Both server calls are
+      // mocked to reject `not_open`, matching the real server (the earlier revision mocked `placeOrder` to
+      // SUCCESS, an impossible pairing — `placeOrder` succeeds only when the order is open, which is exactly
+      // when `updateWorkingOrder` would not have thrown). Removing `#onPlaceOrder`'s place.error handler,
+      // or advancing the stage on a failed place, makes this fail.
+      const updateWorkingOrder = vi.fn().mockRejectedValue({ code: "working_order.not_open" });
+      const placeOrder = vi.fn().mockRejectedValue({ code: "working_order.not_open" });
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+        updateWorkingOrder,
+        placeOrder,
+      });
+      const c = await toCounter(el);
+
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+      c.store.addProduct(cafe, "1"); // edit → dirty → re-sync attempted
+      await el.updateComplete;
+
+      emit(c, "place-order");
+      await flush(el);
+
+      expect(tenderPay(el).stage).toBe("order"); // NOT advanced to collect — the place failed
+      expect(ticket(el)).toBeNull(); // stays on the counter, no ticket
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("place.error"));
+      expect(el.shadowRoot!.textContent).not.toContain("working_order.not_open"); // raw code never leaks
+    });
+
+    it("a failed place keeps the counter, the order stage and the basket, showing a non-fatal error", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        parkOrder: vi.fn().mockRejectedValue({ code: "working_order.rejected" }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "place-order");
+      await flush(el);
+
+      expect(currentApi.placeOrder).not.toHaveBeenCalled(); // never reached — the park failed first
+      expect(tenderPay(el).stage).toBe("order"); // never advanced
+      expect(counter(el)).not.toBeNull();
+      expect(c.store.lines).toHaveLength(1); // basket intact
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("place.error"));
+      expect(el.shadowRoot!.textContent).not.toContain("working_order.rejected");
+    });
+
+    it("place single-flight: a second place-order while the first is pending places EXACTLY ONCE", async () => {
+      const parkOrder = vi.fn(() => new Promise(() => {})); // never resolves
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        parkOrder,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "place-order"); // first — raises the guard, awaits
+      await el.updateComplete;
+      expect(counter(el)!.busy).toBe(true); // in flight → the Place affordance is disabled
+      emit(c, "place-order"); // second — guarded, a no-op
+      await el.updateComplete;
+
+      expect(parkOrder).toHaveBeenCalledOnce();
+    });
+
+    it("collect-order: settles the placed order and shows the ticket", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      const id = c.store.id;
+      emit(c, "place-order");
+      await flush(el);
+      expect(tenderPay(el).stage).toBe("collect");
+
+      emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
+      await flush(el);
+
+      expect(currentApi.collectOrder).toHaveBeenCalledWith(id, { method: "cash", amount: "5" });
+      const view = ticket(el)!;
+      expect(view).not.toBeNull();
+      // The ticket renders the SERVER collect result (its `lines` are the filed placed composition),
+      // not the local basket — a local edit between place and collect can't diverge the printed list.
+      expect(view.result).toBe(saleResult);
+    });
+
+    it("a failed collect keeps the counter (collect stage) and the basket, showing a non-fatal error", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        collectOrder: vi.fn().mockRejectedValue({ code: "working_order.not_placed" }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "place-order");
+      await flush(el);
+
+      emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
+      await flush(el);
+
+      expect(ticket(el)).toBeNull();
+      expect(counter(el)).not.toBeNull();
+      expect(tenderPay(el).stage).toBe("collect"); // still awaiting collection
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("sale.error"));
+      expect(el.shadowRoot!.textContent).not.toContain("working_order.not_placed");
+    });
+
+    it("collect single-flight: a second collect-order while the first is pending collects EXACTLY ONCE", async () => {
+      const collectOrder = vi.fn(() => new Promise<TillSaleResult>(() => {})); // never resolves
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        collectOrder,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "place-order");
+      await flush(el);
+
+      emit(counter(el)!, "collect-order", { method: "cash", amount: "5" }); // first — awaits
+      await el.updateComplete;
+      expect(counter(el)!.busy).toBe(true);
+      emit(counter(el)!, "collect-order", { method: "cash", amount: "5" }); // second — guarded
+      await el.updateComplete;
+
+      expect(collectOrder).toHaveBeenCalledOnce();
+    });
+
+    it("new-sale resets the collect stage back to order for the next basket", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "place-order");
+      await flush(el);
+      emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
+      await flush(el);
+      expect(ticket(el)).not.toBeNull();
+
+      emit(ticket(el)!, "new-sale");
+      await flush(el);
+
+      expect(tenderPay(el).stage).toBe("order");
+    });
+
+    it("advance-prep: advances the entry, then refreshes the prep queue", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        listPrepQueue: vi.fn().mockResolvedValueOnce([prepEntry]).mockResolvedValue([]),
+      });
+      const c = await toCounter(el);
+      expect(prepQueueWidget(el)!.entries).toEqual([prepEntry]);
+
+      emit(c, "advance-prep", { id: "wo-1", to: "preparing" });
+      await flush(el);
+
+      expect(currentApi.advancePrep).toHaveBeenCalledWith("wo-1", "preparing");
+      // once on entering the counter, once after the advance.
+      expect(currentApi.listPrepQueue).toHaveBeenCalledTimes(2);
+      expect(prepQueueWidget(el)!.entries).toEqual([]);
+    });
+
+    it("a failed advance-prep still refreshes the queue and shows a non-fatal error", async () => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+        advancePrep: vi.fn().mockRejectedValue({ code: "order_prep.invalid_transition" }),
+      });
+      const c = await toCounter(el);
+
+      emit(c, "advance-prep", { id: "wo-1", to: "preparing" });
+      await flush(el);
+
+      // the refresh runs even though the advance rejected — a stale entry corrects itself.
+      expect(currentApi.listPrepQueue).toHaveBeenCalledTimes(2);
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("prep.advance_error"));
+      expect(el.shadowRoot!.textContent).not.toContain("order_prep.invalid_transition");
+    });
   });
 
   it("does not change the global locale when the app disconnects before getTill resolves", async () => {

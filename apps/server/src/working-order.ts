@@ -2,21 +2,44 @@
 // them — the reachability convention `till-sale.ts`/`till-config.ts` follow (a bare import, no value
 // used here). See the note atop `errors.ts`.
 import "./errors.js";
-import { and, eq, sql } from "drizzle-orm";
-import { AppError } from "@waitron/shared";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { AppError, type SaleId, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import {
   allocateOrderNumber,
+  appendOrderAmendment,
   asAppUser,
+  invoiceSeries,
+  isUniqueViolation,
+  orderPrep,
+  prepState,
+  sales,
   withTenant,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { listAvailableProducts, priceBasket } from "@waitron/catalogue";
+import { listAvailableProducts, priceBasket, priceLockedLines } from "@waitron/catalogue";
+import type { LockedLine, PricedLines } from "@waitron/catalogue";
+import { formatInvoiceNumber, recordSale } from "@waitron/core";
+import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { TillConfig } from "./till-config.js";
 
 export interface WorkingOrderDeps {
   db: Database;
+}
+
+/**
+ * The fuller till dependency bundle — `db` plus the `backend`/`clock` a FISCAL FILE needs. `placeOrder`
+ * (Mode-I deferred invoice) and `cancelPlacedOrder` (the amendment's trusted clock) take it here, and
+ * every `till-sale.ts` filing path (`payWorkingOrder`, `collectOrder`, `fileImmediateSale`,
+ * `recordTillSale`) takes it too. It lives in this lower-level module — beside {@link WorkingOrderDeps},
+ * the `db`-only subset for the non-filing operations (park, list, retrieve, update, abandon, advance) —
+ * so `till-sale.ts` imports it from here, keeping the module dependency ONE-directional (no import cycle).
+ */
+export interface TillSaleDeps {
+  db: Database;
+  backend: FiscalBackend;
+  clock: TrustedClock;
 }
 
 /** The rows a park or an update writes into `working_order_lines`, as Drizzle types the insert. */
@@ -45,7 +68,9 @@ type PricedBasket = ReturnType<typeof priceBasket>;
  * OPEN order (allocating its number), update rewrites an existing one's lines and label — this helper
  * owns only the lines, which are identical between the two. `priced.lines` is in `lines` order
  * (priceBasket iterates in order and stamps `lineNo = i + 1`), so row `i` takes its `product_id` from
- * `lines[i]`; everything else is the display snapshot priceBasket produced.
+ * `lines[i]`; the display columns (`descriptions`, `unit_price`, `category`) are the snapshot
+ * priceBasket produced, while `unit_price_gross` is the AUTHORITATIVE gross unit LOCKED at add-time —
+ * the input a retrieved order is later filed from without a re-price (see that column's comment below).
  */
 async function priceOrderLines(
   tx: Transaction,
@@ -72,18 +97,110 @@ async function priceOrderLines(
     descriptions: line.descriptions,
     quantity: line.quantity,
     unitPrice: line.unitPrice,
+    // The GROSS (VAT-inclusive) UNIT price LOCKED at add-time (line-add snapshot, 7c) — the
+    // AUTHORITATIVE input a retrieved order is FILED from without a re-price (`priceLockedLines`,
+    // @waitron/catalogue reads this straight back as its `grossUnitPrice`). `unit_price` above is the
+    // NET unit, informational only; this is the gross the line was priced from, so a later catalogue
+    // price change never moves the filed total. Stored from `priceBasket`'s `grossUnitPrices` — the
+    // per-UNIT gross at MONEY_SCALE, the exact figure `priceLockedLines` recomputes from — never
+    // `line_total ÷ quantity`, which is exact for `each` but DRIFTS for a weighed line. This is a
+    // durable lock, not a display cache.
+    unitPriceGross: priced.grossUnitPrices[i]!,
     vatRate: line.vatRate,
     // The DRAFT line stores the GROSS (VAT-inclusive) line total, not `line.lineTotal`'s net base:
     // `working_order_lines` is the counter's mutable display, and every other total the operator/
     // customer sees is gross (the basket grand total, the per-line gross, the filed ticket), so the
     // held-orders list `sum(line_total)` must be gross too. This deliberately DIVERGES from the FILED
-    // `sale_lines.line_total`, which keeps `line.lineTotal`'s net base for the fiscal record — the
-    // walk-up/pay path files from `priced.lines`, unaffected by this draft column. See
-    // `working_order_lines.line_total`'s schema comment and `priceBasket`'s `grossLineTotals`.
+    // `sale_lines.line_total`, which keeps `line.lineTotal`'s net base for the fiscal record. The
+    // FILED line of a retrieved order now derives from the locked `unit_price_gross` unit above via
+    // `priceLockedLines`, NOT from `priced.lines`; a freshly-created walk-up still files from
+    // `priced.lines`. See `working_order_lines.line_total`'s schema comment and `priceBasket`'s
+    // `grossLineTotals`/`grossUnitPrices`.
     lineTotal: priced.grossLineTotals[i]!,
     category: line.category ?? null,
   }));
   return { lineRows, priced };
+}
+
+/**
+ * Read a persisted order's STORED lines in `line_no` order — exactly the columns `priceLockedLines`
+ * needs (gross unit, quantity, rate, descriptions, category), each snapshotted at add-time. THE ONE
+ * reader shared by `payWorkingOrder` (a retrieved order), `placeOrder` (Mode-I's deferred file at
+ * placing) and `collectOrder` (Mode-T's immediate file at collect), so all three file a persisted
+ * order from the SAME locked composition and a catalogue price change after add never moves the filed
+ * total (line-add snapshot, 7c).
+ *
+ * Throws on a lineless order: a persisted `open`/`placed` order always has ≥1 line (park refuses an
+ * empty basket, `updateHeldOrder` never leaves it lineless, and placing freezes the composition), so
+ * an empty result is corruption rather than a reachable flow — the same guard `payWorkingOrder` used
+ * inline before this was extracted.
+ */
+export async function readLockedLines(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<LockedLine[]> {
+  const stored = await tx
+    .select({
+      grossUnitPrice: workingOrderLines.unitPriceGross,
+      quantity: workingOrderLines.quantity,
+      vatRate: workingOrderLines.vatRate,
+      descriptions: workingOrderLines.descriptions,
+      category: workingOrderLines.category,
+    })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, workingOrderId))
+    .orderBy(workingOrderLines.lineNo);
+  /* v8 ignore start */
+  if (stored.length === 0) {
+    throw new Error(`readLockedLines: working order ${workingOrderId} has no lines to file`);
+  }
+  /* v8 ignore stop */
+  return stored;
+}
+
+/**
+ * Price a persisted order's STORED locked composition — `priceLockedLines` over {@link readLockedLines},
+ * the one-liner every persisted-order file repeats (retrieved-order pay, Mode-I place, Mode-T collect,
+ * and the settled-ticket read-back). `priceLockedLines` runs the SAME difference-method arithmetic over
+ * the ADD-TIME locked gross (`unit_price_gross`) that `priceBasket` runs over a live catalogue, so a
+ * catalogue price change after add never moves the filed total (line-add snapshot, 7c). Pure over
+ * `readLockedLines`'s read; throws on a lineless order (see there).
+ */
+export async function priceStoredOrder(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<PricedLines> {
+  return priceLockedLines(await readLockedLines(tx, workingOrderId));
+}
+
+/**
+ * Read a filed sale's human-facing `NumSerieFactura` ("A/1") back from its `sales` row and series, in
+ * the caller's transaction — the `FiscalRecordRef` is regime-opaque and carries neither, so both the
+ * immediate-file (`fileImmediateSale`) and the Mode-I deferred place (`placeOrder`) read it back the
+ * same way. `recordSale` guarantees exactly one `sales` row for the id, so the single-row read always
+ * resolves (the non-null assertion holds for the same reason both call sites' did).
+ */
+export async function readInvoiceNumber(tx: Transaction, saleId: SaleId): Promise<string> {
+  const [issued] = await tx
+    .select({ code: invoiceSeries.code, number: sales.invoiceNumber })
+    .from(sales)
+    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+    .where(eq(sales.id, saleId));
+  return formatInvoiceNumber(issued!.code, issued!.number);
+}
+
+/**
+ * Project a VAT desglose onto the ticket's `{ rate, base, tax }` shape — the one place the three result
+ * builders express it: `placeOrder` here (Mode-I place), and `till-sale.ts`'s `readSettledTicket` (over a
+ * FILED record's bands) and `fileImmediateSale` (over a freshly-`priced` basket). A pure per-band field
+ * copy; the surcharge fields a `VatBreakdownLine` may also carry are deliberately dropped, exactly as
+ * each inline `.map` did — the counter ticket carries base/tax only. Lives here (not in `till-sale.ts`)
+ * so `till-sale.ts` imports it one-directionally, no cycle.
+ */
+export function toVatBreakdown(
+  bands: readonly { rate: string; base: string; tax: string }[],
+): { rate: string; base: string; tax: string }[] {
+  return bands.map((v) => ({ rate: v.rate, base: v.base, tax: v.tax }));
 }
 
 /**
@@ -424,5 +541,436 @@ export async function abandonHeldOrder(
     if (updated.length === 0) {
       throw new AppError("working_order.not_open", { workingOrderId: id });
     }
+  });
+}
+
+/**
+ * The result of placing an order. In Task 7 (Mode T / generic placing) an order goes `open → placed`
+ * and NO fiscal document is filed, so only `id` and `status: "placed"` are returned. The optional
+ * fiscal fields are the shape Task 8's mode dispatch fills for the modes that DO file at placing:
+ * Mode P (prepay) pays + issues → `settled`, and Mode I (invoice-first) issues the deferred invoice.
+ * Kept on this interface now so the placing surface does not change shape when those modes land.
+ */
+export interface PlaceOrderResult {
+  id: string;
+  status: "placed" | "settled";
+  invoiceNumber?: string;
+  issuedAt?: string;
+  total?: string;
+  qr?: string;
+  vatBreakdown?: { rate: string; base: string; tax: string }[];
+}
+
+/**
+ * Place a working order (spec §3): `open → placed`, which FREEZES its composition and OPENS the
+ * art. 29.2.j amendment log with an `order_placed` genesis entry — all in ONE `withTenant`/`asAppUser`
+ * transaction, so the transition, the genesis amendment and the prep enqueue commit as one unit (or
+ * roll back together, leaving the order open and un-logged).
+ *
+ * The freeze is FREE: once the row is `placed`, `working_orders_enforce_transition` rejects a
+ * non-status update of it and `working_order_lines_require_open_parent` rejects any line write under
+ * it, so the stored composition can no longer be silently rewritten — a further edit must become a
+ * logged amendment (the future correction slice), not a line rewrite. `updateHeldOrder` also refuses
+ * a placed order at the app layer with `working_order.not_open`.
+ *
+ * The mode dispatch (Task 8, design §3's state-machine table) keys on the location's `order_flow`:
+ *  - `invoice_first` (Mode I): file `recordSale` DEFERRED here — an unpaid, chained invoice issued at
+ *    placing — from the order's stored locked lines, and return its invoice number. `collectOrder`
+ *    settles it later.
+ *  - `ticket_then_pay` (Mode T) and `prepay` (Mode P): file NO fiscal document here. Mode T pays at
+ *    collect (`collectOrder`); Mode P never reaches placing at all — a walk-up/prepay order pays and
+ *    issues at ORDER via `payWorkingOrder` (open → settled, no placed state). So `placeOrder` under
+ *    `prepay` is a bare place with no fiscal doc, the same as Mode T.
+ * `deps` is the fuller `TillSaleDeps` because Mode I needs `backend`/`clock` to file.
+ *
+ * The order is locked `for update` and its status read off the locked row: a non-`open` order (already
+ * placed/settled/abandoned, or absent / another tenant's, RLS-hidden) fails closed with
+ * `working_order.not_open`, the same shape `payWorkingOrder`/`updateHeldOrder` use for the modify side.
+ * That FOR UPDATE lock is ALSO the Mode-I double-place idempotency: a concurrent second place blocks
+ * on the lock, then re-reads the row as `placed` and is refused `working_order.not_open` BEFORE it
+ * files — so the `sales_working_order_id_key` guard is never even reached, and at most one deferred
+ * invoice is ever filed per order (the order row always exists here, unlike a walk-up, so the lock
+ * fully serialises; there is no create-race backstop to add).
+ *
+ * `operatorId` is REQUIRED: `order_amendments.actor_id` is NOT NULL and the genesis entry's
+ * accountability rests on a real operator (the session's `personId`, wired by the till), so there is
+ * no system sentinel to fall back to. The amendment's local wall-clock is `deps.clock.now()` — the
+ * venue's trusted clock, the same source `recordSale` reads for a sale's `issued_at`/offset.
+ */
+export async function placeOrder(
+  deps: TillSaleDeps,
+  cfg: TillConfig,
+  id: string,
+  operatorId: string,
+): Promise<PlaceOrderResult> {
+  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+
+    // Lock the order for the life of the tx and read its status off the locked copy. Absent (nothing
+    // to lock) or not-open → `working_order.not_open`; the enforce_transition trigger is the DB
+    // backstop if this app check is ever wrong.
+    const [locked] = await tx
+      .select({ status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id))
+      .for("update");
+    if (locked === undefined || locked.status !== "open") {
+      throw new AppError("working_order.not_open", { workingOrderId: id });
+    }
+
+    // Mode dispatch (design §3). Mode I files the DEFERRED invoice HERE, before the transition, from
+    // the order's stored locked lines (never a re-price — the composition was locked at add-time); the
+    // read-back invoice number rides on the result. Modes T and P file nothing at placing. The
+    // deferred file tags the sale with `working_order_id = id`, so the FOR UPDATE lock above already
+    // guarantees one invoice per order (a second place sees `placed` and is refused before reaching
+    // this).
+    let placeResult: PlaceOrderResult = { id, status: "placed" };
+    if (cfg.orderFlow === "invoice_first") {
+      const priced = await priceStoredOrder(tx, id);
+      const { saleId, fiscal } = await recordSale(tx, deps.backend, {
+        tenantId: cfg.tenantId,
+        tillId: cfg.tillId,
+        nodeId: cfg.nodeId,
+        seriesId: cfg.seriesId,
+        workingOrderId: brandWorkingOrderId(id),
+        locale: cfg.locale,
+        invoiceLocales: cfg.invoiceLocales,
+        total: priced.total,
+        lines: priced.lines,
+        vatBreakdown: priced.vatBreakdown,
+        fiscalBackend: "verifactu",
+        clock: deps.clock,
+        operatorId,
+        // A chained invoice with NO tender and NO settlement — the legitimate unsettled steady state
+        // an invoice-first sale sits in until `collectOrder` settles it (design §3, Ordering 1).
+        settlement: { kind: "deferred" },
+      });
+      // The human-facing "A/1" is read back from the sale row + its series (the FiscalRecordRef is
+      // regime-opaque), in this same transaction — the shared `readInvoiceNumber` reader.
+      placeResult = {
+        id,
+        status: "placed",
+        invoiceNumber: await readInvoiceNumber(tx, saleId),
+        issuedAt: fiscal.issuedAt.toISOString(),
+        total: priced.total,
+        qr: fiscal.verificationUrl ?? "",
+        vatBreakdown: toVatBreakdown(priced.vatBreakdown),
+      };
+    }
+
+    // open → placed. `working_orders_enforce_transition` validates OLD.status = 'open'; no `settled_at`
+    // (the biconditional requires it stay NULL for a non-settled status).
+    await tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id));
+
+    // Open the amendment log with its `order_placed` genesis. `appendOrderAmendment` owns the
+    // parent-row-lock serialisation, the per-order sequence and the tamper-evident hash (Task 3); the
+    // genesis carries NO contest reason (a placement has none). The venue's trusted-clock instant +
+    // wall offset are hashed and stored so the entry reprints in venue time (#52).
+    const now = deps.clock.now();
+    await appendOrderAmendment(tx, {
+      tenantId: cfg.tenantId,
+      workingOrderId: id,
+      kind: "order_placed",
+      actorId: operatorId,
+      reason: null,
+      capturedByTillId: cfg.tillId,
+      capturedByNodeId: cfg.nodeId,
+      eventAt: now.instant,
+      eventOffsetMinutes: now.offsetMinutes,
+    });
+
+    // send-to-prep = placing enqueues the node-scoped prep row at `queued` (design §5); the cook's prep
+    // routes (Task 9) advance it queued → preparing → ready → collected. One row per order (the PK is
+    // the order), and prep advances even after the order is fiscally frozen, so it lives in its own
+    // MUTABLE table rather than a `working_orders` column.
+    await tx.insert(orderPrep).values({
+      tenantId: cfg.tenantId,
+      workingOrderId: id,
+      nodeId: cfg.nodeId,
+      state: "queued",
+    });
+
+    return placeResult;
+  });
+}
+
+/**
+ * Cancel a PLACED working order (spec §4): `placed → abandoned`, appending an `order_cancelled`
+ * amendment that carries the operator's reason — both in ONE `withTenant`/`asAppUser` transaction, so
+ * the transition and the logged amendment commit as one unit (or roll back together).
+ *
+ * The reason is REQUIRED and non-empty, enforced HERE by the app: `order_amendments.reason` is
+ * nullable (null is the `order_placed` genesis's own legitimate value) and no DB CHECK forces a reason
+ * on `order_cancelled`, so this guard is the ONLY thing stopping a reasonless cancel from writing an
+ * accountability-empty entry (art. 29.2.j — the reason is the contestable content; 7c carry-forward
+ * from Task 3's review). An absent, empty or whitespace-only reason is refused with
+ * `working_order.reason_required` — deliberately its OWN code, not `working_order.not_placed`: this
+ * guard runs BEFORE the order is locked and its status read, so the order's state is unknown here (it
+ * may be open, settled, abandoned or absent). A missing reason is a client/request-shape error
+ * independent of that state, so `not_placed` would mislabel it as a state conflict (CLAUDE.md §1).
+ * The guard runs BEFORE any database work, so a reasonless cancel neither transitions the order nor
+ * touches the log.
+ *
+ * The order is locked `for update` and its status read off the locked row: a non-`placed` order (still
+ * `open` — edit it via `updateHeldOrder` or discard it via `abandonHeldOrder` instead — or already
+ * `settled`/`abandoned`, or absent / another tenant's, RLS-hidden) fails closed with
+ * `working_order.not_placed`, the fail-closed shape `working_order.not_open` uses for the modify side.
+ *
+ * `deps` is `TillSaleDeps` so the venue's trusted clock is available for the amendment's local
+ * wall-clock (its `backend` is unused), keeping the dep shape consistent with `placeOrder` — cancel is
+ * a till operation beside place and pay. `operatorId` is the accountable actor, required for the same
+ * reason `placeOrder`'s is.
+ */
+export async function cancelPlacedOrder(
+  deps: TillSaleDeps,
+  cfg: TillConfig,
+  id: string,
+  reason: string,
+  operatorId: string,
+): Promise<void> {
+  // Refused before any database work: a cancel with no reason is not a loggable amendment (its reason
+  // is the accountable content), so an empty/whitespace reason neither transitions the order nor
+  // appends a reasonless entry. Its own code — this fires BEFORE the status is read, so a missing
+  // reason is a request-shape error, not the state conflict `not_placed` names (§1).
+  if (reason.trim() === "") {
+    throw new AppError("working_order.reason_required", { workingOrderId: id });
+  }
+
+  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+
+    const [locked] = await tx
+      .select({ status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id))
+      .for("update");
+    if (locked === undefined || locked.status !== "placed") {
+      throw new AppError("working_order.not_placed", { workingOrderId: id });
+    }
+
+    // Terminal transition `placed → abandoned` (enforce_transition permits it; no `settled_at`, which
+    // the biconditional requires stay NULL for a non-settled status).
+    await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
+
+    // Append the `order_cancelled` amendment — the cancel is itself a logged amendment (design §4),
+    // carrying the operator's reason, linked to the genesis via `appendOrderAmendment`'s per-order hash.
+    const now = deps.clock.now();
+    await appendOrderAmendment(tx, {
+      tenantId: cfg.tenantId,
+      workingOrderId: id,
+      kind: "order_cancelled",
+      actorId: operatorId,
+      reason,
+      capturedByTillId: cfg.tillId,
+      capturedByNodeId: cfg.nodeId,
+      eventAt: now.instant,
+      eventOffsetMinutes: now.offsetMinutes,
+    });
+  });
+}
+
+/**
+ * The prep lifecycle (design §5), mirrored from `@waitron/db`'s `prepState` pgEnum via its own
+ * `enumValues` — the same derive-don't-duplicate shape `till-config.ts`'s `OrderFlow` uses for the
+ * identical reason, so the two can never drift. `send-to-prep` (= placing for Modes I/T, or
+ * `sendToPrep` for Mode P, which never places) enqueues at `queued`; the cook advances
+ * queued → preparing → ready → collected.
+ */
+export type PrepState = (typeof prepState.enumValues)[number];
+
+/**
+ * One row of the node-scoped prep-queue view (design §5): what a cook's screen shows for a single
+ * order still ACTIVE in prep (not yet collected). `id` is the working order's own id — the prep
+ * queue addresses orders the same way the held list does, so a route can chain straight from one to
+ * the other. `queuedAt` is when the order FIRST entered prep (`order_prep.queued_at`, the column the
+ * queue is ordered by), not when it reached its CURRENT `state`.
+ */
+export interface PrepQueueEntry {
+  id: string;
+  orderNumber: number;
+  label: string | null;
+  state: PrepState;
+  queuedAt: string;
+}
+
+/**
+ * Enqueue a SETTLED order into prep (design §5) — the Mode-P counterpart to `placeOrder`'s own
+ * enqueue. Modes I/T enqueue `order_prep` at `queued` INSIDE `placeOrder` (open → placed), because
+ * placing is where their order becomes an order of record. Mode P (prepay) never places at all — it
+ * pays and issues at ORDER via `payWorkingOrder` (open → settled, no placed state) — so its order has
+ * no `placeOrder` call to pick a prep row up from, and this is that pickup: called once the order is
+ * already `settled`.
+ *
+ * The order's status IS checked first, and enforced: an id naming NO working order (absent, or
+ * another tenant's — RLS hides it), or one that is `open` (never paid) or `placed` (Modes I/T's own
+ * route, `placeOrder`, already enqueued its prep row at placing — sending it here too would be the
+ * wrong path, not a legitimate double-enqueue), all refuse with the domain
+ * `working_order.not_settled` (409) BEFORE any write — never a raw `order_prep_order_fk` violation
+ * surfacing as an opaque 500 for a well-formed but wrong/absent id (fix round 1, review finding).
+ *
+ * Only past that guard is it a plain INSERT, not a state-machine transition: `order_prep`'s PK is
+ * `(tenant_id, working_order_id)` (one row per order), so a SECOND send-to-prep for an order already
+ * sent (this same guard having passed both times) collides on it. Rather than let that surface as a
+ * raw `23505`, it is caught and reported as the domain `order_prep.invalid_transition` — the same
+ * code `advancePrep` uses for every other illegal prep MOVE (as opposed to the order-level
+ * `not_settled` guard above, which is about the order's FISCAL eligibility to enter prep at all),
+ * since "this order already has a prep record" is exactly as illegal a move as "the target isn't the
+ * next state" (see that code's own note in `errors.ts`).
+ */
+export async function sendToPrep(
+  deps: WorkingOrderDeps,
+  cfg: TillConfig,
+  id: string,
+): Promise<void> {
+  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+
+    // Only a SETTLED order is eligible — `settled` is terminal, so there is no race between this read
+    // and the insert below that could invalidate it. Absent, foreign (RLS-hidden), `open` and
+    // `placed` orders all match the SAME `undefined`/non-settled branch, one fail-closed code.
+    const [order] = await tx
+      .select({ status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id));
+    if (order === undefined || order.status !== "settled") {
+      throw new AppError("working_order.not_settled", { workingOrderId: id });
+    }
+
+    try {
+      await tx.insert(orderPrep).values({
+        tenantId: cfg.tenantId,
+        workingOrderId: id,
+        nodeId: cfg.nodeId,
+        state: "queued",
+      });
+    } catch (error) {
+      if (!isUniqueViolation(error)) {
+        throw error;
+      }
+      throw new AppError("order_prep.invalid_transition", { workingOrderId: id });
+    }
+  });
+}
+
+/**
+ * Advance a working order's prep state one step (design §5): `queued → preparing → ready →
+ * collected`. Each branch is a single conditional UPDATE — `set state = to, <to>_at = now() where
+ * working_order_id = id and state = <the one legal predecessor of to>` — so the legality of the move
+ * IS the write: a skip, a repeat, a jump backwards, or an absent/foreign prep row (RLS hides another
+ * tenant's) all match no row, and the empty `returning` throws `order_prep.invalid_transition`. The
+ * same fail-closed shape `abandonHeldOrder`'s conditional UPDATE uses for `working_orders`.
+ *
+ * `to = "queued"` is refused immediately, before any query: no prep state legally advances TO queued
+ * (only `sendToPrep`'s INSERT reaches it), so that case throws the same domain code the empty-
+ * `returning` branch would. The switch (rather than a table keyed by a computed column name) keeps
+ * each branch's `.set()` call fully typed against Drizzle's inferred update shape.
+ *
+ * Advances freely regardless of the order's FISCAL status (open/placed/settled) — `order_prep` is a
+ * separate MUTABLE table precisely so prep can progress on an already-`settled` Mode-P order without
+ * touching the frozen `working_orders` row (design §5, "where prep state lives"). Node-scoping is not
+ * needed here: the id addresses one prep row directly and RLS still confines it to the tenant,
+ * mirroring `getHeldOrder`/`updateHeldOrder`'s by-id family.
+ */
+export async function advancePrep(
+  deps: WorkingOrderDeps,
+  cfg: TillConfig,
+  id: string,
+  to: PrepState,
+): Promise<void> {
+  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+
+    let updated: { id: string }[];
+    switch (to) {
+      case "preparing":
+        updated = await tx
+          .update(orderPrep)
+          .set({ state: to, preparingAt: sql`now()` })
+          .where(and(eq(orderPrep.workingOrderId, id), eq(orderPrep.state, "queued")))
+          .returning({ id: orderPrep.workingOrderId });
+        break;
+      case "ready":
+        updated = await tx
+          .update(orderPrep)
+          .set({ state: to, readyAt: sql`now()` })
+          .where(and(eq(orderPrep.workingOrderId, id), eq(orderPrep.state, "preparing")))
+          .returning({ id: orderPrep.workingOrderId });
+        break;
+      case "collected":
+        updated = await tx
+          .update(orderPrep)
+          .set({ state: to, collectedAt: sql`now()` })
+          .where(and(eq(orderPrep.workingOrderId, id), eq(orderPrep.state, "ready")))
+          .returning({ id: orderPrep.workingOrderId });
+        break;
+      case "queued":
+      default:
+        // No prep state advances TO queued — reaching it is `sendToPrep`'s job (an INSERT).
+        throw new AppError("order_prep.invalid_transition", { workingOrderId: id });
+    }
+
+    if (updated.length === 0) {
+      throw new AppError("order_prep.invalid_transition", { workingOrderId: id });
+    }
+  });
+}
+
+/**
+ * The node-scoped prep-queue view (design §5): every ACTIVE (not yet collected) prep row on THIS
+ * node for a working order that is STILL prep-eligible, joined to its working order for the display
+ * fields a cook's screen needs — reusing 7b's `listHeldOrders` node-scoping SHAPE (`node_id =
+ * cfg.nodeId`, RLS confines the tenant) over a DIFFERENT storage table: prep lives in `order_prep`,
+ * not `working_orders`, for the reason that table's own schema comment gives (a Mode-P order is
+ * already fiscally frozen `settled` when prep runs, so a `working_orders` column could not advance on
+ * it). Ordered by `queued_at` — when the order FIRST entered prep — so the queue reads oldest-first
+ * regardless of which state each row has since advanced to.
+ *
+ * `collected` rows are excluded (`state in ('queued','preparing','ready')`): once collected, an order
+ * leaves the ACTIVE queue a cook's screen shows, mirroring `listHeldOrders` dropping a `settled`
+ * order from the held list. A SECOND, independent exclusion drops an `abandoned` working order
+ * (`ne(workingOrders.status, "abandoned")`) — `cancelPlacedOrder` (`placed → abandoned`) never
+ * touches `order_prep` at all (design §4's amendment log and design §5's prep table are deliberately
+ * separate concerns), so a cancelled order's `order_prep` row would otherwise sit at whatever state it
+ * was in FOREVER, still `state in (queued, preparing, ready)` and so still matching the first filter —
+ * this join is what retires it instead (fix round 1, review finding), rather than requiring every
+ * removal path (cancel, and any future one) to also know to touch `order_prep`. PGlite is enough for
+ * THIS behaviour — the join, the state/status filters and the ordering are plain SQL a single backend
+ * proves; the node/tenant SCOPING is real-Postgres's job, the same split `listHeldOrders` uses
+ * (CLAUDE.md §4).
+ */
+export async function listPrepQueue(
+  deps: WorkingOrderDeps,
+  cfg: TillConfig,
+): Promise<PrepQueueEntry[]> {
+  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    return (
+      tx
+        .select({
+          id: workingOrders.id,
+          orderNumber: workingOrders.orderNumber,
+          label: workingOrders.label,
+          state: orderPrep.state,
+          queuedAt: orderPrep.queuedAt,
+        })
+        .from(orderPrep)
+        // Composite join predicate (tenant_id too, not the order id alone) — the same tenant-consistency
+        // `listHeldOrders`'s own line join enforces, matching `order_prep_order_fk`'s composite shape.
+        .innerJoin(
+          workingOrders,
+          and(
+            eq(orderPrep.workingOrderId, workingOrders.id),
+            eq(orderPrep.tenantId, workingOrders.tenantId),
+          ),
+        )
+        .where(
+          and(
+            eq(orderPrep.nodeId, cfg.nodeId),
+            inArray(orderPrep.state, ["queued", "preparing", "ready"]),
+            ne(workingOrders.status, "abandoned"),
+          ),
+        )
+        .orderBy(orderPrep.queuedAt)
+    );
   });
 }

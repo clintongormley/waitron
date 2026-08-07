@@ -459,6 +459,168 @@ describe("till-tender-pay", () => {
     expect(store.lines).toHaveLength(1); // basket untouched
   });
 
+  it("defaults to mode prepay / stage order, unaffected by stage when mode is prepay", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store, stage: "collect" });
+    // mode defaults to "prepay", which ignores `stage` entirely — the walk-up idle view is unchanged.
+    expect(query(el, ".pay")).not.toBeNull();
+    expect(query(el, ".hold")).not.toBeNull();
+    expect(el.shadowRoot!.textContent).toContain(t("action.pay"));
+  });
+
+  it("Modes I/T at the order stage show Place + Hold, not Pay/Card", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      mode: "invoice_first",
+      stage: "order",
+    });
+    expect(query(el, ".place")).not.toBeNull();
+    expect(query(el, ".hold")).not.toBeNull();
+    expect(query(el, ".pay")).toBeNull();
+    expect(query(el, ".pay-card")).toBeNull();
+    expect(el.shadowRoot!.textContent).toContain(t("action.place"));
+  });
+
+  it("Mode T (ticket_then_pay) at the order stage also shows Place + Hold", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      mode: "ticket_then_pay",
+      stage: "order",
+    });
+    expect(query(el, ".place")).not.toBeNull();
+    expect(query(el, ".hold")).not.toBeNull();
+  });
+
+  it("disables Place on an empty basket and while busy", async () => {
+    const store = new WorkingOrderStore();
+    const { el: empty } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      mode: "invoice_first",
+    });
+    expect(query(empty, ".place")!.hasAttribute("disabled")).toBe(true);
+
+    const busyStore = new WorkingOrderStore();
+    busyStore.addProduct(cafe, "2");
+    const { el: busy } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store: busyStore,
+      mode: "invoice_first",
+      busy: true,
+    });
+    expect(query(busy, ".place")!.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("Place emits a composed, bubbling place-order with no detail", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      mode: "invoice_first",
+    });
+    let captured: CustomEvent | undefined;
+    el.addEventListener("place-order", (e) => (captured = e as CustomEvent));
+    click(el, ".place");
+    expect(captured).toBeInstanceOf(CustomEvent);
+    expect(captured!.composed).toBe(true);
+    expect(captured!.bubbles).toBe(true);
+    expect(captured!.detail).toBeNull();
+  });
+
+  it("Modes I/T at the collect stage show Collect + Card, not Place/Hold", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      mode: "invoice_first",
+      stage: "collect",
+    });
+    expect(query(el, ".pay")).not.toBeNull();
+    expect(query(el, ".pay-card")).not.toBeNull();
+    expect(query(el, ".place")).toBeNull();
+    expect(query(el, ".hold")).toBeNull();
+    expect(el.shadowRoot!.textContent).toContain(t("action.collect"));
+    expect(el.shadowRoot!.textContent).toContain(t("tender.card"));
+  });
+
+  it("Mode T at the collect stage also shows Collect + Card", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      mode: "ticket_then_pay",
+      stage: "collect",
+    });
+    expect(query(el, ".pay")).not.toBeNull();
+    expect(query(el, ".pay-card")).not.toBeNull();
+  });
+
+  it("at the collect stage, the cash screen's Confirm emits collect-order (not confirm-payment)", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2"); // total 3.00
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      mode: "invoice_first",
+      stage: "collect",
+    });
+    const confirmSpy = vi.fn();
+    const collectSpy = vi.fn();
+    el.addEventListener("confirm-payment", confirmSpy);
+    el.addEventListener("collect-order", (e) => collectSpy((e as CustomEvent).detail));
+    expect(el.shadowRoot!.textContent).toContain(t("action.collect")); // the idle button's own label
+    click(el, ".pay"); // opens the same cash screen Pay opens
+    await el.updateComplete;
+    await type(el, "5");
+    click(el, ".confirm");
+    expect(collectSpy).toHaveBeenCalledWith({ method: "cash", amount: "5" });
+    expect(confirmSpy).not.toHaveBeenCalled();
+  });
+
+  it("at the collect stage, the card screen's Confirm emits collect-order, keeping the ref field", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1"); // total 1.50
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      mode: "ticket_then_pay",
+      stage: "collect",
+    });
+    const confirmSpy = vi.fn();
+    const collectSpy = vi.fn();
+    el.addEventListener("confirm-payment", confirmSpy);
+    el.addEventListener("collect-order", (e) => collectSpy((e as CustomEvent).detail));
+    click(el, ".pay-card");
+    await el.updateComplete;
+    expect(query(el, ".ref-input")).not.toBeNull(); // the manual-card ref field is kept
+    await typeRef(el, "OP-999");
+    click(el, ".confirm");
+    expect(collectSpy).toHaveBeenCalledWith({
+      method: "card",
+      amount: "1.50",
+      externalRef: "OP-999",
+    });
+    expect(confirmSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns to idle (Collect view) after a collect-order is confirmed", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      mode: "invoice_first",
+      stage: "collect",
+    });
+    click(el, ".pay");
+    await el.updateComplete;
+    await type(el, "5");
+    click(el, ".confirm");
+    await el.updateComplete;
+    expect(query(el, ".pay")).not.toBeNull(); // back to the idle Collect view
+    expect(query(el, "till-numeric-pad")).toBeNull();
+  });
+
   it("stops reacting to the store after disconnect", async () => {
     const store = new WorkingOrderStore();
     const { el, host } = await mountWidget<TillTenderPay>("till-tender-pay", { store });

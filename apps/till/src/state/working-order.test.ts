@@ -216,4 +216,79 @@ describe("WorkingOrderStore", () => {
     expect(s.label).toBe("Mesa 7");
     expect(n).toBe(1);
   });
+
+  // `persisted` (7c place/collect): whether `id` already names an OPEN row server-side, so the app
+  // knows whether placing this basket needs a park first or can sync-then-place an already-parked one.
+  it("a fresh store is not persisted", () => {
+    const s = new WorkingOrderStore();
+    expect(s.persisted).toBe(false);
+  });
+
+  it("markPersisted flips persisted to true, without notifying (not a rendering concern)", () => {
+    const s = new WorkingOrderStore();
+    let n = 0;
+    s.subscribe(() => n++);
+    s.markPersisted();
+    expect(s.persisted).toBe(true);
+    expect(n).toBe(0);
+  });
+
+  it("loadFrom marks the store persisted — a retrieved order already exists server-side", () => {
+    const s = new WorkingOrderStore();
+    s.loadFrom("held-1", [{ product: cafe, quantity: "1" }]);
+    expect(s.persisted).toBe(true);
+  });
+
+  it("clear() resets persisted to false — a fresh basket is not yet parked", () => {
+    const s = new WorkingOrderStore();
+    s.markPersisted();
+    s.clear();
+    expect(s.persisted).toBe(false);
+  });
+
+  // `dirty` (Finding-2 re-review): whether the LINES changed since the basket last matched the server,
+  // so the pay flow re-syncs a retrieved order ONLY when it was actually edited (no pay-time re-price
+  // of an untouched order).
+  it("a fresh store is not dirty", () => {
+    const s = new WorkingOrderStore();
+    expect(s.dirty).toBe(false);
+  });
+
+  it("addProduct and removeLine mark the basket dirty", () => {
+    const s = new WorkingOrderStore();
+    s.addProduct(cafe, "1");
+    expect(s.dirty).toBe(true);
+    s.loadFrom("held-1", [{ product: cafe, quantity: "1" }]); // reset to a clean retrieved state
+    expect(s.dirty).toBe(false);
+    s.removeLine(0);
+    expect(s.dirty).toBe(true);
+  });
+
+  it("loadFrom starts a retrieved basket CLEAN, even over a prior edit", () => {
+    const s = new WorkingOrderStore();
+    s.addProduct(jamon, "0.100"); // a prior edit → dirty
+    expect(s.dirty).toBe(true);
+    s.loadFrom("held-1", [{ product: cafe, quantity: "1" }], "Mesa 4");
+    // A just-retrieved basket matches the server, so it is clean — an unedited retrieve→pay must not
+    // re-sync (which would re-price at pay time and defeat the add-time lock).
+    expect(s.dirty).toBe(false);
+  });
+
+  it("a label change is NOT a line edit — it does not mark the basket dirty", () => {
+    const s = new WorkingOrderStore();
+    s.loadFrom("held-1", [{ product: cafe, quantity: "1" }]);
+    s.label = "Mesa 9";
+    // The label is held-list metadata that never reaches the filed sale, so it needs no re-lock.
+    expect(s.dirty).toBe(false);
+  });
+
+  it("markPersisted and clear reset dirty to false", () => {
+    const s = new WorkingOrderStore();
+    s.addProduct(cafe, "1");
+    s.markPersisted(); // a just-parked basket matches the server → clean
+    expect(s.dirty).toBe(false);
+    s.addProduct(cafe, "1");
+    s.clear(); // a fresh empty basket is clean
+    expect(s.dirty).toBe(false);
+  });
 });

@@ -110,6 +110,8 @@ const LINE = {
   descriptions: { es: "Café solo", ca: "Cafè sol" },
   quantity: "1.000",
   unitPrice: "1.30",
+  // The GROSS (VAT-inclusive) unit locked at add time (unit_price_gross, 7c): 1.30 net at 10% VAT.
+  unitPriceGross: "1.43",
   vatRate: "10.00",
   lineTotal: "1.30",
 };
@@ -220,7 +222,7 @@ describeEachTarget("working_orders", (target) => {
         .set({ status: "open", settledAt: null })
         .where(eq(workingOrders.id, id)),
     );
-    expect(pgErrorMessage(error)).toMatch(/is settled and can no longer be modified/);
+    expect(pgErrorMessage(error)).toMatch(/cannot transition from settled to open/);
   });
 
   it("rejects settled → abandoned", async () => {
@@ -237,7 +239,7 @@ describeEachTarget("working_orders", (target) => {
         .set({ status: "abandoned", settledAt: null })
         .where(eq(workingOrders.id, id)),
     );
-    expect(pgErrorMessage(error)).toMatch(/is settled and can no longer be modified/);
+    expect(pgErrorMessage(error)).toMatch(/cannot transition from settled to abandoned/);
   });
 
   it("rejects abandoned → open", async () => {
@@ -246,7 +248,7 @@ describeEachTarget("working_orders", (target) => {
     const error = await captureError(() =>
       db.update(workingOrders).set({ status: "open" }).where(eq(workingOrders.id, id)),
     );
-    expect(pgErrorMessage(error)).toMatch(/is abandoned and can no longer be modified/);
+    expect(pgErrorMessage(error)).toMatch(/cannot transition from abandoned to open/);
   });
 
   it("rejects abandoned → settled", async () => {
@@ -258,7 +260,7 @@ describeEachTarget("working_orders", (target) => {
         .set({ status: "settled", settledAt: AT })
         .where(eq(workingOrders.id, id)),
     );
-    expect(pgErrorMessage(error)).toMatch(/is abandoned and can no longer be modified/);
+    expect(pgErrorMessage(error)).toMatch(/cannot transition from abandoned to settled/);
   });
 
   it("rejects a no-op update of a settled order", async () => {
@@ -271,7 +273,7 @@ describeEachTarget("working_orders", (target) => {
     const error = await captureError(() =>
       db.update(workingOrders).set({ tillId: TILL_A1 }).where(eq(workingOrders.id, id)),
     );
-    expect(pgErrorMessage(error)).toMatch(/is settled and can no longer be modified/);
+    expect(pgErrorMessage(error)).toMatch(/cannot transition from settled to settled/);
   });
 
   it("rejects a no-op update of an abandoned order", async () => {
@@ -284,7 +286,7 @@ describeEachTarget("working_orders", (target) => {
     const error = await captureError(() =>
       db.update(workingOrders).set({ tillId: TILL_A1 }).where(eq(workingOrders.id, id)),
     );
-    expect(pgErrorMessage(error)).toMatch(/is abandoned and can no longer be modified/);
+    expect(pgErrorMessage(error)).toMatch(/cannot transition from abandoned to abandoned/);
   });
 
   it("hides another tenant's order from the app role", async () => {
@@ -519,9 +521,9 @@ describeEachTarget("working_order_lines", (target) => {
       sql`select column_name, data_type, numeric_precision, numeric_scale
             from information_schema.columns
            where table_name = 'working_order_lines'
-             and column_name in ('unit_price', 'line_total')`,
+             and column_name in ('unit_price', 'unit_price_gross', 'line_total')`,
     );
-    expect(cols).toHaveLength(2);
+    expect(cols).toHaveLength(3);
     for (const col of cols) {
       expect(col.data_type).toBe("numeric");
       expect(col.numeric_precision).toBe(12);

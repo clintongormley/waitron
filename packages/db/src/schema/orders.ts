@@ -19,10 +19,19 @@ import { tenants, tills } from "./tenants.js";
 
 /**
  * A pgEnum rather than a text CHECK, deliberately: unlike invoice_series.purpose
- * these three values are settled by the spec, and one declaration yields both
+ * these four values are settled by the spec, and one declaration yields both
  * the TypeScript union and the database constraint.
  */
-export const workingOrderStatus = pgEnum("working_order_status", ["open", "settled", "abandoned"]);
+export const workingOrderStatus = pgEnum("working_order_status", [
+  "open",
+  // placed (7c): the order is finalized — composition FROZEN (require_open_parent already rejects
+  // line writes on a non-open parent) and the fiscal issuance basis fixed. A NON-terminal state
+  // between open and settled: open → placed → settled|abandoned. Only Modes I/T ever visit it;
+  // a Mode-P walk-up goes open → settled in one instant and never enters placed (design §3, §5).
+  "placed",
+  "settled",
+  "abandoned",
+]);
 
 /**
  * A working order is MUTABLE — the deliberate opposite of `sales`. Lines are
@@ -30,8 +39,13 @@ export const workingOrderStatus = pgEnum("working_order_status", ["open", "settl
  * all. Two tables, one transition between them (architecture §6): conflating
  * them means chaining drafts and rectifying records that were never sales.
  *
- * What replaces immutability here is a state machine the database enforces:
- * `settled` and `abandoned` are terminal, and only an `open` order may change.
+ * What replaces immutability here is a state machine the database enforces
+ * (`working_orders_enforce_transition`, rewritten in 0030 for 7c): `settled`
+ * and `abandoned` are terminal; an `open` order may change freely or advance to
+ * any next state; a `placed` order — finalized, its composition frozen — may
+ * only be settled (collect) or abandoned (cancel). So open → placed →
+ * settled|abandoned, with a Mode-P walk-up going open → settled directly and
+ * never entering placed (design §3, §5).
  */
 export const workingOrders = pgTable(
   "working_orders",
@@ -102,11 +116,13 @@ export const workingOrders = pgTable(
  * FILED, the resulting `sale_lines` carry these snapshots and NO product reference at all, so a
  * completed record can never be reached back into.
  *
- * What this DRAFT line adds over that, for park & retrieve (sub-project 7b), is `product_id`: a
- * pricing INPUT, not a reference the record depends on. A parked draft is mutable and may be
- * retrieved and repriced, so it keeps a link back to the priced product it was built from; the
- * snapshot columns are what the till writes and reads, the FK is what lets a repricing re-resolve.
- * The composite (tenant_id, product_id) → products FK below keeps it tenant-consistent.
+ * The line-add snapshot IS the filed price (7c): `unit_price_gross` below locks the gross unit at
+ * add time, and a retrieved order is FILED from these locked columns without a re-price
+ * (priceLockedLines, @waitron/catalogue). `product_id` is therefore a pricing INPUT only for a NEW
+ * or WEIGHED line being (re)priced at add time — NOT a handle for re-pricing an existing line,
+ * whose price is already fixed on it. A parked draft keeps the link back to the product it was
+ * built from so a fresh line can resolve one; the snapshot columns are what the till writes, reads
+ * and files. The composite (tenant_id, product_id) → products FK below keeps it tenant-consistent.
  *
  * `descriptions` is a locale→string map holding EXACTLY the venue's configured
  * locales (spec §9), checked by trigger against locations.invoice_locales.
@@ -126,13 +142,24 @@ export const workingOrderLines = pgTable(
     descriptions: jsonb("descriptions").$type<Record<string, string>>().notNull(),
     quantity: numeric("quantity", { precision: 12, scale: 3 }).notNull(),
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
+    // The GROSS (VAT-inclusive) unit price LOCKED at add time (line-add snapshot, 7c). `unit_price`
+    // above is the NET unit (informational); this is the GROSS unit the line was priced from — the
+    // authoritative input the FILED sale_lines are rebuilt from without a re-price (priceLockedLines,
+    // @waitron/catalogue). Stored rather than recovered as `line_total ÷ quantity` because that
+    // division is exact for `each` lines but DRIFTS for a weighed line (9.99/kg × 0.333 → 3.33 stored,
+    // 3.33 ÷ 0.333 = 10.00 ≠ 9.99), and a weighed line is priced at weigh = add time (design §2,
+    // Decision 1). Keeps the gross/net draft divergence intact: net unit here, gross line total in
+    // `line_total`, gross UNIT here.
+    unitPriceGross: numeric("unit_price_gross", { precision: 12, scale: 2 }).notNull(),
     vatRate: numeric("vat_rate", { precision: 5, scale: 2 }).notNull(),
     // GROSS (VAT-inclusive) line total = unit gross × quantity — the customer-facing number, so the
     // held-orders list `sum(line_total)` equals the basket total the operator saw. This DELIBERATELY
     // DIVERGES from the FILED `sale_lines.line_total` (sales.ts), which is the NET base the fiscal
     // record needs: a working order is a mutable counter DRAFT, not the fiscal record, so its money
-    // column carries the gross the operator reads. `priceBasket` produces both — `grossLineTotals`
-    // (this column, via `priceOrderLines`) and each line's net `lineTotal` (the filed `sale_lines`).
+    // column carries the gross the operator reads. The FILED line of a retrieved order now derives
+    // from the locked snapshot columns above (`unit_price_gross` × `quantity`) via priceLockedLines,
+    // NOT from a re-price — the gross/net divergence stays: gross unit and gross line total here,
+    // the net base rebuilt for the filed `sale_lines`.
     lineTotal: numeric("line_total", { precision: 12, scale: 2 }).notNull(),
     // Snapshotted analytics label (architecture §6), NOT a category_id or a catalogue FK — the
     // value is frozen onto the line so a stale catalogue is a freshness problem, never a
