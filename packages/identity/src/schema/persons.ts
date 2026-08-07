@@ -38,6 +38,8 @@ export const persons = pgTable(
     /** Hashed by ./verify-pin.ts (scrypt, salted) — never plaintext. The check below refuses an
      * empty value; the hash format is the caller's responsibility. */
     pinHash: text("pin_hash").notNull(),
+    passwordHash: text("password_hash"),
+    totpSecret: text("totp_secret"),
     role: personRole("role").notNull().default("staff"),
     status: personStatus("status").notNull().default("active"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
@@ -56,5 +58,10 @@ export const persons = pgTable(
     index("persons_tenant_id_idx").on(t.tenantId),
     check("persons_display_name_ck", sql`length(${t.displayName}) > 0`),
     check("persons_pin_hash_ck", sql`length(${t.pinHash}) > 0`),
+    check(
+      "persons_password_hash_ck",
+      sql`${t.passwordHash} is null or length(${t.passwordHash}) > 0`,
+    ),
+    check("persons_totp_secret_ck", sql`${t.totpSecret} is null or length(${t.totpSecret}) > 0`),
   ],
 ).enableRLS();

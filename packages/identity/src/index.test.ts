@@ -30,6 +30,8 @@ describe("persons constraint declarations (forces the lazy extraConfig callback)
     const checkNames = config.checks.map((c) => c.name);
     expect(checkNames).toContain("persons_display_name_ck");
     expect(checkNames).toContain("persons_pin_hash_ck");
+    expect(checkNames).toContain("persons_password_hash_ck");
+    expect(checkNames).toContain("persons_totp_secret_ck");
   });
 });
 
