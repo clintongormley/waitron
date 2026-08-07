@@ -24,8 +24,12 @@ import {
 import type { Transaction } from "@waitron/db";
 import type { Decimal } from "@waitron/shared";
 import type { PricedLines } from "@waitron/catalogue";
-import { associatePaymentWithSale, recordManualCardPayment } from "@waitron/payments";
-import type { PaymentProvider, PaymentResult } from "@waitron/payments";
+import {
+  associatePaymentWithSale,
+  findCapturedPaymentForWorkingOrder,
+  recordManualCardPayment,
+} from "@waitron/payments";
+import type { CapturedPaymentForOrder, PaymentProvider, PaymentResult } from "@waitron/payments";
 import { formatInvoiceNumber, recordSale, settleSale } from "@waitron/core";
 import type { FiscalBackend } from "@waitron/fiscal";
 import {
@@ -619,6 +623,29 @@ export async function payWorkingOrderIntegrated(
       throw new AppError("sale.empty_basket", {});
     }
 
+    // §4 capture-idempotency pre-check — EXISTING orders only. A walk-up (`locked === undefined`) can
+    // have no prior `collect`: the provider's `insertAttempting` FKs `working_orders`
+    // (`payments_working_order_fk`, `packages/payments`), so no `payments` row can exist before the
+    // order row does — the same FK this body's P1-commit-before-collect ordering is built around.
+    //
+    // On an existing order, a captured (or offline-accepted) payment whose sale is not yet filed
+    // (`sale_id` NULL) is the LOST-T2 RECOVERY WINDOW: `collect`'s T2 committed its capture but P3
+    // never ran, so a naive retry would re-drive `collect` and charge the card a SECOND time — an
+    // unrepairable defect (spec §4). Dispatch to `finalizeRecovery`, which files from the stored lock
+    // and associates THIS existing row rather than collecting again. A captured row that ALREADY
+    // carries a `sale_id` means its sale is filed and the order is therefore `settled`, so the replay
+    // above (step 2) has already returned — this only fires on an `open`/`placed` order.
+    if (locked !== undefined) {
+      const captured = await findCapturedPaymentForWorkingOrder(tx, {
+        tenantId: cfg.tenantId,
+        provider: deps.provider.provider,
+        workingOrderId: req.id,
+      });
+      if (captured !== undefined && captured.saleId === null) {
+        return { kind: "recover" as const, captured };
+      }
+    }
+
     // Price exactly once. A WALK-UP creates the order OPEN with its freshly-priced lines (committing this
     // tx below satisfies the provider's FK), reusing that price; a RETRIEVED/PLACED order files its
     // STORED locked lines — `req.lines` is IGNORED, exactly as `payWorkingOrder`/`collectOrder` do.
@@ -633,6 +660,13 @@ export async function payWorkingOrderIntegrated(
 
   if (prepared.kind === "replay") {
     return { outcome: "captured", ticket: prepared.ticket };
+  }
+  // Recovery of a lost-T2 capture: file from the stored lock and associate the EXISTING captured row —
+  // never a second `collect` (P2 is skipped entirely). `finalizeRecovery` decides `captured` (files or
+  // replays a concurrent winner's ticket) or throws the corruption path (§5), so it returns the whole
+  // outcome.
+  if (prepared.kind === "recover") {
+    return finalizeRecovery(deps, cfg, req, prepared.captured, operatorId);
   }
   const { priced } = prepared;
 
@@ -766,6 +800,144 @@ async function finalizeCapture(
       return readSettledTicket(deps.backend, tx, cfg, req.id);
     });
   }
+}
+
+/**
+ * Finalise a LOST-T2 captured payment WITHOUT re-charging — the §4 recovery path, dispatched from P1's
+ * pre-check (`findCapturedPaymentForWorkingOrder` found a captured/offline-accepted `payments` row for
+ * this order whose `sale_id` is still NULL: `collect`'s T2 committed but P3 never filed the sale). It
+ * files the sale from the order's STORED locked lines — the SAME lines P1 would have priced, so
+ * `priced.total` equals what `collect` charged when no tip was added (line-add snapshot, 7c) — and
+ * associates THIS existing captured row, never a second `collect` (design Decision 2). All in ONE
+ * `withTenant`/`asAppUser` transaction so the sale, its tender/settlement, its chained fiscal record,
+ * the association and the `open`/`placed` → `settled` transition commit as one unit (or roll back
+ * together).
+ *
+ * Idempotency, WITHOUT a 23505 backstop: recovery only fires on an EXISTING order (the pre-check runs
+ * for `locked !== undefined`), so — like `collectOrder`, and unlike `payWorkingOrder`'s walk-up shape —
+ * the `SELECT … FOR UPDATE` here FULLY serialises a concurrent recovery: a second retry blocks on the
+ * lock, re-reads the row `settled`, and REPLAYS the winner's ticket (filing/associating nothing). There
+ * is no unlocked walk-up path left for a unique-key race to slip through.
+ *
+ * The recovery contract (spec Decision 2 — this is fiscal-unrecoverable territory, §5):
+ *  - The captured charge was gross `total + tip`, so the tip is RECONSTRUCTED as `captured.amount −
+ *    priced.total` (≥ 0 by the guard below). The fiscal `total` stays ex-tip (`priced.total`); the
+ *    tender records the whole card charge with the tip attributed on it — the same coverage identity
+ *    `sum(amount) = total + sum(tip)` that `finalizeCapture` files under.
+ *  - CORRUPTION GUARD: a charge that cannot even cover the locked total (`captured.amount <
+ *    priced.total`) means the stored lock and the charge disagree and there is NO honest fiscal figure
+ *    to file. File NOTHING and throw a plain `Error` — a non-`AppError`, so `run` maps it to
+ *    `server.internal` 500 — leaving the captured payment (`sale_id` NULL) as reconcile's orphan class.
+ *    Never invent a divergent total; a wrong fiscal record is unrepairable (§5).
+ */
+async function finalizeRecovery(
+  deps: IntegratedPayDeps,
+  cfg: TillConfig,
+  req: IntegratedPayRequest,
+  captured: CapturedPaymentForOrder,
+  operatorId?: string,
+): Promise<IntegratedPayOutcome> {
+  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+
+    // Re-lock FOR UPDATE (the order always exists here): serialises a concurrent recovery — the loser
+    // blocks, then re-reads `settled` and replays below.
+    const [locked] = await tx
+      .select({ status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, req.id))
+      .for("update");
+
+    // A concurrent winner (another retry) filed the sale and settled the order while this one waited on
+    // the lock → idempotent replay, file and associate NOTHING.
+    if (locked?.status === "settled") {
+      return {
+        outcome: "captured",
+        ticket: await readSettledTicket(deps.backend, tx, cfg, req.id),
+      };
+    }
+
+    // File from the STORED locked lines — the SAME `priceStoredOrder` reader P1 priced with, so
+    // `priced.total` equals what `collect` charged (ex any tip). NOT a re-price of `req.lines`.
+    const priced = await priceStoredOrder(tx, req.id);
+    const capturedAmount = decimal(captured.amount);
+
+    // Corruption guard (Decision 2 / §5): the charge cannot cover the locked total → file nothing,
+    // leave the captured payment for reconcile's orphan class. A plain `Error` maps to `server.internal`.
+    if (compareDecimal(capturedAmount, priced.total) < 0) {
+      throw new Error(
+        `finalizeRecovery: captured ${captured.amount} is below the locked total ${priced.total} for working order ${req.id}`,
+      );
+    }
+
+    // Reconstruct the tip from the gross charge (≥ 0 by the guard above).
+    const tip = subtractDecimal(capturedAmount, priced.total);
+
+    /* v8 ignore start -- a captured/accepted_offline row always carries settled_at (store.ts's
+       insertCapturedPayment/captureAttempting set it); the null-typed column is DEFENDED here, not
+       reasoned away (CLAUDE.md §1), mirroring finalizeCapture's own settledAt guard. */
+    if (captured.settledAt === null) {
+      throw new Error(
+        `finalizeRecovery: captured payment for working order ${req.id} carried no settledAt`,
+      );
+    }
+    /* v8 ignore stop */
+    const settledAt = new Date(captured.settledAt);
+
+    const { saleId, fiscal } = await recordSale(tx, deps.backend, {
+      tenantId: cfg.tenantId,
+      tillId: cfg.tillId,
+      nodeId: cfg.nodeId,
+      seriesId: cfg.seriesId,
+      // The persisted working order this sale is filed from — the sale-idempotency key
+      // (`sales_working_order_id_key`).
+      workingOrderId: brandWorkingOrderId(req.id),
+      locale: cfg.locale,
+      invoiceLocales: cfg.invoiceLocales,
+      total: priced.total,
+      lines: priced.lines,
+      vatBreakdown: priced.vatBreakdown,
+      fiscalBackend: "verifactu",
+      clock: deps.clock,
+      operatorId,
+      settlement: {
+        kind: "immediate",
+        tenders: [{ method: "card", amount: capturedAmount, tipAmount: tip, settledAt }],
+      },
+    });
+
+    // Link the EXISTING captured payment (the lost-T2 row) to the just-filed sale — NOT a second
+    // `payments` row and NOT a re-charge. `associatePaymentWithSale` is write-once, so a concurrent
+    // recovery that reached here first has already claimed it (but the FOR UPDATE above means the loser
+    // never gets here — it replayed).
+    await associatePaymentWithSale(tx, {
+      provider: deps.provider.provider,
+      paymentRef: captured.paymentRef,
+      saleId,
+      tenantId: cfg.tenantId,
+    });
+
+    // → settled, at the ORIGINAL capture instant (the same reading the tender carries).
+    // `working_orders_enforce_transition` permits open → settled and placed → settled; the `settled_at`
+    // biconditional requires the timestamp be set.
+    await tx
+      .update(workingOrders)
+      .set({ status: "settled", settledAt: settledAt.toISOString() })
+      .where(eq(workingOrders.id, req.id));
+
+    return {
+      outcome: "captured",
+      ticket: {
+        invoiceNumber: await readInvoiceNumber(tx, saleId),
+        issuedAt: fiscal.issuedAt.toISOString(),
+        total: priced.total,
+        vatBreakdown: toVatBreakdown(priced.vatBreakdown),
+        lines: ticketLinesFrom(priced),
+        change: "0.00",
+        qr: fiscal.verificationUrl ?? "",
+      },
+    };
+  });
 }
 
 /**

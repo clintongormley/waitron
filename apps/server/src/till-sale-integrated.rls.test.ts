@@ -22,18 +22,20 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import { asAppUser, withTenant } from "@waitron/db";
 import {
+  decimal,
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
+import { insertCapturedPayment } from "@waitron/payments";
 import type { PaymentProvider, PaymentResult, PaymentResultState } from "@waitron/payments";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { deploymentEnvironment } from "./config.js";
 import type { OrderFlow, TillConfig } from "./till-config.js";
-import { parkOrder, placeOrder } from "./working-order.js";
+import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
 import { payWorkingOrder, payWorkingOrderIntegrated } from "./till-sale.js";
 import type { IntegratedPayDeps } from "./till-sale.js";
 import { startRealPostgres } from "./testing/postgres.js";
@@ -677,6 +679,210 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       expect(out.ticket.qr).toBe("");
     } finally {
       await app.close();
+    }
+  });
+});
+
+// The §4 capture-idempotency guard: a lost-response retry where `collect` COMMITTED its capture (T2)
+// but P3 never ran (the sale was never filed) must NOT re-charge. Real Postgres, not PGlite (§4): the
+// recovery files the sale as the deployment role under RLS, and the two concurrency proofs need
+// TWO DISTINCT app-role connections racing one order — a superuser, single-backend PGlite is a false
+// pass, not a weak one. The lost-T2 state is seeded directly (`createOpenOrder` + `insertCapturedPayment`
+// with `sale_id` NULL), exactly the row `provider.collect`'s T2 leaves behind before P3.
+describe("payWorkingOrderIntegrated — capture idempotency (recovery window + concurrency)", () => {
+  /** Seed the lost-T2 state: an OPEN order with a locked café line, plus a captured stripe payment for
+   *  it whose `sale_id` is still NULL (collect committed, P3 never ran). `amount` is the GROSS the card
+   *  was charged (total, or total+tip). Returns the order id. Written as the app role — the same role
+   *  `provider.collect` runs as. */
+  async function seedLostCapture(
+    cfg: TillConfig,
+    cafe: AvailableProduct,
+    quantity: string,
+    capturedAmount: string,
+  ): Promise<{ id: string; externalRef: string }> {
+    const id = randomUUID();
+    // `payments_provider_ref_key` is tenant-scoped but `payments_provider_external_ref_key` is GLOBAL
+    // per provider, and the shared container accumulates every test's rows, so both refs are made
+    // unique per seed (mirrors `nextNif`'s reason for per-venue NIFs).
+    const externalRef = `pi_lost_${randomUUID()}`;
+    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createOpenOrder(tx, cfg, id, [{ productId: cafe.id, quantity }], null);
+      await insertCapturedPayment(tx, {
+        tenantId: cfg.tenantId,
+        workingOrderId: id,
+        provider: "stripe",
+        paymentRef: `pi-ref-${randomUUID()}`,
+        amount: decimal(capturedAmount),
+        settledAt: new Date(),
+        externalRef,
+      });
+    });
+    return { id, externalRef };
+  }
+
+  it("recovers a lost-T2 captured payment: files from locked lines, no re-charge, links the existing row", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const { deps, client } = integratedDeps(cfg, app);
+      // Locked total 1.50; the captured charge was exactly the total (no tip).
+      const { id, externalRef } = await seedLostCapture(cfg, cafe, "1", "1.50");
+
+      const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
+
+      expect(out.outcome).toBe("captured");
+      if (out.outcome !== "captured") throw new Error("unreachable");
+      // Recovered at the locked total — filed, NOT re-charged.
+      expect(out.ticket.total).toBe("1.50");
+      // collect was NEVER driven (recovery skips P2 entirely): no PaymentIntent was created, so there
+      // is no second charge, and there is still exactly ONE payment row — the lost capture, now linked.
+      expect(client.lastCreateIntent).toBeUndefined();
+      expect(await paymentCount(id)).toBe(1);
+      expect(await saleCount(id)).toBe(1);
+      expect(await registroCount(id)).toBe(1);
+      expect(await filedSaleTotal(id)).toBe("1.50");
+      expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+      expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
+      const payments = await paymentsFor(id);
+      expect(payments).toHaveLength(1);
+      expect(payments[0]!.state).toBe("captured");
+      expect(payments[0]!.externalRef).toBe(externalRef); // the EXISTING row, not a fresh one
+      expect(payments[0]!.linkedToSale).toBe(true);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("recovers with a reconstructed tip when the captured amount exceeds the locked total", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const { deps, client } = integratedDeps(cfg, app);
+      // Locked total 1.50, captured 1.80 → the tip is reconstructed as 1.80 − 1.50 = 0.30.
+      const { id } = await seedLostCapture(cfg, cafe, "1", "1.80");
+
+      const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
+
+      expect(out.outcome).toBe("captured");
+      expect(client.lastCreateIntent).toBeUndefined(); // no re-charge
+      // The FISCAL total stays ex-tip (1.50); the tender carries the whole 1.80 charge with tip 0.30
+      // (the coverage identity sum(amount) = total + sum(tip) holds).
+      expect(await filedSaleTotal(id)).toBe("1.50");
+      expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.80", tipAmount: "0.30" }]);
+      expect(await paymentCount(id)).toBe(1);
+      expect((await paymentsFor(id))[0]!.linkedToSale).toBe(true);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("a captured amount BELOW the locked total is corruption: files nothing, leaves the payment for reconcile", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const { deps, client } = integratedDeps(cfg, app);
+      // Captured 1.00 against a locked total 1.50 — the charge cannot even cover the total. There is no
+      // honest fiscal figure to file, so recovery files NOTHING and throws (→ server.internal 500),
+      // leaving the captured payment (sale_id NULL) as reconcile's orphan class (Decision 2 / §5).
+      const { id } = await seedLostCapture(cfg, cafe, "1", "1.00");
+
+      await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toBeDefined();
+
+      expect(client.lastCreateIntent).toBeUndefined(); // never re-charged
+      // No sale, no registro; the order stays open; the captured payment is untouched (still an orphan).
+      expect(await saleCount(id)).toBe(0);
+      expect(await registroCount(id)).toBe(0);
+      expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
+      expect(await rawPaymentsFor(id)).toEqual([{ state: "captured", hasSale: false }]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("two concurrent pays for one parked order file ONE sale; the loser replays (one sale/settlement)", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const appA = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const appB = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const id = randomUUID();
+      await parkOrder({ db: suite.admin }, cfg, {
+        id,
+        lines: [{ productId: cafe.id, quantity: "1" }],
+        label: "Mesa 7",
+      });
+
+      // Two DISTINCT app-role connections, each its own reader, drive the SAME parked order id. P1's
+      // FOR UPDATE serialises them; both reach `collect` and capture, and P3's `sales_working_order_id_key`
+      // 23505 backstop makes exactly one file — the loser replays the winner's ticket. (The one-CHARGE
+      // guarantee across the network sub-window is the Stripe idempotency key, proven in the sandbox,
+      // Task 1 — not the FakeStripe here, which captures per-reader.)
+      const { deps: depsA } = integratedDeps(cfg, appA);
+      const { deps: depsB } = integratedDeps(cfg, appB);
+      const req = { id, lines: [] };
+
+      const [a, b] = await Promise.allSettled([
+        payWorkingOrderIntegrated(depsA, cfg, req),
+        payWorkingOrderIntegrated(depsB, cfg, req),
+      ]);
+
+      if (a.status !== "fulfilled" || b.status !== "fulfilled") {
+        throw new Error(`both pays should settle: a=${JSON.stringify(a)} b=${JSON.stringify(b)}`);
+      }
+      expect(a.value.outcome).toBe("captured");
+      expect(b.value.outcome).toBe("captured");
+      if (a.value.outcome !== "captured" || b.value.outcome !== "captured") {
+        throw new Error("unreachable");
+      }
+      // Both captured, ONE invoice number, ONE sale + registro.
+      expect(a.value.ticket.invoiceNumber).toBe(b.value.ticket.invoiceNumber);
+      expect(await saleCount(id)).toBe(1);
+      expect(await registroCount(id)).toBe(1);
+    } finally {
+      await appA.close();
+      await appB.close();
+    }
+  });
+
+  it("two concurrent recoveries of one lost capture file ONE sale; the loser replays", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const appA = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    const appB = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      // ONE lost capture, TWO retries. Both P1s pass the pre-check (sale_id NULL) and dispatch to
+      // recovery; finalizeRecovery's FOR UPDATE fully serialises them (the order always exists), so one
+      // files + associates the existing row + settles, and the other blocks, re-reads `settled`, and
+      // REPLAYS — the recovery path's own idempotency, with no double-file and no double-associate.
+      const { id } = await seedLostCapture(cfg, cafe, "1", "1.50");
+
+      const { deps: depsA } = integratedDeps(cfg, appA);
+      const { deps: depsB } = integratedDeps(cfg, appB);
+      const req = { id, lines: [] };
+
+      const [a, b] = await Promise.allSettled([
+        payWorkingOrderIntegrated(depsA, cfg, req),
+        payWorkingOrderIntegrated(depsB, cfg, req),
+      ]);
+
+      if (a.status !== "fulfilled" || b.status !== "fulfilled") {
+        throw new Error(
+          `both recoveries should settle: a=${JSON.stringify(a)} b=${JSON.stringify(b)}`,
+        );
+      }
+      expect(a.value.outcome).toBe("captured");
+      expect(b.value.outcome).toBe("captured");
+      if (a.value.outcome !== "captured" || b.value.outcome !== "captured") {
+        throw new Error("unreachable");
+      }
+      expect(a.value.ticket.invoiceNumber).toBe(b.value.ticket.invoiceNumber);
+      // Exactly one sale, one registro; the SINGLE lost capture is the linked payment (no second row).
+      expect(await saleCount(id)).toBe(1);
+      expect(await registroCount(id)).toBe(1);
+      expect(await paymentCount(id)).toBe(1);
+      expect((await paymentsFor(id))[0]!.linkedToSale).toBe(true);
+    } finally {
+      await appA.close();
+      await appB.close();
     }
   });
 });
