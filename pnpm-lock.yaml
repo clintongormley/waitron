@@ -145,6 +145,9 @@ importers:
         specifier: ^8.7.0
         version: 8.7.0
     devDependencies:
+      '@simplewebauthn/server':
+        specifier: ^13.0.0
+        version: 13.3.2
       '@testcontainers/postgresql':
         specifier: ^12.0.4
         version: 12.0.4
