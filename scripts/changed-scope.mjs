@@ -92,6 +92,23 @@ export const UI_PACKAGE = "@waitron/ui";
 export const TILL_PACKAGE = "@waitron/till";
 
 /**
+ * The `test-dashboard` shard's package: the admin/reporting dashboard app, the workspace's THIRD
+ * Chromium consumer after @waitron/ui and apps/till.
+ *
+ * It gets a shard of its own for the SAME reason apps/till does, and on the same precedent rather
+ * than on a hang of its own. apps/dashboard drives Chromium through @vitest/browser + Playwright
+ * exactly as @waitron/ui and apps/till do (its package.json carries @vitest/browser and a
+ * `test:coverage` that runs Vitest in the browser), and the receipt for what a Chromium consumer
+ * does to the shared `test-light` shard is on UI_PACKAGE above: test-light HUNG on the workspace's
+ * first browser package, twice, reproducibly enough to name both runs. This split is therefore a
+ * MITIGATION taken on that precedent — apps/dashboard has never run in test-light and so has never
+ * hung it, and nothing here proves it would; the claim is only that adding a third browser package
+ * to the shard that already hung on the first is the shape worth avoiding. Whether isolation is what
+ * fixes the hang can only be read off future runs, as UI_PACKAGE notes for itself.
+ */
+export const DASHBOARD_PACKAGE = "@waitron/dashboard";
+
+/**
  * The packages that have a test shard to themselves — the set `test-light` subtracts.
  *
  * ONE list rather than a name per gate, because `light` is defined against it: a package added here
@@ -105,7 +122,7 @@ export const TILL_PACKAGE = "@waitron/till";
  * a `pnpm install` for a selection that would then contain nothing to run, which is the shape the
  * `runnable` guard in scripts/changed-packages.mjs was added to refuse.
  */
-export const OWN_SHARD_PACKAGES = [HEAVY_PACKAGE, UI_PACKAGE, TILL_PACKAGE];
+export const OWN_SHARD_PACKAGES = [HEAVY_PACKAGE, UI_PACKAGE, TILL_PACKAGE, DASHBOARD_PACKAGE];
 
 /**
  * Workspace members that deliberately declare no `test:coverage` script.
@@ -123,7 +140,7 @@ export const OWN_SHARD_PACKAGES = [HEAVY_PACKAGE, UI_PACKAGE, TILL_PACKAGE];
  */
 export const PACKAGES_WITHOUT_TESTS = ["@waitron/bench-pglite"];
 
-/** A gate that fires when one named package is in the resolved scope — four of the five. */
+/** A gate that fires when one named package is in the resolved scope — six of the seven. */
 const membership = (packageName) => (inScope) => inScope.has(packageName);
 
 /** True when this package would give the LIGHT shard something to actually run. */
@@ -166,6 +183,7 @@ export const SCOPE_GATES = [
   { output: "heavy", covers: membership(HEAVY_PACKAGE) },
   { output: "ui", covers: membership(UI_PACKAGE) },
   { output: "till", covers: membership(TILL_PACKAGE) },
+  { output: "dashboard", covers: membership(DASHBOARD_PACKAGE) },
   { output: "light", covers: (inScope) => [...inScope].some(runsTests) },
   { output: "verifactu", covers: membership("@waitron/verifactu") },
   { output: "shared", covers: membership("@waitron/shared") },
