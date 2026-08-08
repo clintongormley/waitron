@@ -66,6 +66,9 @@ describe("loadConfig", () => {
       // No WAITRON_TLS_* set, so the whole optional block is absent — not present-but-undefined.
       // `tls` is omitted from the returned object entirely (see loadConfig's conditional spread).
       till: EXPECTED_TILL,
+      // No WAITRON_MANAGEMENT_* set, so the passkey Relying Party falls back to loopback dev values.
+      managementRpId: "localhost",
+      managementOrigin: "http://localhost:5191",
       scheduler: {
         horizonDays: 30,
         maxPeriodsPerTick: 7,
@@ -162,6 +165,8 @@ describe("loadConfig", () => {
         WAITRON_SKIP_RETRY_MS: "60000",
         WAITRON_SETTLEMENT_LAG_MS: "172800000",
         WAITRON_MIGRATIONS_DIR: "/srv/migrations",
+        WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
+        WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com",
         WAITRON_SCHEDULER_HORIZON_DAYS: "14",
         WAITRON_SCHEDULER_MAX_PERIODS_PER_TICK: "3",
         WAITRON_SCHEDULER_MAX_ATTEMPTS: "5",
@@ -179,6 +184,8 @@ describe("loadConfig", () => {
     expect(config.skipRetryMs).toBe(60_000);
     expect(config.settlementLagMs).toBe(172_800_000);
     expect(config.migrationsRoot).toBe("/srv/migrations");
+    expect(config.managementRpId).toBe("dashboard.example.com");
+    expect(config.managementOrigin).toBe("https://dashboard.example.com");
     expect(config.scheduler).toEqual({
       horizonDays: 14,
       maxPeriodsPerTick: 3,

@@ -249,14 +249,26 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     },
     log,
   );
-  // The dashboard's management HTTP surface (manager login, staff/person management) on the SAME app,
-  // the identical convention `mountWebhook` and `mountTillApi` above follow. It reuses the EXACT values
-  // `mountTillApi` receives so the two cannot drift: the same `db`, the same tenant (`till.tenantId`,
-  // this venue's one tenant) and the same `secureCookies` binding hoisted above (one value, read by
-  // both mounts — not a re-typed `config.tls !== undefined`). No fiscal backend, clock or card
-  // provider: the management routes read and write only the tenant's own identity records. Routes
+  // The dashboard's management HTTP surface (manager login, staff/person management, passkey
+  // ceremonies) on the SAME app, the identical convention `mountWebhook` and `mountTillApi` above
+  // follow. It reuses the EXACT values `mountTillApi` receives so the two cannot drift: the same `db`,
+  // the same tenant (`till.tenantId`, this venue's one tenant) and the same `secureCookies` binding
+  // hoisted above (one value, read by both mounts — not a re-typed `config.tls !== undefined`). No
+  // fiscal backend, clock or card provider: the management routes read and write only the tenant's own
+  // identity records. `rpId`/`origin` are the passkey Relying Party config from `loadConfig` — a
+  // passkey is bound to its RP ID + origin, so these are config, never hardcoded (spec §4c). Routes
   // only — no database work at boot.
-  mountManagementApi(app, { db, cfg: { tenantId: till.tenantId }, secureCookies }, log);
+  mountManagementApi(
+    app,
+    {
+      db,
+      cfg: { tenantId: till.tenantId },
+      secureCookies,
+      rpId: config.managementRpId,
+      origin: config.managementOrigin,
+    },
+    log,
+  );
   // `buildServeOptions` turns the plain-HTTP options into HTTPS ones when `config.tls` is set,
   // reading the cert/key files, and returns them unchanged otherwise (loopback dev). The exact
   // `@hono/node-server` option names (`createServer` + `serverOptions`) are confirmed and documented

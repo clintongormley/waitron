@@ -89,8 +89,20 @@ function mountApp(tenantId: string): Hono {
   const app = new Hono();
   // `secureCookies: false` so the session cookie rides the non-TLS `app.request` (mirrors
   // `till-api.rls.test.ts`'s `apiDeps`). `deps.db` is the owner connection; the routes drop to
-  // `app_user` themselves via `withTenant` + `asAppUser`.
-  mountManagementApi(app, { db: suite.admin, cfg: { tenantId }, secureCookies: false }, noopLog);
+  // `app_user` themselves via `withTenant` + `asAppUser`. `rpId`/`origin` are the loopback passkey
+  // Relying Party values (these suites exercise the staff routes, not the passkey ceremonies — those
+  // are covered in Task 5 — but the widened `ManagementApiDeps` requires both).
+  mountManagementApi(
+    app,
+    {
+      db: suite.admin,
+      cfg: { tenantId },
+      secureCookies: false,
+      rpId: "localhost",
+      origin: "http://localhost",
+    },
+    noopLog,
+  );
   return app;
 }
 
