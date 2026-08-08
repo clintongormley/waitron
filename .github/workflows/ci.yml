@@ -80,6 +80,7 @@ jobs:
       heavy: ${{ steps.gates.outputs.heavy }}
       ui: ${{ steps.gates.outputs.ui }}
       till: ${{ steps.gates.outputs.till }}
+      dashboard: ${{ steps.gates.outputs.dashboard }}
       light: ${{ steps.gates.outputs.light }}
       verifactu: ${{ steps.gates.outputs.verifactu }}
       shared: ${{ steps.gates.outputs.shared }}
@@ -158,8 +159,8 @@ jobs:
           # emit nothing, and it is load-bearing for ONE of the three outputs rather than a nicety
           # for all of them. An empty `scope` would be safe: it is not the literal `packages`, so
           # every branch below falls through to running everything. An empty `code` would NOT be —
-          # all six gated jobs test `needs.changes.outputs.code == 'true'` (bundle-smoke, typecheck,
-          # both test shards, both mutation runs), so an empty value skips every one of them, and
+          # all nine gated jobs test `needs.changes.outputs.code == 'true'` (bundle-smoke, typecheck,
+          # all five test shards, both mutation runs), so an empty value skips every one of them, and
           # the `ci` aggregate counts a skip as a pass by design. That is a green pull request with
           # nothing run.
           #
@@ -188,19 +189,19 @@ jobs:
             echo "packages=$packages"
           } >> "$GITHUB_OUTPUT"
 
-      # Which gated jobs have anything to do? Five today — all three test shards and the two
+      # Which gated jobs have anything to do? Seven today — all five test shards and the two
       # mutation runs — and none of them CAN be expressed as a filter on the job itself; see
       # gateOutputs' own comment for the two wrong formulations and why each fails.
       #
-      # Four of the five ask whether one named package is in the resolved scope. `light` does not:
+      # Six of the seven ask whether one named package is in the resolved scope. `light` does not:
       # test-light's own filters SUBTRACT every package that has a shard of its own, so it has work
       # when the scope holds a package that is neither one of those nor one of the members with no
       # test script — which is why a gate is a predicate over the scope rather than a package name.
       # See SCOPE_GATES and OWN_SHARD_PACKAGES in scripts/changed-scope.mjs.
       #
-      # ONE `pnpm ls` for all five. Not mainly for the time — measured locally, the query is 0.20s
-      # against the node script's 0.04s, so five of them would cost well under a second — but
-      # because all four gates are answers about the SAME resolved scope. Resolving it once makes
+      # ONE `pnpm ls` for all seven. Not mainly for the time — measured locally, the query is 0.20s
+      # against the node script's 0.04s, so seven of them would cost only a second or two — but
+      # because all seven gates are answers about the SAME resolved scope. Resolving it once makes
       # them consistent by construction, and keeps this step from growing a stanza per gated job.
       #
       # That query is where the EXPANSION happens, and it is still pnpm's: one `--filter "...<pkg>"`
@@ -238,16 +239,16 @@ jobs:
             # `pnpm ls --depth -1 --json` print zero bytes on both streams at exit 0, and piping
             # that into `node scripts/changed-scope.mjs` prints
             # every gate false — because `packagesInScope("")` is the empty Set, the DEFINITE answer
-            # "nothing matched", not the `null` that fails closed. Re-run on 2026-08-01 against the
-            # tree as it now stands, `printf '' | node scripts/changed-scope.mjs` prints
-            # `heavy=false ui=false light=false verifactu=false shared=false` on stderr and the same
-            # five lines on stdout, exit 0. (The pnpm half of that end-to-end run is quoted above
-            # and is unaffected by adding a gate; only the line COUNT here moved, which is why this
-            # half was re-measured rather than re-worded.) With every scope gate false, all three
-            # test shards and both mutation jobs skip — every job in this file that runs a test —
-            # while `bundle-smoke` and `typecheck` still run, because they gate on `code` alone.
-            # `ci` counts a skip as a pass by design, so that is a green pull request whose tests
-            # never ran.
+            # "nothing matched", not the `null` that fails closed. Re-run on 2026-08-08 against the
+            # tree as it now stands, `printf '' | node scripts/changed-scope.mjs` prints `heavy=false
+            # ui=false till=false dashboard=false light=false verifactu=false shared=false` on stderr
+            # and the same seven lines on stdout, exit 0. (The pnpm half of that end-to-end run is
+            # quoted above and is unaffected by adding a gate; only the line COUNT here moved, which
+            # is why this half was re-measured rather than re-worded.) With every scope gate false,
+            # all five test shards and both mutation jobs skip — every job in this file that runs a
+            # test — while `bundle-smoke` and `typecheck` still run, because they gate on `code`
+            # alone. `ci` counts a skip as a pass by design, so that is a green pull request whose
+            # tests never ran.
             #
             # The hook's version of this loop is followed by a "scope is runnable" step, which
             # exits 1 when the corrupted name was the whole scope. This job has no equivalent.
@@ -636,8 +637,63 @@ jobs:
             | node scripts/changed-packages.mjs runnable test:coverage
           pnpm --filter "@waitron/till" test:coverage
 
+  # apps/dashboard alone: the admin/reporting dashboard app, the workspace's THIRD Chromium consumer
+  # after packages/ui and apps/till. It has a shard of its own for the same reason test-till does — a
+  # @vitest/browser + Playwright package sharing test-light with the rest of the workspace is the
+  # shape that hung that shard on packages/ui, twice (the receipts are on UI_PACKAGE in
+  # scripts/changed-scope.mjs). This split is PREEMPTIVE: apps/dashboard has never run in test-light
+  # and so has never hung it, and nothing here proves it would — see DASHBOARD_PACKAGE in
+  # scripts/changed-scope.mjs for the honest framing. What it buys with certainty is that a third
+  # wedged browser can never take the other packages' test-light results down with it.
+  #
+  # No REQUIRE_DOCKER and no TESTCONTAINERS_RYUK_DISABLED, exactly as test-ui and test-till:
+  # apps/dashboard drives Chromium through Playwright and touches no database.
+  test-dashboard:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Resolve installed Playwright version
+        id: playwright-version
+        run: echo "version=$(pnpm --filter @waitron/dashboard exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      # Same as test-ui and test-till: scope the exec to the @waitron/dashboard workspace (where
+      # playwright is a devDependency) — plain `pnpm exec` at the repo root does not resolve a
+      # member-scoped bin — and always run it, cache hit or not, because the `--with-deps` OS package
+      # install still has to happen on GitHub's clean-VM-per-run.
+      - run: pnpm --filter @waitron/dashboard exec playwright install --with-deps chromium
+
+      # The guard first, for the same reason as the other shards: pnpm answers "nothing to do" with
+      # exit 0 and a line on stdout, so a shard whose filter selects nothing reports success having
+      # run no tests.
+      - name: Run the dashboard shard
+        run: |
+          set -euo pipefail
+          pnpm --filter "@waitron/dashboard" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:coverage
+          pnpm --filter "@waitron/dashboard" test:coverage
+
   # Everything except the packages that have a shard of their own. --no-sort removes the dependency
-  # ordering, which earns nothing for tests: all 15 workspace members resolve to ./src/*.ts and no
+  # ordering, which earns nothing for tests: all 22 workspace members resolve to ./src/*.ts and no
   # test imports a sibling's dist/, so nothing here consumes a build artefact. (`build` DOES need
   # the ordering — this flag is on the test invocation only.)
   #
@@ -650,7 +706,7 @@ jobs:
   # before it. Both figures are cache-warm; a cold cache also downloads the browser.
   test-light:
     needs: changes
-    # `light` is not a membership gate like the other four: the step below subtracts every package
+    # `light` is not a membership gate like the other six: the step below subtracts every package
     # in OWN_SHARD_PACKAGES from the scope, so this job has work when the resolved scope holds a
     # package that is neither one of those nor one of the members that declare no `test:coverage`
     # script (PACKAGES_WITHOUT_TESTS — today just @waitron/bench-pglite, which is why a bench-only
@@ -693,9 +749,10 @@ jobs:
       # scripts/ci-workflow.test.mjs asserts these two lists are the same set — hand-editing one
       # without the other either drops a package from every shard or runs it in two. On a GLOBAL
       # scope these are the only filters, and what they select was read back from pnpm itself on
-      # 2026-08-05: `pnpm --filter "!@waitron/db" --filter "!@waitron/ui" --filter "!@waitron/till"
-      # prepare` reports `Scope: 18 of 22 workspace projects` — the 21 members minus those three, the
-      # 22nd project being the workspace root, which pnpm lists but never runs a script for.
+      # 2026-08-08: `pnpm --filter "!@waitron/db" --filter "!@waitron/ui" --filter "!@waitron/till"
+      # --filter "!@waitron/dashboard" prepare` reports `Scope: 18 of 23 workspace projects` — the 22
+      # members minus those four, the 23rd project being the workspace root, which pnpm lists but
+      # never runs a script for.
       #
       # `scope=global` — main, an unattributable path, a diff we could not work out — leaves the
       # positional parameters empty and runs the whole workspace minus db, which is the
@@ -725,6 +782,7 @@ jobs:
           set -- "$@" --filter "!@waitron/db"
           set -- "$@" --filter "!@waitron/ui"
           set -- "$@" --filter "!@waitron/till"
+          set -- "$@" --filter "!@waitron/dashboard"
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
@@ -831,6 +889,7 @@ jobs:
       - test-heavy
       - test-ui
       - test-till
+      - test-dashboard
       - test-light
       - mutation-verifactu
       - mutation-shared
