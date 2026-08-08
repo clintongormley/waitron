@@ -50,10 +50,10 @@ export class PersonForm extends LitElement {
   /** Whether the dialog is showing. The app sets this to open the form; the form clears it on close. */
   @property({ type: Boolean, reflect: true }) open = false;
 
+  @state() private displayName = "";
   // Named `selectedRole`, not `role`: `HTMLElement` already carries a public `role` ARIA property
   // (ARIAMixin), which a `private role` field would illegally narrow — the same collision the
   // `ha-*`/`wt-*` components hit with `ariaLabel`. The emitted event's detail key is still `role`.
-  @state() private displayName = "";
   @state() private selectedRole: PersonRole = "staff";
   @state() private pin = "";
 
