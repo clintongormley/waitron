@@ -278,6 +278,8 @@ role and no grant to widen, because `applyVenue` inserts under RLS as the table 
 ```bash
 pnpm --filter @waitron/provisioning build   # once — produces dist/bin.js and copies the migrations
 WAITRON_ADMIN_DATABASE_URL=postgres://owner_admin:secret@host:5432/waitron \
+WAITRON_ADMIN_PIN=1234 \
+WAITRON_ADMIN_PASSWORD='choose-a-strong-one' \
   node packages/provisioning/dist/bin.js venue \
     --database waitron \
     --country ES --tax-id B12345678 --legal-name 'Deli SL' \
@@ -286,8 +288,17 @@ WAITRON_ADMIN_DATABASE_URL=postgres://owner_admin:secret@host:5432/waitron \
     --address-line1 'Calle Mayor 1' --postal-code 28001 --city Madrid --province Madrid \
     --time-zone Europe/Madrid --day-cutover 06:00 \
     --till-name 'Caja 1' --series-code A --rectificative-code R \
+    --admin-name 'Owner' \
     --yes
 ```
+
+The command seeds the venue's first **admin** person. `--admin-name` is the display name (not a secret,
+so it stays a flag), while the admin's two login secrets are read only from the environment or an
+echo-off prompt, never from `argv`: `WAITRON_ADMIN_PIN` (the till PIN) and `WAITRON_ADMIN_PASSWORD` (the
+dashboard password, ≥8 characters), both required. This is the only place the FIRST admin's dashboard
+password is set — `setPassword` and passkey enrollment both require an already-authenticated management
+session — so **after `venue`, sign in to the management dashboard with the admin display name and this
+password**; that is the first dashboard login.
 
 Every option is prompted for when omitted, so a bare `venue` is a complete interactive session;
 `--yes` skips the confirmation for a non-interactive run. `--territory` currently accepts only
