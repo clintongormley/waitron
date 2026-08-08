@@ -9,23 +9,34 @@ import "@waitron/ui/src/components/wt-button.js";
 // screen renders them.
 import "../widgets/staff-list.js";
 import "../widgets/person-form.js";
+import "../widgets/person-edit.js";
 import type { DashboardApi, PersonRole, PersonSummary } from "../api/client.js";
 
 /**
  * The management dashboard's STAFF SCREEN: the composition point that wires the pure-display
- * `<dashboard-staff-list>` and the `<dashboard-person-form>` create dialog to the injected
- * `DashboardApi`. It is the single owner of the form-open state (`formOpen`) and the list state.
+ * `<dashboard-staff-list>`, the `<dashboard-person-form>` create dialog and the
+ * `<dashboard-person-edit>` edit dialog to the injected `DashboardApi`. It is the single owner of the
+ * two dialogs' open state (`formOpen`, `editOpen`/`editingPerson`) and the list state.
  *
  * On connect it loads `api.listStaff()` into `people` and hands them down to the list. An "Añadir
- * usuario" button opens the form (`formOpen = true`); on the form's `create-person` event it calls
- * `api.createPerson(detail)`, and on success reloads the list and closes the form — so the list
- * reflects the new person and the operator returns to it. A dismissal (Escape/backdrop) reaches the
+ * usuario" button opens the create form (`formOpen = true`); on the form's `create-person` event it
+ * calls `api.createPerson(detail)`, and on success reloads the list and closes the form — so the list
+ * reflects the new person and the operator returns to it. A dismissal (Escape — `wt-dialog` has no
+ * backdrop light-dismiss) reaches the
  * screen as the form's composed `wt-close`, which the render's `@wt-close` turns back into
  * `formOpen = false`, so the state the screen owns tracks the dialog the operator actually closed —
  * the fix for a form that could not be reopened after a dismiss (parent `formOpen` stuck `true`, so
  * the next "open" was a no-op that re-committed nothing to the child's `.open`).
  *
- * ERROR HANDLING, both async paths, mirroring `login-screen.ts`'s `#loadRoster`/`#submit`:
+ * The staff list's per-row "Editar" emits `edit-person { personId }`, which `#onEditPerson` resolves
+ * against the list already held and opens the edit dialog for. That dialog commits FOUR independent
+ * mutations — role (`updatePerson`), status (`updatePerson`), PIN (`resetPin`), password
+ * (`setPassword`) — each as its own event; `#runEditAction` is their shared body: single-flight,
+ * reload, and re-resolve the open dialog's `editingPerson` from the reloaded list so its derived
+ * controls track the new state. The two dialogs are mutually exclusive (both modal): opening either
+ * closes the other.
+ *
+ * ERROR HANDLING, every async path, mirroring `login-screen.ts`'s `#loadRoster`/`#submit`:
  * - `#load()` is called via `void this.#load()` on connect, so a rejected `listStaff()` MUST be
  *   caught here — otherwise it is an unhandled promise rejection and the operator faces an empty
  *   list with no feedback. A rejection sets `errorKey` from the thrown `{ code }` (falling back to
@@ -33,6 +44,11 @@ import type { DashboardApi, PersonRole, PersonSummary } from "../api/client.js";
  *   Spanish copy, exactly as the login screen defers its error keys).
  * - a rejected `createPerson()` sets the same `errorKey` and DOES NOT reload or close the form, so
  *   the entered values survive and the operator can retry.
+ * - a rejected edit action (`#runEditAction`) sets the same `errorKey` and leaves the edit dialog
+ *   open for a retry. While the edit dialog is open the `errorKey` is passed DOWN into it
+ *   (`.error`), so it renders in the modal's own top layer, and the page-level banner is suppressed
+ *   (`errorKey && !editOpen`) — the create form's banner sits behind its backdrop, a known
+ *   limitation this dialog does not repeat.
  */
 @customElement("dashboard-staff-screen")
 export class StaffScreen extends LitElement {
@@ -73,6 +89,10 @@ export class StaffScreen extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   @state() private people: PersonSummary[] = [];
   @state() private formOpen = false;
+  // The person the edit dialog is open for (null when closed), and its open flag. The screen is the
+  // single owner of the edit-open state, exactly as it owns `formOpen` for the create form.
+  @state() private editingPerson: PersonSummary | null = null;
+  @state() private editOpen = false;
   @state() private errorKey: string | null = null;
   // A minimal success confirmation for #addPasskey, rendered raw in a `role="status"` banner and
   // (like errorKey) deferred to a later i18n task — the WebAuthn ceremony has no visible surface of
@@ -83,6 +103,11 @@ export class StaffScreen extends LitElement {
   // entry so a double-clicked "Crear" (two `create-person` events) files at most one person —
   // `createPerson` is not server-idempotent. Mirrors apps/till's walk-up-sale `submitting` guard.
   #creating = false;
+
+  // The same single-flight guard for the edit dialog's four actions: a double-fired action runs the
+  // mutation once (none of updatePerson/resetPin/setPassword is server-idempotent). Separate from
+  // `#creating` because create and edit are independent flows.
+  #editing = false;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -111,7 +136,95 @@ export class StaffScreen extends LitElement {
   #openForm(): void {
     this.errorKey = null;
     this.passkeyStatus = null;
+    this.#closeEdit(); // the two dialogs are mutually exclusive (both are modal)
     this.formOpen = true;
+  }
+
+  /**
+   * Close the edit dialog AND drop its target. Clearing `editingPerson` here (not only `editOpen`) is
+   * what keeps the "`editingPerson` is null when the dialog is closed" invariant true: it stops a
+   * closed dialog leaving a stale edit target that `#editWith` could still resolve, and keeps the
+   * `.person`/`.open` the dialog receives consistent.
+   */
+  #closeEdit(): void {
+    this.editOpen = false;
+    this.editingPerson = null;
+  }
+
+  /**
+   * The staff list asked to edit a person. Resolve the row from the list we already hold (the list is
+   * OURS — it came from `listStaff` — so an unknown id can only be a stale event; drop it) and open the
+   * edit dialog for it, closing the create form so at most one modal shows. `stopPropagation` keeps the
+   * composed `edit-person` from leaking past this screen to the app shell, the house pattern the create
+   * handler follows.
+   */
+  #onEditPerson(event: CustomEvent<{ personId: string }>): void {
+    event.stopPropagation();
+    const person = this.people.find((p) => p.personId === event.detail.personId);
+    if (person === undefined) return;
+    this.errorKey = null;
+    this.passkeyStatus = null;
+    this.formOpen = false;
+    this.editingPerson = person;
+    this.editOpen = true;
+  }
+
+  /**
+   * Run one edit-dialog action, then reload. The shared body of all four handlers: single-flight (drop
+   * a re-fire while one is in flight, since the mutations are not server-idempotent), clear any prior
+   * error, await the mutation, reload the list, and RE-RESOLVE `editingPerson` from the reloaded list so
+   * the still-open dialog's derived controls (the Suspender/Reactivar toggle, the role preset) reflect
+   * the new state. A rejection becomes the `errorKey` banner and leaves the dialog open for a retry,
+   * exactly as `#onCreatePerson` does — never an unhandled rejection (the handlers call this via `void`).
+   */
+  async #runEditAction(action: () => Promise<void>): Promise<void> {
+    if (this.#editing) return;
+    this.#editing = true;
+    this.errorKey = null;
+    try {
+      await action();
+      await this.#load();
+      if (this.editingPerson) {
+        const id = this.editingPerson.personId;
+        this.editingPerson = this.people.find((p) => p.personId === id) ?? this.editingPerson;
+      }
+    } catch (error) {
+      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+    } finally {
+      this.#editing = false;
+    }
+  }
+
+  #onUpdateRole(event: CustomEvent<{ role: PersonRole }>): void {
+    event.stopPropagation();
+    this.#editWith((id) => this.api.updatePerson(id, { role: event.detail.role }));
+  }
+
+  #onSetStatus(event: CustomEvent<{ status: "active" | "suspended" }>): void {
+    event.stopPropagation();
+    this.#editWith((id) => this.api.updatePerson(id, { status: event.detail.status }));
+  }
+
+  #onResetPin(event: CustomEvent<{ pin: string }>): void {
+    event.stopPropagation();
+    this.#editWith((id) => this.api.resetPin(id, event.detail.pin));
+  }
+
+  #onSetPassword(event: CustomEvent<{ password: string }>): void {
+    event.stopPropagation();
+    this.#editWith((id) => this.api.setPassword(id, event.detail.password));
+  }
+
+  /**
+   * Resolve the open dialog's person id and run `action(id)` through the single-flight edit runner.
+   * The shared head of the four edit handlers, so the `editingPerson` null-narrowing lives in ONE
+   * place. A no-op when no person is open — a type guard rather than a reachable UI path, since the
+   * edit dialog only emits its action events while it is open for a person.
+   */
+  #editWith(action: (id: string) => Promise<void>): void {
+    const id = this.editingPerson?.personId;
+    if (id === undefined) return;
+    void this.#runEditAction(() => action(id));
   }
 
   /**
@@ -189,8 +302,15 @@ export class StaffScreen extends LitElement {
           >
         </div>
       </div>
-      <dashboard-staff-list .people=${this.people}></dashboard-staff-list>
-      ${this.errorKey ? html`<p class="error" role="alert">${this.errorKey}</p>` : ""}
+      <dashboard-staff-list
+        .people=${this.people}
+        @edit-person=${(e: CustomEvent<{ personId: string }>) => this.#onEditPerson(e)}
+      ></dashboard-staff-list>
+      ${
+        this.errorKey && !this.editOpen
+          ? html`<p class="error" role="alert">${this.errorKey}</p>`
+          : ""
+      }
       ${this.passkeyStatus ? html`<p class="status" role="status">${this.passkeyStatus}</p>` : ""}
       <dashboard-person-form
         .open=${this.formOpen}
@@ -198,6 +318,16 @@ export class StaffScreen extends LitElement {
           void this.#onCreatePerson(e)}
         @wt-close=${() => (this.formOpen = false)}
       ></dashboard-person-form>
+      <dashboard-person-edit
+        .person=${this.editingPerson}
+        .open=${this.editOpen}
+        .error=${this.editOpen ? this.errorKey : null}
+        @update-role=${(e: CustomEvent<{ role: PersonRole }>) => this.#onUpdateRole(e)}
+        @set-status=${(e: CustomEvent<{ status: "active" | "suspended" }>) => this.#onSetStatus(e)}
+        @reset-pin=${(e: CustomEvent<{ pin: string }>) => this.#onResetPin(e)}
+        @set-password=${(e: CustomEvent<{ password: string }>) => this.#onSetPassword(e)}
+        @wt-close=${() => this.#closeEdit()}
+      ></dashboard-person-edit>
     `;
   }
 }

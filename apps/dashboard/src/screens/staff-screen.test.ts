@@ -4,6 +4,7 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { DashboardApi, PersonSummary } from "../api/client.js";
 import type { StaffList } from "../widgets/staff-list.js";
 import type { PersonForm } from "../widgets/person-form.js";
+import type { PersonEdit } from "../widgets/person-edit.js";
 import { StaffScreen } from "./staff-screen.js";
 
 // The real `startRegistration` drives `navigator.credentials.create`, which needs a physical
@@ -41,6 +42,9 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
     listStaff: vi.fn().mockResolvedValue(people),
     createPerson: vi.fn().mockResolvedValue({ id: "p3" }),
+    updatePerson: vi.fn().mockResolvedValue(undefined),
+    resetPin: vi.fn().mockResolvedValue(undefined),
+    setPassword: vi.fn().mockResolvedValue(undefined),
     passkeyRegisterOptions: vi
       .fn()
       .mockResolvedValue({ challengeHandle: "h2", options: { challenge: "def" } }),
@@ -63,6 +67,19 @@ function list(el: StaffScreen): StaffList {
 /** The create-person form the screen renders. */
 function form(el: StaffScreen): PersonForm {
   return el.shadowRoot!.querySelector("dashboard-person-form")!;
+}
+
+/** The edit-person dialog the screen renders. */
+function editForm(el: StaffScreen): PersonEdit {
+  return el.shadowRoot!.querySelector("dashboard-person-edit")!;
+}
+
+/** Open the edit dialog for a person by dispatching the staff-list's composed `edit-person`. */
+async function openEdit(el: StaffScreen, personId: string): Promise<void> {
+  list(el).dispatchEvent(
+    new CustomEvent("edit-person", { detail: { personId }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
 }
 
 /** The native <dialog> inside the screen's person-form, once wt-dialog's first render has settled. */
@@ -292,5 +309,244 @@ describe("staff-screen", () => {
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe(
       "passkey.verification_failed",
     );
+  });
+});
+
+describe("staff-screen — row edit", () => {
+  it("opens the edit dialog for the person named by edit-person", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+
+    expect(editForm(el).open).toBe(false);
+    await openEdit(el, "p1");
+    expect(editForm(el).open).toBe(true);
+    expect(editForm(el).person).toEqual(people[0]);
+  });
+
+  // #onEditPerson resolves the id against the list it already holds; an id not in that list can only
+  // be a stale event, and the comment says it is dropped. Prove it: no dialog opens for an unknown id.
+  it("ignores an edit-person for an unknown id (no dialog opens)", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+
+    await openEdit(el, "nope-not-a-real-id");
+    expect(editForm(el).open).toBe(false);
+  });
+
+  it("update-role calls updatePerson with the role and reloads the list", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    await openEdit(el, "p1");
+
+    editForm(el).dispatchEvent(
+      new CustomEvent("update-role", { detail: { role: "admin" }, bubbles: true, composed: true }),
+    );
+    await flush(el);
+
+    expect(api.updatePerson).toHaveBeenCalledWith("p1", { role: "admin" });
+    expect(api.listStaff).toHaveBeenCalledTimes(2); // reloaded
+  });
+
+  it("set-status calls updatePerson with the status and reloads the list", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    await openEdit(el, "p1");
+
+    editForm(el).dispatchEvent(
+      new CustomEvent("set-status", {
+        detail: { status: "suspended" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+
+    expect(api.updatePerson).toHaveBeenCalledWith("p1", { status: "suspended" });
+    expect(api.listStaff).toHaveBeenCalledTimes(2);
+  });
+
+  it("reset-pin calls resetPin with the pin and reloads the list", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    await openEdit(el, "p1");
+
+    editForm(el).dispatchEvent(
+      new CustomEvent("reset-pin", { detail: { pin: "4321" }, bubbles: true, composed: true }),
+    );
+    await flush(el);
+
+    expect(api.resetPin).toHaveBeenCalledWith("p1", "4321");
+    expect(api.listStaff).toHaveBeenCalledTimes(2);
+  });
+
+  it("set-password calls setPassword with the password and reloads the list", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    await openEdit(el, "p1");
+
+    editForm(el).dispatchEvent(
+      new CustomEvent("set-password", {
+        detail: { password: "hunter2 correct horse" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+
+    expect(api.setPassword).toHaveBeenCalledWith("p1", "hunter2 correct horse");
+    expect(api.listStaff).toHaveBeenCalledTimes(2);
+  });
+
+  // After a successful action the screen reloads, and the OPEN dialog's `person` is re-resolved from
+  // the reloaded list so its derived controls (the Suspender/Reactivar toggle) reflect the new state.
+  // Here the second listStaff returns p1 as suspended, so the dialog's person must flip to suspended.
+  it("refreshes the open dialog's person from the reloaded list after an action", async () => {
+    const suspendedP1 = { ...people[0], status: "suspended" as const };
+    const listStaff = vi
+      .fn()
+      .mockResolvedValueOnce(people)
+      .mockResolvedValue([suspendedP1, people[1]]);
+    const api = stubApi({ listStaff });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    await openEdit(el, "p1");
+    expect(editForm(el).person!.status).toBe("active");
+
+    editForm(el).dispatchEvent(
+      new CustomEvent("set-status", {
+        detail: { status: "suspended" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+
+    expect(editForm(el).person!.status).toBe("suspended");
+  });
+
+  // A rejected edit action becomes the error banner (never an unhandled rejection — pristine output
+  // pins that) and leaves the dialog OPEN so the operator can retry. Covers the `.code` arm.
+  it("shows the thrown code and keeps the dialog open when an edit action is rejected", async () => {
+    const api = stubApi({
+      updatePerson: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+    });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    await openEdit(el, "p1");
+
+    editForm(el).dispatchEvent(
+      new CustomEvent("update-role", { detail: { role: "admin" }, bubbles: true, composed: true }),
+    );
+    await flush(el);
+
+    expect((el as unknown as { errorKey: string | null }).errorKey).toBe(
+      "authorization.not_permitted",
+    );
+    expect(editForm(el).open).toBe(true); // still open for a retry
+  });
+
+  // The error must surface INSIDE the modal (its own top layer), not in the screen's page-level
+  // banner, which sits behind the dialog backdrop where a sighted operator could not see it. So while
+  // the edit dialog is open the screen passes the errorKey DOWN as `.error` and suppresses its own
+  // banner. Prove by deletion: drop the `!this.editOpen` guard and the occluded page banner reappears.
+  it("routes a rejected edit action's error into the dialog and suppresses the page banner", async () => {
+    const api = stubApi({
+      updatePerson: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+    });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    await openEdit(el, "p1");
+
+    editForm(el).dispatchEvent(
+      new CustomEvent("update-role", { detail: { role: "admin" }, bubbles: true, composed: true }),
+    );
+    await flush(el);
+
+    // Passed down and rendered inside the edit dialog's shadow.
+    expect(editForm(el).error).toBe("authorization.not_permitted");
+    expect(editForm(el).shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+      "authorization.not_permitted",
+    );
+    // The screen's own page-level banner is suppressed while the edit dialog is open.
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+  });
+
+  it("falls back to server.internal when a rejected edit action carries no code", async () => {
+    const api = stubApi({ resetPin: vi.fn().mockRejectedValue({}) });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    await openEdit(el, "p1");
+
+    editForm(el).dispatchEvent(
+      new CustomEvent("reset-pin", { detail: { pin: "4321" }, bubbles: true, composed: true }),
+    );
+    await flush(el);
+
+    expect((el as unknown as { errorKey: string | null }).errorKey).toBe("server.internal");
+  });
+
+  // Single-flight across edit actions: two update-role events fired back-to-back call updatePerson
+  // once (the mutations are not server-idempotent). Proven by deletion: drop the `#editing` guard and
+  // updatePerson is called twice.
+  it("runs at most one edit action when two fire back-to-back", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    await openEdit(el, "p1");
+
+    editForm(el).dispatchEvent(
+      new CustomEvent("update-role", { detail: { role: "admin" }, bubbles: true, composed: true }),
+    );
+    editForm(el).dispatchEvent(
+      new CustomEvent("update-role", { detail: { role: "staff" }, bubbles: true, composed: true }),
+    );
+    await flush(el);
+
+    expect(api.updatePerson).toHaveBeenCalledTimes(1);
+  });
+
+  // The type-narrowing guard in `#editWith`: an action event that arrives with no person open (not a
+  // reachable UI path — the dialog only emits while open — but the handler is null-safe) is dropped,
+  // firing no mutation. Covers the `editingPerson === null` arm.
+  it("drops an edit action that arrives with no person open", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    // No openEdit(): editingPerson is null.
+    editForm(el).dispatchEvent(
+      new CustomEvent("update-role", { detail: { role: "admin" }, bubbles: true, composed: true }),
+    );
+    await flush(el);
+
+    expect(api.updatePerson).not.toHaveBeenCalled();
+  });
+
+  // The screen owns the edit-open state, so the dialog's `wt-close` must bubble up and clear it —
+  // the same reopen contract the create form has. Prove by deletion: drop the `@wt-close` handler on
+  // dashboard-person-edit and this fails (editForm stays open after the dismiss).
+  it("closes the edit dialog on wt-close and can reopen it", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    await openEdit(el, "p1");
+    expect(editForm(el).open).toBe(true);
+
+    editForm(el).dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(editForm(el).open).toBe(false);
+    // The edit target is dropped on close (the "editingPerson is null when closed" invariant), so no
+    // stale person lingers. Prove by deletion: stop clearing editingPerson in #closeEdit and this
+    // still shows people[0].
+    expect(editForm(el).person).toBeNull();
+
+    await openEdit(el, "p2");
+    expect(editForm(el).open).toBe(true);
+    expect(editForm(el).person).toEqual(people[1]);
   });
 });
