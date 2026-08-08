@@ -40,8 +40,9 @@ function nextNif(): string {
  * RLS is exercised — a MANAGER (role `manager`, which holds `person.manage`) and a STAFF person (role
  * `staff`, which holds nothing), each WITH a dashboard password so both can log in. Each test gets its
  * OWN tenant, so the `persons` re-reads below are that test's alone and order-independent (CLAUDE.md
- * §4). `password_hash` is set directly because provisioning seeds only a PIN for the first admin;
- * `pin_hash` is NOT NULL, so a value is supplied even though these persons log in by password.
+ * §4). These persons are seeded directly because provisioning creates only the ADMIN, and these tests
+ * need a `manager` and a `staff` person to exercise permission gating; `pin_hash` is NOT NULL, so a
+ * value is supplied even though they log in by password.
  */
 async function setupTenant(): Promise<{ tenantId: string; managerId: string; staffId: string }> {
   const venue = await applyVenue(
@@ -65,7 +66,11 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string; sta
       tillName: "Caja 1",
       seriesCode: "A",
       rectificativeSeriesCode: "R",
-      admin: { displayName: "Administradora", pinHash: hashPin("1234") },
+      admin: {
+        displayName: "Administradora",
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword("dashPass123"),
+      },
     }),
     { db: suite.admin },
   );

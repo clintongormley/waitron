@@ -5,7 +5,7 @@ import type { RecordSaleInput } from "@waitron/core";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { FISCAL_MIGRATIONS, VerifactuBackend } from "@waitron/fiscal-verifactu";
-import { IDENTITY_MIGRATIONS } from "@waitron/identity";
+import { IDENTITY_MIGRATIONS, hashPassword, loginManager } from "@waitron/identity";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
   nodeId as brandNodeId,
@@ -74,7 +74,11 @@ function request(taxId = "B12345678"): VenueRequest {
     tillName: "Caja 1",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
-    admin: { displayName: "Owner", pinHash: "scrypt$00$00" },
+    admin: {
+      displayName: "Owner",
+      pinHash: "scrypt$00$00",
+      passwordHash: hashPassword("dashPass123"),
+    },
   };
 }
 
@@ -174,5 +178,45 @@ describe("a venue provisioned by applyVenue is immediately sellable", () => {
         (select secuencia from registros_facturacion where sale_id = ${saleId})::int as secuencia,
         (select secuencia from cadenas where node_id = ${venue.nodeId})::int as head_secuencia`);
     expect(chained.rows[0]).toEqual({ registros: 1, secuencia: 1, head_secuencia: 1 });
+  });
+});
+
+describe("the seeded admin can perform a first dashboard login", () => {
+  it("loginManager succeeds with the provisioned password and rejects a wrong one", async () => {
+    // The gap this whole feature closes: `venue` now seeds the admin's dashboard password, so a first
+    // management-dashboard login is possible with no already-authenticated session. A distinct obligado
+    // (B33333333) so this test's admin is its own (the PGlite suite shares one database).
+    const venue = await applyVenue(planVenue(request("B33333333")), { db: suite.db });
+
+    // The admin's id is generated at seed time, so fetch it by tenant + role rather than assume one.
+    const admin = await suite.db.execute<{ id: string }>(sql`
+      select id from persons where tenant_id = ${venue.tenantId} and role = 'admin'`);
+    const personId = admin.rows[0]?.id;
+    expect(personId).toBeDefined();
+
+    // The provisioned password logs in and mints a management session — run as the app role under the
+    // tenant (asAppUser), the same role constraints production's loginManager runs under, so this also
+    // proves app_user can SELECT the seeded password_hash and INSERT the management session.
+    const session = await withTenant(suite.db, venue.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return loginManager(tx, {
+        tenantId: venue.tenantId,
+        personId: personId!,
+        password: "dashPass123",
+      });
+    });
+    expect(session.personId).toBe(personId);
+
+    // Negative control: a wrong password is refused, so the positive case above is not a rubber stamp.
+    await expect(
+      withTenant(suite.db, venue.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return loginManager(tx, {
+          tenantId: venue.tenantId,
+          personId: personId!,
+          password: "wrongpass1",
+        });
+      }),
+    ).rejects.toMatchObject({ code: "password.invalid" });
   });
 });

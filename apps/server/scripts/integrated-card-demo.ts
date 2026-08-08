@@ -68,7 +68,7 @@ import {
   withTenant,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { IDENTITY_MIGRATIONS, hashPin } from "@waitron/identity";
+import { IDENTITY_MIGRATIONS, hashPassword, hashPin } from "@waitron/identity";
 import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
@@ -265,7 +265,11 @@ async function main(): Promise<void> {
         rectificativeSeriesCode: "R",
         // The initial admin (PIN "1234"), hashed at this boundary — a plaintext PIN never enters the
         // plan or any action.
-        admin: { displayName: "Administradora", pinHash: hashPin("1234") },
+        admin: {
+          displayName: "Administradora",
+          pinHash: hashPin("1234"),
+          passwordHash: hashPassword("dashPass123"),
+        },
       }),
       { db },
     );

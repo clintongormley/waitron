@@ -55,7 +55,7 @@ usage: waitron-provision <command> [options]
            [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]
            [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]
            [--day-cutover <HH:MM>] [--till-name <name>] [--series-code <code>]
-           [--rectificative-code <code>] [--yes]
+           [--rectificative-code <code>] [--admin-name <name>] [--yes]
 ```
 
 Every option is prompted for when omitted, so a bare `waitron-provision instance` is a complete
@@ -196,9 +196,9 @@ It is also the tool to reach for after a failed `instance`: it names which roles
 
 ### `venue`
 
-Stands a sellable venue up in one transaction: a tenant, a location, a till, a node registered as a
-Veri\*Factu SIF, and a standard plus a rectificative invoice series. It replaced the retired
-`apps/server/sql/bootstrap-tenant.sql`.
+Stands a sellable venue up in one transaction: a tenant, an **admin person**, a location, a till, a
+node registered as a Veri\*Factu SIF, and a standard plus a rectificative invoice series. It replaced
+the retired `apps/server/sql/bootstrap-tenant.sql`.
 
 Unlike `instance`, which talks to the cluster admin, `venue` connects to the **target database as the
 owner-admin** — the role that created the tables when it ran `instance` — over the same
@@ -206,6 +206,18 @@ owner-admin** — the role that created the tables when it ran `instance` — ov
 second role and no grant to widen. The database must already be **stamped and migrated**: a venue
 against an unstamped database is refused (`provisioning.database_unstamped`), because stamping is
 `instance`'s job and one database per environment is a fiscal invariant.
+
+The admin person is seeded with two login secrets, both **required** and both handled exactly like the
+admin connection string — read from an environment variable or an echo-off prompt, **never** from
+`argv`: a till **PIN** (`WAITRON_ADMIN_PIN`, for the counter POS) and a dashboard **password**
+(`WAITRON_ADMIN_PASSWORD`, for the management dashboard, ≥8 characters). Each is hashed at the CLI
+boundary (`assertPinLength` / `assertPasswordLength` enforce the same floors the identity package
+does), so only the hash ever reaches the plan or the database, and the display name (`--admin-name`) is
+the only non-secret, so it stays a flag. This is the ONLY place either secret is set for the FIRST
+admin: `setPassword` and passkey enrollment are gated on an already-authenticated management session,
+so without this seed a first dashboard login would be impossible. After `venue`, sign in to the
+management dashboard with the admin's display name and this password — that is the first dashboard
+login.
 
 It reads what would be created, prints the plan headed by `Cluster: <user>@<host>:<port>`, asks for
 confirmation (`--yes` skips it), applies, then prints the new `tenant`, `node` and `SIF` ids (with the
@@ -223,18 +235,22 @@ A worked invocation with the full option set is in
 
 ## Secrets
 
-Three, handled differently, **none ever in `argv`**.
+Five, handled differently, **none ever in `argv`**.
 
-| Secret                  | How it gets in or out                                                                           |
-| ----------------------- | ----------------------------------------------------------------------------------------------- |
-| Credential key ring     | OUTPUT of `keyring` only. Printed once, acknowledged, then screen and scrollback cleared.       |
-| Role passwords          | OUTPUT of `instance` only. Generated here, printed once in a connection string, stored nowhere. |
-| Admin connection string | INPUT. `WAITRON_ADMIN_DATABASE_URL`, or an echo-off prompt. There is no flag.                   |
+| Secret                   | How it gets in or out                                                                              |
+| ------------------------ | -------------------------------------------------------------------------------------------------- |
+| Credential key ring      | OUTPUT of `keyring` only. Printed once, acknowledged, then screen and scrollback cleared.          |
+| Role passwords           | OUTPUT of `instance` only. Generated here, printed once in a connection string, stored nowhere.    |
+| Admin connection string  | INPUT. `WAITRON_ADMIN_DATABASE_URL`, or an echo-off prompt. There is no flag.                      |
+| Admin till PIN           | INPUT (`venue`). `WAITRON_ADMIN_PIN`, or an echo-off prompt. No flag. Hashed at the CLI boundary.  |
+| Admin dashboard password | INPUT (`venue`). `WAITRON_ADMIN_PASSWORD`, or an echo-off prompt. No flag. Hashed at the boundary. |
 
 `--admin-url` is **not** an option, and neither is `--password` or `--key`. `argv` is world-readable
 in `ps` and lands in shell history, so the parser is `strict` and any such flag is a parse error
 rather than something silently accepted — `src/cli.test.ts`'s "refuses any flag that would put a
-secret in argv" and "refuses --admin-url as a flag, in both argv forms" are what keep it that way.
+secret in argv" and "refuses --admin-url as a flag, in both argv forms" are what keep it that way. The
+admin PIN and dashboard password (`venue`) are read the same way: from `WAITRON_ADMIN_PIN` /
+`WAITRON_ADMIN_PASSWORD` or an echo-off prompt, and from nowhere else.
 
 Set the environment variable for a non-interactive run:
 

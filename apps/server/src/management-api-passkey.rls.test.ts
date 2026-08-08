@@ -102,8 +102,9 @@ function nextNif(): string {
  * RLS is exercised — a MANAGER (role `manager`, which holds `person.manage`) WITH a dashboard password,
  * so a password login yields a management-session cookie that gates the register routes. Each test gets
  * its OWN tenant, so the credential re-reads below are that test's alone and order-independent
- * (CLAUDE.md §4). `password_hash` is set directly because provisioning seeds only a PIN for the first
- * admin; `pin_hash` is NOT NULL, so a value is supplied even though this person logs in by password.
+ * (CLAUDE.md §4). This person is seeded directly because provisioning creates only the ADMIN, and this
+ * test needs a `manager` (which holds `person.manage`); `pin_hash` is NOT NULL, so a value is supplied
+ * even though they log in by password.
  * (Mirrors the 1b harness's `setupTenant`, minus the unused STAFF person: these passkey routes resolve
  * the person from the session, so only the logged-in manager is needed.)
  */
@@ -129,7 +130,11 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string }> {
       tillName: "Caja 1",
       seriesCode: "A",
       rectificativeSeriesCode: "R",
-      admin: { displayName: "Administradora", pinHash: hashPin("1234") },
+      admin: {
+        displayName: "Administradora",
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword("dashPass123"),
+      },
     }),
     { db: suite.admin },
   );
