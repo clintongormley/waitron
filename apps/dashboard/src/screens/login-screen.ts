@@ -4,6 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import type { DashboardApi, RosterEntry } from "../api/client.js";
+import { selectStyles } from "../select-styles.js";
 
 /**
  * The dashboard's pre-session login screen: a roster picker (native `<select>` — there is no
@@ -21,6 +22,7 @@ import type { DashboardApi, RosterEntry } from "../api/client.js";
 export class LoginScreen extends LitElement {
   static override styles = [
     baseStyles,
+    selectStyles,
     css`
       .field {
         display: block;
@@ -29,15 +31,6 @@ export class LoginScreen extends LitElement {
       .error {
         color: var(--wt-color-danger);
         margin-top: var(--wt-space-3);
-      }
-      select {
-        font: inherit;
-        padding: var(--wt-space-2);
-        border-radius: var(--wt-radius-md);
-        border: 1px solid var(--wt-color-border);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        width: 100%;
       }
     `,
   ];

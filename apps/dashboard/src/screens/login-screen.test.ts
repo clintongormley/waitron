@@ -13,13 +13,18 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   } as unknown as DashboardApi;
 }
 
+/** Lets the pending `getStaffRoster`/`login` promise settle and the element re-render. */
+async function flush(el: LoginScreen): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await el.updateComplete;
+}
+
 describe("login-screen", () => {
   it("loads the roster and logs in the picked person", async () => {
     const api = stubApi();
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
     await el.updateComplete;
-    await new Promise((r) => setTimeout(r)); // let getStaffRoster resolve
-    await el.updateComplete;
+    await flush(el);
     const loggedIn = new Promise<{ personId: string }>((resolve) =>
       el.addEventListener("logged-in", (e) => resolve((e as CustomEvent).detail)),
     );
@@ -42,8 +47,7 @@ describe("login-screen", () => {
     (el as unknown as { selected: string }).selected = "p1";
     (el as unknown as { password: string }).password = "wrong";
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
-    await new Promise((r) => setTimeout(r));
-    await el.updateComplete;
+    await flush(el);
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("password.invalid");
   });
 
@@ -59,8 +63,7 @@ describe("login-screen", () => {
     });
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
     await el.updateComplete;
-    await new Promise((r) => setTimeout(r));
-    await el.updateComplete;
+    await flush(el);
 
     const select = el.shadowRoot!.querySelector("select")!;
     select.value = "p2";
@@ -86,8 +89,7 @@ describe("login-screen", () => {
     const api = stubApi({ getStaffRoster: vi.fn().mockRejectedValue({ code: "server.internal" }) });
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
     await el.updateComplete;
-    await new Promise((r) => setTimeout(r));
-    await el.updateComplete;
+    await flush(el);
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("server.internal");
     expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain("server.internal");
   });
@@ -96,8 +98,7 @@ describe("login-screen", () => {
     const api = stubApi({ getStaffRoster: vi.fn().mockRejectedValue({}) });
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
     await el.updateComplete;
-    await new Promise((r) => setTimeout(r));
-    await el.updateComplete;
+    await flush(el);
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("server.internal");
   });
 
@@ -105,8 +106,7 @@ describe("login-screen", () => {
     const api = stubApi({ getStaffRoster: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
     await el.updateComplete;
-    await new Promise((r) => setTimeout(r));
-    await el.updateComplete;
+    await flush(el);
     expect((el as unknown as { selected: string }).selected).toBe("");
   });
 
@@ -117,8 +117,7 @@ describe("login-screen", () => {
     (el as unknown as { selected: string }).selected = "p1";
     (el as unknown as { password: string }).password = "wrong";
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
-    await new Promise((r) => setTimeout(r));
-    await el.updateComplete;
+    await flush(el);
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("server.internal");
   });
 });

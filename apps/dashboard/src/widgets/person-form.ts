@@ -5,6 +5,7 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import type { PersonRole } from "../api/client.js";
+import { selectStyles } from "../select-styles.js";
 
 /** The role options the create form offers, in the slice-1b staff API's own order. */
 const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"];
@@ -37,22 +38,11 @@ const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"]
 export class PersonForm extends LitElement {
   static override styles = [
     baseStyles,
+    selectStyles,
     css`
       .field {
         display: block;
         margin-bottom: var(--wt-space-4);
-      }
-
-      /* Matches the login screen's roster <select>: a token-styled native control (no wt-select
-         primitive exists). The 1px hairline is a literal, as wt-input/wt-card's own borders are. */
-      select {
-        font: inherit;
-        width: 100%;
-        padding: var(--wt-space-2);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
       }
     `,
   ];
