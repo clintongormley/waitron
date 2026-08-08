@@ -159,7 +159,8 @@ describe("person-edit", () => {
   });
 
   // Leak guard: a typed PIN and password are SECRETS and must not linger into the next person's edit.
-  // When the dialog closes (Escape/backdrop, or the screen setting `.open=false`), both fields reset.
+  // When the dialog closes (Escape, or the screen setting `.open=false` — wt-dialog has no backdrop
+  // light-dismiss), both fields reset.
   // Prove by deletion: drop the resets in `#onClose` and this reopens with "4321"/"secret" still set.
   // `dialog.close()` fires the native `close` event as a QUEUED TASK, so the wt-close must be awaited.
   it("resets the pin and password fields when the dialog closes", async () => {
@@ -194,5 +195,63 @@ describe("person-edit", () => {
       el.shadowRoot!.querySelector<HTMLElement & { value: string }>("[data-test=edit-password]")!
         .value,
     ).toBe("");
+  });
+
+  // A native <select> keeps a user's dirty pick even after `selectedRole` reverts, because a
+  // `?selected` attribute only seeds `defaultSelected`. So: pick a non-saved role, close (which
+  // reverts `selectedRole` to the person's role), reopen the SAME person — the picker must show the
+  // person's role again, not the abandoned pick. `updated()` reconciling `.value` is what fixes this;
+  // prove by deletion: remove the `updated()` reconcile and this reopens showing "admin".
+  it("shows the person's role again after an unsaved pick is reverted on close and reopened", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
+      person: active, // role: manager
+      open: true,
+    });
+    const select = () => el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=edit-role]")!;
+    select().value = "admin";
+    select().dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    expect(select().value).toBe("admin");
+
+    // Close via the real Escape/programmatic path — the native <dialog> closing fires wt-close.
+    const nativeDialog = await openedDialog(el);
+    const closed = new Promise<void>((resolve) =>
+      el.addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+    nativeDialog.close();
+    await closed;
+    await el.updateComplete;
+
+    // Reopen the same person (same personId, so willUpdate's identity guard does NOT re-preset).
+    el.open = true;
+    await el.updateComplete;
+    expect(select().value).toBe("manager");
+  });
+
+  // A PIN and a password are secrets; the fields must be masked (type=password), not plaintext — the
+  // wt-input default. `wt-input` forwards `type` to its inner <input> (packages/ui wt-input.ts).
+  it("masks the pin and password fields", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
+      person: active,
+      open: true,
+    });
+    const inner = (test: string) =>
+      el
+        .shadowRoot!.querySelector(`[data-test=${test}]`)!
+        .shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    expect(inner("edit-pin").type).toBe("password");
+    expect(inner("edit-password").type).toBe("password");
+  });
+
+  // The screen passes an edit action's failure down as `error`; it renders in the dialog's own top
+  // layer (role="alert"), where the page-level banner behind the backdrop could not be seen.
+  it("renders the error inside the dialog when one is set", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
+      person: active,
+      open: true,
+      error: "authorization.not_permitted",
+    });
+    const alert = el.shadowRoot!.querySelector("[role=alert]");
+    expect(alert?.textContent).toContain("authorization.not_permitted");
   });
 });

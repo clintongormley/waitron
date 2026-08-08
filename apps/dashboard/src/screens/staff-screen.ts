@@ -21,7 +21,8 @@ import type { DashboardApi, PersonRole, PersonSummary } from "../api/client.js";
  * On connect it loads `api.listStaff()` into `people` and hands them down to the list. An "Añadir
  * usuario" button opens the create form (`formOpen = true`); on the form's `create-person` event it
  * calls `api.createPerson(detail)`, and on success reloads the list and closes the form — so the list
- * reflects the new person and the operator returns to it. A dismissal (Escape/backdrop) reaches the
+ * reflects the new person and the operator returns to it. A dismissal (Escape — `wt-dialog` has no
+ * backdrop light-dismiss) reaches the
  * screen as the form's composed `wt-close`, which the render's `@wt-close` turns back into
  * `formOpen = false`, so the state the screen owns tracks the dialog the operator actually closed —
  * the fix for a form that could not be reopened after a dismiss (parent `formOpen` stuck `true`, so
@@ -44,7 +45,10 @@ import type { DashboardApi, PersonRole, PersonSummary } from "../api/client.js";
  * - a rejected `createPerson()` sets the same `errorKey` and DOES NOT reload or close the form, so
  *   the entered values survive and the operator can retry.
  * - a rejected edit action (`#runEditAction`) sets the same `errorKey` and leaves the edit dialog
- *   open for a retry, the same shape as create.
+ *   open for a retry. While the edit dialog is open the `errorKey` is passed DOWN into it
+ *   (`.error`), so it renders in the modal's own top layer, and the page-level banner is suppressed
+ *   (`errorKey && !editOpen`) — the create form's banner sits behind its backdrop, a known
+ *   limitation this dialog does not repeat.
  */
 @customElement("dashboard-staff-screen")
 export class StaffScreen extends LitElement {
@@ -291,7 +295,11 @@ export class StaffScreen extends LitElement {
         .people=${this.people}
         @edit-person=${(e: CustomEvent<{ personId: string }>) => this.#onEditPerson(e)}
       ></dashboard-staff-list>
-      ${this.errorKey ? html`<p class="error" role="alert">${this.errorKey}</p>` : ""}
+      ${
+        this.errorKey && !this.editOpen
+          ? html`<p class="error" role="alert">${this.errorKey}</p>`
+          : ""
+      }
       ${this.passkeyStatus ? html`<p class="status" role="status">${this.passkeyStatus}</p>` : ""}
       <dashboard-person-form
         .open=${this.formOpen}
@@ -302,6 +310,7 @@ export class StaffScreen extends LitElement {
       <dashboard-person-edit
         .person=${this.editingPerson}
         .open=${this.editOpen}
+        .error=${this.editOpen ? this.errorKey : null}
         @update-role=${(e: CustomEvent<{ role: PersonRole }>) => this.#onUpdateRole(e)}
         @set-status=${(e: CustomEvent<{ status: "active" | "suspended" }>) => this.#onSetStatus(e)}
         @reset-pin=${(e: CustomEvent<{ pin: string }>) => this.#onResetPin(e)}

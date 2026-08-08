@@ -451,6 +451,32 @@ describe("staff-screen — row edit", () => {
     expect(editForm(el).open).toBe(true); // still open for a retry
   });
 
+  // The error must surface INSIDE the modal (its own top layer), not in the screen's page-level
+  // banner, which sits behind the dialog backdrop where a sighted operator could not see it. So while
+  // the edit dialog is open the screen passes the errorKey DOWN as `.error` and suppresses its own
+  // banner. Prove by deletion: drop the `!this.editOpen` guard and the occluded page banner reappears.
+  it("routes a rejected edit action's error into the dialog and suppresses the page banner", async () => {
+    const api = stubApi({
+      updatePerson: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+    });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    await openEdit(el, "p1");
+
+    editForm(el).dispatchEvent(
+      new CustomEvent("update-role", { detail: { role: "admin" }, bubbles: true, composed: true }),
+    );
+    await flush(el);
+
+    // Passed down and rendered inside the edit dialog's shadow.
+    expect(editForm(el).error).toBe("authorization.not_permitted");
+    expect(editForm(el).shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+      "authorization.not_permitted",
+    );
+    // The screen's own page-level banner is suppressed while the edit dialog is open.
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+  });
+
   it("falls back to server.internal when a rejected edit action carries no code", async () => {
     const api = stubApi({ resetPin: vi.fn().mockRejectedValue({}) });
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });

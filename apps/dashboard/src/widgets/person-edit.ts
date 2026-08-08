@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { createRef, ref } from "lit/directives/ref.js";
 import type { PropertyValues } from "lit";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
@@ -32,12 +33,18 @@ const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"]
  * boundary to the screen. The staff screen is the single owner of the open state and drives it by
  * setting `.open` — the same open-by-property contract `wt-dialog` uses.
  *
- * The role picker is driven by `?selected` on each option, NOT by a `.value` property on the `<select>`:
- * a `.value` bound before the option children render fails to select a NON-DEFAULT value (the latent
- * bug the create/login pickers carry, harmless there only because their default is the first option) —
- * and this form's whole job is to show a non-default current role. Server-side length rules
- * (`pin.too_short` / `password.too_short`) are NOT duplicated here: a short value is refused by the
- * server and surfaces as that code in the staff screen's banner.
+ * The role `<select>` is reconciled to `selectedRole` imperatively in `updated()`, NOT by a template
+ * binding, because neither binding is sufficient on a native select: a `.value` bound in the template
+ * commits before the `<option>` children exist, so a non-default preset falls back to the first option
+ * (the latent bug the create/login pickers carry, harmless there only because their default IS the
+ * first option); and `?selected` sets each option's boolean `selected` CONTENT attribute, which only
+ * seeds `defaultSelected` and is IGNORED once the user has dirtied the select — so after a user picks a
+ * value, closes (which reverts `selectedRole`) and reopens the same person, a `?selected` picker keeps
+ * the stale dirty pick while state says otherwise. Setting `.value` in `updated()` — after the options
+ * are in the DOM, on every render — makes the picker a properly controlled component in all three
+ * cases (initial preset, cross-person switch, and reopen-after-unsaved-revert). Server-side length
+ * rules (`pin.too_short` / `password.too_short`) are NOT duplicated here: a short value is refused by
+ * the server and surfaces as that code — inside this dialog when it is open (see the `error` property).
  *
  * Roles and status render as their raw domain tokens; a later i18n task maps them to Spanish copy,
  * exactly as the login screen defers its error keys and the staff list its role/status.
@@ -72,6 +79,12 @@ export class PersonEdit extends LitElement {
       .status-label {
         color: var(--wt-color-text);
       }
+      /* The in-dialog error banner — rendered in the modal's own top layer, unlike the screen's
+         page-level banner which the backdrop would occlude. */
+      .edit-error {
+        color: var(--wt-color-danger);
+        margin: 0 0 var(--wt-space-3);
+      }
     `,
   ];
 
@@ -80,6 +93,15 @@ export class PersonEdit extends LitElement {
 
   /** Whether the dialog is showing. The screen sets this to open the form; the form clears it on close. */
   @property({ type: Boolean, reflect: true }) open = false;
+
+  /**
+   * An error to show INSIDE the open dialog (a raw code, e.g. `authorization.not_permitted` or
+   * `pin.too_short` — a later i18n task maps it to copy). The screen passes the edit action's failure
+   * here so it renders in the modal's own top layer; the screen's page-level banner sits BEHIND the
+   * modal backdrop, where a sighted operator could not see it — the create dialog's known limitation,
+   * not repeated for edit.
+   */
+  @property() error: string | null = null;
 
   // Named `selectedRole`, not `role`: `HTMLElement` already carries a public `role` ARIA property
   // (ARIAMixin), which a `private role` field would illegally narrow — the same collision person-form
@@ -94,11 +116,26 @@ export class PersonEdit extends LitElement {
   // unsaved role selection made during the same open session.
   #rolePersonId: string | null = null;
 
+  // A handle to the native role <select>, reconciled to `selectedRole` in `updated()` (see the class
+  // doc for why a template binding cannot do this on a native select).
+  #roleSelect = createRef<HTMLSelectElement>();
+
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("person") && this.person && this.person.personId !== this.#rolePersonId) {
       this.selectedRole = this.person.role;
       this.#rolePersonId = this.person.personId;
     }
+  }
+
+  override updated(): void {
+    // Force the native <select>'s live value to match `selectedRole` after every render, once the
+    // <option> children are in the DOM. This is the ONLY place the picker's displayed value is set —
+    // it corrects both the before-options ordering (initial preset) and a user-dirtied select whose
+    // state has since reverted (reopen-after-unsaved-change). No-op when the dialog has no person
+    // (the select is not rendered). Setting `.value` imperatively does not trigger a reactive update,
+    // so this does not loop.
+    const select = this.#roleSelect.value;
+    if (select) select.value = this.selectedRole;
   }
 
   /** Capture the picked role. A native `<select>` `change` is `composed: false`, so `stopPropagation`
@@ -127,8 +164,11 @@ export class PersonEdit extends LitElement {
   }
 
   /**
-   * The dialog closed (Escape/backdrop, or the screen setting `.open=false`). Drop our own `open` to
-   * stay self-consistent and — unlike the field handlers — deliberately do NOT `stopPropagation`: the
+   * The dialog closed (Escape, or the screen setting `.open=false` — `wt-dialog` implements no
+   * backdrop light-dismiss: it has a `::backdrop` STYLE but no click/pointer/`closedby` handler, so a
+   * backdrop click does NOT close it; verified against `packages/ui/src/components/wt-dialog.ts` and a
+   * real modal `<dialog>`). Drop our own `open` to stay self-consistent and — unlike the field
+   * handlers — deliberately do NOT `stopPropagation`: the
    * composed `wt-close` must bubble on to the staff screen (the single owner of the open state) so its
    * edit-open flag tracks the close and the dialog can reopen (the same contract person-form documents).
    *
@@ -154,16 +194,16 @@ export class PersonEdit extends LitElement {
         ${
           person
             ? html`
+                ${this.error ? html`<p class="edit-error" role="alert">${this.error}</p>` : nothing}
                 <div class="action">
                   <label class="field grow"
                     >Rol
-                    <select data-test="edit-role" @change=${(e: Event) => this.#onRoleChange(e)}>
-                      ${ROLES.map(
-                        (role) =>
-                          html`<option value=${role} ?selected=${role === this.selectedRole}>
-                            ${role}
-                          </option>`,
-                      )}
+                    <select
+                      data-test="edit-role"
+                      ${ref(this.#roleSelect)}
+                      @change=${(e: Event) => this.#onRoleChange(e)}
+                    >
+                      ${ROLES.map((role) => html`<option value=${role}>${role}</option>`)}
                     </select>
                   </label>
                   <wt-button
@@ -194,6 +234,7 @@ export class PersonEdit extends LitElement {
                     class="field grow"
                     data-test="edit-pin"
                     label="PIN"
+                    type="password"
                     .value=${this.pin}
                     @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPinChange(e)}
                   ></wt-input>
@@ -210,6 +251,7 @@ export class PersonEdit extends LitElement {
                     class="field grow"
                     data-test="edit-password"
                     label="Contraseña"
+                    type="password"
                     .value=${this.password}
                     @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPasswordChange(e)}
                   ></wt-input>
