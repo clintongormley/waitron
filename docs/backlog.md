@@ -47,7 +47,7 @@ With both the fiscal story and the operable till complete, the owner chose the n
 The two ran in parallel at the feature level without incident: the anticipated
 `packages/db/drizzle/meta/_journal.json` collision was avoided by sequencing the migrations
 (0031 allergens → 0032 8a → 0033 8b) as each branch landed. Active focus is now the **management
-dashboard** (slice 1c — the dashboard app).
+dashboard** (slice 1d — passkeys, the final sub-slice).
 
 **Management dashboard added 2026-08-07 (building).** The owner's off-premises management console —
 designed and fully planned this session
@@ -67,8 +67,12 @@ till sessions, and a `person.manage`-gated `listPersons` — `@waitron/identity`
 **1b (server management API) LANDED as #69** (2026-08-08): the slice-1a auth exposed over HTTP as a
 `/management-api/*` Hono route group on `apps/server` (a `waitron_management_session` cookie,
 login/logout, `person.manage`-gated staff CRUD), plus `setPassword` in `@waitron/identity`. **1c (the
-dashboard app) is next**, then 1d (passkeys). Slice-1a/1b follow-ups (incl. the still-open
-first-admin-password provisioning gap) are under *Debt and odd jobs*.
+dashboard app) LANDED as #70** (2026-08-08): `apps/dashboard`, a Lit/Vite browser console — a boot
+session probe → login (roster + password + optional TOTP) or the staff screen (list + create person),
+on `@waitron/ui` primitives with a11y in both themes, plus its own Chromium CI shard. **1d (passkeys)
+is next** — the final dashboard sub-slice (offline-verifiable passkey auth). Slice-1a/1b/1c follow-ups
+(incl. the still-open first-admin-password provisioning gap that blocks a true first login) are under
+*Debt and odd jobs*.
 
 **Prioritisation is by soundness, not the calendar (decided 2026-08-02).** Waitron will be finished
 before the deli is ready to trade, so the deli's 1-Jan-2027 legal deadline is *not* a reason to rank
@@ -81,7 +85,7 @@ most-uncertain foundations first.
 
 | What | State |
 | --- | --- |
-| **Management dashboard** — owner's off-premises console | **Slice 1a (#67) + 1b (server management API, #69) LANDED**; **1c (the dashboard app) is next**, then 1d (passkeys). Spec + plans 1a–1d committed (see *Current direction*). Slice-1a/1b follow-ups + the still-open first-admin-password provisioning gap under *Debt and odd jobs* |
+| **Management dashboard** — owner's off-premises console | **Slice 1a (#67) + 1b (#69) + 1c (dashboard app, #70) LANDED**; **1d (passkeys) is next** — the final sub-slice. Spec + plans 1a–1d committed (see *Current direction*). Slice-1a/1b/1c follow-ups + the still-open first-admin-password provisioning gap under *Debt and odd jobs* |
 
 ---
 
@@ -92,6 +96,7 @@ One line per landed PR, newest first. The git log, the linked designs/plans, and
 detail — **this file is not a history** (see *How to keep this file honest*). Open follow-ups from
 these live under *Debt and odd jobs*; their designs/plans stay in `docs/superpowers/`.
 
+- **#70** Dashboard slice 1c — dashboard app — `apps/dashboard`, a browser management console (Lit 3 + Vite 6 + Vitest browser-mode/Playwright-Chromium) consuming slice-1b's `/management-api/*`: a `DashboardApi` client (browser-local types, paths/verbs matched exactly to the routes), a boot session probe → login screen (roster + password + optional TOTP → `logged-in`) / staff screen (list + create dialog → `createPerson` → reload) + logout, all wrapped so no async path is an unhandled rejection; built on `@waitron/ui` primitives + `var(--wt-*)` tokens with an axe `.a11y.test.ts` per screen in both themes; its own `test-dashboard` Chromium CI shard (wired into the `ci` aggregate). All source files 100% coverage. Whole-branch review caught a create-dialog reopen bug; the finish-branch two-lens review twin-caught a create-form-not-reset bug (duplicate/reused-PIN hazard) + added a create single-flight guard. Headless server backend is 1b; UI actions for row-edit are a fast-follow (see below).
 - **#69** Dashboard slice 1b — server management API — the slice-1a identity auth exposed over HTTP as a `/management-api/*` Hono route group on `apps/server` mirroring `mountTillApi`: a `waitron_management_session` cookie (httpOnly / SameSite=Strict / Secure-iff-TLS), login/logout, and `person.manage`-gated staff CRUD (list/create/patch/reset-pin/set-password), plus `setPassword` in `@waitron/identity` (an admin grants dashboard access). New `management.request_invalid` body-shape code; every handler scoped to the one venue tenant via `withTenant` + `asAppUser`. Real-PG e2e incl. a **differential** cross-tenant isolation proof (fails if `asAppUser` is dropped) + refusal proofs (unauth 401, wrong-password 401 + no cookie, staff-role 403). Finish-branch fixed a null/non-object-body → 500 class (now the routes' own 4xx), the PATCH type-screening gap (`role`/`status` now 400 not pgEnum-500) + its false errors.ts doc, and three overstating comments; a Copilot NIF-collision flag was verified a **false positive** (one PG container per file → isolated DBs). Headless — the UI is 1c.
 - **#68** Frozen *cierre Z* (sub-project 8, slice 8b) — immutable numbered `daily_closes` (0033, the immutability recipe: `REVOKE ALL` + `GRANT SELECT,INSERT` + append-only/anti-TRUNCATE triggers + FORCE RLS + tenant policy) freezing a snapshot of the derived close, a per-node `daily_close_chain` head that `recordDailyClose` advances in the **same transaction** as the close (single-active-writer `FOR UPDATE`, `UNIQUE(scope, sequence_no)` backstop), per-till counted-cash vs expected reconciliation → `cash_variance` (*descuadre*), and `verifyDailyCloseChain` which re-walks a `(tenant, node)` chain reporting the first break (`sequence`/`genesis`/`broken_link`/`hash_mismatch`/`tail_truncation`/`missing_head`). Headless; English schema tokens (`daily_closes`/`cash_variance`/`entry_hash`), Spanish *cierre Z*/*descuadre* UI-only. Copilot caught a tamper-detection gap in review — a deleted chain head with surviving closes read as `ok:true`; now caught as `missing_head`, proven by deletion in a real-PG test.
 - **#66** VAT-exact daily close (sub-project 8, slice 8a) — `sales.vat_breakdown jsonb NOT NULL` (0032) written from the *same* variable each sale-creating backend files (one source, cannot diverge from the huella); `computeVatSummary` reads it (`cross join lateral`, rate normalised as `numeric(5,2)::text`) so the daily close is exact per-rate for catalogue difference-method sales. No `computeHuella` change. Prerequisite for the frozen cierre Z (8b).
@@ -342,6 +347,30 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     `drain — batching (the 1001-split)` test can exceed its 30s `testTimeout` under a contended CI shard
     (measured 32s in CI, ~1.2s locally). A heavy 1001-record test; bump its per-test timeout or shrink the
     fixture. Passes on re-run — a flaky timeout, not a regression.
+- **Dashboard slice 1c follow-ups (#70, dashboard app). None blocking; each deferred with a reason
+  during the SDD build / simplify / finish-branch / Copilot review chain.**
+  - **Row-edit ACTIONS are unwired — the biggest one.** `dashboard-staff-list` renders an "Editar"
+    button per row that emits `edit-person`, but NOTHING consumes it, so in the shipped app the button
+    is a silent no-op. The edit actions (change role / suspend / reactivate / reset-PIN / set-password)
+    already exist as `DashboardApi` methods (`updatePerson`/`resetPin`/`setPassword`) — wiring an edit
+    dialog to them in the staff screen is a thin fast-follow. Until then the button is a **seam**, not a
+    feature (plan self-review §626 scoped the actions out deliberately).
+  - **No i18n layer.** The app renders raw error CODES and inline Spanish literals; a follow-up should
+    add an `i18n/` layer mapping codes → localised copy, exactly as `apps/till/src/i18n` does (the till's
+    precedent). Also: a session that expires mid-use surfaces the raw `management_session.required` key
+    with no re-login flow — the shell never re-probes (server enforcement is intact; this is UX).
+  - **Double `listStaff()` on cold load.** The shell's session probe and the staff screen each fetch the
+    roster on a logged-in cold load (the probe discards its result). Thread the probed list down (an
+    initial-people property, or lift `people` into the shell) to drop one `/management-api/staff` round
+    trip. Real but low-cost for a small admin app.
+  - **Create-error renders behind the modal.** A rejected `createPerson` keeps the dialog open (for
+    retry — correct) but the `role="alert"` banner sits behind the backdrop, so a sighted operator may
+    not see WHY it failed (screen readers still announce it). Surface the create error inside the dialog.
+  - **Minors:** the `<select>.value` is bound before its `<option>` children in `login-screen`/`person-form`
+    (renders right today only because the default equals the first option — latent if reused to EDIT a
+    non-default value); no top-level `<main>` landmark in the shell (consistent with `apps/till`; axe
+    passes); `staff-list`'s `people` prop-doc still says "the app owns" (harmless imprecision); and
+    `apps/dashboard` declares `@waitron/shared` but doesn't import it yet (plausibly 1d's — else drop it).
 - **Counter POS follow-ups (sub-project 7, slice 1 / 7a — the walk-up cash sale). None blocking; each
   is a deliberate slice-1 boundary or a small review Minor, deferred rather than dropped.**
   - **TLS termination, LAN binding and serving the built bundle are deployment (#9).** In dev the till
