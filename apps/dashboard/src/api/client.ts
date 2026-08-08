@@ -69,7 +69,7 @@ export class DashboardApi {
     return this.#request<{ personId: string }>("/management-api/session", "POST", input);
   }
 
-  /** `DELETE /management-api/session` — end the session. Answers an empty 200. */
+  /** `DELETE /management-api/session` — end the session. Answers an empty 204. */
   logout(): Promise<void> {
     return this.#request<void>("/management-api/session", "DELETE");
   }
@@ -90,7 +90,7 @@ export class DashboardApi {
 
   /**
    * `PATCH /management-api/staff/:id` — change a person's role and/or active status. Answers an
-   * empty 200.
+   * empty 204.
    */
   updatePerson(
     id: string,
@@ -99,14 +99,14 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/staff/${id}`, "PATCH", patch);
   }
 
-  /** `POST /management-api/staff/:id/reset-pin` — set a person's new PIN. Answers an empty 200. */
+  /** `POST /management-api/staff/:id/reset-pin` — set a person's new PIN. Answers an empty 204. */
   resetPin(id: string, pin: string): Promise<void> {
     return this.#request<void>(`/management-api/staff/${id}/reset-pin`, "POST", { pin });
   }
 
   /**
    * `POST /management-api/staff/:id/password` — set a person's dashboard password. Answers an empty
-   * 200.
+   * 204.
    */
   setPassword(id: string, password: string): Promise<void> {
     return this.#request<void>(`/management-api/staff/${id}/password`, "POST", { password });
@@ -123,9 +123,10 @@ export class DashboardApi {
    * method of `this` (which would rebind a native `fetch`).
    *
    * A 2xx with an EMPTY body resolves to `undefined` rather than being JSON-parsed: the mutation
-   * routes (`logout`, `updatePerson`, `resetPin`, `setPassword`) answer empty 200s, on which
-   * `res.json()` would throw a `SyntaxError`. Those callers type `T` as `void`; every JSON route
-   * sends a body, so the non-empty branch parses exactly as before.
+   * routes (`logout`, `updatePerson`, `resetPin`, `setPassword`) answer empty 204s (`c.body(null,
+   * 204)` in `apps/server/src/management-api.ts`), on which `res.json()` would throw a `SyntaxError`.
+   * Those callers type `T` as `void`; every JSON route sends a body, so the non-empty branch parses
+   * exactly as before. The branch keys off the empty body (`res.text() === ""`), not the status.
    */
   async #request<T>(path: string, method: string, body?: unknown): Promise<T> {
     const fetchImpl = this.#fetchImpl;

@@ -6,12 +6,14 @@ function jsonResponse(body: unknown, ok = true, status = 200): Response {
 }
 
 /**
- * An empty 200 — `text()` → "" — the shape the void-returning management routes answer with
- * (`logout`, `updatePerson`, `resetPin`, `setPassword`). Exercises `#request`'s empty-body branch,
- * which resolves `undefined` instead of `JSON.parse`-ing nothing.
+ * An empty 204 — `text()` → "" — the shape the void-returning management routes answer with
+ * (`logout`, `updatePerson`, `resetPin`, `setPassword`; `c.body(null, 204)` in
+ * `apps/server/src/management-api.ts`). Exercises `#request`'s empty-body branch, which resolves
+ * `undefined` instead of `JSON.parse`-ing nothing. `#request` keys off the empty body (`res.ok` +
+ * `text() === ""`), not the exact status, so 204 stands in for the real routes.
  */
 function emptyResponse(): Response {
-  return { ok: true, status: 200, json: async () => undefined, text: async () => "" } as Response;
+  return { ok: true, status: 204, json: async () => undefined, text: async () => "" } as Response;
 }
 
 describe("DashboardApi", () => {
@@ -81,7 +83,7 @@ describe("DashboardApi", () => {
     });
   });
 
-  it("logout DELETEs the session and resolves undefined on an empty 200 body", async () => {
+  it("logout DELETEs the session and resolves undefined on an empty 204 body", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
     await expect(api.logout()).resolves.toBeUndefined();
@@ -104,7 +106,7 @@ describe("DashboardApi", () => {
     });
   });
 
-  it("updatePerson PATCHes the addressed person (empty 200 body)", async () => {
+  it("updatePerson PATCHes the addressed person (empty 204 body)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
     await expect(
@@ -118,7 +120,7 @@ describe("DashboardApi", () => {
     });
   });
 
-  it("resetPin POSTs the new pin to the addressed person's reset-pin route (empty 200 body)", async () => {
+  it("resetPin POSTs the new pin to the addressed person's reset-pin route (empty 204 body)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
     await expect(api.resetPin("p1", "9999")).resolves.toBeUndefined();
@@ -130,7 +132,7 @@ describe("DashboardApi", () => {
     });
   });
 
-  it("setPassword POSTs the new password to the addressed person's password route (empty 200 body)", async () => {
+  it("setPassword POSTs the new password to the addressed person's password route (empty 204 body)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
     await expect(api.setPassword("p1", "hunter2 correct horse")).resolves.toBeUndefined();

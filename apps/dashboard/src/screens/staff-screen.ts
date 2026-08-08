@@ -12,12 +12,16 @@ import type { DashboardApi, PersonRole, PersonSummary } from "../api/client.js";
 /**
  * The management dashboard's STAFF SCREEN: the composition point that wires the pure-display
  * `<dashboard-staff-list>` and the `<dashboard-person-form>` create dialog to the injected
- * `DashboardApi`. It owns the list state and the form-open state; the two widgets stay dumb.
+ * `DashboardApi`. It is the single owner of the form-open state (`formOpen`) and the list state.
  *
  * On connect it loads `api.listStaff()` into `people` and hands them down to the list. An "Añadir
- * usuario" button opens the form (`.open = true`); on the form's `create-person` event it calls
+ * usuario" button opens the form (`formOpen = true`); on the form's `create-person` event it calls
  * `api.createPerson(detail)`, and on success reloads the list and closes the form — so the list
- * reflects the new person and the operator returns to it.
+ * reflects the new person and the operator returns to it. A dismissal (Escape/backdrop) reaches the
+ * screen as the form's composed `wt-close`, which the render's `@wt-close` turns back into
+ * `formOpen = false`, so the state the screen owns tracks the dialog the operator actually closed —
+ * the fix for a form that could not be reopened after a dismiss (parent `formOpen` stuck `true`, so
+ * the next "open" was a no-op that re-committed nothing to the child's `.open`).
  *
  * ERROR HANDLING, both async paths, mirroring `login-screen.ts`'s `#loadRoster`/`#submit`:
  * - `#load()` is called via `void this.#load()` on connect, so a rejected `listStaff()` MUST be
@@ -79,8 +83,13 @@ export class StaffScreen extends LitElement {
     }
   }
 
-  /** The add button opens the create form; the form owns its own dismissal (`wt-close`). */
+  /**
+   * The add button opens the create form. Clear `errorKey` first so a banner left by a previous
+   * action does not shadow the freshly opened form. Dismissal is not handled here: the form emits
+   * `wt-close`, which the render's `@wt-close` tracks back into `formOpen` (see the class doc).
+   */
   #openForm(): void {
+    this.errorKey = null;
     this.formOpen = true;
   }
 
@@ -118,6 +127,7 @@ export class StaffScreen extends LitElement {
         .open=${this.formOpen}
         @create-person=${(e: CustomEvent<{ displayName: string; role: PersonRole; pin: string }>) =>
           void this.#onCreatePerson(e)}
+        @wt-close=${() => (this.formOpen = false)}
       ></dashboard-person-form>
     `;
   }

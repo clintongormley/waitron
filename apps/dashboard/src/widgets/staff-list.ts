@@ -11,11 +11,11 @@ import type { PersonSummary } from "../api/client.js";
  * factor), plus an Edit control per row.
  *
  * It is a PURE DISPLAY widget — it holds no state and never talks to the API (unlike the login
- * screen, which owns an injected `api`). The app owns the list (`GET /management-api/staff` →
- * `DashboardApi.listStaff`) and hands it down as `people`; the Edit control emits a composed,
- * bubbling `edit-person` carrying only the `personId`, which the app shell (a later task) turns into
- * an edit flow. The widget names no sibling and reaches for no store — the same shape as the till's
- * `till-held-orders` view.
+ * screen, which owns an injected `api`). The staff screen owns the list (`GET /management-api/staff`
+ * → `DashboardApi.listStaff`) and hands it down as `people`; the Edit control emits a composed,
+ * bubbling `edit-person` carrying only the `personId`, which the staff screen will turn into an edit
+ * flow in a later slice (an unheard seam today — the screen wires no `@edit-person` yet). The widget
+ * names no sibling and reaches for no store — the same shape as the till's `till-held-orders` view.
  *
  * Role and status render as their raw domain tokens (`manager`, `suspended`, …); a later i18n task
  * maps them to Spanish copy, exactly as the login screen defers its error keys. The credential badges
@@ -91,9 +91,10 @@ export class StaffList extends LitElement {
   @property({ attribute: false }) people: PersonSummary[] = [];
 
   /**
-   * Ask the app to edit `personId`. `stopPropagation` keeps the button's own composed `click` inside
-   * this widget's shadow boundary, so the app hears the semantic `edit-person` and not a raw click
-   * as well (the house pattern — the till's field handlers stop their composed events the same way).
+   * Ask the staff screen to edit `personId`. `stopPropagation` keeps the button's own composed
+   * `click` inside this widget's shadow boundary, so the consumer hears the semantic `edit-person`
+   * and not a raw click as well (the house pattern — the till's field handlers stop their composed
+   * events the same way).
    */
   #edit(event: Event, personId: string): void {
     event.stopPropagation();

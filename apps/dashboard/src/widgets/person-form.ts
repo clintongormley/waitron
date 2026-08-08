@@ -15,17 +15,20 @@ const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"]
  * primitive, exactly as the login screen's roster picker) and a PIN field (`wt-input`), plus a
  * primary confirm control in the footer.
  *
- * The app shell (a later task) drives it by setting `.open` — the same open-by-property contract
- * `wt-dialog` itself uses — and hears one event: on confirm the form dispatches `create-person`
- * carrying `{ displayName, role, pin }`, `bubbles`/`composed` so it crosses the shadow boundary to
- * the shell, which turns it into `DashboardApi.createPerson`. The form does NOT call the API itself
+ * The staff screen drives it by setting `.open` — the same open-by-property contract `wt-dialog`
+ * itself uses — and hears one event: on confirm the form dispatches `create-person` carrying
+ * `{ displayName, role, pin }`, `bubbles`/`composed` so it crosses the shadow boundary to the staff
+ * screen, which turns it into `DashboardApi.createPerson`. The form does NOT call the API itself
  * (like the pure-display staff list, unlike the login screen) and does NOT close itself on confirm —
- * the shell closes it once the create succeeds, so a rejected create leaves the entered values in
- * place.
+ * the staff screen closes it once the create succeeds, so a rejected create leaves the entered
+ * values in place.
  *
- * Dismissal is the one bit of open-state the form owns: `wt-dialog` emits `wt-close` when its native
- * dialog closes (Escape, the backdrop, `.close()`), and the form resets its own `open` to false in
- * response — otherwise a dismissed dialog would leave the form believing it is still showing.
+ * The staff screen is the single owner of the open state. On dismissal `wt-dialog` emits `wt-close`
+ * when its native dialog closes (Escape, the backdrop, `.close()`); the form resets its own `open`
+ * to false to stay self-consistent AND — crucially — does NOT stop that composed `wt-close`, so it
+ * bubbles on to the staff screen, which clears the `formOpen` it owns. Swallowing it here would
+ * leave the parent's `formOpen` stuck `true`, and the next open would be a no-op the operator sees
+ * as a dialog that will not reopen.
  *
  * Roles render as their raw domain tokens (`staff`, `supervisor`, …); a later i18n task maps them to
  * Spanish copy, exactly as the login screen defers its error keys and the staff list its role/status.
@@ -102,7 +105,12 @@ export class PersonForm extends LitElement {
     );
   }
 
-  /** The dialog was dismissed (Escape/backdrop/close) — drop our own open state to match. */
+  /**
+   * The dialog was dismissed (Escape/backdrop/close). Drop our own `open` to stay self-consistent,
+   * and — unlike the field handlers above — deliberately do NOT `stopPropagation`: the composed
+   * `wt-close` must bubble on to the staff screen (the single owner of the open state) so its
+   * `formOpen` tracks the dismissal and the form can be reopened. See the class doc.
+   */
   #onClose(): void {
     this.open = false;
   }
