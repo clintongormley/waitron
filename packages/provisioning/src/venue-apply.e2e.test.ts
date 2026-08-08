@@ -194,17 +194,29 @@ describe("the seeded admin can perform a first dashboard login", () => {
     const personId = admin.rows[0]?.id;
     expect(personId).toBeDefined();
 
-    // The provisioned password logs in and mints a management session.
-    const session = await withTenant(suite.db, venue.tenantId, (tx) =>
-      loginManager(tx, { tenantId: venue.tenantId, personId: personId!, password: "dashPass123" }),
-    );
+    // The provisioned password logs in and mints a management session — run as the app role under the
+    // tenant (asAppUser), the same role constraints production's loginManager runs under, so this also
+    // proves app_user can SELECT the seeded password_hash and INSERT the management session.
+    const session = await withTenant(suite.db, venue.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return loginManager(tx, {
+        tenantId: venue.tenantId,
+        personId: personId!,
+        password: "dashPass123",
+      });
+    });
     expect(session.personId).toBe(personId);
 
     // Negative control: a wrong password is refused, so the positive case above is not a rubber stamp.
     await expect(
-      withTenant(suite.db, venue.tenantId, (tx) =>
-        loginManager(tx, { tenantId: venue.tenantId, personId: personId!, password: "wrongpass1" }),
-      ),
+      withTenant(suite.db, venue.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return loginManager(tx, {
+          tenantId: venue.tenantId,
+          personId: personId!,
+          password: "wrongpass1",
+        });
+      }),
     ).rejects.toMatchObject({ code: "password.invalid" });
   });
 });
