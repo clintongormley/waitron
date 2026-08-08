@@ -15,7 +15,7 @@ import {
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPin } from "@waitron/identity";
+import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
@@ -153,7 +153,11 @@ async function setupVenue(): Promise<{
       tillName: "Caja 1",
       seriesCode: "A",
       rectificativeSeriesCode: "R",
-      admin: { displayName: "Administradora", pinHash: hashPin("1234") },
+      admin: {
+        displayName: "Administradora",
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword("dashPass123"),
+      },
     }),
     { db: suite.admin },
   );

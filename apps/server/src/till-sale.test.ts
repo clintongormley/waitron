@@ -16,7 +16,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 // `daily-close-demo.ts` already use. Its `recordSale` returns a FiscalRecordRef with NO
 // `verificationUrl`, which is how the "empty qr" branch below is exercised at all.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
-import { hashPin } from "@waitron/identity";
+import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
@@ -122,7 +122,11 @@ async function setupVenue(): Promise<{ cfg: TillConfig; available: AvailableProd
       tillName: "Caja 1",
       seriesCode: "A",
       rectificativeSeriesCode: "R",
-      admin: { displayName: "Administradora", pinHash: hashPin("1234") },
+      admin: {
+        displayName: "Administradora",
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword("dashPass123"),
+      },
     }),
     { db: suite.admin },
   );
