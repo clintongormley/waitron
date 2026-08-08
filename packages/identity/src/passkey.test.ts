@@ -317,6 +317,44 @@ describe("passkey authentication", () => {
     });
   });
 
+  it("never lowers the stored counter — a lower newCounter cannot regress it (concurrency clone-defence)", async () => {
+    const personId = await seedPerson(suite.db, tenantId, "admin");
+    const credRowId = await seedCredential(personId, "cred-abc", 10);
+    // `verifyAuthenticationResponse` rejects a genuine REPLAY (newCounter <= stored, stored > 0) before
+    // the counter update is reached; this guards the CONCURRENT case instead — two logins both read
+    // counter=10 and the later-committing tx tries to write a SMALLER newCounter, silently regressing
+    // the clone-detection baseline. Mock a verify that "succeeds" with a LOWER counter to isolate the
+    // monotonic guard: without `lt(counter, newCounter)` in the update's WHERE, the UPDATE sets it to 5.
+    mockVerifyAuth.mockResolvedValue(authVerified(5));
+
+    const begun = await beginAuth();
+    // The ceremony still succeeds and mints a session — the guard only refuses to LOWER the counter,
+    // it never blocks the login.
+    const session = await authenticate(begun.challengeHandle, "cred-abc");
+    expect(session.personId).toBe(personId);
+
+    const [cred] = await run((tx) =>
+      tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.id, credRowId)),
+    );
+    expect(cred!.counter).toBe(10); // stayed at 10; the WHERE guard matched no row, so no write
+  });
+
+  it("consumes the challenge on the first finish: a second finish with the SAME handle is rejected", async () => {
+    const personId = await seedPerson(suite.db, tenantId, "admin");
+    await seedCredential(personId, "cred-abc", 0);
+    mockVerifyAuth.mockResolvedValue(authVerified(1));
+
+    const begun = await beginAuth();
+    await authenticate(begun.challengeHandle, "cred-abc"); // first finish consumes the challenge
+
+    // The SAME handle a second time: the consume DELETE matches zero rows (already consumed) →
+    // passkey.verification_failed. This is the single-use guarantee exercised through the 0-rows path;
+    // removing the `challenge === undefined` throw in consumeChallenge stops it being a clean AppError.
+    expect(await codeOf(() => authenticate(begun.challengeHandle, "cred-abc"))).toBe(
+      "passkey.verification_failed",
+    );
+  });
+
   it("throws passkey.not_registered when no credential matches the returned id", async () => {
     const begun = await beginAuth();
     // No credential was seeded for this id.

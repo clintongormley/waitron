@@ -13,7 +13,7 @@ import type {
 } from "@simplewebauthn/server";
 import { AppError } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
-import { eq } from "drizzle-orm";
+import { and, eq, lt } from "drizzle-orm";
 import { persons } from "./schema/persons.js";
 import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
 import {
@@ -63,22 +63,29 @@ function b64url(bytes: Uint8Array): string {
 }
 
 /**
- * Load a stored challenge by its handle and enforce its TTL, returning the challenge STRING both
- * finish ceremonies pass to the verifier as `expectedChallenge`. Throws `passkey.verification_failed`
- * for an unknown handle and `passkey.challenge_expired` once the stored challenge is older than
- * `CHALLENGE_TTL_MS` — the same two codes at the same point both finish functions used inline before.
- * Reads only: the single-use DELETE stays in each finish function, run AFTER verify succeeds so it
- * commits with (or rolls back alongside) the credential/session write — the deliberate
- * consume-on-success semantics documented on those functions.
+ * CONSUME a stored challenge by its handle: DELETE it and RETURN its challenge string in one
+ * statement, enforcing single-use — under concurrency, not just sequentially. Returns the challenge
+ * STRING both finish ceremonies pass to the verifier as `expectedChallenge`.
+ *
+ * The DELETE row-locks the challenge, so two finishes racing on the SAME handle serialise: the second
+ * blocks on the first's lock, then — once the first commits — matches ZERO rows. Zero rows (already
+ * consumed, or a handle that never existed) → `passkey.verification_failed`; a row older than
+ * `CHALLENGE_TTL_MS` → `passkey.challenge_expired`. A plain read-then-delete let both racers read the
+ * live challenge and proceed, which is the single-use hole this closes.
+ *
+ * Consume-on-SUCCESS is preserved by the enclosing `withTenant` transaction: on a verify failure, a
+ * `verified:false` return, or a TTL throw, the WHOLE transaction rolls back and this DELETE is undone,
+ * so the challenge survives to lapse by its TTL rather than being eagerly swept — the semantics both
+ * finish functions and `passkey.challenge_expired`'s own doc describe.
  */
-async function loadChallenge(tx: Transaction, challengeHandle: string): Promise<string> {
+async function consumeChallenge(tx: Transaction, challengeHandle: string): Promise<string> {
   const [challenge] = await tx
-    .select({
+    .delete(webauthnChallenges)
+    .where(eq(webauthnChallenges.id, challengeHandle))
+    .returning({
       challenge: webauthnChallenges.challenge,
       createdAt: webauthnChallenges.createdAt,
-    })
-    .from(webauthnChallenges)
-    .where(eq(webauthnChallenges.id, challengeHandle));
+    });
   if (challenge === undefined) throw new AppError("passkey.verification_failed", {});
   if (Date.now() - Date.parse(challenge.createdAt) > CHALLENGE_TTL_MS) {
     throw new AppError("passkey.challenge_expired", {});
@@ -121,17 +128,19 @@ export async function beginPasskeyRegistration(
 }
 
 /**
- * Finish registering a passkey: look up the stored challenge, reject it if unknown or older than
- * `CHALLENGE_TTL_MS`, verify the signed response with `@simplewebauthn/server`, and — only on success
- * — consume the challenge and persist the credential in the SAME transaction, so the two commit
- * together or not at all. That atomic delete is the single-use guarantee: a challenge can produce at
- * most one credential.
+ * Finish registering a passkey: CONSUME the stored challenge (a locking DELETE that rejects it if
+ * unknown or older than `CHALLENGE_TTL_MS`), verify the signed response with `@simplewebauthn/server`,
+ * and persist the credential — all in the SAME transaction, so consume + insert commit together or not
+ * at all. Consuming BEFORE verify is the single-use guarantee: the DELETE row-locks the handle, so a
+ * concurrent finish on the same handle blocks then finds zero rows, and a challenge produces at most
+ * one credential even under contention.
  *
- * A failed or expired ceremony throws, which rolls the caller's transaction (`withTenant`) back, so a
- * challenge is NOT deleted eagerly on those paths — a delete on a throwing path would roll back with
- * it, achieving nothing. The challenge instead survives until its TTL lapses (a later finish then
- * returns `passkey.challenge_expired`); bounding stale challenges by time rather than sweeping them
- * here is a deliberate consequence of finish running inside the caller's transaction.
+ * A failed or expired ceremony throws, which rolls the caller's transaction (`withTenant`) back —
+ * undoing the consume-DELETE with it, so the challenge is NOT lost on those paths. It instead survives
+ * until its TTL lapses (a later finish then returns `passkey.challenge_expired`); bounding stale
+ * challenges by time rather than sweeping them here is a deliberate consequence of finish running
+ * inside the caller's transaction. Consume-on-SUCCESS therefore still holds: only a committing
+ * ceremony keeps the DELETE.
  */
 export async function finishPasskeyRegistration(
   tx: Transaction,
@@ -145,7 +154,9 @@ export async function finishPasskeyRegistration(
   },
 ): Promise<{ credentialId: string }> {
   const { personId } = await resolveManagementSession(tx, input.managementSessionId);
-  const expectedChallenge = await loadChallenge(tx, input.challengeHandle);
+  // Consume the challenge up front: a locking DELETE that also enforces single-use (see
+  // `consumeChallenge`). A verify failure below rolls the whole transaction back, undoing this delete.
+  const expectedChallenge = await consumeChallenge(tx, input.challengeHandle);
   // `@simplewebauthn/server` throws a GENERIC `Error` on a malformed/mismatched response (a
   // missing/non-base64url credential id, wrong origin/RPID, a bad attestation) — never a mapped
   // `passkey.*` code — so a bare call would reach `run` as a non-AppError and become an opaque
@@ -164,8 +175,7 @@ export async function finishPasskeyRegistration(
   }
   if (!verification.verified) throw new AppError("passkey.verification_failed", {});
   const cred = verification.registrationInfo.credential; // { id, publicKey, counter } — v13 WebAuthnCredential
-  // Single-use: consume the challenge atomically with the credential insert (both commit or neither).
-  await tx.delete(webauthnChallenges).where(eq(webauthnChallenges.id, input.challengeHandle));
+  // The challenge was already consumed above (consumeChallenge); the insert commits alongside it.
   await tx.insert(webauthnCredentials).values({
     tenantId: input.tenantId,
     personId,
@@ -197,20 +207,26 @@ export async function beginPasskeyAuthentication(
 }
 
 /**
- * Finish authenticating with a passkey — the passkey branch of the verifier seam. Look up the stored
- * challenge (reject it if unknown or older than `CHALLENGE_TTL_MS`), resolve the credential by the id
- * the authenticator returned, verify the signed assertion with `@simplewebauthn/server`, and — only
- * on success — consume the challenge, bump the stored signature counter, and open a management session
- * for the credential's owner. Like `loginManager`, a successful ceremony ends in
- * `startManagementSession`; the challenge delete, the counter bump and the session insert all run in
- * the caller's SINGLE transaction, so they commit together or not at all.
+ * Finish authenticating with a passkey — the passkey branch of the verifier seam. CONSUME the stored
+ * challenge (a locking DELETE that rejects it if unknown or older than `CHALLENGE_TTL_MS`), resolve
+ * the credential by the id the authenticator returned, verify the signed assertion with
+ * `@simplewebauthn/server`, bump the stored signature counter, and open a management session for the
+ * credential's owner. Like `loginManager`, a successful ceremony ends in `startManagementSession`; the
+ * consume-DELETE, the counter bump and the session insert all run in the caller's SINGLE transaction,
+ * so they commit together or not at all.
  *
- * A failed or expired ceremony throws, which rolls that transaction back — so nothing is deleted
- * eagerly on those paths (a delete on a throwing path would roll back with the throw, achieving
- * nothing, exactly as in `finishPasskeyRegistration`; a challenge is bounded by its TTL instead). An
- * unknown challenge and an unrecognised credential both short-circuit before the verifier is reached.
- * The counter is advanced to the library's `newCounter` to detect a cloned authenticator replaying an
- * old assertion.
+ * Consuming BEFORE verify is the single-use guarantee under concurrency: the DELETE row-locks the
+ * handle, so two finishes racing on the same handle serialise and only one proceeds — the other blocks,
+ * then finds zero rows → `passkey.verification_failed`. A failed or expired ceremony throws, rolling
+ * the transaction back and undoing the consume-DELETE, so the challenge survives to lapse by its TTL
+ * instead (consume-on-success, exactly as in `finishPasskeyRegistration`). An unknown challenge and an
+ * unrecognised credential both short-circuit before the verifier is reached.
+ *
+ * The counter is advanced with a MONOTONIC guard (`counter < newCounter`) so a concurrent assertion
+ * can never LOWER it, which would blind the cloned-authenticator defence: the library already rejects a
+ * genuine replay (`newCounter <= stored`, stored > 0) before this point, and the guard is the second
+ * belt for the concurrent case where two logins both read the old counter. A counter-0 authenticator
+ * (no counter) stays at 0 — `0 < 0` is false, so the guard simply skips the no-op write.
  */
 export async function finishPasskeyAuthentication(
   tx: Transaction,
@@ -222,7 +238,9 @@ export async function finishPasskeyAuthentication(
     origin: string;
   },
 ): Promise<ManagementSession> {
-  const expectedChallenge = await loadChallenge(tx, input.challengeHandle);
+  // Consume the challenge up front: a locking DELETE that also enforces single-use (see
+  // `consumeChallenge`). Any throw below rolls the whole transaction back, undoing this delete.
+  const expectedChallenge = await consumeChallenge(tx, input.challengeHandle);
   // The credential id the authenticator returned is untrusted request input: typed `string`, but the
   // route hands `response` through as `never`, so at runtime it may be missing or non-string — a value
   // that would reach the `credential_id` text column and could 500 in the driver. Screen it first; a
@@ -230,7 +248,7 @@ export async function finishPasskeyAuthentication(
   if (typeof input.response?.id !== "string") throw new AppError("passkey.not_registered", {});
 
   // Resolve the credential the authenticator returned, joining the owning person for their status.
-  // Tenant scoping is by RLS (withTenant), the same as the challenge lookup above; (tenant_id,
+  // Tenant scoping is by RLS (withTenant), the same as the challenge consume above; (tenant_id,
   // credential_id) is unique, so at most one matches. The inner join cannot drop a matched credential:
   // `person_id` is a FK to `persons`, so the owner always exists.
   const [cred] = await tx
@@ -257,8 +275,8 @@ export async function finishPasskeyAuthentication(
   // `@simplewebauthn/server` throws a GENERIC `Error` on a malformed/mismatched assertion (a bad
   // signature, wrong origin/RPID, UV not performed) — never a mapped `passkey.*` code — so a bare call
   // would reach `run` as a non-AppError and become an opaque `server.internal` 500. Wrap it: any throw
-  // becomes `passkey.verification_failed`, a clean 401. A `verified:false` RETURN is handled after the
-  // challenge delete below.
+  // becomes `passkey.verification_failed`, a clean 401. A `verified:false` RETURN is the other failure
+  // shape and is handled just below; both roll back the consume-DELETE, so the challenge survives.
   let verification: Awaited<ReturnType<typeof verifyAuthenticationResponse>>;
   try {
     verification = await verifyAuthenticationResponse({
@@ -276,15 +294,19 @@ export async function finishPasskeyAuthentication(
   } catch {
     throw new AppError("passkey.verification_failed", {});
   }
-  // Single-use: consume the challenge atomically with the counter bump and the session insert below
-  // (all commit or none). On a failed assertion the throw rolls this delete back with them.
-  await tx.delete(webauthnChallenges).where(eq(webauthnChallenges.id, input.challengeHandle));
+  // The challenge was already consumed up front (consumeChallenge); a `verified:false` return here
+  // rolls the whole transaction back, undoing that delete along with everything below.
   if (!verification.verified) throw new AppError("passkey.verification_failed", {});
 
+  // Advance the signature counter, but NEVER lower it: the `counter < newCounter` guard makes a
+  // concurrent assertion that read the old value unable to regress it, which would blind the
+  // cloned-authenticator defence for later assertions. A counter-0 authenticator sends newCounter 0
+  // and `0 < 0` is false, so the guard skips the no-op write and leaves the counter at 0 — correct.
+  const { newCounter } = verification.authenticationInfo;
   await tx
     .update(webauthnCredentials)
-    .set({ counter: verification.authenticationInfo.newCounter })
-    .where(eq(webauthnCredentials.id, cred.id));
+    .set({ counter: newCounter })
+    .where(and(eq(webauthnCredentials.id, cred.id), lt(webauthnCredentials.counter, newCounter)));
   // Verifier seam: like loginManager, a successful passkey ends in a management session.
   return startManagementSession(tx, { tenantId: input.tenantId, personId: cred.personId });
 }
