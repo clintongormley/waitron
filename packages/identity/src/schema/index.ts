@@ -5,3 +5,4 @@
 export { persons, personStatus, personRole } from "./persons.js";
 export { sessions } from "./sessions.js";
 export { managementSessions } from "./management-sessions.js";
+export { webauthnCredentials, webauthnChallenges } from "./webauthn.js";

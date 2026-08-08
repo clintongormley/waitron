@@ -35,6 +35,32 @@ export interface PersonSummary {
   hasTotp: boolean;
 }
 
+/**
+ * The credential-creation / -request options a passkey ceremony's "begin" route returns — WebAuthn's
+ * `PublicKeyCredentialCreationOptionsJSON` / `...RequestOptionsJSON`. Typed as an opaque blob on
+ * purpose: it is handed straight to `@simplewebauthn/browser`'s `startRegistration` /
+ * `startAuthentication` in the view layer (slice-1d Task 7), which validates the concrete shape at the
+ * call site. Keeping it loose holds this client's type surface free of `@simplewebauthn/*` and of the
+ * `@waitron/*` server shapes it wraps, exactly as the header note above requires.
+ */
+export type PasskeyOptions = Record<string, unknown>;
+
+/** A passkey "begin" route's answer: the opaque options + the handle its "verify" half must echo. */
+export interface PasskeyChallenge {
+  challengeHandle: string;
+  options: PasskeyOptions;
+}
+
+/**
+ * The signed ceremony a passkey "verify" route consumes: the handle from the matching "begin" call
+ * plus the authenticator's response. `response` is the opaque object `@simplewebauthn/browser` returns
+ * from `startRegistration` / `startAuthentication`; the server validates its shape.
+ */
+export interface PasskeyVerification {
+  challengeHandle: string;
+  response: unknown;
+}
+
 /** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -110,6 +136,45 @@ export class DashboardApi {
    */
   setPassword(id: string, password: string): Promise<void> {
     return this.#request<void>(`/management-api/staff/${id}/password`, "POST", { password });
+  }
+
+  /**
+   * `POST /management-api/passkey/register/options` — begin enrolling a passkey for the signed-in
+   * operator (gated: the route resolves the person from the session). Takes no body; returns the
+   * creation options for `startRegistration` plus the challenge handle its verify half echoes.
+   */
+  passkeyRegisterOptions(): Promise<PasskeyChallenge> {
+    return this.#request<PasskeyChallenge>("/management-api/passkey/register/options", "POST");
+  }
+
+  /**
+   * `POST /management-api/passkey/register/verify` — finish enrolling a passkey: the signed response
+   * from `startRegistration` plus the handle from `passkeyRegisterOptions`. Answers `{ credentialId }`.
+   */
+  passkeyRegisterVerify(body: PasskeyVerification): Promise<{ credentialId: string }> {
+    return this.#request<{ credentialId: string }>(
+      "/management-api/passkey/register/verify",
+      "POST",
+      body,
+    );
+  }
+
+  /**
+   * `POST /management-api/passkey/auth/options` — begin a passkey login (UNGATED — this IS the login,
+   * the parallel of `login`). Takes no body; returns the request options for `startAuthentication`
+   * plus the challenge handle its verify half echoes.
+   */
+  passkeyAuthOptions(): Promise<PasskeyChallenge> {
+    return this.#request<PasskeyChallenge>("/management-api/passkey/auth/options", "POST");
+  }
+
+  /**
+   * `POST /management-api/passkey/auth/verify` — finish a passkey login (UNGATED): the signed assertion
+   * from `startAuthentication` plus the handle from `passkeyAuthOptions`. The server sets the session
+   * cookie and returns who is now logged in, exactly as `login` does.
+   */
+  passkeyAuthVerify(body: PasskeyVerification): Promise<{ personId: string }> {
+    return this.#request<{ personId: string }>("/management-api/passkey/auth/verify", "POST", body);
   }
 
   /**

@@ -57,6 +57,19 @@ export interface ServerConfig {
    * per-LOCATION column, not an env var, so `boot.ts` reads it via `readOrderFlow` and spreads it in
    * to form the full `TillConfig` handed to the till API (see `till-config.ts`'s `orderFlow` note). */
   till: Omit<TillConfig, "orderFlow">;
+  /** The WebAuthn Relying Party ID the dashboard's passkey ceremonies are bound to — the registrable
+   * domain the browser scopes credentials to (e.g. `dashboard.example.com`, no scheme or port). A
+   * passkey is bound to its RP ID at registration and only offered back on that same RP ID, so this
+   * is deployment config, never a hardcoded constant in `@waitron/identity` (spec §4c). Threaded
+   * through `boot.ts` into `ManagementApiDeps.rpId`. Defaults to `localhost` for loopback dev/tests. */
+  managementRpId: string;
+  /** The exact origin the dashboard is served from (scheme + host + optional port, e.g.
+   * `https://dashboard.example.com`) — what `@simplewebauthn/server` verifies each ceremony's
+   * `response` against as `expectedOrigin`. Distinct from `managementRpId`: the RP ID is the bare
+   * domain, the origin carries scheme and port and must match the served URL byte-for-byte or
+   * verification fails. Threaded into `ManagementApiDeps.origin`. Defaults to the Vite dev server's
+   * `http://localhost:5191` for dev/tests. */
+  managementOrigin: string;
   scheduler: SchedulerConfig;
 }
 
@@ -81,6 +94,13 @@ const DEFAULT_HTTP_HOST = "127.0.0.1";
  * `server.config_invalid` this file promises for every other bad input, and not what
  * `apps/server/README.md`'s "every value is validated once, at boot" line claims either. */
 const MAX_HTTP_PORT = 65_535;
+/** Loopback defaults for the passkey Relying Party, so dev and every test resolve a working RP ID +
+ * origin without setting either variable. A real deployment overrides both with its served domain
+ * (`WAITRON_MANAGEMENT_RP_ID`) and URL (`WAITRON_MANAGEMENT_ORIGIN`) — see the `ServerConfig` fields.
+ * The origin default is the dashboard Vite dev server's port (slice 1c), so a browser served from it
+ * verifies against the same value this host hands the ceremonies. */
+const DEFAULT_MANAGEMENT_RP_ID = "localhost";
+const DEFAULT_MANAGEMENT_ORIGIN = "http://localhost:5191";
 
 type Env = Record<string, string | undefined>;
 
@@ -225,6 +245,8 @@ export function loadConfig(env: Env, defaultMigrationsRoot: string): ServerConfi
     });
   }
   const migrationsDir = env.WAITRON_MIGRATIONS_DIR;
+  const managementRpId = env.WAITRON_MANAGEMENT_RP_ID;
+  const managementOrigin = env.WAITRON_MANAGEMENT_ORIGIN;
   const databaseUrl = required(env, "DATABASE_URL");
   const migrationsDatabaseUrl = env.WAITRON_MIGRATIONS_DATABASE_URL;
   const httpHost = env.WAITRON_HTTP_HOST;
@@ -264,6 +286,10 @@ export function loadConfig(env: Env, defaultMigrationsRoot: string): ServerConfi
     // `till-config.ts`. Loaded AFTER `required(env, "DATABASE_URL")` above so a host missing both
     // still reports the DATABASE_URL fault first, matching this file's existing ordering.
     till: loadTillConfig(env),
+    // The dashboard's passkey RP ID + origin, each defaulted to loopback for dev/tests via the same
+    // `isUnset` (empty string == absent) rule `httpHost` above follows.
+    managementRpId: isUnset(managementRpId) ? DEFAULT_MANAGEMENT_RP_ID : managementRpId,
+    managementOrigin: isUnset(managementOrigin) ? DEFAULT_MANAGEMENT_ORIGIN : managementOrigin,
     scheduler: {
       horizonDays: positiveInt(env, "WAITRON_SCHEDULER_HORIZON_DAYS", DEFAULTS.horizonDays),
       maxPeriodsPerTick: positiveInt(

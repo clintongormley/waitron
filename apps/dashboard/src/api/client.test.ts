@@ -144,6 +144,57 @@ describe("DashboardApi", () => {
     });
   });
 
+  it("passkeyRegisterOptions POSTs the register/options route with credentials and no body", async () => {
+    const payload = {
+      challengeHandle: "ch-1",
+      options: { challenge: "abc", rp: { id: "localhost" } },
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(payload));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.passkeyRegisterOptions()).toEqual(payload);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/passkey/register/options", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
+  it("passkeyRegisterVerify POSTs the handle + signed response to the register/verify route", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ credentialId: "cred-1" }));
+    const api = new DashboardApi("", fetchImpl);
+    const body = { challengeHandle: "ch-1", response: { id: "cred-1", rawId: "raw" } };
+    expect(await api.passkeyRegisterVerify(body)).toEqual({ credentialId: "cred-1" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/passkey/register/verify", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  });
+
+  it("passkeyAuthOptions POSTs the auth/options route with credentials and no body", async () => {
+    const payload = { challengeHandle: "ch-2", options: { challenge: "def" } };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(payload));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.passkeyAuthOptions()).toEqual(payload);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/passkey/auth/options", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
+  it("passkeyAuthVerify POSTs the handle + signed assertion to auth/verify and returns the person id", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ personId: "p1" }));
+    const api = new DashboardApi("", fetchImpl);
+    const body = { challengeHandle: "ch-2", response: { id: "cred-1", rawId: "raw" } };
+    expect(await api.passkeyAuthVerify(body)).toEqual({ personId: "p1" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/passkey/auth/verify", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  });
+
   it("falls back to server.internal when the error body carries no code", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({}, false, 500));
     const api = new DashboardApi("", fetchImpl);

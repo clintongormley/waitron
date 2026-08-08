@@ -14,6 +14,7 @@
     "db:generate:custom": "drizzle-kit generate --custom"
   },
   "dependencies": {
+    "@simplewebauthn/server": "^13.0.0",
     "@waitron/db": "workspace:*",
     "@waitron/shared": "workspace:*",
     "drizzle-orm": "^0.45.2",

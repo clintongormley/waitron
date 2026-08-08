@@ -12,6 +12,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@simplewebauthn/browser": "^13.0.0",
     "@waitron/ui": "workspace:*",
     "@waitron/shared": "workspace:*",
     "lit": "^3.2.0"

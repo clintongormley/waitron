@@ -79,3 +79,49 @@ describe("management_sessions constraint declarations (forces the lazy extraConf
     expect(indexNames).toContain("management_sessions_open_idx");
   });
 });
+
+/**
+ * Same mechanism for webauthn_credentials — its FK/unique/index block is in the lazy extraConfig
+ * callback, so this both forces it to run and pins the names the generated migration
+ * (0007_messy_dorian_gray.sql) and the RLS policy (0008_silent_mauler.sql) reference. A registered
+ * passkey belongs to a person within a tenant, so its two FKs are to tenants and persons; the
+ * credential id is unique per tenant.
+ */
+describe("webauthn_credentials constraint declarations (forces the lazy extraConfig callback)", () => {
+  it("declares webauthn_credentials' primary key, its two foreign keys, its per-tenant unique credential id and its person index", () => {
+    const config = getTableConfig(api.webauthnCredentials);
+
+    expect(config.columns.find((c) => c.name === "id")?.primary).toBe(true);
+
+    const fkNames = config.foreignKeys.map((fk) => fk.getName());
+    expect(fkNames).toContain("webauthn_credentials_tenant_fk");
+    expect(fkNames).toContain("webauthn_credentials_person_fk");
+
+    const uniqueNames = config.uniqueConstraints.map((u) => u.getName());
+    expect(uniqueNames).toContain("webauthn_credentials_credential_id_uq");
+
+    const indexNames = config.indexes.map((i) => i.config.name);
+    expect(indexNames).toContain("webauthn_credentials_person_idx");
+  });
+});
+
+/**
+ * Same mechanism for webauthn_challenges — its FK/index block is in the lazy extraConfig callback, so
+ * this both forces it to run and pins the names the generated migration (0007_messy_dorian_gray.sql)
+ * and the RLS policy (0008_silent_mauler.sql) reference. A challenge belongs to a tenant; person_id is
+ * nullable (a discoverable-login ceremony has no known person yet) and carries no FK, so the ONE FK is
+ * to tenants.
+ */
+describe("webauthn_challenges constraint declarations (forces the lazy extraConfig callback)", () => {
+  it("declares webauthn_challenges' primary key, its single tenant foreign key, and its tenant index", () => {
+    const config = getTableConfig(api.webauthnChallenges);
+
+    expect(config.columns.find((c) => c.name === "id")?.primary).toBe(true);
+
+    const fkNames = config.foreignKeys.map((fk) => fk.getName());
+    expect(fkNames).toEqual(["webauthn_challenges_tenant_fk"]);
+
+    const indexNames = config.indexes.map((i) => i.config.name);
+    expect(indexNames).toContain("webauthn_challenges_tenant_idx");
+  });
+});

@@ -33,5 +33,18 @@ declare module "@waitron/shared" {
     "person.suspended": { personId: string };
     /** Neither the session's operator nor any supplied override holds the required permission. */
     "authorization.not_permitted": { permission: string };
+    /** No passkey is registered for this person (or no credential matched the returned id) — they
+     * must enroll one, or sign in another way. */
+    "passkey.not_registered": Record<string, never>;
+    /** The WebAuthn ceremony did not verify: the authenticator's response failed the library's
+     * checks, or the challenge handle matched no live row — never issued, or already consumed by an
+     * earlier finish (the single-use consume-DELETE, including a concurrent finish that won the race).
+     * Nothing is registered or signed in. */
+    "passkey.verification_failed": Record<string, never>;
+    /** The challenge issued at the start of the ceremony was not returned within `CHALLENGE_TTL_MS`, so
+     * it is no longer honoured — the browser must begin the ceremony again. (The stored row is NOT kept
+     * deleted on this path: finish consumes it with a DELETE, then the TTL check throws and the
+     * transaction rolls back, restoring the row to lapse by its TTL rather than being swept.) */
+    "passkey.challenge_expired": Record<string, never>;
   }
 }

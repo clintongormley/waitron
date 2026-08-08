@@ -10,8 +10,12 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError, isAppError } from "@waitron/shared";
 import { asAppUser, withTenant, type Database } from "@waitron/db";
 import {
+  beginPasskeyAuthentication,
+  beginPasskeyRegistration,
   createPerson,
   endManagementSession,
+  finishPasskeyAuthentication,
+  finishPasskeyRegistration,
   listActiveStaff,
   listPersons,
   loginManager,
@@ -43,6 +47,14 @@ export interface ManagementApiDeps {
   db: Database;
   cfg: { tenantId: string };
   secureCookies: boolean;
+  /** The WebAuthn Relying Party ID the passkey ceremonies below bind credentials to (`config.ts`'s
+   * `managementRpId`, defaulted to `localhost` for dev). A passkey is bound to its RP ID, so this is
+   * config threaded from boot, never a constant in `@waitron/identity` (spec §4c). */
+  rpId: string;
+  /** The exact served origin `@simplewebauthn/server` verifies each ceremony's response against
+   * (`config.ts`'s `managementOrigin`, defaulted to `http://localhost:5191`). Carries scheme + port,
+   * unlike the bare-domain `rpId`. */
+  origin: string;
 }
 
 /**
@@ -66,6 +78,19 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.expired": 401,
   "password.invalid": 401,
   "totp.invalid": 401,
+  // Passkey (WebAuthn) ceremony faults, thrown by the two `finishPasskey*` calls the verify routes
+  // below wrap (the `beginPasskey*` options calls never throw these). Both authentication-failure codes
+  // are 401 — the auth-verify route IS the login,
+  // so a credential that is not registered (`passkey.not_registered`) or an assertion that fails to
+  // verify (`passkey.verification_failed`, also thrown on registration verify) is a failed credential
+  // check, the same family as `password.invalid`. `passkey.challenge_expired` is a 400: the request was
+  // well-formed but its challenge lapsed past `CHALLENGE_TTL_MS`, a client-retryable request-timing
+  // fault rather than a rejected credential. The auth-verify route ALSO surfaces `person.suspended`
+  // (403, below): `finishPasskeyAuthentication` gates on the credential owner's status the way
+  // `loginManager` gates a password login, so a person suspended after enrolling a passkey is refused.
+  "passkey.not_registered": 401,
+  "passkey.verification_failed": 401,
+  "passkey.challenge_expired": 400,
   // Login-enumeration trade-off, ACCEPTED and recorded here (not changed). This map is SHARED with the
   // authenticated staff routes, where 404/403 are the CORRECT semantics: the write routes
   // (PATCH/reset-pin/password `/management-api/staff/:id`) screen `:id` with `isUuid` and refuse a
@@ -80,7 +105,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // `GET /management-api/staff-roster` (`listActiveStaff` returns `{personId, displayName}` for every
   // active person), so a 404-vs-401 split reveals nothing new about them; a suspended person is
   // excluded from that roster, so a 403 can only be provoked by already holding their id — a 122-bit
-  // random v4 UUID (`persons.id` is `gen_random_uuid()`), infeasible to guess.
+  // random v4 UUID (`persons.id` is `gen_random_uuid()`), infeasible to guess. The passkey auth-verify
+  // route surfaces the same 403 (a suspended credential owner), and provoking it there is HARDER still:
+  // it needs the owner's random `credential_id`, not merely their person id.
   "person.suspended": 403,
   "person.not_found": 404,
   "authorization.not_permitted": 403,
@@ -133,6 +160,30 @@ async function run(c: Context, log: Logger, fn: () => Promise<Response>): Promis
 function requirePersonId(id: string): string {
   if (!isUuid(id)) throw new AppError("person.not_found", { personId: id });
   return id;
+}
+
+/**
+ * Parse and screen a passkey VERIFY route's body, returning the narrowed `{ challengeHandle, response }`
+ * pair both `register/verify` and `auth/verify` need — the shared shape those two routes had inline.
+ * The body is coerced to `{}` (`?? {}`, see the login route for why a `null`/non-object body must not
+ * TypeError → 500). `challengeHandle` is screened to a UUID (load-bearing, not cosmetic: it flows into
+ * `eq(webauthnChallenges.id, …)` against a `uuid` PK, so a non-UUID would `22P02` → opaque 500) and
+ * `response` to a non-null object before it reaches the verifier; either failure is
+ * `management.request_invalid` naming the FIELD, the same code and shape as the sibling write routes.
+ * Called AFTER each route's own gating — `register/verify` runs `requireManagementSession` first,
+ * `auth/verify` is unauthenticated (it IS the login) — so this helper screens body shape only.
+ */
+async function parsePasskeyVerifyBody(
+  c: Context,
+): Promise<{ challengeHandle: string; response: object }> {
+  const body = (await c.req.json<{ challengeHandle?: string; response?: unknown }>()) ?? {};
+  if (typeof body.challengeHandle !== "string" || !isUuid(body.challengeHandle)) {
+    throw new AppError("management.request_invalid", { field: "challengeHandle" });
+  }
+  if (typeof body.response !== "object" || body.response === null) {
+    throw new AppError("management.request_invalid", { field: "response" });
+  }
+  return { challengeHandle: body.challengeHandle, response: body.response };
 }
 
 /**
@@ -373,6 +424,116 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         await setPassword(tx, { managementSessionId: sessionId, personId: id, password });
       });
       return c.body(null, 204);
+    }),
+  );
+
+  // ── Passkey (WebAuthn) ceremonies ─────────────────────────────────────────────────────────────
+  // Each ceremony is the WebAuthn two-phase handshake the browser drives: an `options` call issues
+  // (and stores) the challenge the authenticator signs, and a `verify` call checks the signed response
+  // against that stored challenge. `rpId`/`origin` come from `deps` (config threaded from boot, never
+  // hardcoded — a passkey is bound to its RP ID + origin, spec §4c). REGISTRATION is GATED
+  // (`requireManagementSession` before any DB work): a signed-in operator enrolls a passkey for
+  // themselves, and the person is resolved from the session, never a client id. AUTHENTICATION is
+  // UNGATED because it IS the login — the exact parallel of `POST /management-api/session` — so a
+  // caller with no session can complete it, and the verify half sets the management cookie itself.
+
+  // Begin passkey registration (gated): issue + store the creation options for the signed-in person.
+  app.post("/management-api/passkey/register/options", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const out = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return beginPasskeyRegistration(tx, {
+          managementSessionId: sessionId,
+          tenantId: deps.cfg.tenantId,
+          rpId: deps.rpId,
+          rpName: "Waitron",
+        });
+      });
+      return c.json(out);
+    }),
+  );
+
+  // Finish passkey registration (gated): verify the signed response against the stored challenge and
+  // persist the credential. The parsed body is coerced to `{}` (`?? {}`, see the login route for why a
+  // `null`/non-object body must not TypeError → 500) and `challengeHandle` is screened to a UUID (else
+  // `management.request_invalid` naming the FIELD, matching the sibling write routes). The UUID screen
+  // is load-bearing, not cosmetic: `challengeHandle` flows into `eq(webauthnChallenges.id, …)` against
+  // a `uuid` PK column, so a well-formed-string-but-non-UUID value would `22P02` → opaque 500 — the
+  // same failure `requirePersonId`'s `isUuid` screen above exists to prevent, keeping `run`'s
+  // "every surfaced code is a client 4xx" invariant true. `response` is then required to be a non-null
+  // object (else the same `management.request_invalid`) before it reaches the verifier.
+  //
+  // `finishPasskeyRegistration`'s `@simplewebauthn/server` verify call throws a GENERIC `Error` on a
+  // bad/mismatched response (a missing/non-base64url credential id, wrong origin/RPID, a malformed
+  // attestation) — NOT a mapped `passkey.*` code — so `finishPasskeyRegistration` wraps it and throws
+  // `passkey.verification_failed` (also the code for a `verified:false` return). The ceremony's TTL is
+  // OUR check inside that function, not the library's: it throws `passkey.challenge_expired` when the
+  // stored challenge has lapsed past `CHALLENGE_TTL_MS`. Both map via `STATUS` (401 / 400).
+  app.post("/management-api/passkey/register/verify", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const { challengeHandle, response } = await parsePasskeyVerifyBody(c);
+      const out = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return finishPasskeyRegistration(tx, {
+          managementSessionId: sessionId,
+          tenantId: deps.cfg.tenantId,
+          challengeHandle,
+          response: response as never,
+          rpId: deps.rpId,
+          origin: deps.origin,
+        });
+      });
+      return c.json(out);
+    }),
+  );
+
+  // Begin passkey authentication (UNGATED — this IS the login): issue + store the discoverable request
+  // options. No session and no body: the person is unknown until the assertion is verified on finish.
+  app.post("/management-api/passkey/auth/options", (c) =>
+    run(c, log, async () => {
+      const out = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return beginPasskeyAuthentication(tx, { tenantId: deps.cfg.tenantId, rpId: deps.rpId });
+      });
+      return c.json(out);
+    }),
+  );
+
+  // Finish passkey authentication (UNGATED — this IS the login): verify the signed assertion, open a
+  // management session for the credential's owner, set the cookie, and return the person id — the exact
+  // shape of the password login route. Same body coercion + `challengeHandle` UUID screen as
+  // register/verify above; the UUID screen matters MORE here because this route is UNAUTHENTICATED, so
+  // a non-UUID `challengeHandle` reaching the `uuid` PK column (`22P02` → opaque 500) would be an
+  // unauthenticated 500 — the login route's own `isUuid(body.personId)` screen exists for exactly this.
+  // `response` is then required to be a non-null object (else `management.request_invalid`): this route
+  // is UNAUTHENTICATED and `finishPasskeyAuthentication` reads `response.id` to resolve the credential,
+  // so a missing/non-object `response` must be a clean 400 here rather than an unauthenticated fault.
+  //
+  // `finishPasskeyAuthentication`'s `@simplewebauthn/server` verify call throws a GENERIC `Error` on a
+  // bad/mismatched assertion (a bad signature, wrong origin/RPID, UV not performed) — NOT a mapped
+  // code — which that function wraps into `passkey.verification_failed`. Its other faults:
+  // `passkey.not_registered` (no credential matched the returned id, or the returned id was non-string),
+  // `person.suspended` (the credential's owner was suspended after enrolling — the same gate
+  // `loginManager` applies), and `passkey.challenge_expired` (OUR TTL check, not the library's). These
+  // map to 401 / 401 / 403 / 400 via `STATUS`. `setManagementCookie` uses `deps.secureCookies`,
+  // mirroring `POST /management-api/session`.
+  app.post("/management-api/passkey/auth/verify", (c) =>
+    run(c, log, async () => {
+      const { challengeHandle, response } = await parsePasskeyVerifyBody(c);
+      const session = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return finishPasskeyAuthentication(tx, {
+          tenantId: deps.cfg.tenantId,
+          challengeHandle,
+          response: response as never,
+          rpId: deps.rpId,
+          origin: deps.origin,
+        });
+      });
+      setManagementCookie(c, session.id, deps.secureCookies);
+      return c.json({ personId: session.personId });
     }),
   );
 }

@@ -1,14 +1,29 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { startAuthentication } from "@simplewebauthn/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { DashboardApi } from "../api/client.js";
 import { LoginScreen } from "./login-screen.js";
 
+// The real `startAuthentication` drives `navigator.credentials.get`, which needs a physical
+// authenticator and cannot run headless. Mock the whole module: `startAuthentication` resolves the
+// assertion the verify step echoes back, so the screen's chain runs end to end under test.
+vi.mock("@simplewebauthn/browser", () => ({
+  startAuthentication: vi.fn().mockResolvedValue({ id: "cred-abc" }),
+  startRegistration: vi.fn().mockResolvedValue({ id: "cred-abc" }),
+}));
+
 afterEach(cleanupWidgets);
+// Shared across tests (the module mock is file-scoped), so clear its call log between them.
+afterEach(() => vi.mocked(startAuthentication).mockClear());
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
     getStaffRoster: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ada" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
+    passkeyAuthOptions: vi
+      .fn()
+      .mockResolvedValue({ challengeHandle: "h1", options: { challenge: "abc" } }),
+    passkeyAuthVerify: vi.fn().mockResolvedValue({ personId: "p9" }),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -119,5 +134,54 @@ describe("login-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
     await flush(el);
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("server.internal");
+  });
+
+  // Passkey login: options → startAuthentication(the browser ceremony, mocked) → verify → logged-in.
+  it("runs the passkey ceremony and logs in the returned person", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await el.updateComplete;
+    await flush(el);
+    const loggedIn = new Promise<{ personId: string }>((resolve) =>
+      el.addEventListener("logged-in", (e) => resolve((e as CustomEvent).detail)),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=passkey-login]")!.click();
+    expect((await loggedIn).personId).toBe("p9");
+    // v13 wraps the server's options blob under `optionsJSON` — NOT the bare options object.
+    expect(startAuthentication).toHaveBeenCalledWith({ optionsJSON: { challenge: "abc" } });
+    // The handle from options is echoed back with the assertion startAuthentication returned.
+    expect(api.passkeyAuthVerify).toHaveBeenCalledWith({
+      challengeHandle: "h1",
+      response: { id: "cred-abc" },
+    });
+  });
+
+  // A rejected ceremony step becomes the error banner, never an unhandled rejection (pristine
+  // output pins that). Covers the `.code` arm of the catch with a distinct, non-fallback code.
+  it("shows the thrown code as errorKey when a passkey step is rejected (and never rejects)", async () => {
+    const api = stubApi({
+      passkeyAuthVerify: vi.fn().mockRejectedValue({ code: "passkey.challenge_expired" }),
+    });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await el.updateComplete;
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=passkey-login]")!.click();
+    await flush(el);
+    expect((el as unknown as { errorKey: string | null }).errorKey).toBe(
+      "passkey.challenge_expired",
+    );
+  });
+
+  // Covers the `?? "passkey.verification_failed"` fallback arm: a rejection carrying no code.
+  it("falls back to passkey.verification_failed when a rejected passkey step carries no code", async () => {
+    const api = stubApi({ passkeyAuthOptions: vi.fn().mockRejectedValue({}) });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await el.updateComplete;
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=passkey-login]")!.click();
+    await flush(el);
+    expect((el as unknown as { errorKey: string | null }).errorKey).toBe(
+      "passkey.verification_failed",
+    );
   });
 });
