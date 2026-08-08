@@ -1,11 +1,22 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { startRegistration } from "@simplewebauthn/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { DashboardApi, PersonSummary } from "../api/client.js";
 import type { StaffList } from "../widgets/staff-list.js";
 import type { PersonForm } from "../widgets/person-form.js";
 import { StaffScreen } from "./staff-screen.js";
 
+// The real `startRegistration` drives `navigator.credentials.create`, which needs a physical
+// authenticator and cannot run headless. Mock the whole module: `startRegistration` resolves the
+// attestation the verify step echoes back, so the screen's chain runs end to end under test.
+vi.mock("@simplewebauthn/browser", () => ({
+  startAuthentication: vi.fn().mockResolvedValue({ id: "cred-abc" }),
+  startRegistration: vi.fn().mockResolvedValue({ id: "cred-abc" }),
+}));
+
 afterEach(cleanupWidgets);
+// Shared across tests (the module mock is file-scoped), so clear its call log between them.
+afterEach(() => vi.mocked(startRegistration).mockClear());
 
 const people: PersonSummary[] = [
   {
@@ -30,6 +41,10 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
     listStaff: vi.fn().mockResolvedValue(people),
     createPerson: vi.fn().mockResolvedValue({ id: "p3" }),
+    passkeyRegisterOptions: vi
+      .fn()
+      .mockResolvedValue({ challengeHandle: "h2", options: { challenge: "def" } }),
+    passkeyRegisterVerify: vi.fn().mockResolvedValue({ credentialId: "cred-1" }),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -221,5 +236,61 @@ describe("staff-screen", () => {
     await flush(el);
 
     expect(api.createPerson).toHaveBeenCalledTimes(1);
+  });
+
+  // Add-passkey: options → startRegistration (the browser ceremony, mocked) → verify → success
+  // status. The symmetric parallel of the login screen's passkey flow, for the signed-in manager.
+  it("runs the registration ceremony and shows a success status", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-passkey]")!.click();
+    await flush(el);
+
+    // v13 wraps the server's options blob under `optionsJSON` — NOT the bare options object.
+    expect(startRegistration).toHaveBeenCalledWith({ optionsJSON: { challenge: "def" } });
+    expect(api.passkeyRegisterVerify).toHaveBeenCalledWith({
+      challengeHandle: "h2",
+      response: { id: "cred-abc" },
+    });
+    expect((el as unknown as { passkeyStatus: string | null }).passkeyStatus).toBe(
+      "passkey.registered",
+    );
+    expect(el.shadowRoot!.querySelector("[role=status]")?.textContent).toContain(
+      "passkey.registered",
+    );
+  });
+
+  // A rejected registration step becomes the error banner (never an unhandled rejection — pristine
+  // output pins that), leaves no success status, and covers the `.code` arm with a distinct code.
+  it("shows the thrown code as errorKey when a registration step is rejected (and never rejects)", async () => {
+    const api = stubApi({
+      passkeyRegisterVerify: vi.fn().mockRejectedValue({ code: "passkey.challenge_expired" }),
+    });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-passkey]")!.click();
+    await flush(el);
+
+    expect((el as unknown as { errorKey: string | null }).errorKey).toBe(
+      "passkey.challenge_expired",
+    );
+    expect((el as unknown as { passkeyStatus: string | null }).passkeyStatus).toBeNull();
+  });
+
+  // Covers the `?? "passkey.verification_failed"` fallback arm: a rejection carrying no code.
+  it("falls back to passkey.verification_failed when a rejected registration step carries no code", async () => {
+    const api = stubApi({ passkeyRegisterOptions: vi.fn().mockRejectedValue({}) });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-passkey]")!.click();
+    await flush(el);
+
+    expect((el as unknown as { errorKey: string | null }).errorKey).toBe(
+      "passkey.verification_failed",
+    );
   });
 });

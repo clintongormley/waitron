@@ -1,5 +1,7 @@
 import { LitElement, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { startAuthentication } from "@simplewebauthn/browser";
+import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -105,6 +107,44 @@ export class LoginScreen extends LitElement {
     }
   }
 
+  /**
+   * Log in with a passkey — the password-free parallel of `#submit`, driving the WebAuthn assertion
+   * ceremony: `passkeyAuthOptions()` (UNGATED — this IS the login) returns the request options plus a
+   * challenge handle; `startAuthentication` runs the browser ceremony against the operator's
+   * authenticator; `passkeyAuthVerify` echoes the handle with the signed assertion and, on success,
+   * the server sets the session cookie and answers who is now logged in — dispatched as the same
+   * `logged-in` event a password login emits, so the app shell above the shadow boundary is agnostic
+   * to which credential was used.
+   *
+   * `startAuthentication` takes `{ optionsJSON }` in `@simplewebauthn/browser` v13 — the options blob
+   * is nested under that key, not passed bare. The blob is the server's
+   * `PublicKeyCredentialRequestOptionsJSON`; the client types it as an opaque `PasskeyOptions`
+   * (`Record<string, unknown>`), which has no structural overlap with the concrete interface, so the
+   * cast re-narrows it via `unknown` at this one call site — validated there, exactly as the
+   * `PasskeyOptions` note in `api/client.ts` intends.
+   *
+   * Any failure — a lapsed challenge, a rejected assertion, an aborted ceremony — becomes the same
+   * `errorKey`-in-a-`role="alert"` banner a failed password login uses, falling back to
+   * `passkey.verification_failed` (the code the server itself throws on a failed verify) when the
+   * rejection names none. Caught here because the click handler calls this via `void`, so an
+   * uncaught rejection would strand the operator with no feedback.
+   */
+  async #passkeyLogin(): Promise<void> {
+    this.errorKey = null;
+    try {
+      const { challengeHandle, options } = await this.api.passkeyAuthOptions();
+      const response = await startAuthentication({
+        optionsJSON: options as unknown as PublicKeyCredentialRequestOptionsJSON,
+      });
+      const out = await this.api.passkeyAuthVerify({ challengeHandle, response });
+      this.dispatchEvent(
+        new CustomEvent("logged-in", { detail: out, bubbles: true, composed: true }),
+      );
+    } catch (error) {
+      this.errorKey = (error as { code?: string }).code ?? "passkey.verification_failed";
+    }
+  }
+
   override render() {
     return html`
       <label class="field"
@@ -128,6 +168,12 @@ export class LoginScreen extends LitElement {
       ></wt-input>
       <wt-button variant="primary" data-test="submit" @click=${() => void this.#submit()}
         >Entrar</wt-button
+      >
+      <wt-button
+        variant="secondary"
+        data-test="passkey-login"
+        @click=${() => void this.#passkeyLogin()}
+        >Entrar con passkey</wt-button
       >
       ${this.errorKey ? html`<p class="error" role="alert">${this.errorKey}</p>` : ""}
     `;

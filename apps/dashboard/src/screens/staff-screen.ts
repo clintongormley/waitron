@@ -1,5 +1,7 @@
 import { LitElement, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { startRegistration } from "@simplewebauthn/browser";
+import type { PublicKeyCredentialCreationOptionsJSON } from "@simplewebauthn/browser";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 // Value imports (not `import type`): pull in the widget modules for their `@customElement` side
@@ -47,6 +49,11 @@ export class StaffScreen extends LitElement {
         gap: var(--wt-space-3);
         margin-bottom: var(--wt-space-4);
       }
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-3);
+      }
       .title {
         margin: 0;
         font-size: var(--wt-font-size-lg);
@@ -56,6 +63,10 @@ export class StaffScreen extends LitElement {
         color: var(--wt-color-danger);
         margin-top: var(--wt-space-3);
       }
+      .status {
+        color: var(--wt-color-text);
+        margin-top: var(--wt-space-3);
+      }
     `,
   ];
 
@@ -63,6 +74,10 @@ export class StaffScreen extends LitElement {
   @state() private people: PersonSummary[] = [];
   @state() private formOpen = false;
   @state() private errorKey: string | null = null;
+  // A minimal success confirmation for #addPasskey, rendered raw in a `role="status"` banner and
+  // (like errorKey) deferred to a later i18n task — the WebAuthn ceremony has no visible surface of
+  // its own once the browser dialog closes, so without this the operator gets no feedback.
+  @state() private passkeyStatus: string | null = null;
 
   // A re-entrancy guard, NOT @state (nothing renders off it): set synchronously at `#onCreatePerson`
   // entry so a double-clicked "Crear" (two `create-person` events) files at most one person —
@@ -95,7 +110,43 @@ export class StaffScreen extends LitElement {
    */
   #openForm(): void {
     this.errorKey = null;
+    this.passkeyStatus = null;
     this.formOpen = true;
+  }
+
+  /**
+   * Enroll a passkey for the signed-in operator — the symmetric parallel of the login screen's
+   * `#passkeyLogin`, run from where the logged-in manager already is. `passkeyRegisterOptions()` is
+   * GATED (the route resolves the person from the session) and returns the creation options plus a
+   * challenge handle; `startRegistration` runs the browser attestation ceremony; `passkeyRegisterVerify`
+   * echoes the handle with the signed response to finish enrollment. Success sets a brief
+   * `passkeyStatus` banner (the ceremony leaves no visible trace once the browser dialog closes).
+   *
+   * `startRegistration` takes `{ optionsJSON }` in `@simplewebauthn/browser` v13 — the options blob is
+   * nested under that key, not passed bare. The blob is the server's
+   * `PublicKeyCredentialCreationOptionsJSON`; the client types it as an opaque `PasskeyOptions`
+   * (`Record<string, unknown>`), which has no structural overlap with the concrete interface, so the
+   * cast re-narrows it via `unknown` at this one call site — validated there, exactly as the
+   * `PasskeyOptions` note in `api/client.ts` intends.
+   *
+   * Any failure becomes the same `errorKey`-in-a-`role="alert"` banner the other async paths use,
+   * falling back to `passkey.verification_failed` (the code the server itself throws on a failed
+   * verify) when the rejection names none. Caught here because the click handler calls this via
+   * `void`, so an uncaught rejection would strand the operator with no feedback.
+   */
+  async #addPasskey(): Promise<void> {
+    this.errorKey = null;
+    this.passkeyStatus = null;
+    try {
+      const { challengeHandle, options } = await this.api.passkeyRegisterOptions();
+      const response = await startRegistration({
+        optionsJSON: options as unknown as PublicKeyCredentialCreationOptionsJSON,
+      });
+      await this.api.passkeyRegisterVerify({ challengeHandle, response });
+      this.passkeyStatus = "passkey.registered";
+    } catch (error) {
+      this.errorKey = (error as { code?: string }).code ?? "passkey.verification_failed";
+    }
   }
 
   /**
@@ -126,12 +177,21 @@ export class StaffScreen extends LitElement {
     return html`
       <div class="header">
         <h1 class="title">Usuarios</h1>
-        <wt-button variant="primary" data-test="add" @click=${() => this.#openForm()}
-          >Añadir usuario</wt-button
-        >
+        <div class="actions">
+          <wt-button
+            variant="secondary"
+            data-test="add-passkey"
+            @click=${() => void this.#addPasskey()}
+            >Añadir passkey</wt-button
+          >
+          <wt-button variant="primary" data-test="add" @click=${() => this.#openForm()}
+            >Añadir usuario</wt-button
+          >
+        </div>
       </div>
       <dashboard-staff-list .people=${this.people}></dashboard-staff-list>
       ${this.errorKey ? html`<p class="error" role="alert">${this.errorKey}</p>` : ""}
+      ${this.passkeyStatus ? html`<p class="status" role="status">${this.passkeyStatus}</p>` : ""}
       <dashboard-person-form
         .open=${this.formOpen}
         @create-person=${(e: CustomEvent<{ displayName: string; role: PersonRole; pin: string }>) =>
