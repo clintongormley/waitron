@@ -311,6 +311,23 @@ accounting/payroll duty for the **tip-payroll (13)** and **workforce (16)** trac
 and it needs the tip attributed to the payer (which the sale-settlement model, piece 1, now does by
 putting the tip on `tenders`).
 
+**Owner-flagged remaining UI work (2026-08-08).** A "what UI is left?" review named four surfaces to
+keep on the radar. The split that matters is backend-vs-greenfield — only the first is a "build the UI"
+task today:
+
+- **Shift-planning dashboard UI** (sub-project 16) — the scheduling *engine* landed headless (#50:
+  rosters, `publishRoster`, the advisory guardrail engine, planned-vs-actual, shift swaps). What is
+  missing is the **dashboard surface** to author/publish rosters, surface `RosterBreach[]` on publish,
+  and run the manager **approve/reject swaps** flow (backlog notes that approve/reject slice as latent).
+  The one item here where "do the UI" is the actual next task — buildable now against #50.
+- **Recipes / BOM** (sub-project 18) — **the linchpin**, and greenfield (no backend, no UI). Unlocks
+  stock depletion per sale, allergen *inheritance* from ingredients, and plate costing. Backend-first;
+  **declined for the autonomous window** (too many product + food-safety decisions to model unsupervised).
+- **Stock-taking / inventory** (sub-project 20) — greenfield; downstream of recipes (a sale only becomes
+  "150 g ham used" through the recipe).
+- **Supplies ordering / procurement** (sub-project 20) — greenfield; sits on inventory. **AI-assisted
+  reorder is explicitly deferred.**
+
 ---
 
 ## Debt and odd jobs
