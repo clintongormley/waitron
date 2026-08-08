@@ -29,15 +29,15 @@ export interface VenueRequest {
   seriesCode: string;
   rectificativeSeriesCode: string;
   /** The initial ADMIN person a freshly provisioned venue needs, so someone can log in and
-   * authorize privileged actions from day one. The PIN is already HASHED here (hashed at the CLI
-   * boundary by `hashPin`) — `pinHash`, never a plaintext PIN, so the secret never enters the plan
-   * or any action. */
-  admin: { displayName: string; pinHash: string };
+   * authorize privileged actions from day one. Both secrets are already HASHED here (hashed at the CLI
+   * boundary by `hashPin` / `hashPassword`) — `pinHash` for the till, `passwordHash` for the dashboard,
+   * never a plaintext secret, so neither enters the plan or any action. */
+  admin: { displayName: string; pinHash: string; passwordHash: string };
 }
 
 export type VenueAction =
   | { kind: "ensure-tenant"; tenantId: string; country: string; taxId: string; legalName: string }
-  | { kind: "seed-admin"; displayName: string; pinHash: string }
+  | { kind: "seed-admin"; displayName: string; pinHash: string; passwordHash: string }
   | {
       kind: "create-location";
       name: string;
@@ -119,6 +119,7 @@ export function planVenue(request: VenueRequest): VenueAction[] {
       kind: "seed-admin",
       displayName: request.admin.displayName,
       pinHash: request.admin.pinHash,
+      passwordHash: request.admin.passwordHash,
     },
     {
       kind: "create-location",

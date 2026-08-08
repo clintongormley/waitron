@@ -41,7 +41,7 @@ function request(taxId = "B12345678"): VenueRequest {
     tillName: "Caja 1",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
-    admin: { displayName: "Owner", pinHash: "scrypt$00$00" },
+    admin: { displayName: "Owner", pinHash: "scrypt$00$00", passwordHash: "scrypt$00$00" },
   };
 }
 
@@ -82,20 +82,27 @@ describe("applyVenue", () => {
     // A freshly provisioned venue must have someone who can log in and authorize privileged actions.
     // A distinct obligado so the person count is this run's alone (the suite shares one database).
     const seedRequest = request("B55555555");
-    seedRequest.admin = { displayName: "Alicia", pinHash: "scrypt$abc$def" };
+    seedRequest.admin = {
+      displayName: "Alicia",
+      pinHash: "scrypt$abc$def",
+      passwordHash: "scrypt$pwd$hash",
+    };
     const result = await applyVenue(planVenue(seedRequest), { db: suite.db });
 
     const people = await suite.db.execute<{
       display_name: string;
       role: string;
       pin_hash: string;
+      password_hash: string;
     }>(sql`
-      select display_name, role, pin_hash from persons where tenant_id = ${result.tenantId}`);
+      select display_name, role, pin_hash, password_hash
+      from persons where tenant_id = ${result.tenantId}`);
     expect(people.rows).toHaveLength(1);
     expect(people.rows[0]).toEqual({
       display_name: "Alicia",
       role: "admin",
       pin_hash: "scrypt$abc$def",
+      password_hash: "scrypt$pwd$hash",
     });
   });
 

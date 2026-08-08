@@ -81,12 +81,13 @@ export async function applyVenue(
           // yet (the `role='admin'` predicate, RLS-scoped to this tenant; the explicit tenant_id is
           // redundant under RLS but guards a non-scoped connection, as elsewhere here). Raw SQL like
           // every other insert — no @waitron/identity import; the `persons` table exists because the
-          // identity migrations run before a venue is applied. `pin_hash` is already a scrypt hash
-          // (hashed at the CLI boundary), never a plaintext PIN. `role='admin'` is the whole point:
-          // this person can log in and authorize privileged actions from day one.
+          // identity migrations run before a venue is applied. `pin_hash` (till) and `password_hash`
+          // (dashboard) are already scrypt hashes, hashed at the CLI boundary, never a plaintext
+          // secret. `role='admin'` is the whole point: this person can log in and authorize privileged
+          // actions from day one.
           await tx.execute(sql`
-            insert into persons (tenant_id, display_name, pin_hash, role)
-            select ${tenantId}, ${action.displayName}, ${action.pinHash}, 'admin'
+            insert into persons (tenant_id, display_name, pin_hash, password_hash, role)
+            select ${tenantId}, ${action.displayName}, ${action.pinHash}, ${action.passwordHash}, 'admin'
             where not exists (
               select 1 from persons where tenant_id = ${tenantId} and role = 'admin')`);
           break;

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import type { Database, DeploymentEnvironment } from "@waitron/db";
 import { manifestSets } from "@waitron/migrations";
-import { verifyPin } from "@waitron/identity";
+import { verifyPassword, verifyPin } from "@waitron/identity";
 import { runCli } from "./cli.js";
 import type { CliDeps } from "./cli.js";
 import type { InstanceState, RoleFacts } from "./instance-state.js";
@@ -69,12 +69,17 @@ const VENUE_ARGS = [
   "Owner",
 ];
 
-/** The two secrets `venue` reads the SAME way — from the env or an echo-off prompt, never argv: the
- * admin connection string (WAITRON_ADMIN_DATABASE_URL) and the admin PIN (WAITRON_ADMIN_PIN). Most
- * venue tests supply both from the env so no prompt fires; the ones that exercise the prompt path
- * omit WAITRON_ADMIN_PIN and answer through `secrets` instead. The PIN is `4321` throughout, so a
- * seeded admin's hash is checkable with `verifyPin("4321", …)`. */
-const VENUE_ENV = { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI, WAITRON_ADMIN_PIN: "4321" };
+/** The three secrets `venue` reads the SAME way — from the env or an echo-off prompt, never argv: the
+ * admin connection string (WAITRON_ADMIN_DATABASE_URL), the admin PIN (WAITRON_ADMIN_PIN) and the
+ * admin dashboard PASSWORD (WAITRON_ADMIN_PASSWORD). Most venue tests supply all three from the env so
+ * no prompt fires; the ones that exercise the prompt path omit WAITRON_ADMIN_PIN / WAITRON_ADMIN_PASSWORD
+ * and answer through `secrets` instead. The PIN is `4321` and the password `dashPass123` throughout, so
+ * a seeded admin's hashes are checkable with `verifyPin("4321", …)` / `verifyPassword("dashPass123", …)`. */
+const VENUE_ENV = {
+  WAITRON_ADMIN_DATABASE_URL: ADMIN_URI,
+  WAITRON_ADMIN_PIN: "4321",
+  WAITRON_ADMIN_PASSWORD: "dashPass123",
+};
 
 function facts(overrides: Partial<RoleFacts> = {}): RoleFacts {
   return {
@@ -1039,9 +1044,14 @@ describe("runCli venue", () => {
     const seedAdmin = actions.find((action) => action.kind === "seed-admin");
     expect(seedAdmin?.kind === "seed-admin" && seedAdmin.displayName).toBe("Owner");
     expect(seedAdmin?.kind === "seed-admin" && verifyPin("4321", seedAdmin.pinHash)).toBe(true);
-    // The PIN came from WAITRON_ADMIN_PIN in the env (VENUE_ENV) — the env-var half of the same
-    // discipline the admin connection string follows — so no echo-off prompt fired for it, and it
-    // was never read from argv (VENUE_ARGS carries no PIN flag).
+    // The dashboard PASSWORD is hashed the same way — salt is random, so the hash is checked with
+    // `verifyPassword`, never by equality. It came from WAITRON_ADMIN_PASSWORD in the env (VENUE_ENV).
+    expect(
+      seedAdmin?.kind === "seed-admin" && verifyPassword("dashPass123", seedAdmin.passwordHash),
+    ).toBe(true);
+    // The PIN and password came from the env (VENUE_ENV) — the env-var half of the same discipline the
+    // admin connection string follows — so no echo-off prompt fired for either, and neither was read
+    // from argv (VENUE_ARGS carries no PIN/password flag).
     expect(h.askedSecretly).toEqual([]);
 
     // `withVenueState` re-points the admin URI at the target database and hands THAT connection to
@@ -1066,11 +1076,12 @@ describe("runCli venue", () => {
     expect(printed).toContain(`node:     ${VENUE_RESULT.nodeId}`);
     expect(printed).toContain(`SIF:      ${VENUE_RESULT.sif.id} (installation 1)`);
 
-    // No secret anywhere: the admin password is never echoed, the admin PIN never appears, and
-    // venue mints no connection strings.
+    // No secret anywhere: the admin connection string is never echoed, the admin PIN never appears,
+    // the admin dashboard password never appears, and venue mints no connection strings.
     expect(printed).not.toContain("adminsecret");
     expect(printed).not.toContain(ADMIN_URI);
     expect(printed).not.toContain("4321");
+    expect(printed).not.toContain("dashPass123");
     expect(printedUris(h.lines)).toEqual([]);
     // The target connection was closed, whichever way the run ended.
     expect(h.closes()).toBe(1);
@@ -1082,23 +1093,31 @@ describe("runCli venue", () => {
     // connection string. It is hashed at the CLI boundary (`hashPin`), so only a hash reaches the
     // plan/apply and the plaintext appears nowhere in what the operator saw. The PIN is NOT a flag
     // (see the argv-refusal test), so VENUE_ARGS carries no PIN — the prompt is the only source left.
-    const h = harness({ env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI }, secrets: ["4321"] });
+    const h = harness({
+      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
+      secrets: ["4321", "dashPass123"],
+    });
     const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
     expect(code).toBe(0);
 
-    // The admin URI came from the env, so the ONLY echo-off prompt is the PIN — and it is echo-off,
-    // never on the visible `prompt` stream.
-    expect(h.askedSecretly).toEqual(["admin PIN (not shown): "]);
+    // The admin URI came from the env, so the echo-off prompts are the PIN then the password, in that
+    // order — both echo-off, never on the visible `prompt` stream.
+    expect(h.askedSecretly).toEqual(["admin PIN (not shown): ", "admin password (not shown): "]);
     expect(h.asked.join(" ")).not.toContain("PIN");
+    expect(h.asked.join(" ")).not.toContain("password");
 
     const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
     const seedAdmin = actions.find((action) => action.kind === "seed-admin");
     expect(seedAdmin?.kind === "seed-admin" && seedAdmin.displayName).toBe("Owner");
-    // The salt is random, so the hash is checked with `verifyPin`, not by equality — and the
-    // plaintext PIN reaches neither the action nor the transcript.
+    // The salt is random, so the hashes are checked with `verifyPin`/`verifyPassword`, not by
+    // equality — and neither plaintext secret reaches the action or the transcript.
     expect(seedAdmin?.kind === "seed-admin" && verifyPin("4321", seedAdmin.pinHash)).toBe(true);
+    expect(
+      seedAdmin?.kind === "seed-admin" && verifyPassword("dashPass123", seedAdmin.passwordHash),
+    ).toBe(true);
     const transcript = h.lines.join("\n");
     expect(transcript).not.toContain("4321");
+    expect(transcript).not.toContain("dashPass123");
     expect(transcript).toContain("seed admin Owner");
   });
 
@@ -1132,6 +1151,26 @@ describe("runCli venue", () => {
     expect(h.lines.join("\n")).toContain('pin.too_short {"min":4}');
     expect(h.lines.join("\n")).not.toContain("999");
     // Refused before the plan is built and before any connection — nothing is applied.
+    expect(h.applyVenue).not.toHaveBeenCalled();
+    expect(h.connect).not.toHaveBeenCalled();
+  });
+
+  it("refuses a too-short admin password and applies nothing — the floor loginManager needs", async () => {
+    // `hashPassword` validates nothing, so without a length check at the boundary an operator could
+    // seed the admin with a trivially short dashboard password. The CLI applies the same
+    // MIN_PASSWORD_LENGTH floor `setPassword` does. `shortpw` (length 7) is below it and is a
+    // distinctive string absent from every other arg, so the leak-safety assertion is real.
+    const h = harness({
+      env: {
+        WAITRON_ADMIN_DATABASE_URL: ADMIN_URI,
+        WAITRON_ADMIN_PIN: "4321",
+        WAITRON_ADMIN_PASSWORD: "shortpw",
+      },
+    });
+    const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
+    expect(code).toBe(1);
+    expect(h.lines.join("\n")).toContain('password.too_short {"min":8}');
+    expect(h.lines.join("\n")).not.toContain("shortpw");
     expect(h.applyVenue).not.toHaveBeenCalled();
     expect(h.connect).not.toHaveBeenCalled();
   });
@@ -1347,8 +1386,10 @@ describe("runCli venue", () => {
     // that did not create the target holds no privilege on its tables, so the deployment-stamp read
     // fails 42501. A fact about the database, mapped to `provisioning.state_unreadable` — not the raw
     // `unexpected failure` it surfaced as before this fix. The apply must NOT run.
+    // VENUE_ENV supplies the PIN and password from the env (like the refused-CONNECT mirror above), so
+    // the boundary secret checks pass and the run reaches the stamp read this test is about.
     const h = harness({
-      env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
+      env: VENUE_ENV,
       readEnvironment: () =>
         Promise.reject(
           Object.assign(new Error("permission denied for table deployment"), { code: "42501" }),
@@ -1394,9 +1435,10 @@ describe("runCli venue", () => {
         "R",
         "Owner", // admin name
       ],
-      // The admin PIN is the one echo-OFF option here: WAITRON_ADMIN_PIN is unset (URL-only env), so
-      // it is read through `promptSecret`, never the visible `prompt`. Only the admin URI is env-fed.
-      secrets: ["4321"],
+      // The admin PIN and dashboard password are the echo-OFF options here: WAITRON_ADMIN_PIN and
+      // WAITRON_ADMIN_PASSWORD are unset (URL-only env), so each is read through `promptSecret`, never
+      // the visible `prompt`, PIN first then password. Only the admin URI is env-fed.
+      secrets: ["4321", "dashPass123"],
       env: { WAITRON_ADMIN_DATABASE_URL: ADMIN_URI },
     });
     // `--yes` so the confirmation prompt does not appear amid the option prompts.
@@ -1430,9 +1472,9 @@ describe("runCli venue", () => {
       "rectificative series code: ",
       "admin name: ",
     ]);
-    // The admin PIN is the sole echo-off prompt (the admin URI came from the env, WAITRON_ADMIN_PIN
-    // is unset here so the PIN falls through to the prompt).
-    expect(h.askedSecretly).toEqual(["admin PIN (not shown): "]);
+    // The admin PIN and password are the echo-off prompts, in that order (the admin URI came from the
+    // env; WAITRON_ADMIN_PIN / WAITRON_ADMIN_PASSWORD are unset here so both fall through to a prompt).
+    expect(h.askedSecretly).toEqual(["admin PIN (not shown): ", "admin password (not shown): "]);
 
     // The two locales prompted for reach the plan.
     const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
