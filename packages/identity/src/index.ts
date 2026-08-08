@@ -12,6 +12,11 @@ export {
 } from "./management-session.js";
 export type { ManagementSession } from "./management-session.js";
 export { loginManager, authorizeManager } from "./manager-login.js";
+export {
+  CHALLENGE_TTL_MS,
+  beginPasskeyRegistration,
+  finishPasskeyRegistration,
+} from "./passkey.js";
 export { PERMISSIONS, roleHasPermission } from "./permissions.js";
 export type { Permission, PersonRoleValue } from "./permissions.js";
 export { persons, personStatus, personRole } from "./schema/persons.js";

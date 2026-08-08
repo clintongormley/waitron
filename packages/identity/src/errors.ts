@@ -33,5 +33,14 @@ declare module "@waitron/shared" {
     "person.suspended": { personId: string };
     /** Neither the session's operator nor any supplied override holds the required permission. */
     "authorization.not_permitted": { permission: string };
+    /** No passkey is registered for this person (or no credential matched the returned id) — they
+     * must enroll one, or sign in another way. */
+    "passkey.not_registered": Record<string, never>;
+    /** The WebAuthn ceremony did not verify: the authenticator's response failed the library's
+     * checks, or no challenge was on file for the handle. Nothing is registered or signed in. */
+    "passkey.verification_failed": Record<string, never>;
+    /** The challenge issued at the start of the ceremony was not returned within `CHALLENGE_TTL_MS`
+     * and has been discarded — the browser must begin the ceremony again. */
+    "passkey.challenge_expired": Record<string, never>;
   }
 }
