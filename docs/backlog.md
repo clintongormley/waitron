@@ -104,7 +104,7 @@ merges them; anything it cannot safely finish is left as an open PR marked `bloc
 
 | What | State |
 | --- | --- |
-| **Management dashboard** — owner's off-premises console | **Slice 1 COMPLETE — 1a (#67) + 1b (#69) + 1c (#70) + 1d (passkeys, #71) all LANDED.** The auth floor (staff admin + passkey / password+TOTP login) is done; **remote-access transport** (tunnel/snitun-pattern) is a future slice. Slice-1a/1b/1c/1d follow-ups under *Debt and odd jobs*; the first-admin-password provisioning gap is now **CLOSED (#72)**, so a real first dashboard login works |
+| **Management dashboard** — owner's off-premises console | **Slice 1 COMPLETE — 1a (#67) + 1b (#69) + 1c (#70) + 1d (passkeys, #71) all LANDED.** The auth floor (staff admin + passkey / password+TOTP login) is done; **remote-access transport** (tunnel/snitun-pattern) is a future slice. Slice-1a/1b/1c/1d follow-ups under *Debt and odd jobs* — the biggest, **1c row-edit actions, LANDED (#73)**, so the dashboard now manages staff (role/suspend/reactivate/PIN/password), not only list+create; the first-admin-password provisioning gap is now **CLOSED (#72)**, so a real first dashboard login works |
 
 ---
 
@@ -115,6 +115,7 @@ One line per landed PR, newest first. The git log, the linked designs/plans, and
 detail — **this file is not a history** (see *How to keep this file honest*). Open follow-ups from
 these live under *Debt and odd jobs*; their designs/plans stay in `docs/superpowers/`.
 
+- **#73** Dashboard slice 1c — staff row-edit actions — wires the staff list's per-row "Editar" (a live-but-unheard `edit-person` seam since #70) to the four existing slice-1b mutations via a new `<dashboard-person-edit>` dialog: role change, suspend/reactivate, reset-PIN, set-password, each committed **independently** (a role change never forces a PIN retype). The screen turns each bubbling/composed domain event into the matching `DashboardApi` call, reloads, and re-resolves the open dialog's person from the fresh list; a shared single-flight guard drops a re-fired action; secrets are masked (`type=password`) and reset on close. **Browser-only** — `@waitron/identity`/`apps/server` unchanged. The role `<select>` is reconciled to state in `updated()`: a `.value` bound before its options fails a non-default preset (the backlog's latent-picker bug) and a `?selected` attribute keeps a dirtied pick after a revert-on-close+reopen — **both failure modes proven by deletion**. The finish-branch two-lens review (fresh-context reviewer verified findings empirically vs real Lit 3 in Chromium) caught the select reopen-desync + an error banner rendered **behind** the modal backdrop (now surfaced inside the dialog's own top layer) + plaintext secret fields (now masked) + a false "Escape/backdrop" comment (`wt-dialog` has no backdrop light-dismiss). **Copilot** caught three more, all the same stale-claim class the `?selected`→`updated()` swap introduced (`editingPerson` not cleared on close → invariant false + latent stale-id; a stale preset-test comment) — all fixed, replied on-thread, resolved. Dashboard suite 100 tests @ **100/98.9/100/100**, axe clean both themes. **Campaign queue item #10**, landed this session (subagents used for the two reviews; build inline). Deferred edges under *Debt* below.
 - **#72** First venue admin's initial dashboard password — `waitron-provision venue` now seeds the first admin's dashboard **password** (`persons.password_hash`) alongside the till PIN, closing the bootstrap deadlock where a first management-dashboard login was impossible (every credential path except the provisioning seed — `setPassword`, passkey enrollment — is gated on an already-authenticated session). The password is read from `WAITRON_ADMIN_PASSWORD` (env or echo-off prompt, never argv), validated `assertPasswordLength` ≥8, and hashed at the CLI boundary; threaded `VenueRequest.admin` → `seed-admin` action → the `applyVenue` insert, mirroring the PIN. **No schema migration** (the nullable `persons.password_hash` column already existed) and **no grant change** (`applyVenue` runs as the table owner). A gap-closing e2e proves `loginManager` succeeds after `venue` under `app_user`+RLS (and by deletion). Both runbooks corrected (document `WAITRON_ADMIN_PASSWORD`, list all five secrets, fix the stale worked example that omitted `--admin-name`/the PIN env var). Making the field required broke 10 `apps/server` `VenueRequest` consumers (4 demos + 6 tests) — caught by the pre-push gate (the plan enumerated the provisioning fixtures but missed the cross-package ones), all fixed. Copilot: run the e2e login under the app role. Owner decisions: password required; no force-change-on-first-login. (SDD executed inline — the account's weekly limit blocked subagents mid-run.)
 - **#71** Dashboard slice 1d — passkeys (WebAuthn) — the final auth-floor sub-slice: passkeys as the phishing-resistant primary management-dashboard login, plugged into the slice-1a verifier seam. `@waitron/identity` gains two tenant-scoped **FORCE-RLS** tables (`webauthn_credentials`/`webauthn_challenges`; 0007 tables / 0008 hand-written RLS) and the `@simplewebauthn/server` v13 ceremonies (register + auth; auth ends in `startManagementSession` and gates on `person.suspended` like `loginManager`); `apps/server` gains config (`WAITRON_MANAGEMENT_RP_ID`/`_ORIGIN`) + four `/management-api/passkey/*` routes (**register GATED, auth UNGATED**, auth/verify sets the cookie); `apps/dashboard` gains four client methods + `@simplewebauthn/browser` v13 ("Entrar con passkey" / "Añadir passkey"). Only the public key + counter are stored (never a private key); challenges are single-use + `CHALLENGE_TTL_MS`-bounded. Whole-branch review twin-caught a suspended-person auth gap + an unauthenticated-500 behind a false "library maps codes" comment; the finish-branch two-lens review caught three §1 comment overstatements (incl. a "swept" claim the simplify pass left in the sibling migration); **Copilot caught two real concurrency findings** — challenge single-use under concurrency (fixed with a consume-first locking `DELETE … RETURNING` + a deterministic real-PG lock-timeout test) and a counter that could REGRESS under concurrent logins (fixed with a monotonic `counter < newCounter` guard, weakening clone detection). identity 125 tests @ 100%. The crypto is verify-mocked in unit/route tests — a real-ceremony virtual-authenticator test is a follow-up (below).
 - **#70** Dashboard slice 1c — dashboard app — `apps/dashboard`, a browser management console (Lit 3 + Vite 6 + Vitest browser-mode/Playwright-Chromium) consuming slice-1b's `/management-api/*`: a `DashboardApi` client (browser-local types, paths/verbs matched exactly to the routes), a boot session probe → login screen (roster + password + optional TOTP → `logged-in`) / staff screen (list + create dialog → `createPerson` → reload) + logout, all wrapped so no async path is an unhandled rejection; built on `@waitron/ui` primitives + `var(--wt-*)` tokens with an axe `.a11y.test.ts` per screen in both themes; its own `test-dashboard` Chromium CI shard (wired into the `ci` aggregate). All source files 100% coverage. Whole-branch review caught a create-dialog reopen bug; the finish-branch two-lens review twin-caught a create-form-not-reset bug (duplicate/reused-PIN hazard) + added a create single-flight guard. Headless server backend is 1b; UI actions for row-edit are a fast-follow (see below).
@@ -366,29 +367,44 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     fixture. Passes on re-run — a flaky timeout, not a regression.
 - **Dashboard slice 1c follow-ups (#70, dashboard app). None blocking; each deferred with a reason
   during the SDD build / simplify / finish-branch / Copilot review chain.**
-  - **Row-edit ACTIONS are unwired — the biggest one.** `dashboard-staff-list` renders an "Editar"
-    button per row that emits `edit-person`, but NOTHING consumes it, so in the shipped app the button
-    is a silent no-op. The edit actions (change role / suspend / reactivate / reset-PIN / set-password)
-    already exist as `DashboardApi` methods (`updatePerson`/`resetPin`/`setPassword`) — wiring an edit
-    dialog to them in the staff screen is a thin fast-follow. Until then the button is a **seam**, not a
-    feature (plan self-review §626 scoped the actions out deliberately).
-  - **No i18n layer.** The app renders raw error CODES and inline Spanish literals; a follow-up should
-    add an `i18n/` layer mapping codes → localised copy, exactly as `apps/till/src/i18n` does (the till's
-    precedent). Also: a session that expires mid-use surfaces the raw `management_session.required` key
-    with no re-login flow — the shell never re-probes (server enforcement is intact; this is UX).
+  - **Row-edit ACTIONS — DONE (#73).** The staff list's "Editar" now opens a `<dashboard-person-edit>`
+    dialog wired to `updatePerson`/`resetPin`/`setPassword` (role / suspend / reactivate / reset-PIN /
+    set-password, each committed independently). What #73 deliberately left, all small:
+    - **Single-flight silently drops a *different* second action.** The shared `#editing` guard
+      serialises all four edit actions, so clicking e.g. "Guardar rol" then "Restablecer PIN" within
+      one round-trip drops the second with no feedback (deliberate "one edit mutation at a time"; no
+      corruption — the operator just retries). Per-action guarding, or a queued/toast signal, would
+      close it.
+    - **Secrets linger in the open dialog until close.** PIN/password fields are masked and reset on
+      close, but a *successful* action keeps the dialog open (unlike create, which closes on success),
+      so the just-set secret stays in its field until the operator closes. Clear-secret-field-on-success
+      needs the screen (which knows success) to signal the widget.
+    - **Self-lockout is not guarded.** Neither the UI nor the server stops an admin suspending or
+      demoting *themselves*; `resolveManagementSession` re-checks status, so they'd be logged out next
+      request (recoverable via provisioning, nothing deployed). A UI guard needs the screen to know the
+      logged-in `personId`, which it doesn't track yet.
+  - **No i18n layer.** The app (now incl. the edit dialog's labels/`error` codes from #73) renders raw
+    error CODES and inline Spanish literals; a follow-up should add an `i18n/` layer mapping codes →
+    localised copy, exactly as `apps/till/src/i18n` does (the till's precedent). Also: a session that
+    expires mid-use surfaces the raw `management_session.required` key with no re-login flow — the shell
+    never re-probes (server enforcement is intact; this is UX).
   - **Double `listStaff()` on cold load.** The shell's session probe and the staff screen each fetch the
     roster on a logged-in cold load (the probe discards its result). Thread the probed list down (an
     initial-people property, or lift `people` into the shell) to drop one `/management-api/staff` round
     trip. Real but low-cost for a small admin app.
-  - **Create-error renders behind the modal.** A rejected `createPerson` keeps the dialog open (for
-    retry — correct) but the `role="alert"` banner sits behind the backdrop, so a sighted operator may
-    not see WHY it failed (screen readers still announce it). Surface the create error inside the dialog.
+  - **Create-error renders behind the modal (create ONLY now).** A rejected `createPerson` keeps the
+    dialog open (for retry — correct) but the `role="alert"` banner sits behind the backdrop, so a
+    sighted operator may not see WHY it failed (screen readers still announce it). **#73 fixed this for
+    the EDIT dialog** (errorKey passed down as `.error`, rendered in the modal's own top layer, page
+    banner suppressed while it's open) — do the same for the create form. `wt-dialog` has no backdrop
+    light-dismiss, confirmed while wiring #73.
   - **Minors:** the `<select>.value` is bound before its `<option>` children in `login-screen`/`person-form`
-    (renders right today only because the default equals the first option — latent if reused to EDIT a
-    non-default value); no top-level `<main>` landmark in the shell (consistent with `apps/till`; axe
+    (renders right today only because the default equals the first option — the latent EDIT-a-non-default
+    bug **#73's edit picker avoided** via an `updated()` `.value` reconcile; the login/create pickers
+    still carry it); no top-level `<main>` landmark in the shell (consistent with `apps/till`; axe
     passes); `staff-list`'s `people` prop-doc still says "the app owns" (harmless imprecision); and
-    `apps/dashboard` declares `@waitron/shared` but still doesn't import it — **1d did not use it either
-    (confirmed 2026-08-08), so drop the dep.**
+    `apps/dashboard` declares `@waitron/shared` but still doesn't import it — **1d/#73 did not use it
+    either (confirmed 2026-08-08), so drop the dep.**
 - **Dashboard slice 1d follow-ups (#71, passkeys). None blocking; each deferred with a reason during
   the SDD build / simplify / finish-branch / Copilot review chain.**
   - **Real-ceremony integration test — the biggest gap.** Unit/route tests MOCK `@simplewebauthn`'s
