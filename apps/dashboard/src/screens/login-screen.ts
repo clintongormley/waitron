@@ -63,7 +63,11 @@ export class LoginScreen extends LitElement {
     }
   }
 
-  /** Capture the picked person; `stopPropagation` keeps the native `change` inside this screen. */
+  /**
+   * Capture the picked person. A native `<select>` `change` is `composed: false`, so it cannot cross
+   * this screen's shadow boundary anyway — the `stopPropagation` here is defensive consistency with the
+   * composed `wt-change` handlers below, not a boundary guard.
+   */
   #onRosterChange(event: Event): void {
     event.stopPropagation();
     this.selected = (event.target as HTMLSelectElement).value;

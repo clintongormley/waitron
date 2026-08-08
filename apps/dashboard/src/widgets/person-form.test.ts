@@ -94,4 +94,41 @@ describe("person-form", () => {
     await el.updateComplete;
     expect(el.open).toBe(false);
   });
+
+  // When the dialog CLOSES — a successful create (the staff screen sets `.open=false`, and wt-dialog
+  // fires `wt-close` on that programmatic close as much as on a dismiss) or an Escape/backdrop
+  // dismiss — the fields reset, so the previous person's name/role/PIN can't linger into the next
+  // create (a duplicate / reused-PIN hazard). A FAILED create keeps the dialog OPEN, so `#onClose`
+  // never runs and the values survive for a retry — covered by staff-screen.test.ts. Proven by
+  // deletion: remove the resets in `#onClose` and this reopens with "Ada"/"manager"/"1234" still set.
+  it("resets the fields when the dialog closes, so the next open starts blank", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    const nativeDialog = await openedDialog(el);
+    const displayName = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+      "[data-test=display-name]",
+    )!;
+    const pin = el.shadowRoot!.querySelector<HTMLElement & { value: string }>("[data-test=pin]")!;
+    const select = el.shadowRoot!.querySelector("select")!;
+
+    displayName.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Ada" } }));
+    pin.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "1234" } }));
+    select.value = "manager";
+    select.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    // Sanity: the fields hold the entered values before the close.
+    expect(displayName.value).toBe("Ada");
+    expect(pin.value).toBe("1234");
+    expect(select.value).toBe("manager");
+
+    const closed = new Promise<void>((resolve) =>
+      el.addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+    nativeDialog.close();
+    await closed;
+    await el.updateComplete;
+
+    expect(displayName.value).toBe("");
+    expect(pin.value).toBe("");
+    expect(el.shadowRoot!.querySelector("select")!.value).toBe("staff");
+  });
 });

@@ -64,6 +64,11 @@ export class StaffScreen extends LitElement {
   @state() private formOpen = false;
   @state() private errorKey: string | null = null;
 
+  // A re-entrancy guard, NOT @state (nothing renders off it): set synchronously at `#onCreatePerson`
+  // entry so a double-clicked "Crear" (two `create-person` events) files at most one person —
+  // `createPerson` is not server-idempotent. Mirrors apps/till's walk-up-sale `submitting` guard.
+  #creating = false;
+
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
@@ -103,6 +108,8 @@ export class StaffScreen extends LitElement {
     event: CustomEvent<{ displayName: string; role: PersonRole; pin: string }>,
   ): Promise<void> {
     event.stopPropagation();
+    if (this.#creating) return; // single-flight: drop a double-click's second create-person
+    this.#creating = true;
     this.errorKey = null;
     try {
       await this.api.createPerson(event.detail);
@@ -110,6 +117,8 @@ export class StaffScreen extends LitElement {
       await this.#load();
     } catch (error) {
       this.errorKey = (error as { code?: string }).code ?? "server.internal";
+    } finally {
+      this.#creating = false;
     }
   }
 

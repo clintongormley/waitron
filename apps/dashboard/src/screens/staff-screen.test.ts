@@ -158,7 +158,7 @@ describe("staff-screen", () => {
   // close the form, so the operator keeps the entered values and can retry. Covers the `.code` arm.
   it("shows an error key when createPerson is rejected, without reloading or closing the form", async () => {
     const api = stubApi({
-      createPerson: vi.fn().mockRejectedValue({ code: "person.pin_invalid" }),
+      createPerson: vi.fn().mockRejectedValue({ code: "pin.too_short" }),
     });
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
     await flush(el);
@@ -175,7 +175,7 @@ describe("staff-screen", () => {
     expect(api.createPerson).toHaveBeenCalledTimes(1);
     expect(api.listStaff).toHaveBeenCalledTimes(1); // NOT reloaded
     expect(form(el).open).toBe(true); // still open for a retry
-    expect((el as unknown as { errorKey: string | null }).errorKey).toBe("person.pin_invalid");
+    expect((el as unknown as { errorKey: string | null }).errorKey).toBe("pin.too_short");
   });
 
   it("falls back to server.internal when a rejected create carries no code", async () => {
@@ -195,5 +195,31 @@ describe("staff-screen", () => {
     await flush(el);
 
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("server.internal");
+  });
+
+  // Single-flight: a double-clicked "Crear" fires two create-person events; the second lands while the
+  // first's createPerson await is still pending, and the guard drops it — so at most one person is
+  // filed (createPerson is not server-idempotent). Proven by deletion: remove the `#creating` guard
+  // and createPerson is called twice.
+  it("files at most one person when create-person fires twice (double-click)", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
+    await el.updateComplete;
+
+    const detail = { displayName: "Ada", role: "staff" as const, pin: "1234" };
+    // Dispatched synchronously back-to-back: the first #onCreatePerson sets its in-flight guard before
+    // awaiting createPerson, so the second is dropped before it can call the API again.
+    form(el).dispatchEvent(
+      new CustomEvent("create-person", { detail, bubbles: true, composed: true }),
+    );
+    form(el).dispatchEvent(
+      new CustomEvent("create-person", { detail, bubbles: true, composed: true }),
+    );
+    await flush(el);
+
+    expect(api.createPerson).toHaveBeenCalledTimes(1);
   });
 });

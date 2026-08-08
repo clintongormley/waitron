@@ -67,7 +67,11 @@ export class PersonForm extends LitElement {
     this.displayName = event.detail.value;
   }
 
-  /** Capture the picked role; `stopPropagation` keeps the native `change` inside this form. */
+  /**
+   * Capture the picked role. A native `<select>` `change` is `composed: false`, so it cannot cross
+   * this form's shadow boundary anyway — the `stopPropagation` here is defensive consistency with the
+   * composed `wt-change` handlers above, not a boundary guard.
+   */
   #onRoleChange(event: Event): void {
     event.stopPropagation();
     this.selectedRole = (event.target as HTMLSelectElement).value as PersonRole;
@@ -96,13 +100,23 @@ export class PersonForm extends LitElement {
   }
 
   /**
-   * The dialog was dismissed (Escape/backdrop/close). Drop our own `open` to stay self-consistent,
-   * and — unlike the field handlers above — deliberately do NOT `stopPropagation`: the composed
-   * `wt-close` must bubble on to the staff screen (the single owner of the open state) so its
-   * `formOpen` tracks the dismissal and the form can be reopened. See the class doc.
+   * The dialog closed. Drop our own `open` to stay self-consistent, and — unlike the field handlers
+   * above — deliberately do NOT `stopPropagation`: the composed `wt-close` must bubble on to the staff
+   * screen (the single owner of the open state) so its `formOpen` tracks the close and the form can be
+   * reopened. See the class doc.
+   *
+   * Also RESET the fields so the next open starts blank. `#onClose` runs whenever the dialog actually
+   * closes — a SUCCESSFUL create (the staff screen sets `.open=false`, and `wt-dialog` fires `wt-close`
+   * on that programmatic close just as on a dismiss) or an Escape/backdrop dismiss — but NEVER on a
+   * FAILED create, which keeps the dialog open so the operator retries with the values intact. Without
+   * this, the previous person's name/role/PIN would linger into the next create — a duplicate-person /
+   * reused-PIN hazard in an identity console.
    */
   #onClose(): void {
     this.open = false;
+    this.displayName = "";
+    this.selectedRole = "staff";
+    this.pin = "";
   }
 
   override render() {
