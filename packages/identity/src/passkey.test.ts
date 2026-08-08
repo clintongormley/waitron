@@ -5,30 +5,36 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
+import { managementSessions } from "./schema/management-sessions.js";
 import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
-import { codeOf, openManagementSession } from "../test/fixtures.js";
+import { codeOf, openManagementSession, seedPerson } from "../test/fixtures.js";
 
-// PGlite, not real Postgres: this suite tests the registration LOGIC — options issued, challenge
-// stored then consumed, credential persisted, person resolved from the session. A PGlite connection
-// is superuser, so RLS is a false pass here (CLAUDE.md §4); tenant-isolation and FORCE RLS on the
-// webauthn tables are proven as the app role in webauthn.rls.test.ts (Task 1) and not re-proven here.
+// PGlite, not real Postgres: this suite tests the registration AND authentication LOGIC — options
+// issued, challenge stored then consumed, credential persisted, counter bumped, person resolved. A
+// PGlite connection is superuser, so RLS is a false pass here (CLAUDE.md §4); tenant-isolation and
+// FORCE RLS on the webauthn tables are proven as the app role in webauthn.rls.test.ts (Task 1) and
+// not re-proven here.
 //
-// `generateRegistrationOptions` runs FOR REAL (it just mints a random challenge); only
-// `verifyRegistrationResponse` is mocked, because a genuine authenticator attestation cannot be
-// synthesised in a unit test — so this suite asserts OUR wiring around it, not the crypto.
+// `generateRegistrationOptions` and `generateAuthenticationOptions` run FOR REAL (they just mint a
+// random challenge); only the two VERIFY calls are mocked, because a genuine authenticator response
+// cannot be synthesised in a unit test — so this suite asserts OUR wiring around them, not the crypto.
 vi.mock("@simplewebauthn/server", async (orig) => ({
   ...(await orig<typeof import("@simplewebauthn/server")>()),
   verifyRegistrationResponse: vi.fn(),
+  verifyAuthenticationResponse: vi.fn(),
 }));
 
-import { verifyRegistrationResponse } from "@simplewebauthn/server";
+import { verifyAuthenticationResponse, verifyRegistrationResponse } from "@simplewebauthn/server";
 import {
+  beginPasskeyAuthentication,
   beginPasskeyRegistration,
   CHALLENGE_TTL_MS,
+  finishPasskeyAuthentication,
   finishPasskeyRegistration,
 } from "./passkey.js";
 
 const mockVerify = vi.mocked(verifyRegistrationResponse);
+const mockVerifyAuth = vi.mocked(verifyAuthenticationResponse);
 
 /** A fully-typed `verified: true` result — our code reads only `credential`, but the discriminated
  * union requires the rest, so building it in full keeps the mock honest against v13's shape. */
@@ -45,6 +51,28 @@ function verified(id: string): Awaited<ReturnType<typeof verifyRegistrationRespo
       credentialDeviceType: "singleDevice",
       credentialBackedUp: false,
       origin: "http://localhost",
+    },
+  };
+}
+
+/** A fully-typed `verified: true` auth result. Our code reads only `verified` and
+ * `authenticationInfo.newCounter`, but v13's `VerifiedAuthenticationResponse` is NOT a discriminated
+ * union — `authenticationInfo` is required even when `verified` is false — so building it in full
+ * keeps the mock honest against the real shape (and the failed case spreads this with `verified:
+ * false`). */
+function authVerified(
+  newCounter: number,
+): Awaited<ReturnType<typeof verifyAuthenticationResponse>> {
+  return {
+    verified: true,
+    authenticationInfo: {
+      credentialID: "cred-abc",
+      newCounter,
+      userVerified: true,
+      credentialDeviceType: "singleDevice",
+      credentialBackedUp: false,
+      origin: "http://localhost",
+      rpID: "localhost",
     },
   };
 }
@@ -83,8 +111,21 @@ const finish = (sessionId: string, challengeHandle: string) =>
     }),
   );
 
+/** Insert a webauthn_credentials row directly (mirrors finishPasskeyRegistration's insert), for the
+ * authentication suite which needs a credential on file WITHOUT running the registration ceremony.
+ * Returns the row's uuid so a test can read the stored counter back. */
+const seedCredential = (personId: string, credentialId: string, counter = 0) =>
+  run(async (tx) => {
+    const [row] = await tx
+      .insert(webauthnCredentials)
+      .values({ tenantId, personId, credentialId, publicKey: "AQID", counter })
+      .returning({ id: webauthnCredentials.id });
+    return row!.id;
+  });
+
 beforeEach(() => {
   mockVerify.mockReset();
+  mockVerifyAuth.mockReset();
 });
 
 // One PGlite database is shared across the suite (usePgliteDb registers beforeAll, not beforeEach),
@@ -190,5 +231,141 @@ describe("passkey registration", () => {
     );
     // The TTL check short-circuits before the verifier is ever reached.
     expect(mockVerify).not.toHaveBeenCalled();
+  });
+});
+
+describe("passkey authentication", () => {
+  const beginAuth = () =>
+    run((tx) => beginPasskeyAuthentication(tx, { tenantId, rpId: "localhost" }));
+
+  const authenticate = (challengeHandle: string, credentialId: string) =>
+    run((tx) =>
+      finishPasskeyAuthentication(tx, {
+        tenantId,
+        challengeHandle,
+        response: { id: credentialId } as never,
+        rpId: "localhost",
+        origin: "http://localhost",
+      }),
+    );
+
+  it("authenticates a registered passkey into a management session, bumping the counter", async () => {
+    const personId = await seedPerson(suite.db, tenantId, "admin");
+    const credRowId = await seedCredential(personId, "cred-abc", 0);
+    mockVerifyAuth.mockResolvedValue(authVerified(1));
+
+    const begun = await beginAuth();
+    expect(begun.challengeHandle).toBeTruthy();
+    expect(begun.options.challenge).toBeTruthy();
+
+    // A login (discoverable) challenge is minted BEFORE the credential is known, so it is not tied to
+    // a person: person_id is null.
+    const [chalRow] = await run((tx) =>
+      tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
+    );
+    expect(chalRow!.personId).toBeNull();
+
+    const session = await authenticate(begun.challengeHandle, "cred-abc");
+    // The verifier seam: a passkey resolves to its owner's management session, like loginManager.
+    expect(session.personId).toBe(personId);
+    expect(session.tenantId).toBe(tenantId);
+    expect(session.id).toBeTruthy();
+
+    // The stored counter advanced to the verifier's newCounter (replay defence).
+    const [cred] = await run((tx) =>
+      tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.id, credRowId)),
+    );
+    expect(cred!.counter).toBe(1);
+
+    // Single-use: the challenge was consumed on success, in the same committed transaction as the
+    // counter bump and the session insert.
+    const chal = await run((tx) =>
+      tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
+    );
+    expect(chal).toHaveLength(0);
+
+    // The verifier was handed the stored credential's material and this ceremony's challenge.
+    expect(mockVerifyAuth).toHaveBeenCalledTimes(1);
+    expect(mockVerifyAuth.mock.calls[0]![0]).toMatchObject({
+      expectedChallenge: begun.options.challenge,
+      expectedOrigin: "http://localhost",
+      expectedRPID: "localhost",
+      credential: { id: "cred-abc", counter: 0 },
+    });
+  });
+
+  it("throws passkey.not_registered when no credential matches the returned id", async () => {
+    const begun = await beginAuth();
+    // No credential was seeded for this id.
+    expect(await codeOf(() => authenticate(begun.challengeHandle, "cred-unknown"))).toBe(
+      "passkey.not_registered",
+    );
+    // The unrecognised credential short-circuits before the verifier is reached.
+    expect(mockVerifyAuth).not.toHaveBeenCalled();
+  });
+
+  it("throws passkey.verification_failed when the assertion does not verify, leaving counter and challenge intact", async () => {
+    const personId = await seedPerson(suite.db, tenantId, "admin");
+    const credRowId = await seedCredential(personId, "cred-abc", 7);
+    mockVerifyAuth.mockResolvedValue({ ...authVerified(9), verified: false });
+
+    const begun = await beginAuth();
+    expect(await codeOf(() => authenticate(begun.challengeHandle, "cred-abc"))).toBe(
+      "passkey.verification_failed",
+    );
+
+    // The throw rolls finish's transaction back: the counter is unchanged (no bump to 9 leaked).
+    const [cred] = await run((tx) =>
+      tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.id, credRowId)),
+    );
+    expect(cred!.counter).toBe(7);
+    // The challenge (committed by begin) survives, so the user may retry within its TTL — it is
+    // consumed only on success, never on a failed assertion.
+    const chal = await run((tx) =>
+      tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
+    );
+    expect(chal).toHaveLength(1);
+    // No management session was minted for this person by the failed assertion.
+    const opened = await run((tx) =>
+      tx.select().from(managementSessions).where(eq(managementSessions.personId, personId)),
+    );
+    expect(opened).toHaveLength(0);
+  });
+
+  it("throws passkey.verification_failed when no challenge is on file for the handle", async () => {
+    const personId = await seedPerson(suite.db, tenantId, "admin");
+    await seedCredential(personId, "cred-abc", 0);
+    // A well-formed but unknown handle: nothing was ever stored under it.
+    expect(
+      await codeOf(() => authenticate("00000000-0000-4000-8000-000000000000", "cred-abc")),
+    ).toBe("passkey.verification_failed");
+    // The missing challenge short-circuits before the credential lookup and the verifier.
+    expect(mockVerifyAuth).not.toHaveBeenCalled();
+  });
+
+  it("throws passkey.challenge_expired once the challenge is older than CHALLENGE_TTL_MS", async () => {
+    const personId = await seedPerson(suite.db, tenantId, "admin");
+    await seedCredential(personId, "cred-abc", 0);
+    const begun = await beginAuth();
+    // Age the challenge past the TTL via a raw update — deterministic, no clock injection, exactly as
+    // the registration suite ages its challenge.
+    await run((tx) =>
+      tx
+        .update(webauthnChallenges)
+        .set({ createdAt: new Date(Date.now() - CHALLENGE_TTL_MS - 60_000).toISOString() })
+        .where(eq(webauthnChallenges.id, begun.challengeHandle)),
+    );
+
+    expect(await codeOf(() => authenticate(begun.challengeHandle, "cred-abc"))).toBe(
+      "passkey.challenge_expired",
+    );
+    // The TTL check short-circuits before the verifier is ever reached.
+    expect(mockVerifyAuth).not.toHaveBeenCalled();
+    // The expired challenge survives its throw (finish's transaction rolls back) — consumed only by
+    // its TTL lapsing, the registration ceremony's exact single-use semantics: no delete-before-throw.
+    const chal = await run((tx) =>
+      tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
+    );
+    expect(chal).toHaveLength(1);
   });
 });

@@ -14,7 +14,9 @@ export type { ManagementSession } from "./management-session.js";
 export { loginManager, authorizeManager } from "./manager-login.js";
 export {
   CHALLENGE_TTL_MS,
+  beginPasskeyAuthentication,
   beginPasskeyRegistration,
+  finishPasskeyAuthentication,
   finishPasskeyRegistration,
 } from "./passkey.js";
 export { PERMISSIONS, roleHasPermission } from "./permissions.js";

@@ -1,7 +1,14 @@
 import "./errors.js";
-import { generateRegistrationOptions, verifyRegistrationResponse } from "@simplewebauthn/server";
+import {
+  generateAuthenticationOptions,
+  generateRegistrationOptions,
+  verifyAuthenticationResponse,
+  verifyRegistrationResponse,
+} from "@simplewebauthn/server";
 import type {
+  AuthenticationResponseJSON,
   PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
   RegistrationResponseJSON,
 } from "@simplewebauthn/server";
 import { AppError } from "@waitron/shared";
@@ -9,7 +16,11 @@ import type { Transaction } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { persons } from "./schema/persons.js";
 import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
-import { resolveManagementSession } from "./management-session.js";
+import {
+  resolveManagementSession,
+  startManagementSession,
+  type ManagementSession,
+} from "./management-session.js";
 
 /**
  * The passkey (WebAuthn) REGISTRATION ceremony, in two halves the browser drives in turn:
@@ -23,8 +34,11 @@ import { resolveManagementSession } from "./management-session.js";
  * password): `public_key` is stored base64url and `counter` is stored to detect a cloned
  * authenticator on later assertions.
  *
- * The authentication half (verifying a passkey at login) is a later task; `passkey.not_registered`
- * is declared for it now, alongside the two codes this file throws.
+ * The authentication half — `beginPasskeyAuthentication` / `finishPasskeyAuthentication` — is the
+ * passkey branch of the verifier seam: a discoverable (usernameless) login whose signed assertion,
+ * once verified, resolves the person from the returned credential and ends in a management session,
+ * exactly as `loginManager` does for password (+ TOTP). All three `passkey.*` codes are thrown across
+ * the two halves; `passkey.not_registered` is the one the authentication half adds.
  */
 
 /** How long a challenge issued by `beginPasskeyRegistration` stays valid. WebAuthn ceremonies are
@@ -131,4 +145,100 @@ export async function finishPasskeyRegistration(
     counter: cred.counter,
   });
   return { credentialId: cred.id };
+}
+
+/**
+ * Begin authenticating with a passkey. Issues the request options the browser passes to
+ * `navigator.credentials.get(...)` and stores the ceremony's challenge so
+ * `finishPasskeyAuthentication` can verify the returned assertion against it. This is a DISCOVERABLE
+ * (usernameless) login — no `allowCredentials`, so the authenticator offers whichever passkey the
+ * user picks and the person is resolved from the returned credential on finish, not known now. The
+ * stored challenge therefore carries a null `personId`.
+ */
+export async function beginPasskeyAuthentication(
+  tx: Transaction,
+  input: { tenantId: string; rpId: string },
+): Promise<{ challengeHandle: string; options: PublicKeyCredentialRequestOptionsJSON }> {
+  const options = await generateAuthenticationOptions({ rpID: input.rpId }); // discoverable: no allowCredentials
+  const [row] = await tx
+    .insert(webauthnChallenges)
+    .values({ tenantId: input.tenantId, challenge: options.challenge }) // personId null: person unknown until finish
+    .returning({ id: webauthnChallenges.id });
+  return { challengeHandle: row!.id, options };
+}
+
+/**
+ * Finish authenticating with a passkey — the passkey branch of the verifier seam. Look up the stored
+ * challenge (reject it if unknown or older than `CHALLENGE_TTL_MS`), resolve the credential by the id
+ * the authenticator returned, verify the signed assertion with `@simplewebauthn/server`, and — only
+ * on success — consume the challenge, bump the stored signature counter, and open a management session
+ * for the credential's owner. Like `loginManager`, a successful ceremony ends in
+ * `startManagementSession`; the challenge delete, the counter bump and the session insert all run in
+ * the caller's SINGLE transaction, so they commit together or not at all.
+ *
+ * A failed or expired ceremony throws, which rolls that transaction back — so nothing is deleted
+ * eagerly on those paths (a delete on a throwing path would roll back with the throw, achieving
+ * nothing, exactly as in `finishPasskeyRegistration`; a challenge is bounded by its TTL instead). An
+ * unknown challenge and an unrecognised credential both short-circuit before the verifier is reached.
+ * The counter is advanced to the library's `newCounter` to detect a cloned authenticator replaying an
+ * old assertion.
+ */
+export async function finishPasskeyAuthentication(
+  tx: Transaction,
+  input: {
+    tenantId: string;
+    challengeHandle: string;
+    response: AuthenticationResponseJSON;
+    rpId: string;
+    origin: string;
+  },
+): Promise<ManagementSession> {
+  const [challenge] = await tx
+    .select({
+      challenge: webauthnChallenges.challenge,
+      createdAt: webauthnChallenges.createdAt,
+    })
+    .from(webauthnChallenges)
+    .where(eq(webauthnChallenges.id, input.challengeHandle));
+  if (challenge === undefined) throw new AppError("passkey.verification_failed", {});
+  if (Date.now() - Date.parse(challenge.createdAt) > CHALLENGE_TTL_MS) {
+    throw new AppError("passkey.challenge_expired", {});
+  }
+  // Resolve the credential the authenticator returned. Tenant scoping is by RLS (withTenant), the
+  // same as the challenge lookup above; (tenant_id, credential_id) is unique, so at most one matches.
+  const [cred] = await tx
+    .select({
+      id: webauthnCredentials.id,
+      personId: webauthnCredentials.personId,
+      credentialId: webauthnCredentials.credentialId,
+      publicKey: webauthnCredentials.publicKey,
+      counter: webauthnCredentials.counter,
+    })
+    .from(webauthnCredentials)
+    .where(eq(webauthnCredentials.credentialId, input.response.id));
+  if (cred === undefined) throw new AppError("passkey.not_registered", {});
+
+  const verification = await verifyAuthenticationResponse({
+    response: input.response,
+    expectedChallenge: challenge.challenge,
+    expectedOrigin: input.origin,
+    expectedRPID: input.rpId,
+    // WebAuthnCredential: the stored public key is base64url text, decoded back to bytes here.
+    credential: {
+      id: cred.credentialId,
+      publicKey: Buffer.from(cred.publicKey, "base64url"),
+      counter: cred.counter,
+    },
+  });
+  // Single-use: consume the challenge atomically with the counter bump and the session insert below
+  // (all commit or none). On a failed assertion the throw rolls this delete back with them.
+  await tx.delete(webauthnChallenges).where(eq(webauthnChallenges.id, input.challengeHandle));
+  if (!verification.verified) throw new AppError("passkey.verification_failed", {});
+
+  await tx
+    .update(webauthnCredentials)
+    .set({ counter: verification.authenticationInfo.newCounter })
+    .where(eq(webauthnCredentials.id, cred.id));
+  // Verifier seam: like loginManager, a successful passkey ends in a management session.
+  return startManagementSession(tx, { tenantId: input.tenantId, personId: cred.personId });
 }
