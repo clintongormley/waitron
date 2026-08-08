@@ -162,6 +162,30 @@ function requirePersonId(id: string): string {
 }
 
 /**
+ * Parse and screen a passkey VERIFY route's body, returning the narrowed `{ challengeHandle, response }`
+ * pair both `register/verify` and `auth/verify` need — the shared shape those two routes had inline.
+ * The body is coerced to `{}` (`?? {}`, see the login route for why a `null`/non-object body must not
+ * TypeError → 500). `challengeHandle` is screened to a UUID (load-bearing, not cosmetic: it flows into
+ * `eq(webauthnChallenges.id, …)` against a `uuid` PK, so a non-UUID would `22P02` → opaque 500) and
+ * `response` to a non-null object before it reaches the verifier; either failure is
+ * `management.request_invalid` naming the FIELD, the same code and shape as the sibling write routes.
+ * Called AFTER each route's own gating — `register/verify` runs `requireManagementSession` first,
+ * `auth/verify` is unauthenticated (it IS the login) — so this helper screens body shape only.
+ */
+async function parsePasskeyVerifyBody(
+  c: Context,
+): Promise<{ challengeHandle: string; response: object }> {
+  const body = (await c.req.json<{ challengeHandle?: string; response?: unknown }>()) ?? {};
+  if (typeof body.challengeHandle !== "string" || !isUuid(body.challengeHandle)) {
+    throw new AppError("management.request_invalid", { field: "challengeHandle" });
+  }
+  if (typeof body.response !== "object" || body.response === null) {
+    throw new AppError("management.request_invalid", { field: "response" });
+  }
+  return { challengeHandle: body.challengeHandle, response: body.response };
+}
+
+/**
  * Mounts the dashboard's management-session routes on an existing Hono app: the pre-login staff
  * roster, login and logout. Task 4 adds the gated staff CRUD routes to THIS same function, each
  * handler wrapped in `run` (above) so the whole surface maps errors identically. Mirrors
@@ -448,14 +472,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.post("/management-api/passkey/register/verify", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const body = (await c.req.json<{ challengeHandle?: string; response?: unknown }>()) ?? {};
-      if (typeof body.challengeHandle !== "string" || !isUuid(body.challengeHandle)) {
-        throw new AppError("management.request_invalid", { field: "challengeHandle" });
-      }
-      if (typeof body.response !== "object" || body.response === null) {
-        throw new AppError("management.request_invalid", { field: "response" });
-      }
-      const { challengeHandle, response } = body;
+      const { challengeHandle, response } = await parsePasskeyVerifyBody(c);
       const out = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return finishPasskeyRegistration(tx, {
@@ -503,14 +520,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // mirroring `POST /management-api/session`.
   app.post("/management-api/passkey/auth/verify", (c) =>
     run(c, log, async () => {
-      const body = (await c.req.json<{ challengeHandle?: string; response?: unknown }>()) ?? {};
-      if (typeof body.challengeHandle !== "string" || !isUuid(body.challengeHandle)) {
-        throw new AppError("management.request_invalid", { field: "challengeHandle" });
-      }
-      if (typeof body.response !== "object" || body.response === null) {
-        throw new AppError("management.request_invalid", { field: "response" });
-      }
-      const { challengeHandle, response } = body;
+      const { challengeHandle, response } = await parsePasskeyVerifyBody(c);
       const session = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return finishPasskeyAuthentication(tx, {

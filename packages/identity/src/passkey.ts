@@ -63,6 +63,30 @@ function b64url(bytes: Uint8Array): string {
 }
 
 /**
+ * Load a stored challenge by its handle and enforce its TTL, returning the challenge STRING both
+ * finish ceremonies pass to the verifier as `expectedChallenge`. Throws `passkey.verification_failed`
+ * for an unknown handle and `passkey.challenge_expired` once the stored challenge is older than
+ * `CHALLENGE_TTL_MS` — the same two codes at the same point both finish functions used inline before.
+ * Reads only: the single-use DELETE stays in each finish function, run AFTER verify succeeds so it
+ * commits with (or rolls back alongside) the credential/session write — the deliberate
+ * consume-on-success semantics documented on those functions.
+ */
+async function loadChallenge(tx: Transaction, challengeHandle: string): Promise<string> {
+  const [challenge] = await tx
+    .select({
+      challenge: webauthnChallenges.challenge,
+      createdAt: webauthnChallenges.createdAt,
+    })
+    .from(webauthnChallenges)
+    .where(eq(webauthnChallenges.id, challengeHandle));
+  if (challenge === undefined) throw new AppError("passkey.verification_failed", {});
+  if (Date.now() - Date.parse(challenge.createdAt) > CHALLENGE_TTL_MS) {
+    throw new AppError("passkey.challenge_expired", {});
+  }
+  return challenge.challenge;
+}
+
+/**
  * Begin registering a passkey for the person behind `managementSessionId`. Issues the creation
  * options the browser passes to `navigator.credentials.create(...)`, and stores the ceremony's
  * challenge so `finishPasskeyRegistration` can verify the signed response against it. Returns the
@@ -121,17 +145,7 @@ export async function finishPasskeyRegistration(
   },
 ): Promise<{ credentialId: string }> {
   const { personId } = await resolveManagementSession(tx, input.managementSessionId);
-  const [challenge] = await tx
-    .select({
-      challenge: webauthnChallenges.challenge,
-      createdAt: webauthnChallenges.createdAt,
-    })
-    .from(webauthnChallenges)
-    .where(eq(webauthnChallenges.id, input.challengeHandle));
-  if (challenge === undefined) throw new AppError("passkey.verification_failed", {});
-  if (Date.now() - Date.parse(challenge.createdAt) > CHALLENGE_TTL_MS) {
-    throw new AppError("passkey.challenge_expired", {});
-  }
+  const expectedChallenge = await loadChallenge(tx, input.challengeHandle);
   // `@simplewebauthn/server` throws a GENERIC `Error` on a malformed/mismatched response (a
   // missing/non-base64url credential id, wrong origin/RPID, a bad attestation) — never a mapped
   // `passkey.*` code — so a bare call would reach `run` as a non-AppError and become an opaque
@@ -141,7 +155,7 @@ export async function finishPasskeyRegistration(
   try {
     verification = await verifyRegistrationResponse({
       response: input.response,
-      expectedChallenge: challenge.challenge,
+      expectedChallenge,
       expectedOrigin: input.origin,
       expectedRPID: input.rpId,
     });
@@ -208,17 +222,7 @@ export async function finishPasskeyAuthentication(
     origin: string;
   },
 ): Promise<ManagementSession> {
-  const [challenge] = await tx
-    .select({
-      challenge: webauthnChallenges.challenge,
-      createdAt: webauthnChallenges.createdAt,
-    })
-    .from(webauthnChallenges)
-    .where(eq(webauthnChallenges.id, input.challengeHandle));
-  if (challenge === undefined) throw new AppError("passkey.verification_failed", {});
-  if (Date.now() - Date.parse(challenge.createdAt) > CHALLENGE_TTL_MS) {
-    throw new AppError("passkey.challenge_expired", {});
-  }
+  const expectedChallenge = await loadChallenge(tx, input.challengeHandle);
   // The credential id the authenticator returned is untrusted request input: typed `string`, but the
   // route hands `response` through as `never`, so at runtime it may be missing or non-string — a value
   // that would reach the `credential_id` text column and could 500 in the driver. Screen it first; a
@@ -259,7 +263,7 @@ export async function finishPasskeyAuthentication(
   try {
     verification = await verifyAuthenticationResponse({
       response: input.response,
-      expectedChallenge: challenge.challenge,
+      expectedChallenge,
       expectedOrigin: input.origin,
       expectedRPID: input.rpId,
       // WebAuthnCredential: the stored public key is base64url text, decoded back to bytes here.

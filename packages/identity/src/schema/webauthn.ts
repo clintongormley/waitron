@@ -66,7 +66,10 @@ export const webauthnCredentials = pgTable(
  * and consumed (deleted) when the browser returns the signed response. `person_id` is null for a
  * login (discoverable-credential) ceremony, where the person is not yet known. Ephemeral rather than
  * an audit trail — app_user holds SELECT, INSERT, UPDATE, DELETE (DELETE because a challenge is
- * deleted the moment it is used, and any expired ones are swept).
+ * deleted the moment it is consumed on a successful ceremony). An expired challenge is bounded by the
+ * `CHALLENGE_TTL_MS` check at consume time — a later finish rejects it as `passkey.challenge_expired`
+ * and rolls the transaction back — NOT swept: there is no sweep job (a background sweep is a possible
+ * future follow-up).
  */
 export const webauthnChallenges = pgTable(
   "webauthn_challenges",
