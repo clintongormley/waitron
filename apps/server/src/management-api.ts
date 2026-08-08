@@ -84,7 +84,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // verify (`passkey.verification_failed`, also thrown on registration verify) is a failed credential
   // check, the same family as `password.invalid`. `passkey.challenge_expired` is a 400: the request was
   // well-formed but its challenge lapsed past `CHALLENGE_TTL_MS`, a client-retryable request-timing
-  // fault rather than a rejected credential.
+  // fault rather than a rejected credential. The auth-verify route ALSO surfaces `person.suspended`
+  // (403, below): `finishPasskeyAuthentication` gates on the credential owner's status the way
+  // `loginManager` gates a password login, so a person suspended after enrolling a passkey is refused.
   "passkey.not_registered": 401,
   "passkey.verification_failed": 401,
   "passkey.challenge_expired": 400,
@@ -102,7 +104,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // `GET /management-api/staff-roster` (`listActiveStaff` returns `{personId, displayName}` for every
   // active person), so a 404-vs-401 split reveals nothing new about them; a suspended person is
   // excluded from that roster, so a 403 can only be provoked by already holding their id — a 122-bit
-  // random v4 UUID (`persons.id` is `gen_random_uuid()`), infeasible to guess.
+  // random v4 UUID (`persons.id` is `gen_random_uuid()`), infeasible to guess. The passkey auth-verify
+  // route surfaces the same 403 (a suspended credential owner), and provoking it there is HARDER still:
+  // it needs the owner's random `credential_id`, not merely their person id.
   "person.suspended": 403,
   "person.not_found": 404,
   "authorization.not_permitted": 403,
@@ -432,15 +436,24 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // is load-bearing, not cosmetic: `challengeHandle` flows into `eq(webauthnChallenges.id, …)` against
   // a `uuid` PK column, so a well-formed-string-but-non-UUID value would `22P02` → opaque 500 — the
   // same failure `requirePersonId`'s `isUuid` screen above exists to prevent, keeping `run`'s
-  // "every surfaced code is a client 4xx" invariant true. `response` is handed straight to
-  // `@simplewebauthn/server`, which validates its shape and throws the mapped `passkey.*` codes
-  // (`verification_failed`, `challenge_expired`) on a bad or lapsed ceremony.
+  // "every surfaced code is a client 4xx" invariant true. `response` is then required to be a non-null
+  // object (else the same `management.request_invalid`) before it reaches the verifier.
+  //
+  // `finishPasskeyRegistration`'s `@simplewebauthn/server` verify call throws a GENERIC `Error` on a
+  // bad/mismatched response (a missing/non-base64url credential id, wrong origin/RPID, a malformed
+  // attestation) — NOT a mapped `passkey.*` code — so `finishPasskeyRegistration` wraps it and throws
+  // `passkey.verification_failed` (also the code for a `verified:false` return). The ceremony's TTL is
+  // OUR check inside that function, not the library's: it throws `passkey.challenge_expired` when the
+  // stored challenge has lapsed past `CHALLENGE_TTL_MS`. Both map via `STATUS` (401 / 400).
   app.post("/management-api/passkey/register/verify", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = (await c.req.json<{ challengeHandle?: string; response?: unknown }>()) ?? {};
       if (typeof body.challengeHandle !== "string" || !isUuid(body.challengeHandle)) {
         throw new AppError("management.request_invalid", { field: "challengeHandle" });
+      }
+      if (typeof body.response !== "object" || body.response === null) {
+        throw new AppError("management.request_invalid", { field: "response" });
       }
       const { challengeHandle, response } = body;
       const out = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
@@ -476,13 +489,26 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // register/verify above; the UUID screen matters MORE here because this route is UNAUTHENTICATED, so
   // a non-UUID `challengeHandle` reaching the `uuid` PK column (`22P02` → opaque 500) would be an
   // unauthenticated 500 — the login route's own `isUuid(body.personId)` screen exists for exactly this.
-  // `passkey.not_registered`/`verification_failed`/`challenge_expired` map to 401/401/400 via `STATUS`.
-  // `setManagementCookie` uses `deps.secureCookies`, mirroring `POST /management-api/session`.
+  // `response` is then required to be a non-null object (else `management.request_invalid`): this route
+  // is UNAUTHENTICATED and `finishPasskeyAuthentication` reads `response.id` to resolve the credential,
+  // so a missing/non-object `response` must be a clean 400 here rather than an unauthenticated fault.
+  //
+  // `finishPasskeyAuthentication`'s `@simplewebauthn/server` verify call throws a GENERIC `Error` on a
+  // bad/mismatched assertion (a bad signature, wrong origin/RPID, UV not performed) — NOT a mapped
+  // code — which that function wraps into `passkey.verification_failed`. Its other faults:
+  // `passkey.not_registered` (no credential matched the returned id, or the returned id was non-string),
+  // `person.suspended` (the credential's owner was suspended after enrolling — the same gate
+  // `loginManager` applies), and `passkey.challenge_expired` (OUR TTL check, not the library's). These
+  // map to 401 / 401 / 403 / 400 via `STATUS`. `setManagementCookie` uses `deps.secureCookies`,
+  // mirroring `POST /management-api/session`.
   app.post("/management-api/passkey/auth/verify", (c) =>
     run(c, log, async () => {
       const body = (await c.req.json<{ challengeHandle?: string; response?: unknown }>()) ?? {};
       if (typeof body.challengeHandle !== "string" || !isUuid(body.challengeHandle)) {
         throw new AppError("management.request_invalid", { field: "challengeHandle" });
+      }
+      if (typeof body.response !== "object" || body.response === null) {
+        throw new AppError("management.request_invalid", { field: "response" });
       }
       const { challengeHandle, response } = body;
       const session = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {

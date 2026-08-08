@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { managementSessions } from "./schema/management-sessions.js";
+import { persons } from "./schema/persons.js";
 import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
 import { codeOf, openManagementSession, seedPerson } from "../test/fixtures.js";
 
@@ -232,6 +233,28 @@ describe("passkey registration", () => {
     // The TTL check short-circuits before the verifier is ever reached.
     expect(mockVerify).not.toHaveBeenCalled();
   });
+
+  it("maps a THROW from the library to passkey.verification_failed (not an opaque 500)", async () => {
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    // `@simplewebauthn/server` throws a GENERIC Error on a malformed/mismatched response — not a mapped
+    // `passkey.*` code. Unwrapped it would reach `run` as a non-AppError → opaque server.internal 500;
+    // finishPasskeyRegistration must turn it into a clean passkey.verification_failed.
+    mockVerify.mockRejectedValue(new Error("Unexpected authenticator response"));
+
+    const begun = await begin(sessionId);
+    expect(await codeOf(() => finish(sessionId, begun.challengeHandle))).toBe(
+      "passkey.verification_failed",
+    );
+
+    // The throw rolled finish's transaction back: no credential landed, and the challenge survives for
+    // a retry within its TTL — exactly the {verified:false} path's semantics.
+    const creds = await run((tx) => tx.select().from(webauthnCredentials));
+    expect(creds).toHaveLength(0);
+    const chal = await run((tx) =>
+      tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
+    );
+    expect(chal).toHaveLength(1);
+  });
 });
 
 describe("passkey authentication", () => {
@@ -367,5 +390,75 @@ describe("passkey authentication", () => {
       tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
     );
     expect(chal).toHaveLength(1);
+  });
+
+  it("refuses a person suspended AFTER enrolling a passkey, minting no session", async () => {
+    const personId = await seedPerson(suite.db, tenantId, "admin");
+    await seedCredential(personId, "cred-abc", 0);
+    // Suspend the owner AFTER the passkey is on file — the scenario the password sibling (loginManager)
+    // already guards, and the one this gate closes for the passkey branch.
+    await run((tx) =>
+      tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, personId)),
+    );
+    // Verify is mocked to SUCCEED: the gate must refuse the suspended owner even on a ceremony that
+    // WOULD otherwise verify — which is what makes the deletion-proof meaningful (drop the gate and this
+    // exact setup mints a session).
+    mockVerifyAuth.mockResolvedValue(authVerified(1));
+
+    const begun = await beginAuth();
+    expect(await codeOf(() => authenticate(begun.challengeHandle, "cred-abc"))).toBe(
+      "person.suspended",
+    );
+
+    // No management session was minted for the suspended person.
+    const opened = await run((tx) =>
+      tx.select().from(managementSessions).where(eq(managementSessions.personId, personId)),
+    );
+    expect(opened).toHaveLength(0);
+  });
+
+  it("maps a THROW from the library to passkey.verification_failed (not an opaque 500)", async () => {
+    const personId = await seedPerson(suite.db, tenantId, "admin");
+    const credRowId = await seedCredential(personId, "cred-abc", 4);
+    // A generic library throw (bad signature, origin/RPID mismatch, malformed attestation) must become
+    // a clean passkey.verification_failed, not reach `run` as a non-AppError → opaque 500.
+    mockVerifyAuth.mockRejectedValue(new Error("Unexpected authenticator response"));
+
+    const begun = await beginAuth();
+    expect(await codeOf(() => authenticate(begun.challengeHandle, "cred-abc"))).toBe(
+      "passkey.verification_failed",
+    );
+
+    // The throw rolled finish's transaction back: the counter is unchanged and no session was minted.
+    const [cred] = await run((tx) =>
+      tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.id, credRowId)),
+    );
+    expect(cred!.counter).toBe(4);
+    const opened = await run((tx) =>
+      tx.select().from(managementSessions).where(eq(managementSessions.personId, personId)),
+    );
+    expect(opened).toHaveLength(0);
+  });
+
+  it("refuses a non-string or missing returned credential id as passkey.not_registered", async () => {
+    const begun = await beginAuth();
+    const call = (response: unknown) =>
+      codeOf(() =>
+        run((tx) =>
+          finishPasskeyAuthentication(tx, {
+            tenantId,
+            challengeHandle: begun.challengeHandle,
+            response: response as never,
+            rpId: "localhost",
+            origin: "http://localhost",
+          }),
+        ),
+      );
+    // The route hands `response` through as `never`, so the returned id may be non-string or absent at
+    // runtime; either names no credential and must be refused before the driver or the verifier, never
+    // a 500. Both the challenge (rolled back each throw) and the guard survive for the second call.
+    expect(await call({ id: 123 })).toBe("passkey.not_registered");
+    expect(await call(undefined)).toBe("passkey.not_registered");
+    expect(mockVerifyAuth).not.toHaveBeenCalled();
   });
 });

@@ -378,4 +378,62 @@ describe("Management API passkey routes over real Postgres (RLS end-to-end, mock
     expect(mockVerifyReg).not.toHaveBeenCalled();
     expect(await readCredentials(tenantId)).toHaveLength(0);
   });
+
+  it("auth/verify screens a missing / non-object response as 400 before it reaches Postgres", async () => {
+    const { tenantId } = await setupTenant();
+    const app = mountApp(tenantId);
+
+    // A well-formed challengeHandle but NO `response`. This route is UNAUTHENTICATED and
+    // `finishPasskeyAuthentication` reads `response.id` to resolve the credential, so a missing/non-object
+    // response must be a clean 400 naming the field, never an unauthenticated fault reaching the driver.
+    const validHandle = "00000000-0000-4000-8000-000000000000";
+    const missing = await app.request("/management-api/passkey/auth/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ challengeHandle: validHandle }),
+    });
+    expect(missing.status).toBe(400);
+    expect(
+      (await missing.json()) as { error: { code: string; params: { field: string } } },
+    ).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "response" } },
+    });
+
+    // A non-object `response` (a JSON string) fails the same screen.
+    const nonObject = await app.request("/management-api/passkey/auth/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ challengeHandle: validHandle, response: "not-an-object" }),
+    });
+    expect(nonObject.status).toBe(400);
+    expect((await nonObject.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "management.request_invalid" },
+    });
+
+    // The verifier was never reached — the screen fires before any DB work.
+    expect(mockVerifyAuth).not.toHaveBeenCalled();
+  });
+
+  it("register/verify screens a missing response as 400 (gated route, same guard)", async () => {
+    const { tenantId, managerId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, managerId);
+
+    // A well-formed challengeHandle but NO `response`: the same non-null-object screen the auth route
+    // applies, refused as management.request_invalid naming the field.
+    const missing = await app.request("/management-api/passkey/register/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ challengeHandle: "00000000-0000-4000-8000-000000000000" }),
+    });
+    expect(missing.status).toBe(400);
+    expect(
+      (await missing.json()) as { error: { code: string; params: { field: string } } },
+    ).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "response" } },
+    });
+
+    expect(mockVerifyReg).not.toHaveBeenCalled();
+    expect(await readCredentials(tenantId)).toHaveLength(0);
+  });
 });

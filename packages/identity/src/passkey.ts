@@ -37,8 +37,13 @@ import {
  * The authentication half — `beginPasskeyAuthentication` / `finishPasskeyAuthentication` — is the
  * passkey branch of the verifier seam: a discoverable (usernameless) login whose signed assertion,
  * once verified, resolves the person from the returned credential and ends in a management session,
- * exactly as `loginManager` does for password (+ TOTP). All three `passkey.*` codes are thrown across
- * the two halves; `passkey.not_registered` is the one the authentication half adds.
+ * as `loginManager` does for password (+ TOTP). Like `loginManager` it ALSO gates on suspension:
+ * `finishPasskeyAuthentication` reads `persons.status` alongside the credential and throws
+ * `person.suspended` BEFORE minting the session, so a person suspended AFTER enrolling a passkey
+ * cannot sign back in. Unlike `loginManager` it never throws `person.not_found` — the person is
+ * resolved FROM the credential, so a returned id matching no credential is `passkey.not_registered`,
+ * not a missing person. All three `passkey.*` codes are thrown across the two halves;
+ * `passkey.not_registered` is the one the authentication half adds.
  */
 
 /** How long a challenge issued by `beginPasskeyRegistration` stays valid. WebAuthn ceremonies are
@@ -127,12 +132,22 @@ export async function finishPasskeyRegistration(
   if (Date.now() - Date.parse(challenge.createdAt) > CHALLENGE_TTL_MS) {
     throw new AppError("passkey.challenge_expired", {});
   }
-  const verification = await verifyRegistrationResponse({
-    response: input.response,
-    expectedChallenge: challenge.challenge,
-    expectedOrigin: input.origin,
-    expectedRPID: input.rpId,
-  });
+  // `@simplewebauthn/server` throws a GENERIC `Error` on a malformed/mismatched response (a
+  // missing/non-base64url credential id, wrong origin/RPID, a bad attestation) — never a mapped
+  // `passkey.*` code — so a bare call would reach `run` as a non-AppError and become an opaque
+  // `server.internal` 500. Wrap it: any throw becomes `passkey.verification_failed`, a clean 401. A
+  // `verified:false` RETURN is the other failure shape and is handled just below.
+  let verification: Awaited<ReturnType<typeof verifyRegistrationResponse>>;
+  try {
+    verification = await verifyRegistrationResponse({
+      response: input.response,
+      expectedChallenge: challenge.challenge,
+      expectedOrigin: input.origin,
+      expectedRPID: input.rpId,
+    });
+  } catch {
+    throw new AppError("passkey.verification_failed", {});
+  }
   if (!verification.verified) throw new AppError("passkey.verification_failed", {});
   const cred = verification.registrationInfo.credential; // { id, publicKey, counter } — v13 WebAuthnCredential
   // Single-use: consume the challenge atomically with the credential insert (both commit or neither).
@@ -204,8 +219,16 @@ export async function finishPasskeyAuthentication(
   if (Date.now() - Date.parse(challenge.createdAt) > CHALLENGE_TTL_MS) {
     throw new AppError("passkey.challenge_expired", {});
   }
-  // Resolve the credential the authenticator returned. Tenant scoping is by RLS (withTenant), the
-  // same as the challenge lookup above; (tenant_id, credential_id) is unique, so at most one matches.
+  // The credential id the authenticator returned is untrusted request input: typed `string`, but the
+  // route hands `response` through as `never`, so at runtime it may be missing or non-string — a value
+  // that would reach the `credential_id` text column and could 500 in the driver. Screen it first; a
+  // non-string names no credential, so it is `passkey.not_registered`, never a driver fault.
+  if (typeof input.response?.id !== "string") throw new AppError("passkey.not_registered", {});
+
+  // Resolve the credential the authenticator returned, joining the owning person for their status.
+  // Tenant scoping is by RLS (withTenant), the same as the challenge lookup above; (tenant_id,
+  // credential_id) is unique, so at most one matches. The inner join cannot drop a matched credential:
+  // `person_id` is a FK to `persons`, so the owner always exists.
   const [cred] = await tx
     .select({
       id: webauthnCredentials.id,
@@ -213,23 +236,42 @@ export async function finishPasskeyAuthentication(
       credentialId: webauthnCredentials.credentialId,
       publicKey: webauthnCredentials.publicKey,
       counter: webauthnCredentials.counter,
+      status: persons.status,
     })
     .from(webauthnCredentials)
+    .innerJoin(persons, eq(persons.id, webauthnCredentials.personId))
     .where(eq(webauthnCredentials.credentialId, input.response.id));
   if (cred === undefined) throw new AppError("passkey.not_registered", {});
+  // Refuse a person suspended AFTER enrolling this passkey, BEFORE minting a session — the same gate
+  // `loginManager` applies to a password login, and the same `persons.status` re-read
+  // `resolveManagementSession` runs on every authenticated request. Placed before the verifier,
+  // mirroring `loginManager`, which checks suspension before verifying the password.
+  if (cred.status === "suspended") {
+    throw new AppError("person.suspended", { personId: cred.personId });
+  }
 
-  const verification = await verifyAuthenticationResponse({
-    response: input.response,
-    expectedChallenge: challenge.challenge,
-    expectedOrigin: input.origin,
-    expectedRPID: input.rpId,
-    // WebAuthnCredential: the stored public key is base64url text, decoded back to bytes here.
-    credential: {
-      id: cred.credentialId,
-      publicKey: Buffer.from(cred.publicKey, "base64url"),
-      counter: cred.counter,
-    },
-  });
+  // `@simplewebauthn/server` throws a GENERIC `Error` on a malformed/mismatched assertion (a bad
+  // signature, wrong origin/RPID, UV not performed) — never a mapped `passkey.*` code — so a bare call
+  // would reach `run` as a non-AppError and become an opaque `server.internal` 500. Wrap it: any throw
+  // becomes `passkey.verification_failed`, a clean 401. A `verified:false` RETURN is handled after the
+  // challenge delete below.
+  let verification: Awaited<ReturnType<typeof verifyAuthenticationResponse>>;
+  try {
+    verification = await verifyAuthenticationResponse({
+      response: input.response,
+      expectedChallenge: challenge.challenge,
+      expectedOrigin: input.origin,
+      expectedRPID: input.rpId,
+      // WebAuthnCredential: the stored public key is base64url text, decoded back to bytes here.
+      credential: {
+        id: cred.credentialId,
+        publicKey: Buffer.from(cred.publicKey, "base64url"),
+        counter: cred.counter,
+      },
+    });
+  } catch {
+    throw new AppError("passkey.verification_failed", {});
+  }
   // Single-use: consume the challenge atomically with the counter bump and the session insert below
   // (all commit or none). On a failed assertion the throw rolls this delete back with them.
   await tx.delete(webauthnChallenges).where(eq(webauthnChallenges.id, input.challengeHandle));
