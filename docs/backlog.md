@@ -79,6 +79,18 @@ before the deli is ready to trade, so the deli's 1-Jan-2027 legal deadline is *n
 one piece of work above another — order by dependency, correctness, and de-risking the most-reused /
 most-uncertain foundations first.
 
+**Autonomous campaign armed (2026-08-08).** While the owner is away (Sun 2026-08-09 → Fri 2026-08-14;
+the weekly quota renews Tue 01:00) an unattended launchd-driven run works an ordered, pre-specced
+queue — **sync slice 1** (commercial outbox), **reporting** (date-range + *modelo 303*), the
+**catalogue / menu management UI** (with product images), the **layout & receipt editors**, and
+interleaved small follow-ups — each via `finish-branch` → `land-branch`. The plan, ordered queue, and
+guardrails (never auto-land the unrepairable fiscal core; never land on a red gate; one item in flight
+at a time) are recorded in
+[superpowers/specs/2026-08-08-autonomous-campaign-plan.md](superpowers/specs/2026-08-08-autonomous-campaign-plan.md);
+the per-item specs/plans are dated `2026-08-08`. Landed items move to *Recently shipped* as the run
+merges them; anything it cannot safely finish is left as an open PR marked `blocked` or
+`needs-owner-review`.
+
 ---
 
 ## Now
@@ -580,18 +592,15 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     FKs precisely so a line cannot point at another tenant's row independently of RLS. Cheap
     belt-and-suspenders in pre-production: a `UNIQUE(tenant_id, id)` on `catalogues`/`categories` +
     composite FKs from `products`. Flagged by the base-to-tip review; non-blocking.
-  - **Daily-close VAT report vs the filed desglose diverge for gross-inclusive (catalogue) sales.**
-    `@waitron/reporting`'s `computeVatSummary` recomputes cuota **multiplicatively** (`base × rate`,
-    `vat-summary.ts`), which reproduces the filed cuota only for a sale filed via `buildVatBreakdown`.
-    A catalogue sale files by the **difference method** (`gross − base`), so for such sales the daily
-    close (the stated *modelo 303* source, #56) overstates cuota by a rounding céntimo per
-    `(invoice, rate)` group and reports a gross matching neither the money taken nor the filed record.
-    The filed difference-method desglose is **not persisted queryably** (only inside the hash-chained
-    `registros_facturacion`; the per-rate *gross* is not stored), so reporting cannot recompute it —
-    closing this needs the filed desglose **persisted** (a `sale_desglose` table, or the sale's
-    `vatBreakdown` stored) and read by `computeVatSummary`. Its own slice (schema + migration +
-    reporting). **Not reachable in production today** (headless — no catalogue sales until the till,
-    #7); the caveat is documented in `vat-summary.ts`. Found by the finish-branch fresh-context review.
+  - **Daily-close VAT report vs the filed desglose — CLOSED by #66 (stale entry pruned 2026-08-08).**
+    This entry described `computeVatSummary` recomputing cuota **multiplicatively** and so overstating
+    difference-method (catalogue) cuota, with the filed desglose "not persisted queryably". #66 (slice
+    8a) retired both: it persisted the filed per-rate breakdown to `sales.vat_breakdown` (0032) written
+    from the same variable that enters the huella, and `computeVatSummary` now **reads** it
+    (`packages/reporting/src/vat-summary.ts:9,28` — `cross join lateral jsonb_array_elements(vat_breakdown)`),
+    so the reported cuota is the exact filed value. The per-rate *gross* stays unstored but is unneeded
+    (`gross = base + tax`; *modelo 303* has no gross box). This was a stale receipt contradicting the
+    #66 line under *Recently shipped* — see `CLAUDE.md` §1 "a behaviour change retires every receipt".
   - **Difference-method rounding — AEAT acceptance CLOSED on primary source (FAQ §20, 4 Dec 2025);
     one residual + configurability remain.** The AEAT developer FAQ documents the only `ImporteTotal`
     validation: `ImporteTotal == Σ(BaseImponible + CuotaRepercutida + CuotaRecargoEquivalencia)` with a
