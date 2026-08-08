@@ -136,8 +136,19 @@ export class StaffScreen extends LitElement {
   #openForm(): void {
     this.errorKey = null;
     this.passkeyStatus = null;
-    this.editOpen = false; // the two dialogs are mutually exclusive (both are modal)
+    this.#closeEdit(); // the two dialogs are mutually exclusive (both are modal)
     this.formOpen = true;
+  }
+
+  /**
+   * Close the edit dialog AND drop its target. Clearing `editingPerson` here (not only `editOpen`) is
+   * what keeps the "`editingPerson` is null when the dialog is closed" invariant true: it stops a
+   * closed dialog leaving a stale edit target that `#editWith` could still resolve, and keeps the
+   * `.person`/`.open` the dialog receives consistent.
+   */
+  #closeEdit(): void {
+    this.editOpen = false;
+    this.editingPerson = null;
   }
 
   /**
@@ -315,7 +326,7 @@ export class StaffScreen extends LitElement {
         @set-status=${(e: CustomEvent<{ status: "active" | "suspended" }>) => this.#onSetStatus(e)}
         @reset-pin=${(e: CustomEvent<{ pin: string }>) => this.#onResetPin(e)}
         @set-password=${(e: CustomEvent<{ password: string }>) => this.#onSetPassword(e)}
-        @wt-close=${() => (this.editOpen = false)}
+        @wt-close=${() => this.#closeEdit()}
       ></dashboard-person-edit>
     `;
   }

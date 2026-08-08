@@ -540,6 +540,10 @@ describe("staff-screen — row edit", () => {
     editForm(el).dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
     await el.updateComplete;
     expect(editForm(el).open).toBe(false);
+    // The edit target is dropped on close (the "editingPerson is null when closed" invariant), so no
+    // stale person lingers. Prove by deletion: stop clearing editingPerson in #closeEdit and this
+    // still shows people[0].
+    expect(editForm(el).person).toBeNull();
 
     await openEdit(el, "p2");
     expect(editForm(el).open).toBe(true);

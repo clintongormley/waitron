@@ -49,8 +49,9 @@ describe("person-edit", () => {
   // The role picker must show the person's CURRENT (non-default) role. `manager` is the third of the
   // four options, so this fails if the select is driven by a `.value` property bound before its
   // <option> children render — the latent bug the backlog names for the login/create pickers, which
-  // "renders right today only because the default equals the first option". Driving via `?selected`
-  // on the options is what makes a non-default preset stick.
+  // "renders right today only because the default equals the first option". Reconciling the native
+  // <select>'s `.value` to `selectedRole` in `updated()` (after the options render) is what makes a
+  // non-default preset stick.
   it("presets the role picker to the person's current role", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       person: active,
