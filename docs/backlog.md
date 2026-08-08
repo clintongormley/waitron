@@ -46,8 +46,9 @@ With both the fiscal story and the operable till complete, the owner chose the n
 
 The two ran in parallel at the feature level without incident: the anticipated
 `packages/db/drizzle/meta/_journal.json` collision was avoided by sequencing the migrations
-(0031 allergens → 0032 8a → 0033 8b) as each branch landed. Active focus is now the **management
-dashboard** (slice 1d — passkeys, the final sub-slice).
+(0031 allergens → 0032 8a → 0033 8b) as each branch landed. The **management dashboard** slice-1 auth
+floor is now **COMPLETE** — 1d (passkeys) LANDED as #71, so all four sub-slices are in; the
+**autonomous campaign** (below) is the active focus.
 
 **Management dashboard added 2026-08-07 (building).** The owner's off-premises management console —
 designed and fully planned this session
@@ -70,9 +71,15 @@ login/logout, `person.manage`-gated staff CRUD), plus `setPassword` in `@waitron
 dashboard app) LANDED as #70** (2026-08-08): `apps/dashboard`, a Lit/Vite browser console — a boot
 session probe → login (roster + password + optional TOTP) or the staff screen (list + create person),
 on `@waitron/ui` primitives with a11y in both themes, plus its own Chromium CI shard. **1d (passkeys)
-is next** — the final dashboard sub-slice (offline-verifiable passkey auth). Slice-1a/1b/1c follow-ups
-(incl. the still-open first-admin-password provisioning gap that blocks a true first login) are under
-*Debt and odd jobs*.
+LANDED as #71** (2026-08-08): WebAuthn as the phishing-resistant primary login — two FORCE-RLS tables
+(`webauthn_credentials`/`webauthn_challenges`), the `@simplewebauthn/server` v13 ceremonies plugged
+into the 1a verifier seam (auth gates on `person.suspended` like `loginManager`), four
+`/management-api/passkey/*` routes (register GATED, auth UNGATED), and the `@simplewebauthn/browser`
+UI. Challenges are single-use (consume-first locking `DELETE`) + TTL-bounded; only the public key +
+a monotonic counter are stored; Copilot's two concurrency findings (single-use race + counter
+regression) were fixed with a real-PG concurrency test. **Slice 1 (the auth floor) is now COMPLETE.**
+Slice-1a/1b/1c/1d follow-ups (incl. the still-open first-admin-password provisioning gap that blocks a
+true first login) are under *Debt and odd jobs*.
 
 **Prioritisation is by soundness, not the calendar (decided 2026-08-02).** Waitron will be finished
 before the deli is ready to trade, so the deli's 1-Jan-2027 legal deadline is *not* a reason to rank
@@ -97,7 +104,7 @@ merges them; anything it cannot safely finish is left as an open PR marked `bloc
 
 | What | State |
 | --- | --- |
-| **Management dashboard** — owner's off-premises console | **Slice 1a (#67) + 1b (#69) + 1c (dashboard app, #70) LANDED**; **1d (passkeys) is next** — the final sub-slice. Spec + plans 1a–1d committed (see *Current direction*). Slice-1a/1b/1c follow-ups + the still-open first-admin-password provisioning gap under *Debt and odd jobs* |
+| **Management dashboard** — owner's off-premises console | **Slice 1 COMPLETE — 1a (#67) + 1b (#69) + 1c (#70) + 1d (passkeys, #71) all LANDED.** The auth floor (staff admin + passkey / password+TOTP login) is done; **remote-access transport** (tunnel/snitun-pattern) is a future slice. Slice-1a/1b/1c/1d follow-ups + the still-open first-admin-password provisioning gap under *Debt and odd jobs* |
 
 ---
 
@@ -108,6 +115,7 @@ One line per landed PR, newest first. The git log, the linked designs/plans, and
 detail — **this file is not a history** (see *How to keep this file honest*). Open follow-ups from
 these live under *Debt and odd jobs*; their designs/plans stay in `docs/superpowers/`.
 
+- **#71** Dashboard slice 1d — passkeys (WebAuthn) — the final auth-floor sub-slice: passkeys as the phishing-resistant primary management-dashboard login, plugged into the slice-1a verifier seam. `@waitron/identity` gains two tenant-scoped **FORCE-RLS** tables (`webauthn_credentials`/`webauthn_challenges`; 0007 tables / 0008 hand-written RLS) and the `@simplewebauthn/server` v13 ceremonies (register + auth; auth ends in `startManagementSession` and gates on `person.suspended` like `loginManager`); `apps/server` gains config (`WAITRON_MANAGEMENT_RP_ID`/`_ORIGIN`) + four `/management-api/passkey/*` routes (**register GATED, auth UNGATED**, auth/verify sets the cookie); `apps/dashboard` gains four client methods + `@simplewebauthn/browser` v13 ("Entrar con passkey" / "Añadir passkey"). Only the public key + counter are stored (never a private key); challenges are single-use + `CHALLENGE_TTL_MS`-bounded. Whole-branch review twin-caught a suspended-person auth gap + an unauthenticated-500 behind a false "library maps codes" comment; the finish-branch two-lens review caught three §1 comment overstatements (incl. a "swept" claim the simplify pass left in the sibling migration); **Copilot caught two real concurrency findings** — challenge single-use under concurrency (fixed with a consume-first locking `DELETE … RETURNING` + a deterministic real-PG lock-timeout test) and a counter that could REGRESS under concurrent logins (fixed with a monotonic `counter < newCounter` guard, weakening clone detection). identity 125 tests @ 100%. The crypto is verify-mocked in unit/route tests — a real-ceremony virtual-authenticator test is a follow-up (below).
 - **#70** Dashboard slice 1c — dashboard app — `apps/dashboard`, a browser management console (Lit 3 + Vite 6 + Vitest browser-mode/Playwright-Chromium) consuming slice-1b's `/management-api/*`: a `DashboardApi` client (browser-local types, paths/verbs matched exactly to the routes), a boot session probe → login screen (roster + password + optional TOTP → `logged-in`) / staff screen (list + create dialog → `createPerson` → reload) + logout, all wrapped so no async path is an unhandled rejection; built on `@waitron/ui` primitives + `var(--wt-*)` tokens with an axe `.a11y.test.ts` per screen in both themes; its own `test-dashboard` Chromium CI shard (wired into the `ci` aggregate). All source files 100% coverage. Whole-branch review caught a create-dialog reopen bug; the finish-branch two-lens review twin-caught a create-form-not-reset bug (duplicate/reused-PIN hazard) + added a create single-flight guard. Headless server backend is 1b; UI actions for row-edit are a fast-follow (see below).
 - **#69** Dashboard slice 1b — server management API — the slice-1a identity auth exposed over HTTP as a `/management-api/*` Hono route group on `apps/server` mirroring `mountTillApi`: a `waitron_management_session` cookie (httpOnly / SameSite=Strict / Secure-iff-TLS), login/logout, and `person.manage`-gated staff CRUD (list/create/patch/reset-pin/set-password), plus `setPassword` in `@waitron/identity` (an admin grants dashboard access). New `management.request_invalid` body-shape code; every handler scoped to the one venue tenant via `withTenant` + `asAppUser`. Real-PG e2e incl. a **differential** cross-tenant isolation proof (fails if `asAppUser` is dropped) + refusal proofs (unauth 401, wrong-password 401 + no cookie, staff-role 403). Finish-branch fixed a null/non-object-body → 500 class (now the routes' own 4xx), the PATCH type-screening gap (`role`/`status` now 400 not pgEnum-500) + its false errors.ts doc, and three overstating comments; a Copilot NIF-collision flag was verified a **false positive** (one PG container per file → isolated DBs). Headless — the UI is 1c.
 - **#68** Frozen *cierre Z* (sub-project 8, slice 8b) — immutable numbered `daily_closes` (0033, the immutability recipe: `REVOKE ALL` + `GRANT SELECT,INSERT` + append-only/anti-TRUNCATE triggers + FORCE RLS + tenant policy) freezing a snapshot of the derived close, a per-node `daily_close_chain` head that `recordDailyClose` advances in the **same transaction** as the close (single-active-writer `FOR UPDATE`, `UNIQUE(scope, sequence_no)` backstop), per-till counted-cash vs expected reconciliation → `cash_variance` (*descuadre*), and `verifyDailyCloseChain` which re-walks a `(tenant, node)` chain reporting the first break (`sequence`/`genesis`/`broken_link`/`hash_mismatch`/`tail_truncation`/`missing_head`). Headless; English schema tokens (`daily_closes`/`cash_variance`/`entry_hash`), Spanish *cierre Z*/*descuadre* UI-only. Copilot caught a tamper-detection gap in review — a deleted chain head with surviving closes read as `ok:true`; now caught as `missing_head`, proven by deletion in a real-PG test.
@@ -275,8 +283,9 @@ not payment method); a short payment agreed as payment-in-full before the factur
 Most of the till track now has code — see *Recently shipped* (sub-projects 5 Identity, 6 Locations,
 7 Counter POS, 8 Reporting, 16 Workforce, 18 Menu & allergens all have landed slices). What remains
 genuinely unstarted is below. The two 2026-08-07 reprioritised slices have both landed their first cut
-(allergens #65; *cierre Z* 8a #66 + 8b #68); the **management dashboard** (slice 1b) is now the active
-work (see *Now*).
+(allergens #65; *cierre Z* 8a #66 + 8b #68); the **management dashboard** slice-1 auth floor is
+**COMPLETE** (1a #67 → 1b #69 → 1c #70 → 1d passkeys #71), and the **autonomous campaign** is now the
+active work (see *Now* / *Current direction*).
 
 | Sub-project | Note |
 | --- | --- |
@@ -317,11 +326,15 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     flagged it; **v13 is a breaking API change** (restructured `authenticator` export — `totp.ts` fails
     at import), so it needs a `totp.ts` rewrite + re-probe of v13's fail-closed behaviour — its own small
     follow-up, not a dep bump. Warnings are install-time only; CI is green.
-  - **First admin has no dashboard password.** `waitron-provision venue` seeds an admin with a PIN, not
-    a password, so there is no true end-to-end first login until an admin password exists. **Slice 1b's
-    `setPassword` (#69) now covers every SUBSEQUENT person**; only the FIRST admin's initial password
-    remains — **a provisioning follow-up** (extend `venue`, or a `set-password` command) unblocks it. This
-    is the one thing between #69 and a real dashboard login.
+  - **First admin has no dashboard password — now the ONLY thing between the completed auth floor and a
+    real first login.** `waitron-provision venue` seeds an admin with a PIN, not a password, so there is
+    no true end-to-end first login until an admin password exists. **Slice 1b's `setPassword` (#69) now
+    covers every SUBSEQUENT person**; only the FIRST admin's initial password remains — **a provisioning
+    follow-up** (extend `venue`, or a `set-password` command) unblocks it. **Passkeys (1d, #71) do NOT
+    bypass this:** passkey *enrollment* is gated on an already-authenticated session (you must log in
+    with a password before you can add a passkey), so the first login still needs the admin's password.
+    With 1a–1d all landed, this provisioning gap is the single remaining blocker to a real dashboard
+    login.
   - **Deferred (untouched by 1b, which was the HTTP-API layer only — these touch the session internals /
     `authorize.ts`):** stamp `ended_at` when a management session expires (today the idle timeout is
     enforced at read time — matters once a `(tenant_id, person_id) WHERE ended_at IS NULL` open-session
@@ -382,7 +395,36 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     (renders right today only because the default equals the first option — latent if reused to EDIT a
     non-default value); no top-level `<main>` landmark in the shell (consistent with `apps/till`; axe
     passes); `staff-list`'s `people` prop-doc still says "the app owns" (harmless imprecision); and
-    `apps/dashboard` declares `@waitron/shared` but doesn't import it yet (plausibly 1d's — else drop it).
+    `apps/dashboard` declares `@waitron/shared` but still doesn't import it — **1d did not use it either
+    (confirmed 2026-08-08), so drop the dep.**
+- **Dashboard slice 1d follow-ups (#71, passkeys). None blocking; each deferred with a reason during
+  the SDD build / simplify / finish-branch / Copilot review chain.**
+  - **Real-ceremony integration test — the biggest gap.** Unit/route tests MOCK `@simplewebauthn`'s
+    `verify*`, so they prove OUR wiring (RLS, gating, single-use, counter, suspension) but never the
+    crypto. The true end-to-end proof is a Playwright **virtual authenticator** (CDP
+    `addVirtualAuthenticator`) driving `@simplewebauthn/browser` against the real
+    `@simplewebauthn/server` verify — belongs with the dashboard's browser shard (`test-dashboard`).
+  - **`transports` column is declared but never written.** `webauthn_credentials.transports` is in the
+    schema but nothing populates it. Either write it at registration (`credential.transports`, useful as
+    an `excludeCredentials`/`allowCredentials` hint) or drop the column. Populate-or-drop.
+  - **RP-ID / origin misconfig is undiagnosable in production.** `WAITRON_MANAGEMENT_RP_ID`/`_ORIGIN`
+    default to `localhost` / `http://localhost:5191` for dev+tests; a wrong origin now surfaces as a
+    clean 401 (was a 500), but the real fix is to make both **required at boot** in production so a
+    misconfig fails loudly at startup, not as a mystery 401 per login.
+  - **`userVerification` policy not pinned.** `generate*Options` default to `"preferred"` while the
+    `verify*` calls require UV (the safe direction — fails closed). For a phishing-resistant PRIMARY
+    login, pin both generate and verify to `"required"` explicitly.
+  - **Duplicate `credential_id` on the gated register route → opaque 500.** A second registration of the
+    same `(tenant_id, credential_id)` raises `23505` → `server.internal` 500, breaking the "every
+    surfaced code is a 4xx" invariant. Near-unreachable (route is gated + `excludeCredentials` makes a
+    compliant authenticator refuse), but catch `23505` → a mapped `passkey.*`/`management.request_invalid`
+    to close it.
+  - **Residual harmless double-session (out of scope, documented).** Two DISTINCT concurrent auth
+    ceremonies (different challenge handles) for the same person can each mint a session — both belong to
+    the legitimately-authenticated owner, the same race as `loginManager`, no trust boundary crossed. The
+    single-use fix (#71) closes the SAME-handle race; this different-handle case is left as harmless.
+  - **i18n** — passkey button labels + status/error keys render raw, folded into the slice-wide i18n
+    follow-up above (shared with 1c).
 - **Counter POS follow-ups (sub-project 7, slice 1 / 7a — the walk-up cash sale). None blocking; each
   is a deliberate slice-1 boundary or a small review Minor, deferred rather than dropped.**
   - **TLS termination, LAN binding and serving the built bundle are deployment (#9).** In dev the till
