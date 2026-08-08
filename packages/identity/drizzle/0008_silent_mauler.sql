@@ -40,8 +40,9 @@ CREATE POLICY "webauthn_challenges_tenant_isolation" ON "webauthn_challenges"
   WITH CHECK (tenant_id = current_tenant_id());--> statement-breakpoint
 
 -- REVOKE ALL first so a prior provisioning GRANT ALL cannot survive, then the targeted grant.
--- webauthn_challenges is EPHEMERAL: a challenge is consumed (deleted) the moment the browser returns
--- the signed response, and expired ones are swept — so app_user holds SELECT, INSERT, UPDATE, DELETE.
+-- webauthn_challenges is EPHEMERAL: a challenge is consumed (deleted) on a SUCCESSFUL ceremony, and an
+-- unused/expired one is bounded by CHALLENGE_TTL_MS at consume time (rejected, not swept — there is no
+-- sweep job) — so app_user holds SELECT, INSERT, UPDATE, DELETE.
 -- DELETE is essential here, not merely allowed: a challenge that could not be deleted could be replayed.
 REVOKE ALL ON "webauthn_challenges" FROM app_user;--> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE, DELETE ON "webauthn_challenges" TO app_user;

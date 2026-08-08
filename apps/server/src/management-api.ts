@@ -78,8 +78,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.expired": 401,
   "password.invalid": 401,
   "totp.invalid": 401,
-  // Passkey (WebAuthn) ceremony faults, thrown by the four `finishPasskey*`/`beginPasskey*` calls the
-  // routes below wrap. Both authentication-failure codes are 401 — the auth-verify route IS the login,
+  // Passkey (WebAuthn) ceremony faults, thrown by the two `finishPasskey*` calls the verify routes
+  // below wrap (the `beginPasskey*` options calls never throw these). Both authentication-failure codes
+  // are 401 — the auth-verify route IS the login,
   // so a credential that is not registered (`passkey.not_registered`) or an assertion that fails to
   // verify (`passkey.verification_failed`, also thrown on registration verify) is a failed credential
   // check, the same family as `password.invalid`. `passkey.challenge_expired` is a 400: the request was
