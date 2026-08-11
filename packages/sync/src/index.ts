@@ -16,6 +16,12 @@ export type { CaptureOp, EnrolledTable, SyncMode } from "./registry.js";
 // The static per-table apply SQL, built once from the registry + live schema (never from row data).
 export { applyStatementFor, deleteStatementFor } from "./apply-sql.js";
 
+// The apply loop — take a peer's captured sync_log rows and write each into the local mirror as the
+// non-superuser app role under withTenant, idempotently and in seq order, with the environment
+// handshake up front (docs/superpowers/plans/2026-08-08-sync-slice1-commercial-outbox-plan.md Task 4).
+export { applyBatch } from "./apply.js";
+export type { ApplyBatchOptions, ApplyBatchResult, SyncLogRow } from "./apply.js";
+
 // Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable from
 // this package's own public barrel, per the reachability rule in packages/shared/src/errors.ts.
 // See errors.reachability.test.ts.
