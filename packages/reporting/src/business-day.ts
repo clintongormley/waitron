@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import type { DailyCloseInput } from "./types.js";
+import type { TenantId } from "@waitron/shared";
+import type { DailyCloseInput, PeriodVatInput } from "./types.js";
 
 const CUTOVER_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -66,13 +67,26 @@ export function businessDayClause(column: SQL, input: DailyCloseInput): SQL {
 }
 
 /**
+ * The closed-range generalisation of `businessDayClause`: the SAME cutover-shifted local-date
+ * expression, but `between from and to` instead of `= businessDay`. A single-day range
+ * (`from == to`) is therefore byte-identical to `businessDayClause`'s `= from` form (`x between D and
+ * D` ≡ `x = D`), so the range clause provably EXTENDS the tested one rather than replacing it — see
+ * `business-day.test.ts`. Bounds are inclusive on both ends.
+ */
+export function businessDayRangeClause(column: SQL, input: PeriodVatInput): SQL {
+  return sql`(${column} at time zone ${input.timeZone} - ${input.dayCutover}::interval)::date
+             between ${input.fromBusinessDay}::date and ${input.toBusinessDay}::date`;
+}
+
+/**
  * Excludes the sales a fiscal aggregate must not count: voided sales (annulled) and F3-canje
  * substitutes (their VAT already lives in the substituted F2 tickets — design §4, confirmed against
  * *modelo 303* in the AEAT FAQ). Assumes the outer query aliases `sales` as `s`. Shared by the VAT
  * summary and the record counts so the two cannot drift on which sales are "active". No leading
- * `and` — the caller writes `and ${activeSalesClause(input)}`.
+ * `and` — the caller writes `and ${activeSalesClause(input)}`. Only `tenantId` is read, so the param
+ * is narrowed to that shape (the daily-close/counts callers still satisfy it structurally).
  */
-export function activeSalesClause(input: DailyCloseInput): SQL {
+export function activeSalesClause(input: { tenantId: TenantId }): SQL {
   return sql`not exists (select 1 from sale_voids sv where sv.sale_id = s.id and sv.tenant_id = ${input.tenantId})
       and not exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = s.id and sub.tenant_id = ${input.tenantId})`;
 }

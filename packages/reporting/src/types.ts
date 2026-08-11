@@ -14,6 +14,20 @@ export interface DailyCloseInput {
   dayCutover: string;
 }
 
+export interface PeriodVatInput {
+  tenantId: TenantId;
+  /** Omit → aggregate across ALL the tenant's nodes (RLS + the tenant predicate scope it). */
+  nodeId?: NodeId;
+  /** Inclusive lower bound, local calendar date of the business day, "YYYY-MM-DD". */
+  fromBusinessDay: string;
+  /** Inclusive upper bound, local calendar date of the business day, "YYYY-MM-DD". */
+  toBusinessDay: string;
+  /** IANA timezone, e.g. "Europe/Madrid". Required; never defaulted to UTC. */
+  timeZone: string;
+  /** "HH:MM" time-of-day in `timeZone` at which the business day starts, e.g. "05:00". */
+  dayCutover: string;
+}
+
 export interface VatRateLine {
   /** Percentage literal as stored, e.g. "21.00". */
   rate: Decimal;
