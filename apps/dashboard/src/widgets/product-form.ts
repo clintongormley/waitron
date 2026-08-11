@@ -10,6 +10,9 @@ import "@waitron/ui/src/components/wt-switch.js";
 // before this form renders them (the `staff-screen.ts` widget-registration pattern).
 import "./allergen-picker.js";
 import "./image-upload.js";
+import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
+import { unitName, vatClassName } from "../i18n/domain.js";
 import type { ImageUploader } from "./image-upload.js";
 import type {
   AllergenDeclaration,
@@ -290,7 +293,7 @@ export class ProductForm extends LitElement {
   override render() {
     return html`
       <wt-dialog
-        heading=${this.product ? "Editar producto" : "Nuevo producto"}
+        heading=${this.product ? t("product.edit") : t("product.new")}
         .open=${this.open}
         @wt-close=${() => this.#onClose()}
       >
@@ -299,7 +302,7 @@ export class ProductForm extends LitElement {
             <wt-input
               class="field"
               data-test=${`description-${locale}`}
-              label=${`Descripción (${locale})`}
+              label=${`${t("product.description")} (${locale})`}
               .value=${this.descriptions[locale] ?? ""}
               @wt-change=${(e: CustomEvent<{ value: string }>) =>
                 this.#onDescriptionChange(e, locale)}
@@ -309,30 +312,38 @@ export class ProductForm extends LitElement {
         <wt-input
           class="field"
           data-test="unit-price"
-          label="Precio"
+          label=${t("product.price")}
           .value=${this.unitPrice}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onUnitPriceChange(e)}
         ></wt-input>
         <label class="field"
-          >IVA
+          >${t("product.vat")}
           <select data-test="vat-class" @change=${(e: Event) => this.#onVatClassChange(e)}>
             ${VAT_CLASSES.map(
-              (v) => html`<option value=${v} .selected=${v === this.vatClass}>${v}</option>`,
+              (v) =>
+                html`<option value=${v} .selected=${v === this.vatClass}>
+                  ${vatClassName(v)}
+                </option>`,
             )}
           </select>
         </label>
         <label class="field"
-          >Unidad
+          >${t("product.unit")}
           <select data-test="pricing-unit" @change=${(e: Event) => this.#onPricingUnitChange(e)}>
             ${PRICING_UNITS.map(
-              (u) => html`<option value=${u} .selected=${u === this.pricingUnit}>${u}</option>`,
+              (u) =>
+                html`<option value=${u} .selected=${u === this.pricingUnit}>
+                  ${unitName(u)}
+                </option>`,
             )}
           </select>
         </label>
         <label class="field"
-          >Categoría
+          >${t("product.category")}
           <select data-test="category" @change=${(e: Event) => this.#onCategoryChange(e)}>
-            <option value="" .selected=${this.categoryId === null}>— none —</option>
+            <option value="" .selected=${this.categoryId === null}>
+              ${t("product.no_category")}
+            </option>
             ${this.categories.map(
               (c) =>
                 html`<option value=${c.id} .selected=${c.id === this.categoryId}>
@@ -344,7 +355,7 @@ export class ProductForm extends LitElement {
         <wt-switch
           class="field"
           data-test="active"
-          label="Activo"
+          label=${t("product.active")}
           .checked=${this.active}
           @wt-change=${(e: CustomEvent<{ checked: boolean }>) => this.#onActiveChange(e)}
         ></wt-switch>
@@ -362,7 +373,9 @@ export class ProductForm extends LitElement {
         ></dashboard-image-upload>
         ${
           this.validationError
-            ? html`<p class="error" role="alert" data-test="error">${this.validationError}</p>`
+            ? html`<p class="error" role="alert" data-test="error">
+                ${codeMessage(this.validationError)}
+              </p>`
             : nothing
         }
         <wt-button
@@ -371,7 +384,7 @@ export class ProductForm extends LitElement {
           data-test="confirm"
           ?disabled=${this.busy}
           @click=${(e: Event) => this.#confirm(e)}
-          >${this.product ? "Guardar" : "Crear"}</wt-button
+          >${this.product ? t("action.save") : t("action.create")}</wt-button
         >
       </wt-dialog>
     `;

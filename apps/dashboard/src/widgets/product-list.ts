@@ -3,6 +3,8 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
+import { t } from "../i18n/t.js";
+import { allergenStateName, unitName, vatClassName } from "../i18n/domain.js";
 import type { AllergenDeclaration, Product } from "../api/client.js";
 
 /** The three allergen-declaration states the pill renders, keyed off the §7 / §1 invariant. */
@@ -20,15 +22,6 @@ function allergenState(allergens: AllergenDeclaration): AllergenState {
   return Object.keys(allergens).length === 0 ? "none" : "declared";
 }
 
-/** The human label for each allergen state. Raw tokens for now — a later i18n task maps them to
- * Spanish copy, exactly as `person-form`/`staff-list` render their role/status tokens raw. PENDING and
- * none read as DIFFERENT text so the pill never conveys the distinction by colour alone (a11y). */
-const ALLERGEN_LABEL: Record<AllergenState, string> = {
-  pending: "PENDING",
-  none: "none",
-  declared: "declared",
-};
-
 /**
  * The management dashboard's PRODUCT LIST: one `wt-card` row per product showing its name (from
  * `descriptions[primaryLocale]`, degrading gracefully when that locale is absent), gross `unitPrice` +
@@ -43,8 +36,9 @@ const ALLERGEN_LABEL: Record<AllergenState, string> = {
  *
  * Everything that carries meaning does so in TEXT, not colour alone (a11y): the active badge names its
  * state, the allergen pill's three states read as three different words, and the thumbnail's `alt` is
- * the product name. `vatClass`/`pricingUnit` render as their raw domain tokens for now, a later i18n
- * task mapping them to Spanish copy, exactly as `staff-list` defers its role/status tokens.
+ * the product name. `vatClass`/`pricingUnit` and the allergen state render through the i18n layer as
+ * localised display names (`vatClassName`/`unitName`/`allergenStateName`) at the render edge, exactly
+ * as `staff-list` translates its role/status tokens; `data-state`/`data-active` stay the raw tokens.
  */
 @customElement("dashboard-product-list")
 export class ProductList extends LitElement {
@@ -198,18 +192,20 @@ export class ProductList extends LitElement {
                   <div class="details">
                     <span class="name">${name}</span>
                     <span class="meta">
-                      <span class="price">${product.unitPrice} ${product.pricingUnit}</span>
-                      <span class="vat">${product.vatClass}</span>
+                      <span class="price"
+                        >${product.unitPrice} ${unitName(product.pricingUnit)}</span
+                      >
+                      <span class="vat">${vatClassName(product.vatClass)}</span>
                     </span>
                     <span class="badges">
                       <span
                         class="badge"
                         data-test="active-badge"
                         data-active=${product.active ? "true" : "false"}
-                        >${product.active ? "Activo" : "Inactivo"}</span
+                        >${product.active ? t("product.active_badge") : t("product.inactive_badge")}</span
                       >
                       <span class="badge" data-test="allergen-state" data-state=${state}
-                        >${ALLERGEN_LABEL[state]}</span
+                        >${allergenStateName(state)}</span
                       >
                     </span>
                   </div>
@@ -217,10 +213,10 @@ export class ProductList extends LitElement {
                 <wt-button
                   variant="ghost"
                   data-test=${`edit-${product.id}`}
-                  aria-label=${`Editar ${name}`}
+                  aria-label=${`${t("action.edit")} ${name}`}
                   @click=${(event: Event) => this.#edit(event, product.id)}
                 >
-                  Editar
+                  ${t("action.edit")}
                 </wt-button>
               </div>
             </wt-card>

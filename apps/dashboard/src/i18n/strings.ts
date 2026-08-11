@@ -85,6 +85,8 @@ export const en = {
   // Allergen picker
   "allergen.reviewed": "Reviewed",
   "allergen.origin": "Origin",
+  "allergen.contains": "Contains",
+  "allergen.may_contain": "May contain",
   // Category manager
   "category.new": "New category",
   // Image upload
@@ -170,6 +172,8 @@ export const es: Record<StringKey, string> = {
   "person.set_password": "Establecer contraseña",
   "allergen.reviewed": "Revisado",
   "allergen.origin": "Origen",
+  "allergen.contains": "Contiene",
+  "allergen.may_contain": "Puede contener",
   "category.new": "Nueva categoría",
   "image.label": "Imagen",
   "image.preview_alt": "Vista previa del producto",

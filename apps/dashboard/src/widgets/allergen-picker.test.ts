@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { t } from "../i18n/t.js";
+import { allergenName } from "../i18n/domain.js";
 // Value import (not `import type`): pulls in the module for its `@customElement` side effect, which
 // registers `dashboard-allergen-picker` so `mountWidget` can create it.
 import { AllergenPicker } from "./allergen-picker.js";
@@ -173,6 +175,33 @@ describe("allergen-picker", () => {
     });
     await setPresence(el, "gluten", "unset");
     expect(el.value).toEqual({});
+  });
+
+  // Each code's NAME renders through the i18n layer as its localised display name, not the raw token.
+  // The wire code stays raw in `data-test`/`id` (asserted elsewhere); only the visible name is localised.
+  it("renders each allergen code's localised display name in the name cell", async () => {
+    const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {});
+    const eggs = el.shadowRoot!.querySelector("#name-eggs")!;
+    expect(eggs.textContent!.trim()).toBe(allergenName("eggs", "es-ES"));
+    expect(eggs.textContent!.trim()).not.toBe("eggs");
+    const milk = el.shadowRoot!.querySelector("#name-milk")!;
+    expect(milk.textContent!.trim()).toBe(allergenName("milk", "es-ES"));
+  });
+
+  // The presence `<select>` options carry localised LABELS while keeping their raw WIRE VALUES (the
+  // server's `AllergenPresence` tokens the value getter emits). The empty "unset" option stays the
+  // locale-neutral em dash.
+  it("labels the presence options with localised text, keeping the wire values", async () => {
+    const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {});
+    const options = [
+      ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=presence-gluten] option"),
+    ];
+    const byValue = (v: string) => options.find((o) => o.value === v)!;
+    expect(byValue("contains").textContent!.trim()).toBe(t("allergen.contains", "es-ES"));
+    expect(byValue("may_contain").textContent!.trim()).toBe(t("allergen.may_contain", "es-ES"));
+    expect(byValue("contains").value).toBe("contains");
+    expect(byValue("may_contain").value).toBe("may_contain");
+    expect(byValue("unset").textContent!.trim()).toBe("—");
   });
 
   // All 14 EU-1169/2011 Annex II codes are offered, in the till's display order (redefined locally,

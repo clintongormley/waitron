@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { allergenStateName, unitName, vatClassName } from "../i18n/domain.js";
 import type { Product } from "../api/client.js";
 import { ProductList } from "./product-list.js";
 
@@ -68,18 +69,23 @@ describe("product-list", () => {
     expect(row.textContent).not.toContain("Croquetas");
   });
 
-  it("shows the gross unitPrice and pricingUnit", async () => {
+  // The gross unitPrice is left as-is (money formatting is deferred); only the pricingUnit token is
+  // localised through the i18n layer — the raw `weight` token is never shown.
+  it("shows the gross unitPrice and the localised pricing unit", async () => {
     const products = [product({ unitPrice: "12.00", pricingUnit: "weight" })];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
     const text = el.shadowRoot!.querySelector("[data-test=row]")!.textContent!;
     expect(text).toContain("12.00");
-    expect(text).toContain("weight");
+    expect(text).toContain(unitName("weight", "es-ES"));
+    expect(text).not.toContain("weight");
   });
 
-  it("shows the vatClass", async () => {
+  it("shows the localised vatClass name, not the raw token", async () => {
     const products = [product({ vatClass: "super_reduced" })];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
-    expect(el.shadowRoot!.querySelector("[data-test=row]")!.textContent).toContain("super_reduced");
+    const text = el.shadowRoot!.querySelector("[data-test=row]")!.textContent!;
+    expect(text).toContain(vatClassName("super_reduced", "es-ES"));
+    expect(text).not.toContain("super_reduced");
   });
 
   it("shows an active/inactive badge carrying text, not colour alone", async () => {
@@ -121,6 +127,23 @@ describe("product-list", () => {
     });
     const pill = el.shadowRoot!.querySelector<HTMLElement>("[data-test=allergen-state]")!;
     expect(pill.getAttribute("data-state")).toBe("declared");
+  });
+
+  // The three states render through the i18n layer as three DISTINCT localised names (Pendiente /
+  // Ninguno / Declarado), preserving the a11y "three different words, not colour alone" requirement.
+  // `data-state` stays the raw token (asserted elsewhere); only the pill's visible text is localised.
+  it("renders each allergen-state pill with its localised name", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "p", allergens: null }),
+        product({ id: "n", allergens: {} }),
+        product({ id: "d", allergens: { milk: { presence: "contains" } } }),
+      ],
+    });
+    const pills = el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=allergen-state]");
+    expect(pills[0]!.textContent!.trim()).toBe(allergenStateName("pending", "es-ES"));
+    expect(pills[1]!.textContent!.trim()).toBe(allergenStateName("none", "es-ES"));
+    expect(pills[2]!.textContent!.trim()).toBe(allergenStateName("declared", "es-ES"));
   });
 
   it("distinguishes all three allergen states from one another", async () => {

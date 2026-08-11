@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
+import { unitName, vatClassName } from "../i18n/domain.js";
 // Value import (not `import type`): pulls in the module for its `@customElement` side effect, which
 // registers `dashboard-product-form` so `mountWidget` can create it.
 import { ProductForm } from "./product-form.js";
@@ -102,12 +105,37 @@ describe("product-form", () => {
     expect(unit).toEqual(["each", "weight"]);
   });
 
+  // The VAT and pricing-unit options carry localised LABELS while keeping their raw WIRE VALUES (the
+  // CHECK-set tokens the create/update body sends) — the same render-edge translation staff-list uses.
+  it("labels the VAT and unit options with localised names, keeping the wire values", async () => {
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", baseProps());
+    const vatOptions = [
+      ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=vat-class] option"),
+    ];
+    for (const o of vatOptions) {
+      expect(o.textContent!.trim()).toBe(vatClassName(o.value, "es-ES"));
+      expect(o.textContent!.trim()).not.toBe(o.value);
+    }
+    const unitOptions = [
+      ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=pricing-unit] option"),
+    ];
+    for (const o of unitOptions) {
+      expect(o.textContent!.trim()).toBe(unitName(o.value, "es-ES"));
+      expect(o.textContent!.trim()).not.toBe(o.value);
+    }
+  });
+
   it("lists the loaded categories plus a — none — option that maps to null", async () => {
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", baseProps());
     const values = [...el.shadowRoot!.querySelectorAll("[data-test=category] option")].map(
       (o) => (o as HTMLOptionElement).value,
     );
     expect(values).toEqual(["", "cat-bebidas", "cat-postres"]);
+    // The no-category option carries localised text while its wire value stays the empty string.
+    const none = [
+      ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=category] option"),
+    ].find((o) => o.value === "")!;
+    expect(none.textContent!.trim()).toBe(t("product.no_category", "es-ES"));
   });
 
   // The whole create round-trip: fill every field, leave the picker PENDING and no image, confirm,
@@ -184,15 +212,20 @@ describe("product-form", () => {
   });
 
   // A non-empty PRIMARY-locale description is required client-side (the column is NOT NULL; a nameless
-  // product is a UI error). An empty name blocks confirm — no event — and shows an error.
-  it("blocks confirm and shows an error when the primary description is empty", async () => {
+  // product is a UI error). An empty name blocks confirm — no event — and shows an error. The banner
+  // renders LOCALISED copy through the i18n layer, never the raw `product.description_required` code
+  // (which stays raw in @state; codeMessage maps it at the render edge, mirroring the screens).
+  it("blocks confirm and shows a localised error when the primary description is empty", async () => {
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", baseProps());
     let fired = false;
     el.addEventListener("create-product", () => (fired = true));
     confirm(el);
     await el.updateComplete;
     expect(fired).toBe(false);
-    expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBe(null);
+    const alert = el.shadowRoot!.querySelector("[role=alert]");
+    expect(alert).not.toBe(null);
+    expect(alert!.textContent).toContain(codeMessage("product.description_required", "es-ES"));
+    expect(alert!.textContent).not.toContain("product.description_required");
   });
 
   // Whitespace-only is still empty.
