@@ -182,11 +182,18 @@ export class TillCounterScreen extends LitElement {
    */
   #widget(instance: WidgetInstance): TemplateResult {
     switch (instance.type) {
-      case "product-grid":
+      case "product-grid": {
+        // Thread the one wired per-widget config key, `product-grid.columns`. The config bag is
+        // `Record<string, unknown>`, so narrow to a number and pass it through only then — a
+        // missing/malformed value leaves the widget's responsive auto-fill default (its own `columns`
+        // doc). The value is validated 1..12 server-side (`@waitron/layouts` `WIDGET_CONFIG`).
+        const columns = instance.config.columns;
         return html`<till-product-grid
           .products=${this.products}
           .store=${this.store}
+          .columns=${typeof columns === "number" ? columns : undefined}
         ></till-product-grid>`;
+      }
       case "basket":
         return html`<till-basket .store=${this.store}></till-basket>`;
       case "total":

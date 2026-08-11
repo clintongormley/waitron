@@ -43,4 +43,20 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
     );
     await expectNoA11yViolations(host);
   });
+
+  it("has no violations with the non-fiscal receipt trim rendered (header subtitle + footer message)", async () => {
+    const { host } = await mountWidget<TillTicketView>(
+      "till-ticket-view",
+      {
+        result,
+        issuer,
+        receipt: {
+          headerSubtitle: "Calle Mayor 1, Madrid",
+          footerMessage: "Gracias por su visita",
+        },
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
 });

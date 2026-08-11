@@ -16,6 +16,11 @@
  * follow — a mismatch surfaces as a runtime shape error a view test catches, not a compile break.
  */
 
+// The till's LOCAL layout/receipt shapes (`../layout.ts`) — plain data, browser-safe, bundle-decoupled
+// exactly like every interface below. `GET /api/till` carries the authored-or-default arrangement +
+// receipt trim; importing these from `../layout.js` (never `@waitron/layouts`) keeps the decoupling.
+import type { LayoutDef, ReceiptConfig } from "../layout.js";
+
 /** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 export type FetchLike = typeof fetch;
 
@@ -28,6 +33,12 @@ export type FetchLike = typeof fetch;
  * (`apps/server/src/till-api.ts`), both always present (a till with no integrated reader still echoes
  * `cardProvider: "none"`) — needed so the counter can choose whether to render the integrated-card
  * pay control at all, and whether that control prompts for a tip.
+ *
+ * `layout`/`receipt` (layout & receipt editors) are the owner-authored till arrangement and receipt
+ * trim, or the built-in defaults when the tenant has never opened the editor — the server always sends
+ * both (`getLayout` returns `DEFAULT_LAYOUT`/`DEFAULT_RECEIPT` on absence, `till-api.ts`). Like
+ * `orderFlow`/`venueName` they carry no secrets, only the widget arrangement + footer text. The app
+ * renders `layout` in place of the hardcoded `LAYOUT_A` and threads `receipt` to its ticket.
  */
 export interface TillInfo {
   locale: string;
@@ -36,6 +47,8 @@ export interface TillInfo {
   orderFlow: OrderFlow;
   cardProvider: "none" | "stripe_terminal" | "stripe_on_device";
   tipsEnabled: boolean;
+  layout: LayoutDef;
+  receipt: ReceiptConfig;
 }
 
 /** One `GET /api/staff` roster entry — no PIN, role or status (the server strips them). */

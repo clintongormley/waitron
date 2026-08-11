@@ -6,6 +6,7 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { TillProduct } from "../api/client.js";
 import type { TillAllergenScreen } from "./till-allergen-screen.js";
+import type { TillProductGrid } from "../widgets/product-grid.js";
 
 const cafe: TillProduct = {
   id: "p1",
@@ -138,6 +139,31 @@ describe("till-counter-screen", () => {
     expect(pay.cardProvider).toBe("none");
     expect(pay.tipsEnabled).toBe(false);
     expect(pay.cardOutcome).toBeUndefined();
+  });
+
+  it("threads a product-grid's `columns` config through to the grid widget (product-grid.columns)", async () => {
+    const layout: LayoutDef = [{ type: "product-grid", region: "main", config: { columns: 4 } }];
+    const { el } = await mount({ layout });
+    const grid = el.shadowRoot!.querySelector<TillProductGrid>("till-product-grid")!;
+    expect(grid.columns).toBe(4);
+  });
+
+  it("leaves `columns` unset when the product-grid config carries none", async () => {
+    const layout: LayoutDef = [{ type: "product-grid", region: "main", config: {} }];
+    const { el } = await mount({ layout });
+    const grid = el.shadowRoot!.querySelector<TillProductGrid>("till-product-grid")!;
+    expect(grid.columns).toBeUndefined();
+  });
+
+  it("ignores a non-numeric `columns` config value, leaving the grid's responsive default", async () => {
+    // The config bag is `Record<string, unknown>`; the screen narrows `columns` to a number and passes
+    // it through only then, so a malformed value can never reach the widget as a bad column count.
+    const layout: LayoutDef = [
+      { type: "product-grid", region: "main", config: { columns: "four" } },
+    ];
+    const { el } = await mount({ layout });
+    const grid = el.shadowRoot!.querySelector<TillProductGrid>("till-product-grid")!;
+    expect(grid.columns).toBeUndefined();
   });
 
   it("passes the products through to the product grid", async () => {

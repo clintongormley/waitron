@@ -7,6 +7,8 @@ import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillPrepQueue } from "./widgets/prep-queue.js";
+import type { TillProductGrid } from "./widgets/product-grid.js";
+import { LAYOUT_A, type LayoutDef } from "./layout.js";
 import type {
   HeldOrderSummary,
   PayOutcome,
@@ -66,6 +68,10 @@ const till = {
   // two fields) keeps exercising #62's unchanged behaviour rather than the integrated one.
   cardProvider: "none" as const,
   tipsEnabled: false,
+  // `layout`/`receipt` are DELIBERATELY omitted (an older server that predates the editor): #boot then
+  // leaves the received layout undefined, so #layoutFor()'s Mode-P prep-queue drop applies as the
+  // fallback and the ticket receipt defaults to {} — the slice-1 behaviour every pre-Task-9 test relies
+  // on. The `authored layout + receipt` suite supplies them explicitly.
 };
 
 const placedResult = {
@@ -1585,6 +1591,112 @@ describe("till-app", () => {
       const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
       expect(banner.textContent).toContain(t("prep.advance_error"));
       expect(el.shadowRoot!.textContent).not.toContain("order_prep.invalid_transition");
+    });
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  // Layout & receipt editors (Task 9): #boot reads `layout`/`receipt` from GET /api/till. An AUTHORED
+  // layout (structurally different from the built-in default) renders VERBATIM — no Mode-P filter, the
+  // owner's choice (design §7); a DEFAULT or ABSENT layout keeps slice 1's Mode-P prep-queue drop as
+  // the fallback (#layoutFor). `receipt` is threaded to the ticket view. The `till` fixture above OMITS
+  // both fields, so every pre-Task-9 test exercises the ABSENT→fallback branch.
+  // ---------------------------------------------------------------------------------------------
+
+  describe("authored layout + receipt (design §7)", () => {
+    // A full 6-widget layout, but prep-queue FIRST — a structural difference from LAYOUT_A (reordered),
+    // so it is AUTHORED, not the default.
+    const authoredReordered: LayoutDef = [
+      { type: "prep-queue", region: "aside", config: {} },
+      { type: "product-grid", region: "main", config: {} },
+      { type: "basket", region: "aside", config: {} },
+      { type: "total", region: "aside", config: {} },
+      { type: "tender-pay", region: "aside", config: {} },
+      { type: "held-orders", region: "aside", config: {} },
+    ];
+
+    const gridOf = (el: TillApp) =>
+      counter(el)!.shadowRoot!.querySelector<TillProductGrid>("till-product-grid")!;
+
+    it("renders an AUTHORED layout verbatim — under Mode P an authored prep-queue is NOT dropped", async () => {
+      // The two-branch proof (this is the AUTHORED half): under Mode P the default fallback would drop
+      // prep-queue, but an authored layout is rendered verbatim, so the owner's prep-queue survives.
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          orderFlow: "prepay",
+          layout: authoredReordered,
+          receipt: {},
+        }),
+      });
+      const c = await toCounter(el);
+      // the authored arrangement reached the counter verbatim (order preserved)
+      expect(c.layout).toEqual(authoredReordered);
+      // and under Mode P the authored prep-queue is present — the mode filter did NOT run
+      expect(prepQueueWidget(el)).not.toBeNull();
+    });
+
+    it("threads an authored product-grid `columns` config end to end to the grid widget", async () => {
+      // A full layout identical to the default EXCEPT product-grid carries `columns: 4` — a config
+      // difference makes it AUTHORED (rendered verbatim), and the value reaches the real grid widget.
+      const authoredColumns: LayoutDef = [
+        { type: "product-grid", region: "main", config: { columns: 4 } },
+        { type: "basket", region: "aside", config: {} },
+        { type: "total", region: "aside", config: {} },
+        { type: "tender-pay", region: "aside", config: {} },
+        { type: "held-orders", region: "aside", config: {} },
+        { type: "prep-queue", region: "aside", config: {} },
+      ];
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, layout: authoredColumns, receipt: {} }),
+      });
+      await toCounter(el);
+      expect(gridOf(el).columns).toBe(4);
+    });
+
+    it("a layout structurally EQUAL to the default keeps the Mode-P prep-queue drop (default detection)", async () => {
+      // The two-branch proof (this is the DEFAULT half): a VALUE-copy of LAYOUT_A (not the local
+      // reference — it arrives as fresh JSON) is detected as the default, so under Mode P the fallback
+      // still drops prep-queue exactly as slice 1 shipped. Making isDefaultLayout return a constant
+      // false breaks this (prep-queue would survive); returning constant true breaks the authored test.
+      const defaultCopy: LayoutDef = LAYOUT_A.map((w) => ({ ...w, config: { ...w.config } }));
+      const { el } = await mountApp({
+        getTill: vi
+          .fn()
+          .mockResolvedValue({ ...till, orderFlow: "prepay", layout: defaultCopy, receipt: {} }),
+      });
+      await toCounter(el);
+      expect(prepQueueWidget(el)).toBeNull();
+    });
+
+    it("falls back to #layoutFor() when GET /api/till OMITS `layout` (older server): Mode P drops prep-queue", async () => {
+      // The `till` fixture carries no `layout` — #boot leaves receivedLayout undefined, so #layoutFor()
+      // applies the Mode-P prep-queue drop, the slice-1 behaviour, unchanged.
+      const { el } = await mountApp();
+      await toCounter(el);
+      expect(prepQueueWidget(el)).toBeNull();
+    });
+
+    it("threads the receipt trim from getTill through to the ticket view", async () => {
+      const receipt = { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias por su visita" };
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, layout: LAYOUT_A, receipt }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      expect(ticket(el)!.receipt).toEqual(receipt);
+    });
+
+    it("defaults the ticket receipt to {} when GET /api/till omits it (older server)", async () => {
+      const { el } = await mountApp(); // the `till` fixture omits `receipt`
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      expect(ticket(el)!.receipt).toEqual({});
     });
   });
 

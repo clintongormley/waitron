@@ -33,6 +33,11 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listCatalogues: vi.fn().mockResolvedValue([]),
     listCategories: vi.fn().mockResolvedValue([]),
     listProducts: vi.fn().mockResolvedValue([]),
+    // The layout + receipt screens the nav mounts both load `getLayout` on connect; resolve it (and
+    // stub the two writers they call on Guardar) so navigating to either leaves no stray rejection.
+    getLayout: vi.fn().mockResolvedValue({ definition: [], receipt: {} }),
+    putLayout: vi.fn().mockResolvedValue(undefined),
+    putReceipt: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -46,12 +51,42 @@ async function flush(el: DashboardApp): Promise<void> {
 const login = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-login-screen");
 const staff = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-staff-screen");
 const catalogue = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-catalogue-screen");
+const layout = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-layout-screen");
+const receipt = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-receipt-screen");
 const logoutBtn = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]");
 const navStaff = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-staff]");
 const navCatalogue = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-catalogue]");
+const navLayout = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-layout]");
+const navReceipt = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-receipt]");
+
+/** The four logged-in screen tags — exactly one is mounted at a time. */
+const SCREEN_TAGS = [
+  "dashboard-staff-screen",
+  "dashboard-catalogue-screen",
+  "dashboard-layout-screen",
+  "dashboard-receipt-screen",
+] as const;
+
+/** The screen tags currently mounted in the shell (should always be exactly one when logged in). */
+function mountedScreens(el: DashboardApp): string[] {
+  return SCREEN_TAGS.filter((tag) => el.shadowRoot!.querySelector(tag));
+}
+
+/** Count every `<h1>` in the composed tree: the shell's own (there are none) plus the mounted
+ * screen's — the heading-outline invariant is exactly one across the whole DOM. */
+function countH1(el: DashboardApp): number {
+  const shellH1 = el.shadowRoot!.querySelectorAll("h1").length;
+  const screenH1 = SCREEN_TAGS.reduce((n, tag) => {
+    const screen = el.shadowRoot!.querySelector(tag);
+    return n + (screen?.shadowRoot?.querySelectorAll("h1").length ?? 0);
+  }, 0);
+  return shellH1 + screenH1;
+}
 
 /** Fires the login screen's composed, bubbling `logged-in` — the exact shape it emits on success. */
 function emitLoggedIn(source: Element): void {
@@ -169,6 +204,51 @@ describe("dashboard-app", () => {
     expect(catalogue(el)).toBeNull();
   });
 
+  // The logged-in shell now switches between FOUR screens (staff / catalogue / layout / receipt); the
+  // nav gained "Disposición" (layout) and "Recibo" (receipt) beside the existing two. Exactly one
+  // screen — and exactly one <h1> (each screen owns its own; the shell adds none) — shows at a time.
+  it("navigates between all four logged-in screens, one screen and one h1 at a time", async () => {
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+
+    // Opens on staff, with all four nav controls present.
+    expect(mountedScreens(el)).toEqual(["dashboard-staff-screen"]);
+    expect(countH1(el)).toBe(1);
+    expect(navStaff(el)).toBeTruthy();
+    expect(navCatalogue(el)).toBeTruthy();
+    expect(navLayout(el)).toBeTruthy();
+    expect(navReceipt(el)).toBeTruthy();
+
+    // To layout.
+    navLayout(el)!.click();
+    await flush(el);
+    expect(mountedScreens(el)).toEqual(["dashboard-layout-screen"]);
+    expect(layout(el)).toBeTruthy();
+    expect(countH1(el)).toBe(1);
+
+    // To receipt.
+    navReceipt(el)!.click();
+    await flush(el);
+    expect(mountedScreens(el)).toEqual(["dashboard-receipt-screen"]);
+    expect(receipt(el)).toBeTruthy();
+    expect(countH1(el)).toBe(1);
+
+    // To catalogue.
+    navCatalogue(el)!.click();
+    await flush(el);
+    expect(mountedScreens(el)).toEqual(["dashboard-catalogue-screen"]);
+    expect(catalogue(el)).toBeTruthy();
+    expect(countH1(el)).toBe(1);
+
+    // Back to staff.
+    navStaff(el)!.click();
+    await flush(el);
+    expect(mountedScreens(el)).toEqual(["dashboard-staff-screen"]);
+    expect(staff(el)).toBeTruthy();
+    expect(countH1(el)).toBe(1);
+  });
+
   it("does not show the nav on the login screen", async () => {
     const api = stubApi({
       listStaff: vi.fn().mockRejectedValue({ code: "management_session.required" }),
@@ -178,6 +258,8 @@ describe("dashboard-app", () => {
     expect(login(el)).toBeTruthy();
     expect(navStaff(el)).toBeNull();
     expect(navCatalogue(el)).toBeNull();
+    expect(navLayout(el)).toBeNull();
+    expect(navReceipt(el)).toBeNull();
   });
 
   // The nav is chrome, not a screen: logout works the same from the catalogue screen too.

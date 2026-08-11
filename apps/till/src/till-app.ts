@@ -21,7 +21,7 @@ import type {
   TillProduct,
   TillSaleResult,
 } from "./api/client.js";
-import type { LayoutDef } from "./layout.js";
+import type { LayoutDef, ReceiptConfig } from "./layout.js";
 import type { OrderLine } from "./state/working-order.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
@@ -46,6 +46,30 @@ type Screen = "lock" | "counter" | "ticket";
 function displayQuantity(product: TillProduct, quantity: string): string {
   if (product.pricingUnit !== "each" || !quantity.includes(".")) return quantity;
   return quantity.replace(/0+$/, "").replace(/\.$/, "");
+}
+
+/**
+ * Whether a received layout is the built-in default {@link LAYOUT_A}, compared by VALUE (serialised) —
+ * the layout arrives as fresh JSON from `GET /api/till`, never the local `LAYOUT_A` reference. Design
+ * §7: a DEFAULT (or absent) layout keeps slice 1's Mode-P prep-queue drop as the fallback
+ * (`#layoutFor`); an AUTHORED layout — ANY structural difference, a reordering or a
+ * per-widget config key — renders VERBATIM, the owner's choice (a prep-queue they placed under Mode P
+ * simply shows its empty state).
+ *
+ * The serialised compare is exact because the till's `LAYOUT_A` (`layout.ts:47-54`) and the server's
+ * `DEFAULT_LAYOUT` are the SAME literal in the same key order (`type`/`region`/`config`, empty bags) —
+ * a verbatim copy, verified in `packages/layouts/src/defaults.ts`. A false-negative would cost only the
+ * cosmetic Mode-P prep-queue drop, never a fiscal element. Both branches are proven by the
+ * `default-copy → prep-queue dropped` and `authored → prep-queue survives` tests (making this return a
+ * constant fails one or the other).
+ */
+// `LAYOUT_A` is a module constant, so its serialisation never changes — compute it once at module
+// load rather than on every `isDefaultLayout` call, which `#layoutFor()` runs on every reactive
+// re-render of the live counter. (Imports are initialised before this runs, so `LAYOUT_A` is bound.)
+const LAYOUT_A_JSON = JSON.stringify(LAYOUT_A);
+
+function isDefaultLayout(layout: LayoutDef): boolean {
+  return JSON.stringify(layout) === LAYOUT_A_JSON;
 }
 
 /**
@@ -165,6 +189,21 @@ export class TillApp extends LitElement {
    * even though both read the same server `locale` (see `#boot`). Defaults to the deli's es-ES.
    */
   @state() private invoiceLocale = "es-ES";
+  /**
+   * The owner-authored till layout as received from `GET /api/till` (layout & receipt editors), or
+   * `undefined` when the server omits it (an older server predating the editor). {@link layoutFor}
+   * renders an AUTHORED layout (present and structurally different from the built-in default) VERBATIM,
+   * and falls back to the Mode-P-filtered {@link LAYOUT_A} for a default or absent layout — see its own
+   * doc and {@link isDefaultLayout}.
+   */
+  @state() private receivedLayout?: LayoutDef;
+  /**
+   * The authored NON-FISCAL receipt trim (header subtitle + footer message), read from `GET /api/till`
+   * on boot and threaded to `till-ticket-view`. Defaults to `{}` (no trim) — the value an older server
+   * that omits the field, or a tenant that never opened the receipt editor, resolves to. It renders
+   * AROUND the immutable art. 7.1 core, never able to touch it (design §8).
+   */
+  @state() private receipt: ReceiptConfig = {};
   /** The string key of a non-fatal error to show over the counter, or `undefined` for none. */
   @state() private errorKey?: StringKey;
   /**
@@ -239,6 +278,11 @@ export class TillApp extends LitElement {
     this.orderFlow = till.orderFlow;
     this.cardProvider = till.cardProvider;
     this.tipsEnabled = till.tipsEnabled;
+    // The authored (or default) layout + receipt trim (layout & receipt editors). `layout` drives
+    // `#layoutFor()` (authored → verbatim, default/absent → the Mode-P fallback); `receipt` is threaded
+    // to the ticket. `?? {}` handles an older server that omits `receipt` (the field is typed present).
+    this.receivedLayout = till.layout;
+    this.receipt = till.receipt ?? {};
   }
 
   /** A confirmed login: load the catalogue, remember the operator, show the counter, list held orders
@@ -658,13 +702,21 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * The layout to render for {@link orderFlow}: `LAYOUT_A` minus the prep-queue widget under Mode P.
-   * Mode P has no automatic path into prep (see `#refreshPrepQueue`'s doc), so the widget would only
-   * ever show its empty state there; Modes I/T enqueue automatically at placing (design §5) and are the
-   * modes prep-queue exists for. `layout.ts` itself stays plain data (its own stated invariant) — this
-   * derivation lives here, in the composition root, not there.
+   * The layout the counter renders (design §7). An AUTHORED layout — one received from `GET /api/till`
+   * and structurally different from the built-in default (see {@link isDefaultLayout}) — renders
+   * VERBATIM: it is the owner's explicit choice, so no mode filter runs (a prep-queue they placed under
+   * Mode P simply shows its empty state).
+   *
+   * A DEFAULT or ABSENT layout keeps slice 1's fallback: `LAYOUT_A` minus the prep-queue widget under
+   * Mode P. Mode P has no automatic path into prep (see `#refreshPrepQueue`'s doc), so the widget would
+   * only ever show its empty state there; Modes I/T enqueue automatically at placing (design §5) and
+   * are the modes prep-queue exists for. `layout.ts` itself stays plain data (its own stated invariant)
+   * — this derivation lives here, in the composition root, not there.
    */
   #layoutFor(): LayoutDef {
+    if (this.receivedLayout !== undefined && !isDefaultLayout(this.receivedLayout)) {
+      return this.receivedLayout;
+    }
     return this.orderFlow === "prepay"
       ? LAYOUT_A.filter((widget) => widget.type !== "prep-queue")
       : LAYOUT_A;
@@ -717,6 +769,7 @@ export class TillApp extends LitElement {
           .result=${this.result}
           .issuer=${this.issuer}
           .invoiceLocale=${this.invoiceLocale}
+          .receipt=${this.receipt}
         ></till-ticket-view>`;
     }
   }

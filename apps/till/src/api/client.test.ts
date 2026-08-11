@@ -140,7 +140,23 @@ describe("TillApi", () => {
   });
 
   it("getTill GETs the boot info with no request body or content-type", async () => {
-    const info = { locale: "es-ES", venueName: "Deli", nif: "B12345678", orderFlow: "prepay" };
+    // The boot payload now also carries the authored-or-default `layout` (the widget arrangement) and
+    // `receipt` (the non-fiscal trim) — the client passes both through untouched, typed as `TillInfo`,
+    // so this literal is a compile-time proof the shape carries them and the `.toEqual` a runtime proof
+    // they round-trip.
+    const info = {
+      locale: "es-ES",
+      venueName: "Deli",
+      nif: "B12345678",
+      orderFlow: "prepay",
+      cardProvider: "none",
+      tipsEnabled: false,
+      layout: [
+        { type: "product-grid", region: "main", config: { columns: 4 } },
+        { type: "basket", region: "aside", config: {} },
+      ],
+      receipt: { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias por su visita" },
+    };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(info));
     const api = new TillApi("", fetchStub);
 
@@ -155,6 +171,12 @@ describe("TillApi", () => {
     expect(init.body).toBeUndefined();
     expect(init.headers).toBeUndefined();
     expect(r).toEqual(info);
+    // The layout + receipt survive the round-trip typed.
+    expect(r.layout[0]).toEqual({ type: "product-grid", region: "main", config: { columns: 4 } });
+    expect(r.receipt).toEqual({
+      headerSubtitle: "Calle Mayor 1",
+      footerMessage: "Gracias por su visita",
+    });
   });
 
   it("listStaff GETs the pre-login roster", async () => {
