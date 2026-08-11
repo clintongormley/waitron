@@ -95,6 +95,21 @@ interface OriginProgress {
  * and for the single ordered lane every row is independently idempotent and seq-ordered, so
  * source-transaction atomicity buys nothing here (spec §1 defers the fast lane and its atomic
  * groups). The mirror is a failover target that is eventually consistent, not read live mid-sync.
+ *
+ * **Known constraint for the transport/redelivery slice (not yet built), flagged by the 2026-08-11
+ * finish-branch review.** Per-row commit + the cursor held below a gap means a batch that throws a
+ * NON-`23503` error mid-way leaves the rows it already committed above the (un-advanced) cursor. When
+ * the transport layer later redelivers the below-cursor range at least once, those committed rows are
+ * re-applied — and an insert-only re-apply is a clean `ON CONFLICT DO NOTHING` no-op ONLY if no
+ * BEFORE trigger rejects it first. Several enrolled tables carry business-rule BEFORE triggers that
+ * fire on the apply path and are NOT gated on `app.sync_apply` (`tenders_reject_post_settlement`
+ * 0012_sale_settlement.sql:150, `working_orders_enforce_transition` 0004_working_orders.sql:96,
+ * `working_order_lines_require_open_parent` 0004:122), so re-applying e.g. a `tenders` row after its
+ * `sale_settlements` row has committed raises `WT002` and can wedge the stream. This slice ships only
+ * `applyBatch` (a single batch, no redelivery), so it cannot occur here — but the transport slice MUST
+ * resolve it: gate those business triggers on `app.sync_apply IS DISTINCT FROM 'on'` so the mirror
+ * applies a source's already-validated write verbatim (spec §3.3) rather than re-validating it, or
+ * make redelivery finer-grained than the whole below-cursor range.
  */
 export async function applyBatch(
   subscriberDb: Database,

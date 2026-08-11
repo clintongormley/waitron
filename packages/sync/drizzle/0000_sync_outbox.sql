@@ -64,10 +64,15 @@ GRANT INSERT ON sync_log TO app_user;
 
 -- sync_tailer — the dedicated reader (spec §7). NOLOGIN NOSUPERUSER, created idempotently and
 -- refusing to reuse a pre-existing LOGIN role, mirroring payments_webhook_resolver
--- (packages/payments/drizzle/0008_payments_webhook_resolver.sql:16-27): sync_tailer can SELECT
--- every tenant's row_image, so a login-capable one would let anyone who authenticates as it read
--- every tenant's captured business data unfiltered — the same cross-tenant risk. Roles are
--- cluster-global and the manifest runs against shared test containers, so this stays idempotent.
+-- (packages/payments/drizzle/0008_payments_webhook_resolver.sql:16-27). sync_tailer's SELECT is
+-- PER-TENANT — the sync_log_tenant_isolation policy below carries no TO clause, so under FORCE RLS it
+-- fences sync_tailer to current_tenant_id() as well (capture.gate.test.ts proves a sync_tailer member
+-- sees only its own tenant). The cross-tenant risk is not one unfiltered query but the GUC: app.tenant_id
+-- is unprivileged, so a LOGIN-capable sync_tailer could set it to any tenant in turn and read every
+-- tenant's captured row_image serially. That is why it stays NOLOGIN — reachable only through a
+-- controlled membership under a fixed tenant context — the same cross-tenant risk as
+-- payments_webhook_resolver. Roles are cluster-global and the manifest runs against shared test
+-- containers, so this stays idempotent.
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'sync_tailer') THEN
@@ -76,7 +81,7 @@ BEGIN
     SELECT 1 FROM pg_roles WHERE rolname = 'sync_tailer' AND rolcanlogin
   ) THEN
     RAISE EXCEPTION
-      'sync_tailer already exists with LOGIN — refusing to reuse it, since anyone who can authenticate as it would read every tenant''s captured row_image unfiltered';
+      'sync_tailer already exists with LOGIN — refusing to reuse it, since anyone who can authenticate as it could set app.tenant_id to any tenant in turn and read every tenant''s captured row_image';
   END IF;
 END
 $$;

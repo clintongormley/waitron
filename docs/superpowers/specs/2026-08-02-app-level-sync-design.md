@@ -53,6 +53,27 @@ to the real schema by `file:line`, per `CLAUDE.md` §1.
 > (§9/§12), the **active-active topology / promotion / failover** (§8, #33), and **config-flow-down**
 > of the reference tables (`tenants`/`locations`/`tills`/`nodes`/`invoice_series`). Slice 1 records
 > `origin_id` per row so the topology enrols later without a rewrite.
+>
+> **Two constraints the transport/redelivery slice MUST honour** (surfaced by Slice 1's finish-branch
+> review, 2026-08-11):
+> 1. **Business-rule BEFORE triggers fire on the apply path.** Several enrolled tables carry BEFORE
+>    triggers not gated on `app.sync_apply` (`tenders_reject_post_settlement`,
+>    `working_orders_enforce_transition`, `working_order_lines_require_open_parent`). Because
+>    `applyBatch` commits each row in its own transaction and holds the cursor below a gap, a batch that
+>    throws a non-`23503` error mid-way leaves committed rows above the un-advanced cursor; at-least-once
+>    redelivery then re-applies them, and re-inserting e.g. a `tenders` row after its `sale_settlements`
+>    row committed raises `WT002` — wedging the stream. Slice 1 ships only single-batch `applyBatch`
+>    (no redelivery), so it cannot occur yet. The clean fix: gate those business triggers on
+>    `app.sync_apply IS DISTINCT FROM 'on'` (the mirror applies a source's already-validated write
+>    verbatim, §3.3) or make redelivery finer-grained than the whole below-cursor range. See
+>    `packages/sync/src/apply.ts`'s per-row-transaction note.
+> 2. **The all-zero `origin_id` sentinel is shared across sources.** Slice 1 threads `app.node_id` only
+>    through the till write path (`apps/server/src/till-sale.ts`/`working-order.ts`); `payments`/
+>    `payment_refunds` (`@waitron/payments` `store.ts`/`reconcile.ts`) and the catalogue tables are
+>    written under the plain 3-arg `withTenant`, so they capture the all-zero origin. Harmless now
+>    (single node, global-seq apply absorbs the intra-source split), but before two nodes write
+>    concurrently the transport slice must either thread `nodeId` through those paths too or ensure a
+>    `(subscriber, all-zero)` cursor cannot conflate independent per-source sequences.
 
 ---
 
