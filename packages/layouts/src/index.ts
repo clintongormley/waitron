@@ -5,6 +5,7 @@ export { DEFAULT_LAYOUT, DEFAULT_RECEIPT } from "./defaults.js";
 export { WIDGET_CONFIG } from "./widget-config.js";
 export type { ConfigValidator, WidgetConfigSchema } from "./widget-config.js";
 export { MAX_RECEIPT_FIELD_LENGTH, validateLayout, validateReceiptConfig } from "./validate.js";
+export { getLayout, putLayout, putReceipt } from "./store.js";
 
 // Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable from
 // this package's own public barrel, per the reachability rule in packages/shared/src/errors.ts (and
