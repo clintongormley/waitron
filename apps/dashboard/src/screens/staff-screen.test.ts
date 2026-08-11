@@ -474,9 +474,13 @@ describe("staff-screen — row edit", () => {
     );
     await flush(el);
 
-    // Passed down and rendered inside the edit dialog's shadow.
+    // Passed down (the raw code stays in the dialog's `error` state) and rendered inside the edit
+    // dialog's shadow as LOCALISED copy, never the raw wire code.
     expect(editForm(el).error).toBe("authorization.not_permitted");
     expect(editForm(el).shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+      codeMessage("authorization.not_permitted", "es-ES"),
+    );
+    expect(editForm(el).shadowRoot!.querySelector("[role=alert]")?.textContent).not.toContain(
       "authorization.not_permitted",
     );
     // The screen's own page-level banner is suppressed while the edit dialog is open.

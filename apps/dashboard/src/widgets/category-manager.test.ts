@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { t } from "../i18n/t.js";
 import type { CategorySummary } from "../api/client.js";
 import { CategoryManager } from "./category-manager.js";
 
@@ -25,6 +26,18 @@ describe("category-manager", () => {
     expect(rows.length).toBe(2);
     expect(rows[0]!.textContent).toContain("Entrantes");
     expect(rows[1]!.textContent).toContain("Postres");
+  });
+
+  // The create field's label and the create button render through the i18n layer (localised UI
+  // chrome). Category NAMES stay raw operator DATA (covered by the row tests above), not translated.
+  it("renders the create field label and button from the i18n layer", async () => {
+    const { el } = await mountWidget<CategoryManager>("dashboard-category-manager", { categories });
+    expect(el.shadowRoot!.querySelector("[data-test=category-name]")!.getAttribute("label")).toBe(
+      t("category.new", "es-ES"),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=create]")!.textContent).toContain(
+      t("action.create", "es-ES"),
+    );
   });
 
   it("renders no category rows for an empty list", async () => {

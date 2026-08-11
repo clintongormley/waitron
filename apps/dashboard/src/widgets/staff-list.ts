@@ -3,6 +3,8 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
+import { t } from "../i18n/t.js";
+import { roleName, statusName } from "../i18n/domain.js";
 import type { PersonSummary } from "../api/client.js";
 
 /**
@@ -17,11 +19,11 @@ import type { PersonSummary } from "../api/client.js";
  * flow in a later slice (an unheard seam today — the screen wires no `@edit-person` yet). The widget
  * names no sibling and reaches for no store — the same shape as the till's `till-held-orders` view.
  *
- * Role and status render as their raw domain tokens (`manager`, `suspended`, …); a later i18n task
- * maps them to Spanish copy, exactly as the login screen defers its error keys. The credential badges
- * convey state by TEXT, never by colour alone (a11y): a badge is present only when the credential is
- * held, and it is labelled ("Contraseña", "TOTP"), so a screen-reader user and a colour-blind user
- * both get the same information a sighted one does.
+ * Role and status render through the i18n layer as localised display names (`roleName`/`statusName`
+ * translate the raw `manager`/`suspended` tokens at the render edge). The credential badges convey
+ * state by TEXT, never by colour alone (a11y): a badge is present only when the credential is held,
+ * and it is labelled (`t("staff.badge_password")`, `t("staff.badge_totp")`), so a screen-reader user
+ * and a colour-blind user both get the same information a sighted one does.
  */
 @customElement("dashboard-staff-list")
 export class StaffList extends LitElement {
@@ -117,21 +119,25 @@ export class StaffList extends LitElement {
                 <div class="details">
                   <span class="name">${person.displayName}</span>
                   <span class="meta">
-                    <span class="role">${person.role}</span>
-                    <span class="status">${person.status}</span>
+                    <span class="role">${roleName(person.role)}</span>
+                    <span class="status">${statusName(person.status)}</span>
                   </span>
                   <span class="badges">
-                    ${person.hasPassword ? html`<span class="badge">Contraseña</span>` : nothing}
-                    ${person.hasTotp ? html`<span class="badge">TOTP</span>` : nothing}
+                    ${
+                      person.hasPassword
+                        ? html`<span class="badge">${t("staff.badge_password")}</span>`
+                        : nothing
+                    }
+                    ${person.hasTotp ? html`<span class="badge">${t("staff.badge_totp")}</span>` : nothing}
                   </span>
                 </div>
                 <wt-button
                   variant="ghost"
                   data-test="edit-${person.personId}"
-                  aria-label=${`Editar ${person.displayName}`}
+                  aria-label=${`${t("action.edit")} ${person.displayName}`}
                   @click=${(event: Event) => this.#edit(event, person.personId)}
                 >
-                  Editar
+                  ${t("action.edit")}
                 </wt-button>
               </div>
             </wt-card>

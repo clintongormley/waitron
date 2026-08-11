@@ -4,6 +4,8 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
+import { t } from "../i18n/t.js";
+import { roleName } from "../i18n/domain.js";
 import type { PersonRole } from "../api/client.js";
 import { selectStyles } from "../select-styles.js";
 
@@ -31,8 +33,9 @@ const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"]
  * leave the parent's `formOpen` stuck `true`, and the next open would be a no-op the operator sees
  * as a dialog that will not reopen.
  *
- * Roles render as their raw domain tokens (`staff`, `supervisor`, …); a later i18n task maps them to
- * Spanish copy, exactly as the login screen defers its error keys and the staff list its role/status.
+ * Each role option's visible TEXT renders through the i18n layer as its localised name (`roleName`),
+ * while its `<option value>` stays the raw domain token (`staff`, `supervisor`, …) — that wire value
+ * is what the emitted `create-person` detail's `role` reads back.
  */
 @customElement("dashboard-person-form")
 export class PersonForm extends LitElement {
@@ -121,24 +124,24 @@ export class PersonForm extends LitElement {
 
   override render() {
     return html`
-      <wt-dialog heading="Nuevo usuario" .open=${this.open} @wt-close=${() => this.#onClose()}>
+      <wt-dialog heading=${t("person.new")} .open=${this.open} @wt-close=${() => this.#onClose()}>
         <wt-input
           class="field"
           data-test="display-name"
-          label="Nombre"
+          label=${t("person.name")}
           .value=${this.displayName}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDisplayNameChange(e)}
         ></wt-input>
         <label class="field"
-          >Rol
+          >${t("person.role")}
           <select .value=${this.selectedRole} @change=${(e: Event) => this.#onRoleChange(e)}>
-            ${ROLES.map((role) => html`<option value=${role}>${role}</option>`)}
+            ${ROLES.map((role) => html`<option value=${role}>${roleName(role)}</option>`)}
           </select>
         </label>
         <wt-input
           class="field"
           data-test="pin"
-          label="PIN"
+          label=${t("person.pin")}
           .value=${this.pin}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPinChange(e)}
         ></wt-input>
@@ -147,7 +150,7 @@ export class PersonForm extends LitElement {
           variant="primary"
           data-test="confirm"
           @click=${(e: Event) => this.#confirm(e)}
-          >Crear</wt-button
+          >${t("action.create")}</wt-button
         >
       </wt-dialog>
     `;

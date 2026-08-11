@@ -6,6 +6,9 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
+import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
+import { roleName, statusName } from "../i18n/domain.js";
 import type { PersonRole, PersonSummary } from "../api/client.js";
 import { selectStyles } from "../select-styles.js";
 
@@ -46,8 +49,10 @@ const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"]
  * rules (`pin.too_short` / `password.too_short`) are NOT duplicated here: a short value is refused by
  * the server and surfaces as that code — inside this dialog when it is open (see the `error` property).
  *
- * Roles and status render as their raw domain tokens; a later i18n task maps them to Spanish copy,
- * exactly as the login screen defers its error keys and the staff list its role/status.
+ * Roles and status render through the i18n layer as localised display names (`roleName`/`statusName`
+ * at the render edge); each role option's `<option value>` stays the raw domain token, since the
+ * picker is reconciled to `selectedRole` (a raw token) by value. The in-dialog error banner maps its
+ * raw code through `codeMessage`, so an operator never sees the wire code.
  */
 @customElement("dashboard-person-edit")
 export class PersonEdit extends LitElement {
@@ -95,11 +100,12 @@ export class PersonEdit extends LitElement {
   @property({ type: Boolean, reflect: true }) open = false;
 
   /**
-   * An error to show INSIDE the open dialog (a raw code, e.g. `authorization.not_permitted` or
-   * `pin.too_short` — a later i18n task maps it to copy). The screen passes the edit action's failure
-   * here so it renders in the modal's own top layer; the screen's page-level banner sits BEHIND the
-   * modal backdrop, where a sighted operator could not see it — the create dialog's known limitation,
-   * not repeated for edit.
+   * An error to show INSIDE the open dialog. The screen passes the edit action's failure here as a
+   * RAW code (e.g. `authorization.not_permitted` or `pin.too_short`), which `codeMessage` maps to
+   * localised copy at the render edge — the code stays raw in this property, never shown verbatim. It
+   * renders in the modal's own top layer; the screen's page-level banner sits BEHIND the modal
+   * backdrop, where a sighted operator could not see it — the create dialog's known limitation, not
+   * repeated for edit.
    */
   @property() error: string | null = null;
 
@@ -187,35 +193,41 @@ export class PersonEdit extends LitElement {
     const person = this.person;
     return html`
       <wt-dialog
-        heading=${person ? `Editar ${person.displayName}` : "Editar usuario"}
+        heading=${person ? `${t("action.edit")} ${person.displayName}` : t("person.edit")}
         .open=${this.open}
         @wt-close=${() => this.#onClose()}
       >
         ${
           person
             ? html`
-                ${this.error ? html`<p class="edit-error" role="alert">${this.error}</p>` : nothing}
+                ${
+                  this.error
+                    ? html`<p class="edit-error" role="alert">${codeMessage(this.error)}</p>`
+                    : nothing
+                }
                 <div class="action">
                   <label class="field grow"
-                    >Rol
+                    >${t("person.role")}
                     <select
                       data-test="edit-role"
                       ${ref(this.#roleSelect)}
                       @change=${(e: Event) => this.#onRoleChange(e)}
                     >
-                      ${ROLES.map((role) => html`<option value=${role}>${role}</option>`)}
+                      ${ROLES.map((role) => html`<option value=${role}>${roleName(role)}</option>`)}
                     </select>
                   </label>
                   <wt-button
                     variant="secondary"
                     data-test="save-role"
                     @click=${(e: Event) => this.#emit("update-role", { role: this.selectedRole }, e)}
-                    >Guardar rol</wt-button
+                    >${t("person.save_role")}</wt-button
                   >
                 </div>
 
                 <div class="status-row">
-                  <span class="status-label">Estado: ${person.status}</span>
+                  <span class="status-label"
+                    >${t("person.status_label")}: ${statusName(person.status)}</span
+                  >
                   <wt-button
                     variant="secondary"
                     data-test="toggle-status"
@@ -225,7 +237,9 @@ export class PersonEdit extends LitElement {
                         { status: person.status === "active" ? "suspended" : "active" },
                         e,
                       )}
-                    >${person.status === "active" ? "Suspender" : "Reactivar"}</wt-button
+                    >${
+                      person.status === "active" ? t("person.suspend") : t("person.reactivate")
+                    }</wt-button
                   >
                 </div>
 
@@ -233,7 +247,7 @@ export class PersonEdit extends LitElement {
                   <wt-input
                     class="field grow"
                     data-test="edit-pin"
-                    label="PIN"
+                    label=${t("person.pin")}
                     type="password"
                     .value=${this.pin}
                     @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPinChange(e)}
@@ -242,7 +256,7 @@ export class PersonEdit extends LitElement {
                     variant="secondary"
                     data-test="save-pin"
                     @click=${(e: Event) => this.#emit("reset-pin", { pin: this.pin }, e)}
-                    >Restablecer PIN</wt-button
+                    >${t("person.reset_pin")}</wt-button
                   >
                 </div>
 
@@ -250,7 +264,7 @@ export class PersonEdit extends LitElement {
                   <wt-input
                     class="field grow"
                     data-test="edit-password"
-                    label="Contraseña"
+                    label=${t("person.password")}
                     type="password"
                     .value=${this.password}
                     @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPasswordChange(e)}
@@ -259,7 +273,7 @@ export class PersonEdit extends LitElement {
                     variant="secondary"
                     data-test="save-password"
                     @click=${(e: Event) => this.#emit("set-password", { password: this.password }, e)}
-                    >Establecer contraseña</wt-button
+                    >${t("person.set_password")}</wt-button
                   >
                 </div>
               `
