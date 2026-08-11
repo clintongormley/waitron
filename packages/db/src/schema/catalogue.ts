@@ -66,6 +66,12 @@ export const products = pgTable(
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
     vatClass: text("vat_class").notNull(),
     active: boolean("active").notNull().default(true),
+    // A path REFERENCE to the product photo (a content-addressed `<sha256>.<ext>` filename served by
+    // apps/server's /media route), never bytes. Nullable: a product legitimately has no photo, and
+    // null here just means "no picture" — unlike `allergens`' null, which is a load-bearing PENDING
+    // state. The table-level GRANT + tenant-isolation policy (0027) cover it with no change — proven
+    // in catalogue.rls.test.ts (design §5a).
+    image: text("image"),
     // Allergen declaration (EU 1169/2011 Annex II). NULL = not yet reviewed (a compliance gap the
     // till surfaces distinctly); {} = reviewed, contains none of the 14; else per-code presence +
     // optional specific-substance source. Structural type only — the exact AllergenCode-keyed type
