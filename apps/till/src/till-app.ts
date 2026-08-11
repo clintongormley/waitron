@@ -63,8 +63,13 @@ function displayQuantity(product: TillProduct, quantity: string): string {
  * `default-copy → prep-queue dropped` and `authored → prep-queue survives` tests (making this return a
  * constant fails one or the other).
  */
+// `LAYOUT_A` is a module constant, so its serialisation never changes — compute it once at module
+// load rather than on every `isDefaultLayout` call, which `#layoutFor()` runs on every reactive
+// re-render of the live counter. (Imports are initialised before this runs, so `LAYOUT_A` is bound.)
+const LAYOUT_A_JSON = JSON.stringify(LAYOUT_A);
+
 function isDefaultLayout(layout: LayoutDef): boolean {
-  return JSON.stringify(layout) === JSON.stringify(LAYOUT_A);
+  return JSON.stringify(layout) === LAYOUT_A_JSON;
 }
 
 /**
