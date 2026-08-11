@@ -2,20 +2,25 @@ import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-// Side-effect imports register the two screen elements this shell swaps between; it names them only
-// as tags below, so the wiring — not the screens — is what lives here.
+// Side-effect imports register the screen elements this shell swaps between; it names them only as
+// tags below, so the wiring — not the screens — is what lives here.
 import "./screens/login-screen.js";
 import "./screens/staff-screen.js";
+import "./screens/catalogue-screen.js";
 import type { DashboardApi } from "./api/client.js";
 
-/** The two faces of the management dashboard: sign in, or manage staff. Exactly one shows at a time. */
-type Screen = "login" | "staff";
+/**
+ * The faces of the management dashboard: sign in, manage staff, or author the catalogue. Exactly one
+ * shows at a time. `staff` and `catalogue` are the two LOGGED-IN faces the nav switches between; both
+ * carry the same chrome (nav + logout).
+ */
+type Screen = "login" | "staff" | "catalogue";
 
 /**
- * The management dashboard's ROOT element — the shell that turns the two screens into a working app.
+ * The management dashboard's ROOT element — the shell that turns the screens into a working app.
  *
- * It owns one thing the whole flow shares: the injected {@link DashboardApi}. It runs a two-state
- * screen machine and does the event wiring the screens deliberately do not:
+ * It owns one thing the whole flow shares: the injected {@link DashboardApi}. It runs a screen
+ * machine (`login` | `staff` | `catalogue`) and does the event wiring the screens deliberately do not:
  *
  *  - boot → a SESSION PROBE ({@link DashboardApp.#probeSession}) calls `api.listStaff()`; a success
  *    means a live management session, so the app opens on `staff`; ANY rejection (the common
@@ -24,16 +29,19 @@ type Screen = "login" | "staff";
  *    `apps/till` `#boot` defect (`docs/backlog.md`), so this shell mirrors the login/staff screens'
  *    own `try/catch`ed loaders instead;
  *  - `logged-in` (from the login screen, on a successful `api.login`) → show `staff`;
- *  - `logout` (the shell's own control, staff-only) → end the server session, back to `login`.
+ *  - the NAV (the shell's own control, shown only when logged in) switches between the two logged-in
+ *    faces `staff` and `catalogue` — a plain local state change, no server call;
+ *  - `logout` (the shell's own control, logged-in only) → end the server session, back to `login`.
  *
  * The default screen is `login`: before the probe resolves the shell shows the sign-in screen, and
  * only a successful probe switches it to `staff` — so a not-logged-in cold load never flashes the
  * staff screen it is not entitled to.
  *
  * HEADING OUTLINE. Each screen owns its OWN top heading — `dashboard-staff-screen` renders the sole
- * `<h1>Usuarios</h1>`, and `dashboard-login-screen` renders none — so the shell adds no competing
- * `<h1>`: its staff-screen chrome (the logout button) sits in a plain `<header>` with no heading,
- * keeping exactly one `<h1>` in the DOM at a time.
+ * `<h1>Usuarios</h1>`, `dashboard-catalogue-screen` the sole `<h1>Carta</h1>`, and
+ * `dashboard-login-screen` none — so the shell adds no competing `<h1>`: its logged-in chrome (the
+ * nav + logout button) sits in a plain `<header>` with no heading, keeping exactly one `<h1>` in the
+ * DOM at a time.
  */
 @customElement("dashboard-app")
 export class DashboardApp extends LitElement {
@@ -46,9 +54,17 @@ export class DashboardApp extends LitElement {
 
       .chrome {
         display: flex;
-        justify-content: flex-end;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-3);
         padding: var(--wt-space-3);
         border-bottom: 1px solid var(--wt-color-border);
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
       }
 
       .body {
@@ -114,23 +130,42 @@ export class DashboardApp extends LitElement {
   }
 
   override render(): TemplateResult {
-    return this.screen === "login"
-      ? html`<div class="body">
-          <dashboard-login-screen
-            .api=${this.api}
-            @logged-in=${(event: Event) => this.#onLoggedIn(event)}
-          ></dashboard-login-screen>
-        </div>`
-      : html`
-          <header class="chrome">
-            <wt-button variant="secondary" data-test="logout" @click=${() => void this.#onLogout()}
-              >Cerrar sesión</wt-button
-            >
-          </header>
-          <div class="body">
-            <dashboard-staff-screen .api=${this.api}></dashboard-staff-screen>
-          </div>
-        `;
+    if (this.screen === "login") {
+      return html`<div class="body">
+        <dashboard-login-screen
+          .api=${this.api}
+          @logged-in=${(event: Event) => this.#onLoggedIn(event)}
+        ></dashboard-login-screen>
+      </div>`;
+    }
+    return html`
+      <header class="chrome">
+        <nav class="nav" aria-label="Secciones">
+          <wt-button
+            variant=${this.screen === "staff" ? "primary" : "secondary"}
+            data-test="nav-staff"
+            @click=${() => (this.screen = "staff")}
+            >Usuarios</wt-button
+          >
+          <wt-button
+            variant=${this.screen === "catalogue" ? "primary" : "secondary"}
+            data-test="nav-catalogue"
+            @click=${() => (this.screen = "catalogue")}
+            >Carta</wt-button
+          >
+        </nav>
+        <wt-button variant="secondary" data-test="logout" @click=${() => void this.#onLogout()}
+          >Cerrar sesión</wt-button
+        >
+      </header>
+      <div class="body">
+        ${
+          this.screen === "catalogue"
+            ? html`<dashboard-catalogue-screen .api=${this.api}></dashboard-catalogue-screen>`
+            : html`<dashboard-staff-screen .api=${this.api}></dashboard-staff-screen>`
+        }
+      </div>
+    `;
   }
 }
 
