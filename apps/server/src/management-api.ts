@@ -1,13 +1,15 @@
-// Side-effect only: keeps this host's `server.internal` code (and the rest of errors.ts) reachable
-// from the file that answers with it — the reachability convention till-api.ts and
-// management-session.ts follow. `@waitron/identity`'s own error-code augmentations
+// Side-effect only: loads errors.ts's augmentation for the host code this file THROWS
+// (`management.request_invalid`) under the "every file that throws one of these imports ./errors.js"
+// convention errors.ts states. The shared `error-boundary.ts` these routes wrap through is what
+// answers with `server.internal` now, emitting it as a bare literal, so it needs no such import of
+// its own. `@waitron/identity`'s own error-code augmentations
 // (`password.invalid`, `person.*`, `totp.invalid`, `management_session.*`, `authorization.*`, …)
 // load transitively via the value imports from that package below, so no bare
 // `import "@waitron/identity"` is needed on top of them.
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { asAppUser, withTenant, type Database } from "@waitron/db";
 import {
   beginPasskeyAuthentication,
@@ -26,7 +28,7 @@ import {
   suspendPerson,
   type PersonRoleValue,
 } from "@waitron/identity";
-import { codeOf } from "./error-code.js";
+import { createErrorBoundary } from "./error-boundary.js";
 import {
   clearManagementCookie,
   readManagementSessionId,
@@ -117,32 +119,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "shared.invalid_id": 400,
 };
 
-/**
- * The one error boundary every management route wraps its handler in — the local counterpart of
- * till-api.ts's exported `run`, identical in shape but keyed on the management `STATUS` map and
- * logging server faults under `management.failed`.
- *
- * An `AppError` becomes a structured `{ error: { code, params } }` at its mapped status (or 400 when
- * unmapped), logged at `warn`: every code the API surfaces is a client 4xx by construction (see
- * `STATUS`), so there is no `error`-level AppError to distinguish. Anything else IS a server fault:
- * logged at `error` under `management.failed` with only `codeOf`'s classification (never the caught
- * value's `.message`, which a driver can load with a connection string), and answered with an opaque
- * `server.internal` 500 that leaks nothing. Local, not exported: Task 4's gated routes live in this
- * same file and reach it directly.
- */
-async function run(c: Context, log: Logger, fn: () => Promise<Response>): Promise<Response> {
-  try {
-    return await fn();
-  } catch (cause) {
-    if (isAppError(cause)) {
-      const status = STATUS[cause.code] ?? 400;
-      log("warn", cause.code, cause.params);
-      return c.json({ error: { code: cause.code, params: cause.params } }, status);
-    }
-    log("error", "management.failed", { errorCode: codeOf(cause) });
-    return c.json({ error: { code: "server.internal" } }, 500);
-  }
-}
+// The one error boundary every management route wraps its handler in — the shared
+// `createErrorBoundary` (see `error-boundary.ts` for its full behaviour) closed over this surface's
+// `STATUS` map and its `management.failed` log tag, the management counterpart of till-api.ts's
+// exported `run`. Local, not exported: Task 4's gated routes live in this same file and reach it
+// directly.
+const run = createErrorBoundary(STATUS, "management.failed");
 
 /**
  * Screen a `/management-api/staff/:id` path param as a UUID before it reaches a query, returning it. A

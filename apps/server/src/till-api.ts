@@ -1,14 +1,14 @@
-import type { Context, Hono } from "hono";
+import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { eq } from "drizzle-orm";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { asAppUser, tenants, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { endSession, listActiveStaff, loginWithPin } from "@waitron/identity";
 import { listAvailableProducts } from "@waitron/catalogue";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
-import { codeOf } from "./error-code.js";
+import { createErrorBoundary } from "./error-boundary.js";
 import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
 import { collectOrder, payWorkingOrderIntegrated, recordTillSale } from "./till-sale.js";
@@ -33,8 +33,11 @@ import {
   requireSession,
   setSessionCookie,
 } from "./till-session.js";
-// Side-effect only: keeps this host's `server.internal` / `session.required` codes reachable from
-// the file that answers with them — the reachability convention `webhook.ts` follows. See errors.ts.
+// Side-effect only: loads errors.ts's augmentation for the host codes this file THROWS — the
+// `working_order.*` / `order_prep.*` it constructs via `requireUuidId` — under the "every file that
+// throws one of these imports ./errors.js" convention errors.ts states. The shared
+// `error-boundary.ts` these routes wrap through is what answers with `server.internal` now, and it
+// emits that as a bare literal, so it needs no such import of its own. See errors.ts.
 import "./errors.js";
 
 /**
@@ -96,30 +99,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "order_prep.invalid_transition": 409,
 };
 
-/**
- * The one error boundary every till route wraps its handler in — exported so Tasks 5/6's routes wrap
- * theirs in this EXACT mapping rather than each inventing one.
- *
- * An `AppError` becomes a structured `{ error: { code, params } }` at its mapped status (or 400 when
- * unmapped), logged at `warn`: every code the API surfaces is a client 4xx by construction (see
- * `STATUS`), so there is no `error`-level AppError to distinguish — a 5xx-worthy fault is never an
- * AppError on this surface. Anything else IS that server fault: logged at `error` under `till.failed`
- * with only `codeOf`'s classification (never the caught value's `.message`, which a driver can load
- * with a connection string), and answered with an opaque `server.internal` 500 that leaks nothing.
- */
-export async function run(c: Context, log: Logger, fn: () => Promise<Response>): Promise<Response> {
-  try {
-    return await fn();
-  } catch (cause) {
-    if (isAppError(cause)) {
-      const status = STATUS[cause.code] ?? 400;
-      log("warn", cause.code, cause.params);
-      return c.json({ error: { code: cause.code, params: cause.params } }, status);
-    }
-    log("error", "till.failed", { errorCode: codeOf(cause) });
-    return c.json({ error: { code: "server.internal" } }, 500);
-  }
-}
+// The one error boundary every till route wraps its handler in — the shared `createErrorBoundary`
+// (see `error-boundary.ts` for its full behaviour) closed over this surface's `STATUS` map and its
+// `till.failed` log tag. Exported so Tasks 5/6's routes wrap theirs in this EXACT mapping rather than
+// each inventing one.
+export const run = createErrorBoundary(STATUS, "till.failed");
 
 /**
  * Screen a path `:id` param as a UUID before it reaches a query, returning it for the caller. A
