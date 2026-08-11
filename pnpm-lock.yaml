@@ -544,6 +544,9 @@ importers:
       '@waitron/scheduler':
         specifier: workspace:*
         version: link:../scheduler
+      '@waitron/sync':
+        specifier: workspace:*
+        version: link:../sync
       '@waitron/workforce':
         specifier: workspace:*
         version: link:../workforce

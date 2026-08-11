@@ -30,6 +30,7 @@
     "@waitron/identity": "workspace:*",
     "@waitron/payments": "workspace:*",
     "@waitron/scheduler": "workspace:*",
+    "@waitron/sync": "workspace:*",
     "@waitron/workforce": "workspace:*",
     "@waitron/workforce-es": "workspace:*",
     "drizzle-orm": "^0.45.2",

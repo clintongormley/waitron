@@ -18,10 +18,12 @@ describe("the sync error codes reach the public barrel", () => {
   });
 
   it("loads the public barrel, so errors.ts's side-effect import runs", () => {
-    // Unlike the credentials clone, @waitron/sync's Task 1 barrel re-exports nothing at runtime yet
-    // (later tasks add the registry/apply surface), so this asserts the barrel MODULE loaded rather
-    // than that it re-exports a value: importing ./index.js runs `import "./errors.js"`, and if that
-    // threw this file would fail to load at all.
+    // Importing ./index.js runs `import "./errors.js"`, and if that threw this file would fail to
+    // load at all. Task 2 added the first runtime re-export to the barrel (SYNC_MIGRATIONS, the
+    // outbox migration descriptor the manifest consumes); asserting it is present confirms the
+    // barrel module loaded AND that the re-export resolves (later tasks add the registry/apply
+    // surface).
     expect(barrel).toBeTypeOf("object");
+    expect(barrel.SYNC_MIGRATIONS.migrationsTable).toBe("__drizzle_migrations_sync");
   });
 });

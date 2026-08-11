@@ -10,6 +10,7 @@ import { FISCAL_MIGRATIONS } from "@waitron/fiscal-verifactu";
 import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { SCHEDULER_MIGRATIONS } from "@waitron/scheduler";
 import { CREDENTIALS_MIGRATIONS } from "@waitron/credentials";
+import { SYNC_MIGRATIONS } from "@waitron/sync";
 import { isAppError } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "./manifest.js";
 
@@ -30,6 +31,7 @@ describe("the migration manifest", () => {
       payments: PAYMENTS_MIGRATIONS.migrationsTable,
       scheduler: SCHEDULER_MIGRATIONS.migrationsTable,
       credentials: CREDENTIALS_MIGRATIONS.migrationsTable,
+      sync: SYNC_MIGRATIONS.migrationsTable,
     });
   });
 
