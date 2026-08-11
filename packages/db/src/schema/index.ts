@@ -10,6 +10,7 @@ export * from "./orders.js";
 export * from "./order-amendments.js";
 export * from "./order-prep.js";
 export * from "./catalogue.js";
+export * from "./layouts.js";
 export * from "./working-order-counters.js";
 export * from "./sales.js";
 export * from "./sale-voids.js";
