@@ -35,8 +35,11 @@ export interface SubscriberLag {
   originId: string;
   /** `origin max(seq) − last_applied_seq`: how many of this origin's captured rows the subscriber has
    * not yet applied. A threshold over this is the `sync.stream_stalled` signal (design §9); whether
-   * to alarm or evict is §12 ops-policy, out of scope here — this only reports the number. */
-  lag: number;
+   * to alarm or evict is §12 ops-policy, out of scope here — this only reports the number. `bigint`,
+   * not `number`: a far-behind subscriber can push this past 2^53−1, and narrowing to a JS `number`
+   * there loses precision — so it stays a `bigint` (matching `PruneResult.highWater`) until a
+   * threshold/UI edge narrows it under a safe bound. */
+  lag: bigint;
   /** The `sync_cursor.alive` flag. Metadata for alarm reporting only — it is NOT a filter on the
    * prune. A down-but-present subscriber (`alive=false`) still HOLDS the log at its cursor; the min
    * pruneSyncLog takes is across ALL rows, alive or not (findings GATE 7 — filtering the min to alive
@@ -114,9 +117,11 @@ export async function lagFor(db: Database): Promise<SubscriberLag[]> {
   return result.rows.map((row) => ({
     subscriberId: row.subscriber_id,
     originId: row.origin_id,
-    // The lag is a small count of unapplied rows; read as text and Number()'d rather than trusting a
-    // bigint column to survive as a JS number, consistent with the rest of the package.
-    lag: Number(row.lag),
+    // Read as text and kept as a `bigint` (matching `PruneResult.highWater`) — never narrowed to a
+    // JS `number` here: `origin max(seq) − last_applied_seq` can exceed 2^53−1 for a subscriber
+    // astronomically far behind, and `Number()` would silently lose precision at that point. The SQL
+    // ORDER BY sorts on the bigint expression, so worst-first ordering is unaffected.
+    lag: BigInt(row.lag),
     alive: row.alive,
   }));
 }

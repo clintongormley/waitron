@@ -134,8 +134,8 @@ describe("bounded sync_log retention under a down subscriber (gate 7)", () => {
       const lags = await lagFor(pruner);
       const cloud = lags.find((l) => l.subscriberId === "cloud")!;
       const peer = lags.find((l) => l.subscriberId === "peerB")!;
-      expect(cloud).toMatchObject({ originId: ORIGIN, lag: 6, alive: false });
-      expect(peer).toMatchObject({ originId: ORIGIN, lag: 0, alive: true });
+      expect(cloud).toMatchObject({ originId: ORIGIN, lag: 6n, alive: false });
+      expect(peer).toMatchObject({ originId: ORIGIN, lag: 0n, alive: true });
 
       // --- The correct prune, run as the non-superuser sync_retention member. ---
       const aBefore = await tenantRows(a);

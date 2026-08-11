@@ -115,8 +115,13 @@ GRANT SELECT, INSERT, UPDATE ON sync_cursor TO sync_tailer;
 -- on TG_OP because NEW is NULL on a DELETE — a delete captures to_jsonb(OLD)/OLD.tenant_id, an
 -- insert/update captures to_jsonb(NEW)/NEW.tenant_id. origin_id is the producing node's app.node_id
 -- GUC, defaulting to the all-zero uuid when unset (matching the gate function, findings §Setup);
--- to_jsonb keeps text/numeric columns as JSON strings so a mirrored row restores byte-identically
--- (findings GATE 1). `lower(tg_op)` yields the check constraint's lowercase op, and `RETURN NULL`
+-- to_jsonb maps each column to its natural JSON type — a text column to a JSON string, a numeric
+-- column to a JSON *number* preserving its scale (e.g. 1.50) — and apply.ts restores the row with
+-- jsonb_populate_record (apply-sql.ts), which casts each JSON value back to its column type, so a
+-- mirrored row restores byte-identically (findings GATE 1; verified on postgres:18-alpine:
+-- jsonb_typeof(to_jsonb(numeric))='number', of text='string', and the jsonb_populate_record
+-- round-trip preserves 1.50::numeric byte-for-byte). `lower(tg_op)` yields the check constraint's
+-- lowercase op, and `RETURN NULL`
 -- because an AFTER trigger's return value is ignored.
 CREATE FUNCTION sync_capture() RETURNS trigger LANGUAGE plpgsql AS $fn$
 DECLARE
