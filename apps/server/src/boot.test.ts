@@ -393,6 +393,15 @@ describe("startServer, against a real container as the deployment role", () => {
       const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
       expect(staff.status).toBe(200);
       expect(await staff.json()).toEqual([]);
+
+      // The catalogue write group is mounted on the same app (`mountCatalogueApi` in `boot.ts`). It is
+      // fully gated, so an UNAUTHENTICATED `GET /management-api/catalogues` answers 401
+      // (`management_session.required`) rather than 404 — a 404 here would mean the mount never ran.
+      const catalogues = await fetch(`http://127.0.0.1:${port}/management-api/catalogues`);
+      expect(catalogues.status).toBe(401);
+      expect((await catalogues.json()) as { error: { code: string } }).toMatchObject({
+        error: { code: "management_session.required" },
+      });
     } finally {
       await server.close();
     }

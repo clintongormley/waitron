@@ -38,6 +38,7 @@ import type { StripeAccountDeps } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
 import { mountManagementApi } from "./management-api.js";
+import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountMedia } from "./media-api.js";
 import { readOrderFlow } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
@@ -293,6 +294,23 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       secureCookies,
       rpId: config.managementRpId,
       origin: config.managementOrigin,
+    },
+    log,
+  );
+  // The dashboard's gated catalogue write group (catalogues/categories/products + image upload) on the
+  // SAME app, the identical convention. It reuses the EXACT `db` and tenant `mountManagementApi` above
+  // receives (`till.tenantId`, this venue's one tenant) so the two cannot drift, plus the store
+  // `mkdirSync` above ensured (`config.mediaDir`) and the shared `MAX_UPLOAD_BYTES` DoS ceiling — one
+  // value read by this mount and its route, not two literals. No fiscal backend, clock or card
+  // provider: these routes touch only the catalogue and the image store. Routes only — no database
+  // work at boot; the `person.manage` gate runs per request.
+  mountCatalogueApi(
+    app,
+    {
+      db,
+      cfg: { tenantId: till.tenantId },
+      mediaDir: config.mediaDir,
+      maxUploadBytes: MAX_UPLOAD_BYTES,
     },
     log,
   );
