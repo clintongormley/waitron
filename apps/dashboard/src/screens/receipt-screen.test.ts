@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, ReceiptConfig } from "../api/client.js";
 import { ReceiptScreen } from "./receipt-screen.js";
 
@@ -10,7 +11,7 @@ import { ReceiptScreen } from "./receipt-screen.js";
  * `getLayout().receipt`; editing them and clicking Guardar calls `putReceipt` with the composed config;
  * a blank field yields an ABSENT key (so an empty input never sends `""` — the config matches
  * `DEFAULT_RECEIPT = {}` rather than `{ headerSubtitle: "" }`); a rejected `putReceipt`/`getLayout`
- * surfaces a `role="alert"` with the raw code.
+ * surfaces a `role="alert"` whose text is the LOCALISED copy for the code, never the raw wire code.
  */
 
 function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig = {}): DashboardApi {
@@ -169,7 +170,10 @@ describe("receipt-screen", () => {
     await flush(el);
 
     expect(errorKey(el)).toBe("receipt.invalid");
-    expect(q(el, "[role=alert]")?.textContent).toContain("receipt.invalid");
+    // The banner renders LOCALISED copy, never the raw wire code (the state above stays the raw code).
+    const banner = q(el, "[role=alert]")?.textContent;
+    expect(banner).toContain(codeMessage("receipt.invalid", "es-ES"));
+    expect(banner).not.toContain("receipt.invalid");
   });
 
   it("falls back to server.internal when a rejected putReceipt carries no code", async () => {
@@ -188,7 +192,10 @@ describe("receipt-screen", () => {
     await flush(el);
 
     expect(errorKey(el)).toBe("server.internal");
-    expect(q(el, "[role=alert]")?.textContent).toContain("server.internal");
+    // The banner renders LOCALISED copy, never the raw wire code (the state above stays the raw code).
+    const banner = q(el, "[role=alert]")?.textContent;
+    expect(banner).toContain(codeMessage("server.internal", "es-ES"));
+    expect(banner).not.toContain("server.internal");
   });
 
   it("contains the field change events so they do not leak past the screen (stopPropagation)", async () => {

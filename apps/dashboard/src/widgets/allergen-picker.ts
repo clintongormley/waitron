@@ -3,6 +3,8 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-input.js";
+import { t } from "../i18n/t.js";
+import { allergenName } from "../i18n/domain.js";
 import type { AllergenDeclaration, AllergenEntry, AllergenPresence } from "../api/client.js";
 import { selectStyles } from "../select-styles.js";
 
@@ -10,9 +12,10 @@ import { selectStyles } from "../select-styles.js";
  * The 14 EU allergens (Regulation (EU) No 1169/2011, Annex II) in DISPLAY order, redefined LOCALLY
  * exactly as `apps/till/src/screens/till-allergen-screen.ts:24` and `api/client.ts` redefine catalogue
  * shapes: a runtime import from `@waitron/catalogue` would drag its barrel — and through it
- * `@waitron/db` and Node builtins — into the browser bundle (the #70 rule). Kept as plain string
- * codes because the dashboard has no allergen i18n table yet; a later task maps them to Spanish copy,
- * exactly as `person-form` renders its role tokens raw for now.
+ * `@waitron/db` and Node builtins — into the browser bundle (the #70 rule). These raw codes stay the
+ * WIRE VALUES (the `data-test`/`id`/aria wiring and the emitted declaration keys); each renders its
+ * localised display name at the render edge through `allergenName` (i18n/domain.ts), the same
+ * render-edge translation `staff-list` uses for its role/status tokens.
  */
 const ALLERGEN_DISPLAY_ORDER = [
   "gluten",
@@ -188,11 +191,15 @@ export class AllergenPicker extends LitElement {
 
   override render() {
     const disabled = !this.reviewed;
+    // Locale-invariant across the 14 rows — resolve once per render, not once per row.
+    const containsLabel = t("allergen.contains");
+    const mayContainLabel = t("allergen.may_contain");
+    const originLabel = t("allergen.origin");
     return html`
       <wt-switch
         class="reviewed"
         data-test="reviewed"
-        label="Revisado"
+        label=${t("allergen.reviewed")}
         .checked=${this.reviewed}
         @wt-change=${(e: CustomEvent<{ checked: boolean }>) => this.#onReviewed(e)}
       ></wt-switch>
@@ -200,9 +207,10 @@ export class AllergenPicker extends LitElement {
         ${ALLERGEN_DISPLAY_ORDER.map((code) => {
           const entry = this.entries[code];
           const presence = entry?.presence ?? "unset";
+          const name = allergenName(code);
           return html`
-            <div class="row" role="group" aria-label=${code}>
-              <span class="name" id=${`name-${code}`}>${code}</span>
+            <div class="row" role="group" aria-label=${name}>
+              <span class="name" id=${`name-${code}`}>${name}</span>
               <select
                 data-test=${`presence-${code}`}
                 aria-labelledby=${`name-${code}`}
@@ -211,12 +219,12 @@ export class AllergenPicker extends LitElement {
                 @change=${(e: Event) => this.#onPresence(e, code)}
               >
                 <option value="unset">—</option>
-                <option value="contains">contains</option>
-                <option value="may_contain">may_contain</option>
+                <option value="contains">${containsLabel}</option>
+                <option value="may_contain">${mayContainLabel}</option>
               </select>
               <wt-input
                 data-test=${`source-${code}`}
-                label=${`Origen (${code})`}
+                label=${`${originLabel} (${name})`}
                 .value=${entry?.source ?? ""}
                 ?disabled=${disabled || presence === "unset"}
                 @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onSource(e, code)}

@@ -3,6 +3,8 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
+import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, ReceiptConfig } from "../api/client.js";
 
 /**
@@ -27,8 +29,8 @@ import type { DashboardApi, ReceiptConfig } from "../api/client.js";
  * ERROR HANDLING mirrors `layout-screen.ts`/`catalogue-screen.ts`/`staff-screen.ts`: `#load` and `#save`
  * are each fully `try/catch`ed (invoked via `void`), so a rejection becomes `errorKey` — the raw thrown
  * `{ code }`, falling back to `server.internal` — rendered in a `role="alert"` banner, never an unhandled
- * promise rejection. The raw code is shown as-is; mapping codes to Spanish copy is a deferred i18n item,
- * exactly as the sibling screens defer theirs.
+ * promise rejection. The raw code stays in state; `codeMessage` (`../i18n/codes.js`) maps it to localised
+ * copy at the render edge, so the banner shows a sentence and never the raw wire code.
  */
 @customElement("dashboard-receipt-screen")
 export class ReceiptScreen extends LitElement {
@@ -144,16 +146,16 @@ export class ReceiptScreen extends LitElement {
 
   override render(): TemplateResult {
     return html`
-      <h1 class="title">Recibo</h1>
+      <h1 class="title">${t("receipt.title")}</h1>
       <div class="fields">
         <wt-input
-          label="Subtítulo de cabecera"
+          label=${t("receipt.header_subtitle")}
           data-test="header-subtitle"
           .value=${this.headerSubtitle}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onHeaderChange(e)}
         ></wt-input>
         <label class="field">
-          <span class="field-label">Mensaje de pie</span>
+          <span class="field-label">${t("receipt.footer_message")}</span>
           <textarea
             data-test="footer-message"
             rows="3"
@@ -165,11 +167,11 @@ export class ReceiptScreen extends LitElement {
 
       <div class="save">
         <wt-button variant="primary" data-test="save" @click=${() => void this.#save()}
-          >Guardar</wt-button
+          >${t("action.save")}</wt-button
         >
       </div>
 
-      ${this.errorKey ? html`<p class="error" role="alert">${this.errorKey}</p>` : nothing}
+      ${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
     `;
   }
 }

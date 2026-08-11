@@ -4,6 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
+import { t } from "../i18n/t.js";
 import type { CategorySummary } from "../api/client.js";
 
 /**
@@ -103,12 +104,12 @@ export class CategoryManager extends LitElement {
         <wt-input
           class="field"
           data-test="category-name"
-          label="Nueva categoría"
+          label=${t("category.new")}
           .value=${this.name}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNameChange(e)}
         ></wt-input>
         <wt-button variant="primary" data-test="create" @click=${(e: Event) => this.#create(e)}>
-          Crear
+          ${t("action.create")}
         </wt-button>
       </div>
     `;

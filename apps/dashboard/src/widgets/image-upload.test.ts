@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { codeMessage } from "../i18n/codes.js";
 // Value import (not `import type`): pulls in the module for its `@customElement` side effect, which
 // registers `dashboard-image-upload` so `mountWidget` can create it.
 import { ImageUpload } from "./image-upload.js";
@@ -84,9 +85,10 @@ describe("image-upload", () => {
     expect(api.uploadImage).not.toHaveBeenCalled();
   });
 
-  // A rejected upload surfaces the server's `media.*` code raw in a `role="alert"` region — the exact
-  // errorKey-in-a-banner contract the login/staff screens use (a later i18n task maps the codes).
-  it("shows the media.* error key in a role=alert region on a rejected upload", async () => {
+  // A rejected upload surfaces the server's `media.*` code through the i18n layer as localised copy in
+  // a `role="alert"` region — the operator NEVER sees the raw wire code (the errorKey stays raw in
+  // state; `codeMessage` maps it at the render edge, mirroring the login/staff screens).
+  it("shows localised copy for the media.* error code in a role=alert region on a rejected upload", async () => {
     const api = stubApi({
       uploadImage: vi.fn().mockRejectedValue({ code: "media.unsupported_type" }),
     } as Partial<DashboardApi>);
@@ -94,12 +96,13 @@ describe("image-upload", () => {
     pickFile(el, pngFile());
     await flush(el);
     const alert = el.shadowRoot!.querySelector("[role=alert]")!;
-    expect(alert.textContent).toContain("media.unsupported_type");
+    expect(alert.textContent).toContain(codeMessage("media.unsupported_type", "es-ES"));
+    expect(alert.textContent).not.toContain("media.unsupported_type");
   });
 
   // A thrown error with no `{ code }` falls back to `server.internal`, mirroring the screens, so the
-  // operator always gets a stable domain code rather than a raw message or a blank banner.
-  it("falls back to server.internal when the rejection names no code", async () => {
+  // operator always gets a stable localised sentence rather than a raw message or a blank banner.
+  it("falls back to server.internal copy when the rejection names no code", async () => {
     const api = stubApi({
       uploadImage: vi.fn().mockRejectedValue(new Error("boom")),
     } as Partial<DashboardApi>);
@@ -107,7 +110,8 @@ describe("image-upload", () => {
     pickFile(el, pngFile());
     await flush(el);
     const alert = el.shadowRoot!.querySelector("[role=alert]")!;
-    expect(alert.textContent).toContain("server.internal");
+    expect(alert.textContent).toContain(codeMessage("server.internal", "es-ES"));
+    expect(alert.textContent).not.toContain("server.internal");
   });
 
   // A successful upload after a failed one clears the stale banner, so a recovered pick does not leave
@@ -122,7 +126,9 @@ describe("image-upload", () => {
     const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", { api });
     pickFile(el, pngFile());
     await flush(el);
-    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain("media.too_large");
+    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
+      codeMessage("media.too_large", "es-ES"),
+    );
     pickFile(el, pngFile());
     await flush(el);
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBe(null);

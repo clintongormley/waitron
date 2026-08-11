@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, LayoutDef } from "../api/client.js";
 import { LayoutScreen } from "./layout-screen.js";
 
@@ -326,7 +327,10 @@ describe("layout-screen", () => {
     await flush(el);
 
     expect(errorKey(el)).toBe("layout.invalid");
-    expect(q(el, "[role=alert]")?.textContent).toContain("layout.invalid");
+    // The banner renders LOCALISED copy, never the raw wire code (the state above stays the raw code).
+    const banner = q(el, "[role=alert]")?.textContent;
+    expect(banner).toContain(codeMessage("layout.invalid", "es-ES"));
+    expect(banner).not.toContain("layout.invalid");
   });
 
   it("falls back to server.internal when a rejected putLayout carries no code", async () => {
@@ -345,7 +349,10 @@ describe("layout-screen", () => {
     await flush(el);
 
     expect(errorKey(el)).toBe("server.internal");
-    expect(q(el, "[role=alert]")?.textContent).toContain("server.internal");
+    // The banner renders LOCALISED copy, never the raw wire code (the state above stays the raw code).
+    const banner = q(el, "[role=alert]")?.textContent;
+    expect(banner).toContain(codeMessage("server.internal", "es-ES"));
+    expect(banner).not.toContain("server.internal");
   });
 
   it("contains the columns wt-change so it does not leak past the screen (stopPropagation)", async () => {

@@ -1,9 +1,11 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { startRegistration } from "@simplewebauthn/browser";
 import type { PublicKeyCredentialCreationOptionsJSON } from "@simplewebauthn/browser";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 // Value imports (not `import type`): pull in the widget modules for their `@customElement` side
 // effects, so `<dashboard-staff-list>` and `<dashboard-person-form>` are registered before this
 // screen renders them.
@@ -40,8 +42,8 @@ import type { DashboardApi, PersonRole, PersonSummary } from "../api/client.js";
  * - `#load()` is called via `void this.#load()` on connect, so a rejected `listStaff()` MUST be
  *   caught here — otherwise it is an unhandled promise rejection and the operator faces an empty
  *   list with no feedback. A rejection sets `errorKey` from the thrown `{ code }` (falling back to
- *   `server.internal`), rendered raw in a `role="alert"` banner (a later i18n task maps codes to
- *   Spanish copy, exactly as the login screen defers its error keys).
+ *   `server.internal`); the raw code stays in state and `codeMessage` maps it to localised copy at
+ *   the render edge, so the `role="alert"` banner shows a sentence and never the raw wire code.
  * - a rejected `createPerson()` sets the same `errorKey` and DOES NOT reload or close the form, so
  *   the entered values survive and the operator can retry.
  * - a rejected edit action (`#runEditAction`) sets the same `errorKey` and leaves the edit dialog
@@ -94,9 +96,10 @@ export class StaffScreen extends LitElement {
   @state() private editingPerson: PersonSummary | null = null;
   @state() private editOpen = false;
   @state() private errorKey: string | null = null;
-  // A minimal success confirmation for #addPasskey, rendered raw in a `role="status"` banner and
-  // (like errorKey) deferred to a later i18n task — the WebAuthn ceremony has no visible surface of
-  // its own once the browser dialog closes, so without this the operator gets no feedback.
+  // A minimal success confirmation for #addPasskey: the raw status code is kept here and mapped to
+  // localised copy by `codeMessage` at the render edge (`passkey.registered` → "Passkey añadida").
+  // The WebAuthn ceremony has no visible surface of its own once the browser dialog closes, so
+  // without this the operator gets no feedback.
   @state() private passkeyStatus: string | null = null;
 
   // A re-entrancy guard, NOT @state (nothing renders off it): set synchronously at `#onCreatePerson`
@@ -289,16 +292,16 @@ export class StaffScreen extends LitElement {
   override render() {
     return html`
       <div class="header">
-        <h1 class="title">Usuarios</h1>
+        <h1 class="title">${t("staff.title")}</h1>
         <div class="actions">
           <wt-button
             variant="secondary"
             data-test="add-passkey"
             @click=${() => void this.#addPasskey()}
-            >Añadir passkey</wt-button
+            >${t("staff.add_passkey")}</wt-button
           >
           <wt-button variant="primary" data-test="add" @click=${() => this.#openForm()}
-            >Añadir usuario</wt-button
+            >${t("staff.add_user")}</wt-button
           >
         </div>
       </div>
@@ -308,10 +311,14 @@ export class StaffScreen extends LitElement {
       ></dashboard-staff-list>
       ${
         this.errorKey && !this.editOpen
-          ? html`<p class="error" role="alert">${this.errorKey}</p>`
-          : ""
+          ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
+          : nothing
       }
-      ${this.passkeyStatus ? html`<p class="status" role="status">${this.passkeyStatus}</p>` : ""}
+      ${
+        this.passkeyStatus
+          ? html`<p class="status" role="status">${codeMessage(this.passkeyStatus)}</p>`
+          : nothing
+      }
       <dashboard-person-form
         .open=${this.formOpen}
         @create-person=${(e: CustomEvent<{ displayName: string; role: PersonRole; pin: string }>) =>

@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
+import { roleName, statusName } from "../i18n/domain.js";
 // Value import (not `import type`): pulls in the module for its `@customElement` side effect, which
 // registers `dashboard-person-edit` so `mountWidget` can create it.
 import { PersonEdit } from "./person-edit.js";
@@ -57,9 +60,16 @@ describe("person-edit", () => {
       person: active,
       open: true,
     });
-    expect(el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=edit-role]")!.value).toBe(
-      "manager",
+    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=edit-role]")!;
+    expect(select.value).toBe("manager");
+    // The option's wire VALUE stays the raw role token (updated() reconciles the live value to it)...
+    const options = [...select.querySelectorAll("option")];
+    expect(options.map((o) => o.value)).toEqual(["staff", "supervisor", "manager", "admin"]);
+    // ...while the visible option TEXT is the localised role name, never the raw token.
+    expect(options.map((o) => o.textContent?.trim())).toEqual(
+      ["staff", "supervisor", "manager", "admin"].map((r) => roleName(r, "es-ES")),
     );
+    expect(options.find((o) => o.value === "manager")?.textContent).not.toContain("manager");
   });
 
   it("emits update-role with the newly selected role on save", async () => {
@@ -86,7 +96,13 @@ describe("person-edit", () => {
       open: true,
     });
     const button = el.shadowRoot!.querySelector<HTMLElement>("[data-test=toggle-status]")!;
-    expect(button.textContent).toContain("Suspender");
+    expect(button.textContent).toContain(t("person.suspend", "es-ES"));
+    // The status label shows the localised status name, never the raw token.
+    const label = el.shadowRoot!.querySelector(".status-label")!;
+    expect(label.textContent).toContain(
+      `${t("person.status_label", "es-ES")}: ${statusName("active", "es-ES")}`,
+    );
+    expect(label.textContent).not.toContain("active");
 
     const seen = new Promise<CustomEvent<{ status: string }>>((resolve) =>
       el.addEventListener("set-status", (e) => resolve(e as CustomEvent)),
@@ -101,7 +117,7 @@ describe("person-edit", () => {
       open: true,
     });
     const button = el.shadowRoot!.querySelector<HTMLElement>("[data-test=toggle-status]")!;
-    expect(button.textContent).toContain("Reactivar");
+    expect(button.textContent).toContain(t("person.reactivate", "es-ES"));
 
     const seen = new Promise<CustomEvent<{ status: string }>>((resolve) =>
       el.addEventListener("set-status", (e) => resolve(e as CustomEvent)),
@@ -253,6 +269,8 @@ describe("person-edit", () => {
       error: "authorization.not_permitted",
     });
     const alert = el.shadowRoot!.querySelector("[role=alert]");
-    expect(alert?.textContent).toContain("authorization.not_permitted");
+    // The banner shows LOCALISED copy for the code, never the raw wire code (the code stays in `error`).
+    expect(alert?.textContent).toContain(codeMessage("authorization.not_permitted", "es-ES"));
+    expect(alert?.textContent).not.toContain("authorization.not_permitted");
   });
 });

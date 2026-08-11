@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { roleName } from "../i18n/domain.js";
 // Value import (not `import type`): pulls in the module for its `@customElement` side effect, which
 // registers `dashboard-person-form` so `mountWidget` can create it.
 import { PersonForm } from "./person-form.js";
@@ -28,8 +29,14 @@ describe("person-form", () => {
 
   it("offers the four person roles", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
-    const options = [...el.shadowRoot!.querySelectorAll("option")].map((o) => o.value);
-    expect(options).toEqual(["staff", "supervisor", "manager", "admin"]);
+    const options = [...el.shadowRoot!.querySelectorAll("option")];
+    // The option's wire VALUE stays the raw role token (the emitted detail.role reads it back)...
+    expect(options.map((o) => o.value)).toEqual(["staff", "supervisor", "manager", "admin"]);
+    // ...while the visible option TEXT is the localised role name, never the raw token.
+    expect(options.map((o) => o.textContent?.trim())).toEqual(
+      ["staff", "supervisor", "manager", "admin"].map((r) => roleName(r, "es-ES")),
+    );
+    expect(options.find((o) => o.value === "manager")?.textContent).not.toContain("manager");
   });
 
   // Drives all three field handlers through the DOM (the wt-inputs' composed `wt-change`, the native

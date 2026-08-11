@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { t } from "../i18n/t.js";
+import { roleName, statusName } from "../i18n/domain.js";
 import type { PersonSummary } from "../api/client.js";
 import { StaffList } from "./staff-list.js";
 
@@ -29,7 +31,11 @@ describe("staff-list", () => {
     const rows = el.shadowRoot!.querySelectorAll("[data-test=row]");
     expect(rows.length).toBe(2);
     expect(rows[0]!.textContent).toContain("Ada");
-    expect(rows[1]!.textContent).toContain("suspended");
+    // Role and status render through the i18n layer as localised display names, never the raw token.
+    expect(rows[0]!.textContent).toContain(roleName("manager", "es-ES"));
+    expect(rows[0]!.textContent).not.toContain("manager");
+    expect(rows[1]!.textContent).toContain(statusName("suspended", "es-ES"));
+    expect(rows[1]!.textContent).not.toContain("suspended");
   });
 
   it("emits edit-person when a row's edit control is clicked", async () => {
@@ -71,8 +77,8 @@ describe("staff-list", () => {
     // both credential badges present, and each carries text (not colour alone) naming the credential.
     expect(badges.length).toBe(2);
     const text = Array.from(badges, (b) => b.textContent ?? "").join(" ");
-    expect(text).toContain("Contraseña");
-    expect(text).toContain("TOTP");
+    expect(text).toContain(t("staff.badge_password", "es-ES"));
+    expect(text).toContain(t("staff.badge_totp", "es-ES"));
   });
 
   // An empty roster renders no rows (and does not throw) — the widget defaults `people` to `[]`, so
