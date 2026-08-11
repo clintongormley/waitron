@@ -21,7 +21,10 @@ export interface MediaApiDeps {
  * wrong/upper-case extension, or an off-length name all fail. This IS the path-traversal guard, made
  * EXPLICIT and unit-testable (`CLAUDE.md` §3: "the defence is explicit, never implicit") rather than
  * trusted to `serve-static` middleware — a crafted `:filename` can therefore never escape `mediaDir`,
- * because it is refused with a bare 404 BEFORE any `readFile`. No `g` flag: `.exec`/`.test` must stay
+ * because it is refused with a bare 404 BEFORE any `readFile`. Proven, not asserted (`CLAUDE.md` §1):
+ * `media-api.test.ts` neuters the regex and watches four names flip green→red, and serves a real file
+ * planted ABOVE the store through a `../` name and gets a 404 with the `readFile` spy showing no fs
+ * touch. No `g` flag: `.exec`/`.test` must stay
  * stateless across calls. The capture group yields the extension, so a matched name needs no second
  * parse to pick its Content-Type. Exported so the guard is testable on its own.
  */
@@ -54,7 +57,9 @@ export function mountMedia(app: Hono, deps: MediaApiDeps, log: Logger): void {
   app.get("/media/:filename", async (c) => {
     // `c.req.param` returns the URI-DECODED value, so a `..%2f..%2f…` traversal arrives here already
     // decoded to `../../…` and is refused by the anchored regex before the filesystem is touched at
-    // all — the guard's whole point. A non-match is a bare 404, no `readFile`, no log.
+    // all — the guard's whole point. The guard does NOT rest on that decoding claim, though: the
+    // anchored regex rejects the `%`-encoded form too (a `%` is not in `[0-9a-f]`), so a change in
+    // Hono's decoding behaviour could not open an escape. A non-match is a bare 404, no `readFile`.
     const match = MEDIA_FILENAME.exec(c.req.param("filename"));
     if (match === null) return c.body(null, 404);
     const filename = match[0];
