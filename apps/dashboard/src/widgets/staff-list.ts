@@ -110,6 +110,7 @@ export class StaffList extends LitElement {
   }
 
   override render() {
+    const editLabel = t("action.edit"); // locale-invariant across rows — resolve once per render
     return html`
       <div class="list">
         ${this.people.map(
@@ -134,10 +135,10 @@ export class StaffList extends LitElement {
                 <wt-button
                   variant="ghost"
                   data-test="edit-${person.personId}"
-                  aria-label=${`${t("action.edit")} ${person.displayName}`}
+                  aria-label=${`${editLabel} ${person.displayName}`}
                   @click=${(event: Event) => this.#edit(event, person.personId)}
                 >
-                  ${t("action.edit")}
+                  ${editLabel}
                 </wt-button>
               </div>
             </wt-card>

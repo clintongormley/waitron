@@ -1,4 +1,4 @@
-import { currentLocale } from "./t.js";
+import { currentLocale, pickLocale } from "./t.js";
 
 // Localised DISPLAY NAMES for the enum tokens the server hands the dashboard — roles, statuses,
 // VAT classes, sale units, allergen-declaration states, and the 14 EU allergen codes. The dashboard
@@ -22,8 +22,8 @@ type NameTable = Record<string, { en: string; es: string }>;
  * token renders as itself rather than as an empty string or a throw.
  */
 function resolve(table: NameTable, value: string, locale: string): string {
-  const lang = locale.replace(/-.*$/, "");
-  return table[value]?.[lang as "en" | "es"] ?? table[value]?.en ?? value;
+  const entry = table[value];
+  return entry ? pickLocale(entry, locale) : value;
 }
 
 const ROLE_NAMES: NameTable = {

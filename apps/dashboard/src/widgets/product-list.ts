@@ -169,6 +169,7 @@ export class ProductList extends LitElement {
   }
 
   override render() {
+    const editLabel = t("action.edit"); // locale-invariant across rows — resolve once per render
     return html`
       <div class="list">
         ${this.products.map((product) => {
@@ -213,10 +214,10 @@ export class ProductList extends LitElement {
                 <wt-button
                   variant="ghost"
                   data-test=${`edit-${product.id}`}
-                  aria-label=${`${t("action.edit")} ${name}`}
+                  aria-label=${`${editLabel} ${name}`}
                   @click=${(event: Event) => this.#edit(event, product.id)}
                 >
-                  ${t("action.edit")}
+                  ${editLabel}
                 </wt-button>
               </div>
             </wt-card>

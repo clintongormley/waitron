@@ -191,6 +191,10 @@ export class AllergenPicker extends LitElement {
 
   override render() {
     const disabled = !this.reviewed;
+    // Locale-invariant across the 14 rows — resolve once per render, not once per row.
+    const containsLabel = t("allergen.contains");
+    const mayContainLabel = t("allergen.may_contain");
+    const originLabel = t("allergen.origin");
     return html`
       <wt-switch
         class="reviewed"
@@ -203,9 +207,10 @@ export class AllergenPicker extends LitElement {
         ${ALLERGEN_DISPLAY_ORDER.map((code) => {
           const entry = this.entries[code];
           const presence = entry?.presence ?? "unset";
+          const name = allergenName(code);
           return html`
-            <div class="row" role="group" aria-label=${allergenName(code)}>
-              <span class="name" id=${`name-${code}`}>${allergenName(code)}</span>
+            <div class="row" role="group" aria-label=${name}>
+              <span class="name" id=${`name-${code}`}>${name}</span>
               <select
                 data-test=${`presence-${code}`}
                 aria-labelledby=${`name-${code}`}
@@ -214,12 +219,12 @@ export class AllergenPicker extends LitElement {
                 @change=${(e: Event) => this.#onPresence(e, code)}
               >
                 <option value="unset">—</option>
-                <option value="contains">${t("allergen.contains")}</option>
-                <option value="may_contain">${t("allergen.may_contain")}</option>
+                <option value="contains">${containsLabel}</option>
+                <option value="may_contain">${mayContainLabel}</option>
               </select>
               <wt-input
                 data-test=${`source-${code}`}
-                label=${`${t("allergen.origin")} (${allergenName(code)})`}
+                label=${`${originLabel} (${name})`}
                 .value=${entry?.source ?? ""}
                 ?disabled=${disabled || presence === "unset"}
                 @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onSource(e, code)}

@@ -1,4 +1,4 @@
-import { currentLocale } from "./t.js";
+import { currentLocale, pickLocale } from "./t.js";
 
 // Localised copy for the raw error/status CODES the server and client emit.
 //
@@ -110,10 +110,11 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
 };
 
-// The message shown for any code not in CODE_MESSAGES. Deliberately identical to `server.internal`:
-// an unmapped code and an internal error are the same thing to the operator — something failed and
-// retrying is the next move — and neither ever exposes the underlying code.
-const GENERIC = { en: "Something went wrong, try again", es: "Algo salió mal, inténtalo de nuevo" };
+// The message shown for any code not in CODE_MESSAGES. Deliberately the SAME entry as
+// `server.internal`: an unmapped code and an internal error are the same thing to the operator —
+// something failed and retrying is the next move — and neither ever exposes the underlying code.
+// Referencing the entry (rather than re-typing its strings) keeps the two in step by construction.
+const GENERIC = CODE_MESSAGES["server.internal"];
 
 /**
  * Resolve an error/status `code` to localised copy for `locale` (default: the active locale).
@@ -124,7 +125,5 @@ const GENERIC = { en: "Something went wrong, try again", es: "Algo salió mal, i
  * raw code.
  */
 export function codeMessage(code: string, locale: string = currentLocale()): string {
-  const lang = locale.replace(/-.*$/, "");
-  const entry = CODE_MESSAGES[code] ?? GENERIC;
-  return (entry as Record<string, string>)[lang] ?? entry.en;
+  return pickLocale(CODE_MESSAGES[code] ?? GENERIC, locale);
 }

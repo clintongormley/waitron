@@ -59,6 +59,13 @@ const WIDGET_CONFIG_FIELDS: Record<WidgetType, readonly "columns"[]> = {
   "prep-queue": [],
 };
 
+/**
+ * A widget kind's localised label, from the `widget.<type>` catalogue key. The `as StringKey` cast
+ * (the key is built from a `WidgetType`, which the catalogue always carries a `widget.` entry for)
+ * lives here once rather than at each render site.
+ */
+const widgetName = (type: WidgetType): string => t(`widget.${type}` as StringKey);
+
 const COLUMNS_MIN = 1;
 const COLUMNS_MAX = 12;
 
@@ -335,7 +342,7 @@ export class LayoutScreen extends LitElement {
   }
 
   #renderRow(region: Region, rows: WidgetInstance[], instance: WidgetInstance, index: number) {
-    const name = t(`widget.${instance.type}` as StringKey);
+    const name = widgetName(instance.type);
     return html`<li data-test="row-${instance.type}">
       <wt-card>
         <div class="row">
@@ -410,7 +417,7 @@ export class LayoutScreen extends LitElement {
                   ${available.map(
                     (type) =>
                       html`<option value=${type} .selected=${type === choice}>
-                        ${t(`widget.${type}` as StringKey)}
+                        ${widgetName(type)}
                       </option>`,
                   )}
                 </select>
