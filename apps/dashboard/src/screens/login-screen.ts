@@ -1,4 +1,4 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { startAuthentication } from "@simplewebauthn/browser";
 import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
@@ -177,7 +177,7 @@ export class LoginScreen extends LitElement {
         @click=${() => void this.#passkeyLogin()}
         >${t("login.with_passkey")}</wt-button
       >
-      ${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : ""}
+      ${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
     `;
   }
 }

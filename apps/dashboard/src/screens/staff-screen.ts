@@ -1,4 +1,4 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { startRegistration } from "@simplewebauthn/browser";
 import type { PublicKeyCredentialCreationOptionsJSON } from "@simplewebauthn/browser";
@@ -312,12 +312,12 @@ export class StaffScreen extends LitElement {
       ${
         this.errorKey && !this.editOpen
           ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
-          : ""
+          : nothing
       }
       ${
         this.passkeyStatus
           ? html`<p class="status" role="status">${codeMessage(this.passkeyStatus)}</p>`
-          : ""
+          : nothing
       }
       <dashboard-person-form
         .open=${this.formOpen}
