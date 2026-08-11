@@ -1,5 +1,5 @@
-import { LitElement, css, html } from "lit";
-import { customElement, state } from "lit/decorators.js";
+import { LitElement, type PropertyValues, css, html } from "lit";
+import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -82,11 +82,45 @@ export class AllergenPicker extends LitElement {
     `,
   ];
 
+  /**
+   * The SEED declaration for edit mode — the product form sets this from a loaded product's allergens
+   * so the picker opens pre-filled. It is an INPUT, distinct from the computed `value` getter (which
+   * stays the live read of the internal state): assigning it reconstructs `reviewed`/`entries` once,
+   * in `willUpdate`, after which the per-code controls drive the state as usual. `null` (the default,
+   * and a CREATE) seeds the PENDING state, exactly as an untouched picker already holds. Bound only on
+   * (re)seed by the form — never to the live value — so it does not fight the operator's edits.
+   */
+  @property({ attribute: false }) declaration: AllergenDeclaration = null;
+
   /** Whether the operator has reviewed this product's allergens — the null-vs-`{}` gate. */
   @state() private reviewed = false;
 
   /** Per-code presence + free-text source. A code absent here reads as `unset` with no source. */
   @state() private entries: Record<string, { presence: Presence; source: string }> = {};
+
+  /**
+   * Seed the internal three-state from a freshly-assigned `declaration` (edit-mode pre-fill). Runs only
+   * when `declaration` actually changes — a user edit changes `reviewed`/`entries`, not `declaration`,
+   * so it is never re-seeded out from under the operator. `null` → reviewed off (PENDING); `{}` →
+   * reviewed on, nothing marked; `{ code: {…} }` → reviewed on with each code's presence + source
+   * (an absent `source` becomes `""`, the empty the `value` getter drops). Does NOT emit
+   * `allergens-changed` — seeding is not an operator change; the form reads the seed it just set.
+   */
+  override willUpdate(changed: PropertyValues): void {
+    if (!changed.has("declaration")) return;
+    const declaration = this.declaration;
+    if (declaration === null) {
+      this.reviewed = false;
+      this.entries = {};
+      return;
+    }
+    this.reviewed = true;
+    const entries: Record<string, { presence: Presence; source: string }> = {};
+    for (const [code, entry] of Object.entries(declaration)) {
+      entries[code] = { presence: entry.presence, source: entry.source ?? "" };
+    }
+    this.entries = entries;
+  }
 
   /**
    * The three-state declaration this picker currently holds (design §7): `null` while unreviewed,

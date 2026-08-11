@@ -111,6 +111,70 @@ describe("allergen-picker", () => {
     expect(event.composed).toBe(true);
   });
 
+  // ── Edit-mode seeding via the `declaration` property ──────────────────────────────────────────
+  // The product form pre-fills the picker for an EDIT by setting `.declaration` from the loaded
+  // product's allergens. Seeding sets the reviewed toggle + per-code state; the existing read
+  // behaviour (`value` getter) and `allergens-changed` event are unchanged.
+
+  // A null declaration seeds the PENDING state: reviewed off, value null.
+  it("seeds the PENDING state (null) from a null declaration", async () => {
+    const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
+      declaration: null,
+    });
+    const sw = el.shadowRoot!.querySelector<HTMLInputElement & { checked: boolean }>(
+      "[data-test=reviewed]",
+    )!;
+    expect(sw.checked).toBe(false);
+    expect(el.value).toBe(null);
+  });
+
+  // An empty-object declaration seeds the REVIEWED-NONE state: reviewed on, value {}.
+  it("seeds the reviewed-none state ({}) from an empty declaration", async () => {
+    const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
+      declaration: {},
+    });
+    const sw = el.shadowRoot!.querySelector<HTMLInputElement & { checked: boolean }>(
+      "[data-test=reviewed]",
+    )!;
+    expect(sw.checked).toBe(true);
+    expect(el.value).toEqual({});
+  });
+
+  // A populated declaration seeds reviewed on, each code's presence select + source input, and the
+  // value getter reads back the same declaration — the edit round-trip the product form relies on.
+  it("seeds reviewed-on with per-code entries from a populated declaration", async () => {
+    const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
+      declaration: {
+        gluten: { presence: "contains", source: "trigo" },
+        milk: { presence: "may_contain" },
+      },
+    });
+    const sw = el.shadowRoot!.querySelector<HTMLInputElement & { checked: boolean }>(
+      "[data-test=reviewed]",
+    )!;
+    expect(sw.checked).toBe(true);
+    const gluten = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=presence-gluten]")!;
+    const glutenSource = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+      "[data-test=source-gluten]",
+    )!;
+    expect(gluten.value).toBe("contains");
+    expect(glutenSource.value).toBe("trigo");
+    expect(el.value).toEqual({
+      gluten: { presence: "contains", source: "trigo" },
+      milk: { presence: "may_contain" },
+    });
+  });
+
+  // After seeding, the operator can still edit: flipping a seeded code back to unset drops it, so the
+  // seed is a starting point, not a lock — the per-code handlers keep working over a seeded picker.
+  it("keeps the per-code controls editable after seeding", async () => {
+    const { el } = await mountWidget<AllergenPicker>("dashboard-allergen-picker", {
+      declaration: { gluten: { presence: "contains", source: "trigo" } },
+    });
+    await setPresence(el, "gluten", "unset");
+    expect(el.value).toEqual({});
+  });
+
   // All 14 EU-1169/2011 Annex II codes are offered, in the till's display order (redefined locally,
   // no @waitron/catalogue runtime import — the #70 bundle rule).
   it("offers all fourteen EU allergen codes", async () => {
