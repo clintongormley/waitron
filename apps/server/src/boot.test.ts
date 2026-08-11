@@ -1,6 +1,7 @@
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, rm } from "node:fs/promises";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -17,7 +18,12 @@ import { loadKeyRing, putCredential } from "@waitron/credentials";
 // restricts either package, so the deep import resolves the same way a same-package one would.
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { DEFAULT_MIGRATIONS_ROOT, startServer, type StartedServer } from "./boot.js";
+import {
+  DEFAULT_MIGRATIONS_ROOT,
+  MAX_UPLOAD_BYTES,
+  startServer,
+  type StartedServer,
+} from "./boot.js";
 import { DUTY_BUDGET_MS } from "./health.js";
 import { DRAIN_DUTY } from "./pass.js";
 import { roleUrl, startRealPostgres } from "./testing/postgres.js";
@@ -107,9 +113,15 @@ const TILL_ENV = {
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
   WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
 };
+// Every successful boot in this suite writes its media directory here (an existing temp dir, so the
+// recursive `mkdirSync` boot performs is a no-op) rather than into `boot.ts`'s own default — which,
+// run from SOURCE, resolves to `apps/server/src/media` and would pollute the checkout on every run.
+// Created synchronously so the `KEY_ENV` const below can reference it; torn down in `afterAll`.
+const MEDIA_ROOT = mkdtempSync(join(tmpdir(), "waitron-boot-media-"));
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
+  WAITRON_MEDIA_DIR: MEDIA_ROOT,
   ...TILL_ENV,
 };
 
@@ -182,6 +194,9 @@ beforeAll(async () => {
 // must not be followed by an `rm(undefined)` reported as a second failure beside the real one.
 afterAll(async () => {
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
+  // `MEDIA_ROOT` is created synchronously at module load (always defined), so no undefined guard —
+  // `force: true` also absorbs the case where a boot's own nested subdir was already removed.
+  await rm(MEDIA_ROOT, { recursive: true, force: true });
 });
 
 /** An OS-assigned port, released before use. `WAITRON_HTTP_PORT` rejects `"0"` as not a positive
@@ -412,6 +427,39 @@ describe("startServer, against a real container as the deployment role", () => {
       // Two GENUINELY concurrent calls this time, not one-after-the-other: without the idempotency
       // guard, the loser reaches `db.close()` a second time and throws.
       await Promise.all([server.close(), server.close()]);
+    }
+  }, 60_000);
+
+  // The upload/serve routes (later slices) store product images under `config.mediaDir`; `boot.ts`
+  // must ensure that directory exists once, at startup, before mounting anything — a missing store
+  // would fail the first upload rather than the boot. Proven by behaviour, not by mocking: point
+  // `WAITRON_MEDIA_DIR` at a nested path that does NOT exist yet, boot, and assert `existsSync`
+  // flipped false -> true — proof the recursive `mkdirSync` ran with this resolved, absolute
+  // mediaDir, not merely that some directory happened to be present already.
+  it("ensures the configured media directory exists at boot (recursive), before mounting routes", async () => {
+    const port = await freePort();
+    const mediaDir = join(MEDIA_ROOT, "created-at-boot", "product-images");
+    expect(existsSync(mediaDir)).toBe(false);
+    expect(isAbsolute(mediaDir)).toBe(true);
+
+    const server = await startServer({
+      ...KEY_ENV,
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      // Overrides KEY_ENV's own MEDIA_ROOT with the fresh nested path this test asserts on.
+      WAITRON_MEDIA_DIR: mediaDir,
+      WAITRON_MIN_TICK_MS: "50",
+      WAITRON_MAX_TICK_MS: "200",
+      WAITRON_SKIP_RETRY_MS: "100",
+    });
+
+    try {
+      // `startServer` resolves only after the mkdir (which runs before the first pass), so the
+      // directory is already present the moment the boot returns — no polling needed.
+      expect(existsSync(mediaDir)).toBe(true);
+    } finally {
+      await server.close();
     }
   }, 60_000);
 
@@ -785,6 +833,14 @@ describe("startServer's maxTickMs-vs-drain-budget guard", () => {
       }),
     );
     expect(isAppError(error) && error.code).toBe("credentials.key_missing");
+  });
+});
+
+describe("MAX_UPLOAD_BYTES", () => {
+  it("is 5 MiB — the product-image upload ceiling the write routes (later slices) enforce", () => {
+    // A settled config constant (design §5e, proposal 5 MiB), pinned here so a later edit to the
+    // upload route cannot silently change the ceiling without this failing.
+    expect(MAX_UPLOAD_BYTES).toBe(5 * 1024 * 1024);
   });
 });
 

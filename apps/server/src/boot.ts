@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { mkdirSync } from "node:fs";
 import { serve } from "@hono/node-server";
 import { createPostgresDb } from "@waitron/db";
 import { credentialTenants, loadKeyRing } from "@waitron/credentials";
@@ -70,6 +71,25 @@ export interface StartedServer {
 export const DEFAULT_MIGRATIONS_ROOT = fileURLToPath(new URL("drizzle", import.meta.url));
 
 /**
+ * The default local store for product images, computed exactly as `DEFAULT_MIGRATIONS_ROOT` above:
+ * beside the bundle (`<dist>/media`) for a built artefact, or `apps/server/src/media` run from
+ * source. `WAITRON_MEDIA_DIR` overrides it (config.ts), and deployment (#9) sets it explicitly to a
+ * durable path; this default only has to exist so a from-source dev boot has somewhere to write.
+ * Threaded into `loadConfig` as the `defaultMediaRoot` argument, the same way this file supplies
+ * `DEFAULT_MIGRATIONS_ROOT`.
+ */
+export const DEFAULT_MEDIA_ROOT = fileURLToPath(new URL("media", import.meta.url));
+
+/**
+ * The upper bound on a single product-image upload (design §5e, 5 MiB). A settled constant rather
+ * than config: it is a DoS ceiling on an unauthenticated-adjacent write path, not an operator knob.
+ * The upload route (a later slice) enforces it both coarsely (a `bodyLimit` middleware) and
+ * precisely (a `file.size` check → `media.too_large`); exported here so that route and this boot
+ * agree on one value rather than two literals that could drift.
+ */
+export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+
+/**
  * The one integrated card-payment provider this till drives (sub-project 7), or `undefined` when
  * `WAITRON_TILL_CARD_PROVIDER=none`. A till serves exactly ONE tenant (`cfg.tenantId`), so ONE
  * provider is built up front at boot rather than per request — the same "resolve provisioning-time
@@ -132,7 +152,7 @@ export async function buildCardProvider(
 export async function startServer(env: Record<string, string | undefined>): Promise<StartedServer> {
   const now = () => new Date();
   const log = createLogger((line) => process.stdout.write(line), now);
-  const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT);
+  const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_MEDIA_ROOT);
   // This guard cannot live in `config.ts`'s `loadConfig` beside `minTickMs > maxTickMs` above it —
   // `health.ts` imports `DEFAULT_MAX_TICK_MS` FROM `config.ts` to build `DUTY_BUDGET_MS`, so
   // `config.ts` importing `DUTY_BUDGET_MS` back would be a cycle. `boot.ts` already imports both,
@@ -203,6 +223,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // creating a second one" (health.ts's own note). `makeStripe` is `defaultMakeStripe`, the same SDK
   // factory `stripeAccountResolver` uses above — the webhook selects each request's signing secret
   // from the PATH tenant's own `payments.stripe` credential, never a platform one.
+  // The product-image store must exist before mounting the routes that read and write it (the
+  // upload/serve mounts land in later slices). Done ONCE here, not per request; `recursive: true`
+  // makes it idempotent — a no-op once the directory is there, which is every boot after the first.
+  // After migrations deliberately: a boot that fails earlier never creates a stray media directory.
+  mkdirSync(config.mediaDir, { recursive: true });
+
   const app = healthApp(health, now);
   mountWebhook(
     app,
