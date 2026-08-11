@@ -4,6 +4,9 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
+import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
+import type { StringKey } from "../i18n/strings.js";
 import type { DashboardApi, LayoutDef, WidgetInstance, WidgetType } from "../api/client.js";
 import { selectStyles } from "../select-styles.js";
 
@@ -24,17 +27,6 @@ const WIDGET_TYPES: readonly WidgetType[] = [
   "held-orders",
   "prep-queue",
 ];
-
-/** The Spanish display name shown per row (i18n of these — and of the raw error codes — is deferred to
- * a later item, exactly as the catalogue/staff screens defer theirs). */
-const WIDGET_NAMES: Record<WidgetType, string> = {
-  "product-grid": "Cuadrícula de productos",
-  basket: "Cesta",
-  total: "Total",
-  "tender-pay": "Cobro",
-  "held-orders": "Pedidos aparcados",
-  "prep-queue": "Cola de preparación",
-};
 
 /**
  * The region a freshly-added widget lands in — its NATURAL region, taken from `DEFAULT_LAYOUT`: the
@@ -102,8 +94,9 @@ function parseColumns(value: string): number | undefined {
  * ERROR HANDLING mirrors `catalogue-screen.ts`/`staff-screen.ts`: `#load` and `#save` are each fully
  * `try/catch`ed (invoked via `void`), so a rejection becomes `errorKey` — the raw thrown `{ code }`,
  * falling back to `server.internal` — rendered in a `role="alert"` banner, never an unhandled promise
- * rejection (the `#boot` defect class). The raw code is shown as-is; mapping codes to Spanish copy is a
- * deferred i18n item, exactly as the catalogue/staff screens defer theirs.
+ * rejection (the `#boot` defect class). The raw code stays in `errorKey`; `codeMessage`
+ * (`../i18n/codes.js`) maps it to localised copy at the render edge, and the widget row names come
+ * from `t("widget.<type>")`, so the banner and rows show localised copy, never the raw code or key.
  */
 @customElement("dashboard-layout-screen")
 export class LayoutScreen extends LitElement {
@@ -262,7 +255,7 @@ export class LayoutScreen extends LitElement {
   /** The widget types not yet placed, in canonical order — the picker's option list. */
   #available(): WidgetType[] {
     const placed = this.#placed();
-    return WIDGET_TYPES.filter((t) => !placed.has(t));
+    return WIDGET_TYPES.filter((type) => !placed.has(type));
   }
 
   /** The picker's effective selection: the current `addChoice` if still available, else the first
@@ -325,7 +318,7 @@ export class LayoutScreen extends LitElement {
 
   #renderConfig(instance: WidgetInstance): TemplateResult {
     if (WIDGET_CONFIG_FIELDS[instance.type].length === 0) {
-      return html`<p class="no-config">Sin ajustes</p>`;
+      return html`<p class="no-config">${t("layout.no_config")}</p>`;
     }
     // Slice 1's only config field: product-grid.columns.
     const current = instance.config.columns;
@@ -333,7 +326,7 @@ export class LayoutScreen extends LitElement {
     return html`<div class="config">
       <wt-input
         type="number"
-        label="Columnas (1–12)"
+        label=${t("layout.columns")}
         data-test="columns"
         .value=${value}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onColumnsChange(e)}
@@ -342,7 +335,7 @@ export class LayoutScreen extends LitElement {
   }
 
   #renderRow(region: Region, rows: WidgetInstance[], instance: WidgetInstance, index: number) {
-    const name = WIDGET_NAMES[instance.type];
+    const name = t(`widget.${instance.type}` as StringKey);
     return html`<li data-test="row-${instance.type}">
       <wt-card>
         <div class="row">
@@ -350,7 +343,7 @@ export class LayoutScreen extends LitElement {
           <div class="controls">
             <wt-button
               size="sm"
-              aria-label=${`Subir ${name}`}
+              aria-label=${`${t("action.move_up")} ${name}`}
               data-test="up-${instance.type}"
               ?disabled=${index === 0}
               @click=${() => this.#move(region, index, -1)}
@@ -358,7 +351,7 @@ export class LayoutScreen extends LitElement {
             >
             <wt-button
               size="sm"
-              aria-label=${`Bajar ${name}`}
+              aria-label=${`${t("action.move_down")} ${name}`}
               data-test="down-${instance.type}"
               ?disabled=${index === rows.length - 1}
               @click=${() => this.#move(region, index, 1)}
@@ -368,14 +361,14 @@ export class LayoutScreen extends LitElement {
               size="sm"
               data-test="edit-${instance.type}"
               @click=${() => this.#toggleEdit(instance.type)}
-              >Editar</wt-button
+              >${t("action.edit")}</wt-button
             >
             <wt-button
               size="sm"
               variant="danger"
               data-test="remove-${instance.type}"
               @click=${() => this.#remove(region, index)}
-              >Eliminar</wt-button
+              >${t("action.remove")}</wt-button
             >
           </div>
         </div>
@@ -390,7 +383,7 @@ export class LayoutScreen extends LitElement {
       <h2 class="region-title">${title}</h2>
       ${
         rows.length === 0
-          ? html`<p class="empty">Sin widgets</p>`
+          ? html`<p class="empty">${t("layout.no_widgets")}</p>`
           : html`<ol>
               ${rows.map((w, i) => this.#renderRow(region, rows, w, i))}
             </ol>`
@@ -402,27 +395,28 @@ export class LayoutScreen extends LitElement {
     const available = this.#available();
     const choice = this.#effectiveChoice(available);
     return html`
-      <h1 class="title">Disposición</h1>
+      <h1 class="title">${t("layout.title")}</h1>
       <div class="regions">
-        ${this.#renderRegion("main", "Principal")} ${this.#renderRegion("aside", "Lateral")}
+        ${this.#renderRegion("main", t("layout.region_main"))}
+        ${this.#renderRegion("aside", t("layout.region_aside"))}
       </div>
 
       ${
         available.length > 0
           ? html`<section class="add">
               <label class="picker"
-                >Widget
+                >${t("layout.widget_picker")}
                 <select data-test="add-type" @change=${(e: Event) => this.#onAddChange(e)}>
                   ${available.map(
-                    (t) =>
-                      html`<option value=${t} .selected=${t === choice}>
-                        ${WIDGET_NAMES[t]}
+                    (type) =>
+                      html`<option value=${type} .selected=${type === choice}>
+                        ${t(`widget.${type}` as StringKey)}
                       </option>`,
                   )}
                 </select>
               </label>
               <wt-button variant="secondary" data-test="add-widget" @click=${() => this.#add()}
-                >Añadir widget</wt-button
+                >${t("layout.add_widget")}</wt-button
               >
             </section>`
           : nothing
@@ -430,11 +424,11 @@ export class LayoutScreen extends LitElement {
 
       <div class="save">
         <wt-button variant="primary" data-test="save" @click=${() => void this.#save()}
-          >Guardar</wt-button
+          >${t("action.save")}</wt-button
         >
       </div>
 
-      ${this.errorKey ? html`<p class="error" role="alert">${this.errorKey}</p>` : nothing}
+      ${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
     `;
   }
 }

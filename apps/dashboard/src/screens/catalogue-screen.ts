@@ -3,6 +3,8 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
+import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 // Value imports (not `import type`): pull in the widget modules for their `@customElement` side
 // effects, so `<dashboard-product-list>`, `<dashboard-product-form>` and
 // `<dashboard-category-manager>` are registered before this screen renders them (the
@@ -306,12 +308,12 @@ export class CatalogueScreen extends LitElement {
     const hasCatalogue = this.catalogues.length > 0;
     return html`
       <div class="header">
-        <h1 class="title">Carta</h1>
+        <h1 class="title">${t("catalogue.title")}</h1>
         ${
           hasCatalogue
             ? html`<div class="actions">
                 <label class="picker"
-                  >Catálogo
+                  >${t("catalogue.picker")}
                   <select
                     data-test="catalogue-select"
                     @change=${(e: Event) => this.#onSelectCatalogue(e)}
@@ -328,7 +330,7 @@ export class CatalogueScreen extends LitElement {
                   variant="primary"
                   data-test="add-product"
                   @click=${() => this.#openForm()}
-                  >Añadir producto</wt-button
+                  >${t("catalogue.add_product")}</wt-button
                 >
               </div>`
             : nothing
@@ -341,16 +343,14 @@ export class CatalogueScreen extends LitElement {
               .products=${this.products}
               @edit-product=${(e: CustomEvent<{ productId: string }>) => this.#onEditProduct(e)}
             ></dashboard-product-list>`
-          : html`<p class="prompt" data-test="no-catalogue">
-              Crea un catálogo para empezar a añadir productos.
-            </p>`
+          : html`<p class="prompt" data-test="no-catalogue">${t("catalogue.empty_prompt")}</p>`
       }
 
       <section class="new-catalogue">
         <wt-input
           class="field"
           data-test="new-catalogue-name"
-          label="Nuevo catálogo"
+          label=${t("catalogue.new")}
           .value=${this.newCatalogueName}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNewCatalogueNameChange(e)}
         ></wt-input>
@@ -358,7 +358,7 @@ export class CatalogueScreen extends LitElement {
           variant="secondary"
           data-test="create-catalogue"
           @click=${() => void this.#createCatalogue()}
-          >Crear catálogo</wt-button
+          >${t("catalogue.create")}</wt-button
         >
       </section>
 
@@ -369,7 +369,7 @@ export class CatalogueScreen extends LitElement {
         ></dashboard-category-manager>
       </section>
 
-      ${this.errorKey ? html`<p class="error" role="alert">${this.errorKey}</p>` : nothing}
+      ${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
 
       <dashboard-product-form
         .open=${this.formOpen}

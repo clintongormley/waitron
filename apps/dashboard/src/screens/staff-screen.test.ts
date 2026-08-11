@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { startRegistration } from "@simplewebauthn/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, PersonSummary } from "../api/client.js";
 import type { StaffList } from "../widgets/staff-list.js";
 import type { PersonForm } from "../widgets/person-form.js";
@@ -175,7 +176,10 @@ describe("staff-screen", () => {
     await flush(el);
 
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("server.internal");
-    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain("server.internal");
+    // The banner renders LOCALISED copy, never the raw wire code (the state above stays the raw code).
+    const banner = el.shadowRoot!.querySelector("[role=alert]")?.textContent;
+    expect(banner).toContain(codeMessage("server.internal", "es-ES"));
+    expect(banner).not.toContain("server.internal");
   });
 
   it("falls back to server.internal when the rejected staff load carries no code", async () => {
@@ -274,9 +278,11 @@ describe("staff-screen", () => {
     expect((el as unknown as { passkeyStatus: string | null }).passkeyStatus).toBe(
       "passkey.registered",
     );
-    expect(el.shadowRoot!.querySelector("[role=status]")?.textContent).toContain(
-      "passkey.registered",
-    );
+    // The status banner renders LOCALISED copy ("Passkey añadida"), never the raw wire code (the
+    // state above stays the raw success code).
+    const status = el.shadowRoot!.querySelector("[role=status]")?.textContent;
+    expect(status).toContain(codeMessage("passkey.registered", "es-ES"));
+    expect(status).not.toContain("passkey.registered");
   });
 
   // A rejected registration step becomes the error banner (never an unhandled rejection — pristine

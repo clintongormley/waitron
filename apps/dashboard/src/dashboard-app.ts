@@ -2,6 +2,7 @@ import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import { t } from "./i18n/t.js";
 // Side-effect imports register the screen elements this shell swaps between; it names them only as
 // tags below, so the wiring — not the screens — is what lives here.
 import "./screens/login-screen.js";
@@ -145,34 +146,34 @@ export class DashboardApp extends LitElement {
     }
     return html`
       <header class="chrome">
-        <nav class="nav" aria-label="Secciones">
+        <nav class="nav" aria-label=${t("nav.sections")}>
           <wt-button
             variant=${this.screen === "staff" ? "primary" : "secondary"}
             data-test="nav-staff"
             @click=${() => (this.screen = "staff")}
-            >Usuarios</wt-button
+            >${t("nav.staff")}</wt-button
           >
           <wt-button
             variant=${this.screen === "catalogue" ? "primary" : "secondary"}
             data-test="nav-catalogue"
             @click=${() => (this.screen = "catalogue")}
-            >Carta</wt-button
+            >${t("nav.catalogue")}</wt-button
           >
           <wt-button
             variant=${this.screen === "layout" ? "primary" : "secondary"}
             data-test="nav-layout"
             @click=${() => (this.screen = "layout")}
-            >Disposición</wt-button
+            >${t("nav.layout")}</wt-button
           >
           <wt-button
             variant=${this.screen === "receipt" ? "primary" : "secondary"}
             data-test="nav-receipt"
             @click=${() => (this.screen = "receipt")}
-            >Recibo</wt-button
+            >${t("nav.receipt")}</wt-button
           >
         </nav>
         <wt-button variant="secondary" data-test="logout" @click=${() => void this.#onLogout()}
-          >Cerrar sesión</wt-button
+          >${t("action.logout")}</wt-button
         >
       </header>
       <div class="body">${this.#renderScreen()}</div>

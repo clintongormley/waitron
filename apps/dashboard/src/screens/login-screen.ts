@@ -5,6 +5,8 @@ import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/brow
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
+import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, RosterEntry } from "../api/client.js";
 import { selectStyles } from "../select-styles.js";
 
@@ -16,9 +18,9 @@ import { selectStyles } from "../select-styles.js";
  * event: on a successful `api.login(...)` it dispatches `logged-in` carrying `{ personId }`,
  * `bubbles`/`composed` so the app shell above the shadow boundary hears it. A rejected login — or a
  * rejected roster fetch — sets `errorKey` from the thrown `{ code }` (falling back to
- * `server.internal`), which renders raw in a `role="alert"` paragraph — a later i18n task maps those
- * codes to Spanish copy, exactly as `apps/till/src/i18n` does; the screen deliberately does not
- * translate here.
+ * `server.internal`); the raw code is kept in state, and `codeMessage` (`../i18n/codes.js`) maps it to
+ * localised copy at the render edge, so the `role="alert"` paragraph shows a sentence and never the
+ * raw wire code.
  */
 @customElement("dashboard-login-screen")
 export class LoginScreen extends LitElement {
@@ -148,34 +150,34 @@ export class LoginScreen extends LitElement {
   override render() {
     return html`
       <label class="field"
-        >Usuario
+        >${t("login.roster")}
         <select .value=${this.selected} @change=${(e: Event) => this.#onRosterChange(e)}>
           ${this.roster.map((p) => html`<option value=${p.personId}>${p.displayName}</option>`)}
         </select>
       </label>
       <wt-input
         class="field"
-        label="Contraseña"
+        label=${t("login.password")}
         type="password"
         .value=${this.password}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPasswordChange(e)}
       ></wt-input>
       <wt-input
         class="field"
-        label="Código (si procede)"
+        label=${t("login.totp")}
         .value=${this.totp}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onTotpChange(e)}
       ></wt-input>
       <wt-button variant="primary" data-test="submit" @click=${() => void this.#submit()}
-        >Entrar</wt-button
+        >${t("action.login")}</wt-button
       >
       <wt-button
         variant="secondary"
         data-test="passkey-login"
         @click=${() => void this.#passkeyLogin()}
-        >Entrar con passkey</wt-button
+        >${t("login.with_passkey")}</wt-button
       >
-      ${this.errorKey ? html`<p class="error" role="alert">${this.errorKey}</p>` : ""}
+      ${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : ""}
     `;
   }
 }

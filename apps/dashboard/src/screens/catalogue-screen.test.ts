@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { CatalogueSummary, CategorySummary, DashboardApi, Product } from "../api/client.js";
 import type { ProductList } from "../widgets/product-list.js";
 import type { ProductForm } from "../widgets/product-form.js";
@@ -291,7 +292,10 @@ describe("catalogue-screen", () => {
     await flush(el);
 
     expect(errorKey(el)).toBe("server.internal");
-    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain("server.internal");
+    // The banner renders LOCALISED copy, never the raw wire code (the state above stays the raw code).
+    const banner = el.shadowRoot!.querySelector("[role=alert]")?.textContent;
+    expect(banner).toContain(codeMessage("server.internal", "es-ES"));
+    expect(banner).not.toContain("server.internal");
   });
 
   it("falls back to server.internal when a rejected load carries no code", async () => {

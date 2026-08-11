@@ -1,0 +1,44 @@
+import { afterEach, expect, it } from "vitest";
+import { codeMessage } from "./codes.js";
+import { setLocale } from "./t.js";
+
+afterEach(() => {
+  // codes.ts defaults to t.ts's module-level locale (via currentLocale()); reset
+  // to the shipped default so a setLocale in one test cannot leak into another.
+  setLocale("es-ES");
+});
+
+it("resolves a known code to its Spanish copy", () => {
+  // Exercises CODE_MESSAGES[code] (first ?? arm) and entry[lang] with lang "es".
+  expect(codeMessage("password.invalid", "es")).toBe("Contraseña incorrecta, inténtalo de nuevo");
+});
+
+it("degrades an unknown code to the generic message, NEVER the raw code", () => {
+  // The load-bearing guarantee: an unmapped code must render human copy, never leak
+  // the wire code to the operator. This is the CODE_MESSAGES[code] ?? GENERIC arm.
+  const message = codeMessage("totally.made.up", "en");
+  expect(message).toBe("Something went wrong, try again");
+  expect(message).not.toBe("totally.made.up");
+});
+
+it("resolves a known code to its English copy", () => {
+  // entry[lang] with lang "en" — the other side of the language selection.
+  expect(codeMessage("password.invalid", "en")).toBe("Incorrect password, try again");
+});
+
+it("falls back to English for a known code in an unknown language", () => {
+  // "fr" is not a column, so entry["fr"] is undefined and the `?? entry.en` arm fires.
+  expect(codeMessage("password.invalid", "fr")).toBe("Incorrect password, try again");
+});
+
+it("strips a region subtag before the language lookup", () => {
+  // "es-ES" → "es"; proves locale.replace(/-.*$/, "") runs before indexing entry.
+  expect(codeMessage("totp.invalid", "es-ES")).toBe("Código incorrecto, inténtalo de nuevo");
+});
+
+it("defaults to the active locale when none is passed", () => {
+  // No locale arg → currentLocale(). The shipped default is es-ES.
+  expect(codeMessage("passkey.registered")).toBe("Passkey añadida");
+  setLocale("en");
+  expect(codeMessage("passkey.registered")).toBe("Passkey added");
+});
