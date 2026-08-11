@@ -1,6 +1,8 @@
-// The static per-table apply SQL for the commercial-lane outbox. Each statement is built ONCE from
-// the enrolment registry (registry.ts) and the live Drizzle schema — never from a captured row's
-// contents. Table names are literals drawn from the fixed ENROLLED registry; column names are read
+// The static per-table apply SQL for the commercial-lane outbox. Each statement is a pure function of
+// its enrolled table (registry.ts) and the live Drizzle schema — never a captured row's contents — so
+// apply.ts builds each apply statement once into its module-level dispatch map and reuses it per row,
+// rather than rebuilding (and re-deriving the watermark column list) for every row of a batch.
+// Table names are literals drawn from the fixed ENROLLED registry; column names are read
 // off the compile-time Drizzle table objects. So no identifier is runtime-derived and the CLAUDE.md
 // §3 identifier-escaping question does not arise (apply-sql.test.ts proves it): the whole row_image
 // binds as the single `$1` via jsonb_populate_record, exactly the shape the container gates validated

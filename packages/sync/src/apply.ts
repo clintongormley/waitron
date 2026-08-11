@@ -199,6 +199,48 @@ export async function applyBatch(
   return { applied, deferred };
 }
 
+/** A `$1`-bearing statement split into the text before and after the single payload bind. */
+interface StatementParts {
+  head: string;
+  tail: string;
+}
+
+/**
+ * One enrolled table's apply plumbing, precomputed ONCE at module load. `applyParts` is the
+ * insert/update statement already split at the `$1` payload marker with the affected-row RETURNING
+ * folded into its tail, so the per-row hot path is a Map lookup and a string interleave rather than a
+ * rebuild. That matters for the watermark form, whose statement re-derives the column list from the
+ * Drizzle schema (apply-sql.ts) — wasteful to recompute for every row of a batch.
+ */
+interface Dispatch {
+  entry: EnrolledTable;
+  applyParts: StatementParts;
+}
+
+/**
+ * Splits a statement at its single `$1` payload marker and folds in the affected-row `returning 1 as
+ * applied`, so a no-op leaves `.rows` empty and a real change returns one row. The `row_image` then
+ * binds as that one `$1` (cast `::jsonb`); every identifier around it is a literal from the fixed
+ * registry (apply-sql.ts), never runtime-derived, so the CLAUDE.md §3 escaping question does not arise.
+ */
+function splitStatement(statement: string): StatementParts {
+  const marker = statement.indexOf("$1");
+  return {
+    head: statement.slice(0, marker),
+    tail: `${statement.slice(marker + 2)} returning 1 as applied`,
+  };
+}
+
+// The dispatch table, built once from ENROLLED: 14 entries cover every row of any batch. The delete
+// statement is NOT precomputed — deleteStatementFor is a cheap pure-string helper with no column
+// derivation, and only Group C rows ever delete — so it is built per delete row in applyOneRow.
+const DISPATCH: ReadonlyMap<string, Dispatch> = new Map(
+  ENROLLED.map((entry) => [
+    entry.table,
+    { entry, applyParts: splitStatement(applyStatementFor(entry)) },
+  ]),
+);
+
 /**
  * Applies one row, returning the affected-row count, or the sentinel `"deferred"` when the write
  * raised `23503 foreign_key_violation` (the only error parked; anything else — a cross-tenant
@@ -207,10 +249,10 @@ export async function applyBatch(
  * a hard `sync.table_not_enrolled` rather than a silent skip.
  */
 async function tryApplyRow(db: Database, row: SyncLogRow): Promise<number | "deferred"> {
-  const entry = ENROLLED.find((e) => e.table === row.table);
-  if (entry === undefined) throw new AppError("sync.table_not_enrolled", { table: row.table });
+  const dispatch = DISPATCH.get(row.table);
+  if (dispatch === undefined) throw new AppError("sync.table_not_enrolled", { table: row.table });
   try {
-    return await applyOneRow(db, row, entry);
+    return await applyOneRow(db, row, dispatch);
   } catch (error) {
     // pgErrorCode reads the SQLSTATE off drizzle's DrizzleQueryError wrapper (.cause.code) — the
     // repo's one canonical reader, reused rather than re-copied (packages/db/src/testing/errors.ts).
@@ -220,28 +262,23 @@ async function tryApplyRow(db: Database, row: SyncLogRow): Promise<number | "def
 }
 
 /**
- * Runs the registry's static apply statement for one row inside a tenant-scoped, echo-guarded
- * transaction, and returns how many rows it changed.
- *
- * The `row_image` binds as the single `$1` (cast `::jsonb`); the statement's identifiers are all
- * literals drawn from the fixed registry (apply-sql.ts), never runtime-derived, so the
- * identifier-escaping question of CLAUDE.md §3 does not arise. `returning 1` is appended so the
- * affected-row count can be read off `.rows`: the shared `Database.execute` result type exposes
- * `.rows` but NOT pg's `.rowCount` (packages/db/src/client.ts, deliberately, so both drivers share
- * one type), so a no-op leaves `.rows` empty and a real change returns one row.
+ * Runs the row's apply (or delete) statement inside a tenant-scoped, echo-guarded transaction and
+ * returns how many rows it changed. The insert/update statement is the precomputed `applyParts`; a
+ * delete builds its cheap statement per row (only Group C deletes, no column derivation). The shared
+ * `Database.execute` result type exposes `.rows` but NOT pg's `.rowCount` (packages/db/src/client.ts,
+ * so both drivers share one type), so the folded-in `returning 1` makes a no-op an empty `.rows` and
+ * a real change one row.
  */
-async function applyOneRow(db: Database, row: SyncLogRow, entry: EnrolledTable): Promise<number> {
-  const statement = row.op === "delete" ? deleteStatementFor(entry) : applyStatementFor(entry);
-  const marker = statement.indexOf("$1");
-  const head = statement.slice(0, marker);
-  const tail = statement.slice(marker + 2);
+async function applyOneRow(db: Database, row: SyncLogRow, dispatch: Dispatch): Promise<number> {
+  const parts =
+    row.op === "delete" ? splitStatement(deleteStatementFor(dispatch.entry)) : dispatch.applyParts;
   const payload = JSON.stringify(row.rowImage);
   return withTenant(db, row.tenantId, async (tx) => {
     // Echo guard, same transaction as the write: the capture triggers skip a write made under
     // app.sync_apply='on' (spec §3.4), so applying a peer's row does not re-enter our own sync_log.
     await tx.execute(sql`select set_config('app.sync_apply', 'on', true)`);
     const result = await tx.execute(
-      sql`${sql.raw(head)}${payload}::jsonb${sql.raw(tail)} returning 1 as applied`,
+      sql`${sql.raw(parts.head)}${payload}::jsonb${sql.raw(parts.tail)}`,
     );
     return result.rows.length;
   });
