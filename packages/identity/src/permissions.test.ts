@@ -23,4 +23,13 @@ describe("roleHasPermission", () => {
   it("gives an admin every permission", () => {
     for (const p of PERMISSIONS) expect(roleHasPermission("admin", p)).toBe(true);
   });
+  it("grants till.configure to manager and admin only (design D9)", () => {
+    // A domain-named config permission (layout/receipt authoring), granted to exactly the roles that
+    // hold person.manage — manager and admin — and NEVER to staff or supervisor, so the layout/receipt
+    // write gate matches the staff-admin gate.
+    expect(roleHasPermission("manager", "till.configure")).toBe(true);
+    expect(roleHasPermission("admin", "till.configure")).toBe(true);
+    expect(roleHasPermission("staff", "till.configure")).toBe(false);
+    expect(roleHasPermission("supervisor", "till.configure")).toBe(false);
+  });
 });

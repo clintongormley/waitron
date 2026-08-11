@@ -10,6 +10,10 @@ export const PERMISSIONS = [
   "sale.discount", // in the catalog for completeness; no call site until the till (#7) applies a discount
   "sale.rectify",
   "person.manage",
+  // Authoring the till layout + receipt trim (dashboard config, @waitron/layouts). A domain-named
+  // CONFIG permission, distinct from staff admin (person.manage); granted to manager + admin, the
+  // same roles as person.manage (design D9).
+  "till.configure",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -23,7 +27,11 @@ const SUPERVISOR: ReadonlySet<Permission> = new Set([
   "sale.discount",
   "sale.rectify",
 ]);
-const MANAGER: ReadonlySet<Permission> = new Set([...SUPERVISOR, "person.manage"]);
+const MANAGER: ReadonlySet<Permission> = new Set([
+  ...SUPERVISOR,
+  "person.manage",
+  "till.configure",
+]);
 const ALL: ReadonlySet<Permission> = new Set(PERMISSIONS);
 
 const ROLE_PERMISSIONS: Record<PersonRoleValue, ReadonlySet<Permission>> = {
