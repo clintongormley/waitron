@@ -595,17 +595,36 @@ those runs pointed the same way, and a control would need a config where the `ex
 the table. The trap is a property of Vitest's defaults, not of that config, so it is waiting for the
 next `include` that points inside a dot-directory.
 
-**`errors.reachability.test.ts` does not test reachability.** The rule it exists to enforce is real —
-an `errors.ts` unreachable from its package's own barrel is invisible to external consumers — but the
-test does not enforce it. Proven by deletion in `packages/migrations`: remove `import "./errors.js"`
-from the barrel **and** from every other file, and it still passes, because `tsconfig`'s
-`include: ["src"]` makes every file a compilation root regardless of the import graph and
-`vitest run` does not typecheck at all. **Eight packages carry a copy** (`core`, `credentials`, `db`,
-`fiscal`, `fiscal-verifactu`, `migrations`, `payments`, `payments-stripe`) and every one of their
-`include` arrays starts with `"src"` — verified by inspection, so the mechanism is uniform even
-though the deletion was run in one. Closing it needs a `tsc`-based downstream-consumer probe, or an
-`include` narrowed to the barrel's transitive closure. Until then, do not cite these tests as
-evidence that an augmentation is reachable.
+**`errors.ts` reachability is guarded once, in the root Vitest project — `scripts/errors-reachable.test.ts`.**
+The rule is real: an `errors.ts` unreachable from its package's own barrel is invisible to external
+consumers, because the package's own `pnpm typecheck` loads it anyway (`tsconfig` `include`s all of
+`src`) so nothing that runs from inside the package ever notices. Until 2026-08-11 thirteen packages
+each hand-copied a per-package `src/errors.reachability.test.ts`, in **two shapes**, and six of them
+did not test reachability at all — the shape (constructing an `AppError`, checking the barrel loads)
+inspects no import graph. Proven by deletion in `test/reachability-import-graph`, `import "./errors.js"`
+stripped from every file that reaches it: `packages/migrations` (a smoke copy) passed **2/2 with
+`errors.ts` fully unreachable** — `AppError` validates nothing against `ErrorParams` at runtime and
+`vitest run` does not typecheck — while `packages/db` (a _text-walk_ copy, which reads source as text
+and walks the import graph from `index.ts`) **failed correctly**, `expected false to be true`, and
+passed again once restored. So the old CLAUDE.md claim "the test does not test reachability" was true
+for the six smoke copies and **false for the seven text-walk copies**; it conflated them, and its
+"eight packages" list mixed the two. Two augmenting packages (`catalogue`, `provisioning`) had no
+copy at all.
+
+All thirteen copies are deleted. The single root guard discovers every `packages/*` that ships both
+`src/index.ts` and `src/errors.ts` — **sixteen today**, including the two that were uncovered and
+`shared` itself — and asserts reachability with the proven text-walk. It is **proven by deletion
+through the new guard**: delete both of `db`'s reachable `import "./errors.js"` lines and the `db`
+case fails while the other fifteen pass; restore and all green. It reads **text, not types**, so a
+`from "./errors.js"` sitting in a _comment_ on a still-reachable file would fake an edge — a limitation
+stated in the guard's own header, not papered over. Comment-stripping was rejected: a block stripper
+mishandles a slash-star opener inside a string literal (a glob), which would drop a **real** import and
+misfire the guard, a worse failure than the hole it closes. The tree already carried the working
+mechanism, so the earlier idea of a `tsc` downstream-consumer probe or a narrowed `include` was not
+needed. Living in the root project, the guard **auto-covers packages added later** — which is what the
+hand-copied version's drift shows was needed: eight in this file's own former count, thirteen actually
+in the tree, and `catalogue` and `provisioning` never copied at all. Like the other root guards it is
+**not typechecked** (§2), so keep it plain.
 
 **`toMatchObject` checks only the keys you list — a key you never list is never checked at all.**
 That is the loophole, not type-blindness: `expect({memberOf: "{}"}).toMatchObject({memberOf: []})`
