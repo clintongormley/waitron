@@ -1,6 +1,6 @@
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
-import { cp, mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
@@ -436,7 +436,7 @@ describe("startServer, against a real container as the deployment role", () => {
   // `WAITRON_MEDIA_DIR` at a nested path that does NOT exist yet, boot, and assert `existsSync`
   // flipped false -> true — proof the recursive `mkdirSync` ran with this resolved, absolute
   // mediaDir, not merely that some directory happened to be present already.
-  it("ensures the configured media directory exists at boot (recursive), before mounting routes", async () => {
+  it("ensures the configured media directory exists at boot (recursive), and serves it from the public /media route", async () => {
     const port = await freePort();
     const mediaDir = join(MEDIA_ROOT, "created-at-boot", "product-images");
     expect(existsSync(mediaDir)).toBe(false);
@@ -458,6 +458,25 @@ describe("startServer, against a real container as the deployment role", () => {
       // `startServer` resolves only after the mkdir (which runs before the first pass), so the
       // directory is already present the moment the boot returns — no polling needed.
       expect(existsSync(mediaDir)).toBe(true);
+
+      // `mountMedia` is on the SAME app, wired to `config.mediaDir` (this very dir). Drop a
+      // content-hash-shaped file into it and fetch it back through the public serve route: a 200 with
+      // the right bytes and Content-Type is the proof the mount ran AND reads from `config.mediaDir` —
+      // a plain nonexistent route would answer Hono's own 404, so only a 200 distinguishes the two.
+      const imageName = "a".repeat(64) + ".png";
+      const imageBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      await writeFile(join(mediaDir, imageName), imageBytes);
+      const image = await fetch(`http://127.0.0.1:${port}/media/${imageName}`);
+      expect(image.status).toBe(200);
+      expect(image.headers.get("content-type")).toBe("image/png");
+      expect(new Uint8Array(await image.arrayBuffer())).toEqual(imageBytes);
+
+      // A traversal attempt is refused by the mounted route's own regex guard — a bare 404, from a
+      // real boot, not just the in-process suite.
+      const escape = await fetch(
+        `http://127.0.0.1:${port}/media/${encodeURIComponent("../../etc/passwd")}`,
+      );
+      expect(escape.status).toBe(404);
     } finally {
       await server.close();
     }

@@ -38,6 +38,7 @@ import type { StripeAccountDeps } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
 import { mountManagementApi } from "./management-api.js";
+import { mountMedia } from "./media-api.js";
 import { readOrderFlow } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
@@ -295,6 +296,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     },
     log,
   );
+  // The PUBLIC read half of the product-image feature on the SAME app — the `mountWebhook` /
+  // `mountTillApi` / `mountManagementApi` convention again. Deliberately UNAUTHENTICATED and taking
+  // no `db`/session: it serves bytes from `config.mediaDir` (the store `mkdirSync` above ensured),
+  // guarding the filename against traversal with its own explicit regex (design §5e). Mounted after
+  // the gated groups purely for reading order; route registration only, no database work at boot.
+  mountMedia(app, { mediaDir: config.mediaDir }, log);
   // `buildServeOptions` turns the plain-HTTP options into HTTPS ones when `config.tls` is set,
   // reading the cert/key files, and returns them unchanged otherwise (loopback dev). The exact
   // `@hono/node-server` option names (`createServer` + `serverOptions`) are confirmed and documented
