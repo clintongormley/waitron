@@ -305,3 +305,73 @@ describeEachTarget("invoice_locales", (target) => {
     );
   });
 });
+
+describeEachTarget("app.node_id origin context", (target) => {
+  // The optional 4th arg to withTenant: it threads the producing node's id into `app.node_id` so a
+  // locally-originated write to an enrolled table records its origin in `sync_log.origin_id` (the
+  // sync capture trigger reads that GUC). Observed here via `current_setting`, so PGlite is a fair
+  // target — this is not an RLS/grant assertion, just proof the GUC is set, unset, and
+  // transaction-local. The end-to-end proof that a real capture stamps `origin_id` lives in
+  // packages/sync's origin.gate.test.ts against a genuine capture trigger.
+  const tenantId = randomUUID();
+  const nodeId = randomUUID();
+  let db: Database;
+
+  beforeEach(async () => {
+    db = await target.create();
+  });
+
+  afterEach(async () => {
+    if (db !== undefined) await db.close();
+  });
+
+  const nodeSetting = (
+    tx: Parameters<Parameters<typeof withTenant>[2]>[0],
+  ): Promise<string | null> =>
+    tx
+      .execute<{ v: string | null }>(sql`select current_setting('app.node_id', true) as v`)
+      .then((r) => r.rows[0]?.v ?? null);
+
+  it("sets app.node_id to the supplied node id within the transaction (4-arg form)", async () => {
+    const seen = await withTenant(db, tenantId, (tx) => nodeSetting(tx), { nodeId });
+    expect(seen).toBe(nodeId);
+  });
+
+  it("still sets app.tenant_id alongside app.node_id (the 4-arg form does not drop the tenant)", async () => {
+    // The node id is ADDITIVE — it must not displace the tenant GUC every tenancy decision reads.
+    const seen = await withTenant(
+      db,
+      tenantId,
+      (tx) =>
+        tx
+          .execute<{ t: string | null; n: string | null }>(
+            sql`select current_setting('app.tenant_id', true) as t,
+                       current_setting('app.node_id', true) as n`,
+          )
+          .then((r) => r.rows[0]),
+      { nodeId },
+    );
+    expect(seen).toMatchObject({ t: tenantId, n: nodeId });
+  });
+
+  it("leaves app.node_id unset on the plain 3-arg form (default path byte-unchanged)", async () => {
+    // Proves the existing signature is untouched: no app.node_id is set, so capture falls back to the
+    // all-zero origin. current_setting(..., true) is NULL when never set (or '' once a local set has
+    // been restored at txn end); it is NEVER the node id.
+    const seen = await withTenant(db, tenantId, (tx) => nodeSetting(tx));
+    expect(seen === null || seen === "").toBe(true);
+    expect(seen).not.toBe(nodeId);
+  });
+
+  it("does not leak app.node_id to a later transaction on the same connection", async () => {
+    // Mirrors the app.tenant_id leak test above: set_config's `true` (transaction-LOCAL) third arg is
+    // load-bearing. A node id set in one withTenant must not still be readable in the next,
+    // tenant-less transaction on the same pooled connection / reused pglite session.
+    const within = await withTenant(db, tenantId, (tx) => nodeSetting(tx), { nodeId });
+    expect(within).toBe(nodeId);
+
+    const after = await db.transaction((tx) => nodeSetting(tx));
+    expect(after === null || after === "").toBe(true);
+    expect(after).not.toBe(nodeId);
+  });
+});

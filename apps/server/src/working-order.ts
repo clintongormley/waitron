@@ -301,12 +301,17 @@ export async function parkOrder(
     throw new AppError("sale.empty_basket", {});
   }
 
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
-    // Park needs only the allocated number; `priced` is `payWorkingOrder`'s walk-up shortcut, unused here.
-    const { orderNumber } = await createOpenOrder(tx, cfg, req.id, req.lines, req.label ?? null);
-    return { id: req.id, orderNumber };
-  });
+  return withTenant(
+    deps.db,
+    cfg.tenantId,
+    async (tx) => {
+      await asAppUser(tx);
+      // Park needs only the allocated number; `priced` is `payWorkingOrder`'s walk-up shortcut, unused here.
+      const { orderNumber } = await createOpenOrder(tx, cfg, req.id, req.lines, req.label ?? null);
+      return { id: req.id, orderNumber };
+    },
+    { nodeId: cfg.nodeId },
+  );
 }
 
 /** One row of the held-orders list the counter shows to retrieve a parked order. */
@@ -472,45 +477,50 @@ export async function updateHeldOrder(
   id: string,
   req: UpdateHeldOrderRequest,
 ): Promise<void> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
+  return withTenant(
+    deps.db,
+    cfg.tenantId,
+    async (tx) => {
+      await asAppUser(tx);
 
-    // Lock the order row for the life of the tx, then read its status off the locked copy. Absent or
-    // not-open → `working_order.not_open`; the DB triggers (enforce_transition on the label update,
-    // require_open_parent on the line delete/insert) are the backstop if this app check is ever wrong.
-    const [order] = await tx
-      .select({ status: workingOrders.status })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, id))
-      .for("update");
+      // Lock the order row for the life of the tx, then read its status off the locked copy. Absent or
+      // not-open → `working_order.not_open`; the DB triggers (enforce_transition on the label update,
+      // require_open_parent on the line delete/insert) are the backstop if this app check is ever wrong.
+      const [order] = await tx
+        .select({ status: workingOrders.status })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, id))
+        .for("update");
 
-    if (order === undefined || order.status !== "open") {
-      throw new AppError("working_order.not_open", { workingOrderId: id });
-    }
+      if (order === undefined || order.status !== "open") {
+        throw new AppError("working_order.not_open", { workingOrderId: id });
+      }
 
-    // Refused before any line is touched: an empty basket has nothing to price, and rewriting an
-    // order to zero lines is a discard, which is `abandonHeldOrder`'s job, not this one's. The same
-    // guard `parkOrder`/`recordTillSale` make.
-    if (req.lines.length === 0) {
-      throw new AppError("sale.empty_basket", {});
-    }
+      // Refused before any line is touched: an empty basket has nothing to price, and rewriting an
+      // order to zero lines is a discard, which is `abandonHeldOrder`'s job, not this one's. The same
+      // guard `parkOrder`/`recordTillSale` make.
+      if (req.lines.length === 0) {
+        throw new AppError("sale.empty_basket", {});
+      }
 
-    // Price the new basket (refusing an unknown product) BEFORE deleting anything, so a bad line
-    // aborts the tx with the parked order still intact. Then swap the lines wholesale: the parent is
-    // open (checked above, held under the lock), so the line delete and the re-insert both satisfy
-    // `require_open_parent`, and the re-numbered `line_no`s start from 1.
-    // An edit only rewrites the persisted lines; `priced` is `payWorkingOrder`'s walk-up shortcut, unused here.
-    const { lineRows } = await priceOrderLines(tx, cfg, id, req.lines);
-    await tx.delete(workingOrderLines).where(eq(workingOrderLines.workingOrderId, id));
-    await tx.insert(workingOrderLines).values(lineRows);
+      // Price the new basket (refusing an unknown product) BEFORE deleting anything, so a bad line
+      // aborts the tx with the parked order still intact. Then swap the lines wholesale: the parent is
+      // open (checked above, held under the lock), so the line delete and the re-insert both satisfy
+      // `require_open_parent`, and the re-numbered `line_no`s start from 1.
+      // An edit only rewrites the persisted lines; `priced` is `payWorkingOrder`'s walk-up shortcut, unused here.
+      const { lineRows } = await priceOrderLines(tx, cfg, id, req.lines);
+      await tx.delete(workingOrderLines).where(eq(workingOrderLines.workingOrderId, id));
+      await tx.insert(workingOrderLines).values(lineRows);
 
-    // Runs over the `enforce_transition` trigger (OLD.status = 'open', so it passes). `req.label`
-    // absent clears any prior label to NULL — the whole request is the new state, labels included.
-    await tx
-      .update(workingOrders)
-      .set({ label: req.label ?? null })
-      .where(eq(workingOrders.id, id));
-  });
+      // Runs over the `enforce_transition` trigger (OLD.status = 'open', so it passes). `req.label`
+      // absent clears any prior label to NULL — the whole request is the new state, labels included.
+      await tx
+        .update(workingOrders)
+        .set({ label: req.label ?? null })
+        .where(eq(workingOrders.id, id));
+    },
+    { nodeId: cfg.nodeId },
+  );
 }
 
 /**
@@ -529,19 +539,24 @@ export async function abandonHeldOrder(
   cfg: TillConfig,
   id: string,
 ): Promise<void> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
+  return withTenant(
+    deps.db,
+    cfg.tenantId,
+    async (tx) => {
+      await asAppUser(tx);
 
-    const updated = await tx
-      .update(workingOrders)
-      .set({ status: "abandoned" })
-      .where(and(eq(workingOrders.id, id), eq(workingOrders.status, "open")))
-      .returning({ id: workingOrders.id });
+      const updated = await tx
+        .update(workingOrders)
+        .set({ status: "abandoned" })
+        .where(and(eq(workingOrders.id, id), eq(workingOrders.status, "open")))
+        .returning({ id: workingOrders.id });
 
-    if (updated.length === 0) {
-      throw new AppError("working_order.not_open", { workingOrderId: id });
-    }
-  });
+      if (updated.length === 0) {
+        throw new AppError("working_order.not_open", { workingOrderId: id });
+      }
+    },
+    { nodeId: cfg.nodeId },
+  );
 }
 
 /**
@@ -603,95 +618,100 @@ export async function placeOrder(
   id: string,
   operatorId: string,
 ): Promise<PlaceOrderResult> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
+  return withTenant(
+    deps.db,
+    cfg.tenantId,
+    async (tx) => {
+      await asAppUser(tx);
 
-    // Lock the order for the life of the tx and read its status off the locked copy. Absent (nothing
-    // to lock) or not-open → `working_order.not_open`; the enforce_transition trigger is the DB
-    // backstop if this app check is ever wrong.
-    const [locked] = await tx
-      .select({ status: workingOrders.status })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, id))
-      .for("update");
-    if (locked === undefined || locked.status !== "open") {
-      throw new AppError("working_order.not_open", { workingOrderId: id });
-    }
+      // Lock the order for the life of the tx and read its status off the locked copy. Absent (nothing
+      // to lock) or not-open → `working_order.not_open`; the enforce_transition trigger is the DB
+      // backstop if this app check is ever wrong.
+      const [locked] = await tx
+        .select({ status: workingOrders.status })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, id))
+        .for("update");
+      if (locked === undefined || locked.status !== "open") {
+        throw new AppError("working_order.not_open", { workingOrderId: id });
+      }
 
-    // Mode dispatch (design §3). Mode I files the DEFERRED invoice HERE, before the transition, from
-    // the order's stored locked lines (never a re-price — the composition was locked at add-time); the
-    // read-back invoice number rides on the result. Modes T and P file nothing at placing. The
-    // deferred file tags the sale with `working_order_id = id`, so the FOR UPDATE lock above already
-    // guarantees one invoice per order (a second place sees `placed` and is refused before reaching
-    // this).
-    let placeResult: PlaceOrderResult = { id, status: "placed" };
-    if (cfg.orderFlow === "invoice_first") {
-      const priced = await priceStoredOrder(tx, id);
-      const { saleId, fiscal } = await recordSale(tx, deps.backend, {
+      // Mode dispatch (design §3). Mode I files the DEFERRED invoice HERE, before the transition, from
+      // the order's stored locked lines (never a re-price — the composition was locked at add-time); the
+      // read-back invoice number rides on the result. Modes T and P file nothing at placing. The
+      // deferred file tags the sale with `working_order_id = id`, so the FOR UPDATE lock above already
+      // guarantees one invoice per order (a second place sees `placed` and is refused before reaching
+      // this).
+      let placeResult: PlaceOrderResult = { id, status: "placed" };
+      if (cfg.orderFlow === "invoice_first") {
+        const priced = await priceStoredOrder(tx, id);
+        const { saleId, fiscal } = await recordSale(tx, deps.backend, {
+          tenantId: cfg.tenantId,
+          tillId: cfg.tillId,
+          nodeId: cfg.nodeId,
+          seriesId: cfg.seriesId,
+          workingOrderId: brandWorkingOrderId(id),
+          locale: cfg.locale,
+          invoiceLocales: cfg.invoiceLocales,
+          total: priced.total,
+          lines: priced.lines,
+          vatBreakdown: priced.vatBreakdown,
+          fiscalBackend: "verifactu",
+          clock: deps.clock,
+          operatorId,
+          // A chained invoice with NO tender and NO settlement — the legitimate unsettled steady state
+          // an invoice-first sale sits in until `collectOrder` settles it (design §3, Ordering 1).
+          settlement: { kind: "deferred" },
+        });
+        // The human-facing "A/1" is read back from the sale row + its series (the FiscalRecordRef is
+        // regime-opaque), in this same transaction — the shared `readInvoiceNumber` reader.
+        placeResult = {
+          id,
+          status: "placed",
+          invoiceNumber: await readInvoiceNumber(tx, saleId),
+          issuedAt: fiscal.issuedAt.toISOString(),
+          total: priced.total,
+          qr: fiscal.verificationUrl ?? "",
+          vatBreakdown: toVatBreakdown(priced.vatBreakdown),
+        };
+      }
+
+      // open → placed. `working_orders_enforce_transition` validates OLD.status = 'open'; no `settled_at`
+      // (the biconditional requires it stay NULL for a non-settled status).
+      await tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id));
+
+      // Open the amendment log with its `order_placed` genesis. `appendOrderAmendment` owns the
+      // parent-row-lock serialisation, the per-order sequence and the tamper-evident hash (Task 3); the
+      // genesis carries NO contest reason (a placement has none). The venue's trusted-clock instant +
+      // wall offset are hashed and stored so the entry reprints in venue time (#52).
+      const now = deps.clock.now();
+      await appendOrderAmendment(tx, {
         tenantId: cfg.tenantId,
-        tillId: cfg.tillId,
-        nodeId: cfg.nodeId,
-        seriesId: cfg.seriesId,
-        workingOrderId: brandWorkingOrderId(id),
-        locale: cfg.locale,
-        invoiceLocales: cfg.invoiceLocales,
-        total: priced.total,
-        lines: priced.lines,
-        vatBreakdown: priced.vatBreakdown,
-        fiscalBackend: "verifactu",
-        clock: deps.clock,
-        operatorId,
-        // A chained invoice with NO tender and NO settlement — the legitimate unsettled steady state
-        // an invoice-first sale sits in until `collectOrder` settles it (design §3, Ordering 1).
-        settlement: { kind: "deferred" },
+        workingOrderId: id,
+        kind: "order_placed",
+        actorId: operatorId,
+        reason: null,
+        capturedByTillId: cfg.tillId,
+        capturedByNodeId: cfg.nodeId,
+        eventAt: now.instant,
+        eventOffsetMinutes: now.offsetMinutes,
       });
-      // The human-facing "A/1" is read back from the sale row + its series (the FiscalRecordRef is
-      // regime-opaque), in this same transaction — the shared `readInvoiceNumber` reader.
-      placeResult = {
-        id,
-        status: "placed",
-        invoiceNumber: await readInvoiceNumber(tx, saleId),
-        issuedAt: fiscal.issuedAt.toISOString(),
-        total: priced.total,
-        qr: fiscal.verificationUrl ?? "",
-        vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-      };
-    }
 
-    // open → placed. `working_orders_enforce_transition` validates OLD.status = 'open'; no `settled_at`
-    // (the biconditional requires it stay NULL for a non-settled status).
-    await tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id));
+      // send-to-prep = placing enqueues the node-scoped prep row at `queued` (design §5); the cook's prep
+      // routes (Task 9) advance it queued → preparing → ready → collected. One row per order (the PK is
+      // the order), and prep advances even after the order is fiscally frozen, so it lives in its own
+      // MUTABLE table rather than a `working_orders` column.
+      await tx.insert(orderPrep).values({
+        tenantId: cfg.tenantId,
+        workingOrderId: id,
+        nodeId: cfg.nodeId,
+        state: "queued",
+      });
 
-    // Open the amendment log with its `order_placed` genesis. `appendOrderAmendment` owns the
-    // parent-row-lock serialisation, the per-order sequence and the tamper-evident hash (Task 3); the
-    // genesis carries NO contest reason (a placement has none). The venue's trusted-clock instant +
-    // wall offset are hashed and stored so the entry reprints in venue time (#52).
-    const now = deps.clock.now();
-    await appendOrderAmendment(tx, {
-      tenantId: cfg.tenantId,
-      workingOrderId: id,
-      kind: "order_placed",
-      actorId: operatorId,
-      reason: null,
-      capturedByTillId: cfg.tillId,
-      capturedByNodeId: cfg.nodeId,
-      eventAt: now.instant,
-      eventOffsetMinutes: now.offsetMinutes,
-    });
-
-    // send-to-prep = placing enqueues the node-scoped prep row at `queued` (design §5); the cook's prep
-    // routes (Task 9) advance it queued → preparing → ready → collected. One row per order (the PK is
-    // the order), and prep advances even after the order is fiscally frozen, so it lives in its own
-    // MUTABLE table rather than a `working_orders` column.
-    await tx.insert(orderPrep).values({
-      tenantId: cfg.tenantId,
-      workingOrderId: id,
-      nodeId: cfg.nodeId,
-      state: "queued",
-    });
-
-    return placeResult;
-  });
+      return placeResult;
+    },
+    { nodeId: cfg.nodeId },
+  );
 }
 
 /**
@@ -736,37 +756,42 @@ export async function cancelPlacedOrder(
     throw new AppError("working_order.reason_required", { workingOrderId: id });
   }
 
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
+  return withTenant(
+    deps.db,
+    cfg.tenantId,
+    async (tx) => {
+      await asAppUser(tx);
 
-    const [locked] = await tx
-      .select({ status: workingOrders.status })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, id))
-      .for("update");
-    if (locked === undefined || locked.status !== "placed") {
-      throw new AppError("working_order.not_placed", { workingOrderId: id });
-    }
+      const [locked] = await tx
+        .select({ status: workingOrders.status })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, id))
+        .for("update");
+      if (locked === undefined || locked.status !== "placed") {
+        throw new AppError("working_order.not_placed", { workingOrderId: id });
+      }
 
-    // Terminal transition `placed → abandoned` (enforce_transition permits it; no `settled_at`, which
-    // the biconditional requires stay NULL for a non-settled status).
-    await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
+      // Terminal transition `placed → abandoned` (enforce_transition permits it; no `settled_at`, which
+      // the biconditional requires stay NULL for a non-settled status).
+      await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
 
-    // Append the `order_cancelled` amendment — the cancel is itself a logged amendment (design §4),
-    // carrying the operator's reason, linked to the genesis via `appendOrderAmendment`'s per-order hash.
-    const now = deps.clock.now();
-    await appendOrderAmendment(tx, {
-      tenantId: cfg.tenantId,
-      workingOrderId: id,
-      kind: "order_cancelled",
-      actorId: operatorId,
-      reason,
-      capturedByTillId: cfg.tillId,
-      capturedByNodeId: cfg.nodeId,
-      eventAt: now.instant,
-      eventOffsetMinutes: now.offsetMinutes,
-    });
-  });
+      // Append the `order_cancelled` amendment — the cancel is itself a logged amendment (design §4),
+      // carrying the operator's reason, linked to the genesis via `appendOrderAmendment`'s per-order hash.
+      const now = deps.clock.now();
+      await appendOrderAmendment(tx, {
+        tenantId: cfg.tenantId,
+        workingOrderId: id,
+        kind: "order_cancelled",
+        actorId: operatorId,
+        reason,
+        capturedByTillId: cfg.tillId,
+        capturedByNodeId: cfg.nodeId,
+        eventAt: now.instant,
+        eventOffsetMinutes: now.offsetMinutes,
+      });
+    },
+    { nodeId: cfg.nodeId },
+  );
 }
 
 /**

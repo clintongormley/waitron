@@ -1,0 +1,96 @@
+import { sql } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
+import { withTenant, type Database } from "@waitron/db";
+import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { runMigrationSets, startMigratedPostgres } from "@waitron/db/testing/postgres.js";
+import { seedTenant } from "@waitron/db/testing/seed.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+
+// Real Postgres, not PGlite: capture runs under FORCE ROW LEVEL SECURITY as the non-superuser app
+// role, which PGlite (superuser) bypasses — a false pass here (CLAUDE.md §4). Unlike capture.gate,
+// which drives capture through a LOCAL withTenantNode copy of the helper, this suite drives it
+// through the PRODUCTION `withTenant` from @waitron/db, so it is the test that proves Task 5's
+// wiring — that the real helper's optional node id reaches `app.node_id` and lands in
+// `sync_log.origin_id`.
+const postgres = useRealPostgres({
+  start: () =>
+    startMigratedPostgres({
+      dockerRequired:
+        "The sync origin-gate suite requires a running Docker daemon. It cannot be skipped: PGlite " +
+        "connects as a superuser and bypasses FORCE ROW LEVEL SECURITY, so it cannot exercise the " +
+        "capture trigger under the non-superuser app role this suite drives through withTenant " +
+        "(CLAUDE.md §4).",
+      migrate: (uri) => runMigrationSets(uri, migrationOptionsFor(manifestSets(), null)),
+    }),
+  probeRole: { name: "app_login", password: "app_pw", inRole: "app_user" },
+  timeoutMs: 180_000,
+});
+
+// A producing node's id, and the all-zero uuid capture defaults origin to when app.node_id is unset.
+const NODE_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const ZERO = "00000000-0000-0000-0000-000000000000";
+
+/** Seeds a tenant plus the one FK parent a `products` row needs (a catalogue), as the superuser. */
+async function seedTenantWithCatalogue(admin: Database): Promise<{
+  tenantId: string;
+  catalogueId: string;
+}> {
+  const tenantId = await seedTenant(admin);
+  const cat = await admin.execute<{ id: string }>(
+    sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Deli') returning id`,
+  );
+  return { tenantId, catalogueId: cat.rows[0]!.id };
+}
+
+describe("withTenant threads app.node_id into sync_log.origin_id", () => {
+  it("stamps origin_id with the supplied node id (4-arg), and defaults to all-zero on the plain form", async () => {
+    // Failing case: the production `withTenant` does NOT set app.node_id, so a locally-originated
+    // write lands in sync_log with the all-zero origin even when a node id was supplied — origin
+    // attribution is silently lost (before Task 5 wired the 4th arg the extra param is ignored at
+    // runtime, so the node-aware write captures ZERO exactly like the plain one). Control in the
+    // other direction: the plain 3-arg withTenant leaves origin_id at the all-zero default, so the
+    // two paths VISIBLY differ (NODE_A vs ZERO) — a measurement where both answers look alike would
+    // measure nothing (CLAUDE.md §1).
+    const aware = await seedTenantWithCatalogue(postgres.admin);
+    const plain = await seedTenantWithCatalogue(postgres.admin);
+    const probe = await postgres.pg.connectAs("app_login", "app_pw");
+
+    const insertProduct = (tenantId: string, catalogueId: string) =>
+      sql`insert into products
+            (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
+          values (${tenantId}, ${catalogueId}, '{"en":"Coffee"}'::jsonb, 'each', '1.00', 'general')`;
+
+    const originFor = async (tenantId: string): Promise<{ n: string; origin: string | null }> => {
+      const r = await postgres.admin.execute<{ n: string; origin: string | null }>(
+        sql`select count(*)::text as n, max(origin_id::text) as origin
+            from sync_log where table_name = 'products' and tenant_id = ${tenantId}`,
+      );
+      return r.rows[0]!;
+    };
+
+    try {
+      // Node-aware: the real 4-arg withTenant carries NODE_A into app.node_id.
+      await withTenant(
+        probe,
+        aware.tenantId,
+        (tx) => tx.execute(insertProduct(aware.tenantId, aware.catalogueId)),
+        { nodeId: NODE_A },
+      );
+      // Plain 3-arg: no node id supplied → capture falls back to the all-zero origin.
+      await withTenant(probe, plain.tenantId, (tx) =>
+        tx.execute(insertProduct(plain.tenantId, plain.catalogueId)),
+      );
+
+      const awareRow = await originFor(aware.tenantId);
+      const plainRow = await originFor(plain.tenantId);
+
+      expect(awareRow.n).toBe("1"); // captured exactly once
+      expect(awareRow.origin).toBe(NODE_A); // the node-aware helper stamped the origin
+      expect(plainRow.n).toBe("1");
+      expect(plainRow.origin).toBe(ZERO); // the plain helper left the all-zero default
+      expect(awareRow.origin).not.toBe(plainRow.origin); // the two paths visibly differ
+    } finally {
+      await probe.close();
+    }
+  });
+});

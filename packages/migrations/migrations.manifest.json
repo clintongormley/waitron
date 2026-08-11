@@ -34,5 +34,10 @@
     "name": "credentials",
     "table": "__drizzle_migrations_credentials",
     "from": "../credentials/drizzle"
+  },
+  {
+    "name": "sync",
+    "table": "__drizzle_migrations_sync",
+    "from": "../sync/drizzle"
   }
 ]
