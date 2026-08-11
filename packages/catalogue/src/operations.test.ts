@@ -133,6 +133,68 @@ describe("catalogue operations", () => {
     });
   });
 
+  it("threads a product's image through create, update and list", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "Deli" });
+      // Created WITH an image: the stored reference round-trips out of createProduct and listProducts.
+      const withImage = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "ham" },
+        pricingUnit: "weight",
+        unitPrice: "24.90",
+        vatClass: "reduced",
+        image: "x.webp",
+      });
+      expect(withImage.image).toBe("x.webp");
+      // Omitting `image` leaves it null (no picture — distinct from allergens' PENDING null).
+      const noImage = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "water" },
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      expect(noImage.image).toBeNull();
+      const listed = await listProducts(tx, cat.id);
+      expect(listed.find((p) => p.id === withImage.id)!.image).toBe("x.webp");
+      expect(listed.find((p) => p.id === noImage.id)!.image).toBeNull();
+      // updateProduct sets a new image reference…
+      await updateProduct(tx, noImage.id, { image: "y.png" });
+      const afterSet = (await listProducts(tx, cat.id)).find((p) => p.id === noImage.id)!;
+      expect(afterSet.image).toBe("y.png");
+      // …and `null` clears it back to no-picture.
+      await updateProduct(tx, noImage.id, { image: null });
+      const afterClear = (await listProducts(tx, cat.id)).find((p) => p.id === noImage.id)!;
+      expect(afterClear.image).toBeNull();
+    });
+  });
+
+  it("toggles a product's active flag through updateProduct", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "Deli" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "water" },
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      expect(p.active).toBe(true);
+      // `{ active: false }` deactivates through the same edit route (the headless deactivateProduct
+      // stays for the till/other callers)…
+      await updateProduct(tx, p.id, { active: false });
+      const deactivated = (await listProducts(tx, cat.id)).find((x) => x.id === p.id)!;
+      expect(deactivated.active).toBe(false);
+      // …and `{ active: true }` reactivates it.
+      await updateProduct(tx, p.id, { active: true });
+      const reactivated = (await listProducts(tx, cat.id)).find((x) => x.id === p.id)!;
+      expect(reactivated.active).toBe(true);
+    });
+  });
+
   it("round-trips a product's allergens", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });
