@@ -79,6 +79,29 @@ describe("till-product-grid", () => {
     expect(store.lines).toHaveLength(0);
   });
 
+  it("fixes the grid to N equal columns when `columns` is set (product-grid.columns config)", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
+      products: [cafe, jamon],
+      store,
+      columns: 4,
+    });
+    const grid = el.shadowRoot!.querySelector<HTMLElement>(".grid")!;
+    // An explicit column count overrides the responsive default with a fixed N-column track list.
+    expect(grid.style.gridTemplateColumns).toBe("repeat(4, 1fr)");
+  });
+
+  it("keeps the responsive auto-fill grid when `columns` is unset (no inline override)", async () => {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
+      products: [cafe],
+      store,
+    });
+    const grid = el.shadowRoot!.querySelector<HTMLElement>(".grid")!;
+    // No inline grid-template-columns, so the stylesheet's repeat(auto-fill, minmax(9rem, 1fr)) governs.
+    expect(grid.style.gridTemplateColumns).toBe("");
+  });
+
   it("gives each tile an accessible name (its content)", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillProductGrid>("till-product-grid", {

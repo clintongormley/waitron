@@ -4,6 +4,7 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillTicketView } from "./till-ticket-view.js";
 import type { TicketIssuer } from "./till-ticket-view.js";
 import type { TillSaleResult } from "../api/client.js";
+import type { ReceiptConfig } from "../layout.js";
 
 // es-ES currency formatting separates the amount and € with a non-breaking space (U+00A0, or a
 // narrow no-break U+202F on some ICU builds); normalise both to a plain space before asserting.
@@ -31,13 +32,16 @@ const result: TillSaleResult = {
 
 const issuer: TicketIssuer = { venueName: "Deli Delicioso SL", nif: "B12345678" };
 
-const mount = (over: Partial<TillSaleResult> = {}) =>
+const mount = (over: Partial<TillSaleResult> = {}, receipt?: ReceiptConfig) =>
   mountWidget<TillTicketView>("till-ticket-view", {
     result: { ...result, ...over },
     issuer,
     // The receipt renders in its INVOICE locale prop (fed from server config), never the operator UI.
     // Pin it explicitly so the "operator UI is English, ticket stays Spanish" test is unambiguous.
     invoiceLocale: "es-ES",
+    // The non-fiscal trim (design §8) — omitted (undefined) by default so the fiscal-core tests above
+    // exercise the receipt-less ticket; the trim suite below passes it explicitly.
+    ...(receipt ? { receipt } : {}),
   });
 
 const text = (el: TillTicketView): string => norm(el.shadowRoot!.textContent ?? "");
@@ -161,5 +165,90 @@ describe("till-ticket-view", () => {
     expect(t).not.toContain("Cash");
     expect(t).not.toContain("Change");
     expect(t).not.toContain("Coffee");
+  });
+
+  // -----------------------------------------------------------------------------------------------
+  // Receipt trim (non-fiscal, design §8): the owner-authored headerSubtitle + footerMessage render
+  // AROUND the immutable art. 7.1 core — under the venue name and under the VERI*FACTU legend — never
+  // inside or reordering it. The fiscal-core-cannot-be-suppressed test is the load-bearing guard.
+  // -----------------------------------------------------------------------------------------------
+  describe("receipt trim (design §8)", () => {
+    const following = (a: Element, b: Element) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+    it("renders headerSubtitle under the venue name and footerMessage under the legend", async () => {
+      const { el } = await mount(
+        {},
+        { headerSubtitle: "Calle Mayor 1, Madrid", footerMessage: "Gracias por su visita" },
+      );
+      const sub = el.shadowRoot!.querySelector(".header-subtitle");
+      const foot = el.shadowRoot!.querySelector(".footer-message");
+      expect(sub!.textContent).toContain("Calle Mayor 1, Madrid");
+      expect(foot!.textContent).toContain("Gracias por su visita");
+      // header-subtitle sits inside the issuer header, immediately after the venue name.
+      const venue = el.shadowRoot!.querySelector(".issuer .venue")!;
+      expect(el.shadowRoot!.querySelector(".issuer .header-subtitle")).not.toBeNull();
+      expect(following(venue, sub!)).toBe(true);
+      // footer-message follows the legend in document order.
+      const legend = el.shadowRoot!.querySelector(".legend")!;
+      expect(following(legend, foot!)).toBe(true);
+    });
+
+    it("renders neither slot (no empty node) when the receipt config is absent", async () => {
+      const { el } = await mount(); // no receipt prop
+      expect(el.shadowRoot!.querySelector(".header-subtitle")).toBeNull();
+      expect(el.shadowRoot!.querySelector(".footer-message")).toBeNull();
+    });
+
+    it("renders neither slot when the receipt config is empty ({})", async () => {
+      const { el } = await mount({}, {});
+      expect(el.shadowRoot!.querySelector(".header-subtitle")).toBeNull();
+      expect(el.shadowRoot!.querySelector(".footer-message")).toBeNull();
+    });
+
+    it("renders only the field that is present (footer only)", async () => {
+      const { el } = await mount({}, { footerMessage: "Wifi: DELI-2026" });
+      expect(el.shadowRoot!.querySelector(".header-subtitle")).toBeNull();
+      expect(el.shadowRoot!.querySelector(".footer-message")!.textContent).toContain(
+        "Wifi: DELI-2026",
+      );
+    });
+
+    it("FISCAL-SAFETY: a receipt config cannot suppress or reorder any mandated art. 7.1 element, the QR or the legend", async () => {
+      // The load-bearing guard (design §8): the trim only ADDS content in its two designated slots; the
+      // whole immutable core must still render, in its fixed positions, even WITH both trim fields set.
+      // A future editor extension that let ReceiptConfig remove or reorder a mandated element fails here.
+      const { el } = await mount({}, { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias" });
+      const t = text(el);
+      // 7.1.d issuer venue + NIF
+      expect(t).toContain("Deli Delicioso SL");
+      expect(t).toContain("NIF");
+      expect(t).toContain("B12345678");
+      // 7.1.a número/serie + 7.1.b fecha
+      expect(t).toContain("A/1");
+      // 7.1.e goods identification — both filed lines still present
+      expect(el.shadowRoot!.querySelectorAll(".line")).toHaveLength(2);
+      expect(t).toContain("Café");
+      expect(t).toContain("Jamón");
+      // 7.1.f tipo + base per rate (both rates)
+      expect(t).toContain("Base 21.00%");
+      expect(t).toContain("Base 10.00%");
+      expect(t).toContain("IVA 21.00%");
+      expect(t).toContain("IVA 10.00%");
+      // 7.1.g total
+      expect(t).toContain("TOTAL");
+      expect(t).toContain("9,40 €");
+      // QR + VERI*FACTU legend
+      expect(el.shadowRoot!.querySelector("svg")).not.toBeNull();
+      expect(t).toContain("VERI*FACTU");
+      // The trim renders ONLY in its two slots — the core order is untouched: the issuer header still
+      // precedes the meta block, and the legend still precedes the footer trim.
+      const header = el.shadowRoot!.querySelector(".issuer")!;
+      const meta = el.shadowRoot!.querySelector(".meta")!;
+      const legend = el.shadowRoot!.querySelector(".legend")!;
+      const foot = el.shadowRoot!.querySelector(".footer-message")!;
+      expect(following(header, meta)).toBe(true);
+      expect(following(legend, foot)).toBe(true);
+    });
   });
 });

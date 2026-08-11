@@ -7,6 +7,7 @@ import { formatMoney } from "../i18n/format.js";
 import { t } from "../i18n/t.js";
 import { qrSvg } from "../qr.js";
 import type { TillSaleResult } from "../api/client.js";
+import type { ReceiptConfig } from "../layout.js";
 
 /** The receipt issuer's legally-printed identity (RD 1619/2012 art. 7.1.d): venue name + NIF. */
 export interface TicketIssuer {
@@ -117,6 +118,19 @@ export class TillTicketView extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
+      /* Non-fiscal receipt trim (design §8), rendered AROUND the immutable core — never inside it. */
+      .header-subtitle,
+      .footer-message {
+        margin: var(--wt-space-1) 0 0;
+        text-align: center;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .footer-message {
+        margin-top: var(--wt-space-2);
+      }
+
       .meta,
       .lines {
         margin: 0 0 var(--wt-space-3);
@@ -198,6 +212,14 @@ export class TillTicketView extends LitElement {
    * operator-UI `currentLocale()`. Defaults to es-ES, the deli's invoice locale.
    */
   @property() invoiceLocale = "es-ES";
+  /**
+   * The owner-authored NON-FISCAL trim (layout & receipt editors, design §8), threaded from `till-app`
+   * (`GET /api/till`). `headerSubtitle` renders under the venue name and `footerMessage` under the
+   * VERI*FACTU legend, both `nothing` when absent — the immutable art. 7.1 core (below) is NEVER read
+   * from or gated on this prop, so no `ReceiptConfig` field can suppress or reorder a mandated element.
+   * Undefined (an older server, or a tenant that never opened the editor) renders no trim at all.
+   */
+  @property({ attribute: false }) receipt?: ReceiptConfig;
 
   /** Announce that the operator wants to start the next sale. The parent (Task 19) swaps the screen. */
   #newSale(): void {
@@ -212,6 +234,11 @@ export class TillTicketView extends LitElement {
       <article class="ticket">
         <header class="issuer">
           <p class="venue">${this.issuer.venueName}</p>
+          ${
+            this.receipt?.headerSubtitle
+              ? html`<p class="header-subtitle">${this.receipt.headerSubtitle}</p>`
+              : nothing
+          }
           <p class="nif">${LABEL.nif}: ${this.issuer.nif}</p>
         </header>
 
@@ -277,6 +304,11 @@ export class TillTicketView extends LitElement {
 
         ${svg ? html`<div class="qr">${unsafeHTML(svg)}</div>` : nothing}
         <p class="legend">${LEGEND}</p>
+        ${
+          this.receipt?.footerMessage
+            ? html`<p class="footer-message">${this.receipt.footerMessage}</p>`
+            : nothing
+        }
       </article>
 
       <wt-button class="new-sale" variant="primary" size="lg" @click=${() => this.#newSale()}>

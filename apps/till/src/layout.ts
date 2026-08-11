@@ -25,6 +25,19 @@ export interface WidgetInstance {
 export type LayoutDef = WidgetInstance[];
 
 /**
+ * The authorable, NON-FISCAL receipt trim (design §7/§8): a `headerSubtitle` rendered under the venue
+ * name and a `footerMessage` under the VERI*FACTU legend, both optional. It renders AROUND the
+ * immutable art. 7.1 core of `till-ticket-view`, never able to touch it — no field here can suppress
+ * or reorder a mandated element. A LOCAL copy of the server's `ReceiptConfig`
+ * (`packages/layouts/src/types.ts`), bundle-decoupled exactly like {@link LayoutDef} — deliberately
+ * NOT imported from `@waitron/layouts`, same rule as every server shape in `api/client.ts`.
+ */
+export interface ReceiptConfig {
+  headerSubtitle?: string;
+  footerMessage?: string;
+}
+
+/**
  * Layout A — the walk-up-sale arrangement slice 1 ships: the product grid fills `main` (the left),
  * with the basket, total, pay flow, the held-orders list and the prep queue stacked in `aside` (the
  * right). The held-orders list sits at the foot of the sale flow (basket → total → pay), with the

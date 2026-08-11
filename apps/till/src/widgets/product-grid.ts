@@ -1,4 +1,4 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "../i18n/format.js";
@@ -53,6 +53,16 @@ export class TillProductGrid extends LitElement {
   /** The order the tiles act on. Every tap goes through this store, never through a sibling widget. */
   @property({ attribute: false }) store!: WorkingOrderStore;
 
+  /**
+   * The per-widget config key `product-grid.columns` (layout & receipt editors): fix the grid to
+   * exactly this many equal-width columns. Unset (the default) keeps the responsive
+   * `repeat(auto-fill, minmax(9rem, 1fr))` grid in the stylesheet below. Threaded from the layout by
+   * `till-counter-screen`, which narrows the config bag's `unknown` to a number; the value is validated
+   * to 1..12 server-side (`@waitron/layouts` `WIDGET_CONFIG`), so the interpolation below is a plain
+   * integer, never free text.
+   */
+  @property({ type: Number }) columns?: number;
+
   /** Price text for a tile: a plain money string, suffixed `/kg` when the product is sold by weight. */
   #priceLabel(product: TillProduct): string {
     const price = formatMoney(product.unitPrice);
@@ -69,8 +79,12 @@ export class TillProductGrid extends LitElement {
   }
 
   override render() {
+    // When `columns` is set, override the responsive default with a fixed N equal-width columns;
+    // unset, `nothing` removes the inline attribute so the stylesheet's auto-fill grid governs.
+    const gridStyle =
+      this.columns === undefined ? nothing : `grid-template-columns: repeat(${this.columns}, 1fr);`;
     return html`
-      <div class="grid">
+      <div class="grid" style=${gridStyle}>
         ${this.products.map(
           (product) => html`
             <wt-button class="tile" @click=${() => this.#pick(product)}>
