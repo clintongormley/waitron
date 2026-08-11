@@ -22,9 +22,10 @@ export interface ImageUploader {
  *
  * `image` is a `@property` so the form can PRE-SET it (edit mode: a product already carrying a picture
  * shows its preview immediately, no upload). A rejected upload sets `errorKey` from the thrown
- * `{ code }` (falling back to `server.internal`), rendered raw in a `role="alert"` banner — the exact
- * errorKey contract `login-screen`/`staff-screen` use, with a later i18n task mapping the `media.*`
- * codes to Spanish copy. A single-flight guard drops a re-fired pick while one upload is in flight
+ * `{ code }` (falling back to `server.internal`); the raw code stays in `errorKey` and `codeMessage`
+ * maps it to localised copy in the `role="alert"` banner at the render edge — the exact errorKey
+ * contract `login-screen`/`staff-screen` use, so the `media.*` codes surface as Spanish copy, never
+ * the raw wire code. A single-flight guard drops a re-fired pick while one upload is in flight
  * (`uploadImage` is not server-idempotent), mirroring the staff screen's create guard.
  */
 @customElement("dashboard-image-upload")

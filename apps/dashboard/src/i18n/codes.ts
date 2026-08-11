@@ -125,5 +125,10 @@ const GENERIC = CODE_MESSAGES["server.internal"];
  * raw code.
  */
 export function codeMessage(code: string, locale: string = currentLocale()): string {
-  return pickLocale(CODE_MESSAGES[code] ?? GENERIC, locale);
+  // Own-key check, not `?? GENERIC`: a code colliding with an Object.prototype member (`toString`,
+  // `constructor`, `valueOf`, `hasOwnProperty`) resolves the inherited method — truthy, so `??` would
+  // skip GENERIC and pickLocale would return undefined (an empty banner). Object.hasOwn keeps the
+  // "only ever a sentence, never the raw code and never undefined" guarantee true for every string.
+  const entry = Object.hasOwn(CODE_MESSAGES, code) ? CODE_MESSAGES[code] : GENERIC;
+  return pickLocale(entry, locale);
 }

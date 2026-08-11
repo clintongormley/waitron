@@ -21,6 +21,17 @@ it("degrades an unknown code to the generic message, NEVER the raw code", () => 
   expect(message).not.toBe("totally.made.up");
 });
 
+it("degrades a prototype-chain code (toString/constructor) to GENERIC, never undefined", () => {
+  // A code colliding with an Object.prototype member (`toString`, `constructor`, `valueOf`,
+  // `hasOwnProperty`) must still degrade to GENERIC copy — the "only ever a sentence, never the raw
+  // code (and never undefined)" guarantee has to hold for EVERY string, not just registry codes. A
+  // bare `CODE_MESSAGES[code]` would resolve the inherited method (truthy), skip the `?? GENERIC`
+  // arm, and return undefined → an empty banner; an own-key check is what keeps the guarantee true.
+  for (const code of ["toString", "constructor", "valueOf", "hasOwnProperty"]) {
+    expect(codeMessage(code, "en")).toBe("Something went wrong, try again");
+  }
+});
+
 it("resolves a known code to its English copy", () => {
   // entry[lang] with lang "en" — the other side of the language selection.
   expect(codeMessage("password.invalid", "en")).toBe("Incorrect password, try again");

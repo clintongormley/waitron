@@ -76,6 +76,15 @@ it("resolves an allergen code to Spanish and English, unknown code raw", () => {
   expect(allergenName("kryptonite", "es")).toBe("kryptonite");
 });
 
+it("passes a prototype-chain token (toString/constructor) through raw, never undefined", () => {
+  // A token colliding with an Object.prototype member must fall back to the raw value like any other
+  // unknown token — a bare `table[value]` would resolve the inherited method (truthy) and return
+  // undefined instead of the raw token. The own-key check is what keeps the raw fallback correct.
+  expect(roleName("toString", "es")).toBe("toString");
+  expect(allergenName("constructor", "es")).toBe("constructor");
+  expect(vatClassName("valueOf", "en")).toBe("valueOf");
+});
+
 it("falls back to English for a known value in an unknown language", () => {
   // "fr" is not a column, so the `?? table[value]?.en` arm fires — proven across resolvers.
   expect(roleName("manager", "fr")).toBe("Manager");

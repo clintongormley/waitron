@@ -22,8 +22,10 @@ type NameTable = Record<string, { en: string; es: string }>;
  * token renders as itself rather than as an empty string or a throw.
  */
 function resolve(table: NameTable, value: string, locale: string): string {
-  const entry = table[value];
-  return entry ? pickLocale(entry, locale) : value;
+  // Own-key check, not truthiness: a token colliding with an Object.prototype member (`toString`,
+  // `constructor`, …) would resolve the inherited method and return undefined instead of the raw
+  // token, so an unknown token must be gated on Object.hasOwn before the pickLocale lookup.
+  return Object.hasOwn(table, value) ? pickLocale(table[value], locale) : value;
 }
 
 const ROLE_NAMES: NameTable = {
