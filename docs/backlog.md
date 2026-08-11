@@ -91,8 +91,8 @@ most-uncertain foundations first.
 **Autonomous campaign armed (2026-08-08).** While the owner is away (Sun 2026-08-09 → Fri 2026-08-14;
 the weekly quota renews Tue 01:00) an unattended launchd-driven run works an ordered, pre-specced
 queue — **sync slice 1** (commercial outbox, **LANDED #74**), **reporting** (date-range + *modelo 303*, **LANDED #76**), the
-**catalogue / menu management UI** (with product images, **LANDED #78**), the **layout & receipt editors**, and
-interleaved small follow-ups — each via `finish-branch` → `land-branch`. The plan, ordered queue, and
+**catalogue / menu management UI** (with product images, **LANDED #78**), the **layout & receipt editors** (**LANDED #81**), and
+interleaved small follow-ups (createErrorBoundary **#75**, percentOf hoist **#77**, otplib v13 **#79**, reachability guard **#80**) — each via `finish-branch` → `land-branch`. The plan, ordered queue, and
 guardrails (never auto-land the unrepairable fiscal core; never land on a red gate; one item in flight
 at a time) are recorded in
 [superpowers/specs/2026-08-08-autonomous-campaign-plan.md](superpowers/specs/2026-08-08-autonomous-campaign-plan.md);
@@ -116,6 +116,31 @@ One line per landed PR, newest first. The git log, the linked designs/plans, and
 [architecture design](superpowers/specs/2026-07-18-pos-architecture-design.md) §2 table hold the
 detail — **this file is not a history** (see *How to keep this file honest*). Open follow-ups from
 these live under *Debt and odd jobs*; their designs/plans stay in `docs/superpowers/`.
+
+- **#81** Counter POS **layout & receipt editors** (campaign queue item #8, sub-project 7) — the counter
+  screen was already layout-driven from a `LayoutDef` of empty per-widget config bags; this makes both
+  the layout *arrangement* and a non-fiscal *receipt trim* owner-authorable. New **`@waitron/layouts`**
+  package (canonical `LayoutDef`/`ReceiptConfig` types, a `WIDGET_CONFIG` validation registry,
+  `validateLayout`/`validateReceiptConfig`, and a `getLayout`/`putLayout`/`putReceipt` store gated on a
+  new `till.configure` permission); a **`till_layouts`** table (tenant_id PK, jsonb `definition` +
+  `receipt`) with FORCE-RLS + tenant-isolation policy in a hand-written custom migration (split
+  `0035` auto CREATE+ENABLE / `0036` custom FORCE+policy+GRANT — `0034` was taken by catalogue);
+  management-api GET/PUT `/layout` + PUT `/receipt`; `GET /api/till` now returns `layout` + `receipt`;
+  the till renders the authored layout + `product-grid.columns` + receipt header/footer trim; and
+  dashboard **layout** + **receipt** editor screens. **Fiscal safety (H2):** commercial-lane only —
+  no fiscal-core source touched (the only `fiscal-verifactu` change is the vocabulary-scope test pin);
+  the receipt trim renders *around* the immutable art. 7.1 core of `till-ticket-view`, pinned by a
+  load-bearing test that the invoice core, QR and legend render unconditionally regardless of config;
+  two reviewers confirmed the boundary. **Review fixes:** simplify hoisted `LAYOUT_A`'s per-render
+  `JSON.stringify` out of the counter render hot path; the wide-lens review found (TDD, proven by
+  running the loop) that `validateLayout` used a bare `schema[key]` **prototype-chain** lookup, so
+  `config` keys `toString`/`constructor` rode into jsonb and `valueOf`/`hasOwnProperty`/`__proto__`
+  threw a raw `TypeError` → 500 instead of `400 layout.invalid` — fixed with `Object.hasOwn`, five
+  hostile keys pinned (this makes the three "fail-closed" comments true, §1); two stale `LAYOUT_A`
+  line-number citations corrected (34-41 → 47-54 after a `ReceiptConfig` insert). CI ran the **full
+  unfiltered suite** (scripts/ + a db migration trigger everything, both mutation shards), all green;
+  Copilot's two inline comments both addressed + resolved — see *Debt and odd jobs* → **Counter POS
+  follow-ups** for the one they surfaced. Adds `layouts` to `GENERIC_PACKAGES` (both pins).
 
 - **#80** `errors.reachability.test.ts` real fix (campaign queue item #7) — the 13 per-package `errors.reachability.test.ts` copies **did not test reachability**: proven by deletion, a *smoke*-variant package (remove `import "./errors.js"` from `migrations`' barrel **and** every other file) passed 2/2 with `errors.ts` fully unreachable, because `tsconfig`'s `include:["src"]` makes every file a compilation root and `vitest run` never typechecks. The copies had **drifted into two variants** — a text-walk import-graph one (7 pkgs: core/db/fiscal/fiscal-verifactu/payments/workforce/workforce-es) that *does* fail on deletion, and a smoke/`AppError`-construct one (6 pkgs: credentials/migrations/payments-stripe/identity/reporting/sync) that does not; `CLAUDE.md` §4's by-deletion receipt had been written against a *smoke* package, so it held for smoke only and its "eight packages" figure was stale (real = 13). Replaced all 13 with **one root guard**, `scripts/errors-reachable.test.ts` (joins `english-only`/`teardown` in the root Vitest project), that **discovers** every `packages/*` carrying `index.ts` + `errors.ts` (17 today — including `catalogue`/`provisioning`, which had *no* copy, and `shared`) and text-walks the barrel's transitive import graph, failing if `errors.ts` is unreachable from the package's public entry. Chose the conservative existing-pattern text-walk over the brief's suggested `tsc`-downstream-probe / narrowed-`include` — most conservative, matches the repo's tree-wide-guard-in-root direction; **proven by deletion through the new guard** (drop `db`'s barrel import → the guard fails, the other 15 pass, restore → green). Branch renamed `…-tsc-probe` → `…-import-graph` to match the choice. **KNOWN LIMITATION (documented in the header):** the walk is static text, so a specifier reachable only across an intervening comment token can read as unreachable — `reporting/record-daily-close.ts` carries `import … "./errors.js"` across a `//`-wrapped break the `\s+` regex won't span; harmless (that file reaches `errors.ts` by other imports). **Fiscal core untouched (H2):** test-infra only — deletes `fiscal`/`fiscal-verifactu` *test* files, nothing near `computeHuella`/the hash chain/`registros`/invoice numbers. Reviews (2-lens, both confirmed by running): fixed a **§1 fabricated receipt** in the guard header (it cited a `db/errors.ts` doc-comment that does not exist), an `EISDIR` try/catch on directory-imports, and stale guard counts; **Copilot** flagged that "does not match a keyword split from its specifier" was inaccurate (`\s+` *does* span a bare newline — it is the intervening `//` token that breaks the match), reworded + re-verified on 4 regex cases, replied + resolved. CI ran the **full unfiltered suite** (a root-config change triggers everything, both mutation shards included), all green; `CLAUDE.md` §4 rewritten to un-conflate the two variants. Closes the *Debt* item below.
 - **#79** otplib v12 → v13 + `totp.ts` rewrite (dashboard 1a follow-up, campaign queue item #6) — otplib was pinned `^12.0.1`, whose transitive `@otplib/*` + `thirty-two` deps are all **deprecated** ("upgrade to v13"). v13 is a **breaking redesign**: the pre-configured `authenticator` export is gone (undefined on v13; `totp.ts` failed at import), so this was a rewrite, not a bump. `@waitron/identity` is the **sole** otplib consumer. `totp.ts` moves to v13's functional API — `generateSecret()`, `generateURI({issuer,label,secret})`, `verifySync({secret,token,epochTolerance}).valid` — with the public contract (`generateTotpSecret`/`totpAuthUri`/`verifyTotp`, all synchronous) preserved byte-for-byte; v12's period-counted `window:1` becomes v13's `epochTolerance:30` (**seconds**). Every receipt was **re-probed by running** the installed otplib@13.4.1 (§1, not reasoned): `epochTolerance:30` ≡ `window:1` (E-30/E/E+30 valid delta −1/0/+1, E±60 invalid, E-30@tol0 invalid); fail-closed is airtight — `verifySync` throws on a malformed base32 secret / non-six-digit token / missing secret and `verifyTotp` returns a strict `false` for every non-string token (7 shapes tested), a well-formed-but-wrong 6-digit token returns `{valid:false}` without throwing; `totpAuthUri` issuer/label not swapped. **Fiscal core untouched (H2):** TOTP is dashboard auth only — nothing near `computeHuella`/the hash chain/`registros`/invoice numbers; both whole-branch reviewers confirmed. Install-time deprecation warnings **gone**. The whole-branch review's one Important finding was a **§1 stale receipt** — `apps/server/src/management-api.ts` cited "probed against otplib@12.0.1, a non-string token returns false, never throws", retired by the library swap — fixed by re-probing v13 (verifySync throws, `verifyTotp`'s catch swallows, fail-closed result unchanged) and dropping the un-reprobable v12 contrast; grep of the whole tree found no other stale source receipt (dated plan/spec docs left per the history rule). identity 125 @ 100% (totp.ts 100%), server 452 green; Copilot reviewed 5/6, zero comments. **The `totp_secret`-at-rest encryption is a SEPARATE deferred item — not folded in** (still open below).
@@ -306,7 +331,7 @@ active work (see *Now* / *Current direction*).
 
 | Sub-project | Note |
 | --- | --- |
-| **7 — Counter POS** | **Operable counter POS complete** — 7a walk-up cash (#60), 7b park/retrieve + idempotency (#61), manual card (#62), 7c prepare & collect (#63), integrated Stripe card (#64); all in *Recently shipped*. **Remaining:** the layout & receipt **editors** (the counter screen is layout-driven from a `LayoutDef` with empty per-widget config bags) and a **SumUp** card provider (a future vendor beside Stripe). Deferred edges under *Debt and odd jobs* → **Counter POS follow-ups** (7a / 7b / 7c / integrated card) |
+| **7 — Counter POS** | **Operable counter POS complete** — 7a walk-up cash (#60), 7b park/retrieve + idempotency (#61), manual card (#62), 7c prepare & collect (#63), integrated Stripe card (#64); the **layout & receipt editors DONE (#81)** — owner-authorable till layout arrangement + non-fiscal receipt trim, `@waitron/layouts` + `till_layouts` + dashboard editors; all in *Recently shipped*. **Remaining:** a **SumUp** card provider (a future vendor beside Stripe). Deferred edges under *Debt and odd jobs* → **Counter POS follow-ups** (7a / 7b / 7c / integrated card / layout-receipt) |
 | **5 — Identity** | **Headless first slice merged (#58, 2026-08-05).** `@waitron/identity` owns `persons` + `sessions` (FORCE-RLS tenant isolation, now also scanned by fiscal-verifactu's `inmutabilidad` guard), salted-PIN hashing, a role/permission catalog, `authorize()` (operator session + supervisor `{personId, pin}` override), `loginWithPin` / `endSession`, and a `person.manage`-gated staff API. `recordVoid` / `recordCorrection` now require `sale.void` / `sale.rectify` authorization; `sales.authorized_by` / `sales.operator_id` + `payment_refunds.authorized_by` seams and a `waitron-provision venue` admin seed are in place. Remaining sub-project 5 scope (mid-shift-suspension enforcement, the discount gate, till-refund enforcement, the workforce-gate consolidation, branded ids) is under *Debt and odd jobs* → **Identity follow-ups**. The human-facing call sites (must-be-logged-in to ring, till refunds must be authorized) land with the counter POS (#7) |
 | **6 — Locations** | **Provision-a-sellable-venue slice merged (#57)** (2026-08-04; see *Now*) — the foundational till-track unblocker. Country/territory-driven fiscal identity, `resolveFiscalModules` (común → Veri\*Factu + IVA, others refused), `planVenue` / `applyVenue` and the `waitron-provision venue` CLI stand up tenant → location → till → node → SIF → series so `recordSale` can chain a sale; the stale `bootstrap-tenant.sql` was **deleted**. Remaining sub-project 6 scope (multiple locations, editing/deactivation, the #33 SIF-topology deferrals) is under *Debt and odd jobs* → **Locations follow-ups** |
 | **8 — Reporting** | **Daily-close first slice done (#56)** — `@waitron/reporting`'s `computeDailyClose`. ***Cierre Z* (frozen/signed daily close) DONE** — 8a VAT-exact close (#66, `sales.vat_breakdown`), 8b immutable numbered `daily_closes` + per-node hash chain + per-till *descuadre* (#68). **Date-range VAT summary (`computeVatSummaryForPeriod`) + *modelo 303* output-VAT month aggregate (`computeVatReturn`) DONE (#76)** — pure reads over the filed desglose, one shared `aggregateVatByRate` core, civil-date bucketing, real-PG cross-tenant RLS proof; all in *Recently shipped*. Further unstarted slices: the **IVA deducible/soportado (input-VAT)** side (needs a purchase-invoice module), the **AEAT casilla mapping + submittable 303 form**, quarterly/annual periods, and the reporting **UI** (belongs to the till, #7). Reporting follow-ups are under *Debt* |
@@ -662,6 +687,35 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     different-WO→different-key test (task-1 minor); add a WT002/aborted-tx interleaving test for `finalizeSettle`'s
     outside-catch (F2); add a corrected-invoice-first (`corrections > 0`) `amountDue` test (F3 — the arithmetic is
     correct-by-construction, only the coverage is missing).
+- **Counter POS follow-ups (sub-project 7, the layout & receipt editors, merged #81). None blocking; all
+  fiscally safe; surfaced by the finish-branch simplify + 2-lens review + Copilot chain and left deliberately.**
+  - **Malformed-JSON body → 500 across the whole management-api surface (Copilot, verified pre-existing).**
+    Every management-api write route reads `(await c.req.json<…>()) ?? {}` with no catch for a *parse*
+    failure — login (`:169`, from #71), person set-password/create/update, reset-pin, set-password, passkey
+    enrol, and the two new layout/receipt routes all share it — so an **empty or malformed JSON body** throws
+    before `?? {}` and the error boundary maps the non-`AppError` to `server.internal` (500) rather than
+    `400 management.request_invalid`. **Not introduced by #81** (the two new routes follow the file's
+    convention); low severity (only a hostile/broken client sends malformed JSON — the dashboard editors
+    always send well-formed bodies; no data or security impact). Proper fix is **one shared catch**
+    (boundary-level, or a `readJsonBody` helper) applied across the whole surface (management-api + till-api),
+    not a partial fix to two routes that would make them diverge from their siblings — hence out of #81's scope.
+  - **`isDefaultLayout` compares by `JSON.stringify` (Copilot; not a defect today, but brittle).** The
+    till classifies a received layout as "the built-in default" (→ apply the Mode-P prep-queue drop) by
+    serialised equality against `LAYOUT_A`. A genuine default never round-trips through jsonb (`getLayout`
+    returns the JS constant `DEFAULT_LAYOUT` for a no-row tenant, `store.ts:43-44`), so it always compares
+    equal; the only jsonb-sourced values are *authored* rows, which render verbatim by design regardless of
+    value — the residual authored-equal-to-default case costs only the cosmetic prep-queue drop, never a
+    fiscal element (documented `till-app.ts:52-64`). The brittleness is the cross-package literal coupling
+    (`LAYOUT_A` vs `DEFAULT_LAYOUT` must stay byte-identical). Deeper form (if the editor grows): have the
+    server send an explicit `authored: boolean` on the till boot payload so the till stops re-deriving it by
+    value — a `/api/till` wire-contract change, deferred out of slice 1.
+  - **Quality defers from the 4-lens simplify (cosmetic, non-blocking):** hoist a single `codeOf(error)`
+    helper (now inline-duplicated across ~8 dashboard screens/widgets — a home for it also single-sources the
+    deferred code→i18n mapping); make the `WIDGET_CONFIG` entry a *descriptor* (`{kind, min, max, label}`) so
+    the dashboard editor is driven from the registry instead of hardcoding `columns` in ~4 parallel spots —
+    right-altitude only once a **second** config key exists (today it's one key); drop the derivable `region`
+    field from the layout editor's in-memory rows (it is re-stamped from the column on save) once an
+    editor-only row type is worth introducing.
 - **Catalogue follow-ups (sub-project 7/18 seed, `feat/catalogue-model`). None blocking; deferred by
   the slice's headless YAGNI boundary (design §9) or surfaced by its whole-branch review.**
   - **`products.catalogue_id`/`category_id` are single-column FKs**, so a product could reference
