@@ -108,6 +108,12 @@ export async function seedSale(
     correctsSaleId?: SaleId;
     /** Overrides the breakdown derived from `lines`, for a test that needs a specific desglose. */
     vatBreakdown?: { rate: string; base: string; tax: string }[];
+    /**
+     * The snapshotted UTC offset (minutes) filed with the sale; defaults to 0. A test that needs the
+     * filed *fecha de expedición* to differ from the UTC calendar date (the modelo 303 civil-date
+     * bucketing) sets this to the venue's real offset, e.g. Madrid's summer +120.
+     */
+    issuedOffsetMinutes?: number;
   },
 ): Promise<SaleId> {
   const [row] = await db
@@ -119,7 +125,7 @@ export async function seedSale(
       seriesId: seed.seriesId,
       invoiceNumber: opts.invoiceNumber,
       issuedAt: opts.issuedAt,
-      issuedOffsetMinutes: 0,
+      issuedOffsetMinutes: opts.issuedOffsetMinutes ?? 0,
       total: opts.total,
       vatBreakdown: opts.vatBreakdown ?? breakdownFromLines(opts.lines),
       locale: "es-ES",

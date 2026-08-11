@@ -28,6 +28,26 @@ export interface PeriodVatInput {
   dayCutover: string;
 }
 
+export interface VatReturnInput {
+  /** The obligado — a modelo 303 aggregates ALL nodes of the legal entity (no node predicate). */
+  tenantId: TenantId;
+  /** Civil calendar year of the liquidation period, e.g. 2026 (must be an integer). */
+  year: number;
+  /** Civil calendar month of the liquidation period, 1..12. */
+  month: number;
+}
+export interface VatReturn {
+  tenantId: TenantId;
+  year: number;
+  month: number;
+  /** Régimen-general IVA devengado per rate {rate, base, tax}, corrections netted. */
+  byRate: VatRateLine[];
+  /** Σ base imponible devengada. */
+  baseTotal: Decimal;
+  /** Σ cuota devengada (the output-VAT total). */
+  taxTotal: Decimal;
+}
+
 export interface VatRateLine {
   /** Percentage literal as stored, e.g. "21.00". */
   rate: Decimal;

@@ -22,8 +22,11 @@ import type { DailyCloseInput, PeriodVatInput, VatSummary } from "./types.js";
  * is applied only when `scope.nodeId` is given (a tenant-wide aggregate — e.g. modelo 303 — omits it,
  * relying on RLS + the tenant predicate). Callers differ only in their issuance-date `dateFilter` and
  * whether a node is fixed.
+ *
+ * Exported for `vat-return.ts`'s modelo 303 aggregate to reuse; package-internal, deliberately NOT in
+ * the public barrel (`index.ts`).
  */
-async function aggregateVatByRate(
+export async function aggregateVatByRate(
   tx: Transaction,
   scope: { tenantId: TenantId; nodeId?: NodeId; dateFilter: SQL },
 ): Promise<VatSummary> {
