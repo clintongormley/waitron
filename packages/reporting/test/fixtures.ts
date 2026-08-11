@@ -1,14 +1,12 @@
 import { sql } from "drizzle-orm";
 import {
-  MONEY_SCALE,
   addDecimal,
   locationId as brandLocationId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
   decimal,
-  divideDecimal,
-  multiplyDecimal,
+  percentOf,
 } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { saleLines, saleSubstitutions, saleVoids, sales, tenders } from "@waitron/db";
@@ -76,8 +74,9 @@ export async function seedTill(
  * The filed per-rate desglose a real sale would carry on `sales.vat_breakdown`,
  * derived here from the fixture's own lines so the seeded breakdown is COHERENT with them: lines are
  * grouped by `vatRate`, each group's `base` is the summed `lineTotal`, and its `tax` is
- * `base * rate / 100` rounded to money scale — the same direct-method grouping `@waitron/core`'s
- * `buildVatBreakdown` performs (inlined, not imported: reporting does not depend on core).
+ * `@waitron/shared`'s `percentOf` (`base * rate / 100` rounded to money scale) — the same
+ * direct-method grouping `@waitron/core`'s `buildVatBreakdown` performs. The grouping is inlined
+ * rather than imported (reporting does not depend on core); only the shared tax formula is reused.
  */
 function breakdownFromLines(
   lines: Array<{ vatRate: string; lineTotal: string }>,
@@ -93,7 +92,7 @@ function breakdownFromLines(
   return [...bases.entries()].map(([rate, base]) => ({
     rate,
     base,
-    tax: divideDecimal(multiplyDecimal(decimal(base), decimal(rate)), decimal("100"), MONEY_SCALE),
+    tax: percentOf(decimal(base), decimal(rate)),
   }));
 }
 

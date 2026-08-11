@@ -25,10 +25,8 @@ import { deploymentEnvironment } from "../src/config.js";
 import {
   addDecimal,
   decimal,
-  divideDecimal,
-  multiplyDecimal,
-  MONEY_SCALE,
   negateDecimal,
+  percentOf,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
@@ -95,8 +93,7 @@ async function main(): Promise<void> {
     list.length === 0 ? "(none)" : list.map((o) => `${o.saleId}=${o.amountDue}`).join(", ");
 
   const rate = decimal("10.00");
-  const vatOn = (base: Decimal): Decimal =>
-    divideDecimal(multiplyDecimal(base, rate), decimal("100"), MONEY_SCALE);
+  const vatOn = (base: Decimal): Decimal => percentOf(base, rate);
 
   const saleBase = decimal("100.00");
   const saleTax = vatOn(saleBase);

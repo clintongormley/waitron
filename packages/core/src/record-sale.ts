@@ -13,7 +13,14 @@ import {
   tills,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError, addDecimal, compareDecimal, decimal, sumDecimals } from "@waitron/shared";
+import {
+  AppError,
+  addDecimal,
+  compareDecimal,
+  decimal,
+  percentOf,
+  sumDecimals,
+} from "@waitron/shared";
 import type {
   Decimal,
   NodeId,
@@ -32,7 +39,6 @@ import type {
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
 import { settleSale } from "./settle-sale.js";
-import { percentOf } from "./vat.js";
 
 export interface RecordSaleLine {
   lineNo: number;
@@ -44,7 +50,7 @@ export interface RecordSaleLine {
    * convention. */
   vatRate: string;
   /** The line's tax-EXCLUSIVE base amount. `buildVatBreakdown` below groups lines by `vatRate`
-   * and derives each group's tax from this figure via `./vat.js`'s `percentOf` — plain
+   * and derives each group's tax from this figure via `@waitron/shared`'s `percentOf` — plain
    * multiplication, because this is already the base rather than a customer-facing gross price
    * that would need reversing out of. */
   lineTotal: string;
