@@ -2,7 +2,7 @@ import type { LayoutDef, ReceiptConfig } from "./types.js";
 
 /**
  * The built-in default layout — a verbatim copy of the till's current `LAYOUT_A`
- * (`apps/till/src/layout.ts:34-41`): the product grid fills `main`, with the basket, total, pay flow,
+ * (`apps/till/src/layout.ts:47-54`): the product grid fills `main`, with the basket, total, pay flow,
  * held-orders list and prep queue stacked in `aside`. `getLayout` (Task 5) returns this for a tenant
  * that has never authored one (design §5).
  */

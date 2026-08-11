@@ -56,7 +56,7 @@ function displayQuantity(product: TillProduct, quantity: string): string {
  * per-widget config key — renders VERBATIM, the owner's choice (a prep-queue they placed under Mode P
  * simply shows its empty state).
  *
- * The serialised compare is exact because the till's `LAYOUT_A` (`layout.ts:34-41`) and the server's
+ * The serialised compare is exact because the till's `LAYOUT_A` (`layout.ts:47-54`) and the server's
  * `DEFAULT_LAYOUT` are the SAME literal in the same key order (`type`/`region`/`config`, empty bags) —
  * a verbatim copy, verified in `packages/layouts/src/defaults.ts`. A false-negative would cost only the
  * cosmetic Mode-P prep-queue drop, never a fiscal element. Both branches are proven by the
