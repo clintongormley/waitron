@@ -128,7 +128,7 @@ describe("catalogue-screen", () => {
     emit(form(el), "create-product", createDetail({ active: true }));
     await flush(el);
 
-    // The active field is STRIPPED from the ProductInput — createProduct has no `active`.
+    // `active` is threaded straight through the create — one request, no follow-up patch.
     expect(api.createProduct).toHaveBeenCalledWith({
       catalogueId: "cat-a",
       categoryId: "c1",
@@ -136,16 +136,17 @@ describe("catalogue-screen", () => {
       unitPrice: "2.50",
       vatClass: "reduced",
       pricingUnit: "each",
+      active: true,
     });
-    // active:true means the new DB product is already active — no reconciling patch.
     expect(api.updateProduct).not.toHaveBeenCalled();
     expect(api.listProducts).toHaveBeenCalledTimes(2); // reloaded
     expect(form(el).open).toBe(false);
   });
 
-  // The load-bearing cross-task contract: createProduct has no `active`, so a create-with-inactive
-  // is reconciled by a follow-up updateProduct(created.id, { active: false }).
-  it("reconciles a create-with-inactive as a follow-up updateProduct patch", async () => {
+  // The robustness fix (whole-branch review finding): create-INACTIVE is ONE atomic request carrying
+  // `active: false`, never a create-then-patch that could leave the product active/sellable if the
+  // follow-up failed. Proven by the single createProduct call and NO updateProduct.
+  it("creates a product inactive in a single atomic request (no follow-up patch)", async () => {
     const api = stubApi();
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
@@ -156,7 +157,16 @@ describe("catalogue-screen", () => {
     await flush(el);
 
     expect(api.createProduct).toHaveBeenCalledTimes(1);
-    expect(api.updateProduct).toHaveBeenCalledWith("p-new", { active: false });
+    expect(api.createProduct).toHaveBeenCalledWith({
+      catalogueId: "cat-a",
+      categoryId: "c1",
+      descriptions: { es: "Café" },
+      unitPrice: "2.50",
+      vatClass: "reduced",
+      pricingUnit: "each",
+      active: false,
+    });
+    expect(api.updateProduct).not.toHaveBeenCalled();
     expect(api.listProducts).toHaveBeenCalledTimes(2);
   });
 
@@ -184,6 +194,7 @@ describe("catalogue-screen", () => {
       unitPrice: "2.50",
       vatClass: "reduced",
       pricingUnit: "each",
+      active: true,
       allergens: { gluten: { presence: "contains", source: "trigo" } },
       image: "sha.png",
     });

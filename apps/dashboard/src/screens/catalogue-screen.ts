@@ -33,12 +33,11 @@ import { selectStyles } from "../select-styles.js";
  * create-catalogue field then calls `createCatalogue` and reloads. A catalogue selector switches which
  * catalogue's products show.
  *
- * THE CREATE-VS-PATCH `active` ASYMMETRY is load-bearing (mirrors the allergen/image asymmetry the
- * form documents). `createProduct`'s headless input has NO `active` field — a new DB product is always
- * active — so `#onCreateProduct` STRIPS `active` from the form's detail when building the
- * `ProductInput`, and, if the operator created the product INACTIVE (`active === false`), reconciles it
- * with a follow-up `updateProduct(created.id, { active: false })` before reloading. An edit goes
- * straight through `updateProduct(id, patch)`, where `active` IS a legal patch key.
+ * `active` IS SETTABLE ON CREATE. `#onCreateProduct` threads the form's `active` straight into the
+ * `ProductInput`, so a create-INACTIVE is ONE atomic request — never a create-then-patch that could
+ * leave the product active/sellable at the till if the follow-up failed (a whole-branch review
+ * finding). `active` stays a legal patch key on an edit too, which goes straight through
+ * `updateProduct(id, patch)`.
  *
  * ERROR HANDLING, every async path, mirroring `staff-screen.ts`: `#load`, `#switchCatalogue`,
  * `#onCreateProduct`, `#onUpdateProduct`, `#onCreateCategory` and `#doCreateCatalogue` are each fully
@@ -206,11 +205,11 @@ export class CatalogueScreen extends LitElement {
   }
 
   /**
-   * Create a product from the form's detail, then reload. The `active` field is STRIPPED from the
-   * `ProductInput` (createProduct has none — a new DB product is always active), and
-   * `allergens`/`image` are carried only when the detail has them (the create-vs-patch asymmetry the
-   * form documents). If the operator created the product INACTIVE, reconcile with a follow-up patch.
-   * On rejection the form stays open with its values intact for a retry.
+   * Create a product from the form's detail, then reload. `active` is threaded straight into the
+   * `ProductInput`, so a create-INACTIVE is ONE atomic request — never a create-then-patch that could
+   * leave the product active/sellable at the till if the follow-up failed. `allergens`/`image` are
+   * carried only when the detail has them (the create-vs-patch asymmetry the form documents). On
+   * rejection the form stays open with its values intact for a retry.
    */
   async #onCreateProduct(event: CustomEvent<CreateProductDetail>): Promise<void> {
     event.stopPropagation();
@@ -226,13 +225,11 @@ export class CatalogueScreen extends LitElement {
         unitPrice: detail.unitPrice,
         vatClass: detail.vatClass,
         pricingUnit: detail.pricingUnit,
+        active: detail.active,
       };
       if (detail.allergens !== undefined) input.allergens = detail.allergens;
       if (detail.image !== undefined) input.image = detail.image;
-      const created = await this.api.createProduct(input);
-      if (detail.active === false) {
-        await this.api.updateProduct(created.id, { active: false });
-      }
+      await this.api.createProduct(input);
       this.formOpen = false;
       await this.#reloadProducts();
     } catch (error) {
@@ -243,8 +240,8 @@ export class CatalogueScreen extends LitElement {
   }
 
   /**
-   * Patch a product from the form's edit detail, then reload. `active` IS a legal patch key here (the
-   * asymmetry is create-only), so the patch goes straight through. On rejection the form stays open.
+   * Patch a product from the form's edit detail, then reload. `active` is a legal patch key here (as it
+   * is on create), so the patch goes straight through. On rejection the form stays open.
    */
   async #onUpdateProduct(event: CustomEvent<UpdateProductDetail>): Promise<void> {
     event.stopPropagation();

@@ -59,6 +59,9 @@ export interface CreateProductInput {
   allergens?: ProductAllergens;
   /** A stored photo reference (`<sha256>.<ext>`); omitted leaves it null (no picture). */
   image?: string;
+  /** Omitted leaves it active, mirroring the `products.active` column default. Set `false` to create
+   * a product that is not yet sellable at the till — atomic in the one insert, no follow-up patch. */
+  active?: boolean;
 }
 
 /** The mutable slice of a product. Absent keys are left unchanged (the object literal a caller
@@ -210,6 +213,7 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
       pricingUnit: input.pricingUnit,
       unitPrice: input.unitPrice,
       vatClass: input.vatClass,
+      active: input.active ?? true,
       allergens,
       image: input.image ?? null,
     })

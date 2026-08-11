@@ -134,7 +134,9 @@ export interface Product {
 /**
  * The `POST /management-api/products` body — mirrors catalogue's `CreateProductInput`. `allergens`
  * omitted leaves the product unreviewed (null); the server refuses an explicit `null` here, so the
- * form OMITS the key for a PENDING declaration. `image` omitted leaves it null.
+ * form OMITS the key for a PENDING declaration. `image` omitted leaves it null. `active` omitted
+ * leaves the product active (the column default); `false` creates it inactive in the SAME request —
+ * the create is atomic, with no follow-up patch.
  */
 export interface ProductInput {
   catalogueId: string;
@@ -145,6 +147,7 @@ export interface ProductInput {
   vatClass: VatClass;
   allergens?: Record<string, AllergenEntry>;
   image?: string | null;
+  active?: boolean;
 }
 
 /**

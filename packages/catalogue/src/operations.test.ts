@@ -195,6 +195,37 @@ describe("catalogue operations", () => {
     });
   });
 
+  it("creates a product inactive when active:false, active by default when omitted", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "Deli" });
+      // Created INACTIVE in one write: the flag round-trips out of createProduct.
+      const hidden = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "seasonal" },
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+        active: false,
+      });
+      expect(hidden.active).toBe(false);
+      // Omitting `active` leaves the column default (true) — today's behaviour, unchanged.
+      const shown = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "water" },
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      expect(shown.active).toBe(true);
+      // Both round-trip through listProducts.
+      const listed = await listProducts(tx, cat.id);
+      expect(listed.find((p) => p.id === hidden.id)!.active).toBe(false);
+      expect(listed.find((p) => p.id === shown.id)!.active).toBe(true);
+    });
+  });
+
   it("round-trips a product's allergens", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });

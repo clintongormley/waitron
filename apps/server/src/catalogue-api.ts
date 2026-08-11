@@ -208,6 +208,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           vatClass?: unknown;
           allergens?: unknown;
           image?: unknown;
+          active?: unknown;
         }>()) ?? {};
       if (typeof body.catalogueId !== "string") {
         throw new AppError("management.request_invalid", { field: "catalogueId" });
@@ -230,6 +231,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (body.image !== undefined && typeof body.image !== "string") {
         throw new AppError("management.request_invalid", { field: "image" });
       }
+      if (body.active !== undefined && typeof body.active !== "boolean") {
+        throw new AppError("management.request_invalid", { field: "active" });
+      }
       const input = {
         catalogueId: body.catalogueId,
         categoryId: body.categoryId,
@@ -239,6 +243,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         vatClass: body.vatClass as never,
         ...(body.allergens === undefined ? {} : { allergens: body.allergens as ProductAllergens }),
         ...(body.image === undefined ? {} : { image: body.image }),
+        ...(body.active === undefined ? {} : { active: body.active }),
       };
       const created = await gated(sessionId, (tx) => createProduct(tx, input));
       return c.json(created, 201);

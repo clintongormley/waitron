@@ -290,6 +290,55 @@ describe("mountCatalogueApi — products", () => {
     expect(rows.some((r) => r.id === product.id)).toBe(true);
   });
 
+  it("POST /management-api/products with active:false → 201 and the created product is inactive", async () => {
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Create-inactive catalogue");
+    const res = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        descriptions: { "es-ES": "No sellable yet" },
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+        active: false,
+      },
+    });
+    expect(res.status).toBe(201);
+    expect((await res.json()) as { active: boolean }).toMatchObject({ active: false });
+  });
+
+  it("POST /management-api/products with active:true (and with it omitted) → an active product", async () => {
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Create-active catalogue");
+    const explicit = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        descriptions: { "es-ES": "Explícitamente activo" },
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+        active: true,
+      },
+    });
+    expect(explicit.status).toBe(201);
+    expect((await explicit.json()) as { active: boolean }).toMatchObject({ active: true });
+    // Omitting `active` preserves today's behaviour: an active product.
+    const omitted = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        descriptions: { "es-ES": "Activo por defecto" },
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+      },
+    });
+    expect(omitted.status).toBe(201);
+    expect((await omitted.json()) as { active: boolean }).toMatchObject({ active: true });
+  });
+
   it("POST /management-api/products with a missing required field → management.request_invalid 400", async () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Missing-field catalogue");
@@ -431,6 +480,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
     ["pricingUnit", { ...productBase, pricingUnit: 5 }],
     ["vatClass", { ...productBase, vatClass: 5 }],
     ["image", { ...productBase, image: 5 }],
+    ["active", { ...productBase, active: "nope" }],
   ])(
     "POST /products rejects a wrong-typed %s → management.request_invalid 400",
     async (field, body) => {
