@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import type { DailyCloseInput } from "./types.js";
+import type { TenantId } from "@waitron/shared";
+import type { DailyCloseInput, PeriodVatInput } from "./types.js";
 
 const CUTOVER_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -56,13 +57,53 @@ export function validateBusinessDay(day: string): void {
 }
 
 /**
+ * Validates a closed `[from, to]` business-day range: each end is a real calendar date and `from` is
+ * on or before `to`. String compare is correct for the fixed "YYYY-MM-DD" shape `validateBusinessDay`
+ * enforces. The symmetric home for the ordering rule beside the atomic validators, so the next range
+ * aggregate (quarterly/annual) reuses it rather than re-deriving `from <= to` and its message.
+ */
+export function validateBusinessDayRange(input: {
+  fromBusinessDay: string;
+  toBusinessDay: string;
+}): void {
+  validateBusinessDay(input.fromBusinessDay);
+  validateBusinessDay(input.toBusinessDay);
+  if (input.fromBusinessDay > input.toBusinessDay) {
+    throw new Error(
+      `reporting: fromBusinessDay must be on or before toBusinessDay: ${JSON.stringify(input.fromBusinessDay)} > ${JSON.stringify(input.toBusinessDay)}`,
+    );
+  }
+}
+
+/**
+ * The DST-aware venue-local business DATE of a `timestamptz` column: its wall-clock in `timeZone`,
+ * shifted back by the cutover, truncated to a date. Never UTC — `AT TIME ZONE` with an IANA name is
+ * DST-correct; a fixed offset would not be. The single home of the cutover-shift expression, so
+ * `businessDayClause` (`=`) and `businessDayRangeClause` (`between`) build on one fragment and cannot
+ * drift on the load-bearing shift maths.
+ */
+function businessDayLocalDate(column: SQL, input: { timeZone: string; dayCutover: string }): SQL {
+  return sql`(${column} at time zone ${input.timeZone} - ${input.dayCutover}::interval)::date`;
+}
+
+/**
  * The DST-aware business-day predicate, reused by every aggregate. `column` is a `timestamptz`
  * (`sales.issued_at` or `tenders.settled_at`); a row belongs to `businessDay` when its venue-local
- * wall-clock, shifted back by the cutover, lands on that date. Never UTC — `AT TIME ZONE` with an
- * IANA name is DST-correct; a fixed offset would not be.
+ * business date (above) equals that date.
  */
 export function businessDayClause(column: SQL, input: DailyCloseInput): SQL {
-  return sql`(${column} at time zone ${input.timeZone} - ${input.dayCutover}::interval)::date = ${input.businessDay}::date`;
+  return sql`${businessDayLocalDate(column, input)} = ${input.businessDay}::date`;
+}
+
+/**
+ * The closed-range generalisation of `businessDayClause`: the SAME venue-local business date, but
+ * `between from and to` instead of `= businessDay`. A single-day range (`from == to`) therefore
+ * matches exactly what `businessDayClause`'s `= from` form matches (`x between D and D` ≡ `x = D`), so
+ * the range clause provably EXTENDS the tested one rather than replacing it — see `business-day.test.ts`.
+ * Bounds are inclusive on both ends.
+ */
+export function businessDayRangeClause(column: SQL, input: PeriodVatInput): SQL {
+  return sql`${businessDayLocalDate(column, input)} between ${input.fromBusinessDay}::date and ${input.toBusinessDay}::date`;
 }
 
 /**
@@ -70,9 +111,10 @@ export function businessDayClause(column: SQL, input: DailyCloseInput): SQL {
  * substitutes (their VAT already lives in the substituted F2 tickets — design §4, confirmed against
  * *modelo 303* in the AEAT FAQ). Assumes the outer query aliases `sales` as `s`. Shared by the VAT
  * summary and the record counts so the two cannot drift on which sales are "active". No leading
- * `and` — the caller writes `and ${activeSalesClause(input)}`.
+ * `and` — the caller writes `and ${activeSalesClause(input)}`. Only `tenantId` is read, so the param
+ * is narrowed to that shape (the daily-close/counts callers still satisfy it structurally).
  */
-export function activeSalesClause(input: DailyCloseInput): SQL {
+export function activeSalesClause(input: { tenantId: TenantId }): SQL {
   return sql`not exists (select 1 from sale_voids sv where sv.sale_id = s.id and sv.tenant_id = ${input.tenantId})
       and not exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = s.id and sub.tenant_id = ${input.tenantId})`;
 }

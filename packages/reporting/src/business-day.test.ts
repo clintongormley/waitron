@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { validateBusinessDay, validateCutover, validateTimeZone } from "./business-day.js";
+import { sql } from "drizzle-orm";
+import { CORE_MIGRATIONS } from "@waitron/db";
+import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import {
+  businessDayClause,
+  businessDayRangeClause,
+  validateBusinessDay,
+  validateCutover,
+  validateTimeZone,
+} from "./business-day.js";
+import type { DailyCloseInput, PeriodVatInput } from "./types.js";
 
 describe("validateTimeZone", () => {
   it("accepts a valid IANA zone", () => {
@@ -37,4 +47,37 @@ describe("validateBusinessDay", () => {
       expect(() => validateBusinessDay(bad)).toThrow(/not a real calendar date/i);
     },
   );
+});
+
+describe("businessDayRangeClause", () => {
+  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+
+  const TZ = "Europe/Madrid";
+  const CUTOVER = "05:00";
+
+  it("a single-day range (from == to) matches the = businessDay form at a boundary instant", async () => {
+    // 2026-08-04 05:00 Madrid = 2026-08-04T03:00Z is exactly the cutover; one second earlier belongs
+    // to the prior business day. Evaluating both predicates for those two instants pins that the range
+    // clause EXTENDS `businessDayClause` — same answer, both directions, at the boundary that separates
+    // the two days. (Only timeZone/dayCutover/day(s) matter to the date maths — tenant/node are unread,
+    // hence the minimal cast objects.)
+    for (const [instant, day, expected] of [
+      ["2026-08-04T03:00:00Z", "2026-08-04", true],
+      ["2026-08-04T02:59:59Z", "2026-08-04", false],
+    ] as const) {
+      const column = sql`${instant}::timestamptz`;
+      const dayInput = { businessDay: day, timeZone: TZ, dayCutover: CUTOVER } as DailyCloseInput;
+      const rangeInput = {
+        fromBusinessDay: day,
+        toBusinessDay: day,
+        timeZone: TZ,
+        dayCutover: CUTOVER,
+      } as PeriodVatInput;
+      const { rows } = await suite.db.execute<{ eq: boolean; range: boolean }>(
+        sql`select ${businessDayClause(column, dayInput)} as eq, ${businessDayRangeClause(column, rangeInput)} as range`,
+      );
+      expect(rows[0]!.range).toBe(rows[0]!.eq);
+      expect(rows[0]!.range).toBe(expected);
+    }
+  });
 });
