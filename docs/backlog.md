@@ -117,6 +117,18 @@ One line per landed PR, newest first. The git log, the linked designs/plans, and
 detail — **this file is not a history** (see *How to keep this file honest*). Open follow-ups from
 these live under *Debt and odd jobs*; their designs/plans stay in `docs/superpowers/`.
 
+- **#82** Dashboard **i18n layer** (campaign queue item #11, the last campaign item) — the management
+  dashboard rendered raw error CODES and inline Spanish literals; this adds an `apps/dashboard/src/i18n/`
+  layer mirroring `apps/till/src/i18n` (four modules: `strings.ts` en-base + a fully-typed `es`
+  catalogue, `t.ts` with `t`/`setLocale`/`currentLocale`/`pickLocale`, `codes.ts` `codeMessage`
+  code→copy that degrades an unmapped code to a GENERIC sentence and never returns the raw code,
+  `domain.ts` role/status/vat/unit/allergen-state/allergen-name resolvers with raw-value fallback) and
+  wires the shell + all 5 screens + all 8 widgets to translate at the **render edge** — the raw
+  code/token stays in state, `<option value>`/`.value` wire bindings are unchanged, only visible text
+  is localised. `codeMessage`/`domain.resolve` gate on `Object.hasOwn` so a prototype-chain key
+  (`toString`/`constructor`) can't skip the fallback and return `undefined`. **Fiscal safety (H2):**
+  browser-only, no fiscal core touched (confirmed by both reviewers). 286 tests, coverage
+  99.94/97.27/100/99.94. Deferred edges under *Debt* → dashboard 1c follow-ups.
 - **#81** Counter POS **layout & receipt editors** (campaign queue item #8, sub-project 7) — the counter
   screen was already layout-driven from a `LayoutDef` of empty per-widget config bags; this makes both
   the layout *arrangement* and a non-fiscal *receipt trim* owner-authorable. New **`@waitron/layouts`**
@@ -439,11 +451,24 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
       demoting *themselves*; `resolveManagementSession` re-checks status, so they'd be logged out next
       request (recoverable via provisioning, nothing deployed). A UI guard needs the screen to know the
       logged-in `personId`, which it doesn't track yet.
-  - **No i18n layer.** The app (now incl. the edit dialog's labels/`error` codes from #73) renders raw
-    error CODES and inline Spanish literals; a follow-up should add an `i18n/` layer mapping codes →
-    localised copy, exactly as `apps/till/src/i18n` does (the till's precedent). Also: a session that
-    expires mid-use surfaces the raw `management_session.required` key with no re-login flow — the shell
-    never re-probes (server enforcement is intact; this is UX).
+  - **i18n layer DONE (#82).** The dashboard now renders localised copy through
+    `apps/dashboard/src/i18n` (mirrors `apps/till/src/i18n`); raw error codes and inline Spanish
+    literals are gone from every screen and widget. **Still open, deferred by #82:**
+    - a session that expires mid-use surfaces the raw `management_session.required` key with no
+      re-login flow — the shell never re-probes (server enforcement is intact; this is UX). This was
+      #82's optional stretch, deferred because it touches the shell session state machine.
+    - the 14 EU allergen names in `domain.ts` are duplicated verbatim from `apps/till/src/i18n/allergen-names.ts`
+      (a deliberate bundle-decoupling mirror — the dashboard can't import `@waitron/catalogue`, and no
+      shared browser-safe copy module exists). These are **regulated** names (EU 1169/2011 Annex II),
+      so either hoist them to a shared browser-safe module both apps import, or add a drift-guard test
+      pinning the two tables equal so a corrected spelling can't diverge unnoticed.
+    - `t()` resolves the full locale tag via the `catalogues` alias map (`"es-ES"` → `es`) while
+      `codeMessage`/`domain` region-strip by regex; identical for `es-ES` today, but any other `es-*`
+      region would render chrome in English and codes/tokens in Spanish. Unreachable until a locale
+      switcher calls `setLocale` (never called today); unify the two strategies before one lands.
+    - `layout-screen`'s `widgetName` uses an `as StringKey` cast, so a future 7th `WidgetType` added
+      without a `widget.*` string key would render an empty label rather than fail typecheck; add a
+      parity guard pinning `WidgetType` ↔ `widget.*` keys.
   - **Double `listStaff()` on cold load.** The shell's session probe and the staff screen each fetch the
     roster on a logged-in cold load (the probe discards its result). Thread the probed list down (an
     initial-people property, or lift `people` into the shell) to drop one `/management-api/staff` round
@@ -487,8 +512,8 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     ceremonies (different challenge handles) for the same person can each mint a session — both belong to
     the legitimately-authenticated owner, the same race as `loginManager`, no trust boundary crossed. The
     single-use fix (#71) closes the SAME-handle race; this different-handle case is left as harmless.
-  - **i18n** — passkey button labels + status/error keys render raw, folded into the slice-wide i18n
-    follow-up above (shared with 1c).
+  - **i18n DONE (#82).** Passkey button labels + status/error keys now render through the dashboard
+    i18n layer (`login-screen`/`staff-screen` via `t()`/`codeMessage`).
 - **Counter POS follow-ups (sub-project 7, slice 1 / 7a — the walk-up cash sale). None blocking; each
   is a deliberate slice-1 boundary or a small review Minor, deferred rather than dropped.**
   - **TLS termination, LAN binding and serving the built bundle are deployment (#9).** In dev the till
