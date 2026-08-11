@@ -28,6 +28,11 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
     createPerson: vi.fn().mockResolvedValue({ id: "p2" }),
     logout: vi.fn().mockResolvedValue(undefined),
+    // The catalogue screen the nav mounts loads these on connect; resolve them so navigating to it
+    // does not leave a stray rejection (a rejection is a finding — the suite runs pristine).
+    listCatalogues: vi.fn().mockResolvedValue([]),
+    listCategories: vi.fn().mockResolvedValue([]),
+    listProducts: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -40,8 +45,13 @@ async function flush(el: DashboardApp): Promise<void> {
 
 const login = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-login-screen");
 const staff = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-staff-screen");
+const catalogue = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-catalogue-screen");
 const logoutBtn = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]");
+const navStaff = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-staff]");
+const navCatalogue = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-catalogue]");
 
 /** Fires the login screen's composed, bubbling `logged-in` — the exact shape it emits on success. */
 function emitLoggedIn(source: Element): void {
@@ -131,6 +141,59 @@ describe("dashboard-app", () => {
     expect(api.logout).toHaveBeenCalledOnce();
     expect(login(el)).toBeTruthy();
     expect(staff(el)).toBeNull();
+  });
+
+  // The logged-in shell gains a nav between the staff and catalogue screens. It opens on staff (the
+  // probe's landing), and the nav switches the mounted screen — exactly one shows at a time.
+  it("navigates between the staff and catalogue screens", async () => {
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+
+    // Opens on staff, with both nav controls present.
+    expect(staff(el)).toBeTruthy();
+    expect(catalogue(el)).toBeNull();
+    expect(navStaff(el)).toBeTruthy();
+    expect(navCatalogue(el)).toBeTruthy();
+
+    // To catalogue.
+    navCatalogue(el)!.click();
+    await flush(el);
+    expect(catalogue(el)).toBeTruthy();
+    expect(staff(el)).toBeNull();
+
+    // Back to staff.
+    navStaff(el)!.click();
+    await flush(el);
+    expect(staff(el)).toBeTruthy();
+    expect(catalogue(el)).toBeNull();
+  });
+
+  it("does not show the nav on the login screen", async () => {
+    const api = stubApi({
+      listStaff: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(login(el)).toBeTruthy();
+    expect(navStaff(el)).toBeNull();
+    expect(navCatalogue(el)).toBeNull();
+  });
+
+  // The nav is chrome, not a screen: logout works the same from the catalogue screen too.
+  it("logout from the catalogue screen ends the session and returns to login", async () => {
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    navCatalogue(el)!.click();
+    await flush(el);
+    expect(catalogue(el)).toBeTruthy();
+
+    logoutBtn(el)!.click();
+    await flush(el);
+    expect(api.logout).toHaveBeenCalledOnce();
+    expect(login(el)).toBeTruthy();
+    expect(catalogue(el)).toBeNull();
   });
 
   it("logout: a FAILED logout still drops to login and never rejects", async () => {

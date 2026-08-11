@@ -195,6 +195,147 @@ describe("DashboardApi", () => {
     });
   });
 
+  it("listCatalogues GETs the catalogues with credentials", async () => {
+    const catalogues = [{ id: "c1", name: "Almuerzo", active: true, version: 1 }];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(catalogues));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listCatalogues()).toEqual(catalogues);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/catalogues", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("createCatalogue POSTs the name and returns the created catalogue", async () => {
+    const created = { id: "c2", name: "Cena", active: true, version: 1 };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(created, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.createCatalogue("Cena")).toEqual(created);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/catalogues", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Cena" }),
+    });
+  });
+
+  it("listCategories GETs the categories with credentials", async () => {
+    const categories = [{ id: "cat1", name: "Entrantes" }];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(categories));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listCategories()).toEqual(categories);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/categories", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("createCategory POSTs the name and returns the created category", async () => {
+    const created = { id: "cat2", name: "Principales" };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(created, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.createCategory("Principales")).toEqual(created);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/categories", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Principales" }),
+    });
+  });
+
+  it("listProducts GETs the addressed catalogue's products with credentials", async () => {
+    const products = [
+      {
+        id: "p1",
+        catalogueId: "c1",
+        categoryId: null,
+        descriptions: { es: "Café solo" },
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+        active: true,
+        allergens: null,
+        image: null,
+      },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(products));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listProducts("c1")).toEqual(products);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/catalogues/c1/products", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("createProduct POSTs the input body and returns the created product", async () => {
+    const input = {
+      catalogueId: "c1",
+      categoryId: "cat1",
+      descriptions: { es: "Tarta de queso" },
+      pricingUnit: "each" as const,
+      unitPrice: "4.00",
+      vatClass: "reduced" as const,
+      allergens: { gluten: { presence: "contains" as const, source: "trigo" } },
+      image: "deadbeef.png",
+    };
+    const created = { id: "p9", ...input, active: true };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(created, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.createProduct(input)).toEqual(created);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/products", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  });
+
+  it("updateProduct PATCHes the addressed product's mutable slice (empty 204 body)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(
+      api.updateProduct("p1", { unitPrice: "2.00", active: false, image: null }),
+    ).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/products/p1", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ unitPrice: "2.00", active: false, image: null }),
+    });
+  });
+
+  it("uploadImage POSTs a multipart FormData file part with no JSON content-type and returns { image }", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ image: "deadbeef.png" }, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "photo.png", {
+      type: "image/png",
+    });
+    expect(await api.uploadImage(file)).toEqual({ image: "deadbeef.png" });
+    const call = fetchImpl.mock.calls[0] as [string, RequestInit];
+    const [url, init] = call;
+    expect(url).toBe("/management-api/product-images");
+    expect(init.method).toBe("POST");
+    expect(init.credentials).toBe("include");
+    // The body is the multipart FormData carrying the file part…
+    expect(init.body).toBeInstanceOf(FormData);
+    const part = (init.body as FormData).get("file");
+    expect(part).toBeInstanceOf(File);
+    expect((part as File).name).toBe("photo.png");
+    // …and NO JSON content-type is set: the browser derives `multipart/form-data` and appends the
+    // boundary itself; a manual content-type would drop the boundary and corrupt the upload.
+    const headers = (init.headers ?? {}) as Record<string, string>;
+    expect(headers["content-type"]).toBeUndefined();
+  });
+
+  it("uploadImage throws the envelope code on a non-2xx", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "media.unsupported_type" } }, false, 415));
+    const api = new DashboardApi("", fetchImpl);
+    const file = new File([new Uint8Array([1, 2, 3])], "notes.txt", { type: "text/plain" });
+    await expect(api.uploadImage(file)).rejects.toMatchObject({ code: "media.unsupported_type" });
+  });
+
   it("falls back to server.internal when the error body carries no code", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({}, false, 500));
     const api = new DashboardApi("", fetchImpl);

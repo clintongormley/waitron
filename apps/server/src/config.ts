@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import { DEFAULTS } from "@waitron/scheduler";
 import { loadTillConfig } from "./till-config.js";
@@ -43,6 +44,18 @@ export interface ServerConfig {
   /** Undefined means "let the neutral layer apply its own seven days" — not zero. */
   settlementLagMs: number | undefined;
   migrationsRoot: string;
+  /**
+   * The local directory product images are stored in — the upload route (a later slice) writes
+   * `<sha256hex>.<ext>` files here and the public `/media/:filename` serve route reads them back.
+   * Resolved to an ABSOLUTE path at load (`resolve`): the serve route joins an untrusted filename
+   * onto it, so it must be a settled absolute base, not a relative one whose meaning shifts with the
+   * process's cwd. Defaults to a boot-computed `defaultMediaRoot` threaded into `loadConfig` exactly
+   * as `defaultMigrationsRoot` is (see `boot.ts`); `WAITRON_MEDIA_DIR` overrides it, and deployment
+   * (#9) sets it explicitly. An unset OR EMPTY value falls back to the default via `isUnset` — never
+   * `resolve("")`, which is cwd (the "empty value is a valid value" trap, CLAUDE.md §3). `boot.ts`
+   * ensures the directory exists once at startup (`mkdirSync(mediaDir, { recursive: true })`).
+   */
+  mediaDir: string;
   /**
    * The PEM files that make this host serve HTTPS. BOTH-or-NEITHER (loadConfig refuses a
    * half-configured pair): absent means plain HTTP for loopback dev, present means TLS. This task
@@ -176,7 +189,11 @@ export function deploymentEnvironment(env: Env): DeploymentEnvironment {
   return raw;
 }
 
-export function loadConfig(env: Env, defaultMigrationsRoot: string): ServerConfig {
+export function loadConfig(
+  env: Env,
+  defaultMigrationsRoot: string,
+  defaultMediaRoot: string,
+): ServerConfig {
   const minTickMs = positiveInt(env, "WAITRON_MIN_TICK_MS", DEFAULT_MIN_TICK_MS);
   const maxTickMs = positiveInt(env, "WAITRON_MAX_TICK_MS", DEFAULT_MAX_TICK_MS);
   // Checked here rather than left to `clamp`, whose Math.min/Math.max composition would silently
@@ -245,6 +262,7 @@ export function loadConfig(env: Env, defaultMigrationsRoot: string): ServerConfi
     });
   }
   const migrationsDir = env.WAITRON_MIGRATIONS_DIR;
+  const mediaDir = env.WAITRON_MEDIA_DIR;
   const managementRpId = env.WAITRON_MANAGEMENT_RP_ID;
   const managementOrigin = env.WAITRON_MANAGEMENT_ORIGIN;
   const databaseUrl = required(env, "DATABASE_URL");
@@ -278,6 +296,10 @@ export function loadConfig(env: Env, defaultMigrationsRoot: string): ServerConfi
     skipRetryMs,
     settlementLagMs: optionalPositiveInt(env, "WAITRON_SETTLEMENT_LAG_MS"),
     migrationsRoot: isUnset(migrationsDir) ? defaultMigrationsRoot : migrationsDir,
+    // `resolve` is applied ONLY to a genuinely-set value: an unset OR empty `WAITRON_MEDIA_DIR`
+    // takes `defaultMediaRoot`, never `resolve("")` — which is cwd, the "empty value is a valid
+    // value" trap (CLAUDE.md §3). Same `isUnset` fallback `migrationsRoot` above uses.
+    mediaDir: isUnset(mediaDir) ? defaultMediaRoot : resolve(mediaDir),
     // Conditionally present, never present-but-undefined: an absent `tls` key is what "no TLS
     // configured" means downstream (`config.tls !== undefined` decides `secureCookies` and whether
     // `buildServeOptions` reads any files at all).

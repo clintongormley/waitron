@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { mkdirSync } from "node:fs";
 import { serve } from "@hono/node-server";
 import { createPostgresDb } from "@waitron/db";
 import { credentialTenants, loadKeyRing } from "@waitron/credentials";
@@ -37,6 +38,8 @@ import type { StripeAccountDeps } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
 import { mountManagementApi } from "./management-api.js";
+import { mountCatalogueApi } from "./catalogue-api.js";
+import { mountMedia } from "./media-api.js";
 import { readOrderFlow } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
@@ -68,6 +71,25 @@ export interface StartedServer {
  * than a second copy of the expression that could silently drift from it.
  */
 export const DEFAULT_MIGRATIONS_ROOT = fileURLToPath(new URL("drizzle", import.meta.url));
+
+/**
+ * The default local store for product images, computed exactly as `DEFAULT_MIGRATIONS_ROOT` above:
+ * beside the bundle (`<dist>/media`) for a built artefact, or `apps/server/src/media` run from
+ * source. `WAITRON_MEDIA_DIR` overrides it (config.ts), and deployment (#9) sets it explicitly to a
+ * durable path; this default only has to exist so a from-source dev boot has somewhere to write.
+ * Threaded into `loadConfig` as the `defaultMediaRoot` argument, the same way this file supplies
+ * `DEFAULT_MIGRATIONS_ROOT`.
+ */
+export const DEFAULT_MEDIA_ROOT = fileURLToPath(new URL("media", import.meta.url));
+
+/**
+ * The upper bound on a single product-image upload (design §5e, 5 MiB). A settled constant rather
+ * than config: it is a DoS ceiling on an unauthenticated-adjacent write path, not an operator knob.
+ * The upload route (a later slice) enforces it both coarsely (a `bodyLimit` middleware) and
+ * precisely (a `file.size` check → `media.too_large`); exported here so that route and this boot
+ * agree on one value rather than two literals that could drift.
+ */
+export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 /**
  * The one integrated card-payment provider this till drives (sub-project 7), or `undefined` when
@@ -132,7 +154,7 @@ export async function buildCardProvider(
 export async function startServer(env: Record<string, string | undefined>): Promise<StartedServer> {
   const now = () => new Date();
   const log = createLogger((line) => process.stdout.write(line), now);
-  const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT);
+  const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_MEDIA_ROOT);
   // This guard cannot live in `config.ts`'s `loadConfig` beside `minTickMs > maxTickMs` above it —
   // `health.ts` imports `DEFAULT_MAX_TICK_MS` FROM `config.ts` to build `DUTY_BUDGET_MS`, so
   // `config.ts` importing `DUTY_BUDGET_MS` back would be a cycle. `boot.ts` already imports both,
@@ -203,6 +225,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // creating a second one" (health.ts's own note). `makeStripe` is `defaultMakeStripe`, the same SDK
   // factory `stripeAccountResolver` uses above — the webhook selects each request's signing secret
   // from the PATH tenant's own `payments.stripe` credential, never a platform one.
+  // The product-image store must exist before mounting the routes that read and write it (the
+  // upload/serve mounts land in later slices). Done ONCE here, not per request; `recursive: true`
+  // makes it idempotent — a no-op once the directory is there, which is every boot after the first.
+  // After migrations deliberately: a boot that fails earlier never creates a stray media directory.
+  mkdirSync(config.mediaDir, { recursive: true });
+
   const app = healthApp(health, now);
   mountWebhook(
     app,
@@ -269,6 +297,29 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     },
     log,
   );
+  // The dashboard's gated catalogue write group (catalogues/categories/products + image upload) on the
+  // SAME app, the identical convention. It reuses the EXACT `db` and tenant `mountManagementApi` above
+  // receives (`till.tenantId`, this venue's one tenant) so the two cannot drift, plus the store
+  // `mkdirSync` above ensured (`config.mediaDir`) and the shared `MAX_UPLOAD_BYTES` DoS ceiling — one
+  // value read by this mount and its route, not two literals. No fiscal backend, clock or card
+  // provider: these routes touch only the catalogue and the image store. Routes only — no database
+  // work at boot; the `person.manage` gate runs per request.
+  mountCatalogueApi(
+    app,
+    {
+      db,
+      cfg: { tenantId: till.tenantId },
+      mediaDir: config.mediaDir,
+      maxUploadBytes: MAX_UPLOAD_BYTES,
+    },
+    log,
+  );
+  // The PUBLIC read half of the product-image feature on the SAME app — the `mountWebhook` /
+  // `mountTillApi` / `mountManagementApi` convention again. Deliberately UNAUTHENTICATED and taking
+  // no `db`/session: it serves bytes from `config.mediaDir` (the store `mkdirSync` above ensured),
+  // guarding the filename against traversal with its own explicit regex (design §5e). Mounted after
+  // the gated groups purely for reading order; route registration only, no database work at boot.
+  mountMedia(app, { mediaDir: config.mediaDir }, log);
   // `buildServeOptions` turns the plain-HTTP options into HTTPS ones when `config.tls` is set,
   // reading the cert/key files, and returns them unchanged otherwise (loopback dev). The exact
   // `@hono/node-server` option names (`createServer` + `serverOptions`) are confirmed and documented

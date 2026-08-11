@@ -1,3 +1,4 @@
+import { isAbsolute, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { captureError } from "@waitron/db";
 import { DEFAULTS } from "@waitron/scheduler";
@@ -20,6 +21,11 @@ const TILL_ENV = {
 // NOT, deliberately, because that guard fires before the till is ever read (see the test).
 const MIN_ENV = { DATABASE_URL: "postgres://u@h/d", ...TILL_ENV };
 const ROOT = "/opt/waitron/drizzle";
+// The boot-computed default media root, threaded in exactly as ROOT (the migrations root) is — so
+// an unset OR empty WAITRON_MEDIA_DIR resolves to this, never to `resolve("")` (which is cwd, the
+// "empty value is a valid value" trap CLAUDE.md §3 warns about). Absolute on purpose, distinct from
+// ROOT, so a mediaDir assertion cannot pass by picking up the migrations root by coincidence.
+const MEDIA_ROOT = "/opt/waitron/media";
 
 const EXPECTED_TILL = {
   tenantId: TILL_ENV.WAITRON_TILL_TENANT_ID,
@@ -42,7 +48,7 @@ function codeOf(error: unknown): string {
 
 describe("loadConfig", () => {
   it("defaults every optional value, and defaults the deployment environment to preproduction", () => {
-    const config = loadConfig(MIN_ENV, ROOT);
+    const config = loadConfig(MIN_ENV, ROOT, MEDIA_ROOT);
     expect(config).toEqual({
       databaseUrl: "postgres://u@h/d",
       // Defaults to DATABASE_URL — same variable, same role — so a deployment that never sets
@@ -63,6 +69,9 @@ describe("loadConfig", () => {
       skipRetryMs: DEFAULTS.skipRetryMs,
       settlementLagMs: undefined,
       migrationsRoot: ROOT,
+      // No WAITRON_MEDIA_DIR set, so mediaDir falls back to the boot-provided default (MEDIA_ROOT),
+      // the same isUnset fallback migrationsRoot uses above — never resolve("") / cwd (CLAUDE.md §3).
+      mediaDir: MEDIA_ROOT,
       // No WAITRON_TLS_* set, so the whole optional block is absent — not present-but-undefined.
       // `tls` is omitted from the returned object entirely (see loadConfig's conditional spread).
       till: EXPECTED_TILL,
@@ -80,7 +89,7 @@ describe("loadConfig", () => {
   });
 
   it("populates config.till from the WAITRON_TILL_* environment (the till's fiscal identity)", () => {
-    const config = loadConfig(MIN_ENV, ROOT);
+    const config = loadConfig(MIN_ENV, ROOT, MEDIA_ROOT);
     expect(config.till).toEqual(EXPECTED_TILL);
   });
 
@@ -92,6 +101,7 @@ describe("loadConfig", () => {
         WAITRON_TLS_KEY_FILE: "/etc/waitron/tls/key.pem",
       },
       ROOT,
+      MEDIA_ROOT,
     );
     expect(config.tls).toEqual({
       certFile: "/etc/waitron/tls/cert.pem",
@@ -100,7 +110,7 @@ describe("loadConfig", () => {
   });
 
   it("leaves config.tls undefined when NEITHER cert nor key is set (plain HTTP loopback dev)", () => {
-    const config = loadConfig(MIN_ENV, ROOT);
+    const config = loadConfig(MIN_ENV, ROOT, MEDIA_ROOT);
     expect(config.tls).toBeUndefined();
   });
 
@@ -114,7 +124,7 @@ describe("loadConfig", () => {
     [{ WAITRON_TLS_KEY_FILE: "/etc/waitron/tls/key.pem" }, "WAITRON_TLS_CERT_FILE"],
   ])("rejects a half-configured TLS pair, naming the missing %o", async (extra, missing) => {
     const error = await captureError(() =>
-      Promise.resolve(loadConfig({ ...MIN_ENV, ...extra }, ROOT)),
+      Promise.resolve(loadConfig({ ...MIN_ENV, ...extra }, ROOT, MEDIA_ROOT)),
     );
     expect(codeOf(error)).toBe("server.config_invalid");
     expect(isAppError(error) && error.params).toEqual({
@@ -136,6 +146,7 @@ describe("loadConfig", () => {
             WAITRON_TLS_KEY_FILE: "/etc/waitron/tls/key.pem",
           },
           ROOT,
+          MEDIA_ROOT,
         ),
       ),
     );
@@ -147,7 +158,7 @@ describe("loadConfig", () => {
   });
 
   it("requires DATABASE_URL", async () => {
-    const error = await captureError(() => Promise.resolve(loadConfig({}, ROOT)));
+    const error = await captureError(() => Promise.resolve(loadConfig({}, ROOT, MEDIA_ROOT)));
     expect(codeOf(error)).toBe("server.config_missing");
     expect(isAppError(error) && error.params).toMatchObject({ variable: "DATABASE_URL" });
   });
@@ -174,6 +185,7 @@ describe("loadConfig", () => {
         WAITRON_SCHEDULER_STALE_AFTER_MS: "2000",
       },
       ROOT,
+      MEDIA_ROOT,
     );
     expect(config.migrationsDatabaseUrl).toBe("postgres://migrator@h/d");
     expect(config.environment).toBe("production");
@@ -199,12 +211,16 @@ describe("loadConfig", () => {
     // Mirrors WAITRON_MIGRATIONS_DIR's own empty-string-means-unset treatment elsewhere in this
     // file: an operator's deploy tooling that always sets the variable, empty when unused, must
     // not be forced to omit it entirely to get the default.
-    const config = loadConfig({ ...MIN_ENV, WAITRON_MIGRATIONS_DATABASE_URL: "" }, ROOT);
+    const config = loadConfig(
+      { ...MIN_ENV, WAITRON_MIGRATIONS_DATABASE_URL: "" },
+      ROOT,
+      MEDIA_ROOT,
+    );
     expect(config.migrationsDatabaseUrl).toBe(config.databaseUrl);
   });
 
   it("accepts the highest real TCP port, 65535 — the boundary the rejection test just above it lives one past", () => {
-    const config = loadConfig({ ...MIN_ENV, WAITRON_HTTP_PORT: "65535" }, ROOT);
+    const config = loadConfig({ ...MIN_ENV, WAITRON_HTTP_PORT: "65535" }, ROOT, MEDIA_ROOT);
     expect(config.httpPort).toBe(65_535);
   });
 
@@ -222,7 +238,7 @@ describe("loadConfig", () => {
     ["WAITRON_SCHEDULER_MAX_ATTEMPTS", "1.5", "not_a_positive_integer"],
   ])("rejects %s=%s", async (variable, value, reason) => {
     const error = await captureError(() =>
-      Promise.resolve(loadConfig({ ...MIN_ENV, [variable]: value }, ROOT)),
+      Promise.resolve(loadConfig({ ...MIN_ENV, [variable]: value }, ROOT, MEDIA_ROOT)),
     );
     expect(codeOf(error)).toBe("server.config_invalid");
     // The variable NAME and a reason CODE — never the value, which is arbitrary operator input and
@@ -233,7 +249,11 @@ describe("loadConfig", () => {
   it("rejects a minTick above maxTick, which would make the clamp unsatisfiable", async () => {
     const error = await captureError(() =>
       Promise.resolve(
-        loadConfig({ ...MIN_ENV, WAITRON_MIN_TICK_MS: "10000", WAITRON_MAX_TICK_MS: "5000" }, ROOT),
+        loadConfig(
+          { ...MIN_ENV, WAITRON_MIN_TICK_MS: "10000", WAITRON_MAX_TICK_MS: "5000" },
+          ROOT,
+          MEDIA_ROOT,
+        ),
       ),
     );
     expect(codeOf(error)).toBe("server.config_invalid");
@@ -255,6 +275,7 @@ describe("loadConfig", () => {
         loadConfig(
           { ...MIN_ENV, WAITRON_MIN_TICK_MS: "10000", WAITRON_SKIP_RETRY_MS: "9999" },
           ROOT,
+          MEDIA_ROOT,
         ),
       ),
     );
@@ -274,13 +295,14 @@ describe("loadConfig", () => {
     const config = loadConfig(
       { ...MIN_ENV, WAITRON_MIN_TICK_MS: "10000", WAITRON_SKIP_RETRY_MS: "10000" },
       ROOT,
+      MEDIA_ROOT,
     );
     expect(config.minTickMs).toBe(10_000);
     expect(config.skipRetryMs).toBe(10_000);
   });
 
   it("boots with the shipped defaults (skipRetryMs 300000, minTickMs 5000) — the new guard must not reject them", () => {
-    const config = loadConfig(MIN_ENV, ROOT);
+    const config = loadConfig(MIN_ENV, ROOT, MEDIA_ROOT);
     expect(config.minTickMs).toBe(5_000);
     expect(config.skipRetryMs).toBe(DEFAULTS.skipRetryMs);
   });
@@ -298,6 +320,7 @@ describe("loadConfig", () => {
         loadConfig(
           { ...MIN_ENV, WAITRON_MAX_TICK_MS: "5000", WAITRON_SKIP_RETRY_MS: "300000" },
           ROOT,
+          MEDIA_ROOT,
         ),
       ),
     );
@@ -317,6 +340,7 @@ describe("loadConfig", () => {
     const config = loadConfig(
       { ...MIN_ENV, WAITRON_MAX_TICK_MS: "300000", WAITRON_SKIP_RETRY_MS: "300000" },
       ROOT,
+      MEDIA_ROOT,
     );
     expect(config.maxTickMs).toBe(300_000);
     expect(config.skipRetryMs).toBe(300_000);
@@ -326,9 +350,49 @@ describe("loadConfig", () => {
     const config = loadConfig(
       { ...MIN_ENV, WAITRON_MAX_TICK_MS: "120000", WAITRON_SKIP_RETRY_MS: "60000" },
       ROOT,
+      MEDIA_ROOT,
     );
     expect(config.maxTickMs).toBe(120_000);
     expect(config.skipRetryMs).toBe(60_000);
+  });
+
+  it("resolves WAITRON_MEDIA_DIR to an absolute path", () => {
+    // An absolute value survives resolve() unchanged — mediaDir is the store the upload/serve routes
+    // (later tasks) join untrusted filenames onto, so it must be a settled absolute path, never a
+    // relative one whose meaning shifts with the process's cwd.
+    const config = loadConfig(
+      { ...MIN_ENV, WAITRON_MEDIA_DIR: "/srv/waitron/product-images" },
+      ROOT,
+      MEDIA_ROOT,
+    );
+    expect(config.mediaDir).toBe("/srv/waitron/product-images");
+    expect(isAbsolute(config.mediaDir)).toBe(true);
+  });
+
+  it("resolves a relative WAITRON_MEDIA_DIR against cwd, so mediaDir is always absolute", () => {
+    // A relative value is resolved (resolve(value)) rather than stored verbatim — this is the ONE
+    // path where resolve() is applied, and it is applied only to a genuinely-set value, never to the
+    // empty string (that case falls back below, not through resolve).
+    const config = loadConfig({ ...MIN_ENV, WAITRON_MEDIA_DIR: "media/uploads" }, ROOT, MEDIA_ROOT);
+    expect(config.mediaDir).toBe(resolve("media/uploads"));
+    expect(isAbsolute(config.mediaDir)).toBe(true);
+  });
+
+  it("falls back to the boot-provided defaultMediaRoot when WAITRON_MEDIA_DIR is unset", () => {
+    const config = loadConfig(MIN_ENV, ROOT, MEDIA_ROOT);
+    expect(config.mediaDir).toBe(MEDIA_ROOT);
+  });
+
+  // The load-bearing empty-value guard (CLAUDE.md §3): an operator's `WAITRON_MEDIA_DIR=` (set but
+  // empty) must fall back to the default exactly as an unset one does — NEVER `resolve("")`, which is
+  // cwd. A mediaDir silently pointing at cwd would have the upload route writing product images into,
+  // and the serve route reading them from, whatever directory the process happened to start in.
+  it("treats an empty WAITRON_MEDIA_DIR as unset, falling back to the default — never resolve('') / cwd", () => {
+    const config = loadConfig({ ...MIN_ENV, WAITRON_MEDIA_DIR: "" }, ROOT, MEDIA_ROOT);
+    expect(config.mediaDir).toBe(MEDIA_ROOT);
+    // Prove the trap directly: the empty value did NOT resolve to cwd.
+    expect(config.mediaDir).not.toBe(resolve(""));
+    expect(config.mediaDir).not.toBe(process.cwd());
   });
 });
 

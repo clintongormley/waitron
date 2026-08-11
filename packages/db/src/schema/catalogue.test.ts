@@ -83,4 +83,17 @@ describeEachTarget("catalogue — menu, taxonomy and priced items", (target) => 
     );
     expect(col).toMatchObject({ data_type: "jsonb", is_nullable: "YES" });
   });
+
+  it("products carries a nullable image text column", async () => {
+    // The image column is a path REFERENCE (a content-addressed filename), never bytes — nullable
+    // because a product legitimately has no photo (distinct from allergens' null, which is a
+    // load-bearing PENDING state; image null just means "no picture"). The write/read RLS receipt
+    // that the existing grant + policy cover it lives in catalogue.rls.test.ts.
+    const [col] = await rows<{ data_type: string; is_nullable: string }>(
+      db,
+      sql`select data_type, is_nullable from information_schema.columns
+          where table_name = 'products' and column_name = 'image'`,
+    );
+    expect(col).toMatchObject({ data_type: "text", is_nullable: "YES" });
+  });
 });

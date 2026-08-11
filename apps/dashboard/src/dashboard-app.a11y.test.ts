@@ -37,6 +37,10 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
     createPerson: vi.fn().mockResolvedValue({ id: "p3" }),
     logout: vi.fn().mockResolvedValue(undefined),
+    // The catalogue screen (reachable via the nav) loads these on connect.
+    listCatalogues: vi.fn().mockResolvedValue([]),
+    listCategories: vi.fn().mockResolvedValue([]),
+    listProducts: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -73,6 +77,24 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     const h1s = [
       ...el.shadowRoot!.querySelectorAll("h1"),
       ...(staff!.shadowRoot?.querySelectorAll("h1") ?? []),
+    ];
+    expect(h1s).toHaveLength(1);
+    await expectNoA11yViolations(host);
+  });
+
+  it("the catalogue screen renders accessibly with a single, well-ordered heading", async () => {
+    // Navigate to the catalogue screen (its own <h1> "Carta" is then the sole heading; the shell's
+    // nav chrome carries none), and scan the composed tree in this theme.
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue(people) });
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-catalogue]")!.click();
+    await flush(el);
+    const catalogue = el.shadowRoot!.querySelector("dashboard-catalogue-screen");
+    expect(catalogue).toBeTruthy();
+    const h1s = [
+      ...el.shadowRoot!.querySelectorAll("h1"),
+      ...(catalogue!.shadowRoot?.querySelectorAll("h1") ?? []),
     ];
     expect(h1s).toHaveLength(1);
     await expectNoA11yViolations(host);

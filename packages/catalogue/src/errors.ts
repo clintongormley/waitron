@@ -10,5 +10,19 @@ declare module "@waitron/shared" {
     "allergen.invalid_presence": { code: string; presence: string };
     /** An allergen's optional `source` is present but is not a string. */
     "allergen.invalid_source": { code: string };
+    /** An image upload carried no file part in the multipart body. Thrown by the server route. */
+    "media.missing": Record<string, never>;
+    /**
+     * The uploaded bytes are not an accepted image type (JPEG/PNG/WEBP). `detected` names the type
+     * when it is recognisable (e.g. `"gif"`); it carries a fact about the bytes, never the bytes.
+     */
+    "media.unsupported_type": { detected?: string };
+    /**
+     * The uploaded image exceeds `maxUploadBytes`. Thrown by the server route. Facts, not bytes.
+     * `size` is the true `file.size` when the precise per-file check rejects it, but a LOWER BOUND
+     * (the raw-body ceiling that was exceeded) when the coarse `bodyLimit` middleware rejects the
+     * stream before the file is measured — so a consumer must not render it as "your file was N bytes".
+     */
+    "media.too_large": { size: number; limit: number };
   }
 }

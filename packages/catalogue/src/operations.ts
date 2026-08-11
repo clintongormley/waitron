@@ -44,6 +44,8 @@ export interface Product {
   active: boolean;
   /** EU 1169/2011 Annex II declaration, or null when not yet reviewed (a compliance gap). */
   allergens: ProductAllergens | null;
+  /** Content-addressed photo filename served at `/media/<image>`, or null when there is no picture. */
+  image: string | null;
 }
 
 export interface CreateProductInput {
@@ -55,6 +57,11 @@ export interface CreateProductInput {
   vatClass: VatClass;
   /** Omitted leaves it null (unreviewed); validated against the EU-14 taxonomy on insert. */
   allergens?: ProductAllergens;
+  /** A stored photo reference (`<sha256>.<ext>`); omitted leaves it null (no picture). */
+  image?: string;
+  /** Omitted leaves it active, mirroring the `products.active` column default. Set `false` to create
+   * a product that is not yet sellable at the till — atomic in the one insert, no follow-up patch. */
+  active?: boolean;
 }
 
 /** The mutable slice of a product. Absent keys are left unchanged (the object literal a caller
@@ -67,6 +74,10 @@ export interface UpdateProductInput {
   categoryId?: string | null;
   /** `null` clears the declaration back to unreviewed; omitted leaves it unchanged. */
   allergens?: ProductAllergens | null;
+  /** `null` clears the photo reference; omitted leaves it unchanged. */
+  image?: string | null;
+  /** Toggle active/inactive through the edit route; omitted leaves it unchanged. */
+  active?: boolean;
 }
 
 /**
@@ -106,6 +117,7 @@ const PRODUCT_COLUMNS = {
   vatClass: products.vatClass,
   active: products.active,
   allergens: products.allergens,
+  image: products.image,
 };
 
 /** The product row as Drizzle types it back: `pricing_unit`/`vat_class` are `text` columns, so they
@@ -120,6 +132,7 @@ interface RawProduct {
   vatClass: string;
   active: boolean;
   allergens: ProductAllergens | null;
+  image: string | null;
 }
 
 // `pricing_unit`/`vat_class` are constrained to their unions by a CHECK (catalogue.ts), so the value
@@ -200,7 +213,9 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
       pricingUnit: input.pricingUnit,
       unitPrice: input.unitPrice,
       vatClass: input.vatClass,
+      active: input.active ?? true,
       allergens,
+      image: input.image ?? null,
     })
     .returning(PRODUCT_COLUMNS);
   return toProduct(row!);
