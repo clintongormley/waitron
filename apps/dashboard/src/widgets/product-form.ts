@@ -34,10 +34,11 @@ const PRICING_UNITS: readonly PricingUnit[] = ["each", "weight"];
 /**
  * The `create-product` event detail — the whole form assembled. `allergens` is OMITTED (never sent as
  * `null`) when the picker is PENDING, because the server's `createProduct` throws `allergen.invalid_code`
- * on an explicit `allergens: null` (the create-vs-patch asymmetry); `image` is omitted when unset.
- * `active` is always carried and threaded straight through the create, so a product created INACTIVE
- * is one atomic request (`createProduct` accepts `active`), never a create-then-patch. `{}` is a
- * REVIEWED-NONE declaration, distinct from PENDING, and IS sent.
+ * on an explicit `allergens: null` (the create-vs-patch asymmetry); `image` is the same — it is
+ * OMITTED when unset and never emitted as `null` (the POST route rejects a literal `null`), so it is
+ * typed `string`, not `string | null`. `active` is always carried and threaded straight through the
+ * create, so a product created INACTIVE is one atomic request (`createProduct` accepts `active`),
+ * never a create-then-patch. `{}` is a REVIEWED-NONE declaration, distinct from PENDING, and IS sent.
  */
 export interface CreateProductDetail {
   catalogueId: string;
@@ -47,7 +48,7 @@ export interface CreateProductDetail {
   vatClass: VatClass;
   pricingUnit: PricingUnit;
   allergens?: Record<string, AllergenEntry>;
-  image?: string | null;
+  image?: string;
   active: boolean;
 }
 

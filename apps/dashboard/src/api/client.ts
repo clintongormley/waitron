@@ -134,9 +134,11 @@ export interface Product {
 /**
  * The `POST /management-api/products` body — mirrors catalogue's `CreateProductInput`. `allergens`
  * omitted leaves the product unreviewed (null); the server refuses an explicit `null` here, so the
- * form OMITS the key for a PENDING declaration. `image` omitted leaves it null. `active` omitted
- * leaves the product active (the column default); `false` creates it inactive in the SAME request —
- * the create is atomic, with no follow-up patch.
+ * form OMITS the key for a PENDING declaration. `image` is the same: the POST route accepts a string
+ * or the key's absence, never a literal `null` (that 400s as `management.request_invalid`), so it is
+ * typed `string` and omitted when there is no picture — only `ProductPatch.image` is nullable (a PATCH
+ * clears the photo with `null`). `active` omitted leaves the product active (the column default);
+ * `false` creates it inactive in the SAME request — the create is atomic, with no follow-up patch.
  */
 export interface ProductInput {
   catalogueId: string;
@@ -146,7 +148,7 @@ export interface ProductInput {
   unitPrice: string;
   vatClass: VatClass;
   allergens?: Record<string, AllergenEntry>;
-  image?: string | null;
+  image?: string;
   active?: boolean;
 }
 
