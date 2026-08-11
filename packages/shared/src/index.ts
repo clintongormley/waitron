@@ -52,6 +52,7 @@ export {
   MONEY_SCALE,
   multiplyDecimal,
   negateDecimal,
+  percentOf,
   subtractDecimal,
   sumDecimals,
   toScale,

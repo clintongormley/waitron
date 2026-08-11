@@ -109,8 +109,8 @@ function roundedQuotient(numerator: bigint, denominator: bigint): bigint {
 
 /**
  * Exact quotient `dividend / divisor`, rounded half away from zero to `scale` places — the
- * division `@waitron/shared` otherwise lacks (which is why `packages/core/src/vat.ts` used to
- * reimplement this file's private codec). Computed entirely in BigInt: never a JS number.
+ * division `@waitron/shared` otherwise lacks (an earlier `@waitron/core` VAT helper, since removed,
+ * reimplemented this file's private codec for want of it). Computed entirely in BigInt: never a JS number.
  */
 export function divideDecimal(dividend: Decimal, divisor: Decimal, scale: number): Decimal {
   const a = partsOf(dividend);
@@ -127,6 +127,19 @@ export function divideDecimal(dividend: Decimal, divisor: Decimal, scale: number
   const absDen = den < 0n ? -den : den;
   const rounded = roundedQuotient(absNum, absDen);
   return fromParts({ units: negative ? -rounded : rounded, scale });
+}
+
+/**
+ * `ratePercent`% of `amount`, exact and rounded half away from zero to `scale` places (money
+ * scale by default). `ratePercent` is a PERCENTAGE literal as this system stores it ("21.00"
+ * meaning 21%), so the division by 100 is folded in: amount * rate / 100.
+ *
+ * Exact throughout via the BigInt decimal ops above — the single implementation of the VAT
+ * `base * rate / 100` formula, imported wherever a tax figure is derived from a base rather than
+ * re-inlined (which is how it drifted into four copies before this was hoisted here).
+ */
+export function percentOf(amount: Decimal, ratePercent: Decimal, scale = MONEY_SCALE): Decimal {
+  return divideDecimal(multiplyDecimal(amount, ratePercent), "100" as Decimal, scale);
 }
 
 export function negateDecimal(value: Decimal): Decimal {

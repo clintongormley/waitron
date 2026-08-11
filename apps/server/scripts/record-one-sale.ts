@@ -43,9 +43,7 @@ import { deploymentEnvironment } from "../src/config.js";
 import {
   addDecimal,
   decimal,
-  divideDecimal,
-  multiplyDecimal,
-  MONEY_SCALE,
+  percentOf,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
@@ -128,14 +126,12 @@ async function main(): Promise<void> {
   const vatRate = decimal(vatRateArg);
   const tipAmount = decimal(tipArg ?? "0.00");
 
-  // The same formula `packages/core/src/vat.ts`'s `percentOf` applies internally (multiply, then
-  // divide by 100, rounded to money scale) — reproduced here, rather than imported, because
-  // `percentOf` is not part of `@waitron/core`'s public surface (`src/index.ts`). Using the
-  // identical formula is what keeps this computed `total` agreeing with the VAT breakdown
-  // `recordSale` derives independently from `lines` — a caller-supplied total that disagreed
-  // would not fail loudly (there is no CHECK constraint comparing the two), it would just be
-  // wrong.
-  const tax = divideDecimal(multiplyDecimal(baseAmount, vatRate), decimal("100"), MONEY_SCALE);
+  // The same `percentOf` (multiply, then divide by 100, rounded to money scale) that `recordSale`
+  // applies internally when it derives the VAT breakdown from `lines`. Using the identical function
+  // is what keeps this computed `total` agreeing with that breakdown — a caller-supplied total that
+  // disagreed would not fail loudly (there is no CHECK constraint comparing the two), it would just
+  // be wrong.
+  const tax = percentOf(baseAmount, vatRate);
   const total = addDecimal(baseAmount, tax);
   // The single tender's whole charge: total plus the tip, which now rides ON the tender
   // (`tenders.tip_amount`) rather than on the sale — `amount_charged` was dropped from `sales` in
