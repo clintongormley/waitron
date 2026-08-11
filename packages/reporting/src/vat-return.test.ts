@@ -177,6 +177,16 @@ describe("computeVatReturn", () => {
     await expect(run({ year: 2026.5, month: 8 })).rejects.toThrow();
   });
 
+  it("throws a plain validation Error on a year outside the 4-digit range, not a silent-empty 303", async () => {
+    // A mistyped year make_date still accepts (226 AD, 20226 AD) would otherwise match no sales and
+    // return a plausible-but-EMPTY 303 — the quiet, worse direction for a fiscal filing. A year
+    // make_date rejects (0) surfaces as a raw Postgres error mid-query, not the plain `reporting:`
+    // Error. Both must be caught as a validation throw BEFORE any query — hence the pinned message.
+    await expect(run({ year: 226, month: 8 })).rejects.toThrow(/year must be/);
+    await expect(run({ year: 20226, month: 8 })).rejects.toThrow(/year must be/);
+    await expect(run({ year: 0, month: 8 })).rejects.toThrow(/year must be/);
+  });
+
   it("returns zeros for an empty month", async () => {
     expect(await run({ year: 2026, month: 3 })).toEqual({
       tenantId: venue.tenantId,

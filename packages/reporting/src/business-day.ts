@@ -97,9 +97,9 @@ export function businessDayClause(column: SQL, input: DailyCloseInput): SQL {
 
 /**
  * The closed-range generalisation of `businessDayClause`: the SAME venue-local business date, but
- * `between from and to` instead of `= businessDay`. A single-day range (`from == to`) is therefore
- * byte-identical to `businessDayClause`'s `= from` form (`x between D and D` ≡ `x = D`), so the range
- * clause provably EXTENDS the tested one rather than replacing it — see `business-day.test.ts`.
+ * `between from and to` instead of `= businessDay`. A single-day range (`from == to`) therefore
+ * matches exactly what `businessDayClause`'s `= from` form matches (`x between D and D` ≡ `x = D`), so
+ * the range clause provably EXTENDS the tested one rather than replacing it — see `business-day.test.ts`.
  * Bounds are inclusive on both ends.
  */
 export function businessDayRangeClause(column: SQL, input: PeriodVatInput): SQL {

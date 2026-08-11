@@ -18,14 +18,23 @@ import type { VatReturn, VatReturnInput } from "./types.js";
  * business day (spec §4/D4). The filed `FechaExpedicionFactura` is the civil-local date of the
  * issuance instant using the sale's OWN snapshotted offset, exactly what AEAT received:
  * `formatDate(issued_at, issued_offset_minutes)` shifts by the offset then reads the date
- * (`packages/verifactu/src/format.ts:119-122` `formatDate` → `:97-112` `shift`). The SQL below is
- * byte-identical to that shift-then-read-date, so it needs no `timeZone` input.
+ * (`packages/verifactu/src/format.ts:119-122` `formatDate` → `:97-112` `shift`). The SQL below applies
+ * the same fixed snapshot offset to the same instant and reads the same date components, so it yields
+ * the same civil date `formatDate` filed and needs no `timeZone` input. The +120-offset July/August
+ * boundary case in `vat-return.test.ts` pins that equivalence.
  */
 export async function computeVatReturn(tx: Transaction, input: VatReturnInput): Promise<VatReturn> {
   // Caller preconditions — a bad year/month is a plain Error (spec §D9; matches business-day.ts's
-  // validators, no registered code). Validated BEFORE any query.
-  if (!Number.isInteger(input.year)) {
-    throw new Error(`reporting: year must be an integer: ${JSON.stringify(input.year)}`);
+  // validators, no registered code). Validated BEFORE any query. The year is bounded to four digits,
+  // the same range `validateBusinessDay`'s `^\d{4}-\d{2}-\d{2}$` enforces on the sibling range path
+  // (business-day.ts:7): without the bound, a year make_date accepts but that is plainly a typo
+  // (e.g. 226 AD) matches no sales and returns a plausible-but-EMPTY 303 (the quiet, worse direction
+  // for a fiscal filing), while a year make_date rejects (0, 1e7) surfaces as a raw Postgres error
+  // mid-query rather than this plain Error.
+  if (!Number.isInteger(input.year) || input.year < 1000 || input.year > 9999) {
+    throw new Error(
+      `reporting: year must be an integer in 1000..9999: ${JSON.stringify(input.year)}`,
+    );
   }
   if (!Number.isInteger(input.month) || input.month < 1 || input.month > 12) {
     throw new Error(`reporting: month must be an integer in 1..12: ${JSON.stringify(input.month)}`);
