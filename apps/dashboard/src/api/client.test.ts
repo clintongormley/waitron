@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { DashboardApi } from "./client.js";
+import type { LayoutDef, ReceiptConfig } from "./client.js";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return { ok, status, json: async () => body, text: async () => JSON.stringify(body) } as Response;
@@ -334,6 +335,75 @@ describe("DashboardApi", () => {
     const api = new DashboardApi("", fetchImpl);
     const file = new File([new Uint8Array([1, 2, 3])], "notes.txt", { type: "text/plain" });
     await expect(api.uploadImage(file)).rejects.toMatchObject({ code: "media.unsupported_type" });
+  });
+
+  it("getLayout GETs the layout + receipt with credentials", async () => {
+    const payload = {
+      definition: [
+        { type: "product-grid", region: "main", config: {} },
+        { type: "basket", region: "aside", config: {} },
+      ],
+      receipt: { headerSubtitle: "C/ Mayor 1", footerMessage: "Gracias" },
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(payload));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getLayout()).toEqual(payload);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/layout", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("putLayout PUTs the definition body and resolves undefined on an empty 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    const definition: LayoutDef = [
+      { type: "product-grid", region: "main", config: { columns: 4 } },
+      { type: "basket", region: "aside", config: {} },
+      { type: "total", region: "aside", config: {} },
+      { type: "tender-pay", region: "aside", config: {} },
+    ];
+    await expect(api.putLayout(definition)).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/layout", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ definition }),
+    });
+  });
+
+  it("putReceipt PUTs the receipt body and resolves undefined on an empty 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    const receipt: ReceiptConfig = {
+      headerSubtitle: "C/ Mayor 1",
+      footerMessage: "Gracias por su visita",
+    };
+    await expect(api.putReceipt(receipt)).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/receipt", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ receipt }),
+    });
+  });
+
+  it("putLayout throws the envelope code on a non-2xx", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "layout.invalid" } }, false, 400));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.putLayout([])).rejects.toMatchObject({ code: "layout.invalid" });
+  });
+
+  it("putReceipt throws the envelope code on a non-2xx", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "receipt.invalid" } }, false, 400));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.putReceipt({ footerMessage: "x" })).rejects.toMatchObject({
+      code: "receipt.invalid",
+    });
   });
 
   it("falls back to server.internal when the error body carries no code", async () => {

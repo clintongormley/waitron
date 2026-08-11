@@ -169,6 +169,38 @@ export interface ProductPatch {
   active?: boolean;
 }
 
+// ── Till layout & receipt (configurable-till) types ──────────────────────────────────────────────
+// LOCAL copies of `@waitron/layouts`' JSON shapes (the `/management-api/layout` + `/management-api/receipt`
+// routes wrapping the layouts service), deliberately NOT imported from `@waitron/layouts`/`@waitron/db` —
+// a runtime import would drag their barrels + Node builtins into the browser bundle (the #70 rule, as the
+// staff/catalogue shapes above and `apps/till/src/layout.ts` do — the till keeps its own local copy the
+// same way). If the server shapes change these follow, and a mismatch surfaces as a runtime shape error a
+// view test catches, not a compile break.
+
+/** One of the six counter widgets the layout editor can place (mirrors layouts' `WidgetType`). */
+export type WidgetType =
+  "product-grid" | "basket" | "total" | "tender-pay" | "held-orders" | "prep-queue";
+
+/** One placed widget: which widget, which region it sits in, and its per-widget `config` bag. */
+export interface WidgetInstance {
+  type: WidgetType;
+  region: "main" | "aside";
+  config: Record<string, unknown>;
+}
+
+/** A whole layout: the ordered widget instances the till renders, in order, into their regions. */
+export type LayoutDef = WidgetInstance[];
+
+/**
+ * The authorable, NON-FISCAL receipt trim (design §7/§8) — a `headerSubtitle` under the venue name and a
+ * `footerMessage` under the VERI*FACTU legend, both optional. It renders AROUND the immutable art. 7.1
+ * core, never able to touch it; no field here can suppress or reorder a mandated element.
+ */
+export interface ReceiptConfig {
+  headerSubtitle?: string;
+  footerMessage?: string;
+}
+
 /** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -338,6 +370,37 @@ export class DashboardApi {
     const form = new FormData();
     form.append("file", file);
     return this.#request<{ image: string }>("/management-api/product-images", "POST", form);
+  }
+
+  // ── Till layout & receipt configuration ──────────────────────────────────────────────────────
+
+  /**
+   * `GET /management-api/layout` — the authored till layout + receipt trim, or the server's defaults
+   * when this tenant has never authored one (`getLayout` falls back to `DEFAULT_LAYOUT`/`DEFAULT_RECEIPT`
+   * server-side), so this never 404s.
+   */
+  getLayout(): Promise<{ definition: LayoutDef; receipt: ReceiptConfig }> {
+    return this.#request<{ definition: LayoutDef; receipt: ReceiptConfig }>(
+      "/management-api/layout",
+      "GET",
+    );
+  }
+
+  /**
+   * `PUT /management-api/layout` — replace the WHOLE layout definition (full-replace, idempotent, the
+   * editor's "author the whole layout" semantics). Answers an empty 204; a definition the server rejects
+   * throws `layout.invalid`.
+   */
+  putLayout(definition: LayoutDef): Promise<void> {
+    return this.#request<void>("/management-api/layout", "PUT", { definition });
+  }
+
+  /**
+   * `PUT /management-api/receipt` — replace the receipt trim config (full-replace). Answers an empty
+   * 204; a config the server rejects throws `receipt.invalid`.
+   */
+  putReceipt(receipt: ReceiptConfig): Promise<void> {
+    return this.#request<void>("/management-api/receipt", "PUT", { receipt });
   }
 
   /**
