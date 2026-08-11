@@ -7,7 +7,7 @@ import {
   activeSalesClause,
   businessDayClause,
   businessDayRangeClause,
-  validateBusinessDay,
+  validateBusinessDayRange,
   validateCutover,
   validateTimeZone,
 } from "./business-day.js";
@@ -99,14 +99,7 @@ export async function computeVatSummaryForPeriod(
 ): Promise<VatSummary> {
   validateTimeZone(input.timeZone);
   validateCutover(input.dayCutover);
-  validateBusinessDay(input.fromBusinessDay);
-  validateBusinessDay(input.toBusinessDay);
-  // String compare is correct for the fixed "YYYY-MM-DD" shape the validators enforce.
-  if (input.fromBusinessDay > input.toBusinessDay) {
-    throw new Error(
-      `reporting: fromBusinessDay must be on or before toBusinessDay: ${JSON.stringify(input.fromBusinessDay)} > ${JSON.stringify(input.toBusinessDay)}`,
-    );
-  }
+  validateBusinessDayRange(input);
   return aggregateVatByRate(tx, {
     tenantId: input.tenantId,
     nodeId: input.nodeId,

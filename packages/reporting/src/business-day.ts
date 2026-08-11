@@ -57,25 +57,53 @@ export function validateBusinessDay(day: string): void {
 }
 
 /**
- * The DST-aware business-day predicate, reused by every aggregate. `column` is a `timestamptz`
- * (`sales.issued_at` or `tenders.settled_at`); a row belongs to `businessDay` when its venue-local
- * wall-clock, shifted back by the cutover, lands on that date. Never UTC — `AT TIME ZONE` with an
- * IANA name is DST-correct; a fixed offset would not be.
+ * Validates a closed `[from, to]` business-day range: each end is a real calendar date and `from` is
+ * on or before `to`. String compare is correct for the fixed "YYYY-MM-DD" shape `validateBusinessDay`
+ * enforces. The symmetric home for the ordering rule beside the atomic validators, so the next range
+ * aggregate (quarterly/annual) reuses it rather than re-deriving `from <= to` and its message.
  */
-export function businessDayClause(column: SQL, input: DailyCloseInput): SQL {
-  return sql`(${column} at time zone ${input.timeZone} - ${input.dayCutover}::interval)::date = ${input.businessDay}::date`;
+export function validateBusinessDayRange(input: {
+  fromBusinessDay: string;
+  toBusinessDay: string;
+}): void {
+  validateBusinessDay(input.fromBusinessDay);
+  validateBusinessDay(input.toBusinessDay);
+  if (input.fromBusinessDay > input.toBusinessDay) {
+    throw new Error(
+      `reporting: fromBusinessDay must be on or before toBusinessDay: ${JSON.stringify(input.fromBusinessDay)} > ${JSON.stringify(input.toBusinessDay)}`,
+    );
+  }
 }
 
 /**
- * The closed-range generalisation of `businessDayClause`: the SAME cutover-shifted local-date
- * expression, but `between from and to` instead of `= businessDay`. A single-day range
- * (`from == to`) is therefore byte-identical to `businessDayClause`'s `= from` form (`x between D and
- * D` ≡ `x = D`), so the range clause provably EXTENDS the tested one rather than replacing it — see
- * `business-day.test.ts`. Bounds are inclusive on both ends.
+ * The DST-aware venue-local business DATE of a `timestamptz` column: its wall-clock in `timeZone`,
+ * shifted back by the cutover, truncated to a date. Never UTC — `AT TIME ZONE` with an IANA name is
+ * DST-correct; a fixed offset would not be. The single home of the cutover-shift expression, so
+ * `businessDayClause` (`=`) and `businessDayRangeClause` (`between`) build on one fragment and cannot
+ * drift on the load-bearing shift maths.
+ */
+function businessDayLocalDate(column: SQL, input: { timeZone: string; dayCutover: string }): SQL {
+  return sql`(${column} at time zone ${input.timeZone} - ${input.dayCutover}::interval)::date`;
+}
+
+/**
+ * The DST-aware business-day predicate, reused by every aggregate. `column` is a `timestamptz`
+ * (`sales.issued_at` or `tenders.settled_at`); a row belongs to `businessDay` when its venue-local
+ * business date (above) equals that date.
+ */
+export function businessDayClause(column: SQL, input: DailyCloseInput): SQL {
+  return sql`${businessDayLocalDate(column, input)} = ${input.businessDay}::date`;
+}
+
+/**
+ * The closed-range generalisation of `businessDayClause`: the SAME venue-local business date, but
+ * `between from and to` instead of `= businessDay`. A single-day range (`from == to`) is therefore
+ * byte-identical to `businessDayClause`'s `= from` form (`x between D and D` ≡ `x = D`), so the range
+ * clause provably EXTENDS the tested one rather than replacing it — see `business-day.test.ts`.
+ * Bounds are inclusive on both ends.
  */
 export function businessDayRangeClause(column: SQL, input: PeriodVatInput): SQL {
-  return sql`(${column} at time zone ${input.timeZone} - ${input.dayCutover}::interval)::date
-             between ${input.fromBusinessDay}::date and ${input.toBusinessDay}::date`;
+  return sql`${businessDayLocalDate(column, input)} between ${input.fromBusinessDay}::date and ${input.toBusinessDay}::date`;
 }
 
 /**
