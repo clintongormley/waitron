@@ -30,14 +30,36 @@ import type { Database, Transaction } from "./client.js";
  * must not rely on it. Rejected alternative: branching on a deployment mode
  * inside this function, which would mean the standalone path runs a code path
  * the cloud tests never exercise.
+ *
+ * `opts.nodeId` (optional, additive) threads the PRODUCING node's id into
+ * `app.node_id`, using the identical set_config parameter binding as the tenant
+ * id above — never string-interpolated. When supplied, a locally-originated
+ * write to an enrolled table records this node in `sync_log.origin_id` (the
+ * `sync_capture()` trigger reads `app.node_id`; unset defaults to the all-zero
+ * uuid — packages/sync). Omitting it is byte-behaviourally identical to the
+ * former three-argument signature: no `app.node_id` is set and capture falls
+ * back to the all-zero origin. Proven both directions on real Postgres — a
+ * node-aware write stamps `origin_id` with the id, a plain write leaves the
+ * all-zero default (packages/sync/src/origin.gate.test.ts); the GUC is set,
+ * left unset on the plain form, and transaction-local (tenancy.test.ts,
+ * "app.node_id origin context"). Typed `string` so a branded `NodeId`
+ * (@waitron/shared, a string subtype) passes without importing the brand.
  */
+export interface TenantTxOptions {
+  nodeId?: string;
+}
+
 export async function withTenant<T>(
   db: Database,
   tenantId: string,
   fn: (tx: Transaction) => Promise<T>,
+  opts?: TenantTxOptions,
 ): Promise<T> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`select set_config('app.tenant_id', ${tenantId}, true)`);
+    if (opts?.nodeId !== undefined) {
+      await tx.execute(sql`select set_config('app.node_id', ${opts.nodeId}, true)`);
+    }
     return fn(tx);
   });
 }

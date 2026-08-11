@@ -257,76 +257,81 @@ export async function payWorkingOrder(
   operatorId?: string,
 ): Promise<TillSaleResult> {
   try {
-    return await withTenant(deps.db, cfg.tenantId, async (tx) => {
-      await asAppUser(tx);
+    return await withTenant(
+      deps.db,
+      cfg.tenantId,
+      async (tx) => {
+        await asAppUser(tx);
 
-      // Step 1. Lock/resolve the order by its (RLS-tenant-scoped) id. FOR UPDATE serialises a
-      // concurrent pay on a PARKED order; on a walk-up there is no row yet, so it locks nothing and
-      // the 23505 catch below is that shape's backstop.
-      const [locked] = await tx
-        .select({ status: workingOrders.status })
-        .from(workingOrders)
-        .where(eq(workingOrders.id, req.id))
-        .for("update");
+        // Step 1. Lock/resolve the order by its (RLS-tenant-scoped) id. FOR UPDATE serialises a
+        // concurrent pay on a PARKED order; on a walk-up there is no row yet, so it locks nothing and
+        // the 23505 catch below is that shape's backstop.
+        const [locked] = await tx
+          .select({ status: workingOrders.status })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, req.id))
+          .for("update");
 
-      // Step 2. Already settled → idempotent replay. A retry whose first response was lost, or the
-      // loser of a parked-order race that blocked on the lock above and now sees it settled.
-      if (locked?.status === "settled") {
-        return readSettledTicket(deps.backend, tx, cfg, req.id);
-      }
-
-      // Step 3. Abandoned (or any non-open, non-settled) order cannot be paid — the same refusal
-      // `updateHeldOrder`/`abandonHeldOrder` make, surfaced as the domain code rather than the raw
-      // `working_orders_enforce_transition` trigger error the settle UPDATE would otherwise raise.
-      if (locked !== undefined && locked.status !== "open") {
-        throw new AppError("working_order.not_open", { workingOrderId: req.id });
-      }
-
-      // Tender guard, before anything is filed — a network boundary (the till is untrusted): the only
-      // supported tenders are cash (7a) and a manual card (this slice); `voucher`/`transfer`/`other`
-      // are refused. AFTER the replay check, so a retry of an already-settled order is never refused
-      // for the shape of its retry body. The EMPTY-BASKET guard is NOT here: it belongs to the walk-up
-      // shape only (below), because a retrieved order ignores `req.lines` and files its stored lines.
-      if (req.tender.method !== "cash" && req.tender.method !== "card") {
-        throw new AppError("sale.unsupported_tender", { method: req.tender.method });
-      }
-
-      // Steps 4-5. Obtain the authoritative price to file, one way per shape (line-add snapshot, 7c),
-      // so it is computed exactly ONCE either way:
-      //  - WALK-UP (order does not exist yet): create it OPEN with its freshly-priced lines (the same
-      //    `createOpenOrder` `parkOrder` uses, so a walk-up order is identical in shape to a parked
-      //    one) and REUSE the price that creation already derived — `createOpenOrder` read the
-      //    catalogue and ran `priceBasket` to build the line rows, so re-reading and re-pricing the
-      //    identical `req.lines` here would just double the catalogue join on the till's hottest path.
-      //    A walk-up carries no label. An empty basket is refused here (nothing to price), a guard the
-      //    retrieved shape does not need.
-      //  - RETRIEVED order (already exists): file from the STORED locked lines, NOT a re-price of a
-      //    client basket. `req.lines` is IGNORED — the browser sends none; the persisted
-      //    `working_order_lines` are the authoritative composition, and their `unit_price_gross` was
-      //    LOCKED at add-time. `priceLockedLines` runs the SAME difference-method arithmetic over that
-      //    locked gross that `priceBasket` runs over a live catalogue, so the filed record is
-      //    byte-identical to what the line was priced to at add — and a catalogue price change between
-      //    park and pay never moves the filed total (the whole point of the snapshot model).
-      // The result is then filed with recordSale's immediate cash settlement, tagged with this order's
-      // id (`sales_working_order_id_key` = the idempotency key).
-      let priced: PricedLines;
-      if (locked === undefined) {
-        if (req.lines.length === 0) {
-          throw new AppError("sale.empty_basket", {});
+        // Step 2. Already settled → idempotent replay. A retry whose first response was lost, or the
+        // loser of a parked-order race that blocked on the lock above and now sees it settled.
+        if (locked?.status === "settled") {
+          return readSettledTicket(deps.backend, tx, cfg, req.id);
         }
-        ({ priced } = await createOpenOrder(tx, cfg, req.id, req.lines, null));
-      } else {
-        // Retrieved order: file from the STORED locked lines via the shared `priceStoredOrder` reader,
-        // never a re-price of a client basket (`req.lines` is IGNORED). It runs the SAME
-        // difference-method arithmetic over the locked gross that `priceBasket` runs over a live
-        // catalogue, so a catalogue price change between park and pay never moves the filed total.
-        priced = await priceStoredOrder(tx, req.id);
-      }
 
-      // File the immediate cash/card sale and settle it (open → settled), tagged with this order's id
-      // — the shared filing path Mode-T collect reuses (`fileImmediateSale`).
-      return fileImmediateSale(tx, deps, cfg, req.id, req.tender, priced, operatorId);
-    });
+        // Step 3. Abandoned (or any non-open, non-settled) order cannot be paid — the same refusal
+        // `updateHeldOrder`/`abandonHeldOrder` make, surfaced as the domain code rather than the raw
+        // `working_orders_enforce_transition` trigger error the settle UPDATE would otherwise raise.
+        if (locked !== undefined && locked.status !== "open") {
+          throw new AppError("working_order.not_open", { workingOrderId: req.id });
+        }
+
+        // Tender guard, before anything is filed — a network boundary (the till is untrusted): the only
+        // supported tenders are cash (7a) and a manual card (this slice); `voucher`/`transfer`/`other`
+        // are refused. AFTER the replay check, so a retry of an already-settled order is never refused
+        // for the shape of its retry body. The EMPTY-BASKET guard is NOT here: it belongs to the walk-up
+        // shape only (below), because a retrieved order ignores `req.lines` and files its stored lines.
+        if (req.tender.method !== "cash" && req.tender.method !== "card") {
+          throw new AppError("sale.unsupported_tender", { method: req.tender.method });
+        }
+
+        // Steps 4-5. Obtain the authoritative price to file, one way per shape (line-add snapshot, 7c),
+        // so it is computed exactly ONCE either way:
+        //  - WALK-UP (order does not exist yet): create it OPEN with its freshly-priced lines (the same
+        //    `createOpenOrder` `parkOrder` uses, so a walk-up order is identical in shape to a parked
+        //    one) and REUSE the price that creation already derived — `createOpenOrder` read the
+        //    catalogue and ran `priceBasket` to build the line rows, so re-reading and re-pricing the
+        //    identical `req.lines` here would just double the catalogue join on the till's hottest path.
+        //    A walk-up carries no label. An empty basket is refused here (nothing to price), a guard the
+        //    retrieved shape does not need.
+        //  - RETRIEVED order (already exists): file from the STORED locked lines, NOT a re-price of a
+        //    client basket. `req.lines` is IGNORED — the browser sends none; the persisted
+        //    `working_order_lines` are the authoritative composition, and their `unit_price_gross` was
+        //    LOCKED at add-time. `priceLockedLines` runs the SAME difference-method arithmetic over that
+        //    locked gross that `priceBasket` runs over a live catalogue, so the filed record is
+        //    byte-identical to what the line was priced to at add — and a catalogue price change between
+        //    park and pay never moves the filed total (the whole point of the snapshot model).
+        // The result is then filed with recordSale's immediate cash settlement, tagged with this order's
+        // id (`sales_working_order_id_key` = the idempotency key).
+        let priced: PricedLines;
+        if (locked === undefined) {
+          if (req.lines.length === 0) {
+            throw new AppError("sale.empty_basket", {});
+          }
+          ({ priced } = await createOpenOrder(tx, cfg, req.id, req.lines, null));
+        } else {
+          // Retrieved order: file from the STORED locked lines via the shared `priceStoredOrder` reader,
+          // never a re-price of a client basket (`req.lines` is IGNORED). It runs the SAME
+          // difference-method arithmetic over the locked gross that `priceBasket` runs over a live
+          // catalogue, so a catalogue price change between park and pay never moves the filed total.
+          priced = await priceStoredOrder(tx, req.id);
+        }
+
+        // File the immediate cash/card sale and settle it (open → settled), tagged with this order's id
+        // — the shared filing path Mode-T collect reuses (`fileImmediateSale`).
+        return fileImmediateSale(tx, deps, cfg, req.id, req.tender, priced, operatorId);
+      },
+      { nodeId: cfg.nodeId },
+    );
   } catch (error) {
     // Step 6. The CONCURRENT backstop. Anything but a unique violation is a real failure (a shortfall,
     // an unknown product, a chain error) and surfaces unchanged.
@@ -641,88 +646,93 @@ export async function payWorkingOrderIntegrated(
   operatorId?: string,
 ): Promise<IntegratedPayOutcome> {
   // ---- P1 (tx A): resolve / replay / price; commit a walk-up order OPEN before the network call. ----
-  const prepared = await withTenant(deps.db, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
+  const prepared = await withTenant(
+    deps.db,
+    cfg.tenantId,
+    async (tx) => {
+      await asAppUser(tx);
 
-    const [locked] = await tx
-      .select({ status: workingOrders.status })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, req.id))
-      .for("update");
+      const [locked] = await tx
+        .select({ status: workingOrders.status })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, req.id))
+        .for("update");
 
-    // Already settled → idempotent replay (a retry whose first response was lost). Files nothing.
-    if (locked?.status === "settled") {
-      return {
-        kind: "replay" as const,
-        ticket: await readSettledTicket(deps.backend, tx, cfg, req.id),
-      };
-    }
-
-    // A `placed` order is payable too — that is issue-at-pay (ordering 2). Only a terminal non-settled
-    // state (abandoned) — or any other unexpected status — refuses, the fail-closed shape
-    // `payWorkingOrder` uses; the settle UPDATE's `enforce_transition` trigger is the DB backstop.
-    if (locked !== undefined && locked.status !== "open" && locked.status !== "placed") {
-      throw new AppError("working_order.not_open", { workingOrderId: req.id });
-    }
-
-    // Empty-basket guard, WALK-UP shape only: a retrieved/placed order ignores `req.lines` and files its
-    // stored lock, so an empty `req.lines` there is normal (the till sends none), not a refusal.
-    if (req.lines.length === 0 && locked === undefined) {
-      throw new AppError("sale.empty_basket", {});
-    }
-
-    // EXISTING orders only: resolve the ordering-1 discriminator and run the §4 capture pre-check. A
-    // walk-up (`locked === undefined`) has neither — no prior sale, and no `collect` can have run: the
-    // provider's `insertAttempting` FKs `working_orders` (`payments_working_order_fk`,
-    // `packages/payments`), so no `payments` row can exist before the order row does — the same FK this
-    // body's P1-commit-before-collect ordering is built around.
-    if (locked !== undefined) {
-      // ORDERING 1 (invoice-first): the deferred invoice was issued at placing, so a `placed`
-      // invoice-first order already carries an unsettled `sales` row (ordering 2 files at pay, so its
-      // non-settled order has none → `undefined`). Used both to route a live collect to a SETTLE and to
-      // decide whether a lost-T2 recovery settles the existing invoice or files a fresh sale.
-      const outstanding = await readOutstandingSaleForOrder(tx, cfg.tenantId, req.id);
-
-      // §4 capture-idempotency pre-check. A captured (or offline-accepted) payment whose sale is not yet
-      // filed (`sale_id` NULL) is the LOST-T2 RECOVERY WINDOW: `collect`'s T2 committed its capture but
-      // P3 never ran, so a naive retry would re-drive `collect` and charge the card a SECOND time — an
-      // unrepairable defect (spec §4). A captured row that ALREADY carries a `sale_id` means its sale is
-      // filed and the order is therefore `settled`, so the replay above (step 2) has already returned —
-      // this only fires on an `open`/`placed` order.
-      const captured = await findCapturedPaymentForWorkingOrder(tx, {
-        tenantId: cfg.tenantId,
-        provider: deps.provider.provider,
-        workingOrderId: req.id,
-      });
-      if (captured !== undefined && captured.saleId === null) {
-        // Recover WITHOUT re-charging. When the invoice was ALREADY ISSUED (ordering 1), recover by
-        // SETTLING it (`finalizeSettleRecovery`) — a second `recordSale` would 23505 against the issued
-        // invoice; otherwise file a fresh sale from the stored lock (ordering 2, `finalizeRecovery`).
-        return outstanding !== undefined
-          ? { kind: "recover-settle" as const, captured, outstanding }
-          : { kind: "recover" as const, captured };
+      // Already settled → idempotent replay (a retry whose first response was lost). Files nothing.
+      if (locked?.status === "settled") {
+        return {
+          kind: "replay" as const,
+          ticket: await readSettledTicket(deps.backend, tx, cfg, req.id),
+        };
       }
 
-      // No lost capture. An outstanding issued invoice (ordering 1) routes this pay to a SETTLE of the
-      // already-issued invoice, ahead of the ordering-2 `collect` pricing below — an invoice-first order
-      // never re-files (the real hazard is an orphaned capture beside an unsettled invoice, not a
-      // double-file, which the UNIQUE key already blocks).
-      if (outstanding !== undefined) {
-        return { kind: "settle" as const, outstanding };
+      // A `placed` order is payable too — that is issue-at-pay (ordering 2). Only a terminal non-settled
+      // state (abandoned) — or any other unexpected status — refuses, the fail-closed shape
+      // `payWorkingOrder` uses; the settle UPDATE's `enforce_transition` trigger is the DB backstop.
+      if (locked !== undefined && locked.status !== "open" && locked.status !== "placed") {
+        throw new AppError("working_order.not_open", { workingOrderId: req.id });
       }
-    }
 
-    // Price exactly once. A WALK-UP creates the order OPEN with its freshly-priced lines (committing this
-    // tx below satisfies the provider's FK), reusing that price; a RETRIEVED/PLACED order files its
-    // STORED locked lines — `req.lines` is IGNORED, exactly as `payWorkingOrder`/`collectOrder` do.
-    let priced: PricedLines;
-    if (locked === undefined) {
-      ({ priced } = await createOpenOrder(tx, cfg, req.id, req.lines, null));
-    } else {
-      priced = await priceStoredOrder(tx, req.id);
-    }
-    return { kind: "collect" as const, priced };
-  });
+      // Empty-basket guard, WALK-UP shape only: a retrieved/placed order ignores `req.lines` and files its
+      // stored lock, so an empty `req.lines` there is normal (the till sends none), not a refusal.
+      if (req.lines.length === 0 && locked === undefined) {
+        throw new AppError("sale.empty_basket", {});
+      }
+
+      // EXISTING orders only: resolve the ordering-1 discriminator and run the §4 capture pre-check. A
+      // walk-up (`locked === undefined`) has neither — no prior sale, and no `collect` can have run: the
+      // provider's `insertAttempting` FKs `working_orders` (`payments_working_order_fk`,
+      // `packages/payments`), so no `payments` row can exist before the order row does — the same FK this
+      // body's P1-commit-before-collect ordering is built around.
+      if (locked !== undefined) {
+        // ORDERING 1 (invoice-first): the deferred invoice was issued at placing, so a `placed`
+        // invoice-first order already carries an unsettled `sales` row (ordering 2 files at pay, so its
+        // non-settled order has none → `undefined`). Used both to route a live collect to a SETTLE and to
+        // decide whether a lost-T2 recovery settles the existing invoice or files a fresh sale.
+        const outstanding = await readOutstandingSaleForOrder(tx, cfg.tenantId, req.id);
+
+        // §4 capture-idempotency pre-check. A captured (or offline-accepted) payment whose sale is not yet
+        // filed (`sale_id` NULL) is the LOST-T2 RECOVERY WINDOW: `collect`'s T2 committed its capture but
+        // P3 never ran, so a naive retry would re-drive `collect` and charge the card a SECOND time — an
+        // unrepairable defect (spec §4). A captured row that ALREADY carries a `sale_id` means its sale is
+        // filed and the order is therefore `settled`, so the replay above (step 2) has already returned —
+        // this only fires on an `open`/`placed` order.
+        const captured = await findCapturedPaymentForWorkingOrder(tx, {
+          tenantId: cfg.tenantId,
+          provider: deps.provider.provider,
+          workingOrderId: req.id,
+        });
+        if (captured !== undefined && captured.saleId === null) {
+          // Recover WITHOUT re-charging. When the invoice was ALREADY ISSUED (ordering 1), recover by
+          // SETTLING it (`finalizeSettleRecovery`) — a second `recordSale` would 23505 against the issued
+          // invoice; otherwise file a fresh sale from the stored lock (ordering 2, `finalizeRecovery`).
+          return outstanding !== undefined
+            ? { kind: "recover-settle" as const, captured, outstanding }
+            : { kind: "recover" as const, captured };
+        }
+
+        // No lost capture. An outstanding issued invoice (ordering 1) routes this pay to a SETTLE of the
+        // already-issued invoice, ahead of the ordering-2 `collect` pricing below — an invoice-first order
+        // never re-files (the real hazard is an orphaned capture beside an unsettled invoice, not a
+        // double-file, which the UNIQUE key already blocks).
+        if (outstanding !== undefined) {
+          return { kind: "settle" as const, outstanding };
+        }
+      }
+
+      // Price exactly once. A WALK-UP creates the order OPEN with its freshly-priced lines (committing this
+      // tx below satisfies the provider's FK), reusing that price; a RETRIEVED/PLACED order files its
+      // STORED locked lines — `req.lines` is IGNORED, exactly as `payWorkingOrder`/`collectOrder` do.
+      let priced: PricedLines;
+      if (locked === undefined) {
+        ({ priced } = await createOpenOrder(tx, cfg, req.id, req.lines, null));
+      } else {
+        priced = await priceStoredOrder(tx, req.id);
+      }
+      return { kind: "collect" as const, priced };
+    },
+    { nodeId: cfg.nodeId },
+  );
 
   if (prepared.kind === "replay") {
     return { outcome: "captured", ticket: prepared.ticket };
@@ -818,61 +828,66 @@ async function finalizeCapture(
   }
   /* v8 ignore stop */
   try {
-    return await withTenant(deps.db, cfg.tenantId, async (tx) => {
-      await asAppUser(tx);
+    return await withTenant(
+      deps.db,
+      cfg.tenantId,
+      async (tx) => {
+        await asAppUser(tx);
 
-      const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-        tenantId: cfg.tenantId,
-        tillId: cfg.tillId,
-        nodeId: cfg.nodeId,
-        seriesId: cfg.seriesId,
-        // The persisted working order this sale is filed from — the sale-idempotency key
-        // (`sales_working_order_id_key`), and what the 23505 backstop below keys the replay on.
-        workingOrderId: brandWorkingOrderId(req.id),
-        locale: cfg.locale,
-        invoiceLocales: cfg.invoiceLocales,
-        total: priced.total,
-        lines: priced.lines,
-        vatBreakdown: priced.vatBreakdown,
-        fiscalBackend: "verifactu",
-        clock: deps.clock,
-        operatorId,
-        settlement: {
-          kind: "immediate",
-          tenders: [
-            { method: "card", amount: addDecimal(priced.total, tip), tipAmount: tip, settledAt },
-          ],
-        },
-      });
+        const { saleId, fiscal } = await recordSale(tx, deps.backend, {
+          tenantId: cfg.tenantId,
+          tillId: cfg.tillId,
+          nodeId: cfg.nodeId,
+          seriesId: cfg.seriesId,
+          // The persisted working order this sale is filed from — the sale-idempotency key
+          // (`sales_working_order_id_key`), and what the 23505 backstop below keys the replay on.
+          workingOrderId: brandWorkingOrderId(req.id),
+          locale: cfg.locale,
+          invoiceLocales: cfg.invoiceLocales,
+          total: priced.total,
+          lines: priced.lines,
+          vatBreakdown: priced.vatBreakdown,
+          fiscalBackend: "verifactu",
+          clock: deps.clock,
+          operatorId,
+          settlement: {
+            kind: "immediate",
+            tenders: [
+              { method: "card", amount: addDecimal(priced.total, tip), tipAmount: tip, settledAt },
+            ],
+          },
+        });
 
-      // Link the ALREADY-CAPTURED integrated payment (written by `provider.collect`'s T2) to the sale,
-      // in this same transaction — NOT a second manual `payments` row. `fileImmediateSale`'s #62
-      // side-write (`recordManualCardPayment`) is for an UNINTEGRATED card, which has no prior payment;
-      // here the reader already took the money and recorded the row, so this only points its `sale_id`.
-      await associatePaymentWithSale(tx, {
-        provider: result.provider,
-        paymentRef: result.paymentRef,
-        saleId,
-        tenantId: cfg.tenantId,
-      });
+        // Link the ALREADY-CAPTURED integrated payment (written by `provider.collect`'s T2) to the sale,
+        // in this same transaction — NOT a second manual `payments` row. `fileImmediateSale`'s #62
+        // side-write (`recordManualCardPayment`) is for an UNINTEGRATED card, which has no prior payment;
+        // here the reader already took the money and recorded the row, so this only points its `sale_id`.
+        await associatePaymentWithSale(tx, {
+          provider: result.provider,
+          paymentRef: result.paymentRef,
+          saleId,
+          tenantId: cfg.tenantId,
+        });
 
-      // → settled. `working_orders_enforce_transition` permits open → settled (walk-up) and
-      // placed → settled (issue-at-pay); the `settled_at` biconditional requires the timestamp be set.
-      await tx
-        .update(workingOrders)
-        .set({ status: "settled", settledAt: settledAt.toISOString() })
-        .where(eq(workingOrders.id, req.id));
+        // → settled. `working_orders_enforce_transition` permits open → settled (walk-up) and
+        // placed → settled (issue-at-pay); the `settled_at` biconditional requires the timestamp be set.
+        await tx
+          .update(workingOrders)
+          .set({ status: "settled", settledAt: settledAt.toISOString() })
+          .where(eq(workingOrders.id, req.id));
 
-      return {
-        invoiceNumber: await readInvoiceNumber(tx, saleId),
-        issuedAt: fiscal.issuedAt.toISOString(),
-        total: priced.total,
-        vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-        lines: ticketLinesFrom(priced),
-        change: "0.00",
-        qr: fiscal.verificationUrl ?? "",
-      };
-    });
+        return {
+          invoiceNumber: await readInvoiceNumber(tx, saleId),
+          issuedAt: fiscal.issuedAt.toISOString(),
+          total: priced.total,
+          vatBreakdown: toVatBreakdown(priced.vatBreakdown),
+          lines: ticketLinesFrom(priced),
+          change: "0.00",
+          qr: fiscal.verificationUrl ?? "",
+        };
+      },
+      { nodeId: cfg.nodeId },
+    );
   } catch (error) {
     // The CONCURRENT backstop. Anything but a unique violation is a real failure (a chain error, or a
     // failed association) and surfaces unchanged — the transaction above already rolled back, so a
@@ -926,107 +941,112 @@ async function finalizeRecovery(
   captured: CapturedPaymentForOrder,
   operatorId?: string,
 ): Promise<IntegratedPayOutcome> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
+  return withTenant(
+    deps.db,
+    cfg.tenantId,
+    async (tx) => {
+      await asAppUser(tx);
 
-    // Re-lock FOR UPDATE (the order always exists here): serialises a concurrent recovery — the loser
-    // blocks, then re-reads `settled` and replays below.
-    const [locked] = await tx
-      .select({ status: workingOrders.status })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, req.id))
-      .for("update");
+      // Re-lock FOR UPDATE (the order always exists here): serialises a concurrent recovery — the loser
+      // blocks, then re-reads `settled` and replays below.
+      const [locked] = await tx
+        .select({ status: workingOrders.status })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, req.id))
+        .for("update");
 
-    // A concurrent winner (another retry) filed the sale and settled the order while this one waited on
-    // the lock → idempotent replay, file and associate NOTHING.
-    if (locked?.status === "settled") {
-      return {
-        outcome: "captured",
-        ticket: await readSettledTicket(deps.backend, tx, cfg, req.id),
-      };
-    }
+      // A concurrent winner (another retry) filed the sale and settled the order while this one waited on
+      // the lock → idempotent replay, file and associate NOTHING.
+      if (locked?.status === "settled") {
+        return {
+          outcome: "captured",
+          ticket: await readSettledTicket(deps.backend, tx, cfg, req.id),
+        };
+      }
 
-    // File from the STORED locked lines — the SAME `priceStoredOrder` reader P1 priced with, so
-    // `priced.total` equals what `collect` charged (ex any tip). NOT a re-price of `req.lines`.
-    const priced = await priceStoredOrder(tx, req.id);
-    const capturedAmount = decimal(captured.amount);
+      // File from the STORED locked lines — the SAME `priceStoredOrder` reader P1 priced with, so
+      // `priced.total` equals what `collect` charged (ex any tip). NOT a re-price of `req.lines`.
+      const priced = await priceStoredOrder(tx, req.id);
+      const capturedAmount = decimal(captured.amount);
 
-    // Corruption guard (Decision 2 / §5): the charge cannot cover the locked total → file nothing,
-    // leave the captured payment for reconcile's orphan class. A plain `Error` maps to `server.internal`.
-    if (compareDecimal(capturedAmount, priced.total) < 0) {
-      throw new Error(
-        `finalizeRecovery: captured ${captured.amount} is below the locked total ${priced.total} for working order ${req.id}`,
-      );
-    }
+      // Corruption guard (Decision 2 / §5): the charge cannot cover the locked total → file nothing,
+      // leave the captured payment for reconcile's orphan class. A plain `Error` maps to `server.internal`.
+      if (compareDecimal(capturedAmount, priced.total) < 0) {
+        throw new Error(
+          `finalizeRecovery: captured ${captured.amount} is below the locked total ${priced.total} for working order ${req.id}`,
+        );
+      }
 
-    // Reconstruct the tip from the gross charge (≥ 0 by the guard above).
-    const tip = subtractDecimal(capturedAmount, priced.total);
+      // Reconstruct the tip from the gross charge (≥ 0 by the guard above).
+      const tip = subtractDecimal(capturedAmount, priced.total);
 
-    /* v8 ignore start -- a captured/accepted_offline row always carries settled_at (store.ts's
+      /* v8 ignore start -- a captured/accepted_offline row always carries settled_at (store.ts's
        insertCapturedPayment/captureAttempting set it); the null-typed column is DEFENDED here, not
        reasoned away (CLAUDE.md §1), mirroring finalizeCapture's own settledAt guard. */
-    if (captured.settledAt === null) {
-      throw new Error(
-        `finalizeRecovery: captured payment for working order ${req.id} carried no settledAt`,
-      );
-    }
-    /* v8 ignore stop */
-    const settledAt = new Date(captured.settledAt);
+      if (captured.settledAt === null) {
+        throw new Error(
+          `finalizeRecovery: captured payment for working order ${req.id} carried no settledAt`,
+        );
+      }
+      /* v8 ignore stop */
+      const settledAt = new Date(captured.settledAt);
 
-    const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-      tenantId: cfg.tenantId,
-      tillId: cfg.tillId,
-      nodeId: cfg.nodeId,
-      seriesId: cfg.seriesId,
-      // The persisted working order this sale is filed from — the sale-idempotency key
-      // (`sales_working_order_id_key`).
-      workingOrderId: brandWorkingOrderId(req.id),
-      locale: cfg.locale,
-      invoiceLocales: cfg.invoiceLocales,
-      total: priced.total,
-      lines: priced.lines,
-      vatBreakdown: priced.vatBreakdown,
-      fiscalBackend: "verifactu",
-      clock: deps.clock,
-      operatorId,
-      settlement: {
-        kind: "immediate",
-        tenders: [{ method: "card", amount: capturedAmount, tipAmount: tip, settledAt }],
-      },
-    });
-
-    // Link the EXISTING captured payment (the lost-T2 row) to the just-filed sale — NOT a second
-    // `payments` row and NOT a re-charge. `associatePaymentWithSale` is write-once, so a concurrent
-    // recovery that reached here first has already claimed it (but the FOR UPDATE above means the loser
-    // never gets here — it replayed).
-    await associatePaymentWithSale(tx, {
-      provider: deps.provider.provider,
-      paymentRef: captured.paymentRef,
-      saleId,
-      tenantId: cfg.tenantId,
-    });
-
-    // → settled, at the ORIGINAL capture instant (the same reading the tender carries).
-    // `working_orders_enforce_transition` permits open → settled and placed → settled; the `settled_at`
-    // biconditional requires the timestamp be set.
-    await tx
-      .update(workingOrders)
-      .set({ status: "settled", settledAt: settledAt.toISOString() })
-      .where(eq(workingOrders.id, req.id));
-
-    return {
-      outcome: "captured",
-      ticket: {
-        invoiceNumber: await readInvoiceNumber(tx, saleId),
-        issuedAt: fiscal.issuedAt.toISOString(),
+      const { saleId, fiscal } = await recordSale(tx, deps.backend, {
+        tenantId: cfg.tenantId,
+        tillId: cfg.tillId,
+        nodeId: cfg.nodeId,
+        seriesId: cfg.seriesId,
+        // The persisted working order this sale is filed from — the sale-idempotency key
+        // (`sales_working_order_id_key`).
+        workingOrderId: brandWorkingOrderId(req.id),
+        locale: cfg.locale,
+        invoiceLocales: cfg.invoiceLocales,
         total: priced.total,
-        vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-        lines: ticketLinesFrom(priced),
-        change: "0.00",
-        qr: fiscal.verificationUrl ?? "",
-      },
-    };
-  });
+        lines: priced.lines,
+        vatBreakdown: priced.vatBreakdown,
+        fiscalBackend: "verifactu",
+        clock: deps.clock,
+        operatorId,
+        settlement: {
+          kind: "immediate",
+          tenders: [{ method: "card", amount: capturedAmount, tipAmount: tip, settledAt }],
+        },
+      });
+
+      // Link the EXISTING captured payment (the lost-T2 row) to the just-filed sale — NOT a second
+      // `payments` row and NOT a re-charge. `associatePaymentWithSale` is write-once, so a concurrent
+      // recovery that reached here first has already claimed it (but the FOR UPDATE above means the loser
+      // never gets here — it replayed).
+      await associatePaymentWithSale(tx, {
+        provider: deps.provider.provider,
+        paymentRef: captured.paymentRef,
+        saleId,
+        tenantId: cfg.tenantId,
+      });
+
+      // → settled, at the ORIGINAL capture instant (the same reading the tender carries).
+      // `working_orders_enforce_transition` permits open → settled and placed → settled; the `settled_at`
+      // biconditional requires the timestamp be set.
+      await tx
+        .update(workingOrders)
+        .set({ status: "settled", settledAt: settledAt.toISOString() })
+        .where(eq(workingOrders.id, req.id));
+
+      return {
+        outcome: "captured",
+        ticket: {
+          invoiceNumber: await readInvoiceNumber(tx, saleId),
+          issuedAt: fiscal.issuedAt.toISOString(),
+          total: priced.total,
+          vatBreakdown: toVatBreakdown(priced.vatBreakdown),
+          lines: ticketLinesFrom(priced),
+          change: "0.00",
+          qr: fiscal.verificationUrl ?? "",
+        },
+      };
+    },
+    { nodeId: cfg.nodeId },
+  );
 }
 
 /**
@@ -1068,47 +1088,52 @@ async function finalizeSettle(
   }
   /* v8 ignore stop */
   try {
-    return await withTenant(deps.db, cfg.tenantId, async (tx) => {
-      await asAppUser(tx);
+    return await withTenant(
+      deps.db,
+      cfg.tenantId,
+      async (tx) => {
+        await asAppUser(tx);
 
-      // Settle the EXISTING issued invoice — files no fiscal record. The tender records the whole card
-      // charge (`amountDue + tip`) with the tip attributed on it (coverage identity above); `settleSale`
-      // re-derives `due = total + corrections` itself and rejects a mismatch as `sale.tender_shortfall`.
-      await settleSale(tx, {
-        tenantId: cfg.tenantId,
-        saleId: outstanding.saleId,
-        tenders: [
-          {
-            method: "card",
-            amount: addDecimal(outstanding.amountDue, tip),
-            tipAmount: tip,
-            settledAt,
-          },
-        ],
-      });
+        // Settle the EXISTING issued invoice — files no fiscal record. The tender records the whole card
+        // charge (`amountDue + tip`) with the tip attributed on it (coverage identity above); `settleSale`
+        // re-derives `due = total + corrections` itself and rejects a mismatch as `sale.tender_shortfall`.
+        await settleSale(tx, {
+          tenantId: cfg.tenantId,
+          saleId: outstanding.saleId,
+          tenders: [
+            {
+              method: "card",
+              amount: addDecimal(outstanding.amountDue, tip),
+              tipAmount: tip,
+              settledAt,
+            },
+          ],
+        });
 
-      // Link the ALREADY-CAPTURED integrated payment (written by `collect`'s T2) to the issued sale, in
-      // this same transaction — NOT a second `payments` row. Mirrors `finalizeCapture`'s association; an
-      // association failure (`payment.not_found`) is a non-`already_settled` error, so the catch below
-      // re-raises it and the whole settlement rolls back.
-      await associatePaymentWithSale(tx, {
-        provider: result.provider,
-        paymentRef: result.paymentRef,
-        saleId: outstanding.saleId,
-        tenantId: cfg.tenantId,
-      });
+        // Link the ALREADY-CAPTURED integrated payment (written by `collect`'s T2) to the issued sale, in
+        // this same transaction — NOT a second `payments` row. Mirrors `finalizeCapture`'s association; an
+        // association failure (`payment.not_found`) is a non-`already_settled` error, so the catch below
+        // re-raises it and the whole settlement rolls back.
+        await associatePaymentWithSale(tx, {
+          provider: result.provider,
+          paymentRef: result.paymentRef,
+          saleId: outstanding.saleId,
+          tenantId: cfg.tenantId,
+        });
 
-      // placed → settled. `working_orders_enforce_transition` permits it; the `settled_at` biconditional
-      // requires the timestamp be set — the same instant the tender carries.
-      await tx
-        .update(workingOrders)
-        .set({ status: "settled", settledAt: settledAt.toISOString() })
-        .where(eq(workingOrders.id, req.id));
+        // placed → settled. `working_orders_enforce_transition` permits it; the `settled_at` biconditional
+        // requires the timestamp be set — the same instant the tender carries.
+        await tx
+          .update(workingOrders)
+          .set({ status: "settled", settledAt: settledAt.toISOString() })
+          .where(eq(workingOrders.id, req.id));
 
-      // Read the ticket back from the just-settled (already-issued) invoice — a fresh collect, so
-      // `change` stays the "0.00" default.
-      return readSettledTicket(deps.backend, tx, cfg, req.id);
-    });
+        // Read the ticket back from the just-settled (already-issued) invoice — a fresh collect, so
+        // `change` stays the "0.00" default.
+        return readSettledTicket(deps.backend, tx, cfg, req.id);
+      },
+      { nodeId: cfg.nodeId },
+    );
   } catch (error) {
     // A CONCURRENT collect/recovery settled the invoice first → `sale.already_settled`. Anything else (a
     // failed association, a shortfall) is a real failure and surfaces unchanged, its transaction already
@@ -1156,79 +1181,84 @@ async function finalizeSettleRecovery(
   captured: CapturedPaymentForOrder,
   outstanding: { saleId: SaleId; amountDue: Decimal },
 ): Promise<IntegratedPayOutcome> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
+  return withTenant(
+    deps.db,
+    cfg.tenantId,
+    async (tx) => {
+      await asAppUser(tx);
 
-    // Re-lock FOR UPDATE (the order always exists here): serialises a concurrent recovery — the loser
-    // blocks, then re-reads `settled` and replays below.
-    const [locked] = await tx
-      .select({ status: workingOrders.status })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, req.id))
-      .for("update");
+      // Re-lock FOR UPDATE (the order always exists here): serialises a concurrent recovery — the loser
+      // blocks, then re-reads `settled` and replays below.
+      const [locked] = await tx
+        .select({ status: workingOrders.status })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, req.id))
+        .for("update");
 
-    // A concurrent winner settled the invoice and moved the order while this one waited on the lock →
-    // idempotent replay, settle and associate NOTHING.
-    if (locked?.status === "settled") {
+      // A concurrent winner settled the invoice and moved the order while this one waited on the lock →
+      // idempotent replay, settle and associate NOTHING.
+      if (locked?.status === "settled") {
+        return {
+          outcome: "captured",
+          ticket: await readSettledTicket(deps.backend, tx, cfg, req.id),
+        };
+      }
+
+      const capturedAmount = decimal(captured.amount);
+
+      // Corruption guard (Decision 2 / §5): the charge cannot cover the amount due → settle nothing, leave
+      // the captured payment for reconcile's orphan class. A plain `Error` maps to `server.internal`.
+      if (compareDecimal(capturedAmount, outstanding.amountDue) < 0) {
+        throw new Error(
+          `finalizeSettleRecovery: captured ${captured.amount} is below the amount due ${outstanding.amountDue} for working order ${req.id}`,
+        );
+      }
+
+      // Reconstruct the tip from the gross charge (≥ 0 by the guard above).
+      const tip = subtractDecimal(capturedAmount, outstanding.amountDue);
+
+      /* v8 ignore start -- a captured/accepted_offline row always carries settled_at (store.ts's
+       insertCapturedPayment/captureAttempting set it); the null-typed column is DEFENDED here, not
+       reasoned away (CLAUDE.md §1), mirroring finalizeRecovery's own settledAt guard. */
+      if (captured.settledAt === null) {
+        throw new Error(
+          `finalizeSettleRecovery: captured payment for working order ${req.id} carried no settledAt`,
+        );
+      }
+      /* v8 ignore stop */
+      const settledAt = new Date(captured.settledAt);
+
+      // Settle the EXISTING issued invoice — files no fiscal record. The tender records the whole card
+      // charge with the reconstructed tip attributed on it (coverage identity `charged = total +
+      // corrections + Σtip`; `settleSale` re-derives `due` and rejects a mismatch).
+      await settleSale(tx, {
+        tenantId: cfg.tenantId,
+        saleId: outstanding.saleId,
+        tenders: [{ method: "card", amount: capturedAmount, tipAmount: tip, settledAt }],
+      });
+
+      // Link the EXISTING captured payment (the lost-T2 row) to the issued sale — NOT a second `payments`
+      // row and NOT a re-charge. The FOR UPDATE above means the loser never reaches here (it replayed).
+      await associatePaymentWithSale(tx, {
+        provider: deps.provider.provider,
+        paymentRef: captured.paymentRef,
+        saleId: outstanding.saleId,
+        tenantId: cfg.tenantId,
+      });
+
+      // placed → settled, at the ORIGINAL capture instant (the same reading the tender carries).
+      await tx
+        .update(workingOrders)
+        .set({ status: "settled", settledAt: settledAt.toISOString() })
+        .where(eq(workingOrders.id, req.id));
+
       return {
         outcome: "captured",
         ticket: await readSettledTicket(deps.backend, tx, cfg, req.id),
       };
-    }
-
-    const capturedAmount = decimal(captured.amount);
-
-    // Corruption guard (Decision 2 / §5): the charge cannot cover the amount due → settle nothing, leave
-    // the captured payment for reconcile's orphan class. A plain `Error` maps to `server.internal`.
-    if (compareDecimal(capturedAmount, outstanding.amountDue) < 0) {
-      throw new Error(
-        `finalizeSettleRecovery: captured ${captured.amount} is below the amount due ${outstanding.amountDue} for working order ${req.id}`,
-      );
-    }
-
-    // Reconstruct the tip from the gross charge (≥ 0 by the guard above).
-    const tip = subtractDecimal(capturedAmount, outstanding.amountDue);
-
-    /* v8 ignore start -- a captured/accepted_offline row always carries settled_at (store.ts's
-       insertCapturedPayment/captureAttempting set it); the null-typed column is DEFENDED here, not
-       reasoned away (CLAUDE.md §1), mirroring finalizeRecovery's own settledAt guard. */
-    if (captured.settledAt === null) {
-      throw new Error(
-        `finalizeSettleRecovery: captured payment for working order ${req.id} carried no settledAt`,
-      );
-    }
-    /* v8 ignore stop */
-    const settledAt = new Date(captured.settledAt);
-
-    // Settle the EXISTING issued invoice — files no fiscal record. The tender records the whole card
-    // charge with the reconstructed tip attributed on it (coverage identity `charged = total +
-    // corrections + Σtip`; `settleSale` re-derives `due` and rejects a mismatch).
-    await settleSale(tx, {
-      tenantId: cfg.tenantId,
-      saleId: outstanding.saleId,
-      tenders: [{ method: "card", amount: capturedAmount, tipAmount: tip, settledAt }],
-    });
-
-    // Link the EXISTING captured payment (the lost-T2 row) to the issued sale — NOT a second `payments`
-    // row and NOT a re-charge. The FOR UPDATE above means the loser never reaches here (it replayed).
-    await associatePaymentWithSale(tx, {
-      provider: deps.provider.provider,
-      paymentRef: captured.paymentRef,
-      saleId: outstanding.saleId,
-      tenantId: cfg.tenantId,
-    });
-
-    // placed → settled, at the ORIGINAL capture instant (the same reading the tender carries).
-    await tx
-      .update(workingOrders)
-      .set({ status: "settled", settledAt: settledAt.toISOString() })
-      .where(eq(workingOrders.id, req.id));
-
-    return {
-      outcome: "captured",
-      ticket: await readSettledTicket(deps.backend, tx, cfg, req.id),
-    };
-  });
+    },
+    { nodeId: cfg.nodeId },
+  );
 }
 
 /**
@@ -1284,105 +1314,110 @@ export async function collectOrder(
   req: PayWorkingOrderRequest,
   operatorId?: string,
 ): Promise<TillSaleResult> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
-    await asAppUser(tx);
+  return withTenant(
+    deps.db,
+    cfg.tenantId,
+    async (tx) => {
+      await asAppUser(tx);
 
-    // Lock the order for the life of the tx and read its status off the locked copy. A concurrent
-    // collect blocks here and re-reads `settled` below (the idempotency serialisation).
-    const [locked] = await tx
-      .select({ status: workingOrders.status })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, req.id))
-      .for("update");
+      // Lock the order for the life of the tx and read its status off the locked copy. A concurrent
+      // collect blocks here and re-reads `settled` below (the idempotency serialisation).
+      const [locked] = await tx
+        .select({ status: workingOrders.status })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, req.id))
+        .for("update");
 
-    // Already settled → idempotent replay: a retry whose first response was lost, or the loser of a
-    // concurrent collect that blocked on the lock above and now sees it settled. Files nothing.
-    if (locked?.status === "settled") {
-      return readSettledTicket(deps.backend, tx, cfg, req.id);
-    }
-
-    // Only a placed order may be collected — an `open` (never placed), `abandoned`, absent or
-    // RLS-hidden order fails closed. `not_placed` (not `not_open`): collect is the placed→settled
-    // operation, and calling it on an open order is a state error about placing, not opening.
-    if (locked === undefined || locked.status !== "placed") {
-      throw new AppError("working_order.not_placed", { workingOrderId: req.id });
-    }
-
-    // Tender guard — a network boundary, cash (7a) and manual card only, the same guard
-    // `payWorkingOrder` makes. AFTER the replay check, so a retry is never refused for its body shape.
-    if (req.tender.method !== "cash" && req.tender.method !== "card") {
-      throw new AppError("sale.unsupported_tender", { method: req.tender.method });
-    }
-
-    if (cfg.orderFlow === "invoice_first") {
-      // Mode I: the invoice already issued (deferred) at placing. Settle the EXISTING sale and move
-      // placed → settled — file nothing new. `settlementFor` derives the settle amount + change over
-      // the already-filed total (a covered cash tender settles at the total and hands back change; a
-      // short one is passed through raw so `settleSale` raises `sale.tender_shortfall`).
-      const [sale] = await tx
-        .select({ id: sales.id, total: sales.total })
-        .from(sales)
-        .where(and(eq(sales.tenantId, cfg.tenantId), eq(sales.workingOrderId, req.id)));
-      /* v8 ignore start */
-      if (sale === undefined) {
-        // Structurally unreachable: an invoice-first order reaches `placed` only via `placeOrder`,
-        // which filed the deferred sale in the same transaction that placed it. A placed invoice-first
-        // order with no sale is corruption, not a reachable flow.
-        throw new Error(`collectOrder: placed invoice-first order ${req.id} has no sale`);
+      // Already settled → idempotent replay: a retry whose first response was lost, or the loser of a
+      // concurrent collect that blocked on the lock above and now sees it settled. Files nothing.
+      if (locked?.status === "settled") {
+        return readSettledTicket(deps.backend, tx, cfg, req.id);
       }
-      /* v8 ignore stop */
 
-      const { settledAmount, change } = settlementFor(req.tender, sale.total);
-      const settledAt = deps.clock.now().instant;
+      // Only a placed order may be collected — an `open` (never placed), `abandoned`, absent or
+      // RLS-hidden order fails closed. `not_placed` (not `not_open`): collect is the placed→settled
+      // operation, and calling it on an open order is a state error about placing, not opening.
+      if (locked === undefined || locked.status !== "placed") {
+        throw new AppError("working_order.not_placed", { workingOrderId: req.id });
+      }
 
-      await settleSale(tx, {
-        tenantId: cfg.tenantId,
-        saleId: brandSaleId(sale.id),
-        tenders: [
-          { method: req.tender.method, amount: settledAmount, tipAmount: "0.00", settledAt },
-        ],
-      });
+      // Tender guard — a network boundary, cash (7a) and manual card only, the same guard
+      // `payWorkingOrder` makes. AFTER the replay check, so a retry is never refused for its body shape.
+      if (req.tender.method !== "cash" && req.tender.method !== "card") {
+        throw new AppError("sale.unsupported_tender", { method: req.tender.method });
+      }
 
-      // Card ONLY: a manual-card tender at collect records the captured `payments` ledger row and links
-      // it to the just-settled sale, in THIS same transaction — the identical #62 side-write
-      // `fileImmediateSale` makes for an immediate card sale, so an invoice-first card collect is
-      // symmetric with every other card path and visible to reconciliation (`reconcile.ts`) rather than
-      // an unauditable settlement. The FISCAL settlement stays `settleSale` above (unchanged); this only
-      // adds the ledger row alongside. Cash gets none — cash is a tender only. The card charges the
-      // EXACT invoice total (`sale.total`, the amount `settlementFor` settled at), and `settledAt` is the
-      // SAME reading the tender carries. `recordManualCardPayment` makes no network call, so it commits
-      // inline with the settlement.
-      if (req.tender.method === "card") {
-        const { provider, paymentRef } = await recordManualCardPayment(tx, {
+      if (cfg.orderFlow === "invoice_first") {
+        // Mode I: the invoice already issued (deferred) at placing. Settle the EXISTING sale and move
+        // placed → settled — file nothing new. `settlementFor` derives the settle amount + change over
+        // the already-filed total (a covered cash tender settles at the total and hands back change; a
+        // short one is passed through raw so `settleSale` raises `sale.tender_shortfall`).
+        const [sale] = await tx
+          .select({ id: sales.id, total: sales.total })
+          .from(sales)
+          .where(and(eq(sales.tenantId, cfg.tenantId), eq(sales.workingOrderId, req.id)));
+        /* v8 ignore start */
+        if (sale === undefined) {
+          // Structurally unreachable: an invoice-first order reaches `placed` only via `placeOrder`,
+          // which filed the deferred sale in the same transaction that placed it. A placed invoice-first
+          // order with no sale is corruption, not a reachable flow.
+          throw new Error(`collectOrder: placed invoice-first order ${req.id} has no sale`);
+        }
+        /* v8 ignore stop */
+
+        const { settledAmount, change } = settlementFor(req.tender, sale.total);
+        const settledAt = deps.clock.now().instant;
+
+        await settleSale(tx, {
           tenantId: cfg.tenantId,
-          workingOrderId: req.id,
-          amount: decimal(sale.total),
-          settledAt,
-          externalRef: req.tender.externalRef,
-        });
-        await associatePaymentWithSale(tx, {
-          provider,
-          paymentRef,
           saleId: brandSaleId(sale.id),
-          tenantId: cfg.tenantId,
+          tenders: [
+            { method: req.tender.method, amount: settledAmount, tipAmount: "0.00", settledAt },
+          ],
         });
+
+        // Card ONLY: a manual-card tender at collect records the captured `payments` ledger row and links
+        // it to the just-settled sale, in THIS same transaction — the identical #62 side-write
+        // `fileImmediateSale` makes for an immediate card sale, so an invoice-first card collect is
+        // symmetric with every other card path and visible to reconciliation (`reconcile.ts`) rather than
+        // an unauditable settlement. The FISCAL settlement stays `settleSale` above (unchanged); this only
+        // adds the ledger row alongside. Cash gets none — cash is a tender only. The card charges the
+        // EXACT invoice total (`sale.total`, the amount `settlementFor` settled at), and `settledAt` is the
+        // SAME reading the tender carries. `recordManualCardPayment` makes no network call, so it commits
+        // inline with the settlement.
+        if (req.tender.method === "card") {
+          const { provider, paymentRef } = await recordManualCardPayment(tx, {
+            tenantId: cfg.tenantId,
+            workingOrderId: req.id,
+            amount: decimal(sale.total),
+            settledAt,
+            externalRef: req.tender.externalRef,
+          });
+          await associatePaymentWithSale(tx, {
+            provider,
+            paymentRef,
+            saleId: brandSaleId(sale.id),
+            tenantId: cfg.tenantId,
+          });
+        }
+
+        await tx
+          .update(workingOrders)
+          .set({ status: "settled", settledAt: settledAt.toISOString() })
+          .where(eq(workingOrders.id, req.id));
+
+        // Read the ticket back from the just-settled invoice, carrying the real cash-back (a FRESH
+        // collect, not a replay, so not the "0.00" default).
+        return readSettledTicket(deps.backend, tx, cfg, req.id, change);
       }
 
-      await tx
-        .update(workingOrders)
-        .set({ status: "settled", settledAt: settledAt.toISOString() })
-        .where(eq(workingOrders.id, req.id));
-
-      // Read the ticket back from the just-settled invoice, carrying the real cash-back (a FRESH
-      // collect, not a replay, so not the "0.00" default).
-      return readSettledTicket(deps.backend, tx, cfg, req.id, change);
-    }
-
-    // Mode T (ticket_then_pay): no fiscal doc yet — file `recordSale` IMMEDIATE at collect from the
-    // order's stored locked lines and move placed → settled (the shared filing path).
-    const priced = await priceStoredOrder(tx, req.id);
-    return fileImmediateSale(tx, deps, cfg, req.id, req.tender, priced, operatorId);
-  });
+      // Mode T (ticket_then_pay): no fiscal doc yet — file `recordSale` IMMEDIATE at collect from the
+      // order's stored locked lines and move placed → settled (the shared filing path).
+      const priced = await priceStoredOrder(tx, req.id);
+      return fileImmediateSale(tx, deps, cfg, req.id, req.tender, priced, operatorId);
+    },
+    { nodeId: cfg.nodeId },
+  );
 }
 
 /**
