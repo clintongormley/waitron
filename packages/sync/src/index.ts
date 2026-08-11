@@ -22,6 +22,12 @@ export { applyStatementFor, deleteStatementFor } from "./apply-sql.js";
 export { applyBatch } from "./apply.js";
 export type { ApplyBatchOptions, ApplyBatchResult, SyncLogRow } from "./apply.js";
 
+// Bounded log retention (prune to the min across ALL subscriber cursors — a down subscriber holds the
+// log) and per-subscriber lag reporting (docs/superpowers/plans/2026-08-08-sync-slice1-commercial-outbox-plan.md
+// Task 6).
+export { lagFor, pruneSyncLog } from "./retention.js";
+export type { PruneResult, SubscriberLag } from "./retention.js";
+
 // Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable from
 // this package's own public barrel, per the reachability rule in packages/shared/src/errors.ts.
 // See errors.reachability.test.ts.
