@@ -1,11 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import type {
-  CatalogueSummary,
-  CategorySummary,
-  DashboardApi,
-  Product,
-} from "../api/client.js";
+import type { CatalogueSummary, CategorySummary, DashboardApi, Product } from "../api/client.js";
 import type { ProductList } from "../widgets/product-list.js";
 import type { ProductForm } from "../widgets/product-form.js";
 import { CatalogueScreen } from "./catalogue-screen.js";

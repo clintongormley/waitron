@@ -327,7 +327,10 @@ export class CatalogueScreen extends LitElement {
                     )}
                   </select>
                 </label>
-                <wt-button variant="primary" data-test="add-product" @click=${() => this.#openForm()}
+                <wt-button
+                  variant="primary"
+                  data-test="add-product"
+                  @click=${() => this.#openForm()}
                   >Añadir producto</wt-button
                 >
               </div>`
