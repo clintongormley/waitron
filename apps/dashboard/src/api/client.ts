@@ -131,9 +131,6 @@ export interface Product {
   image: string | null;
 }
 
-/** Alias for readers that want the "list row" name; the product list carries the whole product. */
-export type ProductSummary = Product;
-
 /**
  * The `POST /management-api/products` body — mirrors catalogue's `CreateProductInput`. `allergens`
  * omitted leaves the product unreviewed (null); the server refuses an explicit `null` here, so the
