@@ -61,7 +61,12 @@ export function validateLayout(input: unknown): LayoutDef {
     }
     const schema = WIDGET_CONFIG[type];
     for (const [key, value] of Object.entries(config)) {
-      const validator = schema[key];
+      // OWN-property lookup, not a bare `schema[key]`: an index expression resolves prototype members
+      // (`toString`, `constructor`, `valueOf`, `hasOwnProperty`, `__proto__`) up the chain, so a
+      // hostile bag could ride a colliding key through (`toString`/`constructor` → accepted) or throw
+      // a raw TypeError → 500 (`valueOf`/`hasOwnProperty`/`__proto__`) instead of a clean `bad_config`.
+      // Verified by running the loop; the five cases are pinned in validate.test.ts. Fail-closed (D8).
+      const validator = Object.hasOwn(schema, key) ? schema[key] : undefined;
       if (validator === undefined || !validator(value)) {
         throw new AppError("layout.invalid", {
           reason: "bad_config",

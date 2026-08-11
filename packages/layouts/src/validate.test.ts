@@ -117,6 +117,23 @@ describe("validateLayout", () => {
     expect(error.params).toEqual({ reason: "bad_config", widget: "basket" });
   });
 
+  // A config key that collides with an Object.prototype member must be rejected like any other unknown
+  // key. The per-key lookup MUST be own-property: a bare `schema[key]` resolves `toString`/`constructor`
+  // up the prototype chain (so they would ride through) and `valueOf`/`hasOwnProperty`/`__proto__` to a
+  // non-callable/throwing value (a raw TypeError → 500), both breaking the fail-closed contract (§1).
+  // JSON is the wire shape and the only way to get an OWN `__proto__` key — a `{ __proto__: … }` literal
+  // sets the prototype, not an own property.
+  it.each([["toString"], ["constructor"], ["valueOf"], ["hasOwnProperty"], ["__proto__"]])(
+    "rejects the prototype-inherited config key %s as bad_config (own-property check, design D8)",
+    (key) => {
+      const config = JSON.parse(`{ "${key}": 1 }`) as Record<string, unknown>;
+      const error = catchAppError(() =>
+        validateLayout([{ type: "basket", region: "aside", config }]),
+      );
+      expect(error.params).toEqual({ reason: "bad_config", widget: "basket", configKey: key });
+    },
+  );
+
   it("rejects a duplicate widget type with reason duplicate (design D5)", () => {
     const error = catchAppError(() =>
       validateLayout([
