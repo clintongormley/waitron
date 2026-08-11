@@ -7,20 +7,24 @@ import "@waitron/ui/src/components/wt-button.js";
 import "./screens/login-screen.js";
 import "./screens/staff-screen.js";
 import "./screens/catalogue-screen.js";
+import "./screens/layout-screen.js";
+import "./screens/receipt-screen.js";
 import type { DashboardApi } from "./api/client.js";
 
 /**
- * The faces of the management dashboard: sign in, manage staff, or author the catalogue. Exactly one
- * shows at a time. `staff` and `catalogue` are the two LOGGED-IN faces the nav switches between; both
- * carry the same chrome (nav + logout).
+ * The faces of the management dashboard: sign in, manage staff, author the catalogue, arrange the till
+ * layout, or edit the receipt trim. Exactly one shows at a time. `staff`, `catalogue`, `layout` and
+ * `receipt` are the four LOGGED-IN faces the nav switches between; all carry the same chrome (nav +
+ * logout).
  */
-type Screen = "login" | "staff" | "catalogue";
+type Screen = "login" | "staff" | "catalogue" | "layout" | "receipt";
 
 /**
  * The management dashboard's ROOT element — the shell that turns the screens into a working app.
  *
  * It owns one thing the whole flow shares: the injected {@link DashboardApi}. It runs a screen
- * machine (`login` | `staff` | `catalogue`) and does the event wiring the screens deliberately do not:
+ * machine (`login` | `staff` | `catalogue` | `layout` | `receipt`) and does the event wiring the
+ * screens deliberately do not:
  *
  *  - boot → a SESSION PROBE ({@link DashboardApp.#probeSession}) calls `api.listStaff()`; a success
  *    means a live management session, so the app opens on `staff`; ANY rejection (the common
@@ -29,8 +33,8 @@ type Screen = "login" | "staff" | "catalogue";
  *    `apps/till` `#boot` defect (`docs/backlog.md`), so this shell mirrors the login/staff screens'
  *    own `try/catch`ed loaders instead;
  *  - `logged-in` (from the login screen, on a successful `api.login`) → show `staff`;
- *  - the NAV (the shell's own control, shown only when logged in) switches between the two logged-in
- *    faces `staff` and `catalogue` — a plain local state change, no server call;
+ *  - the NAV (the shell's own control, shown only when logged in) switches between the four logged-in
+ *    faces `staff`, `catalogue`, `layout` and `receipt` — a plain local state change, no server call;
  *  - `logout` (the shell's own control, logged-in only) → end the server session, back to `login`.
  *
  * The default screen is `login`: before the probe resolves the shell shows the sign-in screen, and
@@ -38,10 +42,11 @@ type Screen = "login" | "staff" | "catalogue";
  * staff screen it is not entitled to.
  *
  * HEADING OUTLINE. Each screen owns its OWN top heading — `dashboard-staff-screen` renders the sole
- * `<h1>Usuarios</h1>`, `dashboard-catalogue-screen` the sole `<h1>Carta</h1>`, and
- * `dashboard-login-screen` none — so the shell adds no competing `<h1>`: its logged-in chrome (the
- * nav + logout button) sits in a plain `<header>` with no heading, keeping exactly one `<h1>` in the
- * DOM at a time.
+ * `<h1>Usuarios</h1>`, `dashboard-catalogue-screen` the sole `<h1>Carta</h1>`,
+ * `dashboard-layout-screen` the sole `<h1>Disposición</h1>`, `dashboard-receipt-screen` the sole
+ * `<h1>Recibo</h1>`, and `dashboard-login-screen` none — so the shell adds no competing `<h1>`: its
+ * logged-in chrome (the nav + logout button) sits in a plain `<header>` with no heading, keeping
+ * exactly one `<h1>` in the DOM at a time.
  */
 @customElement("dashboard-app")
 export class DashboardApp extends LitElement {
@@ -153,19 +158,44 @@ export class DashboardApp extends LitElement {
             @click=${() => (this.screen = "catalogue")}
             >Carta</wt-button
           >
+          <wt-button
+            variant=${this.screen === "layout" ? "primary" : "secondary"}
+            data-test="nav-layout"
+            @click=${() => (this.screen = "layout")}
+            >Disposición</wt-button
+          >
+          <wt-button
+            variant=${this.screen === "receipt" ? "primary" : "secondary"}
+            data-test="nav-receipt"
+            @click=${() => (this.screen = "receipt")}
+            >Recibo</wt-button
+          >
         </nav>
         <wt-button variant="secondary" data-test="logout" @click=${() => void this.#onLogout()}
           >Cerrar sesión</wt-button
         >
       </header>
-      <div class="body">
-        ${
-          this.screen === "catalogue"
-            ? html`<dashboard-catalogue-screen .api=${this.api}></dashboard-catalogue-screen>`
-            : html`<dashboard-staff-screen .api=${this.api}></dashboard-staff-screen>`
-        }
-      </div>
+      <div class="body">${this.#renderScreen()}</div>
     `;
+  }
+
+  /**
+   * The mounted logged-in face for the current `screen`. Reached only from the chrome branch of
+   * {@link DashboardApp.render}, where `screen` is never `login`, so `staff` is the default: it is the
+   * probe's landing and the post-login/post-logout return, and folding it into the default keeps that
+   * branch covered rather than leaving an unreachable exhaustive `default`.
+   */
+  #renderScreen(): TemplateResult {
+    switch (this.screen) {
+      case "catalogue":
+        return html`<dashboard-catalogue-screen .api=${this.api}></dashboard-catalogue-screen>`;
+      case "layout":
+        return html`<dashboard-layout-screen .api=${this.api}></dashboard-layout-screen>`;
+      case "receipt":
+        return html`<dashboard-receipt-screen .api=${this.api}></dashboard-receipt-screen>`;
+      default:
+        return html`<dashboard-staff-screen .api=${this.api}></dashboard-staff-screen>`;
+    }
   }
 }
 

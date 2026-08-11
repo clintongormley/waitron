@@ -41,6 +41,10 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listCatalogues: vi.fn().mockResolvedValue([]),
     listCategories: vi.fn().mockResolvedValue([]),
     listProducts: vi.fn().mockResolvedValue([]),
+    // The layout + receipt screens (reachable via the nav) load `getLayout` on connect.
+    getLayout: vi.fn().mockResolvedValue({ definition: [], receipt: {} }),
+    putLayout: vi.fn().mockResolvedValue(undefined),
+    putReceipt: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -95,6 +99,42 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     const h1s = [
       ...el.shadowRoot!.querySelectorAll("h1"),
       ...(catalogue!.shadowRoot?.querySelectorAll("h1") ?? []),
+    ];
+    expect(h1s).toHaveLength(1);
+    await expectNoA11yViolations(host);
+  });
+
+  it("the layout screen renders accessibly with a single, well-ordered heading", async () => {
+    // Navigate to the layout screen (its own <h1> "Disposición" is then the sole heading; the shell's
+    // nav chrome carries none), and scan the composed tree in this theme.
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue(people) });
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-layout]")!.click();
+    await flush(el);
+    const layout = el.shadowRoot!.querySelector("dashboard-layout-screen");
+    expect(layout).toBeTruthy();
+    const h1s = [
+      ...el.shadowRoot!.querySelectorAll("h1"),
+      ...(layout!.shadowRoot?.querySelectorAll("h1") ?? []),
+    ];
+    expect(h1s).toHaveLength(1);
+    await expectNoA11yViolations(host);
+  });
+
+  it("the receipt screen renders accessibly with a single, well-ordered heading", async () => {
+    // Navigate to the receipt screen (its own <h1> "Recibo" is then the sole heading; the shell's nav
+    // chrome carries none), and scan the composed tree in this theme.
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue(people) });
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-receipt]")!.click();
+    await flush(el);
+    const receipt = el.shadowRoot!.querySelector("dashboard-receipt-screen");
+    expect(receipt).toBeTruthy();
+    const h1s = [
+      ...el.shadowRoot!.querySelectorAll("h1"),
+      ...(receipt!.shadowRoot?.querySelectorAll("h1") ?? []),
     ];
     expect(h1s).toHaveLength(1);
     await expectNoA11yViolations(host);

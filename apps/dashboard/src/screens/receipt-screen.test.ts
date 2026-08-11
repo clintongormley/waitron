@@ -56,7 +56,10 @@ afterEach(cleanupWidgets);
 
 describe("receipt-screen", () => {
   it("loads the two fields from getLayout().receipt on connect", async () => {
-    const api = stubApi({}, { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias por su visita" });
+    const api = stubApi(
+      {},
+      { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias por su visita" },
+    );
     const { el } = await mountWidget<ReceiptScreen>("dashboard-receipt-screen", { api });
     await flush(el);
 
@@ -113,7 +116,10 @@ describe("receipt-screen", () => {
 
     q(el, "[data-test=save]")!.click();
     await flush(el);
-    expect(lastPut(api)).toEqual({ headerSubtitle: "Calle Mayor 1", footerMessage: "Hasta pronto" });
+    expect(lastPut(api)).toEqual({
+      headerSubtitle: "Calle Mayor 1",
+      footerMessage: "Hasta pronto",
+    });
   });
 
   it("omits a blank field so it reaches putReceipt as an ABSENT key, not an empty string", async () => {

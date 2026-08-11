@@ -32,7 +32,12 @@ describe.each(["light", "dark"] as const)("receipt-screen a11y (%s theme)", (the
   it("renders accessibly with both fields populated", async () => {
     const { el, host } = await mountWidget<ReceiptScreen>(
       "dashboard-receipt-screen",
-      { api: stubApi({}, { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias por su visita" }) },
+      {
+        api: stubApi(
+          {},
+          { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias por su visita" },
+        ),
+      },
       theme,
     );
     await flush(el);
