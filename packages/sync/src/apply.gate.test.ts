@@ -579,9 +579,12 @@ describe("the commercial-lane apply loop", () => {
   });
 
   it("throws sync.table_not_enrolled for a row naming a table the registry does not carry", async () => {
-    // Also a guard that the fiscal core is not enrollable: registros_facturacion has no apply
-    // statement here (spec §1 defers the fiscal lane), so a row naming it is a hard error, never a
-    // silent skip.
+    // Also an H2 guard that a hash-chained / fiscal-adjacent table is not enrollable: order_amendments
+    // (a SHA-256 chain, spec §2 defers it with the owner-reviewed lane), like the fiscal core's
+    // registros_facturacion (spec §1 defers the whole fiscal lane), has no apply statement here — so a
+    // row naming any unenrolled table is a hard error, never a silent skip. The table name in code is
+    // the deliberately English-named order_amendments so @waitron/sync stays inside the english-only
+    // guard (CLAUDE.md §3); the mechanism it exercises rejects every unenrolled table alike.
     await setEnv("production");
     const b = await seedBase();
     const applier = await postgres.pg.connectAs("sync_applier", "ap");
@@ -589,13 +592,13 @@ describe("the commercial-lane apply loop", () => {
       const err = await captureError(() =>
         applyBatch(
           applier,
-          [{ seq: 1n, originId: uuid(), table: "registros_facturacion", op: "insert", tenantId: b.tenantId, rowImage: { id: uuid() } }],
+          [{ seq: 1n, originId: uuid(), table: "order_amendments", op: "insert", tenantId: b.tenantId, rowImage: { id: uuid() } }],
           { subscriberId: uuid(), ...PROD },
         ),
       );
       expect(err).toBeInstanceOf(AppError);
       expect((err as AppError).code).toBe("sync.table_not_enrolled");
-      expect((err as AppError).params).toEqual({ table: "registros_facturacion" });
+      expect((err as AppError).params).toEqual({ table: "order_amendments" });
     } finally {
       await applier.close();
     }
