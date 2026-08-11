@@ -2,7 +2,7 @@ import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { authenticator } from "otplib";
+import { generateSecret, generateSync } from "otplib";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
@@ -71,7 +71,7 @@ describe("loginManager", () => {
   });
   it("requires a valid TOTP when one is enrolled", async () => {
     const personId = await seedManagerWithPassword();
-    const secret = authenticator.generateSecret();
+    const secret = generateSecret();
     await run((tx) =>
       tx.execute(sql`update persons set totp_secret = ${secret} where id = ${personId}`),
     );
@@ -84,7 +84,7 @@ describe("loginManager", () => {
         tenantId,
         personId,
         password: "correct horse",
-        totp: authenticator.generate(secret),
+        totp: generateSync({ secret }),
       }),
     );
     expect(session.personId).toBe(personId);

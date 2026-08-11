@@ -204,9 +204,11 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // non-UUID `personId`, a non-string `password`, or a `totp` present but not a string, is refused as
   // `password.invalid` — the SAME code a wrong password gets, so nothing in the response tells an
   // unauthenticated caller which field failed. (Screening `totp` does NOT avert a 500: `verifyTotp`
-  // fails closed — probed against otplib@12.0.1, a non-string token returns `false`, never throws — so
-  // a non-string `totp` reaching `loginManager` yields `totp.invalid` when the person is enrolled and
-  // is ignored when they are not, never a throw. It is screened for response uniformity and to keep the
+  // fails closed — probed against otplib@13.4.1, `verifyTotp` returns `false` for a non-string `totp`
+  // (number/null/undefined/object/boolean/non-six-digit string all tested): v13's `verifySync` throws
+  // on such input and `verifyTotp`'s catch swallows the throw, so the wrapper never surfaces it — a
+  // non-string `totp` reaching `loginManager` yields `totp.invalid` when the person is enrolled and is
+  // ignored when they are not, never a throw. It is screened for response uniformity and to keep the
   // runtime value matching its declared `string` type; see this task's fix report for the correction to
   // the review's "totp → 500" claim.)
   app.post("/management-api/session", (c) =>
