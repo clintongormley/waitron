@@ -41,22 +41,24 @@ import { describe, expect, it } from "vitest";
  * side-effect `import "./errors.js"` exists to keep true; removing that import is the one edit this
  * guard exists to catch, and the `db` proof above is that it does.
  *
- * KNOWN LIMITATION, stated rather than papered over (CLAUDE.md §1). The walk matches specifier text,
- * so an `import "./errors.js"` or `… from "./errors.js"` — keyword and specifier contiguous — sitting
- * in a COMMENT or a string literal on a still-reachable file would fake an edge and let a
- * genuinely-removed import pass. It does NOT match three things: a keyword split from its specifier,
- * a `declare module "…"`, or a dynamic `import("./errors.js")` (a package reaching `errors.ts` only by
- * dynamic import would be reported unreachable — none does). Grepped tree-wide on 2026-08-11, every
- * regex-matching reference to a package's own `src/errors.ts` from a barrel-reachable file is a real
- * static import or type re-export. The near-misses are instructive and were checked by running:
- * `reporting/record-daily-close.ts` mentions `import` / `"./errors.js"` across a `//`-wrapped line
- * break, and removing that file's real import drops `./errors.js` from the matched set — the comment
- * does not fake the edge; and the self-referential `import "./errors.js"` mentions that several
- * `errors.ts` carry in their own doc-comments (core, fiscal, shared) cannot fake one either, because
- * `errors.ts` is the target the walk reads only AFTER reaching it. Comment-stripping was rejected: a
- * block stripper mishandles a slash-star opener inside a string literal (a glob such as a double-star
- * path pattern), which would drop a REAL import and misfire the guard — a worse failure than the hole
- * it closes.
+ * KNOWN LIMITATION, stated rather than papered over (CLAUDE.md §1). The walk matches specifier text:
+ * an `import`/`… from` followed by only whitespace and then `"./errors.js"` — matched whether that
+ * sits in real code, a COMMENT, or a string literal. So that exact shape in a comment or string on a
+ * still-reachable file would fake an edge and let a genuinely-removed import pass. What it does NOT
+ * match — all checked by running the regex on 2026-08-11: a keyword reached from its specifier across
+ * any NON-whitespace token, where a `//` or `/*` marker between them is enough BUT a bare newline is
+ * not (`\s+` spans newlines, so a real multi-line import is still caught); a `declare module "…"`; and
+ * a dynamic `import("./errors.js")` (a package reaching `errors.ts` only by dynamic import would be
+ * reported unreachable — none does). Grepped tree-wide, every regex-matching reference to a package's
+ * own `src/errors.ts` from a barrel-reachable file is a real static import or type re-export. The one
+ * comment mention on a reachable non-`errors.ts` file — `reporting/record-daily-close.ts`, where
+ * `import` and `"./errors.js"` are split by a `//` marker — does not match: removing that file's real
+ * import drops `./errors.js` from the matched set. And the self-referential `import "./errors.js"`
+ * mentions that several `errors.ts` carry in their own doc-comments (core, fiscal, shared) cannot fake
+ * an edge either, because `errors.ts` is the target the walk reads only AFTER reaching it.
+ * Comment-stripping was rejected: a block stripper mishandles a slash-star opener inside a string
+ * literal (a glob such as a double-star path pattern), which would drop a REAL import and misfire the
+ * guard — a worse failure than the hole it closes.
  */
 
 const REPO_ROOT = resolve(import.meta.dirname, "..");
