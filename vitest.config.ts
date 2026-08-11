@@ -21,8 +21,8 @@ import { defineConfig } from "vitest/config";
 // job runs `pnpm vitest run --coverage` on every push, and `.husky/pre-push` runs it on every push
 // that is not documentation-only.
 //
-// WHAT THE MOVE COST, stated because nothing else in the tree says it: the two guards are
-// TypeScript and NOTHING TYPECHECKS THEM ANY MORE. The workspace root is outside `pnpm -r`, so
+// WHAT THE MOVE COST, stated because nothing else in the tree says it: the guards under `scripts/`
+// are TypeScript and NOTHING TYPECHECKS THEM ANY MORE. The workspace root is outside `pnpm -r`, so
 // `pnpm typecheck` never visits it, and there is no root `tsconfig.json` to visit — CLAUDE.md §2
 // carries the mutation that measured that. Run here in both directions on 2026-08-01, one line,
 // `export const brokenProbe: number = "not a number";`:
@@ -33,7 +33,7 @@ import { defineConfig } from "vitest/config";
 //   appended to scripts/guarded-        `pnpm typecheck` exits 0 and the suite still passes 12/12
 //   teardowns.test.ts                   — Vitest transpiles without typechecking
 //
-// So a type error in one of these two files is now caught only when it is also a runtime error.
+// So a type error in one of these files is now caught only when it is also a runtime error.
 //
 // Deliberately not fixed here, for a reason that is about this repository rather than about
 // effort: the pre-push hook's typecheck step is SCOPED (`pnpm "$@" typecheck`), so on the
@@ -85,7 +85,7 @@ export default defineConfig({
       // change, so it is measured in exactly one place rather than in two or in none — the failure
       // mode being the last of those, which no threshold anywhere would report.
       //
-      // Not `scripts/**/*.ts`: the only `.ts` files under `scripts/` are the two guard SUITES, and
+      // Not `scripts/**/*.ts`: the only `.ts` files under `scripts/` are the three guard SUITES, and
       // Vitest leaves a suite out of its own coverage table whatever this says (measured on
       // 2026-08-01: with `include: ["scripts/**/*.mjs", "scripts/**/*.ts"]` the table held the two
       // classifiers and nothing else). It would be a pattern matching nothing, which is what the

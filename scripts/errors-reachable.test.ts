@@ -42,14 +42,21 @@ import { describe, expect, it } from "vitest";
  * guard exists to catch, and the `db` proof above is that it does.
  *
  * KNOWN LIMITATION, stated rather than papered over (CLAUDE.md §1). The walk matches specifier text,
- * so a `from "./errors.js"` sitting inside a COMMENT in a still-reachable file would fake an edge and
- * let a genuinely-removed import pass. In practice this is not reached — the `db` deletion above left
- * `errors.ts`'s own doc-comment mention of `import "./errors.js"` in the tree and the guard still
- * failed correctly, because that comment lives in a file that is only reachable THROUGH `errors.ts`,
- * not on any surviving path from the barrel. Comment-stripping was considered and rejected: a block
- * stripper mishandles a slash-star opener inside a string literal (a glob such as a double-star
- * path pattern), which would drop a
- * REAL import and misfire the guard — a worse failure than the hole it closes.
+ * so an `import "./errors.js"` or `… from "./errors.js"` — keyword and specifier contiguous — sitting
+ * in a COMMENT or a string literal on a still-reachable file would fake an edge and let a
+ * genuinely-removed import pass. It does NOT match three things: a keyword split from its specifier,
+ * a `declare module "…"`, or a dynamic `import("./errors.js")` (a package reaching `errors.ts` only by
+ * dynamic import would be reported unreachable — none does). Grepped tree-wide on 2026-08-11, every
+ * regex-matching reference to a package's own `src/errors.ts` from a barrel-reachable file is a real
+ * static import or type re-export. The near-misses are instructive and were checked by running:
+ * `reporting/record-daily-close.ts` mentions `import` / `"./errors.js"` across a `//`-wrapped line
+ * break, and removing that file's real import drops `./errors.js` from the matched set — the comment
+ * does not fake the edge; and the self-referential `import "./errors.js"` mentions that several
+ * `errors.ts` carry in their own doc-comments (core, fiscal, shared) cannot fake one either, because
+ * `errors.ts` is the target the walk reads only AFTER reaching it. Comment-stripping was rejected: a
+ * block stripper mishandles a slash-star opener inside a string literal (a glob such as a double-star
+ * path pattern), which would drop a REAL import and misfire the guard — a worse failure than the hole
+ * it closes.
  */
 
 const REPO_ROOT = resolve(import.meta.dirname, "..");
@@ -57,7 +64,16 @@ const PACKAGES_DIR = join(REPO_ROOT, "packages");
 const IMPORT_SPECIFIER = /(?:from|import)\s+["'](\.\.?\/[^"']+)["']/g;
 
 function relativeImportsOf(absolutePath: string): string[] {
-  const source = readFileSync(absolutePath, "utf8");
+  let source: string;
+  try {
+    source = readFileSync(absolutePath, "utf8");
+  } catch {
+    // Not a readable source file: a resolved specifier pointing at a directory (an extensionless
+    // import throws EISDIR) or a path that does not exist (ENOENT). It cannot be `errors.ts` — the
+    // target, which discovery already confirmed exists — so yielding no edges only ever skips an
+    // intermediate, and never crashes the whole guard on one odd import.
+    return [];
+  }
   const dir = dirname(absolutePath);
   return [...source.matchAll(IMPORT_SPECIFIER)]
     .map((match) => match[1])
@@ -72,9 +88,6 @@ function reachableFrom(entryPath: string): Set<string> {
     const file = stack.pop();
     if (file === undefined || seen.has(file)) continue;
     seen.add(file);
-    // A resolved specifier that points at a non-`.ts` asset (a JSON fixture, say) has no source to
-    // read and cannot be `errors.ts` anyway — skip it rather than crash the whole guard on ENOENT.
-    if (!existsSync(file)) continue;
     for (const next of relativeImportsOf(file)) stack.push(next);
   }
   return seen;
