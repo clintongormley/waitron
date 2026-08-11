@@ -107,7 +107,12 @@ async function seedProduct(b: Base): Promise<string> {
   return p.rows[0]!.id;
 }
 
-async function seedLine(b: Base, orderId: string, productId: string, lineNo: number): Promise<string> {
+async function seedLine(
+  b: Base,
+  orderId: string,
+  productId: string,
+  lineNo: number,
+): Promise<string> {
   const l = await postgres.admin.execute<{ id: string }>(
     sql`insert into working_order_lines
           (tenant_id, working_order_id, line_no, product_id, descriptions,
@@ -213,7 +218,8 @@ const saleLineCount = (id: string) =>
 const lineCount = (id: string) =>
   scalar(sql`select count(*)::int::text as v from working_order_lines where id = ${id}`);
 const paymentState = (id: string) => scalar(sql`select state as v from payments where id = ${id}`);
-const woStatus = (id: string) => scalar(sql`select status as v from working_orders where id = ${id}`);
+const woStatus = (id: string) =>
+  scalar(sql`select status as v from working_orders where id = ${id}`);
 
 const PROD = { localEnvironment: "production", sourceEnvironment: "production" } as const;
 
@@ -282,7 +288,16 @@ describe("the commercial-lane apply loop", () => {
       const deliver = (seq: bigint, op: SyncLogRow["op"], over: Image) =>
         applyBatch(
           applier,
-          [{ seq, originId, table: "payments", op, tenantId: b.tenantId, rowImage: paymentImage(b, woId, { ...key, ...over }) }],
+          [
+            {
+              seq,
+              originId,
+              table: "payments",
+              op,
+              tenantId: b.tenantId,
+              rowImage: paymentImage(b, woId, { ...key, ...over }),
+            },
+          ],
           { subscriberId, ...PROD },
         );
 
@@ -314,7 +329,16 @@ describe("the commercial-lane apply loop", () => {
         (
           await applyBatch(
             applier,
-            [{ seq: 1n, originId, table: "working_orders", op: "insert", tenantId: b.tenantId, rowImage: workingOrderImage(b, woId, { status: "open" }) }],
+            [
+              {
+                seq: 1n,
+                originId,
+                table: "working_orders",
+                op: "insert",
+                tenantId: b.tenantId,
+                rowImage: workingOrderImage(b, woId, { status: "open" }),
+              },
+            ],
             opts,
           )
         ).applied,
@@ -323,7 +347,16 @@ describe("the commercial-lane apply loop", () => {
         (
           await applyBatch(
             applier,
-            [{ seq: 2n, originId, table: "working_orders", op: "update", tenantId: b.tenantId, rowImage: workingOrderImage(b, woId, { status: "placed" }) }],
+            [
+              {
+                seq: 2n,
+                originId,
+                table: "working_orders",
+                op: "update",
+                tenantId: b.tenantId,
+                rowImage: workingOrderImage(b, woId, { status: "placed" }),
+              },
+            ],
             opts,
           )
         ).applied,
@@ -336,7 +369,16 @@ describe("the commercial-lane apply loop", () => {
       // silent idempotent skip (applied 0, no change).
       const replay = await applyBatch(
         applier,
-        [{ seq: 1n, originId, table: "working_orders", op: "update", tenantId: b.tenantId, rowImage: workingOrderImage(b, woId, { status: "open" }) }],
+        [
+          {
+            seq: 1n,
+            originId,
+            table: "working_orders",
+            op: "update",
+            tenantId: b.tenantId,
+            rowImage: workingOrderImage(b, woId, { status: "open" }),
+          },
+        ],
         opts,
       );
       expect(replay.applied).toBe(0);
@@ -348,7 +390,16 @@ describe("the commercial-lane apply loop", () => {
       const lineId = await seedLine(b, openWo, productId, 1);
       const del = await applyBatch(
         applier,
-        [{ seq: 3n, originId, table: "working_order_lines", op: "delete", tenantId: b.tenantId, rowImage: { id: lineId, tenant_id: b.tenantId } }],
+        [
+          {
+            seq: 3n,
+            originId,
+            table: "working_order_lines",
+            op: "delete",
+            tenantId: b.tenantId,
+            rowImage: { id: lineId, tenant_id: b.tenantId },
+          },
+        ],
         opts,
       );
       expect(del.applied).toBe(1);
@@ -357,7 +408,16 @@ describe("the commercial-lane apply loop", () => {
       // Re-apply the SAME delete at a higher seq (so the cursor does not mask it): a 0-row no-op.
       const delAgain = await applyBatch(
         applier,
-        [{ seq: 4n, originId, table: "working_order_lines", op: "delete", tenantId: b.tenantId, rowImage: { id: lineId, tenant_id: b.tenantId } }],
+        [
+          {
+            seq: 4n,
+            originId,
+            table: "working_order_lines",
+            op: "delete",
+            tenantId: b.tenantId,
+            rowImage: { id: lineId, tenant_id: b.tenantId },
+          },
+        ],
         opts,
       );
       expect(delAgain.applied).toBe(0); // idempotent — the row was already absent
@@ -381,8 +441,22 @@ describe("the commercial-lane apply loop", () => {
       const inOrder = await applyBatch(
         applier,
         [
-          { seq: 1n, originId, table: "sales", op: "insert", tenantId: b.tenantId, rowImage: parentSale },
-          { seq: 2n, originId, table: "sale_lines", op: "insert", tenantId: b.tenantId, rowImage: saleLineImage(b, parentSale.id as string) },
+          {
+            seq: 1n,
+            originId,
+            table: "sales",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: parentSale,
+          },
+          {
+            seq: 2n,
+            originId,
+            table: "sale_lines",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: saleLineImage(b, parentSale.id as string),
+          },
         ],
         opts,
       );
@@ -396,8 +470,22 @@ describe("the commercial-lane apply loop", () => {
       const shuffled = await applyBatch(
         applier,
         [
-          { seq: 3n, originId, table: "sale_lines", op: "insert", tenantId: b.tenantId, rowImage: laterLine },
-          { seq: 4n, originId, table: "sales", op: "insert", tenantId: b.tenantId, rowImage: laterSale },
+          {
+            seq: 3n,
+            originId,
+            table: "sale_lines",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: laterLine,
+          },
+          {
+            seq: 4n,
+            originId,
+            table: "sales",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: laterSale,
+          },
         ],
         opts,
       );
@@ -427,8 +515,22 @@ describe("the commercial-lane apply loop", () => {
       const result = await applyBatch(
         applier,
         [
-          { seq: 1n, originId, table: "sales", op: "insert", tenantId: b.tenantId, rowImage: goodSale },
-          { seq: 2n, originId, table: "sale_lines", op: "insert", tenantId: b.tenantId, rowImage: orphanLine },
+          {
+            seq: 1n,
+            originId,
+            table: "sales",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: goodSale,
+          },
+          {
+            seq: 2n,
+            originId,
+            table: "sale_lines",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: orphanLine,
+          },
         ],
         { subscriberId, ...PROD },
       );
@@ -455,10 +557,21 @@ describe("the commercial-lane apply loop", () => {
       await setEnv("production");
       const b1 = await seedBase();
       const s1 = await seedSeries(b1);
-      const rowA: SyncLogRow = { seq: 1n, originId: uuid(), table: "sales", op: "insert", tenantId: b1.tenantId, rowImage: saleImage(b1, s1, 1) };
+      const rowA: SyncLogRow = {
+        seq: 1n,
+        originId: uuid(),
+        table: "sales",
+        op: "insert",
+        tenantId: b1.tenantId,
+        rowImage: saleImage(b1, s1, 1),
+      };
       const sub1 = uuid();
       const refusedA = await captureError(() =>
-        applyBatch(applier, [rowA], { subscriberId: sub1, localEnvironment: "production", sourceEnvironment: "preproduction" }),
+        applyBatch(applier, [rowA], {
+          subscriberId: sub1,
+          localEnvironment: "production",
+          sourceEnvironment: "preproduction",
+        }),
       );
       expect(refusedA).toBeInstanceOf(AppError);
       expect((refusedA as AppError).code).toBe("sync.peer_environment_mismatch");
@@ -473,10 +586,21 @@ describe("the commercial-lane apply loop", () => {
       await setEnv("preproduction");
       const b2 = await seedBase();
       const s2 = await seedSeries(b2);
-      const rowB: SyncLogRow = { seq: 1n, originId: uuid(), table: "sales", op: "insert", tenantId: b2.tenantId, rowImage: saleImage(b2, s2, 1) };
+      const rowB: SyncLogRow = {
+        seq: 1n,
+        originId: uuid(),
+        table: "sales",
+        op: "insert",
+        tenantId: b2.tenantId,
+        rowImage: saleImage(b2, s2, 1),
+      };
       const sub2 = uuid();
       const refusedB = await captureError(() =>
-        applyBatch(applier, [rowB], { subscriberId: sub2, localEnvironment: "preproduction", sourceEnvironment: "production" }),
+        applyBatch(applier, [rowB], {
+          subscriberId: sub2,
+          localEnvironment: "preproduction",
+          sourceEnvironment: "production",
+        }),
       );
       expect(refusedB).toBeInstanceOf(AppError);
       expect((refusedB as AppError).code).toBe("sync.peer_environment_mismatch");
@@ -511,7 +635,16 @@ describe("the commercial-lane apply loop", () => {
       const saleId = img.id as string;
       const applied = await applyBatch(
         applier,
-        [{ seq: 1n, originId, table: "sales", op: "insert", tenantId: mirror.tenantId, rowImage: img }],
+        [
+          {
+            seq: 1n,
+            originId,
+            table: "sales",
+            op: "insert",
+            tenantId: mirror.tenantId,
+            rowImage: img,
+          },
+        ],
         { subscriberId, ...PROD },
       );
       expect(applied.applied).toBe(1);
@@ -531,7 +664,16 @@ describe("the commercial-lane apply loop", () => {
       const err = await captureError(() =>
         applyBatch(
           applier,
-          [{ seq: 1n, originId: uuid(), table: "sales", op: "insert", tenantId: other.tenantId, rowImage: crossImg }],
+          [
+            {
+              seq: 1n,
+              originId: uuid(),
+              table: "sales",
+              op: "insert",
+              tenantId: other.tenantId,
+              rowImage: crossImg,
+            },
+          ],
           { subscriberId: uuid(), ...PROD },
         ),
       );
@@ -592,7 +734,16 @@ describe("the commercial-lane apply loop", () => {
       const err = await captureError(() =>
         applyBatch(
           applier,
-          [{ seq: 1n, originId: uuid(), table: "order_amendments", op: "insert", tenantId: b.tenantId, rowImage: { id: uuid() } }],
+          [
+            {
+              seq: 1n,
+              originId: uuid(),
+              table: "order_amendments",
+              op: "insert",
+              tenantId: b.tenantId,
+              rowImage: { id: uuid() },
+            },
+          ],
           { subscriberId: uuid(), ...PROD },
         ),
       );

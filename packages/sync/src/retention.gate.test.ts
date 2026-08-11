@@ -30,8 +30,12 @@ const postgres = useRealPostgres({
   //    leak into sync_tailer (a tailer member must still see only its own tenant).
   // Neither role is widened by hand; each inherits its group's grants (CLAUDE.md §3 "never widen").
   setup: async ({ admin }) => {
-    await admin.execute(sql.raw(`create role sync_pruner login password 'pp' in role sync_retention`));
-    await admin.execute(sql.raw(`create role tailer_login login password 'tp' in role sync_tailer`));
+    await admin.execute(
+      sql.raw(`create role sync_pruner login password 'pp' in role sync_retention`),
+    );
+    await admin.execute(
+      sql.raw(`create role tailer_login login password 'tp' in role sync_tailer`),
+    );
   },
   timeoutMs: 180_000,
 });

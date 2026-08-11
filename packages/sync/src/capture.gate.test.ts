@@ -301,14 +301,18 @@ describe("the generic capture trigger over the commercial lane", () => {
     // access. app_user has none, so each is refused 42501 at the privilege layer.
     const app = await postgres.pg.connectAs("app_login", "app_pw");
     try {
-      expect(pgErrorCode(await captureError(() => app.execute(sql`select seq from sync_log`)))).toBe(
-        "42501",
-      );
       expect(
-        pgErrorCode(await captureError(() => app.execute(sql`update sync_log set row_image = row_image`))),
+        pgErrorCode(await captureError(() => app.execute(sql`select seq from sync_log`))),
       ).toBe("42501");
       expect(
-        pgErrorCode(await captureError(() => app.execute(sql`delete from sync_log where seq = -1`))),
+        pgErrorCode(
+          await captureError(() => app.execute(sql`update sync_log set row_image = row_image`)),
+        ),
+      ).toBe("42501");
+      expect(
+        pgErrorCode(
+          await captureError(() => app.execute(sql`delete from sync_log where seq = -1`)),
+        ),
       ).toBe("42501");
     } finally {
       await app.close();
