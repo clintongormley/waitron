@@ -771,6 +771,9 @@ importers:
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
+      '@waitron/payments':
+        specifier: workspace:*
+        version: link:../payments
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
