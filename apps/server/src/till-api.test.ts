@@ -7,6 +7,8 @@ import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, endSession, hashPin, loginWithPin } from "@waitron/identity";
+import { DEFAULT_LAYOUT, DEFAULT_RECEIPT } from "@waitron/layouts";
+import type { LayoutDef, ReceiptConfig } from "@waitron/layouts";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -436,7 +438,8 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     // The receipt-issuer identity Task 17's ticket view needs: the legal name + NIF printed on every
     // customer receipt, the till's UI locale, (7c) the location's pay-timing mode, and (integrated
     // card terminal) the card provider + tips flag the client picks its collect route / UI from. This
-    // suite's `deps` cfg carries no terminal (`cardProvider: "none"`) and tips off.
+    // suite's `deps` cfg carries no terminal (`cardProvider: "none"`) and tips off. The tenant has
+    // authored no layout, so `layout`/`receipt` are the built-in defaults (Task 8).
     expect(body).toEqual({
       locale: "es-ES",
       venueName: "Test SL",
@@ -444,6 +447,8 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       orderFlow: "prepay",
       cardProvider: "none",
       tipsEnabled: false,
+      layout: DEFAULT_LAYOUT,
+      receipt: DEFAULT_RECEIPT,
     });
     // Nothing sensitive: no pin, certificate, connection string or verification url reaches the wire.
     expect(JSON.stringify(body)).not.toMatch(/pin|secret|password|url|cert/i);
@@ -467,6 +472,37 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toMatchObject({ cardProvider: "stripe_terminal", tipsEnabled: true });
+  });
+
+  it("GET /api/till returns the AUTHORED layout + receipt when the tenant has one, not the defaults", async () => {
+    // Seed a `till_layouts` row for the till's tenant (as the PGlite superuser, RLS bypassed — pure
+    // setup, like the other seeds here). `GET /api/till` must return THIS authored definition/receipt
+    // rather than DEFAULT_LAYOUT/DEFAULT_RECEIPT, proving the route reads the store rather than a
+    // constant. Cleaned up in `finally` so the shared-tenant default case above stays order-independent
+    // (CLAUDE.md §4). The authored layout differs from DEFAULT_LAYOUT (a product-grid columns config +
+    // a trimmed widget set) so a route that hardcoded the default would fail this.
+    const authored: LayoutDef = [
+      { type: "product-grid", region: "main", config: { columns: 5 } },
+      { type: "basket", region: "aside", config: {} },
+      { type: "total", region: "aside", config: {} },
+      { type: "tender-pay", region: "aside", config: {} },
+    ];
+    const authoredReceipt: ReceiptConfig = { footerMessage: "Hasta pronto" };
+    await suite.db.execute(sql`
+      insert into till_layouts (tenant_id, definition, receipt)
+      values (${cfg.tenantId}, ${JSON.stringify(authored)}::jsonb, ${JSON.stringify(authoredReceipt)}::jsonb)`);
+    try {
+      const app = new Hono();
+      mountTillApi(app, deps(suite.db), collect([]));
+
+      const res = await app.request("/api/till");
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { layout: LayoutDef; receipt: ReceiptConfig };
+      expect(body.layout).toEqual(authored);
+      expect(body.receipt).toEqual(authoredReceipt);
+    } finally {
+      await suite.db.execute(sql`delete from till_layouts where tenant_id = ${cfg.tenantId}`);
+    }
   });
 });
 

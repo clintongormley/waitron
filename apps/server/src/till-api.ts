@@ -6,6 +6,7 @@ import { asAppUser, tenants, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { endSession, listActiveStaff, loginWithPin } from "@waitron/identity";
 import { listAvailableProducts } from "@waitron/catalogue";
+import { getLayout } from "@waitron/layouts";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
 import { createErrorBoundary } from "./error-boundary.js";
@@ -199,16 +200,24 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // `eq(id)` filter selects exactly that row.
   app.get("/api/till", (c) =>
     run(c, log, async () => {
-      const issuer = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      // ONE transaction reads both the issuer identity and the authored layout/receipt: `getLayout`
+      // runs inside the same `withTenant` + `asAppUser` block (RLS scopes both to this till's tenant),
+      // never a second connection. `getLayout` does not authorize — this boot read is deliberately
+      // unauthenticated (the browser fetches it before login), and the layout carries no secrets, only
+      // the widget arrangement + receipt trim, same as `venueName`/`orderFlow` already here.
+      const boot = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         const [row] = await tx
           .select({ venueName: tenants.legalName, nif: tenants.taxId })
           .from(tenants)
           .where(eq(tenants.id, deps.cfg.tenantId));
-        return row;
+        // Authored layout/receipt, or the built-in defaults when the tenant has never opened the
+        // editor (`getLayout` returns DEFAULT_LAYOUT/DEFAULT_RECEIPT on absence, no backfill).
+        const { definition, receipt } = await getLayout(tx, deps.cfg.tenantId);
+        return { issuer: row, layout: definition, receipt };
       });
       /* v8 ignore start */
-      if (issuer === undefined) {
+      if (boot.issuer === undefined) {
         // Structurally unreachable: `deps.cfg.tenantId` is the till's own tenant (provisioning
         // stamped it), so its `tenants` row always exists and RLS returns it. A misconfigured till
         // pointed at a nonexistent tenant becomes an opaque 500 via `run`, never a partial payload.
@@ -217,8 +226,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       /* v8 ignore stop */
       return c.json({
         locale: deps.cfg.locale,
-        venueName: issuer.venueName,
-        nif: issuer.nif,
+        venueName: boot.issuer.venueName,
+        nif: boot.issuer.nif,
         orderFlow: deps.cfg.orderFlow,
         // The integrated card terminal (sub-project 7): the STRING provider selector and the tip flag
         // the till app reads BEFORE login to pick its card-collect route and show/hide the tip
@@ -228,6 +237,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         // set at boot from `config.till`), not a second copy on `deps` that could drift from it.
         cardProvider: deps.cfg.cardProvider,
         tipsEnabled: deps.cfg.tipsEnabled,
+        // The authored (or default) till layout + receipt trim (Task 8). The till app renders
+        // `layout` verbatim in place of the hardcoded `LAYOUT_A` and threads `receipt` to its ticket
+        // view; both ride this same unauthenticated boot fetch, so the till makes no second request.
+        layout: boot.layout,
+        receipt: boot.receipt,
       });
     }),
   );
