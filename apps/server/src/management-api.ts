@@ -491,7 +491,12 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = (await c.req.json<{ receipt?: unknown }>()) ?? {};
-      if (typeof body !== "object" || body === null || Array.isArray(body) || !("receipt" in body)) {
+      if (
+        typeof body !== "object" ||
+        body === null ||
+        Array.isArray(body) ||
+        !("receipt" in body)
+      ) {
         throw new AppError("management.request_invalid", { field: "receipt" });
       }
       const { receipt } = body;

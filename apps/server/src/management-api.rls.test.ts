@@ -840,7 +840,9 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
     expect(layoutEmpty.status).toBe(400);
     expect(
       (await layoutEmpty.json()) as { error: { code: string; params: { field: string } } },
-    ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "definition" } } });
+    ).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "definition" } },
+    });
 
     const layoutNull = await app.request("/management-api/layout", {
       method: "PUT",
@@ -870,7 +872,9 @@ describe("Management API — layout + receipt routes (Task 7)", () => {
     expect(receiptEmpty.status).toBe(400);
     expect(
       (await receiptEmpty.json()) as { error: { code: string; params: { field: string } } },
-    ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "receipt" } } });
+    ).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "receipt" } },
+    });
 
     const receiptNull = await app.request("/management-api/receipt", {
       method: "PUT",
