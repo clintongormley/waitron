@@ -108,6 +108,9 @@ importers:
       '@waitron/identity':
         specifier: workspace:*
         version: link:../../packages/identity
+      '@waitron/layouts':
+        specifier: workspace:*
+        version: link:../../packages/layouts
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../../packages/migrations
