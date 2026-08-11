@@ -20,6 +20,40 @@ This spec inherits its topology from `2026-08-01-local-server-sif-and-failover-d
 does not relitigate it. Where a fiscal fact is load-bearing it is cited to #33's sourced §12 table or
 to the real schema by `file:line`, per `CLAUDE.md` §1.
 
+> **Landing log — 2026-08-11: Slice 1 (commercial lane) landed** on branch
+> `feat/sync-slice1-commercial-outbox`. Built the `@waitron/sync` package — the `sync_log` outbox
+> (`0000_sync_outbox.sql`) with one generic `sync_capture()` trigger over the **14 non-fiscal enrolled
+> tables** (spec `2026-08-08-sync-slice1-commercial-outbox-spec.md` §2), the enrolment `registry`,
+> static per-table apply SQL, an idempotent seq-ordered `applyBatch` loop (app role under `withTenant`,
+> echo-suppressed, with the environment handshake and the `23503`-defer), bounded retention, and
+> `app.node_id` origin attribution threaded through the till write path. Proven on real Postgres as the
+> non-superuser app role. Body of this design NOT rewritten — corrections and receipts below.
+>
+> **Corrections this implementation made to the design/spec (each with a receipt, `CLAUDE.md` §1):**
+> - **`sync_log.op` gained `'delete'`** (`check (op in ('insert','update','delete'))`), correcting the
+>   §6 schema's fiscal-lane-only *"no delete: no table grants DELETE"* premise. The commercial lane's
+>   `working_orders`/`working_order_lines` hold DELETE (`0004_working_orders.sql:73,75`) and a line
+>   removed from an open order is a real exercised DELETE, so the capture branches on `TG_OP` and the
+>   apply path performs an idempotent delete. The fiscal lane still enrols insert/update only.
+> - **The `inmutabilidad` FORCE-RLS guard does NOT cover `sync_log`.** The 2026-08-08 spec §5 asserted
+>   it would; verified false — `inmutabilidad.test.ts` migrates only `core+identity+fiscal` on PGlite,
+>   so `sync_log` is never in its database (and cannot be: the capture triggers reference `payments`
+>   etc., absent there). The real FORCE-RLS guard for `sync_log` lives in the sync package itself
+>   (`capture.gate.test.ts` asserts `relforcerowsecurity=true` on `sync_log` directly).
+> - **Retention prunes to `min(last_applied_seq)` across ALL `sync_cursor` rows, not "alive only."** The
+>   spec §4 prose said "across all alive subscribers", which is self-contradictory (its own next clause
+>   calls the live-only min the data-loss bug). Gate 7's measured numbers are authoritative: a
+>   down-but-present subscriber HOLDS the log at its cursor; `alive` is alarm metadata, never a prune
+>   filter. Cross-tenant prune needs a dedicated `sync_retention` NOLOGIN role + a per-role permissive
+>   policy (`0001_sync_retention.sql`, the `payments_webhook_resolver` house pattern) — `sync_tailer`
+>   stays per-tenant fenced.
+>
+> **Still deferred to later slices (unchanged):** the whole **fiscal lane** (hash-chained/immutable
+> `registros_facturacion` + submission state), the **`payments` fast lane** and its cross-lane defer
+> (§9/§12), the **active-active topology / promotion / failover** (§8, #33), and **config-flow-down**
+> of the reference tables (`tenants`/`locations`/`tills`/`nodes`/`invoice_series`). Slice 1 records
+> `origin_id` per row so the topology enrols later without a rewrite.
+
 ---
 
 ## 0. The one thing the prototype settled, and why it drives everything below
