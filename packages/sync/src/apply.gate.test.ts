@@ -248,7 +248,16 @@ describe("the commercial-lane apply loop", () => {
       const saleId = img.id as string;
       const first = await applyBatch(
         applier,
-        [{ seq: 1n, originId, table: "sales", op: "insert", tenantId: b.tenantId, rowImage: wire(img) }],
+        [
+          {
+            seq: 1n,
+            originId,
+            table: "sales",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: wire(img),
+          },
+        ],
         { subscriberId, ...PROD },
       );
       expect(first).toEqual({ applied: 1, deferred: 0 });
@@ -792,7 +801,16 @@ describe("the commercial-lane apply loop", () => {
       const rowImageText = built.rows[0]!.t; // {..., "vat_breakdown":[1.50], ...} — 1.50 is a JSON number
       const raw = await applyBatch(
         applier,
-        [{ seq: 1n, originId, table: "sales", op: "insert", tenantId: b.tenantId, rowImage: rowImageText }],
+        [
+          {
+            seq: 1n,
+            originId,
+            table: "sales",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: rowImageText,
+          },
+        ],
         { subscriberId: uuid(), ...PROD },
       );
       expect(raw.applied).toBe(1);
@@ -808,7 +826,16 @@ describe("the commercial-lane apply loop", () => {
       });
       await applyBatch(
         applier,
-        [{ seq: 2n, originId, table: "sales", op: "insert", tenantId: b.tenantId, rowImage: corruptedText }],
+        [
+          {
+            seq: 2n,
+            originId,
+            table: "sales",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: corruptedText,
+          },
+        ],
         { subscriberId: uuid(), ...PROD },
       );
       expect(await saleVat0(jsCorrupted.id as string)).toBe("1.5"); // JS parse dropped the trailing zero

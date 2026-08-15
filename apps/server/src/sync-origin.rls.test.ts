@@ -129,7 +129,11 @@ async function setupVenue(): Promise<Venue> {
 /** Mounts the catalogue API for one tenant under a given producing node id. */
 function mountApp(tenantId: string, nodeId: string): Hono {
   const app = new Hono();
-  mountCatalogueApi(app, { db: suite.admin, cfg: { tenantId, nodeId }, mediaDir, maxUploadBytes: 1024 * 1024 }, noopLog);
+  mountCatalogueApi(
+    app,
+    { db: suite.admin, cfg: { tenantId, nodeId }, mediaDir, maxUploadBytes: 1024 * 1024 },
+    noopLog,
+  );
   return app;
 }
 
@@ -181,9 +185,7 @@ async function seedOrphanPayment(): Promise<string> {
     return wo.rows[0]!.id;
   });
   // open -> abandoned is a valid transition; this is the orphan shape (abandoned, no sale_id).
-  await suite.admin.execute(
-    sql`update working_orders set status = 'abandoned' where id = ${woId}`,
-  );
+  await suite.admin.execute(sql`update working_orders set status = 'abandoned' where id = ${woId}`);
   await withTenant(suite.admin, venue.tenantId, (tx) =>
     insertCapturedPayment(tx, {
       tenantId: brandTenantId(venue.tenantId),

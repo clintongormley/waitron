@@ -78,7 +78,12 @@ function mountApp(maxUploadBytes: number = HANDLER_LIMIT): Hono {
     app,
     // cfg.nodeId is required but this in-process suite asserts route mechanics, not the captured
     // origin (that is sync-origin.rls.test.ts's job); any valid node id satisfies the type.
-    { db: suite.db, cfg: { tenantId, nodeId: "11111111-1111-4111-8111-111111111111" }, mediaDir, maxUploadBytes },
+    {
+      db: suite.db,
+      cfg: { tenantId, nodeId: "11111111-1111-4111-8111-111111111111" },
+      mediaDir,
+      maxUploadBytes,
+    },
     noopLog,
   );
   return app;

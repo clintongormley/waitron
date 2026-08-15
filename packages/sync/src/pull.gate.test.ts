@@ -108,7 +108,14 @@ describe("syncPullOnce applies a peer's batch and advances the cursor", () => {
     const saleId = sale.id as string;
     // The batch the peer's /sync-api/log would serve — originId is the PEER's node id (the cursor key).
     const batch: SyncLogRow[] = [
-      { seq: 1n, originId: peerNode, table: "sales", op: "insert", tenantId: b.tenantId, rowImage: JSON.stringify(sale) },
+      {
+        seq: 1n,
+        originId: peerNode,
+        table: "sales",
+        op: "insert",
+        tenantId: b.tenantId,
+        rowImage: JSON.stringify(sale),
+      },
     ];
     const ndjson = encodeBatch(batch);
     // Fake http seam: /hello advertises production; /log always serves the same batch (a redelivery on

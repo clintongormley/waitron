@@ -7,8 +7,16 @@ import type { ApplyBatchResult } from "./apply.js";
 // drain-until-empty, per-peer exponential backoff, sync.stream_stalled on saturation, abort handling —
 // is exercised off the network and off a database. The REAL syncPullOnce (cursor read, /hello + /log
 // fetch, applyBatch) is proven against a container in pull.gate.test.ts.
-const peerA: PullPeer = { nodeId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", url: "http://a", token: "ta" };
-const peerB: PullPeer = { nodeId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", url: "http://b", token: "tb" };
+const peerA: PullPeer = {
+  nodeId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  url: "http://a",
+  token: "ta",
+};
+const peerB: PullPeer = {
+  nodeId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  url: "http://b",
+  token: "tb",
+};
 
 // pullOnce is injected in every test here, so these are never touched — cast to the shapes the type
 // demands so a test cannot silently depend on the real DB/network.

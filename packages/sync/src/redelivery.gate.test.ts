@@ -182,9 +182,30 @@ describe("redelivery does not wedge the stream: business BEFORE-triggers are gat
       const first = await applyBatch(
         applier,
         [
-          { seq: 1n, originId, table: "sales", op: "insert", tenantId: b.tenantId, rowImage: wire(sale) },
-          { seq: 2n, originId, table: "tenders", op: "insert", tenantId: b.tenantId, rowImage: wire(tender) },
-          { seq: 3n, originId, table: "sale_settlements", op: "insert", tenantId: b.tenantId, rowImage: wire(settlement) },
+          {
+            seq: 1n,
+            originId,
+            table: "sales",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: wire(sale),
+          },
+          {
+            seq: 2n,
+            originId,
+            table: "tenders",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: wire(tender),
+          },
+          {
+            seq: 3n,
+            originId,
+            table: "sale_settlements",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: wire(settlement),
+          },
         ],
         opts,
       );
@@ -194,13 +215,24 @@ describe("redelivery does not wedge the stream: business BEFORE-triggers are gat
       // the INSERT. With the gate: ON CONFLICT DO NOTHING, applied 0, no throw.
       const redelivered = await applyBatch(
         applier,
-        [{ seq: 4n, originId, table: "tenders", op: "insert", tenantId: b.tenantId, rowImage: wire(tender) }],
+        [
+          {
+            seq: 4n,
+            originId,
+            table: "tenders",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: wire(tender),
+          },
+        ],
         opts,
       );
       expect(redelivered.applied).toBe(0); // clean no-op, stream not wedged
 
       // DELETION control: recreate the trigger UNGATED and redeliver again -> WT002 propagates.
-      await postgres.admin.execute(sql.raw(`drop trigger tenders_reject_post_settlement on tenders`));
+      await postgres.admin.execute(
+        sql.raw(`drop trigger tenders_reject_post_settlement on tenders`),
+      );
       await postgres.admin.execute(
         sql.raw(`create trigger tenders_reject_post_settlement before insert on tenders
                  for each row execute function tenders_reject_post_settlement()`),
@@ -209,14 +241,25 @@ describe("redelivery does not wedge the stream: business BEFORE-triggers are gat
         const err = await captureError(() =>
           applyBatch(
             applier,
-            [{ seq: 5n, originId, table: "tenders", op: "insert", tenantId: b.tenantId, rowImage: wire(tender) }],
+            [
+              {
+                seq: 5n,
+                originId,
+                table: "tenders",
+                op: "insert",
+                tenantId: b.tenantId,
+                rowImage: wire(tender),
+              },
+            ],
             opts,
           ),
         );
         expect(pgErrorCode(err)).toBe("WT002");
       } finally {
         // Restore the GATED trigger (triggers are DB-global; leave the DB as 0037 left it).
-        await postgres.admin.execute(sql.raw(`drop trigger tenders_reject_post_settlement on tenders`));
+        await postgres.admin.execute(
+          sql.raw(`drop trigger tenders_reject_post_settlement on tenders`),
+        );
         await postgres.admin.execute(
           sql.raw(`create trigger tenders_reject_post_settlement before insert on tenders
                    for each row when (current_setting('app.sync_apply', true) is distinct from 'on')
@@ -245,8 +288,22 @@ describe("redelivery does not wedge the stream: business BEFORE-triggers are gat
       const first = await applyBatch(
         applier,
         [
-          { seq: 1n, originId, table: "working_orders", op: "insert", tenantId: b.tenantId, rowImage: wire(open) },
-          { seq: 2n, originId, table: "working_orders", op: "update", tenantId: b.tenantId, rowImage: wire(settled) },
+          {
+            seq: 1n,
+            originId,
+            table: "working_orders",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: wire(open),
+          },
+          {
+            seq: 2n,
+            originId,
+            table: "working_orders",
+            op: "update",
+            tenantId: b.tenantId,
+            rowImage: wire(settled),
+          },
         ],
         opts,
       );
@@ -255,12 +312,23 @@ describe("redelivery does not wedge the stream: business BEFORE-triggers are gat
       // no enforce_transition raise. (working_orders is watermark-upsert with watermarkColumn null.)
       const redelivered = await applyBatch(
         applier,
-        [{ seq: 3n, originId, table: "working_orders", op: "update", tenantId: b.tenantId, rowImage: wire(settled) }],
+        [
+          {
+            seq: 3n,
+            originId,
+            table: "working_orders",
+            op: "update",
+            tenantId: b.tenantId,
+            rowImage: wire(settled),
+          },
+        ],
         opts,
       );
       expect(redelivered.applied).toBe(1);
       // DELETION control: ungate -> OLD.status='settled' is terminal -> RAISE (a plain error).
-      await postgres.admin.execute(sql.raw(`drop trigger working_orders_enforce_transition on working_orders`));
+      await postgres.admin.execute(
+        sql.raw(`drop trigger working_orders_enforce_transition on working_orders`),
+      );
       await postgres.admin.execute(
         sql.raw(`create trigger working_orders_enforce_transition before update on working_orders
                  for each row execute function working_orders_enforce_transition()`),
@@ -269,13 +337,24 @@ describe("redelivery does not wedge the stream: business BEFORE-triggers are gat
         const err = await captureError(() =>
           applyBatch(
             applier,
-            [{ seq: 4n, originId, table: "working_orders", op: "update", tenantId: b.tenantId, rowImage: wire(settled) }],
+            [
+              {
+                seq: 4n,
+                originId,
+                table: "working_orders",
+                op: "update",
+                tenantId: b.tenantId,
+                rowImage: wire(settled),
+              },
+            ],
             opts,
           ),
         );
         expect(pgErrorMessage(err)).toContain("cannot transition"); // the enforce_transition RAISE
       } finally {
-        await postgres.admin.execute(sql.raw(`drop trigger working_orders_enforce_transition on working_orders`));
+        await postgres.admin.execute(
+          sql.raw(`drop trigger working_orders_enforce_transition on working_orders`),
+        );
         await postgres.admin.execute(
           sql.raw(`create trigger working_orders_enforce_transition before update on working_orders
                    for each row when (current_setting('app.sync_apply', true) is distinct from 'on')
@@ -321,16 +400,46 @@ describe("redelivery does not wedge the stream: business BEFORE-triggers are gat
       const first = await applyBatch(
         applier,
         [
-          { seq: 1n, originId, table: "working_orders", op: "insert", tenantId: b.tenantId, rowImage: wire(open) },
-          { seq: 2n, originId, table: "working_order_lines", op: "insert", tenantId: b.tenantId, rowImage: wire(line) },
-          { seq: 3n, originId, table: "working_orders", op: "update", tenantId: b.tenantId, rowImage: wire(settled) },
+          {
+            seq: 1n,
+            originId,
+            table: "working_orders",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: wire(open),
+          },
+          {
+            seq: 2n,
+            originId,
+            table: "working_order_lines",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: wire(line),
+          },
+          {
+            seq: 3n,
+            originId,
+            table: "working_orders",
+            op: "update",
+            tenantId: b.tenantId,
+            rowImage: wire(settled),
+          },
         ],
         opts,
       );
       expect(first.applied).toBe(3);
       const redelivered = await applyBatch(
         applier,
-        [{ seq: 4n, originId, table: "working_order_lines", op: "insert", tenantId: b.tenantId, rowImage: wire(line) }],
+        [
+          {
+            seq: 4n,
+            originId,
+            table: "working_order_lines",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: wire(line),
+          },
+        ],
         opts,
       );
       expect(redelivered.applied).toBe(1); // gated -> ON CONFLICT DO UPDATE, parent-open check skipped
@@ -346,7 +455,16 @@ describe("redelivery does not wedge the stream: business BEFORE-triggers are gat
         const err = await captureError(() =>
           applyBatch(
             applier,
-            [{ seq: 5n, originId, table: "working_order_lines", op: "insert", tenantId: b.tenantId, rowImage: wire(line) }],
+            [
+              {
+                seq: 5n,
+                originId,
+                table: "working_order_lines",
+                op: "insert",
+                tenantId: b.tenantId,
+                rowImage: wire(line),
+              },
+            ],
             opts,
           ),
         );

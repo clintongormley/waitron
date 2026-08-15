@@ -433,7 +433,11 @@ describe("startServer, against a real container as the deployment role", () => {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "production",
       WAITRON_SYNC_PEERS: JSON.stringify([
-        { nodeId: "66666666-6666-4666-8666-666666666666", url: "http://127.0.0.1:1/", token: "peer-token" },
+        {
+          nodeId: "66666666-6666-4666-8666-666666666666",
+          url: "http://127.0.0.1:1/",
+          token: "peer-token",
+        },
       ]),
       WAITRON_SYNC_NODE_TOKEN: "boot-node-token",
       WAITRON_SYNC_DATABASE_URL: databaseUrl,
