@@ -22,6 +22,11 @@ export { applyStatementFor, deleteStatementFor } from "./apply-sql.js";
 export { applyBatch } from "./apply.js";
 export type { ApplyBatchOptions, ApplyBatchResult, SyncLogRow } from "./apply.js";
 
+// The sync_tailer source read — select a peer's captured sync_log rows past a cursor, row_image as
+// raw jsonb text, under the deli tenant context (docs/superpowers/plans/2026-08-15-sync-transport-slice1.md Task 5).
+export { readSyncLogSince } from "./source.js";
+export type { ReadSyncLogArgs } from "./source.js";
+
 // Bounded log retention (prune to the min across ALL subscriber cursors — a down subscriber holds the
 // log) and per-subscriber lag reporting (docs/superpowers/plans/2026-08-08-sync-slice1-commercial-outbox-plan.md
 // Task 6).
