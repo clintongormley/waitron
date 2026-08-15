@@ -6,6 +6,7 @@ import type { TenantId } from "@waitron/shared";
 import { priceBasket } from "./pricing.js";
 import type { PriceableProduct } from "./pricing.js";
 import {
+  applyRecipeDerivation,
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
@@ -319,6 +320,70 @@ describe("catalogue operations", () => {
       const [available] = await listAvailableProducts(tx, locationId);
       expect(available!.allergens).toEqual({ milk: { presence: "contains" } });
     });
+  });
+
+  // A product with no recipe still publishes exactly the manual value (today's behavior).
+  it("createProduct publishes the manual allergen map when there is no recipe", async () => {
+    const result = await withTenant(fx.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cat = await createCatalogue(tx, { name: "C" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "sandwich" },
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+        allergens: { gluten: { presence: "contains" } },
+      });
+      return p;
+    });
+    expect(result.allergens).toEqual({ gluten: { presence: "contains" } });
+  });
+
+  // applyRecipeDerivation unions the floor over the manual overlay (add-only).
+  it("applyRecipeDerivation republishes allergens as floor ∪ manual", async () => {
+    const seen = await withTenant(fx.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cat = await createCatalogue(tx, { name: "C" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "sandwich" },
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+        allergens: { nuts: { presence: "may_contain" } },
+      });
+      await applyRecipeDerivation(tx, p.id, {
+        allergens: { eggs: { presence: "contains" } },
+        pending: false,
+      });
+      const [row] = await listProducts(tx, cat.id);
+      return row!.allergens;
+    });
+    expect(seen).toEqual({ eggs: { presence: "contains" }, nuts: { presence: "may_contain" } });
+  });
+
+  // A pending derivation forces PENDING (null), even with a manual overlay present.
+  it("applyRecipeDerivation with pending=true publishes PENDING (null)", async () => {
+    const seen = await withTenant(fx.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cat = await createCatalogue(tx, { name: "C" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "x" },
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+        allergens: { nuts: { presence: "contains" } },
+      });
+      await applyRecipeDerivation(tx, p.id, { allergens: {}, pending: true });
+      const [row] = await listProducts(tx, cat.id);
+      return row!.allergens;
+    });
+    expect(seen).toBeNull();
   });
 
   it("renames a catalogue", async () => {

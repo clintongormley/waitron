@@ -2,6 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { catalogues, categories, locations, products } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { validateAllergens, type ProductAllergens } from "./allergens.js";
+import { republish, type RecipeDerivation } from "./derivation.js";
 import type { PricingUnit, VatClass } from "./pricing.js";
 
 /**
@@ -198,10 +199,45 @@ export async function renameCategory(tx: Transaction, id: string, name: string):
     .where(eq(categories.id, id));
 }
 
+/**
+ * Republish `products.allergens` from the two overlays on the row. `allergens` is a COMPUTED column:
+ * staff author `manual_allergens`, the recipe module writes `recipe_derivation`, and the published
+ * declaration is `republish(manual, derivation)` (derivation.ts). Called after any change to either
+ * overlay — createProduct/updateProduct (manual) or applyRecipeDerivation (derivation). `row!` follows
+ * the file's convention: `id` was just written in this same transaction, so the row is present.
+ */
+async function republishProduct(tx: Transaction, id: string): Promise<void> {
+  const [row] = await tx
+    .select({ manual: products.manualAllergens, derivation: products.recipeDerivation })
+    .from(products)
+    .where(eq(products.id, id));
+  const published = republish(row!.manual, row!.derivation);
+  await tx.update(products).set({ allergens: published }).where(eq(products.id, id));
+}
+
+/**
+ * Set a product's recipe-derived overlay and republish its declaration. The seam `@waitron/recipes`
+ * (Task 5) calls when a recipe or its ingredients change; `null` clears the derivation (no recipe),
+ * after which the published declaration reverts to the manual overlay alone.
+ */
+export async function applyRecipeDerivation(
+  tx: Transaction,
+  productId: string,
+  derivation: RecipeDerivation | null,
+): Promise<void> {
+  await tx
+    .update(products)
+    .set({ recipeDerivation: derivation, updatedAt: sql`now()` })
+    .where(eq(products.id, productId));
+  await republishProduct(tx, productId);
+}
+
 export async function createProduct(tx: Transaction, input: CreateProductInput): Promise<Product> {
   // Validate before the write: an unreviewed product stores null, a supplied map is checked against
   // the EU-14 taxonomy and rejected (throws `allergen.invalid_code`/`allergen.invalid_presence`)
-  // before any row is inserted.
+  // before any row is inserted. The map is the MANUAL overlay; at create there is no recipe, so the
+  // published `allergens` is `republish(manual, null)` — which is exactly `manual` (or null when
+  // unreviewed), preserving today's round-trip behaviour.
   const allergens = input.allergens === undefined ? null : validateAllergens(input.allergens);
   const [row] = await tx
     .insert(products)
@@ -214,7 +250,8 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
       unitPrice: input.unitPrice,
       vatClass: input.vatClass,
       active: input.active ?? true,
-      allergens,
+      manualAllergens: allergens,
+      allergens: republish(allergens, null),
       image: input.image ?? null,
     })
     .returning(PRODUCT_COLUMNS);
@@ -235,13 +272,23 @@ export async function updateProduct(
   id: string,
   patch: UpdateProductInput,
 ): Promise<void> {
-  // A supplied map is validated before the write; `null` (clear) and `undefined` (leave unchanged)
-  // both skip validation. `.set({...patch})` maps `allergens` straight to the jsonb column.
-  if (patch.allergens != null) validateAllergens(patch.allergens);
+  // `allergens` is the MANUAL overlay now, not the published column: split it out of the generic
+  // patch and write it to `manual_allergens`, then republish. A supplied map is validated before the
+  // write; `null` (clear) and `undefined` (leave unchanged) both skip validation, and only `null`
+  // reaches `manual_allergens`. The remaining `rest` keys map 1:1 to `products` columns, so the
+  // spread stays fully typed against `.set()` — no `Record<string, unknown>` widening. Republish only
+  // when `allergens` was in the patch: an unrelated edit must not disturb the published declaration.
+  const { allergens, ...rest } = patch;
+  if (allergens != null) validateAllergens(allergens);
   await tx
     .update(products)
-    .set({ ...patch, updatedAt: sql`now()` })
+    .set({
+      ...rest,
+      ...(allergens !== undefined ? { manualAllergens: allergens } : {}),
+      updatedAt: sql`now()`,
+    })
     .where(eq(products.id, id));
+  if (allergens !== undefined) await republishProduct(tx, id);
 }
 
 export async function deactivateProduct(tx: Transaction, id: string): Promise<void> {
