@@ -76,7 +76,11 @@ describe("approvals-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=approve-swap-sw1]")!.click();
     await flush(el);
     expect(api.decideSwap).toHaveBeenCalledWith("sw1", "approved");
-    expect(api.listPendingSwaps).toHaveBeenCalledTimes(2); // reloaded
+    expect(api.listPendingSwaps).toHaveBeenCalledTimes(2); // both queues reloaded via #loadQueues
+    expect(api.listPendingAbsences).toHaveBeenCalledTimes(2);
+    // A decide reloads only the queues, never the roster: staff is fetched once on connect and NOT
+    // refetched on a decide (eff#3 — #loadQueues, not the full #load).
+    expect(api.listStaff).toHaveBeenCalledTimes(1);
   });
 
   it("rejects an absence → calls decideAbsence with 'rejected'", async () => {

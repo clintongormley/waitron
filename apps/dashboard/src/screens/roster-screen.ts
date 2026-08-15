@@ -19,15 +19,8 @@ import type {
   Shift,
 } from "../api/client.js";
 import { selectStyles } from "../select-styles.js";
+import { MS_PER_DAY, mondayOf, today } from "../date-utils.js";
 
-const MS_PER_DAY = 86_400_000;
-
-/** The local Monday (YYYY-MM-DD) of the week `dateStr` falls in — mirrors roster-validation's weekStartOf. */
-function mondayOf(dateStr: string): string {
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  const mondayIndex = (d.getUTCDay() + 6) % 7; // Sun=0 → 6, Mon=1 → 0
-  return new Date(d.getTime() - mondayIndex * MS_PER_DAY).toISOString().slice(0, 10);
-}
 /** The 7 local dates Mon..Sun of the week starting at `monday`. */
 function weekDays(monday: string): string[] {
   const base = Date.parse(`${monday}T00:00:00Z`);
@@ -38,12 +31,6 @@ function weekDays(monday: string): string[] {
 /** The local wall date of an instant + its offset (the roster-validation localDate convention). */
 function localDate(instant: string, offsetMinutes: number): string {
   return new Date(Date.parse(instant) + offsetMinutes * 60_000).toISOString().slice(0, 10);
-}
-/** Today's date in UTC (YYYY-MM-DD) — the seed for the default week. `toISOString()` is UTC, so near
- * midnight this can name a different calendar day than the operator's local one; seeding from the
- * venue's local timezone is deferred (per-venue timezone is a later slice). */
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 /**

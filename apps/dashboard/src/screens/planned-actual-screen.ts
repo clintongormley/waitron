@@ -4,31 +4,14 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import type {
-  DashboardApi,
-  LocationSummary,
-  PersonSummary,
-  PlannedVsActualRow,
-} from "../api/client.js";
+import type { DashboardApi, LocationSummary, PlannedVsActualRow } from "../api/client.js";
 import { selectStyles } from "../select-styles.js";
+import { MS_PER_DAY, mondayOf, today } from "../date-utils.js";
+import { personNameMap, resolvePersonName } from "../person-utils.js";
 
-const MS_PER_DAY = 86_400_000;
-
-/** The local Monday (YYYY-MM-DD) of the week `dateStr` falls in — mirrors roster-validation's weekStartOf. */
-function mondayOf(dateStr: string): string {
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  const mondayIndex = (d.getUTCDay() + 6) % 7; // Sun=0 → 6, Mon=1 → 0
-  return new Date(d.getTime() - mondayIndex * MS_PER_DAY).toISOString().slice(0, 10);
-}
 /** The exclusive end of the week starting at `monday` — Monday + 7 days (the half-open [from, to)). */
 function weekEnd(monday: string): string {
   return new Date(Date.parse(`${monday}T00:00:00Z`) + 7 * MS_PER_DAY).toISOString().slice(0, 10);
-}
-/** Today's date in UTC (YYYY-MM-DD) — the seed for the default week. `toISOString()` is UTC, so near
- * midnight this can name a different calendar day than the operator's local one; seeding from the
- * venue's local timezone is deferred (per-venue timezone is a later slice, as in roster-screen). */
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 /**
@@ -99,10 +82,12 @@ export class PlannedActualScreen extends LitElement {
 
   @state() private locations: LocationSummary[] = [];
   @state() private locationId = "";
-  @state() private staff: PersonSummary[] = [];
   @state() private weekMonday = mondayOf(today());
   @state() private rows: PlannedVsActualRow[] = [];
   @state() private errorKey: string | null = null;
+  // A personId → displayName lookup rebuilt whenever the staff list loads (in #load), so #name is
+  // O(1) per rendered row rather than a per-row scan of the staff list.
+  #names = new Map<string, string>();
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -116,7 +101,7 @@ export class PlannedActualScreen extends LitElement {
     try {
       const [locations, staff] = await Promise.all([this.api.getLocations(), this.api.listStaff()]);
       this.locations = locations;
-      this.staff = staff;
+      this.#names = personNameMap(staff);
       if (locations.length === 0) {
         this.locationId = "";
         this.rows = [];
@@ -170,9 +155,10 @@ export class PlannedActualScreen extends LitElement {
     }
   }
 
-  /** A person's display name, or the raw id when a row references someone not in the staff list. */
+  /** A person's display name, or the raw id when a row references someone not in the staff list.
+   * Backed by the `#names` map built when the staff list loaded, so it is O(1) per rendered row. */
   #name(personId: string): string {
-    return this.staff.find((p) => p.personId === personId)?.displayName ?? personId;
+    return resolvePersonName(this.#names, personId);
   }
 
   /** The row's advisory flags as a space-joined label — no-show and/or unplanned, or "" for neither. */

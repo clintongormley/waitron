@@ -5,7 +5,8 @@ import "@waitron/ui/src/components/wt-button.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { absenceKindName } from "../i18n/domain.js";
-import type { DashboardApi, PendingAbsence, PendingSwap, PersonSummary } from "../api/client.js";
+import type { DashboardApi, PendingAbsence, PendingSwap } from "../api/client.js";
+import { personNameMap, resolvePersonName } from "../person-utils.js";
 
 /**
  * The management dashboard's APPROVALS SCREEN (design §3g): the two manager approve/reject queues —
@@ -71,35 +72,52 @@ export class ApprovalsScreen extends LitElement {
 
   @state() private swaps: PendingSwap[] = [];
   @state() private absences: PendingAbsence[] = [];
-  @state() private staff: PersonSummary[] = [];
   @state() private errorKey: string | null = null;
   @state() private busy = false;
+  // A personId → displayName lookup rebuilt whenever the staff list loads (in #load), so #name is
+  // O(1) per rendered row rather than a per-row scan of the staff list.
+  #names = new Map<string, string>();
 
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
   }
 
-  /** (Re)load both queues + the staff list for name resolution. A rejection becomes the error banner. */
+  /** The INITIAL load: the staff list (for name resolution) then both queues — mirrors
+   * roster-screen's `#load` (static data) vs `#loadRoster` (the reloadable part) split. A rejection
+   * anywhere becomes the error banner. */
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
-      const [swaps, absences, staff] = await Promise.all([
-        this.api.listPendingSwaps(),
-        this.api.listPendingAbsences(),
-        this.api.listStaff(),
-      ]);
-      this.swaps = swaps;
-      this.absences = absences;
-      this.staff = staff;
+      this.#names = personNameMap(await this.api.listStaff());
+      await this.#loadQueues();
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.#fail(error);
     }
   }
 
-  /** A person's display name, or the raw id when it is not in the loaded staff list. */
+  /** Reload just the two pending queues. A decide moves a row out of a queue but cannot change the
+   * staff roster, so the staff list is fetched once (in `#load`) and never refetched here. Throws to
+   * its caller's catch. */
+  async #loadQueues(): Promise<void> {
+    const [swaps, absences] = await Promise.all([
+      this.api.listPendingSwaps(),
+      this.api.listPendingAbsences(),
+    ]);
+    this.swaps = swaps;
+    this.absences = absences;
+  }
+
+  /** Surface a rejection as the `errorKey` banner — the thrown domain `{ code }`, or `server.internal`
+   * when the value carries none (a bare Error / network fault). The one place the fallback lives. */
+  #fail(error: unknown): void {
+    this.errorKey = (error as { code?: string }).code ?? "server.internal";
+  }
+
+  /** A person's display name, or the raw id when it is not in the loaded staff list. Backed by the
+   * `#names` map built when the staff list loaded, so it is O(1) per rendered row. */
   #name(personId: string): string {
-    return this.staff.find((p) => p.personId === personId)?.displayName ?? personId;
+    return resolvePersonName(this.#names, personId);
   }
 
   async #decideSwap(swapId: string, decision: "approved" | "rejected"): Promise<void> {
@@ -108,9 +126,9 @@ export class ApprovalsScreen extends LitElement {
     this.errorKey = null;
     try {
       await this.api.decideSwap(swapId, decision);
-      await this.#load();
+      await this.#loadQueues();
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.#fail(error);
     } finally {
       this.busy = false;
     }
@@ -122,9 +140,9 @@ export class ApprovalsScreen extends LitElement {
     this.errorKey = null;
     try {
       await this.api.decideAbsence(absenceId, decision);
-      await this.#load();
+      await this.#loadQueues();
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.#fail(error);
     } finally {
       this.busy = false;
     }
