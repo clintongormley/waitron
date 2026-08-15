@@ -131,9 +131,10 @@ shipped*) and nothing was left blocked or `needs-owner-review`; the run is finis
 slice 2, the payments fast lane (#85)** and **workforce roster management slice 2 (#87)** (split-shift
 *jornada partida* authoring, manager approve/reject of swaps + absences, and a planned-vs-actual view)
 — built in parallel worktrees via subagent-driven TDD (per-task + whole-branch review + fix wave +
-4-lens simplify + Copilot). A test-infra fix, **#88** (de-flakes the `fiscal-verifactu` drain
-1001-split test by making the drain's batch cap an injectable, defaulted param — production
-unchanged), is open and ready to land. The **management dashboard** slice-1 auth floor + catalogue
+4-lens simplify + Copilot). A test-infra fix, **#88**, also LANDED (2026-08-15) — de-flakes the `fiscal-verifactu` drain
+1001-split test by making the drain's batch cap an injectable, defaulted param (production
+unchanged; the ~1001-row fixture drops to ~4 rows, ~30s → ~90ms), removing that intermittent CI
+timeout for every future PR. The **management dashboard** slice-1 auth floor + catalogue
 authoring remain COMPLETE (1a #67 → 1d passkeys #71, row-edit #73, i18n #82, catalogue #78); its
 remote-access transport is a future slice.
 
@@ -158,6 +159,16 @@ One line per landed PR, newest first. The git log, the linked designs/plans, and
 detail — **this file is not a history** (see *How to keep this file honest*). Open follow-ups from
 these live under *Debt and odd jobs*; their designs/plans stay in `docs/superpowers/`.
 
+- **#88** De-flake the `fiscal-verifactu` `drain — 1001-split` CI timeout — the test seeded 1001 rows
+  through a per-row fixture (~4000 DB round-trips, ~32s in CI vs ~1.2s local, right on the 30s wall).
+  Root fix: the drain's batch cap `MAX_REGISTROS_POR_ENVIO` (1000, the AEAT XSD cap) becomes an
+  optional, defaulted `DrainDeps.maxRegistrosPorEnvio`, so the batching/starvation tests prove the
+  IDENTICAL split semantics with a ~4-row fixture (cap 3) instead of 1001 — ~30s → ~90ms.
+  **Production unchanged** (every non-test caller omits the field → 1000; `serialize.ts`'s XSD guard
+  and all submission/huella/registro logic untouched — verified by a fresh-context fiscal-safety
+  review); the injected cap is validated (integer in 1..1000, fail-fast — Copilot), proven by deletion.
+  Removes the flake for every future PR. This was the CLAUDE.md §2 "bump its timeout or shrink the
+  fixture" debt item — done as the shrink.
 - **#87** Workforce roster management — slice 2 (sub-project 16) — surfaces the remaining
   roster-management engine behind the management dashboard, the **manager-approval half**:
   **split-shift (*jornada partida*) authoring** (a populated person×day cell can now author a SECOND
