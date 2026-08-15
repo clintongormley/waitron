@@ -236,6 +236,9 @@ describe("decideSwap", () => {
   });
 
   it("throws swap.not_found for a swap that does not exist under the tenant", async () => {
+    // Prove by deletion: the conditional UPDATE matches nothing, so the cold-path `SELECT` finds no
+    // row → `swap.not_found`. Remove the `if (rows[0] === undefined) throw swap.not_found` branch and
+    // this reddens (it falls through to swap.not_decidable instead).
     const code = await codeOfRejection(() =>
       run((tx) =>
         decideSwap(tx, {
@@ -250,6 +253,9 @@ describe("decideSwap", () => {
   });
 
   it("throws swap.not_decidable for a REQUESTED swap (not yet accepted)", async () => {
+    // Prove by deletion: the `and status = 'accepted'` predicate on the UPDATE is the decidability
+    // guard. Remove it and this REQUESTED swap is wrongly UPDATEd (0-row path never taken, no throw),
+    // reddening this test.
     const requester = await seedPerson(suite.db, tenantId, `r-${crypto.randomUUID()}`);
     const toPerson = await seedPerson(suite.db, tenantId, `t-${crypto.randomUUID()}`);
     const fromShift = await insertDraftShift(suite.db, {

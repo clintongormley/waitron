@@ -106,30 +106,36 @@ export interface DecideSwapInput {
 
 /**
  * A manager approves or rejects an ACCEPTED swap — the `accepted → approved | rejected` transition
- * (design §3a). Reads the swap's status under the tenant; throws `swap.not_found` if absent (never
- * created, or hidden by RLS) and the new `swap.not_decidable` if its status is not `accepted` (a
- * `requested` swap has not been accepted yet; an `approved`/`rejected` one is terminal). Otherwise
- * UPDATEs `status = decision`, `decided_by_person_id`, `decided_at = now()`. PLANNING data — a plain
- * status flip, no chain. Who MAY decide is the route's gate (`swap.approve`), not this verb's.
+ * (design §3a). The success path is a single conditional UPDATE guarded on `status = 'accepted'`,
+ * setting `status = decision`, `decided_by_person_id` and `decided_at = now()` and `RETURNING id`
+ * (mirrors `setAbsenceStatus`) — one round trip in the common case. When it matches no row the swap is
+ * either absent or not decidable, and ONLY THEN a `SELECT` disambiguates: throws `swap.not_found` if
+ * absent (never created, or hidden by RLS), else the new `swap.not_decidable` (a `requested` swap has
+ * not been accepted yet; an `approved`/`rejected` one is terminal). PLANNING data — a plain status
+ * flip, no chain. Who MAY decide is the route's gate (`swap.approve`), not this verb's.
  */
 export async function decideSwap(tx: Transaction, input: DecideSwapInput): Promise<void> {
-  const { rows } = await tx.execute<{ status: ShiftSwapStatus }>(sql`
-    select status from shift_swaps
-    where tenant_id = ${input.tenantId} and id = ${input.swapId}
-    limit 1`);
-  const swap = rows[0];
-  if (swap === undefined) {
-    throw new AppError("swap.not_found", { tenantId: input.tenantId, swapId: input.swapId });
-  }
-  if (swap.status !== "accepted") {
-    throw new AppError("swap.not_decidable", { tenantId: input.tenantId, swapId: input.swapId });
-  }
-  await tx.execute(sql`
+  // The common case in ONE round trip: the UPDATE only fires while the swap is still `accepted`, and
+  // `RETURNING id` reports whether it matched — the `status = 'accepted'` predicate IS the decidability
+  // guard (delete it and a requested/terminal swap would be decided).
+  const { rows: decided } = await tx.execute<{ id: string }>(sql`
     update shift_swaps
     set status = ${input.decision},
         decided_by_person_id = ${input.decidedByPersonId},
         decided_at = now()
-    where tenant_id = ${input.tenantId} and id = ${input.swapId}`);
+    where tenant_id = ${input.tenantId} and id = ${input.swapId} and status = 'accepted'
+    returning id`);
+  if (decided.length > 0) return;
+  // No row matched: the swap is absent, or present but not `accepted`. One extra read on this cold
+  // path disambiguates which error to raise.
+  const { rows } = await tx.execute<{ status: ShiftSwapStatus }>(sql`
+    select status from shift_swaps
+    where tenant_id = ${input.tenantId} and id = ${input.swapId}
+    limit 1`);
+  if (rows[0] === undefined) {
+    throw new AppError("swap.not_found", { tenantId: input.tenantId, swapId: input.swapId });
+  }
+  throw new AppError("swap.not_decidable", { tenantId: input.tenantId, swapId: input.swapId });
 }
 
 /** One accepted-and-pending swap awaiting a manager decision (the approvals queue). */
