@@ -107,16 +107,6 @@ const ABSENCE_KIND_NAMES: NameTable = {
   unpaid: { en: "Unpaid leave", es: "Permiso sin sueldo" },
 };
 
-// The swap/absence lifecycle statuses shown on the approvals screen (@waitron/workforce
-// shift_swap_status ∪ absence_status). One shared table — the token sets overlap on
-// requested/approved/rejected — with a raw-value fallback.
-const DECISION_STATUS_NAMES: NameTable = {
-  requested: { en: "Requested", es: "Solicitado" },
-  accepted: { en: "Accepted", es: "Aceptado" },
-  approved: { en: "Approved", es: "Aprobado" },
-  rejected: { en: "Rejected", es: "Rechazado" },
-};
-
 /** A person's management role (staff / supervisor / manager / admin) → its display name. */
 export function roleName(value: string, locale: string = currentLocale()): string {
   return resolve(ROLE_NAMES, value, locale);
@@ -130,11 +120,6 @@ export function breachKindName(kind: string, locale: string = currentLocale()): 
 /** An absence kind (holiday / sick_leave / leave / unpaid) → its display name (raw-value fallback). */
 export function absenceKindName(kind: string, locale: string = currentLocale()): string {
   return resolve(ABSENCE_KIND_NAMES, kind, locale);
-}
-
-/** A swap/absence lifecycle status → its display name (raw-value fallback for an unmapped token). */
-export function decisionStatusName(status: string, locale: string = currentLocale()): string {
-  return resolve(DECISION_STATUS_NAMES, status, locale);
 }
 
 /** A person's account status (active / suspended) → its display name. */

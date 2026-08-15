@@ -128,7 +128,9 @@ export async function insertDraftShift(
 }
 
 /** An `absences` row for the tenant/person. Defaults to a 5–8 Jan holiday, status `requested`, no
- * note. Planning data (mutable). Returns its id. */
+ * note. `createdAt` defaults to the DB's `now()`; pass it to control ordering (the listPending suites
+ * seed OUT-OF-INSERT-ORDER timestamps to prove `order by created_at`). Planning data (mutable).
+ * Returns its id. */
 export async function insertAbsence(
   db: Database | Transaction,
   params: {
@@ -139,14 +141,16 @@ export async function insertAbsence(
     endsOn?: string;
     status?: string;
     note?: string | null;
+    createdAt?: string;
   },
 ): Promise<string> {
   const result = await db.execute<{ id: string }>(sql`
-    insert into absences (tenant_id, person_id, absence_kind, starts_on, ends_on, status, note)
+    insert into absences (tenant_id, person_id, absence_kind, starts_on, ends_on, status, note, created_at)
     values (
       ${params.tenantId}, ${params.personId}, ${params.kind ?? "holiday"},
       ${params.startsOn ?? "2026-01-05"}, ${params.endsOn ?? "2026-01-08"},
-      ${params.status ?? "requested"}, ${params.note ?? null}
+      ${params.status ?? "requested"}, ${params.note ?? null},
+      ${params.createdAt === undefined ? sql`default` : params.createdAt}
     )
     returning id`);
   return result.rows[0]!.id;
@@ -205,8 +209,10 @@ export async function insertShiftTemplate(
   return result.rows[0]!.id;
 }
 
-/** A `shift_swaps` row for the tenant. Status defaults to `requested`, `to_shift_id` null. Planning
- * data (mutable). Returns its id. */
+/** A `shift_swaps` row for the tenant. Status defaults to `requested`, `to_shift_id` null. `createdAt`
+ * defaults to the DB's `now()`; pass it to control ordering (the listPending suites seed
+ * OUT-OF-INSERT-ORDER timestamps to prove `order by created_at`). Planning data (mutable). Returns its
+ * id. */
 export async function insertShiftSwap(
   db: Database | Transaction,
   params: {
@@ -216,14 +222,16 @@ export async function insertShiftSwap(
     toPersonId: string;
     toShiftId?: string | null;
     status?: string;
+    createdAt?: string;
   },
 ): Promise<string> {
   const result = await db.execute<{ id: string }>(sql`
     insert into shift_swaps (
-      tenant_id, requested_by_person_id, from_shift_id, to_person_id, to_shift_id, status
+      tenant_id, requested_by_person_id, from_shift_id, to_person_id, to_shift_id, status, created_at
     ) values (
       ${params.tenantId}, ${params.requestedByPersonId}, ${params.fromShiftId},
-      ${params.toPersonId}, ${params.toShiftId ?? null}, ${params.status ?? "requested"}
+      ${params.toPersonId}, ${params.toShiftId ?? null}, ${params.status ?? "requested"},
+      ${params.createdAt === undefined ? sql`default` : params.createdAt}
     )
     returning id`);
   return result.rows[0]!.id;

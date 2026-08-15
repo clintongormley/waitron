@@ -69,18 +69,19 @@ function requireUuidParam(id: string, kind: string): string {
   return id;
 }
 
-/** Screen a `period` query/body value as a YYYY-MM-DD date that is BOTH well-shaped AND a real calendar
- * day. The regex alone admits impossible days (`2026-02-30`, `2026-13-01`), which would reach the
- * `::date` column as a 22008 → an opaque `server.internal` 500; the round-trip through `Date` (a
- * normalised or NaN result means the Y-M-D was not a real day) rejects them here as
- * `management.request_invalid` naming the field. */
-function requirePeriod(value: unknown): string {
+/** Screen a YYYY-MM-DD date value (a roster `period`, or a planned-vs-actual `from`/`to`) that is BOTH
+ * well-shaped AND a real calendar day. The regex alone admits impossible days (`2026-02-30`,
+ * `2026-13-01`), which would reach the `::date` column as a 22008 → an opaque `server.internal` 500;
+ * the round-trip through `Date` (a normalised or NaN result means the Y-M-D was not a real day) rejects
+ * them here as `management.request_invalid`. `field` names the offending parameter in the (log-only)
+ * error detail — `"period"`, `"from"` or `"to"` — mirroring `requireTimestamp`/`requireOffsetMinutes`. */
+function requirePeriod(value: unknown, field: string): string {
   if (typeof value !== "string" || !YYYY_MM_DD.test(value)) {
-    throw new AppError("management.request_invalid", { field: "period" });
+    throw new AppError("management.request_invalid", { field });
   }
   const asUtc = new Date(`${value}T00:00:00Z`);
   if (Number.isNaN(asUtc.getTime()) || asUtc.toISOString().slice(0, 10) !== value) {
-    throw new AppError("management.request_invalid", { field: "period" });
+    throw new AppError("management.request_invalid", { field });
   }
   return value;
 }
@@ -153,7 +154,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const locationId = requireUuidParam(c.req.query("locationId") ?? "", "LocationId");
-      const period = requirePeriod(c.req.query("period"));
+      const period = requirePeriod(c.req.query("period"), "period");
       const snapshot = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
         backend.getRoster(tx, { tenantId: deps.cfg.tenantId, locationId, period }),
       );
@@ -166,7 +167,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const body = (await c.req.json<{ locationId?: unknown; period?: unknown }>()) ?? {};
       const locationId = requireBodyUuid(body.locationId, "locationId");
-      const period = requirePeriod(body.period);
+      const period = requirePeriod(body.period, "period");
       const versionId = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
         backend.createRosterVersion(tx, { tenantId: deps.cfg.tenantId, locationId, period }),
       );
@@ -350,8 +351,8 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const locationId = requireUuidParam(c.req.query("locationId") ?? "", "LocationId");
-      const from = requirePeriod(c.req.query("from"));
-      const to = requirePeriod(c.req.query("to"));
+      const from = requirePeriod(c.req.query("from"), "from");
+      const to = requirePeriod(c.req.query("to"), "to");
       const rows = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
         backend.getPlannedVsActual(tx, {
           tenantId: deps.cfg.tenantId,

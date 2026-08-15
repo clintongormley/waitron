@@ -331,11 +331,16 @@ export class WorkforceBackend {
    *
    * The published-only predicate lives in the JOIN's ON clause, not in WHERE, so BOTH exclusions are
    * independently provable by deletion (CLAUDE.md §4). With the INNER JOIN it is exactly equivalent to
-   * a WHERE placement (an inner join drops unmatched rows either way), but under the negative-control
-   * mutations they separate: turning the join OUTER re-admits the null-version DRAFT (its `rv.id` match
-   * fails, so a WHERE `rv.status = 'published'` would still drop it on the NULL comparison and hide the
-   * regression), while dropping the `status = 'published'` term re-admits the SUPERSEDED version's row.
-   * Each guard then fails a different row's exclusion. The `starts_at + starts_offset_minutes` → local
+   * a WHERE placement (an inner join drops unmatched rows either way); the two negative-control
+   * mutations, however, are NOT symmetric, because the WHERE references only `s.*`. Turning the join
+   * OUTER re-admits BOTH the null-version DRAFT (no `rv.id` match) AND the SUPERSEDED version's shift
+   * (its `rv.status` fails the ON term): each keeps its shift row with NULL rv columns, and the s-only
+   * WHERE cannot drop either — so that mutation reddens, driven by the DRAFT (the row the drop-`status`
+   * mutation below leaves correctly excluded). Dropping the `status = 'published'` term instead
+   * re-admits ONLY the SUPERSEDED row (its `rv.id` still matches); the DRAFT stays out for want of any
+   * `rv.id`. Each guard is therefore necessary — one catches the DRAFT exclusion, the other the
+   * SUPERSEDED — even though the OUTER mutation happens to re-admit both. The
+   * `starts_at + starts_offset_minutes` → local
    * date expression is offset-aware (offset 0 in this slice, so local = UTC) and matches
    * publishRoster's shift-attach; `to_char` normalises the instants to UTC ISO so the pure comparator's
    * `Date.parse` sees a string under either driver. */

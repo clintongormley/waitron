@@ -194,7 +194,11 @@ describe("decideSwap", () => {
   async function acceptedSwap(): Promise<string> {
     const requester = await seedPerson(suite.db, tenantId, `req-${crypto.randomUUID()}`);
     const toPerson = await seedPerson(suite.db, tenantId, `to-${crypto.randomUUID()}`);
-    const fromShift = await insertDraftShift(suite.db, { tenantId, personId: requester, locationId });
+    const fromShift = await insertDraftShift(suite.db, {
+      tenantId,
+      personId: requester,
+      locationId,
+    });
     return insertShiftSwap(suite.db, {
       tenantId,
       requestedByPersonId: requester,
@@ -222,7 +226,9 @@ describe("decideSwap", () => {
 
   it("rejects an accepted swap (decision 'rejected')", async () => {
     const swapId = await acceptedSwap();
-    await run((tx) => decideSwap(tx, { tenantId, swapId, decision: "rejected", decidedByPersonId: null }));
+    await run((tx) =>
+      decideSwap(tx, { tenantId, swapId, decision: "rejected", decidedByPersonId: null }),
+    );
     const rows = await suite.db.execute<{ status: string }>(
       sql`select status from shift_swaps where id = ${swapId}`,
     );
@@ -246,7 +252,11 @@ describe("decideSwap", () => {
   it("throws swap.not_decidable for a REQUESTED swap (not yet accepted)", async () => {
     const requester = await seedPerson(suite.db, tenantId, `r-${crypto.randomUUID()}`);
     const toPerson = await seedPerson(suite.db, tenantId, `t-${crypto.randomUUID()}`);
-    const fromShift = await insertDraftShift(suite.db, { tenantId, personId: requester, locationId });
+    const fromShift = await insertDraftShift(suite.db, {
+      tenantId,
+      personId: requester,
+      locationId,
+    });
     const swapId = await insertShiftSwap(suite.db, {
       tenantId,
       requestedByPersonId: requester,
@@ -255,16 +265,22 @@ describe("decideSwap", () => {
       status: "requested",
     });
     const code = await codeOfRejection(() =>
-      run((tx) => decideSwap(tx, { tenantId, swapId, decision: "approved", decidedByPersonId: null })),
+      run((tx) =>
+        decideSwap(tx, { tenantId, swapId, decision: "approved", decidedByPersonId: null }),
+      ),
     );
     expect(code).toBe("swap.not_decidable");
   });
 
   it("throws swap.not_decidable for an already-approved swap (terminal state)", async () => {
     const swapId = await acceptedSwap();
-    await run((tx) => decideSwap(tx, { tenantId, swapId, decision: "approved", decidedByPersonId: null }));
+    await run((tx) =>
+      decideSwap(tx, { tenantId, swapId, decision: "approved", decidedByPersonId: null }),
+    );
     const code = await codeOfRejection(() =>
-      run((tx) => decideSwap(tx, { tenantId, swapId, decision: "rejected", decidedByPersonId: null })),
+      run((tx) =>
+        decideSwap(tx, { tenantId, swapId, decision: "rejected", decidedByPersonId: null }),
+      ),
     );
     expect(code).toBe("swap.not_decidable");
   });
@@ -289,27 +305,48 @@ describe("listPendingSwaps", () => {
       personId: requester,
       locationId: listLocation,
     });
-    const accepted = await insertShiftSwap(suite.db, {
+    const s3 = await insertDraftShift(suite.db, {
+      tenantId: listTenant,
+      personId: requester,
+      locationId: listLocation,
+    });
+    // TWO accepted swaps seeded OUT OF created_at ORDER: the FIRST-inserted carries the LATER
+    // timestamp, the SECOND-inserted the EARLIER one, so insertion order and created_at order
+    // DISAGREE. `order by created_at` must return [early, late]; delete it and the query falls back to
+    // physical/insert order [late, early] and the toEqual below reddens (CLAUDE.md §4 prove-by-deletion).
+    const acceptedLate = await insertShiftSwap(suite.db, {
       tenantId: listTenant,
       requestedByPersonId: requester,
       fromShiftId: s1,
       toPersonId: toPerson,
       status: "accepted",
+      createdAt: "2026-03-02T10:00:00Z",
     });
-    // A requested (not accepted) swap must NOT appear.
-    await insertShiftSwap(suite.db, {
+    const acceptedEarly = await insertShiftSwap(suite.db, {
       tenantId: listTenant,
       requestedByPersonId: requester,
       fromShiftId: s2,
+      toPersonId: toPerson,
+      status: "accepted",
+      createdAt: "2026-03-01T10:00:00Z",
+    });
+    // A requested (not accepted) swap must NOT appear (the status filter).
+    await insertShiftSwap(suite.db, {
+      tenantId: listTenant,
+      requestedByPersonId: requester,
+      fromShiftId: s3,
       toPersonId: toPerson,
       status: "requested",
     });
     const rows = await withTenant(suite.db, listTenant, (tx) =>
       listPendingSwaps(tx, { tenantId: listTenant }),
     );
-    expect(rows.map((r) => r.id)).toEqual([accepted]);
-    expect(rows[0]!.status).toBe("accepted");
+    // created_at ASC → [early, late], the REVERSE of insertion order; the requested swap is excluded.
+    expect(rows.map((r) => r.id)).toEqual([acceptedEarly, acceptedLate]);
+    expect(rows.map((r) => r.createdAt)).toEqual(["2026-03-01T10:00:00Z", "2026-03-02T10:00:00Z"]);
+    expect(rows.map((r) => r.status)).toEqual(["accepted", "accepted"]);
+    // Field mapping on the head row (the earlier-created accepted swap, from_shift s2).
     expect(rows[0]!.requestedByPersonId).toBe(requester);
-    expect(rows[0]!.fromShiftId).toBe(s1);
+    expect(rows[0]!.fromShiftId).toBe(s2);
   });
 });
