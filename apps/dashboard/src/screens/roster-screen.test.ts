@@ -4,8 +4,22 @@ import type { DashboardApi, PersonSummary, RosterSnapshot } from "../api/client.
 import { RosterScreen } from "./roster-screen.js";
 
 const staff: PersonSummary[] = [
-  { personId: "p1", displayName: "Ana", role: "staff", status: "active", hasPassword: false, hasTotp: false },
-  { personId: "p2", displayName: "Beto", role: "staff", status: "active", hasPassword: false, hasTotp: false },
+  {
+    personId: "p1",
+    displayName: "Ana",
+    role: "staff",
+    status: "active",
+    hasPassword: false,
+    hasTotp: false,
+  },
+  {
+    personId: "p2",
+    displayName: "Beto",
+    role: "staff",
+    status: "active",
+    hasPassword: false,
+    hasTotp: false,
+  },
 ];
 const locations = [{ id: "loc-1", name: "Main" }];
 const emptySnapshot: RosterSnapshot = { version: null, shifts: [] };
@@ -23,13 +37,24 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     ...overrides,
   } as unknown as DashboardApi;
 }
-async function flush(el: RosterScreen): Promise<void> { await new Promise((r) => setTimeout(r, 0)); await el.updateComplete; }
+async function flush(el: RosterScreen): Promise<void> {
+  await new Promise((r) => setTimeout(r, 0));
+  await el.updateComplete;
+}
 function emit(source: Element, type: string, detail: unknown): void {
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 const dialog = (el: RosterScreen) => el.shadowRoot!.querySelector("dashboard-shift-dialog")!;
 const draftSnapshot = (): RosterSnapshot => ({
-  version: { id: "v1", locationId: "loc-1", periodStart: "2026-03-02", periodEnd: "2026-03-08", status: "draft", publishedAt: null, publishedByPersonId: null },
+  version: {
+    id: "v1",
+    locationId: "loc-1",
+    periodStart: "2026-03-02",
+    periodEnd: "2026-03-08",
+    status: "draft",
+    publishedAt: null,
+    publishedByPersonId: null,
+  },
   shifts: [],
 });
 afterEach(cleanupWidgets);
@@ -41,7 +66,10 @@ describe("roster-screen", () => {
     await flush(el);
     expect(api.getLocations).toHaveBeenCalledTimes(1);
     expect(api.listStaff).toHaveBeenCalledTimes(1);
-    expect(api.getRoster).toHaveBeenCalledWith("loc-1", expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    expect(api.getRoster).toHaveBeenCalledWith(
+      "loc-1",
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    );
     expect(el.shadowRoot!.querySelectorAll("[data-test^=row-]")).toHaveLength(2);
   });
 
@@ -50,21 +78,34 @@ describe("roster-screen", () => {
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
     await flush(el);
     // Open a cell (person p1, the week's first day) and emit add-shift from the dialog.
-    (el as unknown as { openCell(personId: string, day: string): void }).openCell("p1", "2026-03-02");
+    (el as unknown as { openCell(personId: string, day: string): void }).openCell(
+      "p1",
+      "2026-03-02",
+    );
     await el.updateComplete;
     emit(dialog(el), "add-shift", {
-      personId: "p1", startsAt: "2026-03-02T09:00:00Z", startsOffsetMinutes: 0, endsAt: "2026-03-02T13:00:00Z", endsOffsetMinutes: 0, role: null,
+      personId: "p1",
+      startsAt: "2026-03-02T09:00:00Z",
+      startsOffsetMinutes: 0,
+      endsAt: "2026-03-02T13:00:00Z",
+      endsOffsetMinutes: 0,
+      role: null,
     });
     await flush(el);
     expect(api.createRosterVersion).toHaveBeenCalledWith("loc-1", expect.any(String));
-    expect(api.addShift).toHaveBeenCalledWith("v1", expect.objectContaining({ personId: "p1", locationId: "loc-1" }));
+    expect(api.addShift).toHaveBeenCalledWith(
+      "v1",
+      expect.objectContaining({ personId: "p1", locationId: "loc-1" }),
+    );
     expect(api.getRoster).toHaveBeenCalledTimes(2); // reloaded after the add
   });
 
   it("publishes and renders the returned breaches as an advisory banner (publish still succeeds)", async () => {
     const api = stubApi({
       getRoster: vi.fn().mockResolvedValue(draftSnapshot()),
-      publishRoster: vi.fn().mockResolvedValue({ breaches: [{ kind: "night_work", personId: "p1", shiftId: "s1", nightMinutes: 120 }] }),
+      publishRoster: vi.fn().mockResolvedValue({
+        breaches: [{ kind: "night_work", personId: "p1", shiftId: "s1", nightMinutes: 120 }],
+      }),
     });
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
     await flush(el);
@@ -89,7 +130,14 @@ describe("roster-screen", () => {
     await flush(el);
     (el as unknown as { openCell(p: string, d: string): void }).openCell("p1", "2026-03-02");
     await el.updateComplete;
-    const detail = { personId: "p1", startsAt: "2026-03-02T09:00:00Z", startsOffsetMinutes: 0, endsAt: "2026-03-02T13:00:00Z", endsOffsetMinutes: 0, role: null };
+    const detail = {
+      personId: "p1",
+      startsAt: "2026-03-02T09:00:00Z",
+      startsOffsetMinutes: 0,
+      endsAt: "2026-03-02T13:00:00Z",
+      endsOffsetMinutes: 0,
+      role: null,
+    };
     emit(dialog(el), "add-shift", detail);
     emit(dialog(el), "add-shift", detail);
     await flush(el);
@@ -112,7 +160,19 @@ describe("roster-screen", () => {
   it("edits an existing shift via update-shift and reloads", async () => {
     const snap: RosterSnapshot = {
       version: draftSnapshot().version,
-      shifts: [{ id: "s1", personId: "p1", locationId: "loc-1", startsAt: "2026-03-02T09:00:00Z", startsOffsetMinutes: 0, endsAt: "2026-03-02T13:00:00Z", endsOffsetMinutes: 0, role: "bar", rosterVersionId: "v1" }],
+      shifts: [
+        {
+          id: "s1",
+          personId: "p1",
+          locationId: "loc-1",
+          startsAt: "2026-03-02T09:00:00Z",
+          startsOffsetMinutes: 0,
+          endsAt: "2026-03-02T13:00:00Z",
+          endsOffsetMinutes: 0,
+          role: "bar",
+          rosterVersionId: "v1",
+        },
+      ],
     };
     const api = stubApi({ getRoster: vi.fn().mockResolvedValue(snap) });
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
@@ -134,7 +194,12 @@ describe("roster-screen", () => {
   });
 
   it("switching location and week reloads the roster", async () => {
-    const api = stubApi({ getLocations: vi.fn().mockResolvedValue([{ id: "loc-1", name: "Main" }, { id: "loc-2", name: "Annex" }]) });
+    const api = stubApi({
+      getLocations: vi.fn().mockResolvedValue([
+        { id: "loc-1", name: "Main" },
+        { id: "loc-2", name: "Annex" },
+      ]),
+    });
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
     await flush(el);
     const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=location-select]")!;
@@ -159,7 +224,15 @@ describe("roster-screen", () => {
 
   it("shows the published-readonly note and no publish button for a published week", async () => {
     const published: RosterSnapshot = {
-      version: { id: "v1", locationId: "loc-1", periodStart: "2026-03-02", periodEnd: "2026-03-08", status: "published", publishedAt: "2026-03-01T10:00:00Z", publishedByPersonId: "p9" },
+      version: {
+        id: "v1",
+        locationId: "loc-1",
+        periodStart: "2026-03-02",
+        periodEnd: "2026-03-08",
+        status: "published",
+        publishedAt: "2026-03-01T10:00:00Z",
+        publishedByPersonId: "p9",
+      },
       shifts: [],
     };
     const api = stubApi({ getRoster: vi.fn().mockResolvedValue(published) });
@@ -180,7 +253,14 @@ describe("roster-screen", () => {
     await flush(el);
     (el as unknown as { openCell(p: string, d: string): void }).openCell("p1", "2026-03-02");
     await el.updateComplete;
-    emit(dialog(el), "add-shift", { personId: "p1", startsAt: "2026-03-02T09:00:00Z", startsOffsetMinutes: 0, endsAt: "2026-03-02T08:00:00Z", endsOffsetMinutes: 0, role: null });
+    emit(dialog(el), "add-shift", {
+      personId: "p1",
+      startsAt: "2026-03-02T09:00:00Z",
+      startsOffsetMinutes: 0,
+      endsAt: "2026-03-02T08:00:00Z",
+      endsOffsetMinutes: 0,
+      role: null,
+    });
     await flush(el);
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("shift.invalid");
     expect((el as unknown as { busy: boolean }).busy).toBe(false);

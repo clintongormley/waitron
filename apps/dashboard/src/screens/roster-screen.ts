@@ -31,7 +31,9 @@ function mondayOf(dateStr: string): string {
 /** The 7 local dates Mon..Sun of the week starting at `monday`. */
 function weekDays(monday: string): string[] {
   const base = Date.parse(`${monday}T00:00:00Z`);
-  return Array.from({ length: 7 }, (_, i) => new Date(base + i * MS_PER_DAY).toISOString().slice(0, 10));
+  return Array.from({ length: 7 }, (_, i) =>
+    new Date(base + i * MS_PER_DAY).toISOString().slice(0, 10),
+  );
 }
 /** The local wall date of an instant + its offset (the roster-validation localDate convention). */
 function localDate(instant: string, offsetMinutes: number): string {
@@ -241,7 +243,8 @@ export class RosterScreen extends LitElement {
     try {
       let versionId = this.draftVersionId;
       if (versionId === null) {
-        versionId = (await this.api.createRosterVersion(this.locationId, this.weekMonday)).versionId;
+        versionId = (await this.api.createRosterVersion(this.locationId, this.weekMonday))
+          .versionId;
       }
       await this.api.addShift(versionId, { ...event.detail, locationId: this.locationId });
       this.dialogOpen = false;
@@ -307,9 +310,11 @@ export class RosterScreen extends LitElement {
   override render(): TemplateResult {
     return html`
       <h1>${t("roster.title")}</h1>
-      ${this.locations.length === 0
-        ? html`<p class="prompt" data-test="no-location">${t("roster.no_location")}</p>`
-        : this.#renderGrid()}
+      ${
+        this.locations.length === 0
+          ? html`<p class="prompt" data-test="no-location">${t("roster.no_location")}</p>`
+          : this.#renderGrid()
+      }
       <dashboard-shift-dialog
         .open=${this.dialogOpen}
         .day=${this.dialogDay}
@@ -332,9 +337,15 @@ export class RosterScreen extends LitElement {
       <div class="pickers">
         <label class="picker"
           >${t("roster.location")}
-          <select data-test="location-select" @change=${(e: Event) => void this.#onSelectLocation(e)}>
+          <select
+            data-test="location-select"
+            @change=${(e: Event) => void this.#onSelectLocation(e)}
+          >
             ${this.locations.map(
-              (l) => html`<option value=${l.id} .selected=${l.id === this.locationId}>${l.name}</option>`,
+              (l) =>
+                html`<option value=${l.id} .selected=${l.id === this.locationId}>
+                  ${l.name}
+                </option>`,
             )}
           </select>
         </label>
@@ -373,7 +384,10 @@ export class RosterScreen extends LitElement {
                             localDate(s.startsAt, s.startsOffsetMinutes) === day,
                         )
                         .map(
-                          (s) => html`<span>${s.startsAt.slice(11, 16)}–${s.endsAt.slice(11, 16)}</span>`,
+                          (s) =>
+                            html`<span
+                              >${s.startsAt.slice(11, 16)}–${s.endsAt.slice(11, 16)}</span
+                            >`,
                         )}
                     </td>
                   `,
@@ -383,29 +397,37 @@ export class RosterScreen extends LitElement {
           )}
         </tbody>
       </table>
-      ${this.draftVersionId !== null
-        ? html`<wt-button
-            variant="primary"
-            data-test="publish"
-            ?disabled=${this.busy}
-            @click=${() => void this.#onPublish()}
-            >${t("roster.publish")}</wt-button
-          >`
-        : nothing}
-      ${published
-        ? html`<p class="readonly" data-test="readonly">${t("roster.published_readonly")}</p>`
-        : nothing}
-      ${this.breaches.length > 0
-        ? html`<div class="breaches" role="status" data-test="breaches">
-            <p>${t("roster.breaches_intro")}</p>
-            <ul>
-              ${this.breaches.map((b) => html`<li>${breachKindName(b.kind)}</li>`)}
-            </ul>
-          </div>`
-        : nothing}
-      ${this.errorKey
-        ? html`<p class="error" role="alert" data-test="error">${codeMessage(this.errorKey)}</p>`
-        : nothing}
+      ${
+        this.draftVersionId !== null
+          ? html`<wt-button
+              variant="primary"
+              data-test="publish"
+              ?disabled=${this.busy}
+              @click=${() => void this.#onPublish()}
+              >${t("roster.publish")}</wt-button
+            >`
+          : nothing
+      }
+      ${
+        published
+          ? html`<p class="readonly" data-test="readonly">${t("roster.published_readonly")}</p>`
+          : nothing
+      }
+      ${
+        this.breaches.length > 0
+          ? html`<div class="breaches" role="status" data-test="breaches">
+              <p>${t("roster.breaches_intro")}</p>
+              <ul>
+                ${this.breaches.map((b) => html`<li>${breachKindName(b.kind)}</li>`)}
+              </ul>
+            </div>`
+          : nothing
+      }
+      ${
+        this.errorKey
+          ? html`<p class="error" role="alert" data-test="error">${codeMessage(this.errorKey)}</p>`
+          : nothing
+      }
     `;
   }
 }

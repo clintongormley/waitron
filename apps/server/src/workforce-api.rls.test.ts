@@ -27,39 +27,71 @@ function nextNif(): string {
   return `${String(72_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-interface Venue { tenantId: string; locationId: string; personId: string; managerCookie: string; staffCookie: string; }
+interface Venue {
+  tenantId: string;
+  locationId: string;
+  personId: string;
+  managerCookie: string;
+  staffCookie: string;
+}
 
 async function setupVenue(): Promise<Venue> {
   const venue = await applyVenue(
     planVenue({
-      country: "ES", taxId: nextNif(), legalName: "Deli Test SL",
+      country: "ES",
+      taxId: nextNif(),
+      legalName: "Deli Test SL",
       location: {
-        name: "Sala principal", fiscalTerritory: "ES-common", invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento", addressLine1: "Calle Mayor 1",
-        addressLine2: null, postalCode: "28013", city: "Madrid", province: "Madrid",
-        timeZone: "Europe/Madrid", dayCutover: "05:00",
+        name: "Sala principal",
+        fiscalTerritory: "ES-common",
+        invoiceLocales: [LOCALE],
+        operationDescription: "Venta en establecimiento",
+        addressLine1: "Calle Mayor 1",
+        addressLine2: null,
+        postalCode: "28013",
+        city: "Madrid",
+        province: "Madrid",
+        timeZone: "Europe/Madrid",
+        dayCutover: "05:00",
       },
-      tillName: "Caja 1", seriesCode: "A", rectificativeSeriesCode: "R",
-      admin: { displayName: "Administradora", pinHash: hashPin("1234"), passwordHash: hashPassword("dashPass123") },
+      tillName: "Caja 1",
+      seriesCode: "A",
+      rectificativeSeriesCode: "R",
+      admin: {
+        displayName: "Administradora",
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword("dashPass123"),
+      },
     }),
     { db: suite.admin },
   );
   const seeded = await withTenant(suite.admin, venue.tenantId, async (tx) => {
     await asAppUser(tx);
-    const loc = await tx.execute<{ id: string }>(sql`select id from locations where tenant_id = current_tenant_id() limit 1`);
+    const loc = await tx.execute<{ id: string }>(
+      sql`select id from locations where tenant_id = current_tenant_id() limit 1`,
+    );
     const mgr = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
       values (current_tenant_id(), 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
     const stf = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
       values (current_tenant_id(), 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
-    const mSes = await startManagementSession(tx, { tenantId: venue.tenantId, personId: mgr.rows[0]!.id });
-    const sSes = await startManagementSession(tx, { tenantId: venue.tenantId, personId: stf.rows[0]!.id });
+    const mSes = await startManagementSession(tx, {
+      tenantId: venue.tenantId,
+      personId: mgr.rows[0]!.id,
+    });
+    const sSes = await startManagementSession(tx, {
+      tenantId: venue.tenantId,
+      personId: stf.rows[0]!.id,
+    });
     return { locationId: loc.rows[0]!.id, personId: mgr.rows[0]!.id, mSid: mSes.id, sSid: sSes.id };
   });
   return {
-    tenantId: venue.tenantId, locationId: seeded.locationId, personId: seeded.personId,
-    managerCookie: `${MANAGEMENT_COOKIE}=${seeded.mSid}`, staffCookie: `${MANAGEMENT_COOKIE}=${seeded.sSid}`,
+    tenantId: venue.tenantId,
+    locationId: seeded.locationId,
+    personId: seeded.personId,
+    managerCookie: `${MANAGEMENT_COOKIE}=${seeded.mSid}`,
+    staffCookie: `${MANAGEMENT_COOKIE}=${seeded.sSid}`,
   };
 }
 
@@ -69,10 +101,20 @@ function mountApp(tenantId: string): Hono {
   return app;
 }
 
-async function send(app: Hono, method: string, path: string, cookie: string, body?: unknown): Promise<Response> {
+async function send(
+  app: Hono,
+  method: string,
+  path: string,
+  cookie: string,
+  body?: unknown,
+): Promise<Response> {
   const headers: Record<string, string> = { cookie };
   if (body !== undefined) headers["content-type"] = "application/json";
-  return app.request(path, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  return app.request(path, {
+    method,
+    headers,
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
 }
 
 describe("Workforce API over real Postgres (RLS end-to-end)", () => {
@@ -102,31 +144,60 @@ describe("Workforce API over real Postgres (RLS end-to-end)", () => {
     expect(bLocIds).not.toContain(a.locationId);
 
     // A authors a draft for its own location + week.
-    const createA = await send(appA, "POST", "/management-api/roster", a.managerCookie, { locationId: a.locationId, period: "2026-03-02" });
+    const createA = await send(appA, "POST", "/management-api/roster", a.managerCookie, {
+      locationId: a.locationId,
+      period: "2026-03-02",
+    });
     expect(createA.status).toBe(201);
     const versionA = ((await createA.json()) as { versionId: string }).versionId;
     await send(appA, "POST", `/management-api/roster/${versionA}/shifts`, a.managerCookie, {
-      personId: a.personId, locationId: a.locationId,
-      startsAt: "2026-03-02T09:00:00Z", startsOffsetMinutes: 0, endsAt: "2026-03-02T13:00:00Z", endsOffsetMinutes: 0, role: null,
+      personId: a.personId,
+      locationId: a.locationId,
+      startsAt: "2026-03-02T09:00:00Z",
+      startsOffsetMinutes: 0,
+      endsAt: "2026-03-02T13:00:00Z",
+      endsOffsetMinutes: 0,
+      role: null,
     });
 
     // A sees its own draft + shift.
-    const readA = await send(appA, "GET", `/management-api/roster?locationId=${a.locationId}&period=2026-03-02`, a.managerCookie);
+    const readA = await send(
+      appA,
+      "GET",
+      `/management-api/roster?locationId=${a.locationId}&period=2026-03-02`,
+      a.managerCookie,
+    );
     const snapA = (await readA.json()) as { version: { id: string } | null; shifts: unknown[] };
     expect(snapA.version?.id).toBe(versionA);
     expect(snapA.shifts).toHaveLength(1);
 
     // B reading A's location id sees NOTHING — RLS row-hides A's version + shifts (the load-bearing
     // differential; if asAppUser were dropped this would return A's draft).
-    const bReadsA = await send(appB, "GET", `/management-api/roster?locationId=${a.locationId}&period=2026-03-02`, b.managerCookie);
+    const bReadsA = await send(
+      appB,
+      "GET",
+      `/management-api/roster?locationId=${a.locationId}&period=2026-03-02`,
+      b.managerCookie,
+    );
     expect(bReadsA.status).toBe(200);
     expect(await bReadsA.json()).toEqual({ version: null, shifts: [] });
 
     // B cannot mutate A's shift either — RLS hides it, so the id is roster.not_found from B's side.
-    const bAddsToAsVersion = await send(appB, "POST", `/management-api/roster/${versionA}/shifts`, b.managerCookie, {
-      personId: b.personId, locationId: b.locationId,
-      startsAt: "2026-03-02T09:00:00Z", startsOffsetMinutes: 0, endsAt: "2026-03-02T13:00:00Z", endsOffsetMinutes: 0, role: null,
-    });
+    const bAddsToAsVersion = await send(
+      appB,
+      "POST",
+      `/management-api/roster/${versionA}/shifts`,
+      b.managerCookie,
+      {
+        personId: b.personId,
+        locationId: b.locationId,
+        startsAt: "2026-03-02T09:00:00Z",
+        startsOffsetMinutes: 0,
+        endsAt: "2026-03-02T13:00:00Z",
+        endsOffsetMinutes: 0,
+        role: null,
+      },
+    );
     expect(bAddsToAsVersion.status).toBe(404); // roster.not_found — A's version is invisible to B
   });
 
@@ -138,25 +209,61 @@ describe("Workforce API over real Postgres (RLS end-to-end)", () => {
     const missing = "00000000-0000-0000-0000-000000000000";
     const expect403 = async (res: Response) => {
       expect(res.status).toBe(403);
-      expect((await res.json()) as { error: { code: string } }).toMatchObject({ error: { code: "authorization.not_permitted" } });
+      expect((await res.json()) as { error: { code: string } }).toMatchObject({
+        error: { code: "authorization.not_permitted" },
+      });
     };
-    await expect403(await send(app, "GET", `/management-api/roster?locationId=${locationId}&period=2026-03-02`, staffCookie));
-    await expect403(await send(app, "POST", "/management-api/roster", staffCookie, { locationId, period: "2026-03-02" }));
-    await expect403(await send(app, "POST", `/management-api/roster/${missing}/shifts`, staffCookie, {
-      personId: missing, locationId, startsAt: "2026-03-02T09:00:00Z", startsOffsetMinutes: 0, endsAt: "2026-03-02T13:00:00Z", endsOffsetMinutes: 0, role: null,
-    }));
-    await expect403(await send(app, "DELETE", `/management-api/roster/shifts/${missing}`, staffCookie));
-    await expect403(await send(app, "POST", `/management-api/roster/${missing}/publish`, staffCookie));
+    await expect403(
+      await send(
+        app,
+        "GET",
+        `/management-api/roster?locationId=${locationId}&period=2026-03-02`,
+        staffCookie,
+      ),
+    );
+    await expect403(
+      await send(app, "POST", "/management-api/roster", staffCookie, {
+        locationId,
+        period: "2026-03-02",
+      }),
+    );
+    await expect403(
+      await send(app, "POST", `/management-api/roster/${missing}/shifts`, staffCookie, {
+        personId: missing,
+        locationId,
+        startsAt: "2026-03-02T09:00:00Z",
+        startsOffsetMinutes: 0,
+        endsAt: "2026-03-02T13:00:00Z",
+        endsOffsetMinutes: 0,
+        role: null,
+      }),
+    );
+    await expect403(
+      await send(app, "DELETE", `/management-api/roster/shifts/${missing}`, staffCookie),
+    );
+    await expect403(
+      await send(app, "POST", `/management-api/roster/${missing}/publish`, staffCookie),
+    );
   });
 
   it("publishes end-to-end under RLS and returns the breaches array", async () => {
     const v = await setupVenue();
     // Seed the location's convenio_config (as admin — superuser bypasses RLS; tenant_id set explicitly).
-    await suite.admin.execute(sql`insert into convenio_config (tenant_id, location_id) values (${v.tenantId}, ${v.locationId})`);
+    await suite.admin.execute(
+      sql`insert into convenio_config (tenant_id, location_id) values (${v.tenantId}, ${v.locationId})`,
+    );
     const app = mountApp(v.tenantId);
-    const create = await send(app, "POST", "/management-api/roster", v.managerCookie, { locationId: v.locationId, period: "2026-06-01" });
+    const create = await send(app, "POST", "/management-api/roster", v.managerCookie, {
+      locationId: v.locationId,
+      period: "2026-06-01",
+    });
     const versionId = ((await create.json()) as { versionId: string }).versionId;
-    const res = await send(app, "POST", `/management-api/roster/${versionId}/publish`, v.managerCookie);
+    const res = await send(
+      app,
+      "POST",
+      `/management-api/roster/${versionId}/publish`,
+      v.managerCookie,
+    );
     expect(res.status).toBe(200);
     expect((await res.json()) as { breaches: unknown[] }).toEqual({ breaches: [] });
   });

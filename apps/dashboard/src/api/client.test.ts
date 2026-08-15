@@ -434,9 +434,13 @@ describe("DashboardApi — roster", () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(snapshot));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.getRoster("loc-1", "2026-03-02")).toEqual(snapshot);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/roster?locationId=loc-1&period=2026-03-02", {
-      method: "GET", credentials: "include",
-    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/roster?locationId=loc-1&period=2026-03-02",
+      {
+        method: "GET",
+        credentials: "include",
+      },
+    );
   });
 
   it("createRosterVersion POSTs { locationId, period }", async () => {
@@ -444,19 +448,31 @@ describe("DashboardApi — roster", () => {
     const api = new DashboardApi("", fetchImpl);
     expect(await api.createRosterVersion("loc-1", "2026-03-02")).toEqual({ versionId: "v1" });
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/roster", {
-      method: "POST", credentials: "include",
+      method: "POST",
+      credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ locationId: "loc-1", period: "2026-03-02" }),
     });
   });
 
   it("addShift POSTs the shift under the version and returns { shiftId }", async () => {
-    const input = { personId: "p1", locationId: "loc-1", startsAt: "2026-03-02T09:00:00Z", startsOffsetMinutes: 0, endsAt: "2026-03-02T13:00:00Z", endsOffsetMinutes: 0, role: null };
+    const input = {
+      personId: "p1",
+      locationId: "loc-1",
+      startsAt: "2026-03-02T09:00:00Z",
+      startsOffsetMinutes: 0,
+      endsAt: "2026-03-02T13:00:00Z",
+      endsOffsetMinutes: 0,
+      role: null,
+    };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ shiftId: "s1" }, true, 201));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.addShift("v1", input)).toEqual({ shiftId: "s1" });
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/roster/v1/shifts", {
-      method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify(input),
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
     });
   });
 
@@ -465,18 +481,31 @@ describe("DashboardApi — roster", () => {
     const api = new DashboardApi("", fetchImpl);
     await api.updateShift("s1", { role: "bar" });
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/roster/shifts/s1", {
-      method: "PATCH", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ role: "bar" }),
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ role: "bar" }),
     });
     await api.removeShift("s1");
-    expect(fetchImpl).toHaveBeenLastCalledWith("/management-api/roster/shifts/s1", { method: "DELETE", credentials: "include" });
+    expect(fetchImpl).toHaveBeenLastCalledWith("/management-api/roster/shifts/s1", {
+      method: "DELETE",
+      credentials: "include",
+    });
   });
 
   it("publishRoster POSTs and returns { breaches }", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ breaches: [{ kind: "night_work", personId: "p1", shiftId: "s1", nightMinutes: 120 }] }));
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse({
+        breaches: [{ kind: "night_work", personId: "p1", shiftId: "s1", nightMinutes: 120 }],
+      }),
+    );
     const api = new DashboardApi("", fetchImpl);
     const out = await api.publishRoster("v1");
     expect(out.breaches[0]!.kind).toBe("night_work");
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/roster/v1/publish", { method: "POST", credentials: "include" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/roster/v1/publish", {
+      method: "POST",
+      credentials: "include",
+    });
   });
 
   it("getLocations GETs the location list", async () => {
@@ -484,6 +513,9 @@ describe("DashboardApi — roster", () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(locs));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.getLocations()).toEqual(locs);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/locations", { method: "GET", credentials: "include" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/locations", {
+      method: "GET",
+      credentials: "include",
+    });
   });
 });

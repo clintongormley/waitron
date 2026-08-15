@@ -501,7 +501,10 @@ export class WorkforceBackend {
    */
   async addShift(tx: Transaction, input: AddShiftInput): Promise<string> {
     if (Date.parse(input.startsAt) >= Date.parse(input.endsAt)) {
-      throw new AppError("shift.invalid", { tenantId: input.tenantId, reason: "ends_not_after_starts" });
+      throw new AppError("shift.invalid", {
+        tenantId: input.tenantId,
+        reason: "ends_not_after_starts",
+      });
     }
     const status = await this.rosterVersionStatus(tx, input.tenantId, input.versionId); // throws roster.not_found
     if (status !== "draft") {
@@ -528,7 +531,10 @@ export class WorkforceBackend {
     const startsAt = input.startsAt ?? shift.startsAt;
     const endsAt = input.endsAt ?? shift.endsAt;
     if (Date.parse(startsAt) >= Date.parse(endsAt)) {
-      throw new AppError("shift.invalid", { tenantId: input.tenantId, reason: "ends_not_after_starts" });
+      throw new AppError("shift.invalid", {
+        tenantId: input.tenantId,
+        reason: "ends_not_after_starts",
+      });
     }
     await tx.execute(sql`
       update shifts set
@@ -544,7 +550,9 @@ export class WorkforceBackend {
   /** Deletes a shift on a DRAFT version. Same guards as `updateShift`. */
   async removeShift(tx: Transaction, input: { tenantId: string; shiftId: string }): Promise<void> {
     await this.shiftForWrite(tx, input.tenantId, input.shiftId);
-    await tx.execute(sql`delete from shifts where tenant_id = ${input.tenantId} and id = ${input.shiftId}`);
+    await tx.execute(
+      sql`delete from shifts where tenant_id = ${input.tenantId} and id = ${input.shiftId}`,
+    );
   }
 
   /** Reads a shift + its version's status, throwing `shift.not_found` (no such shift) or

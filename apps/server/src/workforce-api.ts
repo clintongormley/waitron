@@ -67,11 +67,13 @@ function requireBodyString(v: unknown, field: string): string {
   return v;
 }
 function requireBodyUuid(v: unknown, field: string): string {
-  if (typeof v !== "string" || !isUuid(v)) throw new AppError("management.request_invalid", { field });
+  if (typeof v !== "string" || !isUuid(v))
+    throw new AppError("management.request_invalid", { field });
   return v;
 }
 function requireBodyInt(v: unknown, field: string): number {
-  if (typeof v !== "number" || !Number.isInteger(v)) throw new AppError("management.request_invalid", { field });
+  if (typeof v !== "number" || !Number.isInteger(v))
+    throw new AppError("management.request_invalid", { field });
   return v;
 }
 function requireNullableString(v: unknown, field: string): string | null {
@@ -84,7 +86,10 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      await authorizeManager(tx, { managementSessionId: sessionId, permission: SCHEDULE_PERMISSION });
+      await authorizeManager(tx, {
+        managementSessionId: sessionId,
+        permission: SCHEDULE_PERMISSION,
+      });
       return fn(tx);
     });
 
@@ -141,8 +146,15 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const role = requireNullableString(body.role, "role");
       const shiftId = await gated(sessionId, (tx) =>
         backend.addShift(tx, {
-          tenantId: deps.cfg.tenantId, versionId, personId, locationId,
-          startsAt, startsOffsetMinutes, endsAt, endsOffsetMinutes, role,
+          tenantId: deps.cfg.tenantId,
+          versionId,
+          personId,
+          locationId,
+          startsAt,
+          startsOffsetMinutes,
+          endsAt,
+          endsOffsetMinutes,
+          role,
         }),
       );
       return c.json({ shiftId }, 201);
@@ -154,12 +166,18 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const shiftId = requireUuidParam(c.req.param("shiftId"), "ShiftId");
       const body = (await c.req.json<Record<string, unknown>>()) ?? {};
-      const patch: import("@waitron/workforce").UpdateShiftInput = { tenantId: deps.cfg.tenantId, shiftId };
+      const patch: import("@waitron/workforce").UpdateShiftInput = {
+        tenantId: deps.cfg.tenantId,
+        shiftId,
+      };
       if (body.personId !== undefined) patch.personId = requireBodyUuid(body.personId, "personId");
-      if (body.startsAt !== undefined) patch.startsAt = requireBodyString(body.startsAt, "startsAt");
+      if (body.startsAt !== undefined)
+        patch.startsAt = requireBodyString(body.startsAt, "startsAt");
       if (body.endsAt !== undefined) patch.endsAt = requireBodyString(body.endsAt, "endsAt");
-      if (body.startsOffsetMinutes !== undefined) patch.startsOffsetMinutes = requireBodyInt(body.startsOffsetMinutes, "startsOffsetMinutes");
-      if (body.endsOffsetMinutes !== undefined) patch.endsOffsetMinutes = requireBodyInt(body.endsOffsetMinutes, "endsOffsetMinutes");
+      if (body.startsOffsetMinutes !== undefined)
+        patch.startsOffsetMinutes = requireBodyInt(body.startsOffsetMinutes, "startsOffsetMinutes");
+      if (body.endsOffsetMinutes !== undefined)
+        patch.endsOffsetMinutes = requireBodyInt(body.endsOffsetMinutes, "endsOffsetMinutes");
       if (body.role !== undefined) patch.role = requireNullableString(body.role, "role");
       await gated(sessionId, (tx) => backend.updateShift(tx, patch));
       return c.body(null, 204);
@@ -170,7 +188,9 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const shiftId = requireUuidParam(c.req.param("shiftId"), "ShiftId");
-      await gated(sessionId, (tx) => backend.removeShift(tx, { tenantId: deps.cfg.tenantId, shiftId }));
+      await gated(sessionId, (tx) =>
+        backend.removeShift(tx, { tenantId: deps.cfg.tenantId, shiftId }),
+      );
       return c.body(null, 204);
     }),
   );
@@ -188,7 +208,10 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
           managementSessionId: sessionId,
           permission: SCHEDULE_PERMISSION,
         });
-        const version = await backend.getRosterVersion(tx, { tenantId: deps.cfg.tenantId, versionId });
+        const version = await backend.getRosterVersion(tx, {
+          tenantId: deps.cfg.tenantId,
+          versionId,
+        });
         const ruleset = await resolveWorkTimeRuleset(tx, {
           tenantId: deps.cfg.tenantId,
           locationId: version.locationId,

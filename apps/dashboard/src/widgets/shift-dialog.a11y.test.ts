@@ -14,9 +14,15 @@ import type { Shift } from "../api/client.js";
 afterEach(cleanupWidgets);
 
 const shift: Shift = {
-  id: "s1", personId: "p1", locationId: "loc-1",
-  startsAt: "2026-03-02T09:00:00Z", startsOffsetMinutes: 0,
-  endsAt: "2026-03-02T13:00:00Z", endsOffsetMinutes: 0, role: "bar", rosterVersionId: "v1",
+  id: "s1",
+  personId: "p1",
+  locationId: "loc-1",
+  startsAt: "2026-03-02T09:00:00Z",
+  startsOffsetMinutes: 0,
+  endsAt: "2026-03-02T13:00:00Z",
+  endsOffsetMinutes: 0,
+  role: "bar",
+  rosterVersionId: "v1",
 };
 
 describe.each(["light", "dark"] as const)("shift-dialog a11y (%s theme)", (theme) => {

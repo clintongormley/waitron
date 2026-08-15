@@ -86,7 +86,10 @@ const ALLERGEN_NAMES: NameTable = {
 // RosterBreachKind), shown in the publish banner. A raw string-keyed LOCAL copy of the token set, same
 // bundle-decoupling reason as the tables above.
 const BREACH_KIND_NAMES: NameTable = {
-  rest_too_short: { en: "Too little rest between shifts", es: "Descanso insuficiente entre turnos" },
+  rest_too_short: {
+    en: "Too little rest between shifts",
+    es: "Descanso insuficiente entre turnos",
+  },
   exceeds_daily_max: { en: "Over the daily maximum", es: "Supera el máximo diario" },
   exceeds_weekly_max: { en: "Over the weekly maximum", es: "Supera el máximo semanal" },
   overtime_cap_exceeded: { en: "Over the overtime cap", es: "Supera el límite de horas extra" },

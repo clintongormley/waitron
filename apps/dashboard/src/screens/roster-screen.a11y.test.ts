@@ -14,8 +14,22 @@ import type { DashboardApi, PersonSummary, RosterSnapshot } from "../api/client.
  * navigable by a screen reader.
  */
 const staff: PersonSummary[] = [
-  { personId: "p1", displayName: "Ana", role: "staff", status: "active", hasPassword: false, hasTotp: false },
-  { personId: "p2", displayName: "Beto", role: "staff", status: "active", hasPassword: false, hasTotp: false },
+  {
+    personId: "p1",
+    displayName: "Ana",
+    role: "staff",
+    status: "active",
+    hasPassword: false,
+    hasTotp: false,
+  },
+  {
+    personId: "p2",
+    displayName: "Beto",
+    role: "staff",
+    status: "active",
+    hasPassword: false,
+    hasTotp: false,
+  },
 ];
 const locations = [{ id: "loc-1", name: "Main" }];
 // Today's local date — always in the current week the screen defaults to — so the shift renders in a cell.
@@ -49,9 +63,27 @@ describe.each(["light", "dark"] as const)("roster-screen a11y (%s theme)", (them
 
   it("renders accessibly for a draft week with shifts", async () => {
     const snapshot: RosterSnapshot = {
-      version: { id: "v1", locationId: "loc-1", periodStart: day, periodEnd: day, status: "draft", publishedAt: null, publishedByPersonId: null },
+      version: {
+        id: "v1",
+        locationId: "loc-1",
+        periodStart: day,
+        periodEnd: day,
+        status: "draft",
+        publishedAt: null,
+        publishedByPersonId: null,
+      },
       shifts: [
-        { id: "s1", personId: "p1", locationId: "loc-1", startsAt: `${day}T09:00:00Z`, startsOffsetMinutes: 0, endsAt: `${day}T13:00:00Z`, endsOffsetMinutes: 0, role: "bar", rosterVersionId: "v1" },
+        {
+          id: "s1",
+          personId: "p1",
+          locationId: "loc-1",
+          startsAt: `${day}T09:00:00Z`,
+          startsOffsetMinutes: 0,
+          endsAt: `${day}T13:00:00Z`,
+          endsOffsetMinutes: 0,
+          role: "bar",
+          rosterVersionId: "v1",
+        },
       ],
     };
     const { el, host } = await mountWidget<RosterScreen>(

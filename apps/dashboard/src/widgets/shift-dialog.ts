@@ -42,10 +42,18 @@ export interface UpdateShiftDetail {
  */
 @customElement("dashboard-shift-dialog")
 export class ShiftDialog extends LitElement {
-  static override styles = [baseStyles, css`
-    :host { display: block; }
-    .field { display: block; margin-bottom: var(--wt-space-4); }
-  `];
+  static override styles = [
+    baseStyles,
+    css`
+      :host {
+        display: block;
+      }
+      .field {
+        display: block;
+        margin-bottom: var(--wt-space-4);
+      }
+    `,
+  ];
 
   @property({ type: Boolean, reflect: true }) open = false;
   /** The local date (YYYY-MM-DD) of the grid cell this dialog authors. */
@@ -78,41 +86,91 @@ export class ShiftDialog extends LitElement {
     const endsAt = `${this.day}T${this.end}:00Z`;
     const role = this.shiftRole.trim() === "" ? null : this.shiftRole.trim();
     if (this.shift) {
-      this.dispatchEvent(new CustomEvent<UpdateShiftDetail>("update-shift", {
-        detail: { shiftId: this.shift.id, patch: { startsAt, startsOffsetMinutes: 0, endsAt, endsOffsetMinutes: 0, role } },
-        bubbles: true, composed: true,
-      }));
+      this.dispatchEvent(
+        new CustomEvent<UpdateShiftDetail>("update-shift", {
+          detail: {
+            shiftId: this.shift.id,
+            patch: { startsAt, startsOffsetMinutes: 0, endsAt, endsOffsetMinutes: 0, role },
+          },
+          bubbles: true,
+          composed: true,
+        }),
+      );
       return;
     }
-    this.dispatchEvent(new CustomEvent<AddShiftDetail>("add-shift", {
-      detail: { personId: this.personId, startsAt, startsOffsetMinutes: 0, endsAt, endsOffsetMinutes: 0, role },
-      bubbles: true, composed: true,
-    }));
+    this.dispatchEvent(
+      new CustomEvent<AddShiftDetail>("add-shift", {
+        detail: {
+          personId: this.personId,
+          startsAt,
+          startsOffsetMinutes: 0,
+          endsAt,
+          endsOffsetMinutes: 0,
+          role,
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   #remove(event: Event): void {
     event.stopPropagation();
     if (this.busy || !this.shift) return;
-    this.dispatchEvent(new CustomEvent("remove-shift", { detail: { shiftId: this.shift.id }, bubbles: true, composed: true }));
+    this.dispatchEvent(
+      new CustomEvent("remove-shift", {
+        detail: { shiftId: this.shift.id },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   override render() {
-    return html`
-      <wt-dialog heading=${this.shift ? t("roster.edit_shift") : t("roster.new_shift")} .open=${this.open} @wt-close=${() => (this.open = false)}>
-        <wt-input class="field" data-test="shift-start" type="time" label=${t("roster.shift_start")}
-          .value=${this.start} @wt-change=${(e: CustomEvent<{ value: string }>) => (this.start = e.detail.value)}></wt-input>
-        <wt-input class="field" data-test="shift-end" type="time" label=${t("roster.shift_end")}
-          .value=${this.end} @wt-change=${(e: CustomEvent<{ value: string }>) => (this.end = e.detail.value)}></wt-input>
-        <wt-input class="field" data-test="shift-role" label=${t("roster.shift_role")}
-          .value=${this.shiftRole} @wt-change=${(e: CustomEvent<{ value: string }>) => (this.shiftRole = e.detail.value)}></wt-input>
-        ${this.shift ? html`<wt-button slot="footer" variant="secondary" data-test="remove" ?disabled=${this.busy} @click=${(e: Event) => this.#remove(e)}>${t("action.remove")}</wt-button>` : nothing}
-        <wt-button slot="footer" variant="primary" data-test="confirm" ?disabled=${this.busy} @click=${(e: Event) => this.#confirm(e)}>
-          ${this.shift ? t("action.save") : t("action.create")}
-        </wt-button>
-      </wt-dialog>`;
+    return html` <wt-dialog
+      heading=${this.shift ? t("roster.edit_shift") : t("roster.new_shift")}
+      .open=${this.open}
+      @wt-close=${() => (this.open = false)}
+    >
+      <wt-input
+        class="field"
+        data-test="shift-start"
+        type="time"
+        label=${t("roster.shift_start")}
+        .value=${this.start}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => (this.start = e.detail.value)}
+      ></wt-input>
+      <wt-input
+        class="field"
+        data-test="shift-end"
+        type="time"
+        label=${t("roster.shift_end")}
+        .value=${this.end}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => (this.end = e.detail.value)}
+      ></wt-input>
+      <wt-input
+        class="field"
+        data-test="shift-role"
+        label=${t("roster.shift_role")}
+        .value=${this.shiftRole}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => (this.shiftRole = e.detail.value)}
+      ></wt-input>
+      ${this.shift ? html`<wt-button slot="footer" variant="secondary" data-test="remove" ?disabled=${this.busy} @click=${(e: Event) => this.#remove(e)}>${t("action.remove")}</wt-button>` : nothing}
+      <wt-button
+        slot="footer"
+        variant="primary"
+        data-test="confirm"
+        ?disabled=${this.busy}
+        @click=${(e: Event) => this.#confirm(e)}
+      >
+        ${this.shift ? t("action.save") : t("action.create")}
+      </wt-button>
+    </wt-dialog>`;
   }
 }
 
 declare global {
-  interface HTMLElementTagNameMap { "dashboard-shift-dialog": ShiftDialog; }
+  interface HTMLElementTagNameMap {
+    "dashboard-shift-dialog": ShiftDialog;
+  }
 }

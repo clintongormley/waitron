@@ -119,7 +119,8 @@ export const en = {
   "roster.publish": "Publish",
   "roster.no_location": "No location configured yet.",
   "roster.breaches_intro": "Published with advisory warnings:",
-  "roster.published_readonly": "This week is published — create changes as a new draft (coming soon).",
+  "roster.published_readonly":
+    "This week is published — create changes as a new draft (coming soon).",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -215,7 +216,8 @@ export const es: Record<StringKey, string> = {
   "roster.publish": "Publicar",
   "roster.no_location": "Aún no hay ningún local configurado.",
   "roster.breaches_intro": "Publicado con avisos:",
-  "roster.published_readonly": "Esta semana está publicada — crea los cambios como un nuevo borrador (próximamente).",
+  "roster.published_readonly":
+    "Esta semana está publicada — crea los cambios como un nuevo borrador (próximamente).",
 };
 
 // Locale → catalogue. `en` is included as its own catalogue so an explicit

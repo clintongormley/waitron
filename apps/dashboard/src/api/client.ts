@@ -497,18 +497,26 @@ export class DashboardApi {
   /** `GET /management-api/roster?locationId=&period=` — the week's draft-or-published snapshot + shifts. */
   getRoster(locationId: string, period: string): Promise<RosterSnapshot> {
     return this.#request<RosterSnapshot>(
-      `/management-api/roster?locationId=${locationId}&period=${period}`, "GET",
+      `/management-api/roster?locationId=${locationId}&period=${period}`,
+      "GET",
     );
   }
 
   /** `POST /management-api/roster` — open a draft for the week; returns `{ versionId }` (201). */
   createRosterVersion(locationId: string, period: string): Promise<{ versionId: string }> {
-    return this.#request<{ versionId: string }>("/management-api/roster", "POST", { locationId, period });
+    return this.#request<{ versionId: string }>("/management-api/roster", "POST", {
+      locationId,
+      period,
+    });
   }
 
   /** `POST …/roster/:versionId/shifts` — add a planned shift; returns `{ shiftId }` (201). */
   addShift(versionId: string, input: ShiftInput): Promise<{ shiftId: string }> {
-    return this.#request<{ shiftId: string }>(`/management-api/roster/${versionId}/shifts`, "POST", input);
+    return this.#request<{ shiftId: string }>(
+      `/management-api/roster/${versionId}/shifts`,
+      "POST",
+      input,
+    );
   }
 
   /** `PATCH …/roster/shifts/:shiftId` — edit a shift's fields. Answers an empty 204. */
@@ -523,7 +531,10 @@ export class DashboardApi {
 
   /** `POST …/roster/:versionId/publish` — publish the draft; returns the advisory `{ breaches }`. */
   publishRoster(versionId: string): Promise<{ breaches: RosterBreach[] }> {
-    return this.#request<{ breaches: RosterBreach[] }>(`/management-api/roster/${versionId}/publish`, "POST");
+    return this.#request<{ breaches: RosterBreach[] }>(
+      `/management-api/roster/${versionId}/publish`,
+      "POST",
+    );
   }
 
   /**

@@ -61,9 +61,14 @@ it("has a sentence for each roster/shift/convenio code (shift-planning slice 1)"
   // not.toBe(GENERIC_ES) assertion goes red. GENERIC is not exported, so its Spanish text is inlined.
   const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
   for (const code of [
-    "roster.draft_exists", "roster.not_draft", "roster.not_found",
-    "roster.already_published", "roster.period_already_published", "shift.not_found",
-    "shift.invalid", "convenio.not_found",
+    "roster.draft_exists",
+    "roster.not_draft",
+    "roster.not_found",
+    "roster.already_published",
+    "roster.period_already_published",
+    "shift.not_found",
+    "shift.invalid",
+    "convenio.not_found",
   ]) {
     expect(codeMessage(code, "es")).not.toBe(code);
     expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
