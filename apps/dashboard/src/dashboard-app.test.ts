@@ -38,6 +38,10 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     getLayout: vi.fn().mockResolvedValue({ definition: [], receipt: {} }),
     putLayout: vi.fn().mockResolvedValue(undefined),
     putReceipt: vi.fn().mockResolvedValue(undefined),
+    // The roster screen the nav mounts loads these on connect; resolve them so navigating to it leaves
+    // no stray rejection.
+    getLocations: vi.fn().mockResolvedValue([{ id: "loc-1", name: "Main" }]),
+    getRoster: vi.fn().mockResolvedValue({ version: null, shifts: [] }),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -53,6 +57,7 @@ const staff = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-staf
 const catalogue = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-catalogue-screen");
 const layout = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-layout-screen");
 const receipt = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-receipt-screen");
+const roster = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-roster-screen");
 const logoutBtn = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]");
 const navStaff = (el: DashboardApp) =>
@@ -63,13 +68,16 @@ const navLayout = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-layout]");
 const navReceipt = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-receipt]");
+const navRoster = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-roster]");
 
-/** The four logged-in screen tags — exactly one is mounted at a time. */
+/** The five logged-in screen tags — exactly one is mounted at a time. */
 const SCREEN_TAGS = [
   "dashboard-staff-screen",
   "dashboard-catalogue-screen",
   "dashboard-layout-screen",
   "dashboard-receipt-screen",
+  "dashboard-roster-screen",
 ] as const;
 
 /** The screen tags currently mounted in the shell (should always be exactly one when logged in). */
@@ -202,6 +210,18 @@ describe("dashboard-app", () => {
     await flush(el);
     expect(staff(el)).toBeTruthy();
     expect(catalogue(el)).toBeNull();
+  });
+
+  it("navigates to the roster (shifts) screen", async () => {
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(navRoster(el)).toBeTruthy();
+    navRoster(el)!.click();
+    await flush(el);
+    expect(roster(el)).toBeTruthy();
+    expect(mountedScreens(el)).toEqual(["dashboard-roster-screen"]);
+    expect(countH1(el)).toBe(1);
   });
 
   // The logged-in shell now switches between FOUR screens (staff / catalogue / layout / receipt); the

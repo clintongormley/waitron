@@ -10,6 +10,7 @@ import "./screens/staff-screen.js";
 import "./screens/catalogue-screen.js";
 import "./screens/layout-screen.js";
 import "./screens/receipt-screen.js";
+import "./screens/roster-screen.js";
 import type { DashboardApi } from "./api/client.js";
 
 /**
@@ -18,7 +19,7 @@ import type { DashboardApi } from "./api/client.js";
  * `receipt` are the four LOGGED-IN faces the nav switches between; all carry the same chrome (nav +
  * logout).
  */
-type Screen = "login" | "staff" | "catalogue" | "layout" | "receipt";
+type Screen = "login" | "staff" | "catalogue" | "layout" | "receipt" | "roster";
 
 /**
  * The management dashboard's ROOT element — the shell that turns the screens into a working app.
@@ -171,6 +172,12 @@ export class DashboardApp extends LitElement {
             @click=${() => (this.screen = "receipt")}
             >${t("nav.receipt")}</wt-button
           >
+          <wt-button
+            variant=${this.screen === "roster" ? "primary" : "secondary"}
+            data-test="nav-roster"
+            @click=${() => (this.screen = "roster")}
+            >${t("nav.roster")}</wt-button
+          >
         </nav>
         <wt-button variant="secondary" data-test="logout" @click=${() => void this.#onLogout()}
           >${t("action.logout")}</wt-button
@@ -194,6 +201,8 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-layout-screen .api=${this.api}></dashboard-layout-screen>`;
       case "receipt":
         return html`<dashboard-receipt-screen .api=${this.api}></dashboard-receipt-screen>`;
+      case "roster":
+        return html`<dashboard-roster-screen .api=${this.api}></dashboard-roster-screen>`;
       default:
         return html`<dashboard-staff-screen .api=${this.api}></dashboard-staff-screen>`;
     }

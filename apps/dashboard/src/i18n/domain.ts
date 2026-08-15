@@ -82,9 +82,39 @@ const ALLERGEN_NAMES: NameTable = {
   molluscs: { en: "Molluscs", es: "Moluscos" },
 };
 
+// The 7 advisory roster-breach kinds `validateRoster` reports (`@waitron/workforce`'s
+// RosterBreachKind), shown in the publish banner. A raw string-keyed LOCAL copy of the token set, same
+// bundle-decoupling reason as the tables above.
+const BREACH_KIND_NAMES: NameTable = {
+  rest_too_short: { en: "Too little rest between shifts", es: "Descanso insuficiente entre turnos" },
+  exceeds_daily_max: { en: "Over the daily maximum", es: "Supera el máximo diario" },
+  exceeds_weekly_max: { en: "Over the weekly maximum", es: "Supera el máximo semanal" },
+  overtime_cap_exceeded: { en: "Over the overtime cap", es: "Supera el límite de horas extra" },
+  weekly_rest_insufficient: { en: "Insufficient weekly rest", es: "Descanso semanal insuficiente" },
+  break_owed: { en: "A break is owed", es: "Se debe un descanso" },
+  night_work: { en: "Night work", es: "Trabajo nocturno" },
+};
+
+// The three roster-version statuses (`@waitron/workforce`'s roster_version_status).
+const ROSTER_STATUS_NAMES: NameTable = {
+  draft: { en: "Draft", es: "Borrador" },
+  published: { en: "Published", es: "Publicado" },
+  superseded: { en: "Superseded", es: "Reemplazado" },
+};
+
 /** A person's management role (staff / supervisor / manager / admin) → its display name. */
 export function roleName(value: string, locale: string = currentLocale()): string {
   return resolve(ROLE_NAMES, value, locale);
+}
+
+/** An advisory roster-breach kind → its display name (raw-value fallback for an unmapped kind). */
+export function breachKindName(kind: string, locale: string = currentLocale()): string {
+  return resolve(BREACH_KIND_NAMES, kind, locale);
+}
+
+/** A roster-version status (draft / published / superseded) → its display name. */
+export function rosterStatusName(status: string, locale: string = currentLocale()): string {
+  return resolve(ROSTER_STATUS_NAMES, status, locale);
 }
 
 /** A person's account status (active / suspended) → its display name. */
