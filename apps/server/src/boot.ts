@@ -39,6 +39,7 @@ import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
+import { mountWorkforceApi } from "./workforce-api.js";
 import { mountMedia } from "./media-api.js";
 import { readOrderFlow } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
@@ -314,6 +315,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     },
     log,
   );
+  // The dashboard's gated shift-planning surface (roster authoring + publish) on the SAME app, the
+  // identical convention. Reuses the EXACT db + tenant (till.tenantId, this venue's one tenant); no
+  // fiscal backend, clock, card provider or media store — these routes touch only roster_versions /
+  // shifts / convenio_config / locations. Routes only; the schedule.manage gate runs per request.
+  mountWorkforceApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
   // The PUBLIC read half of the product-image feature on the SAME app — the `mountWebhook` /
   // `mountTillApi` / `mountManagementApi` convention again. Deliberately UNAUTHENTICATED and taking
   // no `db`/session: it serves bytes from `config.mediaDir` (the store `mkdirSync` above ensured),
