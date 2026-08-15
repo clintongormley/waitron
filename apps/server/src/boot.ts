@@ -16,6 +16,7 @@ import { AppError } from "@waitron/shared";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { loadConfig, loadSyncConfig } from "./config.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
+import { codeOf } from "./error-code.js";
 import { createLogger } from "./logger.js";
 import {
   createHealthState,
@@ -399,15 +400,17 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       runLane("ordered", config.minTickMs),
       runLane("fast", syncConfig.fastMinIdleMs),
     ]).then(() => {});
-    // A SECOND, benign subscription so a lane that settles by rejection (an unexpected throw escaping
+    // A SECOND subscription so a lane that settles by rejection (an unexpected throw escaping
     // runSyncPull's own per-peer catch) is never a process-level unhandled rejection in the window
     // BEFORE close() runs — the window the single-worker slice never had, because `syncWorker` was
     // then the same promise the caller already held. This does NOT swallow the rejection for close():
     // `syncWorker` still rejects, so close()'s own `await syncWorker.catch(() => {})` below is still
     // the load-bearing teardown-ordering guard (its removal still fails the rejecting-worker test).
     // In production runSyncPull never rejects (its loop backs off every per-peer error), so this only
-    // ever fires under a mocked worker in the test — the same defensive posture close()'s catch takes.
-    syncWorker.catch(() => {});
+    // ever fires under a mocked worker in the test — but an EMPTY catch here would drop that signal
+    // silently if it ever did happen for real, with sync stopped and no log line to say why. Log it
+    // instead, the same `codeOf`-classified shape `loop.ts` and `error-boundary.ts` already use.
+    syncWorker.catch((err) => log("error", "sync.worker_rejected", { errorCode: codeOf(err) }));
   }
 
   // `buildServeOptions` turns the plain-HTTP options into HTTPS ones when `config.tls` is set,
