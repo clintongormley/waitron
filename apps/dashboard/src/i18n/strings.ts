@@ -117,6 +117,7 @@ export const en = {
   "roster.week": "Week",
   "roster.location": "Location",
   "roster.publish": "Publish",
+  "roster.add_another": "Add another",
   "roster.no_location": "No location configured yet.",
   "roster.breaches_intro": "Published with advisory warnings:",
   "roster.published_readonly":
@@ -214,6 +215,7 @@ export const es: Record<StringKey, string> = {
   "roster.week": "Semana",
   "roster.location": "Local",
   "roster.publish": "Publicar",
+  "roster.add_another": "Añadir otro",
   "roster.no_location": "Aún no hay ningún local configurado.",
   "roster.breaches_intro": "Publicado con avisos:",
   "roster.published_readonly":
