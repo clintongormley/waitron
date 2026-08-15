@@ -37,8 +37,8 @@ TDD + whole-branch review + Copilot:**
 
 Both are commercial-lane and non-fiscal, and the migration-journal collision risk is low (the
 workforce UI adds no `packages/db` migration; sync's migrations live in its own `drizzle/`), so they
-can proceed independently. A first-draft transport protocol spec sits on branch
-`docs/sif-sync-protocol-design`. See *Now* for each track's state.
+were built independently in parallel worktrees. (The first-draft `docs/sif-sync-protocol-design`
+branch was superseded by the landed slice's spec/plan and removed.) See *Recently shipped*.
 
 ---
 
