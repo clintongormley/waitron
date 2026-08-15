@@ -13,7 +13,12 @@ import {
   type TimeEntryRecord,
   type WorkforceEntryKind,
 } from "./projection.js";
-import { validateRoster, type PlannedShift, type RosterBreach } from "./roster-validation.js";
+import {
+  validateRoster,
+  weekStartOf,
+  type PlannedShift,
+  type RosterBreach,
+} from "./roster-validation.js";
 import type { WorkTimeRuleset } from "./ruleset.js";
 // Side-effect: registers this package's attendance.*/employment.* codes so `new AppError(...)`
 // below type-checks against the shared registry (packages/shared reachability rule).
@@ -112,7 +117,10 @@ export interface PublishRosterInput {
 export interface CreateRosterVersionInput {
   tenantId: string;
   locationId: string;
-  /** The Monday (YYYY-MM-DD) of the week to author — period_start; period_end is derived as +6 days. */
+  /** ANY day (YYYY-MM-DD) of the week to author. The engine NORMALIZES it to that week's Monday, which
+   * becomes period_start (period_end is then derived as +6 days), so a non-Monday caller (a date
+   * picker) can never open a mid-week roster and any two days in one calendar week collide on the
+   * same draft. */
   period: string;
 }
 
@@ -396,18 +404,22 @@ export class WorkforceBackend {
 
   /**
    * Opens a DRAFT roster version for one location's week (design §3a) — planning data (mutable),
-   * inserted with status 'draft' and a null publish stamp. `period_end` is derived in SQL as the
-   * inclusive Sunday (`+ 6` days), so no date value round-trips through TypeScript. Throws
-   * `roster.draft_exists` when a draft for this (tenant, location, week) already exists — the
+   * inserted with status 'draft' and a null publish stamp. `input.period` is NORMALIZED to its week
+   * Monday first (`weekStartOf`, the same helper the guardrail buckets use), so a non-Monday caller
+   * cannot open a mid-week roster and two different days of one calendar week map to the same
+   * period_start — closing the mid-week + duplicate-draft hole structurally. `period_end` is derived
+   * in SQL as the inclusive Sunday (`+ 6` days), so no date value round-trips through TypeScript.
+   * Throws `roster.draft_exists` when a draft for this (tenant, location, week) already exists — the
    * published-uniqueness index does not cover drafts, so this check-then-insert is the guard.
    * Slice-1 single-author screen: a concurrent double-create could still fork two drafts (no draft
    * unique index — that would be a migration); acceptable and documented here.
    */
   async createRosterVersion(tx: Transaction, input: CreateRosterVersionInput): Promise<string> {
+    const period = weekStartOf(input.period);
     const existing = await tx.execute<{ id: string }>(sql`
       select id from roster_versions
       where tenant_id = ${input.tenantId} and location_id = ${input.locationId}
-        and period_start = ${input.period} and status = 'draft'
+        and period_start = ${period} and status = 'draft'
       limit 1`);
     if (existing.rows.length > 0) {
       throw new AppError("roster.draft_exists", {
@@ -417,7 +429,7 @@ export class WorkforceBackend {
     }
     const { rows } = await tx.execute<{ id: string }>(sql`
       insert into roster_versions (tenant_id, location_id, period_start, period_end)
-      values (${input.tenantId}, ${input.locationId}, ${input.period}, ${input.period}::date + 6)
+      values (${input.tenantId}, ${input.locationId}, ${period}, ${period}::date + 6)
       returning id`);
     return rows[0]!.id;
   }
@@ -425,12 +437,15 @@ export class WorkforceBackend {
   /**
    * Reads the roster snapshot for one location's week (design §3a) — the current DRAFT (what is being
    * edited) or, when there is none, the current PUBLISHED version, plus its attached shifts. Returns
-   * `{ version: null, shifts: [] }` for a week with no roster.
+   * `{ version: null, shifts: [] }` for a week with no roster. `input.period` is NORMALIZED to its
+   * week Monday first, the SAME snap `createRosterVersion` applies, so a non-Monday query (from a date
+   * picker) still finds the week's roster rather than missing it.
    */
   async getRoster(
     tx: Transaction,
     input: { tenantId: string; locationId: string; period: string },
   ): Promise<RosterSnapshot> {
+    const period = weekStartOf(input.period);
     // Prefer the DRAFT (what is being edited); fall back to the current PUBLISHED version for the week.
     // `period_start/end::text`: node-postgres parses a `date` column into a JS Date, PGlite into a
     // string — the same driver divergence `attachedShifts` handles with `to_char`. The `::text` cast
@@ -441,7 +456,7 @@ export class WorkforceBackend {
         published_by_person_id
       from roster_versions
       where tenant_id = ${input.tenantId} and location_id = ${input.locationId}
-        and period_start = ${input.period} and status in ('draft', 'published')
+        and period_start = ${period} and status in ('draft', 'published')
       order by case when status = 'draft' then 0 else 1 end
       limit 1`);
     const row = rows[0];
@@ -496,16 +511,12 @@ export class WorkforceBackend {
   /**
    * Adds a planned shift to a DRAFT roster version (design §3a), attaching it directly
    * (`roster_version_id = versionId`). Refuses a malformed interval up front (`shift.invalid`, not the
-   * `shifts_interval_ck` 500), a missing version (`roster.not_found`, via `rosterVersionStatus`) and a
-   * non-draft version (`roster.not_draft`). Planning data — a plain INSERT, no chain.
+   * `shifts_interval_ck` 500 or a `timestamptz` 22007), a missing version (`roster.not_found`, via
+   * `rosterVersionStatus`) and a non-draft version (`roster.not_draft`). Planning data — a plain
+   * INSERT, no chain.
    */
   async addShift(tx: Transaction, input: AddShiftInput): Promise<string> {
-    if (Date.parse(input.startsAt) >= Date.parse(input.endsAt)) {
-      throw new AppError("shift.invalid", {
-        tenantId: input.tenantId,
-        reason: "ends_not_after_starts",
-      });
-    }
+    assertShiftInterval(input.tenantId, input.startsAt, input.endsAt);
     const status = await this.rosterVersionStatus(tx, input.tenantId, input.versionId); // throws roster.not_found
     if (status !== "draft") {
       throw new AppError("roster.not_draft", {
@@ -525,17 +536,15 @@ export class WorkforceBackend {
 
   /** Edits a shift on a DRAFT version. Reads the shift + its version status (`shift.not_found` if the
    * shift is gone, `roster.not_draft` if its version is published). Validates the EFFECTIVE interval
-   * (patch value ?? current) so a partial edit cannot land a malformed interval as a 500 — `shift.invalid`. */
+   * (patch value ?? current) so a partial edit cannot land a malformed interval as a 500 —
+   * `shift.invalid`. The stored value is always a parseable UTC ISO instant, so a NaN in the effective
+   * interval can only come from the patch, i.e. `assertShiftInterval` screens exactly the field(s) the
+   * patch supplies. */
   async updateShift(tx: Transaction, input: UpdateShiftInput): Promise<void> {
     const shift = await this.shiftForWrite(tx, input.tenantId, input.shiftId);
     const startsAt = input.startsAt ?? shift.startsAt;
     const endsAt = input.endsAt ?? shift.endsAt;
-    if (Date.parse(startsAt) >= Date.parse(endsAt)) {
-      throw new AppError("shift.invalid", {
-        tenantId: input.tenantId,
-        reason: "ends_not_after_starts",
-      });
-    }
+    assertShiftInterval(input.tenantId, startsAt, endsAt);
     await tx.execute(sql`
       update shifts set
         person_id = ${input.personId ?? shift.personId},
@@ -1006,6 +1015,26 @@ export class WorkforceBackend {
 /** The UTC ISO instant `deltaDays` from a local date's midnight — bounds the fetch window. */
 function shiftDay(date: string, deltaDays: number): string {
   return new Date(Date.parse(`${date}T00:00:00Z`) + deltaDays * MS_PER_DAY).toISOString();
+}
+
+/**
+ * Screens a shift's interval before the row reaches the `timestamptz` column, throwing `shift.invalid`
+ * (never a driver error) in two cases — shared by `addShift` and `updateShift`:
+ *   - either endpoint UNPARSEABLE — `Date.parse` is `NaN`, and because `NaN >= NaN` is `false` a bare
+ *     ordering guard would let it through to a 22007 at the DB (`reason: "unparseable_timestamp"`);
+ *   - ends not strictly after starts (`reason: "ends_not_after_starts"`) — exactly equal is invalid too.
+ * The engine verb is a public `@waitron/workforce` API and must honour this contract itself, even
+ * though the HTTP route also screens the inputs (`requireTimestamp`).
+ */
+function assertShiftInterval(tenantId: string, startsAt: string, endsAt: string): void {
+  const startMs = Date.parse(startsAt);
+  const endMs = Date.parse(endsAt);
+  if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+    throw new AppError("shift.invalid", { tenantId, reason: "unparseable_timestamp" });
+  }
+  if (startMs >= endMs) {
+    throw new AppError("shift.invalid", { tenantId, reason: "ends_not_after_starts" });
+  }
 }
 
 /** The raw `roster_versions` shape `getRoster`/`getRosterVersion` read — snake_case, dates cast to

@@ -303,6 +303,32 @@ describe("createRosterVersion", () => {
     );
     expect(other).toEqual(expect.any(String));
   });
+
+  it("normalizes a non-Monday period to that week's Monday (no mid-week rosters)", async () => {
+    // A date picker (or a direct API caller) can hand any day of the week. The engine snaps it to the
+    // canonical Monday so the roster is a whole Mon–Sun week, never a mid-week Wed–Tue one.
+    const versionId = await run(
+      (tx) => backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-11-04" }), // a Wednesday
+    );
+    const row = await suite.db.execute<{ period_start: string; period_end: string }>(
+      sql`select period_start, period_end from roster_versions where id = ${versionId}`,
+    );
+    expect(row.rows[0]!.period_start).toBe("2026-11-02"); // that week's Monday
+    expect(row.rows[0]!.period_end).toBe("2026-11-08"); // the inclusive Sunday
+  });
+
+  it("refuses a second draft for two DIFFERENT non-Monday days in the SAME week — roster.draft_exists", async () => {
+    // The duplicate-draft hole: without normalization the draft_exists guard keys on the exact
+    // period_start, so two different mid-week days would each fork a draft for one calendar week.
+    // Normalized, both map to the same Monday and the second collides.
+    await run((tx) =>
+      backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-11-11" }),
+    ); // Wednesday
+    const code = await codeOfRejection(() =>
+      run((tx) => backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-11-12" })),
+    ); // Thursday, same week
+    expect(code).toBe("roster.draft_exists");
+  });
 });
 
 describe("getRoster / getRosterVersion", () => {
@@ -325,6 +351,18 @@ describe("getRoster / getRosterVersion", () => {
     expect(snapshot.version?.status).toBe("draft");
     expect(snapshot.shifts.map((s) => s.id)).toEqual([shiftId]);
     expect(snapshot.shifts[0]!.startsAt).toBe("2026-04-06T09:00:00Z");
+  });
+
+  it("getRoster with a non-Monday day returns the same week's roster (normalized)", async () => {
+    // getRoster must snap to the same canonical Monday createRosterVersion does, or a non-Monday query
+    // (from a date picker) would miss the week's draft and report an empty grid.
+    const versionId = await run(
+      (tx) => backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-11-16" }), // Monday
+    );
+    const snapshot = await run(
+      (tx) => backend.getRoster(tx, { tenantId, locationId, period: "2026-11-18" }), // Wednesday, same week
+    );
+    expect(snapshot.version?.id).toBe(versionId);
   });
 
   it("returns { version: null, shifts: [] } for a week with no roster", async () => {
@@ -436,6 +474,26 @@ describe("addShift", () => {
     );
     expect(code).toBe("shift.invalid");
   });
+
+  it("rejects an UNPARSEABLE startsAt/endsAt — shift.invalid, not a driver 22007", async () => {
+    // Defense in depth: the engine verb is a public @waitron/workforce API and must honour its own
+    // contract even though the route also screens this. `Date.parse` of a non-timestamp is NaN and the
+    // `NaN >= NaN` interval guard is false, so without the explicit NaN check the bad value reaches the
+    // `timestamptz` column as a driver error instead of `shift.invalid`.
+    const versionId = await run((tx) =>
+      backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-10-05" }),
+    );
+    expect(
+      await codeOfRejection(() =>
+        run((tx) => backend.addShift(tx, shiftInput(versionId, { startsAt: "not-a-timestamp" }))),
+      ),
+    ).toBe("shift.invalid");
+    expect(
+      await codeOfRejection(() =>
+        run((tx) => backend.addShift(tx, shiftInput(versionId, { endsAt: "not-a-timestamp" }))),
+      ),
+    ).toBe("shift.invalid");
+  });
 });
 
 describe("updateShift / removeShift", () => {
@@ -474,6 +532,23 @@ describe("updateShift / removeShift", () => {
       from shifts where id = ${shiftId}`);
     expect(row.rows[0]!.ends_at).toBe("2026-09-07T15:00:00Z");
     expect(row.rows[0]!.role).toBe("kitchen");
+  });
+
+  it("rejects an UNPARSEABLE startsAt/endsAt patch — shift.invalid (whichever field is present)", async () => {
+    // Same engine-contract hole as addShift: a partial edit carrying an unparseable instant must be
+    // `shift.invalid`, not a driver 22007 from the `timestamptz` column. Only the patched field is
+    // NaN — the effective interval mixes it with the shift's (always-parseable) stored value.
+    const { shiftId } = await draftShift("2026-10-12");
+    expect(
+      await codeOfRejection(() =>
+        run((tx) => backend.updateShift(tx, { tenantId, shiftId, startsAt: "not-a-timestamp" })),
+      ),
+    ).toBe("shift.invalid");
+    expect(
+      await codeOfRejection(() =>
+        run((tx) => backend.updateShift(tx, { tenantId, shiftId, endsAt: "bogus" })),
+      ),
+    ).toBe("shift.invalid");
   });
 
   it("removes a shift", async () => {
