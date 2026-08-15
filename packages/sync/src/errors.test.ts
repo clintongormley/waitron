@@ -36,4 +36,10 @@ describe("the sync error codes carry their declared params", () => {
       lag: 6,
     });
   });
+
+  it("constructs sync.node_unauthorized with NO params (a uniform, oracle-free 401)", () => {
+    const error = new AppError("sync.node_unauthorized", {});
+    expect(error.code).toBe("sync.node_unauthorized");
+    expect(error.params).toEqual({});
+  });
 });

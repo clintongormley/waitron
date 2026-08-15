@@ -29,5 +29,9 @@ declare module "@waitron/shared" {
      * `lag` is `origin max(seq) − last_applied_seq`, a count of unapplied rows and never their
      * content; `subscriberId` and `originId` name the lagging (subscriber, origin) pair. */
     "sync.stream_stalled": { subscriberId: string; originId: string; lag: number };
+    /** A peer presented a missing, blank or wrong node token to this node's sync-api. NO PARAMS —
+     * the response is uniform (fail-closed, no oracle), and a token must never reach a log line or a
+     * test name. Mapped to HTTP 401 by `mountSyncApi`'s error boundary. */
+    "sync.node_unauthorized": Record<string, never>;
   }
 }
