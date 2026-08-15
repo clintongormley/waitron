@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "@vitest/browser/context";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { DashboardApi, PersonSummary, RosterSnapshot } from "../api/client.js";
 import { RosterScreen } from "./roster-screen.js";
@@ -156,6 +157,38 @@ describe("roster-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-test=breaches]")).toBeNull();
   });
 
+  it("ignores a cleared week input (value '') — no crash, week unchanged, no reload", async () => {
+    // Regression: a native <input type="date"> can be CLEARED (value ""). mondayOf("") builds an
+    // Invalid Date and throws a RangeError on toISOString(), which #onSelectWeek did not guard, so the
+    // handler rejected (an unhandled rejection) and left the screen broken.
+    const api = stubApi();
+    const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+    await flush(el);
+    const before = (el as unknown as { weekMonday: string }).weekMonday;
+    const loadsBefore = (api.getRoster as ReturnType<typeof vi.fn>).mock.calls.length;
+
+    const rejections: unknown[] = [];
+    const onReject = (e: PromiseRejectionEvent): void => {
+      e.preventDefault();
+      rejections.push(e.reason);
+    };
+    window.addEventListener("unhandledrejection", onReject);
+    try {
+      const week = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=week-picker]")!;
+      week.value = "";
+      week.dispatchEvent(new Event("change"));
+      await flush(el);
+      await flush(el);
+    } finally {
+      window.removeEventListener("unhandledrejection", onReject);
+    }
+
+    expect(rejections).toEqual([]);
+    expect((el as unknown as { weekMonday: string }).weekMonday).toBe(before);
+    // The ignored change fires no reload.
+    expect((api.getRoster as ReturnType<typeof vi.fn>).mock.calls.length).toBe(loadsBefore);
+  });
+
   it("shows the error banner and does not crash when a load rejects", async () => {
     const api = stubApi({ getRoster: vi.fn().mockRejectedValue({ code: "convenio.not_found" }) });
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
@@ -192,6 +225,30 @@ describe("roster-screen", () => {
     // The grid renders the current week; pick the first cell in p1's row rather than a hardcoded date.
     const cell = el.shadowRoot!.querySelector<HTMLElement>("[data-test^=cell-p1-]")!;
     cell.click();
+    await el.updateComplete;
+    expect((dialog(el) as unknown as { open: boolean }).open).toBe(true);
+  });
+
+  it("renders each editable grid cell's affordance as a real, labelled <button>", async () => {
+    // Keyboard-accessibility: the cell must expose a real button (focusable + Enter/Space activatable),
+    // not a bare clickable <td>. An empty cell's button carries an accessible name so assistive tech
+    // announces it (axe did not catch the bare-<td> version).
+    const api = stubApi();
+    const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+    await flush(el);
+    const cell = el.shadowRoot!.querySelector<HTMLButtonElement>("[data-test^=cell-p1-]")!;
+    expect(cell.tagName).toBe("BUTTON");
+    // Empty cell → an accessible name from aria-label ("Nuevo turno" in the default es locale).
+    expect(cell.getAttribute("aria-label")).toBe("Nuevo turno");
+  });
+
+  it("opens the dialog when a grid cell button is activated by keyboard (Enter)", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+    await flush(el);
+    const cell = el.shadowRoot!.querySelector<HTMLButtonElement>("[data-test^=cell-p1-]")!;
+    cell.focus();
+    await userEvent.keyboard("{Enter}");
     await el.updateComplete;
     expect((dialog(el) as unknown as { open: boolean }).open).toBe(true);
   });

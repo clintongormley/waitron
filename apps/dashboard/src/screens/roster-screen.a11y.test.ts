@@ -1,4 +1,4 @@
-import { afterEach, describe, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./roster-screen.js";
 import type { RosterScreen } from "./roster-screen.js";
@@ -60,6 +60,11 @@ describe.each(["light", "dark"] as const)("roster-screen a11y (%s theme)", (them
     );
     await flush(el);
     await expectNoA11yViolations(host);
+    // Beyond axe (which did not flag the mouse-only <td>): every editable cell's affordance is a real
+    // <button> — keyboard-operable — and an empty one carries an accessible name (aria-label).
+    const cell = el.shadowRoot!.querySelector<HTMLButtonElement>("[data-test^=cell-]")!;
+    expect(cell.tagName).toBe("BUTTON");
+    expect(cell.getAttribute("aria-label")).toBeTruthy();
   });
 
   it("renders accessibly for a draft week with shifts", async () => {

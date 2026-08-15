@@ -109,7 +109,21 @@ export class RosterScreen extends LitElement {
         text-align: left;
         vertical-align: top;
       }
-      td {
+      /* The editable cell's affordance is a real button filling the cell (transparent, so its text
+       * still composites against the td's defined surface for the contrast check). It inherits the
+       * host's :focus-visible ring from baseStyles, so keyboard focus is visible. min-height keeps an
+       * empty cell a comfortable click/tap target. */
+      .cell-button {
+        display: block;
+        width: 100%;
+        min-height: var(--wt-space-5);
+        margin: 0;
+        padding: 0;
+        border: none;
+        background: none;
+        font: inherit;
+        color: inherit;
+        text-align: left;
         cursor: pointer;
       }
       .breaches {
@@ -211,7 +225,12 @@ export class RosterScreen extends LitElement {
   /** The week picker changed. Snap the entered date to its Monday, then reload. */
   async #onSelectWeek(event: Event): Promise<void> {
     event.stopPropagation();
-    this.weekMonday = mondayOf((event.target as HTMLInputElement).value);
+    const value = (event.target as HTMLInputElement).value;
+    // A native <input type="date"> can be CLEARED (value ""); mondayOf("") builds an Invalid Date and
+    // throws a RangeError on toISOString(). Ignore an empty or otherwise unparseable value — keep the
+    // current week — rather than crashing the screen.
+    if (Number.isNaN(Date.parse(`${value}T00:00:00Z`))) return;
+    this.weekMonday = mondayOf(value);
     this.errorKey = null;
     // The breaches belong to the roster we're leaving — clear them so a new week's grid never shows
     // the prior roster's advisory warnings (they reappear only on a fresh publish).
@@ -386,27 +405,7 @@ export class RosterScreen extends LitElement {
             (person) => html`
               <tr data-test=${`row-${person.personId}`}>
                 <th scope="row">${person.displayName}</th>
-                ${days.map(
-                  (day) => html`
-                    <td
-                      data-test=${`cell-${person.personId}-${day}`}
-                      @click=${() => this.openCell(person.personId, day)}
-                    >
-                      ${this.snapshot.shifts
-                        .filter(
-                          (s) =>
-                            s.personId === person.personId &&
-                            localDate(s.startsAt, s.startsOffsetMinutes) === day,
-                        )
-                        .map(
-                          (s) =>
-                            html`<span
-                              >${s.startsAt.slice(11, 16)}–${s.endsAt.slice(11, 16)}</span
-                            >`,
-                        )}
-                    </td>
-                  `,
-                )}
+                ${days.map((day) => this.#renderCell(person.personId, day))}
               </tr>
             `,
           )}
@@ -444,6 +443,36 @@ export class RosterScreen extends LitElement {
           : nothing
       }
     `;
+  }
+
+  /**
+   * One grid cell (person × day). On an EDITABLE week the cell's interactive affordance is a real
+   * `<button>` — so shift authoring is keyboard-operable (Tab to focus, Enter/Space to activate, native
+   * to the element) and announced to assistive tech, not a mouse-only `<td>` click target (which axe
+   * did not flag). An empty cell's button carries an `aria-label` so it is not a nameless button; a
+   * cell that already shows a shift uses that visible time as its accessible name. A PUBLISHED week is
+   * read-only, so its cells render plain, non-interactive content (a bare `<td>`, no handler).
+   */
+  #renderCell(personId: string, day: string): TemplateResult {
+    const cellShifts = this.snapshot.shifts.filter(
+      (s) => s.personId === personId && localDate(s.startsAt, s.startsOffsetMinutes) === day,
+    );
+    const spans = cellShifts.map(
+      (s) => html`<span>${s.startsAt.slice(11, 16)}–${s.endsAt.slice(11, 16)}</span>`,
+    );
+    const testId = `cell-${personId}-${day}`;
+    if (!this.editable) return html`<td data-test=${testId}>${spans}</td>`;
+    return html`<td>
+      <button
+        type="button"
+        class="cell-button"
+        data-test=${testId}
+        aria-label=${cellShifts.length > 0 ? nothing : t("roster.new_shift")}
+        @click=${() => this.openCell(personId, day)}
+      >
+        ${spans}
+      </button>
+    </td>`;
   }
 }
 
