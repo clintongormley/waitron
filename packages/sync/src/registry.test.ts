@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ENROLLED, type EnrolledTable } from "./registry.js";
+import { ENROLLED, tablesForLane, type EnrolledTable } from "./registry.js";
 
 /**
  * The enrolment registry is pinned here against spec §2's fourteen commercial-lane tables
@@ -17,6 +17,7 @@ const SPEC: Record<
     conflictKey: string[];
     watermarkColumn: string | null;
     captureOps: EnrolledTable["captureOps"];
+    lane: EnrolledTable["lane"];
   }
 > = {
   // Group A — append-only → insert-only apply (AFTER INSERT only).
@@ -25,36 +26,42 @@ const SPEC: Record<
     conflictKey: ["id"],
     watermarkColumn: null,
     captureOps: ["insert"],
+    lane: "ordered",
   },
   sale_lines: {
     mode: "insert-only",
     conflictKey: ["id"],
     watermarkColumn: null,
     captureOps: ["insert"],
+    lane: "ordered",
   },
   tenders: {
     mode: "insert-only",
     conflictKey: ["id"],
     watermarkColumn: null,
     captureOps: ["insert"],
+    lane: "ordered",
   },
   sale_settlements: {
     mode: "insert-only",
     conflictKey: ["id"],
     watermarkColumn: null,
     captureOps: ["insert"],
+    lane: "ordered",
   },
   sale_substitutions: {
     mode: "insert-only",
     conflictKey: ["id"],
     watermarkColumn: null,
     captureOps: ["insert"],
+    lane: "ordered",
   },
   sale_voids: {
     mode: "insert-only",
     conflictKey: ["id"],
     watermarkColumn: null,
     captureOps: ["insert"],
+    lane: "ordered",
   },
   // payment_refunds is captured AFTER INSERT ONLY (append-only trail), so insert-only apply is
   // correct EVEN THOUGH the app-role grant is SELECT, INSERT, UPDATE
@@ -66,6 +73,7 @@ const SPEC: Record<
     conflictKey: ["id"],
     watermarkColumn: null,
     captureOps: ["insert"],
+    lane: "fast",
   },
   // Group B — mutable with a monotonic `updated_at` watermark → watermark upsert (AFTER INSERT OR
   // UPDATE). updated_at receipts: catalogues catalogue.ts:30, categories catalogue.ts:46, products
@@ -75,24 +83,28 @@ const SPEC: Record<
     conflictKey: ["id"],
     watermarkColumn: "updated_at",
     captureOps: ["insert", "update"],
+    lane: "ordered",
   },
   categories: {
     mode: "watermark-upsert",
     conflictKey: ["id"],
     watermarkColumn: "updated_at",
     captureOps: ["insert", "update"],
+    lane: "ordered",
   },
   products: {
     mode: "watermark-upsert",
     conflictKey: ["id"],
     watermarkColumn: "updated_at",
     captureOps: ["insert", "update"],
+    lane: "ordered",
   },
   payments: {
     mode: "watermark-upsert",
     conflictKey: ["id"],
     watermarkColumn: "updated_at",
     captureOps: ["insert", "update"],
+    lane: "fast",
   },
   // payment_policy's PK is tenant_id (one row per tenant, payment-policy.ts:16), so its conflict
   // key is (tenant_id), not (id).
@@ -101,6 +113,7 @@ const SPEC: Record<
     conflictKey: ["tenant_id"],
     watermarkColumn: "updated_at",
     captureOps: ["insert", "update"],
+    lane: "ordered",
   },
   // Group C — mutable, NO watermark column, DELETE-capable → single ordered lane (AFTER INSERT OR
   // UPDATE OR DELETE). watermarkColumn null → the apply upsert is unconditional; monotonicity comes
@@ -110,12 +123,14 @@ const SPEC: Record<
     conflictKey: ["id"],
     watermarkColumn: null,
     captureOps: ["insert", "update", "delete"],
+    lane: "ordered",
   },
   working_order_lines: {
     mode: "watermark-upsert",
     conflictKey: ["id"],
     watermarkColumn: null,
     captureOps: ["insert", "update", "delete"],
+    lane: "ordered",
   },
 };
 
@@ -132,15 +147,32 @@ describe("ENROLLED carries exactly spec §2's fourteen commercial-lane tables", 
   });
 
   for (const [table, spec] of Object.entries(SPEC)) {
-    it(`${table} carries the spec §2 mode, conflict key, watermark and capture ops`, () => {
+    it(`${table} carries the spec §2 mode, conflict key, watermark, capture ops and lane`, () => {
       const e = byName.get(table);
       if (e === undefined) throw new Error(`registry is missing enrolled table ${table}`);
       expect(e.mode).toBe(spec.mode);
       expect(e.conflictKey).toEqual(spec.conflictKey);
       expect(e.watermarkColumn).toBe(spec.watermarkColumn);
       expect(e.captureOps).toEqual(spec.captureOps);
+      expect(e.lane).toBe(spec.lane);
     });
   }
+});
+
+describe("the fast lane carries exactly payments and payment_refunds (spec §4b)", () => {
+  it("tablesForLane('fast') is exactly {payments, payment_refunds}", () => {
+    expect(new Set(tablesForLane("fast"))).toEqual(new Set(["payments", "payment_refunds"]));
+  });
+  it("tablesForLane('ordered') is the remaining twelve enrolled tables", () => {
+    const fast = new Set(["payments", "payment_refunds"]);
+    const expected = ENROLLED.filter((e) => !fast.has(e.table)).map((e) => e.table);
+    expect(tablesForLane("ordered").sort()).toEqual(expected.sort());
+    expect(tablesForLane("ordered")).toHaveLength(12);
+  });
+  it("every enrolled table carries a lane, and the two lanes partition ENROLLED", () => {
+    expect(tablesForLane("fast").length + tablesForLane("ordered").length).toBe(ENROLLED.length);
+    for (const e of ENROLLED) expect(e.lane === "fast" || e.lane === "ordered").toBe(true);
+  });
 });
 
 describe("every enrolled table name is an ASCII lowercase-and-underscore identifier", () => {

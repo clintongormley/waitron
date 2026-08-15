@@ -10,8 +10,8 @@ export { SYNC_MIGRATIONS } from "./migrations.js";
 
 // The enrolment registry — the audit surface for "what crosses the wire" (the fourteen commercial
 // tables, their apply mode, conflict key, watermark and capture ops).
-export { ENROLLED } from "./registry.js";
-export type { CaptureOp, EnrolledTable, SyncMode } from "./registry.js";
+export { ENROLLED, tablesForLane } from "./registry.js";
+export type { CaptureOp, EnrolledTable, SyncLane, SyncMode } from "./registry.js";
 
 // The static per-table apply SQL, built once from the registry + live schema (never from row data).
 export { applyStatementFor, deleteStatementFor } from "./apply-sql.js";
