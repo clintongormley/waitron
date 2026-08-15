@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { recordSale, recordVoid } from "@waitron/core";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
 import type { TenantId } from "@waitron/shared";
@@ -9,7 +9,7 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { VerifactuBackend } from "./backend.js";
-import { backoffMs } from "./drain.js";
+import { DEFAULT_SKIP_RETRY_MS, backoffMs, drain, type DrainDeps } from "./drain.js";
 import { ackStateOf } from "./acks.js";
 import {
   appendPendingAlta,
@@ -136,33 +136,57 @@ describe("drain — happy path, an anulación row", () => {
 /**
  * Its own describe, with a beforeEach that seeds NOTHING beyond `aeat`: `drain()`'s own
  * top-level `tenantsWithWork` sweep (./drain.ts) is global across the WHOLE shared `pg.db`, not
- * scoped to whichever `VerifactuBackend` instance calls it — so if this describe's beforeEach
- * seeded its own always-pending tenant (the "happy path" describe's convention), a self-built
- * 1001-tenant here would have its `result.batchesSent` count polluted by that OTHER tenant's own
- * envío too. Every other describe in this file either fully drains whatever it seeds before its
- * `it` returns, OR — the "deployment-environment guard" describe below, whose whole point is rows
- * no backend in this file can ever fully drain — deletes the `envios` rows it seeded in a
- * `finally`, so nothing is left pending for this sweep to pick up either way.
+ * scoped to whichever caller invokes it — so if this describe's beforeEach seeded its own
+ * always-pending tenant (the "happy path" describe's convention), a self-built batching tenant
+ * here would have its `result.batchesSent` count polluted by that OTHER tenant's own envío too.
+ * Every other describe in this file either fully drains whatever it seeds before its `it` returns,
+ * OR deletes the `envios` rows it seeded (the "deployment-environment guard" describe below, whose
+ * whole point is rows no backend in this file can ever fully drain, in a `finally`; the "flow
+ * control" describe, whose "defers behind a still-open gate" test intentionally leaves 3 rows
+ * `pendiente`, in an `afterEach`), so nothing is left pending for this sweep to pick up.
+ *
+ * That no-leak invariant is STRICT now, where it was slack before: while the drain cap was
+ * hardcoded at 1000, a leaked backlog behind a CLOSED gate (the "defers" test's 3 rows) was `< cap`
+ * and the sweep deferred it, so the leak was invisible. Under the small INJECTED cap below those
+ * same 3 rows are `>= cap`, the sweep sends them, and the starvation test's global counters read 4
+ * submitted instead of 1 — which is why the "flow control" describe now cleans up after itself.
+ *
+ * The batch cap is INJECTED small (`maxRegistrosPorEnvio: 3`) so the split is proven against a
+ * 4-row backlog rather than the 1001 rows the production cap (1000) would demand. Seeding 1000+
+ * rows through `seedPendingEnvios`'s per-row insert loop (~4 round trips each) timed this test out
+ * at 30s under CI Docker contention (~32s in CI vs ~1s locally) — the flake the cap seam fixes. The
+ * semantics are identical to the production default: a full chunk of `maxRegistrosPorEnvio` sent
+ * now, the sub-cap tail deferred to the next gated pass. See `DrainDeps.maxRegistrosPorEnvio`
+ * (./drain.ts) for why the cap is injectable and why production never sets it.
  */
-describe("drain — batching (the 1001-split)", () => {
+describe("drain — batching (the >cap split)", () => {
   let aeat: ReturnType<typeof createFakeAeat>;
 
   beforeEach(() => {
     aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
   });
 
-  it("splits a >1000 backlog at the XSD cap: full 1000-chunk now, the <1000 tail deferred until t", async () => {
-    const seeded = await seedPendingEnvios(pg.db, { count: 1001 });
-    const backend = new VerifactuBackend({
-      deploymentEnvironment: "production",
-      clock: seeded.clock,
+  it("splits a >cap backlog at the injected cap: a full 3-row chunk now, the <cap tail deferred until t", async () => {
+    const seeded = await seedPendingEnvios(pg.db, { count: 4 });
+    // Call the drainer directly rather than through `VerifactuBackend`, so the injected cap reaches
+    // `DrainDeps` (the backend exposes no batch-cap option — production always takes the default).
+    // `VerifactuBackend.drain` is nothing but `runDrain({ db, resolveClient, skipRetryMs,
+    // environment }, now)` — every other describe here exercises that wrapper — so the only
+    // behavioural difference is the small cap this seam exists to inject.
+    const deps: DrainDeps = {
       db: pg.db,
       resolveClient: staticResolver(aeat.client()),
-    });
+      skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+      environment: "production",
+      maxRegistrosPorEnvio: 3,
+    };
 
-    const first = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+    // First pass: 4 due rows, gate open (no `envio_flujo` row yet) — sends a FULL chunk of 3, sees
+    // 1 row left (< cap) and defers that tail to `nextDueAt`, exactly as a 1001-row backlog sends
+    // 1000 and defers 1 at the production cap.
+    const first = await drain(deps, new Date("2026-07-21T00:01:00Z"));
     expect(first.batchesSent).toBe(1);
-    expect(first.recordsSubmitted).toBe(1000);
+    expect(first.recordsSubmitted).toBe(3);
     expect(first.nextDueAt).not.toBeNull();
 
     const pending = await withTenant(pg.db, seeded.tenantId, (tx) =>
@@ -172,10 +196,11 @@ describe("drain — batching (the 1001-split)", () => {
     );
     expect(Number(pending.rows[0].count)).toBe(1);
 
-    const second = await backend.drain(first.nextDueAt!);
+    // Second pass, gated on `t`: the deferred 1-row tail goes.
+    const second = await drain(deps, first.nextDueAt!);
     expect(second.batchesSent).toBe(1);
     expect(second.recordsSubmitted).toBe(1);
-  }, 30_000);
+  });
 });
 
 describe("drain — flow control (envio_flujo)", () => {
@@ -192,6 +217,22 @@ describe("drain — flow control (envio_flujo)", () => {
       db: pg.db,
       resolveClient: staticResolver(aeat.client()),
     });
+  });
+
+  // Delete this describe's own seeded rows after every test — the same "deletes what it seeded in a
+  // finally" hygiene the "deployment-environment guard" describe below applies, and the invariant
+  // the "batching (the >cap split)" describe's header depends on: no test may leave `envios` rows
+  // the file-global `drain()` sweep would pick up. The "defers a tenant behind a still-open gate"
+  // test below LEAVES 3 rows `pendiente` behind a CLOSED gate — harmless while the drain cap was
+  // hardcoded at 1000 (a 3-row backlog is `< 1000`, so the sweep defers it), but the ">cap split"
+  // and starvation tests now inject a small cap (`maxRegistrosPorEnvio: 3`), under which those same
+  // 3 leaked rows are `>= cap` and the global sweep SENDS them — inflating those tests' global
+  // result counters. Cleaning up here removes the leak at its source rather than tuning each cap
+  // around it. Deleting `envios` (not the tenant/registro) mirrors the env-guard describe's own
+  // `delete from envios where tenant_id` pattern; the two draining tests above leave nothing
+  // pending, so this is a no-op for them.
+  afterEach(async () => {
+    await pg.db.execute(sql`delete from envios where tenant_id = ${seeded.tenantId}`);
   });
 
   it("persists the server's TiempoEsperaEnvio into envio_flujo and sets nextDueAt when a partial batch remains for next time", async () => {
@@ -938,7 +979,7 @@ describe("drain — halted records get a halted ack (the bulk chain-halt paths)"
  * backlog of refused rows must not block sendable work behind it) — see the two new tests below —
  * and a `finally` per test deleting what it seeded: unlike every OTHER describe in this file, a
  * refused row is NEVER drained to completion by any backend this file constructs, so leaving it
- * behind would violate the "batching (1001-split)" describe's own documented assumption (its
+ * behind would violate the "batching (the >cap split)" describe's own documented assumption (its
  * header comment, corrected below) that nothing else in this file leaves `envios` rows pending.
  */
 describe("drain — the deployment-environment guard", () => {
@@ -986,7 +1027,7 @@ describe("drain — the deployment-environment guard", () => {
     } finally {
       // This tenant's row is refused, never drained, by every backend this file constructs — left
       // in place it would sit `pendiente` forever in this file's SHARED `pg.db`, violating the
-      // "batching (1001-split)" describe's own documented assumption that nothing else here
+      // "batching (the >cap split)" describe's own documented assumption that nothing else here
       // leaves work behind (its header comment, corrected in this same fix round). Deleting the
       // `envios` row (not the tenant/registro — `envios_tenants_with_work` reads only this table)
       // is `boot.test.ts`'s own established pattern for the identical need.
@@ -1146,24 +1187,31 @@ describe("drain — the deployment-environment guard", () => {
 
   /**
    * I2/property 3 of the fix-round review: a backlog of refused rows cannot starve sendable work
-   * behind it. `MAX_REGISTROS_POR_ENVIO` (1000) refused rows on one chain fill `claimBatch`'s
-   * ENTIRE first claim window; a `seedIndependentChain` row on a second, UNRELATED chain is forced
-   * to sort strictly LAST (`sifId: "ffffffff-..."`, a near-maximal literal `registerSif`'s own
-   * `defaultRandom()` id could never produce) — so only `drainTenant`'s retry loop, excluding the
-   * now-blocked chain from a SECOND `claimBatch` call, can ever reach it. Before the fix this
-   * healthy row was unreachable, this pass and every later one, since nothing about a refused row
-   * changes its own due-ness.
+   * behind it. A cap-filling backlog of refused rows on one chain fills `claimBatch`'s ENTIRE first
+   * claim window (`maxRegistrosPorEnvio: 3` is injected here, so 3 refused rows fill a limit-3
+   * window — the same shape the production cap of 1000 would need 1000 refused rows to reproduce); a
+   * `seedIndependentChain` row on a second, UNRELATED chain is forced to sort strictly LAST
+   * (`sifId: "ffffffff-..."`, a near-maximal literal `registerSif`'s own `defaultRandom()` id could
+   * never produce) — so only `drainTenant`'s retry loop, excluding the now-blocked chain from a
+   * SECOND `claimBatch` call, can ever reach it. Before the fix this healthy row was unreachable,
+   * this pass and every later one, since nothing about a refused row changes its own due-ness.
+   *
+   * The small injected cap is a TEST SEAM (see the ">cap split" describe above and
+   * `DrainDeps.maxRegistrosPorEnvio`): seeding 1000 refused rows to fill the production window timed
+   * this test out under CI Docker contention, and 3 rows reproduce the identical starvation.
    */
-  it("does not starve a sendable row sorting behind a >=1000-row backlog of refused rows on another chain", async () => {
+  it("does not starve a sendable row sorting behind a cap-filling backlog of refused rows on another chain", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     // Seeding lives INSIDE the try (I3's own fix-round-2 correction — same reasoning as the
-    // chain-halt test above): a throw between the two seed calls would otherwise leak 1000
+    // chain-halt test above): a throw between the two seed calls would otherwise leak
     // permanently-`pendiente` rows into this shared `pg.db` with no `finally` covering them. Only the
     // tenant id crosses into `finally` — same "avoid narrowing through a closure" reasoning as the
     // chain-halt test above.
     let cleanupTenantId: TenantId | undefined;
     try {
-      const seeded = await seedPendingEnvios(pg.db, { count: 1000, entorno: null });
+      // 3 refused rows (entorno null → `fiscal.environment_unknown`) exactly fill the injected
+      // limit-3 claim window, so the healthy row below sorts strictly beyond it.
+      const seeded = await seedPendingEnvios(pg.db, { count: 3, entorno: null });
       cleanupTenantId = seeded.tenantId;
       const healthy = await seedIndependentChain(pg.db, seeded, {
         sifId: "ffffffff-ffff-ffff-ffff-ffffffffffff",
@@ -1171,20 +1219,23 @@ describe("drain — the deployment-environment guard", () => {
         entorno: "production",
       });
 
-      const backend = new VerifactuBackend({
-        deploymentEnvironment: "production",
-        clock: seeded.clock,
+      // Direct `drain()` call (not `VerifactuBackend`) so the small cap reaches `DrainDeps`; see the
+      // ">cap split" test above for why the wrapper is bypassed only where a cap must be injected.
+      const deps: DrainDeps = {
         db: pg.db,
         resolveClient: staticResolver(aeat.client()),
-      });
-      const result = await backend.drain(new Date("2026-07-21T00:01:00Z"));
+        skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+        environment: "production",
+        maxRegistrosPorEnvio: 3,
+      };
+      const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
 
-      // The healthy row got through despite sorting behind 1000 refused ones.
+      // The healthy row got through despite sorting behind the cap-filling refused backlog.
       expect(result.recordsSubmitted).toBe(1);
       expect(result.recordsAccepted).toBe(1);
-      // Exactly one incident for the whole 1000-row blocked chain (property 3: `incidentsRaised`
-      // must not disagree with what was actually written within this ONE pass) — not one per
-      // row, and not re-raised across however many `claimBatch` calls the retry needed.
+      // Exactly one incident for the whole blocked chain (property 3: `incidentsRaised` must not
+      // disagree with what was actually written within this ONE pass) — not one per row, and not
+      // re-raised across however many `claimBatch` calls the retry needed.
       expect(result.incidentsRaised).toBe(1);
 
       const healthyRow = await withTenant(pg.db, seeded.tenantId, (tx) =>
@@ -1200,7 +1251,7 @@ describe("drain — the deployment-environment guard", () => {
             where tenant_id = ${seeded.tenantId} and estado = 'pendiente'
           `),
       );
-      expect(Number(refused.rows[0]!.count)).toBe(1000);
+      expect(Number(refused.rows[0]!.count)).toBe(3);
 
       const inc = await withTenant(pg.db, seeded.tenantId, (tx) =>
         tx.execute<{ code: string }>(
@@ -1216,7 +1267,7 @@ describe("drain — the deployment-environment guard", () => {
         await pg.db.execute(sql`delete from envios where tenant_id = ${cleanupTenantId}`);
       }
     }
-  }, 30_000);
+  });
 });
 
 describe("backoffMs", () => {
