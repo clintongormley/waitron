@@ -61,6 +61,24 @@ function requirePeriod(value: unknown): string {
   return value;
 }
 
+function requireBodyString(v: unknown, field: string): string {
+  if (typeof v !== "string") throw new AppError("management.request_invalid", { field });
+  return v;
+}
+function requireBodyUuid(v: unknown, field: string): string {
+  if (typeof v !== "string" || !isUuid(v)) throw new AppError("management.request_invalid", { field });
+  return v;
+}
+function requireBodyInt(v: unknown, field: string): number {
+  if (typeof v !== "number" || !Number.isInteger(v)) throw new AppError("management.request_invalid", { field });
+  return v;
+}
+function requireNullableString(v: unknown, field: string): string | null {
+  if (v === null) return null;
+  if (typeof v !== "string") throw new AppError("management.request_invalid", { field });
+  return v;
+}
+
 export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger): void {
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
@@ -105,6 +123,54 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
         backend.createRosterVersion(tx, { tenantId: deps.cfg.tenantId, locationId, period }),
       );
       return c.json({ versionId }, 201);
+    }),
+  );
+
+  app.post("/management-api/roster/:versionId/shifts", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const versionId = requireUuidParam(c.req.param("versionId"), "RosterVersionId");
+      const body = (await c.req.json<Record<string, unknown>>()) ?? {};
+      const personId = requireBodyUuid(body.personId, "personId");
+      const locationId = requireBodyUuid(body.locationId, "locationId");
+      const startsAt = requireBodyString(body.startsAt, "startsAt");
+      const endsAt = requireBodyString(body.endsAt, "endsAt");
+      const startsOffsetMinutes = requireBodyInt(body.startsOffsetMinutes, "startsOffsetMinutes");
+      const endsOffsetMinutes = requireBodyInt(body.endsOffsetMinutes, "endsOffsetMinutes");
+      const role = requireNullableString(body.role, "role");
+      const shiftId = await gated(sessionId, (tx) =>
+        backend.addShift(tx, {
+          tenantId: deps.cfg.tenantId, versionId, personId, locationId,
+          startsAt, startsOffsetMinutes, endsAt, endsOffsetMinutes, role,
+        }),
+      );
+      return c.json({ shiftId }, 201);
+    }),
+  );
+
+  app.patch("/management-api/roster/shifts/:shiftId", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const shiftId = requireUuidParam(c.req.param("shiftId"), "ShiftId");
+      const body = (await c.req.json<Record<string, unknown>>()) ?? {};
+      const patch: import("@waitron/workforce").UpdateShiftInput = { tenantId: deps.cfg.tenantId, shiftId };
+      if (body.personId !== undefined) patch.personId = requireBodyUuid(body.personId, "personId");
+      if (body.startsAt !== undefined) patch.startsAt = requireBodyString(body.startsAt, "startsAt");
+      if (body.endsAt !== undefined) patch.endsAt = requireBodyString(body.endsAt, "endsAt");
+      if (body.startsOffsetMinutes !== undefined) patch.startsOffsetMinutes = requireBodyInt(body.startsOffsetMinutes, "startsOffsetMinutes");
+      if (body.endsOffsetMinutes !== undefined) patch.endsOffsetMinutes = requireBodyInt(body.endsOffsetMinutes, "endsOffsetMinutes");
+      if (body.role !== undefined) patch.role = requireNullableString(body.role, "role");
+      await gated(sessionId, (tx) => backend.updateShift(tx, patch));
+      return c.body(null, 204);
+    }),
+  );
+
+  app.delete("/management-api/roster/shifts/:shiftId", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const shiftId = requireUuidParam(c.req.param("shiftId"), "ShiftId");
+      await gated(sessionId, (tx) => backend.removeShift(tx, { tenantId: deps.cfg.tenantId, shiftId }));
+      return c.body(null, 204);
     }),
   );
 }

@@ -15,6 +15,7 @@ import "./errors.js";
 const noopLog: Logger = () => {};
 let tenantId: string;
 let locationId: string;
+let personId: string;
 let managerCookie: string;
 let staffCookie: string;
 
@@ -39,6 +40,7 @@ const suite = usePgliteDb({
       return { locationId: loc.rows[0]!.id, personId: mgr.rows[0]!.id, mSid: mSes.id, sSid: sSes.id };
     });
     locationId = seeded.locationId;
+    personId = seeded.personId;
     managerCookie = `${MANAGEMENT_COOKIE}=${seeded.mSid}`;
     staffCookie = `${MANAGEMENT_COOKIE}=${seeded.sSid}`;
   },
@@ -110,5 +112,57 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
     const res = await send(mountApp(), "POST", "/management-api/roster", { body: { locationId, period: "2026-03-09" }, cookie: staffCookie });
     expect(res.status).toBe(403);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  });
+});
+
+describe("mountWorkforceApi — shift routes", () => {
+  async function draftVersion(period: string): Promise<string> {
+    const res = await send(mountApp(), "POST", "/management-api/roster", { body: { locationId, period } });
+    return ((await res.json()) as { versionId: string }).versionId;
+  }
+  const shiftBody = (day: string) => ({
+    personId, locationId,
+    startsAt: `${day}T09:00:00Z`, startsOffsetMinutes: 0,
+    endsAt: `${day}T17:00:00Z`, endsOffsetMinutes: 0, role: "bar",
+  });
+
+  it("POST …/roster/:versionId/shifts adds a shift (201) and GET roster shows it", async () => {
+    const app = mountApp();
+    const versionId = await draftVersion("2026-04-06");
+    const res = await send(app, "POST", `/management-api/roster/${versionId}/shifts`, { body: shiftBody("2026-04-06") });
+    expect(res.status).toBe(201);
+    const { shiftId } = (await res.json()) as { shiftId: string };
+    const roster = await send(app, "GET", `/management-api/roster?locationId=${locationId}&period=2026-04-06`);
+    expect(((await roster.json()) as { shifts: { id: string }[] }).shifts.map((s) => s.id)).toContain(shiftId);
+  });
+
+  it("PATCH …/roster/shifts/:shiftId edits a shift (204)", async () => {
+    const app = mountApp();
+    const versionId = await draftVersion("2026-04-13");
+    const add = await send(app, "POST", `/management-api/roster/${versionId}/shifts`, { body: shiftBody("2026-04-13") });
+    const { shiftId } = (await add.json()) as { shiftId: string };
+    const res = await send(app, "PATCH", `/management-api/roster/shifts/${shiftId}`, { body: { role: "kitchen" } });
+    expect(res.status).toBe(204);
+  });
+
+  it("DELETE …/roster/shifts/:shiftId removes a shift (204)", async () => {
+    const app = mountApp();
+    const versionId = await draftVersion("2026-04-20");
+    const add = await send(app, "POST", `/management-api/roster/${versionId}/shifts`, { body: shiftBody("2026-04-20") });
+    const { shiftId } = (await add.json()) as { shiftId: string };
+    const res = await send(app, "DELETE", `/management-api/roster/shifts/${shiftId}`);
+    expect(res.status).toBe(204);
+  });
+
+  it("404s a shift route with an unknown shift id (shift.not_found)", async () => {
+    const res = await send(mountApp(), "DELETE", "/management-api/roster/shifts/00000000-0000-0000-0000-000000000000");
+    expect(res.status).toBe(404);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({ error: { code: "shift.not_found" } });
+  });
+
+  it("400s a non-UUID :shiftId (shared.invalid_id, never a 500)", async () => {
+    const res = await send(mountApp(), "DELETE", "/management-api/roster/shifts/not-a-uuid");
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({ error: { code: "shared.invalid_id" } });
   });
 });
