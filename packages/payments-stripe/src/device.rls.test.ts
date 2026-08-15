@@ -30,6 +30,9 @@ const suite = useRealPostgres({
 });
 
 const SETTLED = new Date("2026-07-24T10:00:00Z");
+// The provider's sync-origin node id — required option, value irrelevant here (this container migrates
+// core+payments only, no sync capture triggers); threaded into the adapter's withTenant (design §4d(B)).
+const TEST_NODE_ID = "11111111-1111-4111-8111-111111111111";
 
 describe("on-device accepted_offline lifecycle under real row-level security", () => {
   it("lists and reads its own tenant's offline payment, and only its own", async () => {
@@ -104,6 +107,7 @@ describe("on-device accepted_offline lifecycle under real row-level security", (
         client,
         db: probe,
         tenantId: brandTenantId(t.tenantId),
+        nodeId: TEST_NODE_ID,
       });
 
       const result = await provider.forward(new Date("2026-07-24T11:00:00Z"));
@@ -130,6 +134,7 @@ describe("on-device accepted_offline lifecycle under real row-level security", (
         client: new FakeStripeDevice(),
         db: probe,
         tenantId: brandTenantId(t.tenantId),
+        nodeId: TEST_NODE_ID,
       });
       const r = await provider.collect({
         tenantId: brandTenantId(t.tenantId),
@@ -167,6 +172,7 @@ describe("on-device accepted_offline lifecycle under real row-level security", (
         client: new FakeStripeDevice(),
         db: probe,
         tenantId: brandTenantId(t.tenantId),
+        nodeId: TEST_NODE_ID,
       });
       const r = await provider.refund("dev-rev-1");
       expect(r.state).toBe("refunded");

@@ -37,8 +37,23 @@ const suite = useRealPostgres({
 });
 const ring = loadKeyRing(KEY_ENV);
 
-function deps(db: Database): WebhookDeps {
-  return { db, ring, environment: "preproduction", makeStripe: () => verifyingStripe() };
+// The settling node's origin id, and the all-zero uuid capture defaults to when app.node_id is unset.
+const NODE_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const ZERO = "00000000-0000-0000-0000-000000000000";
+
+function deps(db: Database, nodeId: string = NODE_A): WebhookDeps {
+  return { db, ring, nodeId, environment: "preproduction", makeStripe: () => verifyingStripe() };
+}
+
+/** The origin_id captured for this tenant's most recent `payments` op=update in sync_log (the
+ * settlement's initiated->captured UPDATE). RLS-bypassing admin read. */
+async function paymentUpdateOrigin(db: Database, tenantId: TenantId): Promise<string | null> {
+  const r = await db.execute<{ v: string | null }>(
+    sql`select origin_id::text as v from sync_log
+        where table_name = 'payments' and op = 'update' and tenant_id = ${tenantId}
+        order by seq desc limit 1`,
+  );
+  return r.rows[0]?.v ?? null;
 }
 
 interface SeededPayment {
@@ -150,6 +165,46 @@ describe("the webhook resolves and settles as the non-superuser deployment role"
       });
       expect(second.status).toBe(200);
       expect(await stateOf(suite.admin, seeded.tenantId, seeded.sessionId)).toBe("captured");
+    } finally {
+      await probe.close();
+    }
+  });
+
+  it("stamps the settling node's origin on the enrolled payments UPDATE captured to sync_log (all-zero without the fix)", async () => {
+    // Guard-by-deletion of FIX 1: settleWebhook threads { nodeId: deps.nodeId } into its settle
+    // withTenant, so the enrolled `payments` UPDATE (initiated -> captured, the Stripe settlement)
+    // captures NODE_A as sync_log.origin_id. Drop that 4th arg and app.node_id is unset -> capture
+    // falls back to the all-zero origin, which the pull loop (?originId=<peer>) NEVER replicates, so a
+    // card settlement is lost on failover. Mirrors sync-origin.rls.test.ts's payments-UPDATE case,
+    // which the design audit had for the reconcile sweep but missed for this webhook writer.
+    const seeded = await seedInitiated(suite.admin, "whsec_origin");
+    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      const app = new Hono();
+      mountWebhook(app, deps(probe, NODE_A), () => {});
+      const body = completedEvent(seeded.sessionId);
+      const res = await app.request(`/webhooks/stripe/${seeded.tenantId}`, {
+        method: "POST",
+        body,
+        headers: { "stripe-signature": signStripeBody(body, "whsec_origin") },
+      });
+      expect(res.status).toBe(200);
+      expect(await stateOf(suite.admin, seeded.tenantId, seeded.sessionId)).toBe("captured");
+      expect(await paymentUpdateOrigin(suite.admin, seeded.tenantId)).toBe(NODE_A);
+
+      // Control (the two directions visibly differ, CLAUDE.md §1): the SAME settle under the all-zero
+      // node id captures the all-zero origin — so the captured origin tracks deps.nodeId, not a constant.
+      const zeroSeed = await seedInitiated(suite.admin, "whsec_zero");
+      const zeroApp = new Hono();
+      mountWebhook(zeroApp, deps(probe, ZERO), () => {});
+      const zeroBody = completedEvent(zeroSeed.sessionId);
+      const zeroRes = await zeroApp.request(`/webhooks/stripe/${zeroSeed.tenantId}`, {
+        method: "POST",
+        body: zeroBody,
+        headers: { "stripe-signature": signStripeBody(zeroBody, "whsec_zero") },
+      });
+      expect(zeroRes.status).toBe(200);
+      expect(await paymentUpdateOrigin(suite.admin, zeroSeed.tenantId)).toBe(ZERO);
     } finally {
       await probe.close();
     }

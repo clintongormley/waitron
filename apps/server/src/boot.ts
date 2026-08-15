@@ -127,13 +127,21 @@ export async function buildCardProvider(
       client,
       db: deps.db,
       tenantId: cfg.tenantId,
+      // The till's own node id, so a card collect's enrolled `payments` writes capture this node as
+      // the sync origin (design §4d(B)).
+      nodeId: cfg.nodeId,
       resolveReader: () => Promise.resolve(readerId),
     });
   }
   // `stripe_on_device` — the handheld Tap-to-Pay flow, which mints its own connection token and needs
   // no server-side reader id (till-config.ts requires none for this branch).
   const client = await cardDeviceClientResolver(deps)(cfg.tenantId);
-  return new StripeOnDeviceProvider({ client, db: deps.db, tenantId: cfg.tenantId });
+  return new StripeOnDeviceProvider({
+    client,
+    db: deps.db,
+    tenantId: cfg.tenantId,
+    nodeId: cfg.nodeId,
+  });
 }
 
 /**
@@ -239,7 +247,13 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   const app = healthApp(health, now);
   mountWebhook(
     app,
-    { db, ring, environment: config.environment, makeStripe: defaultMakeStripe },
+    {
+      db,
+      ring,
+      nodeId: config.till.nodeId,
+      environment: config.environment,
+      makeStripe: defaultMakeStripe,
+    },
     log,
   );
   // The till's own HTTP surface (session, roster, boot info, catalogue, sales) on the SAME app —

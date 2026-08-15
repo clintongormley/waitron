@@ -41,6 +41,12 @@ export interface StripeTerminalProviderOptions {
    * database phase below scopable without threading a tenant through methods (`void`/`refund`
    * carry only a payment reference). The host builds one provider per tenant. */
   tenantId: TenantId;
+  /** This node's origin id, threaded into every `withTenant` this adapter opens so the enrolled
+   * `payments` INSERT/UPDATE a card collect (or reversal) performs captures a real `sync_log.origin_id`
+   * rather than the all-zero sentinel — which the pull loop (keyed on `?originId=<peer>`) never
+   * replicates, so a card payment would be lost on failover (design §4d(B); sync origin attribution).
+   * A per-till provider serves one node, so the id is known at construction, exactly like `tenantId`. */
+  nodeId: string;
   resolveReader: (tenantId: TenantId, tillId: TillId) => Promise<string>;
   poll?: { maxAttempts?: number; intervalMs?: number; sleep?: (ms: number) => Promise<void> };
 }
@@ -95,7 +101,9 @@ export class StripeTerminalProvider implements PaymentProvider {
   /** Every database phase runs through here, so no transaction this adapter opens can be left
    * unscoped — the failure that made `collect` throw `42501` on every sale under a real role. */
   private inTenant<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(this.opts.db, this.opts.tenantId, fn);
+    // `{ nodeId }` so the enrolled `payments` writes below capture this node as the origin — see
+    // `StripeTerminalProviderOptions.nodeId`.
+    return withTenant(this.opts.db, this.opts.tenantId, fn, { nodeId: this.opts.nodeId });
   }
 
   async collect(params: CollectParams): Promise<PaymentResult> {
@@ -195,6 +203,7 @@ export class StripeTerminalProvider implements PaymentProvider {
   private reverse(kind: "void" | "refund", ref: string, amount?: Decimal): Promise<PaymentResult> {
     return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, kind, amount, {
       tenantId: this.opts.tenantId,
+      nodeId: this.opts.nodeId,
     });
   }
 

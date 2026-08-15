@@ -139,6 +139,10 @@ export class StripeReconciler implements PaymentReconciler {
       undefined,
       {
         tenantId,
+        // The sweep's own node id, so the refund's enrolled `payment_refunds`/`payments` writes capture
+        // a real origin instead of the all-zero sentinel (design §4d(B); sync origin attribution). The
+        // marker UPDATE in `reconcilePayments` already threads this via its own withTenant.
+        nodeId: this.opts.nodeId,
         resolveProcessorRef: (externalRef) =>
           this.processorRef(account.report, externalRef, paymentRef),
       },

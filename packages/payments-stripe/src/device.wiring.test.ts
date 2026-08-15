@@ -82,6 +82,7 @@ describe("on-device offline accept -> recordSale -> associate -> forward decline
       client,
       db: pg.db,
       tenantId: brandTenantId(s.tenantId),
+      nodeId: "11111111-1111-4111-8111-111111111111",
     });
     const paid = await provider.collect({
       tenantId: brandTenantId(s.tenantId),

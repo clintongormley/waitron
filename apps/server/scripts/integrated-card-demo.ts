@@ -341,6 +341,7 @@ async function main(): Promise<void> {
       client: new NarratingStripeClient(capturedClient, "reader"),
       db,
       tenantId: cfg.tenantId,
+      nodeId: cfg.nodeId,
       // Ignores its args and always returns the one configured reader — the exact shape
       // `boot.ts`'s production wiring uses (`buildCardProvider`, `till-sale-integrated.rls.test.ts`'s
       // `integratedDeps`) — a real per-tenant resolver would look the reader id up from `cfg`.
@@ -386,6 +387,7 @@ async function main(): Promise<void> {
       client: new NarratingStripeClient(declinedClient, "reader"),
       db,
       tenantId: cfg.tenantId,
+      nodeId: cfg.nodeId,
       resolveReader: () => Promise.resolve(READER_ID),
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });

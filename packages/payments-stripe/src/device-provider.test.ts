@@ -19,11 +19,19 @@ import { freshNif, seedPaymentPolicy, seedWorkingOrder } from "@waitron/payments
 const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 const AT = new Date("2026-07-24T10:00:00Z");
+// The provider's sync-origin node id — required option, value irrelevant here (no sync triggers in
+// this core+payments container); threaded into the adapter's withTenant (design §4d(B)).
+const TEST_NODE_ID = "11111111-1111-4111-8111-111111111111";
 
 /** An on-device provider is a per-till, therefore per-tenant, object, so the tenant has to exist
  * before the provider does. Mirrors `provider.test.ts`'s `providerFor`. */
 function providerFor(client: FakeStripeDevice, s: { tenantId: string }): StripeOnDeviceProvider {
-  return new StripeOnDeviceProvider({ client, db: pg.db, tenantId: brandTenantId(s.tenantId) });
+  return new StripeOnDeviceProvider({
+    client,
+    db: pg.db,
+    tenantId: brandTenantId(s.tenantId),
+    nodeId: TEST_NODE_ID,
+  });
 }
 
 function collectParams(
@@ -166,6 +174,7 @@ describe("StripeOnDeviceProvider tenant mis-wiring", () => {
       client: new FakeStripeDevice(),
       db: pg.db,
       tenantId: brandTenantId(s.tenantId.toUpperCase()),
+      nodeId: TEST_NODE_ID,
     });
     const r = await provider.collect(collectParams(s));
     expect(r.state).toBe("captured");
