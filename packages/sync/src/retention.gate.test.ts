@@ -69,12 +69,20 @@ async function seedLog(count: number, a: string, b: string): Promise<void> {
   }
 }
 
-/** Upserts one subscriber's cursor for ORIGIN as the superuser admin. */
-async function setCursor(subscriberId: string, lastApplied: number, alive: boolean): Promise<void> {
+/** Upserts one subscriber's cursor for ORIGIN on the given lane as the superuser admin. `lane`
+ * defaults to 'ordered' so every existing single-lane call is unchanged; the two-lane retention
+ * tests pass 'fast'/'ordered' explicitly. The ON CONFLICT arbiter is the 0002 PK
+ * (subscriber_id, origin_id, lane). */
+async function setCursor(
+  subscriberId: string,
+  lastApplied: number,
+  alive: boolean,
+  lane: "ordered" | "fast" = "ordered",
+): Promise<void> {
   await postgres.admin.execute(
-    sql`insert into sync_cursor (subscriber_id, origin_id, last_applied_seq, alive)
-        values (${subscriberId}, ${ORIGIN}::uuid, ${lastApplied}, ${alive})
-        on conflict (subscriber_id, origin_id)
+    sql`insert into sync_cursor (subscriber_id, origin_id, last_applied_seq, alive, lane)
+        values (${subscriberId}, ${ORIGIN}::uuid, ${lastApplied}, ${alive}, ${lane})
+        on conflict (subscriber_id, origin_id, lane)
           do update set last_applied_seq = excluded.last_applied_seq, alive = excluded.alive`,
   );
 }
@@ -98,6 +106,18 @@ async function tenantRows(tenantId: string): Promise<number> {
 }
 
 describe("bounded sync_log retention under a down subscriber (gate 7)", () => {
+  it("0002 repivoted sync_cursor's primary key to (subscriber_id, origin_id, lane)", async () => {
+    // The lane split needs TWO cursor rows per (subscriber, origin), so the PK must include lane. Read
+    // the live PK columns in index order; the fast and ordered lanes are then distinct rows, not a
+    // second write clobbering the first on the old 2-col key.
+    const pk = await postgres.admin.execute<{ cols: string[] | null }>(sql`
+      select array_agg(a.attname order by array_position(i.indkey, a.attnum))::text[] as cols
+      from pg_index i
+      join pg_attribute a on a.attrelid = i.indrelid and a.attnum = any(i.indkey)
+      where i.indrelid = 'sync_cursor'::regclass and i.indisprimary`);
+    expect(pk.rows[0]!.cols).toEqual(["subscriber_id", "origin_id", "lane"]);
+  });
+
   it("prunes to the min across ALL cursors — a down subscriber holds the log — then drains when it catches up", async () => {
     // Failing case (findings GATE 7): the log is pruned to the LIVE-ONLY min (=10), destroying seq
     // 5..10 that the down `cloud` subscriber has not yet applied — silent data loss. Control in the

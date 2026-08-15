@@ -15,6 +15,13 @@
       "when": 1786492800001,
       "tag": "0001_sync_retention",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786492800002,
+      "tag": "0002_sync_cursor_lane",
+      "breakpoints": true
     }
   ]
 }

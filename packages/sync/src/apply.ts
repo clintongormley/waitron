@@ -329,9 +329,12 @@ async function advanceCursor(
   seq: bigint,
 ): Promise<void> {
   await db.execute(
+    // The ON CONFLICT arbiter is the 0002 PK (subscriber_id, origin_id, lane). This omits `lane`, so
+    // the inserted row defaults to 'ordered' (0002_sync_cursor_lane.sql) and the conflict resolves on
+    // the ordered lane — the single lane this apply path serves until T5 threads a lane through.
     sql`insert into sync_cursor (subscriber_id, origin_id, last_applied_seq)
         values (${subscriberId}, ${originId}::uuid, ${seq.toString()}::bigint)
-        on conflict (subscriber_id, origin_id) do update
+        on conflict (subscriber_id, origin_id, lane) do update
           set last_applied_seq = excluded.last_applied_seq, updated_at = now()
           where excluded.last_applied_seq > sync_cursor.last_applied_seq`,
   );
