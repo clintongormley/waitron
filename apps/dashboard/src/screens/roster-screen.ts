@@ -39,7 +39,9 @@ function weekDays(monday: string): string[] {
 function localDate(instant: string, offsetMinutes: number): string {
   return new Date(Date.parse(instant) + offsetMinutes * 60_000).toISOString().slice(0, 10);
 }
-/** Today's local date (YYYY-MM-DD) — the seed for the default week. */
+/** Today's date in UTC (YYYY-MM-DD) — the seed for the default week. `toISOString()` is UTC, so near
+ * midnight this can name a different calendar day than the operator's local one; seeding from the
+ * venue's local timezone is deferred (per-venue timezone is a later slice). */
 function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -166,6 +168,7 @@ export class RosterScreen extends LitElement {
    */
   async #load(): Promise<void> {
     this.errorKey = null;
+    this.breaches = [];
     try {
       const [locations, staff] = await Promise.all([this.api.getLocations(), this.api.listStaff()]);
       this.locations = locations;
@@ -195,6 +198,9 @@ export class RosterScreen extends LitElement {
     event.stopPropagation();
     this.locationId = (event.target as HTMLSelectElement).value;
     this.errorKey = null;
+    // The breaches belong to the roster we're leaving — clear them so a new location's grid never
+    // shows the prior roster's advisory warnings (they reappear only on a fresh publish).
+    this.breaches = [];
     try {
       await this.#loadRoster();
     } catch (error) {
@@ -207,6 +213,9 @@ export class RosterScreen extends LitElement {
     event.stopPropagation();
     this.weekMonday = mondayOf((event.target as HTMLInputElement).value);
     this.errorKey = null;
+    // The breaches belong to the roster we're leaving — clear them so a new week's grid never shows
+    // the prior roster's advisory warnings (they reappear only on a fresh publish).
+    this.breaches = [];
     try {
       await this.#loadRoster();
     } catch (error) {
@@ -217,6 +226,12 @@ export class RosterScreen extends LitElement {
   /**
    * Open the dialog for one grid cell (person × day), pre-filling from that person's shift on the day
    * (or null for an add). Only on an EDITABLE week — a published week's cells are inert.
+   *
+   * SLICE-1 LIMITATION (split shifts / jornada partida): the cell resolves to the FIRST matching shift
+   * via `.find`, so a person/day that already has a shift always re-opens THAT shift in edit mode — a
+   * SECOND shift on the same day cannot be authored through this UI, even though the backend and schema
+   * permit multiple shifts per person/day. Authoring split shifts is deferred to a later slice; for now
+   * an existing shift can only be edited or removed, not joined by another.
    */
   openCell(personId: string, day: string): void {
     if (!this.editable) return;

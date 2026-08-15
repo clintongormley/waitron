@@ -32,7 +32,8 @@ const staff: PersonSummary[] = [
   },
 ];
 const locations = [{ id: "loc-1", name: "Main" }];
-// Today's local date — always in the current week the screen defaults to — so the shift renders in a cell.
+// Today's date in UTC (`toISOString()` is UTC, matching the screen's `today()` seed) — always in the
+// current week the screen defaults to, so the shift renders in a cell.
 const day = new Date().toISOString().slice(0, 10);
 
 function stubApi(snapshot: RosterSnapshot): DashboardApi {

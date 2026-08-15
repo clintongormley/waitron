@@ -224,10 +224,11 @@ describe("dashboard-app", () => {
     expect(countH1(el)).toBe(1);
   });
 
-  // The logged-in shell now switches between FOUR screens (staff / catalogue / layout / receipt); the
-  // nav gained "Disposición" (layout) and "Recibo" (receipt) beside the existing two. Exactly one
-  // screen — and exactly one <h1> (each screen owns its own; the shell adds none) — shows at a time.
-  it("navigates between all four logged-in screens, one screen and one h1 at a time", async () => {
+  // The logged-in shell now switches between FIVE screens (staff / catalogue / layout / receipt /
+  // roster); the fifth, "Turnos" (roster), has its own nav test above, so this test walks the four
+  // non-roster faces. Exactly one screen — and exactly one <h1> (each screen owns its own; the shell
+  // adds none) — shows at a time.
+  it("navigates the four non-roster logged-in screens, one screen and one h1 at a time", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);

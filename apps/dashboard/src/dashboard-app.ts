@@ -15,9 +15,9 @@ import type { DashboardApi } from "./api/client.js";
 
 /**
  * The faces of the management dashboard: sign in, manage staff, author the catalogue, arrange the till
- * layout, or edit the receipt trim. Exactly one shows at a time. `staff`, `catalogue`, `layout` and
- * `receipt` are the four LOGGED-IN faces the nav switches between; all carry the same chrome (nav +
- * logout).
+ * layout, edit the receipt trim, or author the roster. Exactly one shows at a time. `staff`,
+ * `catalogue`, `layout`, `receipt` and `roster` are the five LOGGED-IN faces the nav switches between;
+ * all carry the same chrome (nav + logout).
  */
 type Screen = "login" | "staff" | "catalogue" | "layout" | "receipt" | "roster";
 
@@ -25,8 +25,8 @@ type Screen = "login" | "staff" | "catalogue" | "layout" | "receipt" | "roster";
  * The management dashboard's ROOT element — the shell that turns the screens into a working app.
  *
  * It owns one thing the whole flow shares: the injected {@link DashboardApi}. It runs a screen
- * machine (`login` | `staff` | `catalogue` | `layout` | `receipt`) and does the event wiring the
- * screens deliberately do not:
+ * machine (`login` | `staff` | `catalogue` | `layout` | `receipt` | `roster`) and does the event
+ * wiring the screens deliberately do not:
  *
  *  - boot → a SESSION PROBE ({@link DashboardApp.#probeSession}) calls `api.listStaff()`; a success
  *    means a live management session, so the app opens on `staff`; ANY rejection (the common
@@ -35,8 +35,9 @@ type Screen = "login" | "staff" | "catalogue" | "layout" | "receipt" | "roster";
  *    `apps/till` `#boot` defect (`docs/backlog.md`), so this shell mirrors the login/staff screens'
  *    own `try/catch`ed loaders instead;
  *  - `logged-in` (from the login screen, on a successful `api.login`) → show `staff`;
- *  - the NAV (the shell's own control, shown only when logged in) switches between the four logged-in
- *    faces `staff`, `catalogue`, `layout` and `receipt` — a plain local state change, no server call;
+ *  - the NAV (the shell's own control, shown only when logged in) switches between the five logged-in
+ *    faces `staff`, `catalogue`, `layout`, `receipt` and `roster` — a plain local state change, no
+ *    server call;
  *  - `logout` (the shell's own control, logged-in only) → end the server session, back to `login`.
  *
  * The default screen is `login`: before the probe resolves the shell shows the sign-in screen, and
@@ -46,7 +47,8 @@ type Screen = "login" | "staff" | "catalogue" | "layout" | "receipt" | "roster";
  * HEADING OUTLINE. Each screen owns its OWN top heading — `dashboard-staff-screen` renders the sole
  * `<h1>Usuarios</h1>`, `dashboard-catalogue-screen` the sole `<h1>Carta</h1>`,
  * `dashboard-layout-screen` the sole `<h1>Disposición</h1>`, `dashboard-receipt-screen` the sole
- * `<h1>Recibo</h1>`, and `dashboard-login-screen` none — so the shell adds no competing `<h1>`: its
+ * `<h1>Recibo</h1>`, `dashboard-roster-screen` the sole `<h1>Turnos</h1>`, and `dashboard-login-screen`
+ * none — so the shell adds no competing `<h1>`: its
  * logged-in chrome (the nav + logout button) sits in a plain `<header>` with no heading, keeping
  * exactly one `<h1>` in the DOM at a time.
  */

@@ -117,6 +117,45 @@ describe("roster-screen", () => {
     expect(banner!.textContent).toContain("nocturno"); // breachKindName(night_work, es)
   });
 
+  it("clears the advisory-breach banner when the roster context changes (week/location)", async () => {
+    // Regression: `breaches` was set on publish and never cleared, so navigating to another week or
+    // location kept showing the PRIOR roster's warnings against an unrelated week.
+    const api = stubApi({
+      getLocations: vi.fn().mockResolvedValue([
+        { id: "loc-1", name: "Main" },
+        { id: "loc-2", name: "Annex" },
+      ]),
+      getRoster: vi.fn().mockResolvedValue(draftSnapshot()),
+      publishRoster: vi.fn().mockResolvedValue({
+        breaches: [{ kind: "night_work", personId: "p1", shiftId: "s1", nightMinutes: 120 }],
+      }),
+    });
+    const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+    await flush(el);
+
+    // Publish → the advisory banner shows.
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=publish]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=breaches]")).not.toBeNull();
+
+    // Changing the week must drop the prior roster's warnings.
+    const week = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=week-picker]")!;
+    week.value = "2026-04-08";
+    week.dispatchEvent(new Event("change"));
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=breaches]")).toBeNull();
+
+    // Publish again, then switch location — same: the banner clears.
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=publish]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=breaches]")).not.toBeNull();
+    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=location-select]")!;
+    select.value = "loc-2";
+    select.dispatchEvent(new Event("change"));
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=breaches]")).toBeNull();
+  });
+
   it("shows the error banner and does not crash when a load rejects", async () => {
     const api = stubApi({ getRoster: vi.fn().mockRejectedValue({ code: "convenio.not_found" }) });
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
