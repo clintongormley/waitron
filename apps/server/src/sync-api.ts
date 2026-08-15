@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { Context, Hono } from "hono";
 import { AppError } from "@waitron/shared";
 import { withTenant, type Database } from "@waitron/db";
-import { encodeBatch, readSyncLogSince } from "@waitron/sync";
+import { encodeBatch, readSyncLogSince, tablesForLane, type SyncLane } from "@waitron/sync";
 import { createErrorBoundary } from "./error-boundary.js";
 import type { Logger } from "./logger.js";
 // Loads @waitron/sync's error augmentation so this file may throw sync.node_unauthorized.
@@ -55,6 +55,17 @@ function afterSeq(raw: string | undefined): bigint {
   }
 }
 
+/**
+ * The `?lane=` query param as a `SyncLane`, clamping anything that is NOT the literal `fast` — a
+ * missing param, `ordered`, or garbage — to `ordered`. Same machine-to-machine fail-safe posture this
+ * endpoint takes for `after`/`limit` (no 400 convention): the ordered tables never silently disappear,
+ * and the fast tick always sends `lane=fast` explicitly (spec §4c). The lane is the WIRE dimension —
+ * the route maps it to `tablesForLane(lane)` SERVER-SIDE and never accepts a client-supplied table
+ * list (both nodes run the same enrolment registry). */
+function laneParam(raw: string | undefined): SyncLane {
+  return raw === "fast" ? "fast" : "ordered";
+}
+
 export interface SyncApiDeps {
   db: Database; // a sync_tailer-member pool
   tenantId: string; // the deli tenant the source reads under
@@ -97,10 +108,12 @@ export function mountSyncApi(app: Hono, deps: SyncApiDeps, log: Logger): void {
       const originId = c.req.query("originId");
       const after = afterSeq(c.req.query("after"));
       const limit = logLimit(c.req.query("limit"));
+      const tables = tablesForLane(laneParam(c.req.query("lane")));
       const rows = await withTenant(deps.db, deps.tenantId, (tx) =>
         readSyncLogSince(tx, {
           afterSeq: after,
           limit,
+          tables,
           ...(originId === undefined ? {} : { originId }),
         }),
       );

@@ -80,6 +80,27 @@ describe("mountSyncApi node-token auth + handshake", () => {
       sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Deli') returning id`,
     );
     const catalogueId = cat.rows[0]!.id;
+    // A genuine FAST-lane row to prove lane routing. The fast lane is exactly {payments,
+    // payment_refunds} (registry.ts:153, pinned by registry.test.ts:164); `payment_policy` — which the
+    // task brief mislabelled "fast" — is an ORDERED-lane table (registry.ts:162), so it would prove
+    // nothing here. `payments` points at a working_order (payments_working_order_fk), so seed the
+    // tenant→location→till→working_order chain as admin (RLS bypassed, pure setup, as seedWorkingOrder
+    // does); the FK is satisfied cross-transaction by a committed working_orders row.
+    const loc = await postgres.admin.execute<{ id: string }>(
+      sql`insert into locations (tenant_id, name, invoice_locales, operation_description)
+          values (${tenantId}, 'Counter', array['es'], 'Retail') returning id`,
+    );
+    const locationId = loc.rows[0]!.id;
+    const till = await postgres.admin.execute<{ id: string }>(
+      sql`insert into tills (tenant_id, location_id, name)
+          values (${tenantId}, ${locationId}, 'Till 1') returning id`,
+    );
+    const tillId = till.rows[0]!.id;
+    const wo = await postgres.admin.execute<{ id: string }>(
+      sql`insert into working_orders (tenant_id, till_id, order_number)
+          values (${tenantId}, ${tillId}, 1) returning id`,
+    );
+    const workingOrderId = wo.rows[0]!.id;
     const app_ = await postgres.pg.connectAs("app_login", "app_pw");
     try {
       await withTenant(
@@ -89,6 +110,19 @@ describe("mountSyncApi node-token auth + handshake", () => {
           tx.execute(
             sql`insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
                 values (${tenantId}, ${catalogueId}, '{"en":"Coffee"}'::jsonb, 'each', 1.50::numeric(12,2), 'general')`,
+          ),
+        { nodeId: NODE_A },
+      );
+      // A captured FAST-lane payments row (same origin NODE_A). app_user holds INSERT on payments
+      // (0001_payments_rls.sql:30) and the payments_capture AFTER-INSERT trigger writes it to sync_log
+      // with origin_id = the app.node_id GUC withTenant set.
+      await withTenant(
+        app_,
+        tenantId,
+        (tx) =>
+          tx.execute(
+            sql`insert into payments (tenant_id, working_order_id, provider, payment_ref, amount, state)
+                values (${tenantId}, ${workingOrderId}, 'stripe', 'ref-fast', '5.00', 'captured')`,
           ),
         { nodeId: NODE_A },
       );
@@ -165,6 +199,44 @@ describe("mountSyncApi node-token auth + handshake", () => {
       });
       expect(highCursor.status).toBe(200);
       expect(decodeBatch(await highCursor.text()).some((r) => r.table === "products")).toBe(false);
+
+      // ── Lane routing (Task 7) ────────────────────────────────────────────────────────────────
+      // The server maps ?lane= → tablesForLane(lane) SERVER-SIDE; the client never supplies a table
+      // list (spec §4c). `payments` is the fast lane, `products` the ordered lane (see the seed
+      // comment above for why `payments`, not the brief's `payment_policy`).
+      //
+      // ?lane=fast returns ONLY the fast-lane tables: the payments row is present, products is NOT.
+      const fast = await app.request("/sync-api/log?after=0&limit=100&lane=fast", {
+        headers: { Authorization: "Bearer s3cret" },
+      });
+      expect(fast.status).toBe(200);
+      const fastRows = decodeBatch(await fast.text());
+      expect(fastRows.some((r) => r.table === "payments")).toBe(true);
+      expect(fastRows.some((r) => r.table === "products")).toBe(false);
+
+      // ?lane=ordered returns the ordered set: products present, payments absent. (Decode once — a
+      // Response body is single-use.)
+      const ordered = await app.request("/sync-api/log?after=0&limit=100&lane=ordered", {
+        headers: { Authorization: "Bearer s3cret" },
+      });
+      expect(ordered.status).toBe(200);
+      const orderedRows = decodeBatch(await ordered.text());
+      expect(orderedRows.some((r) => r.table === "products")).toBe(true);
+      expect(orderedRows.some((r) => r.table === "payments")).toBe(false);
+
+      // An unknown or MISSING lane CLAMPS to ordered (fail-safe, spec §4c): garbage returns the
+      // ordered set, never the fast one, and never a 400 (no param-invalid convention, as with
+      // after/limit). The two directions differ visibly (CLAUDE.md §1): a fast lane shows payments and
+      // hides products; every clamp case shows the reverse.
+      for (const bad of ["lane=weird", "lane=", ""]) {
+        const clamped = await app.request(`/sync-api/log?after=0&limit=100&${bad}`, {
+          headers: { Authorization: "Bearer s3cret" },
+        });
+        expect(clamped.status).toBe(200);
+        const rows = decodeBatch(await clamped.text());
+        expect(rows.some((r) => r.table === "products")).toBe(true); // ordered tables never vanish
+        expect(rows.some((r) => r.table === "payments")).toBe(false);
+      }
     } finally {
       await reader.close();
     }
