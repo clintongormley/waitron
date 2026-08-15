@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { mkdirSync } from "node:fs";
 import { serve } from "@hono/node-server";
-import { createPostgresDb } from "@waitron/db";
+import { createPostgresDb, type Database } from "@waitron/db";
 import { credentialTenants, loadKeyRing } from "@waitron/credentials";
 import { runDue } from "@waitron/scheduler";
 import {
@@ -44,7 +44,6 @@ import { mountMedia } from "./media-api.js";
 import { mountSyncApi } from "./sync-api.js";
 import { fetchHttpClient } from "./sync-http.js";
 import { runSyncPull } from "@waitron/sync";
-import type { Database } from "@waitron/db";
 import { readOrderFlow } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
