@@ -148,6 +148,20 @@ export interface RosterSnapshot {
   shifts: ShiftRow[];
 }
 
+/** A request to add one planned shift to a DRAFT roster version (design §3a). */
+export interface AddShiftInput {
+  tenantId: string;
+  versionId: string;
+  personId: string;
+  /** The centro de trabajo — should match the version's location (the screen uses the roster's). */
+  locationId: string;
+  startsAt: string;
+  startsOffsetMinutes: number;
+  endsAt: string;
+  endsOffsetMinutes: number;
+  role: string | null;
+}
+
 /** The three states a worker's shift can be in, derived from the most recent clock event. */
 type ShiftState = "out" | "working" | "on_break";
 
@@ -465,6 +479,33 @@ export class WorkforceBackend {
       where tenant_id = ${tenantId} and roster_version_id = ${versionId}
       order by starts_at`);
     return rows.map(mapShift);
+  }
+
+  /**
+   * Adds a planned shift to a DRAFT roster version (design §3a), attaching it directly
+   * (`roster_version_id = versionId`). Refuses a malformed interval up front (`shift.invalid`, not the
+   * `shifts_interval_ck` 500), a missing version (`roster.not_found`, via `rosterVersionStatus`) and a
+   * non-draft version (`roster.not_draft`). Planning data — a plain INSERT, no chain.
+   */
+  async addShift(tx: Transaction, input: AddShiftInput): Promise<string> {
+    if (Date.parse(input.startsAt) >= Date.parse(input.endsAt)) {
+      throw new AppError("shift.invalid", { tenantId: input.tenantId, reason: "ends_not_after_starts" });
+    }
+    const status = await this.rosterVersionStatus(tx, input.tenantId, input.versionId); // throws roster.not_found
+    if (status !== "draft") {
+      throw new AppError("roster.not_draft", {
+        tenantId: input.tenantId,
+        rosterVersionId: input.versionId,
+      });
+    }
+    const { rows } = await tx.execute<{ id: string }>(sql`
+      insert into shifts (tenant_id, person_id, location_id, starts_at, starts_offset_minutes,
+        ends_at, ends_offset_minutes, role, roster_version_id)
+      values (${input.tenantId}, ${input.personId}, ${input.locationId},
+        ${input.startsAt}, ${input.startsOffsetMinutes}, ${input.endsAt}, ${input.endsOffsetMinutes},
+        ${input.role}, ${input.versionId})
+      returning id`);
+    return rows[0]!.id;
   }
 
   /**

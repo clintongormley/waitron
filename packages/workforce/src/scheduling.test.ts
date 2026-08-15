@@ -353,3 +353,56 @@ describe("getRoster / getRosterVersion", () => {
     expect(code).toBe("roster.not_found");
   });
 });
+
+describe("addShift", () => {
+  function shiftInput(versionId: string, overrides: Partial<import("./clocking.js").AddShiftInput> = {}) {
+    return {
+      tenantId, versionId, personId, locationId,
+      startsAt: "2026-08-03T09:00:00Z", startsOffsetMinutes: 0,
+      endsAt: "2026-08-03T17:00:00Z", endsOffsetMinutes: 0, role: null,
+      ...overrides,
+    };
+  }
+
+  it("inserts a shift attached to the draft version and returns its id", async () => {
+    const versionId = await run((tx) =>
+      backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-08-03" }),
+    );
+    const shiftId = await run((tx) => backend.addShift(tx, shiftInput(versionId, { role: "bar" })));
+    const row = await suite.db.execute<{ roster_version_id: string; role: string | null }>(
+      sql`select roster_version_id, role from shifts where id = ${shiftId}`,
+    );
+    expect(row.rows[0]!.roster_version_id).toBe(versionId);
+    expect(row.rows[0]!.role).toBe("bar");
+  });
+
+  it("rejects a version that does not exist — roster.not_found", async () => {
+    const code = await codeOfRejection(() =>
+      run((tx) => backend.addShift(tx, shiftInput("00000000-0000-0000-0000-000000000000"))),
+    );
+    expect(code).toBe("roster.not_found");
+  });
+
+  it("rejects a PUBLISHED version — roster.not_draft", async () => {
+    const versionId = await insertRosterVersion(suite.db, {
+      tenantId, locationId, periodStart: "2026-08-10", periodEnd: "2026-08-16",
+    });
+    await run((tx) => backend.publishRoster(tx, { tenantId, versionId }));
+    const code = await codeOfRejection(() => run((tx) => backend.addShift(tx, shiftInput(versionId))));
+    expect(code).toBe("roster.not_draft");
+  });
+
+  it("rejects a non-positive interval (starts >= ends) — shift.invalid", async () => {
+    const versionId = await run((tx) =>
+      backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-08-17" }),
+    );
+    const code = await codeOfRejection(() =>
+      run((tx) =>
+        backend.addShift(tx, shiftInput(versionId, {
+          startsAt: "2026-08-17T17:00:00Z", endsAt: "2026-08-17T09:00:00Z",
+        })),
+      ),
+    );
+    expect(code).toBe("shift.invalid");
+  });
+});

@@ -9,6 +9,7 @@ export {
 export type { PublishRosterInput } from "./clocking.js";
 export type { CreateRosterVersionInput } from "./clocking.js";
 export type { RosterVersionRow, ShiftRow, RosterSnapshot } from "./clocking.js";
+export type { AddShiftInput } from "./clocking.js";
 export { workforceChains } from "./schema/workforce-chains.js";
 export { rosterVersions, rosterVersionStatus } from "./schema/roster-versions.js";
 export { shifts } from "./schema/shifts.js";
