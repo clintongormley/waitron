@@ -26,10 +26,14 @@
 -- state, and a row that was valid when the source captured it re-validates to the SAME answer when
 -- the mirror re-applies it:
 --   * sale_settlements_check_coverage (BEFORE INSERT ON sale_settlements, 0012) — asserts the sale's
---     tenders cover total+tips. sale_settlements is INSERT-only, so a redelivery is an
---     ON CONFLICT DO NOTHING no-op that never re-runs the check at all; and even when it does run
---     (first delivery), the sale and its tenders arrived first in seq order, so the coverage a source
---     already satisfied is satisfied identically on the mirror.
+--     tenders cover total+tips. A BEFORE INSERT trigger FIRES on a redelivered insert even under
+--     ON CONFLICT DO NOTHING (the trigger runs before the conflict is resolved; the row is then
+--     discarded, but the check has already run — verified on postgres:18-alpine: the trigger fired
+--     twice while the second insert added no row). So the coverage check DOES re-run on every
+--     redelivery — it just re-validates to the SAME answer, because the sale and its tenders arrive
+--     first in seq order, so the coverage a source already satisfied is satisfied identically on the
+--     mirror. Correctness rests on that idempotent re-validation, not on the check "not running", so it
+--     can never wedge the apply path.
 --   * working_order_lines_check_locales (BEFORE INSERT OR UPDATE ON working_order_lines, 0004) —
 --     asserts the line's descriptions keys equal the venue's invoice_locales. That is a property of
 --     the row against its location config, never of order state, so a redelivered line re-validates
