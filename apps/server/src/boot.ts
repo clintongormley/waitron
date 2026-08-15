@@ -16,6 +16,7 @@ import { AppError } from "@waitron/shared";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { loadConfig, loadSyncConfig } from "./config.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
+import { codeOf } from "./error-code.js";
 import { createLogger } from "./logger.js";
 import {
   createHealthState,
@@ -43,7 +44,7 @@ import { mountWorkforceApi } from "./workforce-api.js";
 import { mountMedia } from "./media-api.js";
 import { mountSyncApi } from "./sync-api.js";
 import { fetchHttpClient } from "./sync-http.js";
-import { runSyncPull } from "@waitron/sync";
+import { runSyncPull, type SyncLane } from "@waitron/sync";
 import { readOrderFlow } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
@@ -369,20 +370,47 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       },
       log,
     );
-    syncWorker = runSyncPull({
-      localDb: syncDb,
-      subscriberId: till.nodeId,
-      tenantId: till.tenantId,
-      localEnvironment: config.environment,
-      http: fetchHttpClient,
-      batchLimit: 500,
-      peers: syncConfig.peers,
-      sleep: realSleep,
-      signal: syncController.signal,
-      minIdleMs: config.minTickMs,
-      maxBackoffMs: config.maxTickMs,
-      log,
-    });
+    // Hoisted to a `const` so `runLane`'s closure keeps the non-`undefined` narrowing: `syncDb` is a
+    // `let` declared outside this block, and TS widens a captured `let` back to `Database | undefined`
+    // inside a nested function, whereas a `const` assigned here holds its narrowed `Database` type.
+    const localSyncDb = syncDb;
+    const runLane = (lane: SyncLane, minIdleMs: number): Promise<void> =>
+      runSyncPull({
+        localDb: localSyncDb,
+        subscriberId: till.nodeId,
+        tenantId: till.tenantId,
+        localEnvironment: config.environment,
+        http: fetchHttpClient,
+        batchLimit: 500,
+        peers: syncConfig.peers,
+        sleep: realSleep,
+        signal: syncController.signal,
+        minIdleMs,
+        maxBackoffMs: config.maxTickMs,
+        log,
+        lane,
+      });
+    // The ORDERED lane at the existing idle interval (config.minTickMs) and the FAST payments lane at
+    // the tighter syncConfig.fastMinIdleMs, both against the same peers/localDb/http, both under the one
+    // syncController and the existing close() teardown (spec §4d). Promise.all so a rejection from
+    // either reaches close()'s `await syncWorker.catch(() => {})` swallow below; the two lanes
+    // touch disjoint tables and disjoint cursor rows, so they never race (spec §4d). `.then(() => {})`
+    // keeps syncWorker a `Promise<void>` so the existing teardown shape is unchanged.
+    syncWorker = Promise.all([
+      runLane("ordered", config.minTickMs),
+      runLane("fast", syncConfig.fastMinIdleMs),
+    ]).then(() => {});
+    // A SECOND subscription so a lane that settles by rejection (an unexpected throw escaping
+    // runSyncPull's own per-peer catch) is never a process-level unhandled rejection in the window
+    // BEFORE close() runs — the window the single-worker slice never had, because `syncWorker` was
+    // then the same promise the caller already held. This does NOT swallow the rejection for close():
+    // `syncWorker` still rejects, so close()'s own `await syncWorker.catch(() => {})` below is still
+    // the load-bearing teardown-ordering guard (its removal still fails the rejecting-worker test).
+    // In production runSyncPull never rejects (its loop backs off every per-peer error), so this only
+    // ever fires under a mocked worker in the test — but an EMPTY catch here would drop that signal
+    // silently if it ever did happen for real, with sync stopped and no log line to say why. Log it
+    // instead, the same `codeOf`-classified shape `loop.ts` and `error-boundary.ts` already use.
+    syncWorker.catch((err) => log("error", "sync.worker_rejected", { errorCode: codeOf(err) }));
   }
 
   // `buildServeOptions` turns the plain-HTTP options into HTTPS ones when `config.tls` is set,

@@ -422,7 +422,7 @@ describe("loadSyncConfig", () => {
     expect(loadSyncConfig({})).toBeUndefined();
   });
 
-  it("parses peers and requires a non-blank token and database url", () => {
+  it("parses peers and requires a non-blank token and database url, defaulting the fast tick to 1000ms", () => {
     const env = {
       WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "https://peer/", token: "tok2" }]),
       WAITRON_SYNC_NODE_TOKEN: "mine",
@@ -432,7 +432,28 @@ describe("loadSyncConfig", () => {
       nodeToken: "mine",
       databaseUrl: "postgres://sync@host/db",
       peers: [{ nodeId: "n2", url: "https://peer/", token: "tok2" }],
+      fastMinIdleMs: 1000,
     });
+  });
+
+  it("reads WAITRON_SYNC_FAST_TICK_MS as the fast lane's idle interval", () => {
+    const env = {
+      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
+      WAITRON_SYNC_NODE_TOKEN: "m",
+      WAITRON_SYNC_DATABASE_URL: "x",
+      WAITRON_SYNC_FAST_TICK_MS: "500",
+    };
+    expect(loadSyncConfig(env)!.fastMinIdleMs).toBe(500);
+  });
+
+  it("refuses a non-positive-integer WAITRON_SYNC_FAST_TICK_MS", () => {
+    const env = {
+      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
+      WAITRON_SYNC_NODE_TOKEN: "m",
+      WAITRON_SYNC_DATABASE_URL: "x",
+      WAITRON_SYNC_FAST_TICK_MS: "0",
+    };
+    expect(() => loadSyncConfig(env)).toThrow(/config_invalid|WAITRON_SYNC_FAST_TICK_MS/);
   });
 
   it("refuses a blank node token (VAR= is unset, must fail closed, never mean 'no auth')", () => {

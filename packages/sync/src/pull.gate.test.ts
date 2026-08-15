@@ -159,6 +159,77 @@ describe("syncPullOnce applies a peer's batch and advances the cursor", () => {
     }
   });
 
+  it("a fast pull requests ?lane=fast and advances ONLY the fast cursor row", async () => {
+    await setEnv("production");
+    const b = await seedBase();
+    const seriesId = await seedSeries(b);
+    const peerNode = uuid();
+    const subscriberId = uuid();
+    const sale = saleImage(b, seriesId, 1);
+    // pull.ts is lane-agnostic about which table rides which lane (that mapping is the SERVER's job,
+    // Task 7); a `sales` row on the fast lane proves the client threads `lane` end to end.
+    const batch: SyncLogRow[] = [
+      {
+        seq: 1n,
+        originId: peerNode,
+        table: "sales",
+        op: "insert",
+        tenantId: b.tenantId,
+        rowImage: JSON.stringify(sale),
+      },
+    ];
+    const ndjson = encodeBatch(batch);
+    const urls: string[] = [];
+    const http: HttpClient = async (url) => {
+      urls.push(url);
+      if (url.includes("/sync-api/hello")) {
+        return { status: 200, text: async () => JSON.stringify({ environment: "production" }) };
+      }
+      return { status: 200, text: async () => ndjson };
+    };
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      const deps = {
+        localDb: applier,
+        subscriberId,
+        tenantId: b.tenantId,
+        localEnvironment: "production",
+        http,
+        batchLimit: 500,
+        lane: "fast" as const,
+      };
+      const peer = { nodeId: peerNode, url: "http://peer/", token: "tok" };
+      // Seed a COMPETING ordered cursor at a DIFFERENT seq (5) for the SAME (subscriber, origin) BEFORE
+      // the fast pull. This deletion-proofs readCursor's `and lane = ${lane}` filter (pull.ts:82) inside
+      // this package: without it, readCursor's `before` (fast) would instead read THIS ordered row's seq
+      // (5, the only cursor that exists pre-pull), so `advanced` (after=1 > before=5) would read FALSE and
+      // the assertion below fails. It also lets the disjointness check assert the ordered cursor is left
+      // UNTOUCHED (still 5) rather than merely absent.
+      await postgres.admin.execute(
+        sql`insert into sync_cursor (subscriber_id, origin_id, lane, last_applied_seq)
+            values (${subscriberId}, ${peerNode}::uuid, 'ordered', 5)`,
+      );
+      const result = await syncPullOnce(deps, peer);
+      expect(result.applied).toBe(1);
+      expect(result.advanced).toBe(true); // the FAST cursor moved (0 → 1); load-bearing lane filter
+      // The wire carried lane=fast (spec §4c/§4d).
+      expect(urls.some((u) => u.includes("/sync-api/log") && u.includes("lane=fast"))).toBe(true);
+      // The FAST cursor advanced to 1; the pre-seeded ORDERED cursor is UNTOUCHED — the lanes are disjoint.
+      const fast = await postgres.admin.execute<{ seq: string }>(
+        sql`select last_applied_seq::text as seq from sync_cursor
+            where subscriber_id = ${subscriberId} and origin_id = ${peerNode}::uuid and lane = 'fast'`,
+      );
+      expect(fast.rows[0]!.seq).toBe("1");
+      const ordered = await postgres.admin.execute<{ seq: string | null }>(
+        sql`select last_applied_seq::text as seq from sync_cursor
+            where subscriber_id = ${subscriberId} and origin_id = ${peerNode}::uuid and lane = 'ordered'`,
+      );
+      expect(ordered.rows[0]!.seq).toBe("5"); // the fast pull did not advance the ordered lane's cursor
+    } finally {
+      await applier.close();
+    }
+  });
+
   it("throws on a non-200 from either endpoint (a transport error the loop backs off on)", async () => {
     await setEnv("production");
     const applier = await postgres.pg.connectAs("sync_applier", "ap");

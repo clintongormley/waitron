@@ -230,6 +230,16 @@ const paymentState = (id: string) => scalar(sql`select state as v from payments 
 const woStatus = (id: string) =>
   scalar(sql`select status as v from working_orders where id = ${id}`);
 
+/** Reads one lane's cursor for (subscriber, origin), or 0n when absent — the admin read-back. With
+ * the 0002 lane split each (subscriber, origin) has up to two cursor rows, so a lane must be named. */
+async function laneCursor(subscriberId: string, originId: string, lane: string): Promise<bigint> {
+  const r = await postgres.admin.execute<{ seq: string | null }>(
+    sql`select last_applied_seq::text as seq from sync_cursor
+        where subscriber_id = ${subscriberId} and origin_id = ${originId}::uuid and lane = ${lane}`,
+  );
+  return r.rows[0]?.seq ? BigInt(r.rows[0].seq) : 0n;
+}
+
 const PROD = { localEnvironment: "production", sourceEnvironment: "production" } as const;
 
 describe("the commercial-lane apply loop", () => {
@@ -839,6 +849,123 @@ describe("the commercial-lane apply loop", () => {
         { subscriberId: uuid(), ...PROD },
       );
       expect(await saleVat0(jsCorrupted.id as string)).toBe("1.5"); // JS parse dropped the trailing zero
+    } finally {
+      await applier.close();
+    }
+  });
+});
+
+describe("the fast and ordered lanes advance independent cursors (spec §4e)", () => {
+  it("a fast apply advances ONLY the fast cursor and never drags the ordered lane past an un-applied lower seq", async () => {
+    // Two lanes read the same sync_log ordered by the same seq, but a fast pull (lane 'fast') advances
+    // only the fast cursor row. With ONE shared cursor, a fast apply to seq 5 would make the ordered
+    // lane skip an un-applied ordered row at seq 3 — silent data loss (spec §4e). Separate lane cursors
+    // remove that: apply a payments row (fast) at seq 5, then a sales row (ordered) at the LOWER seq 3,
+    // and the sales row still lands (the ordered cursor started at 0, independent of the fast cursor).
+    await setEnv("production");
+    const b = await seedBase();
+    const seriesId = await seedSeries(b);
+    const originId = uuid();
+    const subscriberId = uuid();
+    const woId = await seedWorkingOrder(b, 1); // the payments FK parent, seeded so the fast row lands
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      // FAST: a payments row at seq 5 → advances the fast cursor to 5, leaves the ordered cursor at 0.
+      const pay = paymentImage(b, woId);
+      const fast = await applyBatch(
+        applier,
+        [
+          {
+            seq: 5n,
+            originId,
+            table: "payments",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: wire(pay),
+          },
+        ],
+        { subscriberId, ...PROD, lane: "fast" },
+      );
+      expect(fast.applied).toBe(1);
+      expect(await laneCursor(subscriberId, originId, "fast")).toBe(5n);
+      expect(await laneCursor(subscriberId, originId, "ordered")).toBe(0n); // untouched
+
+      // ORDERED: a sales row at the LOWER seq 3. A shared cursor at 5 would SKIP it (3 <= 5) — the
+      // data-loss bug. With an independent ordered cursor (still 0) it applies.
+      const sale = saleImage(b, seriesId, 1);
+      const ordered = await applyBatch(
+        applier,
+        [
+          {
+            seq: 3n,
+            originId,
+            table: "sales",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: wire(sale),
+          },
+        ],
+        { subscriberId, ...PROD, lane: "ordered" },
+      );
+      expect(ordered.applied).toBe(1); // NOT skipped — the ordered lane's own cursor was 0
+      expect(await saleCount(sale.id as string)).toBe("1");
+      expect(await laneCursor(subscriberId, originId, "ordered")).toBe(3n);
+      expect(await laneCursor(subscriberId, originId, "fast")).toBe(5n); // fast still 5 — lanes disjoint
+    } finally {
+      await applier.close();
+    }
+  });
+
+  it("a fast payments row whose ordered working_orders parent is absent parks, holds the fast cursor, and lands on redelivery", async () => {
+    // payments.working_order_id is NOT NULL → working_orders (packages/payments/src/schema/payments.ts),
+    // and working_orders is an ORDERED-lane table. So a fast payments row can arrive before its parent.
+    // The pre-existing 23503 park (apply.ts's tryApplyRow + the retry pass) holds the fast cursor below
+    // it; the in-batch retry cannot land it (the parent is never in a fast batch); a later fast pull
+    // redelivers it, and it lands once the parent exists. No new code — this proves the cross-lane case
+    // reuses the backstop.
+    await setEnv("production");
+    const b = await seedBase();
+    const originId = uuid();
+    const subscriberId = uuid();
+    const woId = uuid(); // a working_orders id NOT yet present on the mirror
+    const pay = paymentImage(b, woId);
+    const batch: SyncLogRow[] = [
+      {
+        seq: 4n,
+        originId,
+        table: "payments",
+        op: "insert",
+        tenantId: b.tenantId,
+        rowImage: wire(pay),
+      },
+    ];
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      // Parent absent → 23503 → parked. applied 0, deferred 1, fast cursor NOT advanced.
+      const parked = await applyBatch(applier, batch, { subscriberId, ...PROD, lane: "fast" });
+      expect(parked.applied).toBe(0);
+      expect(parked.deferred).toBe(1);
+      expect(await laneCursor(subscriberId, originId, "fast")).toBe(0n); // held below the parked seq
+      const absent = await postgres.admin.execute<{ v: string }>(
+        sql`select count(*)::int::text as v from payments where id = ${pay.id as string}`,
+      );
+      expect(absent.rows[0]!.v).toBe("0"); // nothing applied
+
+      // The ordered lane delivers the parent (seed it — the FK resolves once the parent exists, exactly
+      // as the ordered lane applying a working_orders row would leave the mirror).
+      await postgres.admin.execute(
+        sql`insert into working_orders (id, tenant_id, till_id, order_number)
+            values (${woId}, ${b.tenantId}, ${b.tillId}, 99)`,
+      );
+
+      // Redeliver the SAME fast batch → now lands. applied 1, fast cursor advances.
+      const landed = await applyBatch(applier, batch, { subscriberId, ...PROD, lane: "fast" });
+      expect(landed.applied).toBe(1);
+      expect(await laneCursor(subscriberId, originId, "fast")).toBe(4n);
+      const present = await postgres.admin.execute<{ v: string }>(
+        sql`select count(*)::int::text as v from payments where id = ${pay.id as string}`,
+      );
+      expect(present.rows[0]!.v).toBe("1"); // landed once the parent arrived
     } finally {
       await applier.close();
     }

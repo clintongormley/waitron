@@ -2,6 +2,7 @@
 // a real module to augment rather than declaring a fresh ambient one — the same idiom
 // packages/credentials/src/errors.ts and packages/payments/src/errors.ts use.
 import "@waitron/shared";
+import type { SyncLane } from "./registry.js";
 
 /**
  * packages/sync's contribution to the shared error registry, by declaration merging — the
@@ -30,13 +31,15 @@ declare module "@waitron/shared" {
      * neither carries row content (schema/identity fields and counts only):
      *   - the TRANSPORT signal (pull.ts): a peer's pull has FAILED often enough that its exponential
      *     backoff SATURATED at `maxBackoffMs`. `backoffMs` is that saturated interval in
-     *     milliseconds — a property of the retry schedule, not of any row.
+     *     milliseconds — a property of the retry schedule, not of any row. `lane` names which
+     *     replication lane ('ordered' | 'fast') saturated, since the two run independently and each
+     *     backs off on its own — a fixed schema enum, never row content (spec §4d).
      *   - the RETENTION signal (retention.ts `lagFor`, design §9/§12 ops-policy — the alarm/evict
      *     path is not wired here yet): the subscriber has fallen far behind. `lag` is
      *     `origin max(seq) − last_applied_seq`, a count of unapplied rows, never their content.
      * `subscriberId` and `originId` name the lagging (subscriber, origin) pair in both. */
     "sync.stream_stalled":
-      | { subscriberId: string; originId: string; backoffMs: number }
+      | { subscriberId: string; originId: string; backoffMs: number; lane: SyncLane }
       | { subscriberId: string; originId: string; lag: number };
     /** A peer presented a missing, blank or wrong node token to this node's sync-api. NO PARAMS —
      * the response is uniform (fail-closed, no oracle), and a token must never reach a log line or a

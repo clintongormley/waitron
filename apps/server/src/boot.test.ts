@@ -457,6 +457,9 @@ describe("startServer, against a real container as the deployment role", () => {
       ]),
       WAITRON_SYNC_NODE_TOKEN: "boot-node-token",
       WAITRON_SYNC_DATABASE_URL: databaseUrl,
+      // Distinct from the ordered lane's minTickMs default (5000) so the two lanes' idle intervals
+      // are visibly different in the assertions below (spec §4d).
+      WAITRON_SYNC_FAST_TICK_MS: "250",
     });
     try {
       const hello = await fetch(`http://127.0.0.1:${port}/sync-api/hello`, {
@@ -472,6 +475,17 @@ describe("startServer, against a real container as the deployment role", () => {
       expect(unauth.status).toBe(401);
       // Give the pull worker a beat to make its (failing) peer handshake, exercising fetchHttpClient.
       await delay(100);
+
+      // TWO lane-scoped pull workers were started against the same peer: ordered at config.minTickMs
+      // and fast at fastMinIdleMs (spec §4d). Assert the two calls' lane + minIdleMs pairing.
+      const calls = vi.mocked(runSyncPull).mock.calls.map((c) => c[0]);
+      const ordered = calls.find((d) => d.lane === "ordered");
+      const fast = calls.find((d) => d.lane === "fast");
+      expect(ordered).toBeDefined();
+      expect(fast).toBeDefined();
+      expect(ordered!.minIdleMs).toBe(5_000); // config.minTickMs default
+      expect(fast!.minIdleMs).toBe(250); // WAITRON_SYNC_FAST_TICK_MS below
+      expect(fast!.maxBackoffMs).toBe(ordered!.maxBackoffMs); // both share config.maxTickMs
     } finally {
       await server.close();
     }

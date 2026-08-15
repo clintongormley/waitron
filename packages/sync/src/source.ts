@@ -14,6 +14,14 @@ export interface ReadSyncLogArgs {
   afterSeq: bigint;
   /** Batch cap. */
   limit: number;
+  /** Restrict to these `table_name`s (a lane's tables, from `tablesForLane`); omitted → every table,
+   * an empty array → no table (an empty allowlist matches nothing; a lane with no tables syncs
+   * nothing). Emitted as `and table_name in ${tables}`, which drizzle expands into a parenthesised
+   * placeholder list — `in ($1, $2, …)` — so every value binds as its own parameter and no identifier
+   * is interpolated (CLAUDE.md §3). Not `= any(${tables})`: drizzle expands an interpolated JS array
+   * into that same `($1, $2)` list, so `any(($1, $2))` fails 42809 — see the receipt in
+   * packages/fiscal-verifactu/src/drain.ts:588. */
+  tables?: string[];
 }
 
 // Runs under the deli tenant context, so it is always handed the `withTenant` transaction (a
@@ -23,6 +31,15 @@ export async function readSyncLogSince(
   sourceDb: Database | Transaction,
   args: ReadSyncLogArgs,
 ): Promise<SyncLogRow[]> {
+  // `in ${array}` is drizzle's array-expansion shape (drain.ts:588); `= any(${array})` would expand
+  // the same way to `any(($1, $2))` and fail 42809. An empty allowlist matches no table, expressed
+  // as `and false` because an empty interpolated array has no valid `in ()` form either.
+  const tablesClause =
+    args.tables === undefined
+      ? sql``
+      : args.tables.length === 0
+        ? sql`and false`
+        : sql`and table_name in ${args.tables}`;
   const result = await sourceDb.execute<{
     seq: string;
     origin_id: string;
@@ -37,6 +54,7 @@ export async function readSyncLogSince(
     from sync_log
     where seq > ${args.afterSeq.toString()}::bigint
       ${args.originId === undefined ? sql`` : sql`and origin_id = ${args.originId}::uuid`}
+      ${tablesClause}
     order by seq asc
     limit ${args.limit}
   `);

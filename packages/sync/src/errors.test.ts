@@ -28,12 +28,14 @@ describe("the sync error codes carry their declared params", () => {
       subscriberId: "cloud",
       originId: "00000000-0000-0000-0000-000000000000",
       backoffMs: 400,
+      lane: "fast",
     });
     expect(error.code).toBe("sync.stream_stalled");
     expect(error.params).toEqual({
       subscriberId: "cloud",
       originId: "00000000-0000-0000-0000-000000000000",
       backoffMs: 400,
+      lane: "fast",
     });
   });
 

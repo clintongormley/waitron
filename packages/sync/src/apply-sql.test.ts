@@ -51,6 +51,7 @@ describe("applyStatementFor emits the exact static statement per mode", () => {
       watermarkColumn: null,
       captureOps: ["insert", "update", "delete"],
       fkRank: 0,
+      lane: "ordered",
     };
     expect(() => applyStatementFor(fake)).toThrow(/not_a_real_table/);
   });

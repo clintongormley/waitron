@@ -10,6 +10,11 @@ export type SyncMode = "insert-only" | "watermark-upsert";
 /** The DML the capture trigger fires on. A grant fact per spec §2, not a design intention. */
 export type CaptureOp = "insert" | "update" | "delete";
 
+/** Which replication lane carries a table. `payments`/`payment_refunds` ride the tight FAST lane
+ * (ahead of the rest, to shrink the double-charge exposure active-active selling creates); every other
+ * enrolled table rides the ORDERED lane. The lane is the wire dimension both peers agree on (spec §4b).*/
+export type SyncLane = "ordered" | "fast";
+
 export interface EnrolledTable {
   /** The physical table name — an English, [a-z_]+ identifier (regime-neutral; spec §2). */
   table: string;
@@ -26,6 +31,9 @@ export interface EnrolledTable {
    * seq-ascending (spec §6), so this is a hint that never contradicts the FK graph, not the apply
    * order. Level-based (longest path from a root), so siblings may share a rank. */
   fkRank: number;
+  /** Which replication lane carries this table (spec §4b). `payments`/`payment_refunds` ride the tight
+   * fast lane; every other enrolled table rides the ordered lane. */
+  lane: SyncLane;
 }
 
 // fkRank levels (0 = FK roots). The FK graph of spec §2:
@@ -45,6 +53,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     watermarkColumn: null,
     captureOps: ["insert"],
     fkRank: 1,
+    lane: "ordered",
   },
   {
     table: "sale_lines",
@@ -53,6 +62,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     watermarkColumn: null,
     captureOps: ["insert"],
     fkRank: 2,
+    lane: "ordered",
   },
   {
     table: "tenders",
@@ -61,6 +71,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     watermarkColumn: null,
     captureOps: ["insert"],
     fkRank: 2,
+    lane: "ordered",
   },
   {
     table: "sale_settlements",
@@ -69,6 +80,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     watermarkColumn: null,
     captureOps: ["insert"],
     fkRank: 2,
+    lane: "ordered",
   },
   {
     table: "sale_substitutions",
@@ -77,6 +89,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     watermarkColumn: null,
     captureOps: ["insert"],
     fkRank: 2,
+    lane: "ordered",
   },
   {
     table: "sale_voids",
@@ -85,6 +98,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     watermarkColumn: null,
     captureOps: ["insert"],
     fkRank: 2,
+    lane: "ordered",
   },
   // payment_refunds is captured AFTER INSERT ONLY (append-only trail), so insert-only apply is
   // correct even though its app-role grant is SELECT, INSERT, UPDATE (0001_payments_rls.sql:32) —
@@ -97,6 +111,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     watermarkColumn: null,
     captureOps: ["insert"],
     fkRank: 2,
+    lane: "fast",
   },
 
   // Group B — mutable with a monotonic `updated_at` watermark → watermark upsert. Captured AFTER
@@ -108,6 +123,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     watermarkColumn: "updated_at",
     captureOps: ["insert", "update"],
     fkRank: 0,
+    lane: "ordered",
   },
   {
     table: "categories",
@@ -116,6 +132,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     watermarkColumn: "updated_at",
     captureOps: ["insert", "update"],
     fkRank: 1,
+    lane: "ordered",
   },
   {
     table: "products",
@@ -124,6 +141,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     watermarkColumn: "updated_at",
     captureOps: ["insert", "update"],
     fkRank: 2,
+    lane: "ordered",
   },
   {
     table: "payments",
@@ -132,6 +150,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     watermarkColumn: "updated_at",
     captureOps: ["insert", "update"],
     fkRank: 1,
+    lane: "fast",
   },
   {
     table: "payment_policy",
@@ -140,6 +159,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     watermarkColumn: "updated_at",
     captureOps: ["insert", "update"],
     fkRank: 0,
+    lane: "ordered",
   },
 
   // Group C — mutable, NO watermark column, DELETE-capable → single ordered lane. Captured AFTER
@@ -152,6 +172,7 @@ export const ENROLLED: readonly EnrolledTable[] = [
     watermarkColumn: null,
     captureOps: ["insert", "update", "delete"],
     fkRank: 0,
+    lane: "ordered",
   },
   {
     table: "working_order_lines",
@@ -160,5 +181,12 @@ export const ENROLLED: readonly EnrolledTable[] = [
     watermarkColumn: null,
     captureOps: ["insert", "update", "delete"],
     fkRank: 1,
+    lane: "ordered",
   },
 ];
+
+/** The physical table names on one lane, derived once from ENROLLED (never a second hand-kept array).
+ * The source route maps `?lane=` → this list → readSyncLogSince's `tables` filter (spec §4c). */
+export function tablesForLane(lane: SyncLane): string[] {
+  return ENROLLED.filter((e) => e.lane === lane).map((e) => e.table);
+}
