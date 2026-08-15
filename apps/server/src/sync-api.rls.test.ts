@@ -131,6 +131,19 @@ describe("mountSyncApi node-token auth + handshake", () => {
       const filteredRows = decodeBatch(await filtered.text());
       expect(filteredRows.length).toBeGreaterThanOrEqual(1);
       expect(filteredRows.every((r) => r.originId === NODE_A)).toBe(true); // the origin filter bit
+
+      // A malformed `?limit=` clamps to the default instead of reaching Postgres as `LIMIT NaN` (a
+      // non-numeric limit), `LIMIT 0`, or a negative/fractional limit — each of which the plain
+      // `Number(...)` would have passed straight through to a query error -> an opaque 500 (fix:
+      // logLimit). The two directions differ visibly (CLAUDE.md §1): every bad value still serves the
+      // row with 200; without the clamp `?limit=abc` is a 500.
+      for (const bad of ["abc", "0", "-5", "1.5", ""]) {
+        const clamped = await app.request(`/sync-api/log?after=0&limit=${bad}`, {
+          headers: { Authorization: "Bearer s3cret" },
+        });
+        expect(clamped.status).toBe(200);
+        expect(decodeBatch(await clamped.text()).some((r) => r.table === "products")).toBe(true);
+      }
     } finally {
       await reader.close();
     }

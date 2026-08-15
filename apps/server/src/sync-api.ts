@@ -13,6 +13,26 @@ import "@waitron/sync";
 // an opaque server.internal 500, leaking nothing (error-boundary.ts's own contract).
 const run = createErrorBoundary({ "sync.node_unauthorized": 401 }, "sync-api");
 
+/** The `/sync-api/log` page size when the peer names none — mirrors the pull client's own batchLimit
+ * default (boot.ts). */
+const DEFAULT_LOG_LIMIT = 500;
+
+/**
+ * The `?limit=` query param as a positive integer, clamped to `DEFAULT_LOG_LIMIT` for anything that is
+ * NOT one: a missing param, a non-numeric string (`Number("abc")` is `NaN`), zero/negative, or a
+ * fraction. Plain `Number(...)` let a non-numeric `limit` flow through as `LIMIT NaN`, which Postgres
+ * rejects — an opaque 500 for a malformed peer request rather than a served page. This endpoint has no
+ * 400 param-invalid convention (its boundary answers only `sync.node_unauthorized` -> 401, everything
+ * else -> opaque 500) and its sole caller (`pull.ts`) always sends a valid `batchLimit`, so a
+ * machine-to-machine surface CLAMPS to its default rather than minting a client-error code for a case
+ * only a misbehaving peer produces. No upper cap is imposed here — the caller's batchLimit is trusted
+ * behind the node token, and `readSyncLogSince` applies the `LIMIT` itself. */
+function logLimit(raw: string | undefined): number {
+  if (raw === undefined) return DEFAULT_LOG_LIMIT;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : DEFAULT_LOG_LIMIT;
+}
+
 export interface SyncApiDeps {
   db: Database; // a sync_tailer-member pool
   tenantId: string; // the deli tenant the source reads under
@@ -54,7 +74,7 @@ export function mountSyncApi(app: Hono, deps: SyncApiDeps, log: Logger): void {
       requireNodeToken(c, deps.nodeToken);
       const originId = c.req.query("originId");
       const afterSeq = BigInt(c.req.query("after") ?? "0");
-      const limit = Number(c.req.query("limit") ?? "500");
+      const limit = logLimit(c.req.query("limit"));
       const rows = await withTenant(deps.db, deps.tenantId, (tx) =>
         readSyncLogSince(tx, { afterSeq, limit, ...(originId === undefined ? {} : { originId }) }),
       );
