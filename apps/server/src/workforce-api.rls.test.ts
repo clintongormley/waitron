@@ -335,9 +335,15 @@ describe("Workforce API over real Postgres (RLS end-to-end)", () => {
 
     // B deciding A's swap sees swap.not_found — `decideSwap`'s `where tenant_id = b.tenantId and id =
     // swapA` matches no row (belt-and-suspenders with RLS; the explicit filter is what returns 404 here).
-    const bDecidesA = await send(appB, "POST", `/management-api/swaps/${swapA}/decide`, b.managerCookie, {
-      decision: "approved",
-    });
+    const bDecidesA = await send(
+      appB,
+      "POST",
+      `/management-api/swaps/${swapA}/decide`,
+      b.managerCookie,
+      {
+        decision: "approved",
+      },
+    );
     expect(bDecidesA.status).toBe(404);
 
     // A decides its own swap as app_user under FORCE RLS; the decider column is stamped. This is the §5
@@ -352,9 +358,15 @@ describe("Workforce API over real Postgres (RLS end-to-end)", () => {
     // `revoke update (decided_by_person_id)` was a NO-OP — Postgres won't revoke a column privilege
     // held implicitly via a table-level grant, CLAUDE.md §3 — hence the revoke-table-then-partial-grant
     // shape.) Restored the grant; all six green.
-    const aDecides = await send(appA, "POST", `/management-api/swaps/${swapA}/decide`, a.managerCookie, {
-      decision: "approved",
-    });
+    const aDecides = await send(
+      appA,
+      "POST",
+      `/management-api/swaps/${swapA}/decide`,
+      a.managerCookie,
+      {
+        decision: "approved",
+      },
+    );
     expect(aDecides.status).toBe(204);
     const decided = await suite.admin.execute<{
       status: string;
