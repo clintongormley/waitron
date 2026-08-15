@@ -13,9 +13,10 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json-summary"],
-      // src/index.ts is a pure re-export barrel with no logic of its own, excluded for the same
-      // reason packages/catalogue's own vitest.config.ts excludes its identical barrel. src/testing
-      // and test hold the DB harness/fixtures, measured by their own suites.
+      // src/index.ts is a pure re-export barrel with no logic of its own; src/testing/** and test/**
+      // hold the DB harness/fixtures. All three are test infrastructure, not measured product code, so
+      // they are excluded from the coverage thresholds below (the same barrel exclusion
+      // packages/catalogue's own vitest.config.ts records).
       exclude: [...coverageConfigDefaults.exclude, "src/index.ts", "src/testing/**", "test/**"],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },

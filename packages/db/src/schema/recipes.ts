@@ -40,6 +40,7 @@ export const recipeLines = pgTable(
   },
   (t) => [
     index("recipe_lines_product_id_idx").on(t.productId),
+    index("recipe_lines_ingredient_id_idx").on(t.ingredientId),
     unique("recipe_lines_product_ingredient_key").on(t.productId, t.ingredientId),
   ],
 ).enableRLS();

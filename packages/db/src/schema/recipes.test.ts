@@ -18,4 +18,10 @@ describe("recipes schema", () => {
       order by column_name`);
     expect(cols.rows.map((r) => r.column_name)).toEqual(["manual_allergens", "recipe_derivation"]);
   });
+
+  it("indexes recipe_lines.ingredient_id so productsUsingIngredient avoids a sequential scan", async () => {
+    const indexes = await fx.db.execute<{ indexname: string }>(sql`
+      select indexname from pg_indexes where tablename = 'recipe_lines' order by indexname`);
+    expect(indexes.rows.map((r) => r.indexname)).toContain("recipe_lines_ingredient_id_idx");
+  });
 });
