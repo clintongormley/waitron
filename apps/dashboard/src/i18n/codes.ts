@@ -104,6 +104,38 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That image type isn't supported",
     es: "Ese tipo de imagen no es compatible",
   },
+  "roster.draft_exists": {
+    en: "A draft already exists for that week",
+    es: "Ya existe un borrador para esa semana",
+  },
+  "roster.not_draft": {
+    en: "That week is already published",
+    es: "Esa semana ya está publicada",
+  },
+  "roster.not_found": {
+    en: "That roster could not be found",
+    es: "No se ha encontrado ese cuadrante",
+  },
+  "roster.already_published": {
+    en: "That roster is already published",
+    es: "Ese cuadrante ya está publicado",
+  },
+  "roster.period_already_published": {
+    en: "Another version of that week was just published",
+    es: "Se acaba de publicar otra versión de esa semana",
+  },
+  "shift.not_found": {
+    en: "That shift could not be found",
+    es: "No se ha encontrado ese turno",
+  },
+  "shift.invalid": {
+    en: "Check the shift times",
+    es: "Revisa las horas del turno",
+  },
+  "convenio.not_found": {
+    en: "Configure this location's working-time rules first",
+    es: "Configura primero las reglas de jornada de este local",
+  },
   "server.internal": {
     en: "Something went wrong, try again",
     es: "Algo salió mal, inténtalo de nuevo",

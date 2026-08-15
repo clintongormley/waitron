@@ -30,6 +30,7 @@ export const en = {
   "nav.catalogue": "Menu",
   "nav.layout": "Layout",
   "nav.receipt": "Receipt",
+  "nav.roster": "Shifts",
   // Login screen
   "login.roster": "User",
   "login.password": "Password",
@@ -105,6 +106,21 @@ export const en = {
   // Product list
   "product.active_badge": "Active",
   "product.inactive_badge": "Inactive",
+  // Roster — shift dialog
+  "roster.new_shift": "New shift",
+  "roster.edit_shift": "Edit shift",
+  "roster.shift_start": "Start",
+  "roster.shift_end": "End",
+  "roster.shift_role": "Role",
+  // Roster — screen
+  "roster.title": "Shifts",
+  "roster.week": "Week",
+  "roster.location": "Location",
+  "roster.publish": "Publish",
+  "roster.no_location": "No location configured yet.",
+  "roster.breaches_intro": "Published with advisory warnings:",
+  "roster.published_readonly":
+    "This week is published — create changes as a new draft (coming soon).",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -126,6 +142,7 @@ export const es: Record<StringKey, string> = {
   "nav.catalogue": "Carta",
   "nav.layout": "Disposición",
   "nav.receipt": "Recibo",
+  "nav.roster": "Turnos",
   "login.roster": "Usuario",
   "login.password": "Contraseña",
   "login.totp": "Código (si procede)",
@@ -188,6 +205,19 @@ export const es: Record<StringKey, string> = {
   "product.active": "Activo",
   "product.active_badge": "Activo",
   "product.inactive_badge": "Inactivo",
+  "roster.new_shift": "Nuevo turno",
+  "roster.edit_shift": "Editar turno",
+  "roster.shift_start": "Inicio",
+  "roster.shift_end": "Fin",
+  "roster.shift_role": "Puesto",
+  "roster.title": "Turnos",
+  "roster.week": "Semana",
+  "roster.location": "Local",
+  "roster.publish": "Publicar",
+  "roster.no_location": "Aún no hay ningún local configurado.",
+  "roster.breaches_intro": "Publicado con avisos:",
+  "roster.published_readonly":
+    "Esta semana está publicada — crea los cambios como un nuevo borrador (próximamente).",
 };
 
 // Locale → catalogue. `en` is included as its own catalogue so an explicit

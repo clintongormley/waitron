@@ -165,8 +165,10 @@ function wallMinutes(instant: string, offsetMinutes: number): number {
 }
 
 /** The date (YYYY-MM-DD) of the Monday of the local week a date falls in — the weekly checks' bucket.
- * A Monday-anchored calendar week (Mon=0), so a Sunday buckets with the PREVIOUS Monday. */
-function weekStartOf(date: string): string {
+ * A Monday-anchored calendar week (Mon=0), so a Sunday buckets with the PREVIOUS Monday. Exported
+ * (module-level, deliberately NOT on the package barrel) as the canonical week-start helper: clocking.ts
+ * reuses it to normalize a roster's `period` to its week Monday, so the two never drift apart. */
+export function weekStartOf(date: string): string {
   const d = new Date(`${date}T00:00:00Z`);
   const mondayIndex = (d.getUTCDay() + 6) % 7; // Sun=0 → 6, Mon=1 → 0, …
   return new Date(d.getTime() - mondayIndex * MINUTES_PER_DAY * MS_PER_MINUTE)

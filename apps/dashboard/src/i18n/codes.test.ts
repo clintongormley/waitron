@@ -53,3 +53,24 @@ it("defaults to the active locale when none is passed", () => {
   setLocale("en");
   expect(codeMessage("passkey.registered")).toBe("Passkey added");
 });
+
+it("has a sentence for each roster/shift/convenio code (shift-planning slice 1)", () => {
+  // Every code the roster surface can surface must map to real copy, never the raw wire code and never
+  // the GENERIC "something went wrong" fallback — so the banner reads as an actionable message. Proven
+  // by deletion: drop any of these from CODE_MESSAGES and codeMessage returns GENERIC_ES → the
+  // not.toBe(GENERIC_ES) assertion goes red. GENERIC is not exported, so its Spanish text is inlined.
+  const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
+  for (const code of [
+    "roster.draft_exists",
+    "roster.not_draft",
+    "roster.not_found",
+    "roster.already_published",
+    "roster.period_already_published",
+    "shift.not_found",
+    "shift.invalid",
+    "convenio.not_found",
+  ]) {
+    expect(codeMessage(code, "es")).not.toBe(code);
+    expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
+  }
+});

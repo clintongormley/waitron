@@ -2,6 +2,7 @@ import { afterEach, expect, it } from "vitest";
 import {
   allergenName,
   allergenStateName,
+  breachKindName,
   roleName,
   statusName,
   unitName,
@@ -74,6 +75,14 @@ it("resolves an allergen code to Spanish and English, unknown code raw", () => {
   expect(allergenName("sulphites", "es")).toBe("Dióxido de azufre y sulfitos");
   expect(allergenName("gluten", "en")).toBe("Cereals containing gluten");
   expect(allergenName("kryptonite", "es")).toBe("kryptonite");
+});
+
+it("names every breach kind, falling back to the raw token (shift-planning slice 1)", () => {
+  expect(breachKindName("exceeds_daily_max", "es")).not.toBe("exceeds_daily_max");
+  expect(breachKindName("night_work", "es")).toBe("Trabajo nocturno");
+  // Raw-value fallback for an unmapped token (proven by deletion: make resolve() return "" for a miss
+  // and this assertion goes red).
+  expect(breachKindName("unknown_kind", "es")).toBe("unknown_kind");
 });
 
 it("passes a prototype-chain token (toString/constructor) through raw, never undefined", () => {

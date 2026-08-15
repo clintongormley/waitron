@@ -79,6 +79,21 @@ declare module "@waitron/shared" {
      * catches it. Distinct from `roster.already_published`, which is the SAME version being published
      * twice. `roster.*`, grepped against the registry — never renamed once shipped. */
     "roster.period_already_published": { tenantId: string; rosterVersionId: string };
+    /** `createRosterVersion` (../clocking.ts) was asked to open a draft for a (tenant, location, week)
+     * that already has one. The published-uniqueness index covers only PUBLISHED rows, so drafts need
+     * this guard to keep the authoring screen from silently forking two drafts of one week. `roster.*`,
+     * grepped against the registry — the prefix already groups publishRoster's codes. */
+    "roster.draft_exists": { tenantId: string; locationId: string };
+    /** A shift write named a roster version whose `status` is not `draft` (published or superseded) —
+     * planning is closed once a version is published, so a shift add/edit/remove against it is refused.
+     * Distinct from `roster.not_found` (the version does not exist); here it EXISTS but is not editable.
+     * `roster.*`, grepped — groups with publishRoster's codes. */
+    "roster.not_draft": { tenantId: string; rosterVersionId: string };
+    /** A shift's planned interval is malformed — its start is at or after its end. Refused BEFORE the
+     * insert/update so a caller gets a structured 4xx rather than the `shifts_interval_ck` 23514 → 500.
+     * `reason` names WHICH invariant failed (no shiftId: on add the row does not exist yet). `shift.*`,
+     * grepped — the entity is the shift. */
+    "shift.invalid": { tenantId: string; reason: string };
     /** An approval named a correction that is not an approvable PENDING request — its target entry
      * already carries an `approved` correction. Covers both re-approving the same request (the
      * request row stays `requested` forever, since approval is a second append, never a mutation —

@@ -32,4 +32,13 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("staff", "till.configure")).toBe(false);
     expect(roleHasPermission("supervisor", "till.configure")).toBe(false);
   });
+  it("grants schedule.manage to manager and admin only (shift-planning slice 1)", () => {
+    // A domain-named scheduling permission (roster authoring), granted to exactly the roles that hold
+    // person.manage — manager and admin — and NEVER to staff or supervisor, so the roster write gate
+    // matches the staff-admin gate. Later slices add swap.approve / absence.decide beside it.
+    expect(roleHasPermission("manager", "schedule.manage")).toBe(true);
+    expect(roleHasPermission("admin", "schedule.manage")).toBe(true);
+    expect(roleHasPermission("staff", "schedule.manage")).toBe(false);
+    expect(roleHasPermission("supervisor", "schedule.manage")).toBe(false);
+  });
 });

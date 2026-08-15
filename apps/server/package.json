@@ -42,6 +42,8 @@
     "@waitron/scheduler": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/verifactu": "workspace:*",
+    "@waitron/workforce": "workspace:*",
+    "@waitron/workforce-es": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.6.0",
     "pg": "^8.13.0",

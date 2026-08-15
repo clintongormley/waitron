@@ -13,7 +13,12 @@ import {
   type TimeEntryRecord,
   type WorkforceEntryKind,
 } from "./projection.js";
-import { validateRoster, type PlannedShift, type RosterBreach } from "./roster-validation.js";
+import {
+  validateRoster,
+  weekStartOf,
+  type PlannedShift,
+  type RosterBreach,
+} from "./roster-validation.js";
 import type { WorkTimeRuleset } from "./ruleset.js";
 // Side-effect: registers this package's attendance.*/employment.* codes so `new AppError(...)`
 // below type-checks against the shared registry (packages/shared reachability rule).
@@ -106,6 +111,75 @@ export interface PublishRosterInput {
    * regardless, OWNER DECISION 2026-08-02). When omitted, guardrails are not evaluated and the
    * return is empty. */
   ruleset?: WorkTimeRuleset;
+}
+
+/** A request to open a DRAFT roster version for one location's week (design §3a). */
+export interface CreateRosterVersionInput {
+  tenantId: string;
+  locationId: string;
+  /** ANY day (YYYY-MM-DD) of the week to author. The engine NORMALIZES it to that week's Monday, which
+   * becomes period_start (period_end is then derived as +6 days), so a non-Monday caller (a date
+   * picker) can never open a mid-week roster and any two days in one calendar week collide on the
+   * same draft. */
+  period: string;
+}
+
+/** One `roster_versions` row, mapped to the camelCase shape the API/screen read (dates as
+ * 'YYYY-MM-DD' strings, `published_at` as a UTC ISO instant). */
+export interface RosterVersionRow {
+  id: string;
+  locationId: string;
+  periodStart: string;
+  periodEnd: string;
+  status: "draft" | "published" | "superseded";
+  publishedAt: string | null;
+  publishedByPersonId: string | null;
+}
+
+/** One `shifts` row, mapped to camelCase with UTC ISO instants for the grid. */
+export interface ShiftRow {
+  id: string;
+  personId: string;
+  locationId: string;
+  startsAt: string;
+  startsOffsetMinutes: number;
+  endsAt: string;
+  endsOffsetMinutes: number;
+  role: string | null;
+  rosterVersionId: string | null;
+}
+
+/** The week's roster snapshot for the authoring grid — the current draft (or, if none, the published
+ * version) and its attached shifts, or `{ version: null, shifts: [] }` for an unrostered week. */
+export interface RosterSnapshot {
+  version: RosterVersionRow | null;
+  shifts: ShiftRow[];
+}
+
+/** A request to add one planned shift to a DRAFT roster version (design §3a). */
+export interface AddShiftInput {
+  tenantId: string;
+  versionId: string;
+  personId: string;
+  /** The centro de trabajo — should match the version's location (the screen uses the roster's). */
+  locationId: string;
+  startsAt: string;
+  startsOffsetMinutes: number;
+  endsAt: string;
+  endsOffsetMinutes: number;
+  role: string | null;
+}
+
+/** A partial edit of a shift on a DRAFT roster version (design §3a) — only the supplied fields change. */
+export interface UpdateShiftInput {
+  tenantId: string;
+  shiftId: string;
+  personId?: string;
+  startsAt?: string;
+  startsOffsetMinutes?: number;
+  endsAt?: string;
+  endsOffsetMinutes?: number;
+  role?: string | null;
 }
 
 /** The three states a worker's shift can be in, derived from the most recent clock event. */
@@ -326,6 +400,194 @@ export class WorkforceBackend {
   private async lockPerson(tx: Transaction, tenantId: string, personId: string): Promise<void> {
     await tx.execute(sql`
       select id from persons where tenant_id = ${tenantId} and id = ${personId} for no key update`);
+  }
+
+  /**
+   * Opens a DRAFT roster version for one location's week (design §3a) — planning data (mutable),
+   * inserted with status 'draft' and a null publish stamp. `input.period` is NORMALIZED to its week
+   * Monday first (`weekStartOf`, the same helper the guardrail buckets use), so a non-Monday caller
+   * cannot open a mid-week roster and two different days of one calendar week map to the same
+   * period_start — closing the mid-week + duplicate-draft hole structurally. `period_end` is derived
+   * in SQL as the inclusive Sunday (`+ 6` days), so no date value round-trips through TypeScript.
+   * Throws `roster.draft_exists` when a draft for this (tenant, location, week) already exists — the
+   * published-uniqueness index does not cover drafts, so this check-then-insert is the guard.
+   * Slice-1 single-author screen: a concurrent double-create could still fork two drafts (no draft
+   * unique index — that would be a migration); acceptable and documented here.
+   */
+  async createRosterVersion(tx: Transaction, input: CreateRosterVersionInput): Promise<string> {
+    const period = weekStartOf(input.period);
+    const existing = await tx.execute<{ id: string }>(sql`
+      select id from roster_versions
+      where tenant_id = ${input.tenantId} and location_id = ${input.locationId}
+        and period_start = ${period} and status = 'draft'
+      limit 1`);
+    if (existing.rows.length > 0) {
+      throw new AppError("roster.draft_exists", {
+        tenantId: input.tenantId,
+        locationId: input.locationId,
+      });
+    }
+    const { rows } = await tx.execute<{ id: string }>(sql`
+      insert into roster_versions (tenant_id, location_id, period_start, period_end)
+      values (${input.tenantId}, ${input.locationId}, ${period}, ${period}::date + 6)
+      returning id`);
+    return rows[0]!.id;
+  }
+
+  /**
+   * Reads the roster snapshot for one location's week (design §3a) — the current DRAFT (what is being
+   * edited) or, when there is none, the current PUBLISHED version, plus its attached shifts. Returns
+   * `{ version: null, shifts: [] }` for a week with no roster. `input.period` is NORMALIZED to its
+   * week Monday first, the SAME snap `createRosterVersion` applies, so a non-Monday query (from a date
+   * picker) still finds the week's roster rather than missing it.
+   */
+  async getRoster(
+    tx: Transaction,
+    input: { tenantId: string; locationId: string; period: string },
+  ): Promise<RosterSnapshot> {
+    const period = weekStartOf(input.period);
+    // Prefer the DRAFT (what is being edited); fall back to the current PUBLISHED version for the week.
+    // `period_start/end::text`: node-postgres parses a `date` column into a JS Date, PGlite into a
+    // string — the same driver divergence `attachedShifts` handles with `to_char`. The `::text` cast
+    // pins both to a 'YYYY-MM-DD' string, so the row (and its JSON to the browser) is stable.
+    const { rows } = await tx.execute<RosterVersionDbRow>(sql`
+      select id, location_id, period_start::text as period_start, period_end::text as period_end, status,
+        to_char(published_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as published_at,
+        published_by_person_id
+      from roster_versions
+      where tenant_id = ${input.tenantId} and location_id = ${input.locationId}
+        and period_start = ${period} and status in ('draft', 'published')
+      order by case when status = 'draft' then 0 else 1 end
+      limit 1`);
+    const row = rows[0];
+    if (row === undefined) return { version: null, shifts: [] };
+    const version = mapRosterVersion(row);
+    return { version, shifts: await this.shiftsForVersion(tx, input.tenantId, version.id) };
+  }
+
+  /**
+   * Reads one `roster_versions` row by id, or throws `roster.not_found`. The publish route reads a
+   * version's `locationId` off this before resolving its convenio ruleset.
+   */
+  async getRosterVersion(
+    tx: Transaction,
+    input: { tenantId: string; versionId: string },
+  ): Promise<RosterVersionRow> {
+    const { rows } = await tx.execute<RosterVersionDbRow>(sql`
+      select id, location_id, period_start::text as period_start, period_end::text as period_end, status,
+        to_char(published_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as published_at,
+        published_by_person_id
+      from roster_versions
+      where tenant_id = ${input.tenantId} and id = ${input.versionId}
+      limit 1`);
+    const row = rows[0];
+    if (row === undefined) {
+      throw new AppError("roster.not_found", {
+        tenantId: input.tenantId,
+        rosterVersionId: input.versionId,
+      });
+    }
+    return mapRosterVersion(row);
+  }
+
+  /** The shifts attached to a version, mapped to `ShiftRow`s ordered by start instant. */
+  private async shiftsForVersion(
+    tx: Transaction,
+    tenantId: string,
+    versionId: string,
+  ): Promise<ShiftRow[]> {
+    const { rows } = await tx.execute<ShiftDbRow>(sql`
+      select id, person_id, location_id,
+        to_char(starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as starts_at,
+        starts_offset_minutes,
+        to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at,
+        ends_offset_minutes, role, roster_version_id
+      from shifts
+      where tenant_id = ${tenantId} and roster_version_id = ${versionId}
+      order by starts_at`);
+    return rows.map(mapShift);
+  }
+
+  /**
+   * Adds a planned shift to a DRAFT roster version (design §3a), attaching it directly
+   * (`roster_version_id = versionId`). Refuses a malformed interval up front (`shift.invalid`, not the
+   * `shifts_interval_ck` 500 or a `timestamptz` 22007), a missing version (`roster.not_found`, via
+   * `rosterVersionStatus`) and a non-draft version (`roster.not_draft`). Planning data — a plain
+   * INSERT, no chain.
+   */
+  async addShift(tx: Transaction, input: AddShiftInput): Promise<string> {
+    assertShiftInterval(input.tenantId, input.startsAt, input.endsAt);
+    const status = await this.rosterVersionStatus(tx, input.tenantId, input.versionId); // throws roster.not_found
+    if (status !== "draft") {
+      throw new AppError("roster.not_draft", {
+        tenantId: input.tenantId,
+        rosterVersionId: input.versionId,
+      });
+    }
+    const { rows } = await tx.execute<{ id: string }>(sql`
+      insert into shifts (tenant_id, person_id, location_id, starts_at, starts_offset_minutes,
+        ends_at, ends_offset_minutes, role, roster_version_id)
+      values (${input.tenantId}, ${input.personId}, ${input.locationId},
+        ${input.startsAt}, ${input.startsOffsetMinutes}, ${input.endsAt}, ${input.endsOffsetMinutes},
+        ${input.role}, ${input.versionId})
+      returning id`);
+    return rows[0]!.id;
+  }
+
+  /** Edits a shift on a DRAFT version. Reads the shift + its version status (`shift.not_found` if the
+   * shift is gone, `roster.not_draft` if its version is published). Validates the EFFECTIVE interval
+   * (patch value ?? current) so a partial edit cannot land a malformed interval as a 500 —
+   * `shift.invalid`. The stored value is always a parseable UTC ISO instant, so a NaN in the effective
+   * interval can only come from the patch, i.e. `assertShiftInterval` screens exactly the field(s) the
+   * patch supplies. */
+  async updateShift(tx: Transaction, input: UpdateShiftInput): Promise<void> {
+    const shift = await this.shiftForWrite(tx, input.tenantId, input.shiftId);
+    const startsAt = input.startsAt ?? shift.startsAt;
+    const endsAt = input.endsAt ?? shift.endsAt;
+    assertShiftInterval(input.tenantId, startsAt, endsAt);
+    await tx.execute(sql`
+      update shifts set
+        person_id = ${input.personId ?? shift.personId},
+        starts_at = ${startsAt},
+        starts_offset_minutes = ${input.startsOffsetMinutes ?? shift.startsOffsetMinutes},
+        ends_at = ${endsAt},
+        ends_offset_minutes = ${input.endsOffsetMinutes ?? shift.endsOffsetMinutes},
+        role = ${input.role === undefined ? shift.role : input.role}
+      where tenant_id = ${input.tenantId} and id = ${input.shiftId}`);
+  }
+
+  /** Deletes a shift on a DRAFT version. Same guards as `updateShift`. */
+  async removeShift(tx: Transaction, input: { tenantId: string; shiftId: string }): Promise<void> {
+    await this.shiftForWrite(tx, input.tenantId, input.shiftId);
+    await tx.execute(
+      sql`delete from shifts where tenant_id = ${input.tenantId} and id = ${input.shiftId}`,
+    );
+  }
+
+  /** Reads a shift + its version's status, throwing `shift.not_found` (no such shift) or
+   * `roster.not_draft` (the shift's non-null version is not a draft). A null `roster_version_id`
+   * (an unattached draft shift) is editable — there is no published version to protect. */
+  private async shiftForWrite(
+    tx: Transaction,
+    tenantId: string,
+    shiftId: string,
+  ): Promise<ShiftRow> {
+    const { rows } = await tx.execute<ShiftDbRow & { version_status: string | null }>(sql`
+      select s.id, s.person_id, s.location_id,
+        to_char(s.starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as starts_at,
+        s.starts_offset_minutes,
+        to_char(s.ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at,
+        s.ends_offset_minutes, s.role, s.roster_version_id, rv.status as version_status
+      from shifts s
+      left join roster_versions rv on rv.id = s.roster_version_id and rv.tenant_id = ${tenantId}
+      where s.tenant_id = ${tenantId} and s.id = ${shiftId}
+      limit 1`);
+    const row = rows[0];
+    if (row === undefined) throw new AppError("shift.not_found", { tenantId, shiftId });
+    if (row.version_status !== null && row.version_status !== "draft") {
+      throw new AppError("roster.not_draft", { tenantId, rosterVersionId: row.roster_version_id! });
+    }
+    return mapShift(row);
   }
 
   /**
@@ -753,4 +1015,77 @@ export class WorkforceBackend {
 /** The UTC ISO instant `deltaDays` from a local date's midnight — bounds the fetch window. */
 function shiftDay(date: string, deltaDays: number): string {
   return new Date(Date.parse(`${date}T00:00:00Z`) + deltaDays * MS_PER_DAY).toISOString();
+}
+
+/**
+ * Screens a shift's interval before the row reaches the `timestamptz` column, throwing `shift.invalid`
+ * (never a driver error) in two cases — shared by `addShift` and `updateShift`:
+ *   - either endpoint UNPARSEABLE — `Date.parse` is `NaN`, and because `NaN >= NaN` is `false` a bare
+ *     ordering guard would let it through to a 22007 at the DB (`reason: "unparseable_timestamp"`);
+ *   - ends not strictly after starts (`reason: "ends_not_after_starts"`) — exactly equal is invalid too.
+ * The engine verb is a public `@waitron/workforce` API and must honour this contract itself, even
+ * though the HTTP route also screens the inputs (`requireTimestamp`).
+ */
+function assertShiftInterval(tenantId: string, startsAt: string, endsAt: string): void {
+  const startMs = Date.parse(startsAt);
+  const endMs = Date.parse(endsAt);
+  if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+    throw new AppError("shift.invalid", { tenantId, reason: "unparseable_timestamp" });
+  }
+  if (startMs >= endMs) {
+    throw new AppError("shift.invalid", { tenantId, reason: "ends_not_after_starts" });
+  }
+}
+
+/** The raw `roster_versions` shape `getRoster`/`getRosterVersion` read — snake_case, dates cast to
+ * 'YYYY-MM-DD' text and `published_at` to a UTC ISO instant, so no driver divergence reaches the map. */
+type RosterVersionDbRow = {
+  id: string;
+  location_id: string;
+  period_start: string;
+  period_end: string;
+  status: string;
+  published_at: string | null;
+  published_by_person_id: string | null;
+};
+
+/** The raw `shifts` shape the read verbs return — instants normalised to UTC ISO by `to_char`. A
+ * `type` object literal (not an `interface`) so it satisfies `tx.execute`'s `Record<string, unknown>`
+ * constraint via TypeScript's implicit index signature, matching this file's inline row types. */
+type ShiftDbRow = {
+  id: string;
+  person_id: string;
+  location_id: string;
+  starts_at: string;
+  starts_offset_minutes: number;
+  ends_at: string;
+  ends_offset_minutes: number;
+  role: string | null;
+  roster_version_id: string | null;
+};
+
+function mapRosterVersion(r: RosterVersionDbRow): RosterVersionRow {
+  return {
+    id: r.id,
+    locationId: r.location_id,
+    periodStart: r.period_start,
+    periodEnd: r.period_end,
+    status: r.status as RosterVersionRow["status"],
+    publishedAt: r.published_at,
+    publishedByPersonId: r.published_by_person_id,
+  };
+}
+
+function mapShift(r: ShiftDbRow): ShiftRow {
+  return {
+    id: r.id,
+    personId: r.person_id,
+    locationId: r.location_id,
+    startsAt: r.starts_at,
+    startsOffsetMinutes: r.starts_offset_minutes,
+    endsAt: r.ends_at,
+    endsOffsetMinutes: r.ends_offset_minutes,
+    role: r.role,
+    rosterVersionId: r.roster_version_id,
+  };
 }

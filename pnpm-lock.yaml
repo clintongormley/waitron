@@ -135,6 +135,12 @@ importers:
       '@waitron/verifactu':
         specifier: workspace:*
         version: link:../../packages/verifactu
+      '@waitron/workforce':
+        specifier: workspace:*
+        version: link:../../packages/workforce
+      '@waitron/workforce-es':
+        specifier: workspace:*
+        version: link:../../packages/workforce-es
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@electric-sql/pglite@0.5.4)(@types/pg@8.20.0)(pg@8.22.0)
