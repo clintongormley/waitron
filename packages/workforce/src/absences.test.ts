@@ -5,7 +5,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { createAbsence, setAbsenceStatus } from "./absences.js";
+import { createAbsence, listPendingAbsences, setAbsenceStatus } from "./absences.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { insertAbsence, seedPerson } from "../test/fixtures.js";
@@ -156,21 +156,81 @@ describe("createAbsence", () => {
 });
 
 describe("setAbsenceStatus", () => {
-  it("moves a requested absence to approved", async () => {
+  it("moves a requested absence to approved and stamps the decider + decided_at", async () => {
     const id = await insertAbsence(suite.db, { tenantId, personId });
-    await run((tx) => setAbsenceStatus(tx, { tenantId, absenceId: id, status: "approved" }));
-    const rows = await suite.db.execute<{ status: string }>(
-      sql`select status from absences where id = ${id}`,
+    const decider = await seedPerson(suite.db, tenantId, `mgr-${crypto.randomUUID()}`);
+    await run((tx) =>
+      setAbsenceStatus(tx, {
+        tenantId,
+        absenceId: id,
+        status: "approved",
+        decidedByPersonId: decider,
+      }),
     );
+    const rows = await suite.db.execute<{
+      status: string;
+      decided_by_person_id: string | null;
+      decided_at: string | null;
+    }>(sql`select status, decided_by_person_id, decided_at from absences where id = ${id}`);
     expect(rows.rows[0]!.status).toBe("approved");
+    expect(rows.rows[0]!.decided_by_person_id).toBe(decider);
+    expect(rows.rows[0]!.decided_at).not.toBeNull();
   });
 
   it("throws absence.not_found for an absence that does not exist under the tenant", async () => {
     const code = await codeOfRejection(() =>
       run((tx) =>
-        setAbsenceStatus(tx, { tenantId, absenceId: crypto.randomUUID(), status: "rejected" }),
+        setAbsenceStatus(tx, {
+          tenantId,
+          absenceId: crypto.randomUUID(),
+          status: "rejected",
+          decidedByPersonId: null,
+        }),
       ),
     );
     expect(code).toBe("absence.not_found");
+  });
+});
+
+describe("listPendingAbsences", () => {
+  it("returns only requested absences for the tenant, ordered by created_at", async () => {
+    // A FRESH tenant, isolated from the sibling suites above: the shared PGlite DB persists across the
+    // file, and the `createAbsence` tests leave several `requested` absences on the module-level
+    // `tenantId`. Querying its own tenant keeps `toEqual([requested])` order-independent (CLAUDE.md §4)
+    // — mirrors listPendingSwaps' fresh-tenant isolation in shift-swaps.test.ts.
+    const listTenant = await seedTenant(suite.db);
+    const p = await seedPerson(suite.db, listTenant, `la-${crypto.randomUUID()}`);
+    const requested = await insertAbsence(suite.db, {
+      tenantId: listTenant,
+      personId: p,
+      kind: "sick_leave",
+      startsOn: "2026-06-01",
+      endsOn: "2026-06-03",
+      status: "requested",
+      note: "flu",
+    });
+    // An already-approved absence must NOT appear.
+    await insertAbsence(suite.db, {
+      tenantId: listTenant,
+      personId: p,
+      startsOn: "2026-07-01",
+      endsOn: "2026-07-02",
+      status: "approved",
+    });
+    const rows = await withTenant(suite.db, listTenant, (tx) =>
+      listPendingAbsences(tx, { tenantId: listTenant }),
+    );
+    expect(rows.map((r) => r.id)).toEqual([requested]);
+    expect(rows[0]!.status).toBe("requested");
+    expect(rows[0]!.personId).toBe(p);
+    expect(rows[0]!.kind).toBe("sick_leave");
+    expect(rows[0]!.startsOn).toBe("2026-06-01");
+    expect(rows[0]!.endsOn).toBe("2026-06-03");
+    expect(rows[0]!.note).toBe("flu");
+    // Strengthening (CLAUDE.md §4 toMatchObject-gap / Task 3 review): assert EVERY mapped field so a
+    // snake_case→camelCase mis-wire on an unasserted column cannot pass silently. `createdAt` is the
+    // one field the brief left unchecked — its value is dynamic (now()), so pin the to_char-normalised
+    // UTC ISO SHAPE; a mis-wire to a date column (e.g. starts_on) would not carry the "T…Z" instant.
+    expect(rows[0]!.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
   });
 });

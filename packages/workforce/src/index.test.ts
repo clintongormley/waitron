@@ -24,6 +24,7 @@ describe("the public surface", () => {
         "shiftSwapStatus",
         "createAbsence",
         "setAbsenceStatus",
+        "listPendingAbsences",
         "requestSwap",
         "acceptSwap",
         "decideSwap",
