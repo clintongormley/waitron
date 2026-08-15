@@ -33,6 +33,11 @@ const LOCATION = "22222222-2222-4222-8222-222222222222";
 const TILL = "33333333-3333-4333-8333-333333333333";
 const NODE = "44444444-4444-4444-8444-444444444444";
 const SERIES = "55555555-5555-4555-8555-555555555555";
+// The ordered-lane FK parent a fast-lane payment references (payments.working_order_id NOT NULL →
+// working_orders). Seeded directly on BOTH DBs so the source can capture a payment referencing it and
+// the target's FK resolves without a cross-lane 23503 park (that park is proven in the apply/pull
+// suites; this e2e is the two-lane composition proof, spec §8/§4e).
+const WORKING_ORDER = "aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa";
 
 const postgres = useRealPostgres({
   start: startRealPostgres,
@@ -64,6 +69,11 @@ async function seedParents(admin: Database): Promise<void> {
     values (${NODE}, ${TENANT}, ${LOCATION}, 'Node') on conflict do nothing`);
   await admin.execute(sql`insert into invoice_series (id, tenant_id, node_id, code)
     values (${SERIES}, ${TENANT}, ${NODE}, 'A') on conflict do nothing`);
+  // working_orders IS enrolled (ordered lane), but this admin insert runs with no app.node_id GUC, so
+  // sync_capture stamps origin_id = the all-zero uuid — excluded from every ?originId=NODE_A pull, so
+  // it never rides either lane under test. It exists only as the FK parent a captured payment needs.
+  await admin.execute(sql`insert into working_orders (id, tenant_id, till_id, order_number)
+    values (${WORKING_ORDER}, ${TENANT}, ${TILL}, 1) on conflict do nothing`);
 }
 
 /** Stamp a database's singleton deployment.environment. */
@@ -105,6 +115,30 @@ function sourceHttp(environment: "production" | "preproduction"): HttpClient {
 const targetSaleCount = async (id: string): Promise<string> => {
   const r = await targetAdmin.execute<{ v: string }>(
     sql`select count(*)::int::text as v from sales where id = ${id}`,
+  );
+  return r.rows[0]!.v;
+};
+
+/** Capture a payment on the SOURCE under withTenant{nodeId: NODE_A} — sync_capture writes it to
+ * source.sync_log with origin_id = NODE_A on the FAST lane (payments/payment_refunds, spec §4b). Only
+ * the NOT-NULL columns are supplied: created_at/updated_at default, and sale_id/node_id/external_ref/…
+ * are nullable (payments.ts). working_order_id points at the directly-seeded parent so the source FK
+ * (and the target's, on apply) resolves. */
+async function capturePaymentOnSource(paymentId: string): Promise<void> {
+  await withTenant(
+    sourceWriter,
+    TENANT,
+    (tx) =>
+      tx.execute(sql`insert into payments
+        (id, tenant_id, working_order_id, provider, payment_ref, amount, state)
+        values (${paymentId}, ${TENANT}, ${WORKING_ORDER}, 'stripe', ${paymentId}, '10.00', 'captured')`),
+    { nodeId: NODE_A },
+  );
+}
+
+const targetPaymentCount = async (id: string): Promise<string> => {
+  const r = await targetAdmin.execute<{ v: string }>(
+    sql`select count(*)::int::text as v from payments where id = ${id}`,
   );
   return r.rows[0]!.v;
 };
@@ -204,5 +238,46 @@ describe("two-node sync end-to-end over a real HTTP wire", () => {
     const applied = await syncPullOnce(matched, peer);
     expect(applied.applied).toBeGreaterThanOrEqual(1);
     expect(await targetSaleCount(saleId)).toBe("1"); // now it is on the target
+  });
+
+  it("two lanes land their own tables on independent cursors over the HTTP wire (spec §8)", async () => {
+    // The fast lane (?lane=fast) carries ONLY payments/payment_refunds; the ordered lane (?lane=ordered)
+    // carries the rest. Capture a sale AND a payment on the source, then pull each lane: the payment
+    // lands on the fast cursor, the sale on the ordered cursor, and the two (subscriber, origin) cursor
+    // rows advance INDEPENDENTLY. This is the full composition — sync-api ?lane= (Task 7) → source table
+    // filter (Task 4) → pull lane (Task 6) → apply lane cursor (Task 5) — over a real Hono app.request.
+    await stampEnv(targetAdmin, "production");
+    const saleId = "88888888-8888-4888-8888-888888888888";
+    const paymentId = "99999999-9999-4999-8999-999999999999";
+    await captureSaleOnSource(saleId, 3);
+    await capturePaymentOnSource(paymentId);
+
+    const base = {
+      localDb: targetApplier,
+      subscriberId: SUB_MAIN,
+      tenantId: TENANT,
+      localEnvironment: "production",
+      http: sourceHttp("production"),
+      batchLimit: 500,
+    };
+    const peer = { nodeId: NODE_A, url: "", token: "shared" };
+
+    // FAST lane → the payment lands; the sale is not carried on this lane.
+    const fast = await syncPullOnce({ ...base, lane: "fast" as const }, peer);
+    expect(fast.applied).toBeGreaterThanOrEqual(1);
+    expect(await targetPaymentCount(paymentId)).toBe("1");
+
+    // ORDERED lane → the sale lands on its own cursor.
+    const ordered = await syncPullOnce({ ...base, lane: "ordered" as const }, peer);
+    expect(ordered.applied).toBeGreaterThanOrEqual(1);
+    expect(await targetSaleCount(saleId)).toBe("1");
+
+    // Two distinct lane cursor rows for one (subscriber, origin), each advanced past 0 — independent.
+    const cursors = await targetAdmin.execute<{ lane: string; seq: string }>(
+      sql`select lane, last_applied_seq::text as seq from sync_cursor
+          where subscriber_id = ${SUB_MAIN} and origin_id = ${NODE_A}::uuid order by lane`,
+    );
+    expect(cursors.rows.map((r) => r.lane)).toEqual(["fast", "ordered"]);
+    expect(cursors.rows.every((r) => BigInt(r.seq) > 0n)).toBe(true);
   });
 });
