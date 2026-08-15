@@ -124,7 +124,7 @@ export async function listPendingAbsences(
       to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at
     from absences
     where tenant_id = ${input.tenantId} and status = 'requested'
-    order by created_at`);
+    order by absences.created_at`);
   return rows.map((r) => ({
     id: r.id,
     personId: r.person_id,

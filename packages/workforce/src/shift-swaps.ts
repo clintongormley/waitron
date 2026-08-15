@@ -174,7 +174,7 @@ export async function listPendingSwaps(
       to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at
     from shift_swaps
     where tenant_id = ${input.tenantId} and status = 'accepted'
-    order by created_at`);
+    order by shift_swaps.created_at`);
   return rows.map((r) => ({
     id: r.id,
     requestedByPersonId: r.requested_by_person_id,

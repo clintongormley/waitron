@@ -1,7 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import "@waitron/ui/src/components/wt-button.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, LocationSummary, PlannedVsActualRow } from "../api/client.js";
