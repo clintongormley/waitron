@@ -14,7 +14,7 @@ import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
-import { loadConfig } from "./config.js";
+import { loadConfig, loadSyncConfig } from "./config.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { createLogger } from "./logger.js";
 import {
@@ -41,6 +41,10 @@ import { mountManagementApi } from "./management-api.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountWorkforceApi } from "./workforce-api.js";
 import { mountMedia } from "./media-api.js";
+import { mountSyncApi } from "./sync-api.js";
+import { fetchHttpClient } from "./sync-http.js";
+import { runSyncPull } from "@waitron/sync";
+import type { Database } from "@waitron/db";
 import { readOrderFlow } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
@@ -327,6 +331,47 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // guarding the filename against traversal with its own explicit regex (design §5e). Mounted after
   // the gated groups purely for reading order; route registration only, no database work at boot.
   mountMedia(app, { mediaDir: config.mediaDir }, log);
+
+  // The active-active sync transport: enabled iff WAITRON_SYNC_PEERS is set (loadSyncConfig). It opens
+  // its OWN pool (a sync_tailer + app_user member — the app pool cannot read sync_log), mounts the
+  // node-token-authenticated source group on the SAME app, and starts the background pull worker
+  // against each configured peer. The sync NODE ID is till.nodeId (one source of truth; no second
+  // WAITRON_SYNC_NODE_ID), and minTickMs/maxTickMs double as the worker's idle interval and backoff
+  // ceiling. A host that sets no sync env leaves syncConfig undefined, so every existing boot is
+  // unchanged (boot.test.ts sets none). Torn down in close() below.
+  const syncConfig = loadSyncConfig(env);
+  const syncController = new AbortController();
+  let syncDb: Database | undefined;
+  let syncWorker: Promise<void> | undefined;
+  if (syncConfig !== undefined) {
+    syncDb = await createPostgresDb(syncConfig.databaseUrl);
+    mountSyncApi(
+      app,
+      {
+        db: syncDb,
+        tenantId: till.tenantId,
+        nodeId: till.nodeId,
+        environment: config.environment,
+        nodeToken: syncConfig.nodeToken,
+      },
+      log,
+    );
+    syncWorker = runSyncPull({
+      localDb: syncDb,
+      subscriberId: till.nodeId,
+      tenantId: till.tenantId,
+      localEnvironment: config.environment,
+      http: fetchHttpClient,
+      batchLimit: 500,
+      peers: syncConfig.peers,
+      sleep: realSleep,
+      signal: syncController.signal,
+      minIdleMs: config.minTickMs,
+      maxBackoffMs: config.maxTickMs,
+      log,
+    });
+  }
+
   // `buildServeOptions` turns the plain-HTTP options into HTTPS ones when `config.tls` is set,
   // reading the cert/key files, and returns them unchanged otherwise (loopback dev). The exact
   // `@hono/node-server` option names (`createServer` + `serverOptions`) are confirmed and documented
@@ -484,7 +529,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       if (closed) return;
       closed = true;
       controller.abort();
+      // Stop the sync pull worker alongside the main loop so close() never leaves it dangling; the
+      // worker's abort-aware sleep returns promptly rather than waiting out a backoff.
+      syncController.abort();
       await loop;
+      if (syncWorker !== undefined) await syncWorker;
       // `finally`, not a plain sequential `await`: a rejecting `server.close()` (the listener
       // already gone — see bin.ts's own double-signal guard) must still drain the pool. `close()`
       // is exported on `StartedServer`, and a caller reaching for it outside `bin.ts` — a test hook
@@ -496,6 +545,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         );
       } finally {
         await db.close();
+        if (syncDb !== undefined) await syncDb.close();
       }
       log("info", "server.stopped");
     },

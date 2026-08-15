@@ -31,6 +31,11 @@ export type { ReadSyncLogArgs } from "./source.js";
 // jsonb-text string field (design §4b) so JS never re-parses a numeric across the wire (Task 6).
 export { decodeBatch, encodeBatch } from "./wire.js";
 
+// The pull client — syncPullOnce (env handshake + fetch + apply one batch) and the runSyncPull
+// background loop boot.ts starts (drain-per-peer, bounded backoff, stream_stalled alarm) — Task 9.
+export { runSyncPull, syncPullOnce } from "./pull.js";
+export type { HttpClient, PullPeer, RunSyncPullDeps, SyncPullDeps } from "./pull.js";
+
 // Bounded log retention (prune to the min across ALL subscriber cursors — a down subscriber holds the
 // log) and per-subscriber lag reporting (docs/superpowers/plans/2026-08-08-sync-slice1-commercial-outbox-plan.md
 // Task 6).

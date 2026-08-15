@@ -416,6 +416,48 @@ describe("startServer, against a real container as the deployment role", () => {
     await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();
   }, 60_000);
 
+  it("mounts the node-token sync API and starts the pull worker when WAITRON_SYNC_* is configured", async () => {
+    // The sync transport is enabled by WAITRON_SYNC_PEERS. The peer URL is unreachable, so the pull
+    // worker's one handshake attempt goes through fetchHttpClient (undici's fetch, MOCKED to reject in
+    // this file) and the peer backs off — which is all this test needs from the worker: it exercises
+    // the production HttpClient adapter and the boot wiring without a second live node. /sync-api/hello
+    // (no DB) proves mountSyncApi ran with this node's till.nodeId; a tokenless request proves the
+    // fail-closed middleware is live. The sync DB URL reuses the deployment role: /hello needs no DB
+    // and the worker never reaches a sync_log read (it fails at the peer handshake first). close() must
+    // tear the worker + pool down alongside the main loop.
+    const port = await freePort();
+    const server = await startServer({
+      ...KEY_ENV,
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "production",
+      WAITRON_SYNC_PEERS: JSON.stringify([
+        { nodeId: "66666666-6666-4666-8666-666666666666", url: "http://127.0.0.1:1/", token: "peer-token" },
+      ]),
+      WAITRON_SYNC_NODE_TOKEN: "boot-node-token",
+      WAITRON_SYNC_DATABASE_URL: databaseUrl,
+    });
+    try {
+      const hello = await fetch(`http://127.0.0.1:${port}/sync-api/hello`, {
+        headers: { Authorization: "Bearer boot-node-token" },
+      });
+      expect(hello.status).toBe(200);
+      expect(await hello.json()).toEqual({
+        nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+        environment: "production",
+      });
+      // A tokenless request is refused — the fail-closed middleware, not just the route, is live.
+      const unauth = await fetch(`http://127.0.0.1:${port}/sync-api/hello`);
+      expect(unauth.status).toBe(401);
+      // Give the pull worker a beat to make its (failing) peer handshake, exercising fetchHttpClient.
+      await delay(100);
+    } finally {
+      await server.close();
+    }
+    await expect(fetch(`http://127.0.0.1:${port}/sync-api/hello`)).rejects.toThrow(); // listener gone
+  }, 60_000);
+
   it("boots without WAITRON_SETTLEMENT_LAG_MS, taking the neutral layer's own default", async () => {
     const port = await freePort();
     const server = await startServer({
