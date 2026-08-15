@@ -41,6 +41,9 @@ export class FakeReconciler implements PaymentReconciler {
         },
         incidents: recordIncidentOnce,
         settlementLagMs: this.settlementLagMs,
+        // The all-zero origin sentinel: this DB-backed double is not a provisioned node, and no suite
+        // using it asserts on captured origin (sync origin attribution is proven in the server suite).
+        nodeId: "00000000-0000-0000-0000-000000000000",
       },
       tenantId,
       period,

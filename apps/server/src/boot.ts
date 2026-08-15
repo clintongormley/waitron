@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { mkdirSync } from "node:fs";
 import { serve } from "@hono/node-server";
-import { createPostgresDb } from "@waitron/db";
+import { createPostgresDb, type Database } from "@waitron/db";
 import { credentialTenants, loadKeyRing } from "@waitron/credentials";
 import { runDue } from "@waitron/scheduler";
 import {
@@ -14,7 +14,7 @@ import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
-import { loadConfig } from "./config.js";
+import { loadConfig, loadSyncConfig } from "./config.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { createLogger } from "./logger.js";
 import {
@@ -41,6 +41,9 @@ import { mountManagementApi } from "./management-api.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountWorkforceApi } from "./workforce-api.js";
 import { mountMedia } from "./media-api.js";
+import { mountSyncApi } from "./sync-api.js";
+import { fetchHttpClient } from "./sync-http.js";
+import { runSyncPull } from "@waitron/sync";
 import { readOrderFlow } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
@@ -124,13 +127,21 @@ export async function buildCardProvider(
       client,
       db: deps.db,
       tenantId: cfg.tenantId,
+      // The till's own node id, so a card collect's enrolled `payments` writes capture this node as
+      // the sync origin (design §4d(B)).
+      nodeId: cfg.nodeId,
       resolveReader: () => Promise.resolve(readerId),
     });
   }
   // `stripe_on_device` — the handheld Tap-to-Pay flow, which mints its own connection token and needs
   // no server-side reader id (till-config.ts requires none for this branch).
   const client = await cardDeviceClientResolver(deps)(cfg.tenantId);
-  return new StripeOnDeviceProvider({ client, db: deps.db, tenantId: cfg.tenantId });
+  return new StripeOnDeviceProvider({
+    client,
+    db: deps.db,
+    tenantId: cfg.tenantId,
+    nodeId: cfg.nodeId,
+  });
 }
 
 /**
@@ -203,6 +214,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
 
   const reconciler = new StripeReconciler({
     db,
+    nodeId: config.till.nodeId,
     resolveAccount: stripeAccountResolver({
       db,
       ring,
@@ -235,7 +247,13 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   const app = healthApp(health, now);
   mountWebhook(
     app,
-    { db, ring, environment: config.environment, makeStripe: defaultMakeStripe },
+    {
+      db,
+      ring,
+      nodeId: config.till.nodeId,
+      environment: config.environment,
+      makeStripe: defaultMakeStripe,
+    },
     log,
   );
   // The till's own HTTP surface (session, roster, boot info, catalogue, sales) on the SAME app —
@@ -309,7 +327,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     app,
     {
       db,
-      cfg: { tenantId: till.tenantId },
+      cfg: { tenantId: till.tenantId, nodeId: till.nodeId },
       mediaDir: config.mediaDir,
       maxUploadBytes: MAX_UPLOAD_BYTES,
     },
@@ -326,6 +344,47 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // guarding the filename against traversal with its own explicit regex (design §5e). Mounted after
   // the gated groups purely for reading order; route registration only, no database work at boot.
   mountMedia(app, { mediaDir: config.mediaDir }, log);
+
+  // The active-active sync transport: enabled iff WAITRON_SYNC_PEERS is set (loadSyncConfig). It opens
+  // its OWN pool (a sync_tailer + app_user member — the app pool cannot read sync_log), mounts the
+  // node-token-authenticated source group on the SAME app, and starts the background pull worker
+  // against each configured peer. The sync NODE ID is till.nodeId (one source of truth; no second
+  // WAITRON_SYNC_NODE_ID), and minTickMs/maxTickMs double as the worker's idle interval and backoff
+  // ceiling. A host that sets no sync env leaves syncConfig undefined, so every existing boot is
+  // unchanged (boot.test.ts sets none). Torn down in close() below.
+  const syncConfig = loadSyncConfig(env);
+  const syncController = new AbortController();
+  let syncDb: Database | undefined;
+  let syncWorker: Promise<void> | undefined;
+  if (syncConfig !== undefined) {
+    syncDb = await createPostgresDb(syncConfig.databaseUrl);
+    mountSyncApi(
+      app,
+      {
+        db: syncDb,
+        tenantId: till.tenantId,
+        nodeId: till.nodeId,
+        environment: config.environment,
+        nodeToken: syncConfig.nodeToken,
+      },
+      log,
+    );
+    syncWorker = runSyncPull({
+      localDb: syncDb,
+      subscriberId: till.nodeId,
+      tenantId: till.tenantId,
+      localEnvironment: config.environment,
+      http: fetchHttpClient,
+      batchLimit: 500,
+      peers: syncConfig.peers,
+      sleep: realSleep,
+      signal: syncController.signal,
+      minIdleMs: config.minTickMs,
+      maxBackoffMs: config.maxTickMs,
+      log,
+    });
+  }
+
   // `buildServeOptions` turns the plain-HTTP options into HTTPS ones when `config.tls` is set,
   // reading the cert/key files, and returns them unchanged otherwise (loopback dev). The exact
   // `@hono/node-server` option names (`createServer` + `serverOptions`) are confirmed and documented
@@ -483,7 +542,18 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       if (closed) return;
       closed = true;
       controller.abort();
+      // Stop the sync pull worker alongside the main loop so close() never leaves it dangling; the
+      // worker's abort-aware sleep returns promptly rather than waiting out a backoff.
+      syncController.abort();
       await loop;
+      // Swallow a worker rejection so it can never skip the guaranteed teardown below. The worker is
+      // still AWAITED — a clean shutdown drains it exactly as before, its abort-aware sleep returning
+      // promptly — but if it settles by rejection (an unexpected throw escaping runSyncPull's own
+      // per-peer catch), `.catch(() => {})` keeps that from throwing out of close() BEFORE the
+      // try/finally below, which would leak the HTTP server and both connection pools on exactly the
+      // path that failed. close() resolves either way; the worker's own errors are logged inside
+      // runSyncPull (sync.pull_failed / sync.stream_stalled), not here.
+      if (syncWorker !== undefined) await syncWorker.catch(() => {});
       // `finally`, not a plain sequential `await`: a rejecting `server.close()` (the listener
       // already gone — see bin.ts's own double-signal guard) must still drain the pool. `close()`
       // is exported on `StartedServer`, and a caller reaching for it outside `bin.ts` — a test hook
@@ -495,6 +565,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
         );
       } finally {
         await db.close();
+        if (syncDb !== undefined) await syncDb.close();
       }
       log("info", "server.stopped");
     },

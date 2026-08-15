@@ -230,6 +230,10 @@ export interface ReconcileDeps {
   reverse: ReversalFn;
   incidents: IncidentSink;
   settlementLagMs: number;
+  /** This node's origin id, threaded into every write `withTenant` below so the enrolled `payments`
+   * UPDATE the sweep performs (the `reconcile_remediated_at` marker) captures a real origin, not the
+   * all-zero sentinel (design §4d(B); sync origin attribution). */
+  nodeId: string;
 }
 
 const CODE = {
@@ -277,8 +281,11 @@ export async function reconcilePayments(
   now: Date,
 ): Promise<PaymentReconcileResult> {
   // T1 — our rows for the period. No network call inside it.
-  const rows = await withTenant(deps.db, tenantId, (tx) =>
-    listReconcilable(tx, tenantId, deps.provider, period),
+  const rows = await withTenant(
+    deps.db,
+    tenantId,
+    (tx) => listReconcilable(tx, tenantId, deps.provider, period),
+    { nodeId: deps.nodeId },
   );
 
   // Network — outside every transaction, over a window widened by the settlement lag, because a
@@ -315,104 +322,109 @@ export async function reconcilePayments(
   // T2 — resolve the missingLocal candidates, raise every incident, and claim the orphans this
   // sweep will reverse. One short write transaction.
   const remediable: ReconcilableRow[] = [];
-  await withTenant(deps.db, tenantId, async (tx) => {
-    // One batched existence check for the WHOLE sweep's unmatched settlements, not one per
-    // settlement: T2 is a write transaction, so N round trips here would lengthen lock contention
-    // with the concurrent sweeps this feature explicitly supports, and a tenant with zero local
-    // rows against a large report (the exact silent-data-loss case this sweep exists to catch)
-    // is precisely the shape that would make that N largest. See `existingReferences` for why the
-    // check itself stays unbounded by period and by state.
-    const allReferences = new Set<string>();
-    for (const record of classified.unmatched) {
-      for (const reference of record.references) allReferences.add(reference);
-    }
-    const existing = await existingReferences(tx, tenantId, deps.provider, [...allReferences]);
+  await withTenant(
+    deps.db,
+    tenantId,
+    async (tx) => {
+      // One batched existence check for the WHOLE sweep's unmatched settlements, not one per
+      // settlement: T2 is a write transaction, so N round trips here would lengthen lock contention
+      // with the concurrent sweeps this feature explicitly supports, and a tenant with zero local
+      // rows against a large report (the exact silent-data-loss case this sweep exists to catch)
+      // is precisely the shape that would make that N largest. See `existingReferences` for why the
+      // check itself stays unbounded by period and by state.
+      const allReferences = new Set<string>();
+      for (const record of classified.unmatched) {
+        for (const reference of record.references) allReferences.add(reference);
+      }
+      const existing = await existingReferences(tx, tenantId, deps.provider, [...allReferences]);
 
-    const missing: SettlementRecord[] = [];
-    for (const record of classified.unmatched) {
-      if (record.references.some((reference) => existing.has(reference))) continue;
-      missing.push(record);
-      result.missingLocal.push(missingLocalMismatch(record));
-    }
+      const missing: SettlementRecord[] = [];
+      for (const record of classified.unmatched) {
+        if (record.references.some((reference) => existing.has(reference))) continue;
+        missing.push(record);
+        result.missingLocal.push(missingLocalMismatch(record));
+      }
 
-    // Decide what happens to each orphan, and record WHY on every one of them. The gates narrow to
-    // money that can actually be handed back, and their ORDER is what a human is shown when a row
-    // trips more than one, so it is deliberate:
-    //
-    //   - ABANDONED working order only. On a `settled` one a sale exists, so the orphan may be a
-    //     lost associate-back and refunding would take back money the customer owes against a live
-    //     invoice (see the design's orphan section).
-    //   - state `captured` only. This gate is not a preference: the local state machine has NO path
-    //     out of `settled`, and the reversal pre-check accepts `captured` for a void and
-    //     `captured`/`partially_refunded` for a refund — `settled` is in neither set. A `settled`
-    //     orphan claimed here would stamp the marker, fail its reversal, and, because the marker is
-    //     permanent by design, never be retried by any later sweep: the customer's money kept for
-    //     good, on every occurrence. It is reported and incident-raised instead, exactly like a
-    //     `settled`-working-order orphan. DO NOT drop this gate to "cover more orphans" until
-    //     `settled` has a reversal path.
-    //   - not already claimed by an earlier or concurrent sweep. This precedes the drift gate below
-    //     for the same permanence reason as the state gate above: the marker an earlier (or
-    //     concurrent, race-losing) sweep stamped is permanent, so settling a drift on a row that is
-    //     already claimed can never unblock a reversal — it has either already happened or already
-    //     failed for good. Reporting `amountDrifted` on such a row would point a human at a fix that
-    //     cannot do anything; `alreadyClaimed` is the gate whose resolution (there is none, for this
-    //     row) is actually accurate.
-    //   - amount carries no recorded DISAGREEMENT with the processor. A drifting row is the one case
-    //     where the sweep would move money at a figure it has, in the same pass, proven
-    //     untrustworthy: the reversal primitive sends no amount, so the processor refunds ITS figure
-    //     while we record OURS. Sending our amount instead is NOT the fix — when the processor's
-    //     charge is the smaller of the two it exceeds the charge, the refund is refused, and the
-    //     marker is already stamped, so it becomes money kept for good. Gated out and reported: no
-    //     marker is stamped, so the row stays in the audited state set and ANY sweep whose period
-    //     covers it again will re-detect it; and the `payment.reconcile_drift` and
-    //     `payment.reconcile_orphan` incidents stay OPEN (the dedup index is partial on
-    //     `acknowledged_at IS NULL`), so the human signal persists regardless of cadence. The
-    //     separate `drift` incident carries both figures.
-    //
-    // Every orphan gets exactly one entry in this map, which is what lets `incidentFor` read it
-    // without a fallback.
-    const remediation = new Map<string, OrphanRemediation>();
-    for (const entry of classified.rows) {
-      if (entry.klass !== "orphan") continue;
-      const ref = entry.row.paymentRef;
-      if (entry.row.workingOrderStatus !== "abandoned") {
-        remediation.set(ref, "workingOrderNotAbandoned");
-        continue;
+      // Decide what happens to each orphan, and record WHY on every one of them. The gates narrow to
+      // money that can actually be handed back, and their ORDER is what a human is shown when a row
+      // trips more than one, so it is deliberate:
+      //
+      //   - ABANDONED working order only. On a `settled` one a sale exists, so the orphan may be a
+      //     lost associate-back and refunding would take back money the customer owes against a live
+      //     invoice (see the design's orphan section).
+      //   - state `captured` only. This gate is not a preference: the local state machine has NO path
+      //     out of `settled`, and the reversal pre-check accepts `captured` for a void and
+      //     `captured`/`partially_refunded` for a refund — `settled` is in neither set. A `settled`
+      //     orphan claimed here would stamp the marker, fail its reversal, and, because the marker is
+      //     permanent by design, never be retried by any later sweep: the customer's money kept for
+      //     good, on every occurrence. It is reported and incident-raised instead, exactly like a
+      //     `settled`-working-order orphan. DO NOT drop this gate to "cover more orphans" until
+      //     `settled` has a reversal path.
+      //   - not already claimed by an earlier or concurrent sweep. This precedes the drift gate below
+      //     for the same permanence reason as the state gate above: the marker an earlier (or
+      //     concurrent, race-losing) sweep stamped is permanent, so settling a drift on a row that is
+      //     already claimed can never unblock a reversal — it has either already happened or already
+      //     failed for good. Reporting `amountDrifted` on such a row would point a human at a fix that
+      //     cannot do anything; `alreadyClaimed` is the gate whose resolution (there is none, for this
+      //     row) is actually accurate.
+      //   - amount carries no recorded DISAGREEMENT with the processor. A drifting row is the one case
+      //     where the sweep would move money at a figure it has, in the same pass, proven
+      //     untrustworthy: the reversal primitive sends no amount, so the processor refunds ITS figure
+      //     while we record OURS. Sending our amount instead is NOT the fix — when the processor's
+      //     charge is the smaller of the two it exceeds the charge, the refund is refused, and the
+      //     marker is already stamped, so it becomes money kept for good. Gated out and reported: no
+      //     marker is stamped, so the row stays in the audited state set and ANY sweep whose period
+      //     covers it again will re-detect it; and the `payment.reconcile_drift` and
+      //     `payment.reconcile_orphan` incidents stay OPEN (the dedup index is partial on
+      //     `acknowledged_at IS NULL`), so the human signal persists regardless of cadence. The
+      //     separate `drift` incident carries both figures.
+      //
+      // Every orphan gets exactly one entry in this map, which is what lets `incidentFor` read it
+      // without a fallback.
+      const remediation = new Map<string, OrphanRemediation>();
+      for (const entry of classified.rows) {
+        if (entry.klass !== "orphan") continue;
+        const ref = entry.row.paymentRef;
+        if (entry.row.workingOrderStatus !== "abandoned") {
+          remediation.set(ref, "workingOrderNotAbandoned");
+          continue;
+        }
+        if (entry.row.state !== "captured") {
+          remediation.set(ref, "stateNotCaptured");
+          continue;
+        }
+        if (entry.row.reconcileRemediatedAt !== null) {
+          remediation.set(ref, "alreadyClaimed");
+          continue;
+        }
+        if (driftedRefs.has(ref)) {
+          remediation.set(ref, "amountDrifted");
+          continue;
+        }
+        const claimed = await markReconcileRemediated(tx, {
+          tenantId,
+          provider: deps.provider,
+          paymentRef: ref,
+          at: now,
+        });
+        // A lost race is the same fact as an earlier sweep's marker — another sweep owns the reversal
+        // — so it reports the same reason.
+        remediation.set(ref, claimed ? "claimed" : "alreadyClaimed");
+        if (claimed) remediable.push(entry.row);
       }
-      if (entry.row.state !== "captured") {
-        remediation.set(ref, "stateNotCaptured");
-        continue;
-      }
-      if (entry.row.reconcileRemediatedAt !== null) {
-        remediation.set(ref, "alreadyClaimed");
-        continue;
-      }
-      if (driftedRefs.has(ref)) {
-        remediation.set(ref, "amountDrifted");
-        continue;
-      }
-      const claimed = await markReconcileRemediated(tx, {
+
+      result.incidentsRaised += await raiseRowIncidents(
+        tx,
+        deps,
         tenantId,
-        provider: deps.provider,
-        paymentRef: ref,
-        at: now,
-      });
-      // A lost race is the same fact as an earlier sweep's marker — another sweep owns the reversal
-      // — so it reports the same reason.
-      remediation.set(ref, claimed ? "claimed" : "alreadyClaimed");
-      if (claimed) remediable.push(entry.row);
-    }
-
-    result.incidentsRaised += await raiseRowIncidents(
-      tx,
-      deps,
-      tenantId,
-      classified,
-      remediation,
-      now,
-    );
-    result.incidentsRaised += await raiseMissingLocal(tx, deps, tenantId, missing, now);
-  });
+        classified,
+        remediation,
+        now,
+      );
+      result.incidentsRaised += await raiseMissingLocal(tx, deps, tenantId, missing, now);
+    },
+    { nodeId: deps.nodeId },
+  );
 
   // Reversals — outside every transaction. See the marker-ordering note above. One failure does
   // not abort the pass: every remaining orphan still gets its turn. Every failure is recorded on
@@ -659,24 +671,29 @@ async function raiseRemediationFailures(
   }
 
   let raised = 0;
-  await withTenant(deps.db, tenantId, async (tx) => {
-    for (const [tillId, group] of byTill) {
-      const inserted = await deps.incidents(tx, {
-        tenantId,
-        tillId: brandTillId(tillId),
-        error: new AppError(CODE.remediationFailed, {
-          count: group.length,
-          payments: group.map(({ row, reason }) => ({
-            paymentRef: row.paymentRef,
-            amount: row.amount,
-            reason,
-          })),
-        }),
-        severity: "error",
-        detectedAt: now,
-      });
-      if (inserted) raised += 1;
-    }
-  });
+  await withTenant(
+    deps.db,
+    tenantId,
+    async (tx) => {
+      for (const [tillId, group] of byTill) {
+        const inserted = await deps.incidents(tx, {
+          tenantId,
+          tillId: brandTillId(tillId),
+          error: new AppError(CODE.remediationFailed, {
+            count: group.length,
+            payments: group.map(({ row, reason }) => ({
+              paymentRef: row.paymentRef,
+              amount: row.amount,
+              reason,
+            })),
+          }),
+          severity: "error",
+          detectedAt: now,
+        });
+        if (inserted) raised += 1;
+      }
+    },
+    { nodeId: deps.nodeId },
+  );
   return raised;
 }

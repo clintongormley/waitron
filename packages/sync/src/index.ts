@@ -22,6 +22,20 @@ export { applyStatementFor, deleteStatementFor } from "./apply-sql.js";
 export { applyBatch } from "./apply.js";
 export type { ApplyBatchOptions, ApplyBatchResult, SyncLogRow } from "./apply.js";
 
+// The sync_tailer source read — select a peer's captured sync_log rows past a cursor, row_image as
+// raw jsonb text, under the deli tenant context (docs/superpowers/plans/2026-08-15-sync-transport-slice1.md Task 5).
+export { readSyncLogSince } from "./source.js";
+export type { ReadSyncLogArgs } from "./source.js";
+
+// The NDJSON wire codec — one JSON object per line, seq as a decimal string and row_image as a raw
+// jsonb-text string field (design §4b) so JS never re-parses a numeric across the wire (Task 6).
+export { decodeBatch, encodeBatch } from "./wire.js";
+
+// The pull client — syncPullOnce (env handshake + fetch + apply one batch) and the runSyncPull
+// background loop boot.ts starts (drain-per-peer, bounded backoff, stream_stalled alarm) — Task 9.
+export { runSyncPull, syncPullOnce } from "./pull.js";
+export type { HttpClient, PullPeer, RunSyncPullDeps, SyncPullDeps } from "./pull.js";
+
 // Bounded log retention (prune to the min across ALL subscriber cursors — a down subscriber holds the
 // log) and per-subscriber lag reporting (docs/superpowers/plans/2026-08-08-sync-slice1-commercial-outbox-plan.md
 // Task 6).

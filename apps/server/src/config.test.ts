@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { captureError } from "@waitron/db";
 import { DEFAULTS } from "@waitron/scheduler";
 import { isAppError } from "@waitron/shared";
-import { deploymentEnvironment, loadConfig } from "./config.js";
+import { deploymentEnvironment, loadConfig, loadSyncConfig } from "./config.js";
 
 // Distinct per field so a mis-wired till mapping fails the assertions below rather than passing by
 // coincidence — every id is the same 8-4-4-4-12 shape but a different value, matching
@@ -414,5 +414,67 @@ describe("deploymentEnvironment", () => {
       code: "server.config_invalid",
       params: { variable: "WAITRON_ENV", reason: "not_a_deployment_environment" },
     });
+  });
+});
+
+describe("loadSyncConfig", () => {
+  it("is undefined when no peers are configured", () => {
+    expect(loadSyncConfig({})).toBeUndefined();
+  });
+
+  it("parses peers and requires a non-blank token and database url", () => {
+    const env = {
+      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "https://peer/", token: "tok2" }]),
+      WAITRON_SYNC_NODE_TOKEN: "mine",
+      WAITRON_SYNC_DATABASE_URL: "postgres://sync@host/db",
+    };
+    expect(loadSyncConfig(env)).toEqual({
+      nodeToken: "mine",
+      databaseUrl: "postgres://sync@host/db",
+      peers: [{ nodeId: "n2", url: "https://peer/", token: "tok2" }],
+    });
+  });
+
+  it("refuses a blank node token (VAR= is unset, must fail closed, never mean 'no auth')", () => {
+    const env = {
+      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
+      WAITRON_SYNC_NODE_TOKEN: "",
+      WAITRON_SYNC_DATABASE_URL: "x",
+    };
+    expect(() => loadSyncConfig(env)).toThrow(/config_missing|WAITRON_SYNC_NODE_TOKEN/);
+  });
+
+  it("refuses a blank sync database url", () => {
+    const env = {
+      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "u", token: "t" }]),
+      WAITRON_SYNC_NODE_TOKEN: "m",
+      WAITRON_SYNC_DATABASE_URL: "",
+    };
+    expect(() => loadSyncConfig(env)).toThrow(/config_missing|WAITRON_SYNC_DATABASE_URL/);
+  });
+
+  it("refuses a peer with a blank url or token", () => {
+    const env = {
+      WAITRON_SYNC_PEERS: JSON.stringify([{ nodeId: "n2", url: "", token: "t" }]),
+      WAITRON_SYNC_NODE_TOKEN: "m",
+      WAITRON_SYNC_DATABASE_URL: "x",
+    };
+    expect(() => loadSyncConfig(env)).toThrow(/config_invalid|WAITRON_SYNC_PEERS/);
+  });
+
+  it("refuses a peers value that is valid JSON but not a non-empty array", () => {
+    const base = { WAITRON_SYNC_NODE_TOKEN: "m", WAITRON_SYNC_DATABASE_URL: "x" };
+    expect(() => loadSyncConfig({ ...base, WAITRON_SYNC_PEERS: "[]" })).toThrow(
+      /config_invalid|WAITRON_SYNC_PEERS/,
+    );
+    expect(() => loadSyncConfig({ ...base, WAITRON_SYNC_PEERS: '{"nodeId":"n"}' })).toThrow(
+      /config_invalid|WAITRON_SYNC_PEERS/,
+    );
+  });
+
+  it("refuses malformed WAITRON_SYNC_PEERS JSON", () => {
+    expect(() => loadSyncConfig({ WAITRON_SYNC_PEERS: "not json" })).toThrow(
+      /config_invalid|WAITRON_SYNC_PEERS/,
+    );
   });
 });

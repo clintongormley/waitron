@@ -223,6 +223,7 @@ function apiDepsWithCardProvider(
     client,
     db: providerDb,
     tenantId: cfg.tenantId,
+    nodeId: cfg.nodeId,
     resolveReader: () => Promise.resolve("reader_1"),
     // No real waiting: FakeStripe resolves synchronously, so a poll never actually stalls.
     poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },

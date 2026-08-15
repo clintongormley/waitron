@@ -132,7 +132,14 @@ function mountApp(tenantId: string): Hono {
   const app = new Hono();
   mountCatalogueApi(
     app,
-    { db: suite.admin, cfg: { tenantId }, mediaDir, maxUploadBytes: 1024 * 1024 },
+    {
+      db: suite.admin,
+      // These suites assert RLS isolation + the gate, never the captured origin; any valid node id
+      // satisfies the (now required) cfg.nodeId. Origin attribution is proven in sync-origin.rls.test.ts.
+      cfg: { tenantId, nodeId: "11111111-1111-4111-8111-111111111111" },
+      mediaDir,
+      maxUploadBytes: 1024 * 1024,
+    },
     noopLog,
   );
   return app;

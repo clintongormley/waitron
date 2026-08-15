@@ -113,6 +113,7 @@ describe("stripe collect -> recordSale -> associate (the adapter seam, end to en
       client: new FakeStripe(),
       db: pg.db,
       tenantId: brandTenantId(s.tenantId),
+      nodeId: "11111111-1111-4111-8111-111111111111",
       resolveReader: () => Promise.resolve("reader_1"),
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });
@@ -173,6 +174,7 @@ describe("stripe idempotency key is derived from the working order, decoupled fr
       client,
       db: pg.db,
       tenantId: brandTenantId(s.tenantId),
+      nodeId: "11111111-1111-4111-8111-111111111111",
       resolveReader: () => Promise.resolve("reader_1"),
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });

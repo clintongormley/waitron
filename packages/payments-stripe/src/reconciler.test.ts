@@ -24,6 +24,8 @@ function reconciler(
 ): StripeReconciler {
   return new StripeReconciler({
     db: pg.db,
+    // Any node id: these suites assert the sweep's behaviour, not the captured origin.
+    nodeId: "11111111-1111-4111-8111-111111111111",
     resolveAccount: () => Promise.resolve({ report: client, refund: refunder }),
   });
 }
@@ -140,6 +142,7 @@ describe("StripeReconciler", () => {
     const client = new FakeStripeReport();
     const r = new StripeReconciler({
       db: pg.db,
+      nodeId: "11111111-1111-4111-8111-111111111111", // origin not asserted here
       resolveAccount: () => Promise.resolve({ report: client, refund: new FakeStripe() }),
       settlementLagMs: LAG_MS,
     });
@@ -165,6 +168,7 @@ describe("StripeReconciler", () => {
     const client = new FakeStripeReport();
     const r = new StripeReconciler({
       db: pg.db,
+      nodeId: "11111111-1111-4111-8111-111111111111", // origin not asserted here
       resolveAccount: (tenantId) => {
         asked.push(tenantId);
         return Promise.resolve({ report: client, refund: new FakeStripe() });

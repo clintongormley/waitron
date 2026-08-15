@@ -86,6 +86,7 @@ describe("concurrent reconcile sweeps", () => {
       },
       incidents: recordIncidentOnce,
       settlementLagMs: DEFAULT_SETTLEMENT_LAG_MS,
+      nodeId: "11111111-1111-4111-8111-111111111111", // origin irrelevant here (proven in server suite)
     });
 
     try {

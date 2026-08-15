@@ -62,6 +62,16 @@ export interface ReverseViaStripeOptions {
    * money-moving query on the reconcile path (see the check itself for why RLS alone is not enough).
    */
   tenantId: TenantId;
+  /**
+   * The reversing node's origin id, threaded into both `withTenant` phases below so the enrolled
+   * `payment_refunds` INSERT and `payments` state UPDATE a reversal performs capture a real
+   * `sync_log.origin_id` rather than the all-zero sentinel — which the pull loop (keyed on
+   * `?originId=<peer>`) never replicates, so a refund would be lost on failover (design §4d(B); sync
+   * origin attribution). REQUIRED for the same reason `tenantId` is: every live caller has a node id
+   * in hand (the reconcile sweep and both interactive providers are per-node objects), and leaving it
+   * optional is exactly how the all-zero-origin gap this closes was reachable in the first place.
+   */
+  nodeId: string;
   /** Maps the payment's stored `external_ref` to the identifier the processor's refund API needs.
    * Defaults to identity, so the terminal and on-device callers — which store a PaymentIntent id,
    * exactly what `stripe.refunds` wants — behave byte-for-byte as before; the default is the whole
@@ -105,6 +115,7 @@ export async function reverseViaStripe(
    * parameters. No default: `tenantId` is required, so every caller passes this. */
   {
     tenantId,
+    nodeId,
     resolveProcessorRef = (externalRef) => Promise.resolve(externalRef),
   }: ReverseViaStripeOptions,
 ): Promise<PaymentResult> {
@@ -117,7 +128,7 @@ export async function reverseViaStripe(
   // : …`). It is gone with the option's optionality: it was the mechanism by which every
   // interactive-provider reversal failed closed under a real role.
   const inTransaction = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    withTenant(db, tenantId, fn);
+    withTenant(db, tenantId, fn, { nodeId });
 
   const found = await inTransaction(async (tx) => {
     const f = await findPaymentByRef(tx, provider, ref);

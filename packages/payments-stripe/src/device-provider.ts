@@ -70,6 +70,12 @@ export interface StripeOnDeviceProviderOptions {
    * the reversals be scoped at all, since neither carries a tenant in its arguments. The host
    * builds one provider per tenant. */
   tenantId: TenantId;
+  /** This node's origin id, threaded into every `withTenant` this adapter opens (`collect`,
+   * `forward`, reversals) so the enrolled `payments` INSERT/UPDATE they perform captures a real
+   * `sync_log.origin_id` rather than the all-zero sentinel — which the pull loop (keyed on
+   * `?originId=<peer>`) never replicates, so a device card payment would be lost on failover (design
+   * §4d(B); sync origin attribution). Known at construction like `tenantId` (one node per till). */
+  nodeId: string;
 }
 
 /** The real on-device Stripe `PaymentProvider` (Tap-to-Pay / handheld). `collect` applies the neutral
@@ -132,7 +138,9 @@ export class StripeOnDeviceProvider implements PaymentProvider {
    * unscoped — the failure that made `collect` charge cards without recording them and `forward` a
    * permanent silent no-op under a real role. */
   private inTenant<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(this.opts.db, this.opts.tenantId, fn);
+    // `{ nodeId }` so the enrolled `payments` writes below capture this node as the origin — see
+    // `StripeOnDeviceProviderOptions.nodeId`.
+    return withTenant(this.opts.db, this.opts.tenantId, fn, { nodeId: this.opts.nodeId });
   }
 
   async collect(params: CollectParams): Promise<PaymentResult> {
@@ -320,6 +328,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
   private reverse(kind: "void" | "refund", ref: string, amount?: Decimal): Promise<PaymentResult> {
     return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, kind, amount, {
       tenantId: this.opts.tenantId,
+      nodeId: this.opts.nodeId,
     });
   }
 

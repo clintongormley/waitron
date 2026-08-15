@@ -83,6 +83,7 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
       client: stripeClient(stripe),
       db: pg.db,
       tenantId: brandTenantId(s.tenantId),
+      nodeId: "11111111-1111-4111-8111-111111111111",
       resolveReader: () => Promise.resolve(readerId),
       poll: { maxAttempts: 40, intervalMs: 500 },
     });
@@ -123,6 +124,7 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
       client,
       db: pg.db,
       tenantId: brandTenantId(s.tenantId),
+      nodeId: "11111111-1111-4111-8111-111111111111",
       resolveReader: () => Promise.resolve(readerId),
       poll: { maxAttempts: 40, intervalMs: 500 },
     });

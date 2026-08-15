@@ -125,6 +125,11 @@ async function seedLine(
 
 type Image = Record<string, unknown>;
 
+/** The wire shape: row_image travels as the source's raw `row_image::text` — a STRING — so JS never
+ * re-quotes a numeric (design §4b). Tests serialise their fixture object the way `to_jsonb(row)::text`
+ * would; `readSyncLogSince` (Task 5) does the same on the source. */
+const wire = (image: Image): string => JSON.stringify(image);
+
 /** A complete `sales` row_image — every NOT NULL column present, valid against every CHECK — exactly
  * the shape `to_jsonb(sales)` would capture. jsonb_populate_record restores it on apply. */
 function saleImage(b: Base, seriesId: string, invoiceNumber: number, over: Image = {}): Image {
@@ -211,6 +216,10 @@ async function scalar(query: ReturnType<typeof sql>): Promise<string | null> {
   return r.rows[0]?.v ?? null;
 }
 const saleTotal = (id: string) => scalar(sql`select total::text as v from sales where id = ${id}`);
+// The first element of the jsonb vat_breakdown as text — a jsonb column stores its numeric verbatim
+// (scale preserved), unlike a fixed-scale numeric column, so this is where byte-identity is visible.
+const saleVat0 = (id: string) =>
+  scalar(sql`select vat_breakdown->>0 as v from sales where id = ${id}`);
 const saleCount = (id: string) =>
   scalar(sql`select count(*)::int::text as v from sales where id = ${id}`);
 const saleLineCount = (id: string) =>
@@ -239,7 +248,16 @@ describe("the commercial-lane apply loop", () => {
       const saleId = img.id as string;
       const first = await applyBatch(
         applier,
-        [{ seq: 1n, originId, table: "sales", op: "insert", tenantId: b.tenantId, rowImage: img }],
+        [
+          {
+            seq: 1n,
+            originId,
+            table: "sales",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: wire(img),
+          },
+        ],
         { subscriberId, ...PROD },
       );
       expect(first).toEqual({ applied: 1, deferred: 0 });
@@ -255,7 +273,7 @@ describe("the commercial-lane apply loop", () => {
             table: "sales",
             op: "insert",
             tenantId: b.tenantId,
-            rowImage: { ...img, total: "999.99" },
+            rowImage: wire({ ...img, total: "999.99" }),
           },
         ],
         { subscriberId, ...PROD },
@@ -295,7 +313,7 @@ describe("the commercial-lane apply loop", () => {
               table: "payments",
               op,
               tenantId: b.tenantId,
-              rowImage: paymentImage(b, woId, { ...key, ...over }),
+              rowImage: wire(paymentImage(b, woId, { ...key, ...over })),
             },
           ],
           { subscriberId, ...PROD },
@@ -336,7 +354,7 @@ describe("the commercial-lane apply loop", () => {
                 table: "working_orders",
                 op: "insert",
                 tenantId: b.tenantId,
-                rowImage: workingOrderImage(b, woId, { status: "open" }),
+                rowImage: wire(workingOrderImage(b, woId, { status: "open" })),
               },
             ],
             opts,
@@ -354,7 +372,7 @@ describe("the commercial-lane apply loop", () => {
                 table: "working_orders",
                 op: "update",
                 tenantId: b.tenantId,
-                rowImage: workingOrderImage(b, woId, { status: "placed" }),
+                rowImage: wire(workingOrderImage(b, woId, { status: "placed" })),
               },
             ],
             opts,
@@ -376,7 +394,7 @@ describe("the commercial-lane apply loop", () => {
             table: "working_orders",
             op: "update",
             tenantId: b.tenantId,
-            rowImage: workingOrderImage(b, woId, { status: "open" }),
+            rowImage: wire(workingOrderImage(b, woId, { status: "open" })),
           },
         ],
         opts,
@@ -397,7 +415,7 @@ describe("the commercial-lane apply loop", () => {
             table: "working_order_lines",
             op: "delete",
             tenantId: b.tenantId,
-            rowImage: { id: lineId, tenant_id: b.tenantId },
+            rowImage: wire({ id: lineId, tenant_id: b.tenantId }),
           },
         ],
         opts,
@@ -415,7 +433,7 @@ describe("the commercial-lane apply loop", () => {
             table: "working_order_lines",
             op: "delete",
             tenantId: b.tenantId,
-            rowImage: { id: lineId, tenant_id: b.tenantId },
+            rowImage: wire({ id: lineId, tenant_id: b.tenantId }),
           },
         ],
         opts,
@@ -447,7 +465,7 @@ describe("the commercial-lane apply loop", () => {
             table: "sales",
             op: "insert",
             tenantId: b.tenantId,
-            rowImage: parentSale,
+            rowImage: wire(parentSale),
           },
           {
             seq: 2n,
@@ -455,7 +473,7 @@ describe("the commercial-lane apply loop", () => {
             table: "sale_lines",
             op: "insert",
             tenantId: b.tenantId,
-            rowImage: saleLineImage(b, parentSale.id as string),
+            rowImage: wire(saleLineImage(b, parentSale.id as string)),
           },
         ],
         opts,
@@ -476,7 +494,7 @@ describe("the commercial-lane apply loop", () => {
             table: "sale_lines",
             op: "insert",
             tenantId: b.tenantId,
-            rowImage: laterLine,
+            rowImage: wire(laterLine),
           },
           {
             seq: 4n,
@@ -484,7 +502,7 @@ describe("the commercial-lane apply loop", () => {
             table: "sales",
             op: "insert",
             tenantId: b.tenantId,
-            rowImage: laterSale,
+            rowImage: wire(laterSale),
           },
         ],
         opts,
@@ -521,7 +539,7 @@ describe("the commercial-lane apply loop", () => {
             table: "sales",
             op: "insert",
             tenantId: b.tenantId,
-            rowImage: goodSale,
+            rowImage: wire(goodSale),
           },
           {
             seq: 2n,
@@ -529,7 +547,7 @@ describe("the commercial-lane apply loop", () => {
             table: "sale_lines",
             op: "insert",
             tenantId: b.tenantId,
-            rowImage: orphanLine,
+            rowImage: wire(orphanLine),
           },
         ],
         { subscriberId, ...PROD },
@@ -557,13 +575,14 @@ describe("the commercial-lane apply loop", () => {
       await setEnv("production");
       const b1 = await seedBase();
       const s1 = await seedSeries(b1);
+      const imgA = saleImage(b1, s1, 1);
       const rowA: SyncLogRow = {
         seq: 1n,
         originId: uuid(),
         table: "sales",
         op: "insert",
         tenantId: b1.tenantId,
-        rowImage: saleImage(b1, s1, 1),
+        rowImage: wire(imgA),
       };
       const sub1 = uuid();
       const refusedA = await captureError(() =>
@@ -576,23 +595,24 @@ describe("the commercial-lane apply loop", () => {
       expect(refusedA).toBeInstanceOf(AppError);
       expect((refusedA as AppError).code).toBe("sync.peer_environment_mismatch");
       expect((refusedA as AppError).params).toEqual({ local: "production", peer: "preproduction" });
-      expect(await saleCount((rowA.rowImage as { id: string }).id)).toBe("0"); // nothing applied
+      expect(await saleCount(imgA.id as string)).toBe("0"); // nothing applied
       // The matching direction applies.
       const matchedA = await applyBatch(applier, [rowA], { subscriberId: sub1, ...PROD });
       expect(matchedA.applied).toBe(1);
-      expect(await saleCount((rowA.rowImage as { id: string }).id)).toBe("1");
+      expect(await saleCount(imgA.id as string)).toBe("1");
 
       // Preproduction mirror refuses a production source (the other direction).
       await setEnv("preproduction");
       const b2 = await seedBase();
       const s2 = await seedSeries(b2);
+      const imgB = saleImage(b2, s2, 1);
       const rowB: SyncLogRow = {
         seq: 1n,
         originId: uuid(),
         table: "sales",
         op: "insert",
         tenantId: b2.tenantId,
-        rowImage: saleImage(b2, s2, 1),
+        rowImage: wire(imgB),
       };
       const sub2 = uuid();
       const refusedB = await captureError(() =>
@@ -605,7 +625,7 @@ describe("the commercial-lane apply loop", () => {
       expect(refusedB).toBeInstanceOf(AppError);
       expect((refusedB as AppError).code).toBe("sync.peer_environment_mismatch");
       expect((refusedB as AppError).params).toEqual({ local: "preproduction", peer: "production" });
-      expect(await saleCount((rowB.rowImage as { id: string }).id)).toBe("0");
+      expect(await saleCount(imgB.id as string)).toBe("0");
       const matchedB = await applyBatch(applier, [rowB], {
         subscriberId: sub2,
         localEnvironment: "preproduction",
@@ -642,7 +662,7 @@ describe("the commercial-lane apply loop", () => {
             table: "sales",
             op: "insert",
             tenantId: mirror.tenantId,
-            rowImage: img,
+            rowImage: wire(img),
           },
         ],
         { subscriberId, ...PROD },
@@ -671,7 +691,7 @@ describe("the commercial-lane apply loop", () => {
               table: "sales",
               op: "insert",
               tenantId: other.tenantId,
-              rowImage: crossImg,
+              rowImage: wire(crossImg),
             },
           ],
           { subscriberId: uuid(), ...PROD },
@@ -741,7 +761,7 @@ describe("the commercial-lane apply loop", () => {
               table: "order_amendments",
               op: "insert",
               tenantId: b.tenantId,
-              rowImage: { id: uuid() },
+              rowImage: wire({ id: uuid() }),
             },
           ],
           { subscriberId: uuid(), ...PROD },
@@ -750,6 +770,75 @@ describe("the commercial-lane apply loop", () => {
       expect(err).toBeInstanceOf(AppError);
       expect((err as AppError).code).toBe("sync.table_not_enrolled");
       expect((err as AppError).params).toEqual({ table: "order_amendments" });
+    } finally {
+      await applier.close();
+    }
+  });
+
+  it("applies a numeric via raw jsonb TEXT byte-identically; a JS round-trip would corrupt 1.50 to 1.5", async () => {
+    // Failing case (current code JSON.stringify's row.rowImage): passing the raw jsonb TEXT double-
+    // encodes it into a jsonb STRING scalar, so jsonb_populate_record gets a scalar not an object and
+    // the sale never lands ("cannot call populate_composite on a scalar"). The byte-identity property
+    // (design §4b, findings (ii)): a numeric captured as a JSON *number* with its scale (1.50) survives
+    // apply verbatim only if JS never JSON.parses it. It is observable where the value is stored
+    // VERBATIM — a jsonb column (sales.vat_breakdown) — NOT in a fixed-scale numeric column like
+    // sales.total, which normalises both 1.5 and 1.50 to the same "1.50" and so cannot tell them apart.
+    // That is exactly why the guarantee must live in the wire (raw text), not lean on the column type.
+    await setEnv("production");
+    const b = await seedBase();
+    const seriesId = await seedSeries(b);
+    const originId = uuid();
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      // Build the SOURCE's row_image::text with vat_breakdown carrying a JSON *number* 1.50 (scale
+      // preserved), NOT the string "1.50" — via Postgres so the test uses real canonical jsonb, exactly
+      // what to_jsonb(row)::text emits.
+      const img = saleImage(b, seriesId, 1); // object, vat_breakdown:[]
+      const built = await postgres.admin.execute<{ t: string }>(
+        sql`select jsonb_set(${JSON.stringify(img)}::jsonb, '{vat_breakdown}',
+                   jsonb_build_array(to_jsonb(1.50::numeric(12,2))))::text as t`,
+      );
+      const rowImageText = built.rows[0]!.t; // {..., "vat_breakdown":[1.50], ...} — 1.50 is a JSON number
+      const raw = await applyBatch(
+        applier,
+        [
+          {
+            seq: 1n,
+            originId,
+            table: "sales",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: rowImageText,
+          },
+        ],
+        { subscriberId: uuid(), ...PROD },
+      );
+      expect(raw.applied).toBe(1);
+      expect(await saleVat0(img.id as string)).toBe("1.50"); // jsonb preserved the scale through $1::jsonb
+
+      // Control (the two directions visibly differ, CLAUDE.md §1): a JS round-trip of the SAME text
+      // collapses 1.50 -> 1.5, so the mirror's jsonb would store "1.5". A different sale id, fresh insert.
+      const jsCorrupted = saleImage(b, seriesId, 2);
+      const corruptedText = JSON.stringify({
+        ...JSON.parse(rowImageText),
+        id: jsCorrupted.id,
+        invoice_number: 2,
+      });
+      await applyBatch(
+        applier,
+        [
+          {
+            seq: 2n,
+            originId,
+            table: "sales",
+            op: "insert",
+            tenantId: b.tenantId,
+            rowImage: corruptedText,
+          },
+        ],
+        { subscriberId: uuid(), ...PROD },
+      );
+      expect(await saleVat0(jsCorrupted.id as string)).toBe("1.5"); // JS parse dropped the trailing zero
     } finally {
       await applier.close();
     }

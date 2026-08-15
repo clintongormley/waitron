@@ -25,6 +25,11 @@ import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 
 const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
+// The provider's sync-origin node id. Value is irrelevant to these assertions (this container migrates
+// core+payments only, no sync capture triggers), but the option is required — it is threaded into the
+// adapter's withTenant so enrolled `payments` writes capture a real origin (design §4d(B)).
+const TEST_NODE_ID = "11111111-1111-4111-8111-111111111111";
+
 const noSleep = (): Promise<void> => Promise.resolve();
 /** A terminal provider is a per-tenant object, so the tenant has to exist before the provider does
  * — which is why every caller below seeds its working order FIRST and threads the tenant in here. */
@@ -33,6 +38,7 @@ function providerFor(client: StripeClient, tenantId: TenantId): StripeTerminalPr
     client,
     db: pg.db,
     tenantId,
+    nodeId: TEST_NODE_ID,
     resolveReader: () => Promise.resolve("reader_1"),
     poll: { maxAttempts: 3, intervalMs: 0, sleep: noSleep },
   });
@@ -160,6 +166,7 @@ describe("StripeTerminalProvider.collect", () => {
       client,
       db: pg.db,
       tenantId: p.tenantId,
+      nodeId: TEST_NODE_ID,
       resolveReader: () => Promise.resolve("reader_1"),
       poll: { maxAttempts: 3, intervalMs: 0 }, // no sleep override -> default setTimeout(0)
     });
@@ -273,7 +280,10 @@ describe("reverseViaStripe's processor-ref resolution", () => {
     // supplies a resolver, so the stored `external_ref` must reach `stripe.refunds` untouched.
     const client = new FakeStripe();
     const { paymentRef, tenantId } = await capturedPayment("pi_plain");
-    await reverseViaStripe(pg.db, client, "stripe", paymentRef, "refund", undefined, { tenantId });
+    await reverseViaStripe(pg.db, client, "stripe", paymentRef, "refund", undefined, {
+      tenantId,
+      nodeId: TEST_NODE_ID,
+    });
     expect(client.lastRefund?.paymentIntentId).toBe("pi_plain");
   });
 
@@ -282,6 +292,7 @@ describe("reverseViaStripe's processor-ref resolution", () => {
     const { paymentRef, tenantId } = await capturedPayment("cs_hosted");
     await reverseViaStripe(pg.db, client, "stripe", paymentRef, "refund", undefined, {
       tenantId,
+      nodeId: TEST_NODE_ID,
       resolveProcessorRef: (ref) => Promise.resolve(ref === "cs_hosted" ? "pi_resolved" : ref),
     });
     // A hosted payment stores the SESSION id; the refund API needs the PaymentIntent, and before
@@ -302,6 +313,7 @@ describe("reverseViaStripe's processor-ref resolution", () => {
     };
     await reverseViaStripe(pg.db, client, "stripe", paymentRef, "void", undefined, {
       tenantId,
+      nodeId: TEST_NODE_ID,
       resolveProcessorRef: resolve,
     });
     expect(resolved).toBe(1);
@@ -309,6 +321,7 @@ describe("reverseViaStripe's processor-ref resolution", () => {
     await expect(
       reverseViaStripe(pg.db, client, "stripe", paymentRef, "void", undefined, {
         tenantId,
+        nodeId: TEST_NODE_ID,
         resolveProcessorRef: resolve,
       }),
     ).rejects.toBeInstanceOf(AppError);
@@ -345,6 +358,7 @@ describe("reverseViaStripe's tenant scoping", () => {
 
     const error = await reverseViaStripe(pg.db, client, "stripe", paymentRef, "refund", undefined, {
       tenantId: brandTenantId(stranger.tenantId),
+      nodeId: TEST_NODE_ID,
     }).catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(AppError);
@@ -354,6 +368,7 @@ describe("reverseViaStripe's tenant scoping", () => {
     // The predicate SCOPES rather than blocks: the owning tenant's reversal goes through untouched.
     const ok = await reverseViaStripe(pg.db, client, "stripe", paymentRef, "refund", undefined, {
       tenantId: brandTenantId(owner.tenantId),
+      nodeId: TEST_NODE_ID,
     });
     expect(ok.state).toBe("refunded");
     expect(client.lastRefund?.paymentIntentId).toBe("pi_cross_tenant");
@@ -367,6 +382,7 @@ describe("StripeTerminalProvider.forward", () => {
       client: new FakeStripe(),
       db: pg.db,
       tenantId: brandTenantId(randomUUID()),
+      nodeId: TEST_NODE_ID,
       resolveReader: () => Promise.resolve("reader_1"),
     });
     expect(await provider.forward(new Date("2026-07-24T10:00:00Z"))).toEqual({

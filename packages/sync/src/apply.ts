@@ -33,7 +33,10 @@ export interface SyncLogRow {
   table: string;
   op: "insert" | "update" | "delete";
   tenantId: string;
-  rowImage: unknown;
+  /** The verbatim `row_image::text` the capture trigger wrote (spec §3.3), carried as raw `jsonb`
+   * TEXT — a STRING, never a parsed object — so a numeric (1.50) is never JS-collapsed to 1.5 on the
+   * way through (design §4b). Bound as `$1::jsonb`; JS never JSON.parses it. */
+  rowImage: string;
   txid?: string;
 }
 
@@ -287,13 +290,14 @@ async function tryApplyRow(db: Database, row: SyncLogRow): Promise<number | "def
 async function applyOneRow(db: Database, row: SyncLogRow, dispatch: Dispatch): Promise<number> {
   const parts =
     row.op === "delete" ? splitStatement(deleteStatementFor(dispatch.entry)) : dispatch.applyParts;
-  const payload = JSON.stringify(row.rowImage);
   return withTenant(db, row.tenantId, async (tx) => {
     // Echo guard, same transaction as the write: the capture triggers skip a write made under
     // app.sync_apply='on' (spec §3.4), so applying a peer's row does not re-enter our own sync_log.
     await tx.execute(sql`select set_config('app.sync_apply', 'on', true)`);
+    // rowImage is the source's raw row_image::text; bind it as the single text param cast `$1::jsonb`.
+    // Never JSON.stringify (would double-encode) and never JSON.parse (would collapse a numeric).
     const result = await tx.execute(
-      sql`${sql.raw(parts.head)}${payload}::jsonb${sql.raw(parts.tail)}`,
+      sql`${sql.raw(parts.head)}${row.rowImage}::jsonb${sql.raw(parts.tail)}`,
     );
     return result.rows.length;
   });

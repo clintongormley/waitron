@@ -87,6 +87,7 @@ describe("reconcile sweep through StripeReconciler under real row-level security
       const refunder = new FakeStripe();
       const sweep = new StripeReconciler({
         db: probe,
+        nodeId: "11111111-1111-4111-8111-111111111111", // origin not asserted here (proven in server suite)
         resolveAccount: () => Promise.resolve({ report: client, refund: refunder }),
       });
 

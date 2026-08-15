@@ -112,6 +112,7 @@ describe("stripe attempting/capture lifecycle under real row-level security", ()
         client: new FakeStripe(),
         db: probe,
         tenantId: brandTenantId(t.tenantId),
+        nodeId: "11111111-1111-4111-8111-111111111111",
         resolveReader: () => Promise.resolve("reader_1"),
         poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
       });

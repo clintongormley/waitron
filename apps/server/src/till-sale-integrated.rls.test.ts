@@ -195,6 +195,7 @@ function integratedDeps(
     client,
     db: app,
     tenantId: cfg.tenantId,
+    nodeId: cfg.nodeId,
     resolveReader: () => Promise.resolve("reader_1"),
     poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
   });
@@ -689,6 +690,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
         client: new FakeStripe(),
         db: app,
         tenantId: cfg.tenantId,
+        nodeId: cfg.nodeId,
         resolveReader: () => Promise.resolve("reader_1"),
         poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
       });

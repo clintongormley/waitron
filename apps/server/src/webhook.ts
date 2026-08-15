@@ -40,6 +40,13 @@ const CLIENT_ERROR_CODES: ReadonlySet<string> = new Set([
 export interface WebhookDeps {
   db: Database;
   ring: KeyRing;
+  /** This node's origin id (`config.till.nodeId`), threaded into the settlement `withTenant` below so
+   * the enrolled `payments` UPDATE the Stripe settlement performs (`settleInitiated`/`expireInitiated`)
+   * captures a real `sync_log.origin_id` rather than the all-zero sentinel. Without it those settled
+   * rows carry origin `00000000-…`, which the pull loop (keyed on `?originId=<peer>`) NEVER pulls, so a
+   * card settlement would be lost on failover (design §4d(B); sync origin attribution — the same fix B
+   * threaded through `catalogue-api.ts` and `reconcile.ts`, missed here by the design audit). */
+  nodeId: string;
   /** This host's own deployment environment, checked against the tenant's secret key exactly as
    * `stripeAccountResolver` does — see `stripeSecretKeyFrom`. */
   environment: DeploymentEnvironment;
@@ -153,19 +160,26 @@ export async function settleWebhook(
     });
   }
 
-  return withTenant(deps.db, tenant, async (tx) => {
-    if (event.outcome === "expired") {
-      await expireInitiated(tx, { provider: event.provider, externalRef: event.externalRef });
-      return "expired";
-    }
-    const row = await settleInitiated(tx, {
-      provider: event.provider,
-      externalRef: event.externalRef,
-      settledAt: event.settledAt,
-    });
-    // null = an at-least-once redelivery already advanced past `initiated`; do nothing.
-    return row === null ? "redelivery" : "settled";
-  });
+  return withTenant(
+    deps.db,
+    tenant,
+    async (tx) => {
+      if (event.outcome === "expired") {
+        await expireInitiated(tx, { provider: event.provider, externalRef: event.externalRef });
+        return "expired";
+      }
+      const row = await settleInitiated(tx, {
+        provider: event.provider,
+        externalRef: event.externalRef,
+        settledAt: event.settledAt,
+      });
+      // null = an at-least-once redelivery already advanced past `initiated`; do nothing.
+      return row === null ? "redelivery" : "settled";
+    },
+    // Stamp `app.node_id` so the enrolled `payments` UPDATE captures this node as the origin — see
+    // `WebhookDeps.nodeId`.
+    { nodeId: deps.nodeId },
+  );
 }
 
 /**

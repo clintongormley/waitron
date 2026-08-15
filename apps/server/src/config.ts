@@ -140,6 +140,62 @@ function required(env: Env, variable: string): string {
   return value;
 }
 
+export interface SyncPeer {
+  nodeId: string;
+  url: string;
+  token: string;
+}
+export interface SyncTransportConfig {
+  nodeToken: string;
+  databaseUrl: string;
+  peers: SyncPeer[];
+}
+
+/**
+ * Sync is enabled iff `WAITRON_SYNC_PEERS` is set (a non-empty JSON array of `{ nodeId, url, token }`).
+ * Then the node token and the sync database URL (a LOGIN role that is a member of `app_user` AND
+ * `sync_tailer` — the app-role pool cannot read `sync_log`) are required, and a blank token or peer
+ * field fails closed (the empty-value trap, CLAUDE.md §3): a blank secret must never mean "no auth".
+ * The sync NODE ID is `config.till.nodeId`, deliberately NOT a second `WAITRON_SYNC_NODE_ID` variable
+ * — two variables that must agree is the drift the one-source-of-truth rule forbids (design deviation,
+ * flagged to the owner). Absent peers → `undefined` → no sync is mounted, so a host that sets no sync
+ * env (every existing boot) is unaffected.
+ */
+export function loadSyncConfig(env: Env): SyncTransportConfig | undefined {
+  const rawPeers = env.WAITRON_SYNC_PEERS;
+  if (isUnset(rawPeers)) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawPeers);
+  } catch {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_SYNC_PEERS",
+      reason: "not_json",
+    });
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_SYNC_PEERS",
+      reason: "empty_or_not_array",
+    });
+  }
+  const peers = parsed.map((p): SyncPeer => {
+    const peer = p as Partial<SyncPeer>;
+    if (isUnset(peer.nodeId) || isUnset(peer.url) || isUnset(peer.token)) {
+      throw new AppError("server.config_invalid", {
+        variable: "WAITRON_SYNC_PEERS",
+        reason: "peer_field_blank",
+      });
+    }
+    return { nodeId: peer.nodeId, url: peer.url, token: peer.token };
+  });
+  return {
+    nodeToken: required(env, "WAITRON_SYNC_NODE_TOKEN"),
+    databaseUrl: required(env, "WAITRON_SYNC_DATABASE_URL"),
+    peers,
+  };
+}
+
 /**
  * The shared parse+validate step behind both `positiveInt` and `optionalPositiveInt` below:
  * `undefined` when the variable is unset, the parsed value otherwise, throwing
