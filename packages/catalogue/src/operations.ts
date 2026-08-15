@@ -203,15 +203,19 @@ export async function renameCategory(tx: Transaction, id: string, name: string):
  * Republish `products.allergens` from the two overlays on the row. `allergens` is a COMPUTED column:
  * staff author `manual_allergens`, the recipe module writes `recipe_derivation`, and the published
  * declaration is `republish(manual, derivation)` (derivation.ts). Called after any change to either
- * overlay — createProduct/updateProduct (manual) or applyRecipeDerivation (derivation). `row!` follows
- * the file's convention: `id` was just written in this same transaction, so the row is present.
+ * overlay — createProduct/updateProduct (manual) or applyRecipeDerivation (derivation).
+ *
+ * `id` is CALLER-supplied at the update/derivation call sites (an `UPDATE … WHERE id = $id` that
+ * silently touches zero rows when the id doesn't exist), so the SELECT may return no row. That is a
+ * no-op, matching `updateProduct`'s pre-existing "missing id is a silent no-op" semantics: `republish`
+ * of two nulls is null and the follow-up UPDATE also matches nothing.
  */
 async function republishProduct(tx: Transaction, id: string): Promise<void> {
   const [row] = await tx
     .select({ manual: products.manualAllergens, derivation: products.recipeDerivation })
     .from(products)
     .where(eq(products.id, id));
-  const published = republish(row!.manual, row!.derivation);
+  const published = republish(row?.manual ?? null, row?.derivation ?? null);
   await tx.update(products).set({ allergens: published }).where(eq(products.id, id));
 }
 

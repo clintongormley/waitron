@@ -386,6 +386,31 @@ describe("catalogue operations", () => {
     expect(seen).toBeNull();
   });
 
+  // A caller-supplied id that names no product is a SILENT no-op, exactly as every other patch field
+  // is (image/active/…) — updateProduct does not pre-check existence, and republishProduct's SELECT
+  // returns no row, so `republish(null, null) = null` and the follow-up UPDATE matches nothing. This
+  // also exercises republishProduct's `row === undefined` branch.
+  it("updateProduct with allergens on a nonexistent id does not throw and affects no row", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "C" });
+      const missing = "00000000-0000-0000-0000-0000000000ff";
+      await expect(
+        updateProduct(tx, missing, { allergens: { eggs: { presence: "contains" } } }),
+      ).resolves.toBeUndefined();
+      // No row was created or altered: the catalogue stays empty.
+      expect(await listProducts(tx, cat.id)).toEqual([]);
+    });
+  });
+
+  it("applyRecipeDerivation on a nonexistent id does not throw", async () => {
+    await asTenant(async (tx) => {
+      const missing = "00000000-0000-0000-0000-0000000000fe";
+      await expect(
+        applyRecipeDerivation(tx, missing, { allergens: {}, pending: false }),
+      ).resolves.toBeUndefined();
+    });
+  });
+
   it("renames a catalogue", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });
