@@ -47,6 +47,11 @@ export const shiftSwaps = pgTable(
     /** The shift offered in return, if any; null for a one-sided give-away. */
     toShiftId: uuid("to_shift_id"),
     status: shiftSwapStatus("status").notNull().default("requested"),
+    /** The manager who decided this swap (approve/reject), recorded when the route supplies it; null
+     * while the swap is still `requested`/`accepted`. Mirrors roster_versions.published_by_person_id. */
+    decidedByPersonId: uuid("decided_by_person_id"),
+    /** When the swap was decided; null until it is. Mirrors roster_versions.published_at. */
+    decidedAt: timestamp("decided_at", { withTimezone: true, mode: "string" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .notNull()
       .defaultNow(),
@@ -81,6 +86,12 @@ export const shiftSwaps = pgTable(
       foreignColumns: [shifts.id],
       name: "shift_swaps_to_shift_fk",
     }).onDelete("set null"),
+    // restrict, not cascade: the manager who decided a swap must not be silently deletable.
+    foreignKey({
+      columns: [t.decidedByPersonId],
+      foreignColumns: [persons.id],
+      name: "shift_swaps_decided_by_person_fk",
+    }).onDelete("restrict"),
     index("shift_swaps_tenant_id_idx").on(t.tenantId),
     index("shift_swaps_tenant_from_shift_idx").on(t.tenantId, t.fromShiftId),
   ],

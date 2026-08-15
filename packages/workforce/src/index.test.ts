@@ -169,7 +169,14 @@ describe("absences constraint declarations (forces the lazy extraConfig callback
     const config = getTableConfig(api.absences);
 
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
-    expect(fkNames).toEqual(expect.arrayContaining(["absences_tenant_fk", "absences_person_fk"]));
+    expect(fkNames).toEqual(
+      expect.arrayContaining([
+        "absences_tenant_fk",
+        "absences_person_fk",
+        // roster slice 2: the manager who decided the absence (approve/reject).
+        "absences_decided_by_person_fk",
+      ]),
+    );
 
     expect(config.checks.map((c) => c.name)).toContain("absences_range_ck");
   });
@@ -223,6 +230,8 @@ describe("shift_swaps constraint declarations (forces the lazy extraConfig callb
         // from_shift cascades (a swap dies with its offered shift), to_shift SET NULLs.
         "shift_swaps_from_shift_fk",
         "shift_swaps_to_shift_fk",
+        // roster slice 2: the manager who decided the swap (approve/reject).
+        "shift_swaps_decided_by_person_fk",
       ]),
     );
   });
