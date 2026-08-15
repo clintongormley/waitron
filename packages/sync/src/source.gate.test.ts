@@ -186,8 +186,10 @@ describe("readSyncLogSince reads sync_log as sync_tailer under the tenant contex
   it("restricts to the named tables when `tables` is supplied (the lane filter)", async () => {
     // A fast-lane table (payment_policy) and ordered-lane tables (catalogues from seedBase, products)
     // are all captured under one tenant. `tables: ['payment_policy','payments']` returns ONLY the fast
-    // rows; `tables: <the ordered set>` returns the ordered rows and NOT payment_policy. The array binds
-    // as a single `= any($n)` parameter — no identifier is interpolated (CLAUDE.md §3).
+    // rows; `tables: <the ordered set>` returns the ordered rows and NOT payment_policy. The filter
+    // binds as `in ($1, $2, …)`, each table name its own param — no identifier is interpolated
+    // (CLAUDE.md §3); not `= any(${tables})`, which drizzle expands to `any(($1, $2))` and fails 42809
+    // (see source.ts and packages/fiscal-verifactu/src/drain.ts:588).
     const b = await seedBase();
     await captureAProductWrite(b, "1.50"); // products (ordered)
     await capturePaymentPolicyWrite(b); //     payment_policy (fast)
