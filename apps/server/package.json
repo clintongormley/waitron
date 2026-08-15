@@ -20,6 +20,7 @@
     "demo:catalogue": "tsx scripts/catalogue-demo.ts",
     "demo:modelo-303": "tsx scripts/modelo-303-demo.ts",
     "demo:allergens": "tsx scripts/allergens-demo.ts",
+    "demo:recipes": "tsx scripts/recipes-demo.ts",
     "demo:till": "tsx scripts/till-demo.ts",
     "demo:park-retrieve": "tsx scripts/park-retrieve-demo.ts",
     "demo:card": "tsx scripts/integrated-card-demo.ts"
@@ -38,6 +39,7 @@
     "@waitron/payments": "workspace:*",
     "@waitron/payments-stripe": "workspace:*",
     "@waitron/provisioning": "workspace:*",
+    "@waitron/recipes": "workspace:*",
     "@waitron/reporting": "workspace:*",
     "@waitron/scheduler": "workspace:*",
     "@waitron/shared": "workspace:*",

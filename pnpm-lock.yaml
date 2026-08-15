@@ -123,6 +123,9 @@ importers:
       '@waitron/provisioning':
         specifier: workspace:*
         version: link:../../packages/provisioning
+      '@waitron/recipes':
+        specifier: workspace:*
+        version: link:../../packages/recipes
       '@waitron/reporting':
         specifier: workspace:*
         version: link:../../packages/reporting
