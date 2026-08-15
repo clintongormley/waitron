@@ -13,7 +13,7 @@
 import { sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { pgErrorCode, readDeploymentEnvironment, withTenant, type Database } from "@waitron/db";
-import { ENROLLED, type EnrolledTable } from "./registry.js";
+import { ENROLLED, type EnrolledTable, type SyncLane } from "./registry.js";
 import { applyStatementFor, deleteStatementFor } from "./apply-sql.js";
 // Side-effect import: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable
 // from a file that throws `sync.*` codes (packages/shared/src/errors.ts reachability rule).
@@ -48,6 +48,10 @@ export interface ApplyBatchOptions {
   localEnvironment: string;
   /** The environment the source peer advertised. Refused if it differs from the local stamp. */
   sourceEnvironment: string;
+  /** Which replication lane this batch belongs to — selects the `(subscriber, origin, lane)` cursor
+   * rows read, skipped against, and advanced. Optional, defaulting to `"ordered"` (the 0002 column
+   * default and the wire's ordered-clamp), so an ordered-lane caller need not name it. */
+  lane?: SyncLane;
 }
 
 export interface ApplyBatchResult {
@@ -145,9 +149,13 @@ export async function applyBatch(
   //    that sign (never collapsing a non-zero difference to 0), giving a branchless comparator.
   const ordered = [...rows].sort((a, b) => Number(a.seq - b.seq));
 
-  // 3. The per-(subscriber, origin) cursor, read once. A row whose seq <= its origin's cursor was
-  //    applied by a prior batch — the Group-C monotonicity skip.
-  const cursorAtStart = await readCursors(subscriberDb, opts.subscriberId);
+  // 3. The per-(subscriber, origin) cursor for THIS lane, read once. A row whose seq <= its origin's
+  //    cursor was applied by a prior batch of the same lane — the Group-C monotonicity skip. The lane
+  //    defaults to "ordered" (the 0002 column default and the wire's ordered-clamp), so an ordered
+  //    caller need not name it; a fast pull passes lane:"fast" and reads/skips/advances the fast
+  //    cursor rows only, disjoint from the ordered lane's (spec §4e).
+  const lane: SyncLane = opts.lane ?? "ordered";
+  const cursorAtStart = await readCursors(subscriberDb, opts.subscriberId, lane);
   const progress = new Map<string, OriginProgress>();
   const bucket = (originId: string): OriginProgress => {
     let b = progress.get(originId);
@@ -211,7 +219,7 @@ export async function applyBatch(
     const start = cursorAtStart.get(originId) ?? 0n;
     const eligible = b.settled.filter((s) => [...b.deferred].every((d) => s < d));
     const high = eligible.reduce((m, s) => (s > m ? s : m), start);
-    if (high > start) await advanceCursor(subscriberDb, opts.subscriberId, originId, high);
+    if (high > start) await advanceCursor(subscriberDb, opts.subscriberId, originId, lane, high);
   }
 
   return { applied, deferred };
@@ -303,11 +311,22 @@ async function applyOneRow(db: Database, row: SyncLogRow, dispatch: Dispatch): P
   });
 }
 
-/** Reads this subscriber's per-origin cursors into a map (missing origins default to 0 below). */
-async function readCursors(db: Database, subscriberId: string): Promise<Map<string, bigint>> {
+/**
+ * Reads this subscriber's per-origin cursors FOR ONE LANE into a map (missing origins default to 0
+ * below). The `and lane = ${lane}` filter is load-bearing (Task 1 Minor review): with the 0002 lane
+ * split each `(subscriber, origin)` has up to two cursor rows, and reading both would collapse them
+ * to whichever sorts last into the `origin_id`-keyed map — a fast advance would then drag the ordered
+ * lane's seq (or vice-versa), the silent data loss spec §4e exists to prevent. `lane` binds as a
+ * param (never string-concatenated, CLAUDE.md §3).
+ */
+async function readCursors(
+  db: Database,
+  subscriberId: string,
+  lane: SyncLane,
+): Promise<Map<string, bigint>> {
   const result = await db.execute<{ origin_id: string; last_applied_seq: string }>(
     sql`select origin_id::text as origin_id, last_applied_seq::text as last_applied_seq
-        from sync_cursor where subscriber_id = ${subscriberId}`,
+        from sync_cursor where subscriber_id = ${subscriberId} and lane = ${lane}`,
   );
   const cursors = new Map<string, bigint>();
   // bigint columns come back as strings from node-postgres (a JS number would lose precision), so
@@ -326,14 +345,16 @@ async function advanceCursor(
   db: Database,
   subscriberId: string,
   originId: string,
+  lane: SyncLane,
   seq: bigint,
 ): Promise<void> {
   await db.execute(
-    // The ON CONFLICT arbiter is the 0002 PK (subscriber_id, origin_id, lane). This omits `lane`, so
-    // the inserted row defaults to 'ordered' (0002_sync_cursor_lane.sql) and the conflict resolves on
-    // the ordered lane — the single lane this apply path serves until T5 threads a lane through.
-    sql`insert into sync_cursor (subscriber_id, origin_id, last_applied_seq)
-        values (${subscriberId}, ${originId}::uuid, ${seq.toString()}::bigint)
+    // The ON CONFLICT arbiter is the 0002 PK (subscriber_id, origin_id, lane); the INSERT now carries
+    // the REAL lane, so a fast-lane advance writes lane='fast' (its own cursor row) rather than the
+    // 'ordered' default, and the conflict resolves on that lane's row only (spec §4e). `lane` binds as
+    // a param (never string-concatenated, CLAUDE.md §3).
+    sql`insert into sync_cursor (subscriber_id, origin_id, lane, last_applied_seq)
+        values (${subscriberId}, ${originId}::uuid, ${lane}, ${seq.toString()}::bigint)
         on conflict (subscriber_id, origin_id, lane) do update
           set last_applied_seq = excluded.last_applied_seq, updated_at = now()
           where excluded.last_applied_seq > sync_cursor.last_applied_seq`,
