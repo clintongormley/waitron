@@ -27,6 +27,10 @@ export type { ApplyBatchOptions, ApplyBatchResult, SyncLogRow } from "./apply.js
 export { readSyncLogSince } from "./source.js";
 export type { ReadSyncLogArgs } from "./source.js";
 
+// The NDJSON wire codec — one JSON object per line, seq as a decimal string and row_image as a raw
+// jsonb-text string field (design §4b) so JS never re-parses a numeric across the wire (Task 6).
+export { decodeBatch, encodeBatch } from "./wire.js";
+
 // Bounded log retention (prune to the min across ALL subscriber cursors — a down subscriber holds the
 // log) and per-subscriber lag reporting (docs/superpowers/plans/2026-08-08-sync-slice1-commercial-outbox-plan.md
 // Task 6).
