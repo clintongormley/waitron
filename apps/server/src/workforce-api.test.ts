@@ -124,6 +124,30 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
     });
   });
 
+  it("400s a shaped-but-invalid calendar date on POST (2026-02-30 → request_invalid, never a 500)", async () => {
+    // Shape passes the YYYY-MM-DD regex but Feb 30 is not a real day; without a calendar-validity
+    // check it reaches the `::date` column as 22008 → an opaque server.internal 500.
+    const res = await send(mountApp(), "POST", "/management-api/roster", {
+      body: { locationId, period: "2026-02-30" },
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "management.request_invalid" },
+    });
+  });
+
+  it("400s a shaped-but-invalid calendar date on GET (2026-13-01 → request_invalid, never a 500)", async () => {
+    const res = await send(
+      mountApp(),
+      "GET",
+      `/management-api/roster?locationId=${locationId}&period=2026-13-01`,
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "management.request_invalid" },
+    });
+  });
+
   it("401s an unauthenticated request", async () => {
     const res = await send(mountApp(), "GET", "/management-api/locations", { cookie: null });
     expect(res.status).toBe(401);
@@ -217,6 +241,35 @@ describe("mountWorkforceApi — shift routes", () => {
     expect(res.status).toBe(400);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "shared.invalid_id" },
+    });
+  });
+
+  it("400s a non-parseable startsAt on add (management.request_invalid, never a 500)", async () => {
+    // "nope" is a string, so requireBodyString passed it; addShift's `NaN >= NaN` interval guard is
+    // false, so without a route-level timestamp screen it lands in the `::timestamptz` column (22007
+    // → 500). Screened at the route it is a 400 request_invalid.
+    const app = mountApp();
+    const versionId = await draftVersion("2026-04-27");
+    const res = await send(app, "POST", `/management-api/roster/${versionId}/shifts`, {
+      body: { ...shiftBody("2026-04-27"), startsAt: "nope" },
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "management.request_invalid" },
+    });
+  });
+
+  it("400s an out-of-range startsOffsetMinutes on add (management.request_invalid, never a 500)", async () => {
+    // 900 is an integer, so requireBodyInt passed it; the DB check `between -840 and 840` then raises
+    // 23514 → 500. Range-checked at the route it is a 400 request_invalid.
+    const app = mountApp();
+    const versionId = await draftVersion("2026-05-25");
+    const res = await send(app, "POST", `/management-api/roster/${versionId}/shifts`, {
+      body: { ...shiftBody("2026-05-25"), startsOffsetMinutes: 900 },
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "management.request_invalid" },
     });
   });
 });

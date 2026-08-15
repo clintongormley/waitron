@@ -27,6 +27,10 @@ export interface WorkforceApiDeps {
 const SCHEDULE_PERMISSION: Permission = "schedule.manage";
 
 const YYYY_MM_DD = /^\d{4}-\d{2}-\d{2}$/;
+// ±14h — the wall-offset domain the `shifts_*_offset_ck` check constraints enforce
+// (`packages/workforce/src/schema/shifts.ts`); an offset outside it is a 23514 at the DB, screened
+// here to a 400 instead.
+const MAX_OFFSET_MINUTES = 840;
 
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -53,17 +57,29 @@ function requireUuidParam(id: string, kind: string): string {
   return id;
 }
 
-/** Screen a `period` query/body value as a YYYY-MM-DD date shape (a non-date would 22007 → 500 at the
- * `date` column). Refuses as `management.request_invalid` naming the field. */
+/** Screen a `period` query/body value as a YYYY-MM-DD date that is BOTH well-shaped AND a real calendar
+ * day. The regex alone admits impossible days (`2026-02-30`, `2026-13-01`), which would reach the
+ * `::date` column as a 22008 → an opaque `server.internal` 500; the round-trip through `Date` (a
+ * normalised or NaN result means the Y-M-D was not a real day) rejects them here as
+ * `management.request_invalid` naming the field. */
 function requirePeriod(value: unknown): string {
   if (typeof value !== "string" || !YYYY_MM_DD.test(value)) {
+    throw new AppError("management.request_invalid", { field: "period" });
+  }
+  const asUtc = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(asUtc.getTime()) || asUtc.toISOString().slice(0, 10) !== value) {
     throw new AppError("management.request_invalid", { field: "period" });
   }
   return value;
 }
 
-function requireBodyString(v: unknown, field: string): string {
-  if (typeof v !== "string") throw new AppError("management.request_invalid", { field });
+/** Screen a body `startsAt`/`endsAt` as a parseable instant. A non-parseable string is still a
+ * `string`, so a bare type check would admit it — and `addShift`'s `Date.parse(x) >= Date.parse(y)`
+ * interval guard then passes it too (`NaN >= NaN` is `false`) — so it lands in the `::timestamptz`
+ * column as a 22007 → 500; screened here to a 400 `management.request_invalid` naming the field. */
+function requireTimestamp(v: unknown, field: string): string {
+  if (typeof v !== "string" || Number.isNaN(Date.parse(v)))
+    throw new AppError("management.request_invalid", { field });
   return v;
 }
 function requireBodyUuid(v: unknown, field: string): string {
@@ -71,8 +87,16 @@ function requireBodyUuid(v: unknown, field: string): string {
     throw new AppError("management.request_invalid", { field });
   return v;
 }
-function requireBodyInt(v: unknown, field: string): number {
-  if (typeof v !== "number" || !Number.isInteger(v))
+/** Screen a body offset as an integer inside the `±MAX_OFFSET_MINUTES` wall-offset domain. A bare
+ * integer check admits an out-of-domain value, which then violates `shifts_*_offset_ck` as a 23514 →
+ * 500; range-checked here to a 400 `management.request_invalid` naming the field. */
+function requireOffsetMinutes(v: unknown, field: string): number {
+  if (
+    typeof v !== "number" ||
+    !Number.isInteger(v) ||
+    v < -MAX_OFFSET_MINUTES ||
+    v > MAX_OFFSET_MINUTES
+  )
     throw new AppError("management.request_invalid", { field });
   return v;
 }
@@ -136,10 +160,13 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const body = (await c.req.json<Record<string, unknown>>()) ?? {};
       const personId = requireBodyUuid(body.personId, "personId");
       const locationId = requireBodyUuid(body.locationId, "locationId");
-      const startsAt = requireBodyString(body.startsAt, "startsAt");
-      const endsAt = requireBodyString(body.endsAt, "endsAt");
-      const startsOffsetMinutes = requireBodyInt(body.startsOffsetMinutes, "startsOffsetMinutes");
-      const endsOffsetMinutes = requireBodyInt(body.endsOffsetMinutes, "endsOffsetMinutes");
+      const startsAt = requireTimestamp(body.startsAt, "startsAt");
+      const endsAt = requireTimestamp(body.endsAt, "endsAt");
+      const startsOffsetMinutes = requireOffsetMinutes(
+        body.startsOffsetMinutes,
+        "startsOffsetMinutes",
+      );
+      const endsOffsetMinutes = requireOffsetMinutes(body.endsOffsetMinutes, "endsOffsetMinutes");
       const role = requireNullableString(body.role, "role");
       const shiftId = await gated(sessionId, (tx) =>
         backend.addShift(tx, {
@@ -168,13 +195,15 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
         shiftId,
       };
       if (body.personId !== undefined) patch.personId = requireBodyUuid(body.personId, "personId");
-      if (body.startsAt !== undefined)
-        patch.startsAt = requireBodyString(body.startsAt, "startsAt");
-      if (body.endsAt !== undefined) patch.endsAt = requireBodyString(body.endsAt, "endsAt");
+      if (body.startsAt !== undefined) patch.startsAt = requireTimestamp(body.startsAt, "startsAt");
+      if (body.endsAt !== undefined) patch.endsAt = requireTimestamp(body.endsAt, "endsAt");
       if (body.startsOffsetMinutes !== undefined)
-        patch.startsOffsetMinutes = requireBodyInt(body.startsOffsetMinutes, "startsOffsetMinutes");
+        patch.startsOffsetMinutes = requireOffsetMinutes(
+          body.startsOffsetMinutes,
+          "startsOffsetMinutes",
+        );
       if (body.endsOffsetMinutes !== undefined)
-        patch.endsOffsetMinutes = requireBodyInt(body.endsOffsetMinutes, "endsOffsetMinutes");
+        patch.endsOffsetMinutes = requireOffsetMinutes(body.endsOffsetMinutes, "endsOffsetMinutes");
       if (body.role !== undefined) patch.role = requireNullableString(body.role, "role");
       await gated(sessionId, (tx) => backend.updateShift(tx, patch));
       return c.body(null, 204);
