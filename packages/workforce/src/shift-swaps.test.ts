@@ -5,7 +5,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { acceptSwap, requestSwap } from "./shift-swaps.js";
+import { acceptSwap, decideSwap, listPendingSwaps, requestSwap } from "./shift-swaps.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { insertDraftShift, insertShiftSwap, seedLocation, seedPerson } from "../test/fixtures.js";
@@ -187,5 +187,129 @@ describe("acceptSwap", () => {
       run((tx) => acceptSwap(tx, { tenantId, swapId, acceptingPersonId: stranger })),
     );
     expect(code).toBe("swap.not_permitted");
+  });
+});
+
+describe("decideSwap", () => {
+  async function acceptedSwap(): Promise<string> {
+    const requester = await seedPerson(suite.db, tenantId, `req-${crypto.randomUUID()}`);
+    const toPerson = await seedPerson(suite.db, tenantId, `to-${crypto.randomUUID()}`);
+    const fromShift = await insertDraftShift(suite.db, { tenantId, personId: requester, locationId });
+    return insertShiftSwap(suite.db, {
+      tenantId,
+      requestedByPersonId: requester,
+      fromShiftId: fromShift,
+      toPersonId: toPerson,
+      status: "accepted",
+    });
+  }
+
+  it("approves an accepted swap, stamping the decider and decided_at", async () => {
+    const swapId = await acceptedSwap();
+    const decider = await seedPerson(suite.db, tenantId, `mgr-${crypto.randomUUID()}`);
+    await run((tx) =>
+      decideSwap(tx, { tenantId, swapId, decision: "approved", decidedByPersonId: decider }),
+    );
+    const rows = await suite.db.execute<{
+      status: string;
+      decided_by_person_id: string | null;
+      decided_at: string | null;
+    }>(sql`select status, decided_by_person_id, decided_at from shift_swaps where id = ${swapId}`);
+    expect(rows.rows[0]!.status).toBe("approved");
+    expect(rows.rows[0]!.decided_by_person_id).toBe(decider);
+    expect(rows.rows[0]!.decided_at).not.toBeNull();
+  });
+
+  it("rejects an accepted swap (decision 'rejected')", async () => {
+    const swapId = await acceptedSwap();
+    await run((tx) => decideSwap(tx, { tenantId, swapId, decision: "rejected", decidedByPersonId: null }));
+    const rows = await suite.db.execute<{ status: string }>(
+      sql`select status from shift_swaps where id = ${swapId}`,
+    );
+    expect(rows.rows[0]!.status).toBe("rejected");
+  });
+
+  it("throws swap.not_found for a swap that does not exist under the tenant", async () => {
+    const code = await codeOfRejection(() =>
+      run((tx) =>
+        decideSwap(tx, {
+          tenantId,
+          swapId: crypto.randomUUID(),
+          decision: "approved",
+          decidedByPersonId: null,
+        }),
+      ),
+    );
+    expect(code).toBe("swap.not_found");
+  });
+
+  it("throws swap.not_decidable for a REQUESTED swap (not yet accepted)", async () => {
+    const requester = await seedPerson(suite.db, tenantId, `r-${crypto.randomUUID()}`);
+    const toPerson = await seedPerson(suite.db, tenantId, `t-${crypto.randomUUID()}`);
+    const fromShift = await insertDraftShift(suite.db, { tenantId, personId: requester, locationId });
+    const swapId = await insertShiftSwap(suite.db, {
+      tenantId,
+      requestedByPersonId: requester,
+      fromShiftId: fromShift,
+      toPersonId: toPerson,
+      status: "requested",
+    });
+    const code = await codeOfRejection(() =>
+      run((tx) => decideSwap(tx, { tenantId, swapId, decision: "approved", decidedByPersonId: null })),
+    );
+    expect(code).toBe("swap.not_decidable");
+  });
+
+  it("throws swap.not_decidable for an already-approved swap (terminal state)", async () => {
+    const swapId = await acceptedSwap();
+    await run((tx) => decideSwap(tx, { tenantId, swapId, decision: "approved", decidedByPersonId: null }));
+    const code = await codeOfRejection(() =>
+      run((tx) => decideSwap(tx, { tenantId, swapId, decision: "rejected", decidedByPersonId: null })),
+    );
+    expect(code).toBe("swap.not_decidable");
+  });
+});
+
+describe("listPendingSwaps", () => {
+  it("returns only accepted swaps for the tenant, ordered by created_at", async () => {
+    // A FRESH tenant, isolated from the sibling suites above: the shared PGlite DB persists across
+    // the file, and `acceptSwap`'s "moving the swap to accepted" test leaves an `accepted` swap on
+    // the module-level `tenantId` — order-independent per CLAUDE.md §4, so this queries its own tenant.
+    const listTenant = await seedTenant(suite.db);
+    const listLocation = await seedLocation(suite.db, listTenant);
+    const requester = await seedPerson(suite.db, listTenant, `lr-${crypto.randomUUID()}`);
+    const toPerson = await seedPerson(suite.db, listTenant, `lt-${crypto.randomUUID()}`);
+    const s1 = await insertDraftShift(suite.db, {
+      tenantId: listTenant,
+      personId: requester,
+      locationId: listLocation,
+    });
+    const s2 = await insertDraftShift(suite.db, {
+      tenantId: listTenant,
+      personId: requester,
+      locationId: listLocation,
+    });
+    const accepted = await insertShiftSwap(suite.db, {
+      tenantId: listTenant,
+      requestedByPersonId: requester,
+      fromShiftId: s1,
+      toPersonId: toPerson,
+      status: "accepted",
+    });
+    // A requested (not accepted) swap must NOT appear.
+    await insertShiftSwap(suite.db, {
+      tenantId: listTenant,
+      requestedByPersonId: requester,
+      fromShiftId: s2,
+      toPersonId: toPerson,
+      status: "requested",
+    });
+    const rows = await withTenant(suite.db, listTenant, (tx) =>
+      listPendingSwaps(tx, { tenantId: listTenant }),
+    );
+    expect(rows.map((r) => r.id)).toEqual([accepted]);
+    expect(rows[0]!.status).toBe("accepted");
+    expect(rows[0]!.requestedByPersonId).toBe(requester);
+    expect(rows[0]!.fromShiftId).toBe(s1);
   });
 });

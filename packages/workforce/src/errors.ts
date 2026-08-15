@@ -124,5 +124,12 @@ declare module "@waitron/shared" {
      * missing entity (that is `swap.not_found`/`shift.not_found`). `swap.*`, grepped — never
      * renamed. */
     "swap.not_permitted": { tenantId: string; personId: string };
+    /** `decideSwap` (../shift-swaps.ts) was asked to approve/reject a swap whose `status` is not
+     * `accepted` — a `requested` swap has not been accepted yet, and an `approved`/`rejected` one is
+     * terminal. Distinct from `swap.not_found` (no such swap); here it EXISTS but is not in a decidable
+     * state, mirroring `roster.already_published` = exists-but-wrong-state (`errors.ts:72`). `swap.*`,
+     * grepped against the two siblings (`swap.not_found`, `swap.not_permitted`) — both `swap.not_<x>`,
+     * so the shape matches; never renamed once shipped. */
+    "swap.not_decidable": { tenantId: string; swapId: string };
   }
 }

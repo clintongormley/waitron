@@ -26,8 +26,13 @@ export { shiftSwaps, shiftSwapStatus } from "./schema/shift-swaps.js";
 export type { ShiftSwapStatus } from "./schema/shift-swaps.js";
 export { createAbsence, setAbsenceStatus } from "./absences.js";
 export type { CreateAbsenceInput, SetAbsenceStatusInput } from "./absences.js";
-export { requestSwap, acceptSwap } from "./shift-swaps.js";
-export type { RequestSwapInput, AcceptSwapInput } from "./shift-swaps.js";
+export { requestSwap, acceptSwap, decideSwap, listPendingSwaps } from "./shift-swaps.js";
+export type {
+  RequestSwapInput,
+  AcceptSwapInput,
+  DecideSwapInput,
+  PendingSwapRow,
+} from "./shift-swaps.js";
 export { appendToChain, isUniqueViolation, lockChainHead } from "./chain.js";
 export type { ChainHead, TimeEntryAppend } from "./chain.js";
 export { computeEntryHash, verifyChain } from "./chain-hash.js";

@@ -26,6 +26,8 @@ describe("the public surface", () => {
         "setAbsenceStatus",
         "requestSwap",
         "acceptSwap",
+        "decideSwap",
+        "listPendingSwaps",
         "appendToChain",
         "isUniqueViolation",
         "lockChainHead",
