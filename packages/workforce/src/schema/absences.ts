@@ -62,6 +62,11 @@ export const absences = pgTable(
     status: absenceStatus("status").notNull().default("requested"),
     /** A free-text note the requester or approver may attach; null when none. */
     note: text("note"),
+    /** The manager who decided this absence (approve/reject), recorded when the route supplies it;
+     * null while the absence is still `requested`. Mirrors roster_versions.published_by_person_id. */
+    decidedByPersonId: uuid("decided_by_person_id"),
+    /** When the absence was decided; null until it is. */
+    decidedAt: timestamp("decided_at", { withTimezone: true, mode: "string" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .notNull()
       .defaultNow(),
@@ -80,6 +85,12 @@ export const absences = pgTable(
       columns: [t.personId],
       foreignColumns: [persons.id],
       name: "absences_person_fk",
+    }).onDelete("restrict"),
+    // restrict, not cascade: the manager who decided an absence must not be silently deletable.
+    foreignKey({
+      columns: [t.decidedByPersonId],
+      foreignColumns: [persons.id],
+      name: "absences_decided_by_person_fk",
     }).onDelete("restrict"),
     index("absences_tenant_id_idx").on(t.tenantId),
     // The overlap check queries by (tenant, person) over the date range — this index serves it.

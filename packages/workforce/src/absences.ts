@@ -24,6 +24,9 @@ export interface SetAbsenceStatusInput {
   tenantId: string;
   absenceId: string;
   status: AbsenceStatus;
+  /** The manager who decided, recorded on the absence; null when unattributed (mirrors
+   * roster_versions.published_by_person_id — recorded when supplied, never required). NEW field. */
+  decidedByPersonId: string | null;
 }
 
 /**
@@ -71,7 +74,10 @@ export async function setAbsenceStatus(
   input: SetAbsenceStatusInput,
 ): Promise<void> {
   const { rows } = await tx.execute<{ id: string }>(sql`
-    update absences set status = ${input.status}
+    update absences
+    set status = ${input.status},
+        decided_by_person_id = ${input.decidedByPersonId},
+        decided_at = now()
     where tenant_id = ${input.tenantId} and id = ${input.absenceId}
     returning id`);
   if (rows.length === 0) {
@@ -80,4 +86,53 @@ export async function setAbsenceStatus(
       absenceId: input.absenceId,
     });
   }
+}
+
+/** One requested absence awaiting a manager decision (the approvals queue). */
+export interface PendingAbsenceRow {
+  id: string;
+  personId: string;
+  kind: AbsenceKind;
+  /** YYYY-MM-DD, inclusive (::text cast, the getRoster date pattern). */
+  startsOn: string;
+  endsOn: string;
+  /** Always `requested` for this query. */
+  status: AbsenceStatus;
+  note: string | null;
+  createdAt: string;
+}
+
+/**
+ * The tenant's REQUESTED absences awaiting a manager decision, ordered by `created_at` (design §3b).
+ * Tenant-scoped — `absences` has no location.
+ */
+export async function listPendingAbsences(
+  tx: Transaction,
+  input: { tenantId: string },
+): Promise<PendingAbsenceRow[]> {
+  const { rows } = await tx.execute<{
+    id: string;
+    person_id: string;
+    absence_kind: AbsenceKind;
+    starts_on: string;
+    ends_on: string;
+    status: AbsenceStatus;
+    note: string | null;
+    created_at: string;
+  }>(sql`
+    select id, person_id, absence_kind, starts_on::text as starts_on, ends_on::text as ends_on, status, note,
+      to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at
+    from absences
+    where tenant_id = ${input.tenantId} and status = 'requested'
+    order by absences.created_at`);
+  return rows.map((r) => ({
+    id: r.id,
+    personId: r.person_id,
+    kind: r.absence_kind,
+    startsOn: r.starts_on,
+    endsOn: r.ends_on,
+    status: r.status,
+    note: r.note,
+    createdAt: r.created_at,
+  }));
 }

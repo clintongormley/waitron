@@ -19,6 +19,13 @@ export const PERMISSIONS = [
   // (person.manage) and till config (till.configure); granted to manager + admin. Later slices add
   // swap.approve / absence.decide beside it (shift-planning slice 1, 2026-08-15).
   "schedule.manage",
+  // Manager approve/reject of an ACCEPTED shift swap (@waitron/workforce decideSwap), from the
+  // management dashboard's approvals screen. A domain-named APPROVAL permission beside schedule.manage;
+  // granted to manager + admin (roster slice 2, 2026-08-15).
+  "swap.approve",
+  // Manager approve/reject of a REQUESTED absence (@waitron/workforce setAbsenceStatus), same screen.
+  // Domain-named beside swap.approve; granted to manager + admin (roster slice 2, 2026-08-15).
+  "absence.decide",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -37,6 +44,8 @@ const MANAGER: ReadonlySet<Permission> = new Set([
   "person.manage",
   "till.configure",
   "schedule.manage",
+  "swap.approve",
+  "absence.decide",
 ]);
 const ALL: ReadonlySet<Permission> = new Set(PERMISSIONS);
 

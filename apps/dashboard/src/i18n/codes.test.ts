@@ -69,6 +69,9 @@ it("has a sentence for each roster/shift/convenio code (shift-planning slice 1)"
     "shift.not_found",
     "shift.invalid",
     "convenio.not_found",
+    "swap.not_found",
+    "swap.not_decidable",
+    "absence.not_found",
   ]) {
     expect(codeMessage(code, "es")).not.toBe(code);
     expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);

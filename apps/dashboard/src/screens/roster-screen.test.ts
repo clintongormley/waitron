@@ -79,9 +79,10 @@ describe("roster-screen", () => {
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
     await flush(el);
     // Open a cell (person p1, the week's first day) and emit add-shift from the dialog.
-    (el as unknown as { openCell(personId: string, day: string): void }).openCell(
+    (el as unknown as { openCell(personId: string, day: string, shift: null): void }).openCell(
       "p1",
       "2026-03-02",
+      null,
     );
     await el.updateComplete;
     emit(dialog(el), "add-shift", {
@@ -200,7 +201,11 @@ describe("roster-screen", () => {
     const api = stubApi();
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
     await flush(el);
-    (el as unknown as { openCell(p: string, d: string): void }).openCell("p1", "2026-03-02");
+    (el as unknown as { openCell(p: string, d: string, shift: null): void }).openCell(
+      "p1",
+      "2026-03-02",
+      null,
+    );
     await el.updateComplete;
     const detail = {
       personId: "p1",
@@ -251,6 +256,54 @@ describe("roster-screen", () => {
     await userEvent.keyboard("{Enter}");
     await el.updateComplete;
     expect((dialog(el) as unknown as { open: boolean }).open).toBe(true);
+  });
+
+  it("authors a SECOND shift on a populated cell (split shift) — edits the existing one AND adds another", async () => {
+    // The slice-2 fix: a populated cell must offer BOTH an edit of its existing shift AND an add of a
+    // second one. Before the fix `openCell`'s `.find` always re-opened the FIRST shift in edit mode, so
+    // a jornada partida could not be authored.
+    const snap: RosterSnapshot = {
+      version: draftSnapshot().version,
+      shifts: [
+        {
+          id: "s1",
+          personId: "p1",
+          locationId: "loc-1",
+          startsAt: "2026-03-02T09:00:00Z",
+          startsOffsetMinutes: 0,
+          endsAt: "2026-03-02T13:00:00Z",
+          endsOffsetMinutes: 0,
+          role: "bar",
+          rosterVersionId: "v1",
+        },
+      ],
+    };
+    const api = stubApi({ getRoster: vi.fn().mockResolvedValue(snap) });
+    const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+    await flush(el);
+    // The grid defaults to the current week; the fixture shift lives in the week of Mon 2026-03-02,
+    // so navigate there (the stub returns `snap` for any week) before the March cell is rendered.
+    const week = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=week-picker]")!;
+    week.value = "2026-03-02";
+    week.dispatchEvent(new Event("change"));
+    await flush(el);
+    const editBtn = el.shadowRoot!.querySelector<HTMLButtonElement>("[data-test=edit-s1]")!;
+    const addBtn = el.shadowRoot!.querySelector<HTMLButtonElement>(
+      "[data-test=cell-p1-2026-03-02]",
+    )!;
+    expect(editBtn).not.toBeNull();
+    expect(addBtn).not.toBeNull();
+    // Editing opens the dialog on the existing shift.
+    editBtn.click();
+    await el.updateComplete;
+    expect((dialog(el) as unknown as { shift: { id: string } | null }).shift).toMatchObject({
+      id: "s1",
+    });
+    // The add button opens the dialog for a NEW (null) shift on the same person + day.
+    addBtn.click();
+    await el.updateComplete;
+    expect((dialog(el) as unknown as { shift: unknown }).shift).toBeNull();
+    expect((dialog(el) as unknown as { personId: string }).personId).toBe("p1");
   });
 
   it("edits an existing shift via update-shift and reloads", async () => {
@@ -347,7 +400,11 @@ describe("roster-screen", () => {
     const api = stubApi({ addShift: vi.fn().mockRejectedValue({ code: "shift.invalid" }) });
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
     await flush(el);
-    (el as unknown as { openCell(p: string, d: string): void }).openCell("p1", "2026-03-02");
+    (el as unknown as { openCell(p: string, d: string, shift: null): void }).openCell(
+      "p1",
+      "2026-03-02",
+      null,
+    );
     await el.updateComplete;
     emit(dialog(el), "add-shift", {
       personId: "p1",

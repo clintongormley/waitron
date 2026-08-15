@@ -519,3 +519,95 @@ describe("DashboardApi — roster", () => {
     });
   });
 });
+
+describe("DashboardApi — approvals", () => {
+  it("listPendingSwaps GETs /management-api/swaps with credentials", async () => {
+    const rows = [
+      {
+        id: "sw1",
+        requestedByPersonId: "p1",
+        fromShiftId: "s1",
+        toPersonId: "p2",
+        toShiftId: null,
+        status: "accepted",
+        createdAt: "2026-03-02T00:00:00Z",
+      },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listPendingSwaps()).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/swaps", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("decideSwap POSTs the decision and resolves undefined on an empty 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.decideSwap("sw1", "approved")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/swaps/sw1/decide", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ decision: "approved" }),
+    });
+  });
+
+  it("listPendingAbsences GETs /management-api/absences with credentials", async () => {
+    const rows = [
+      {
+        id: "ab1",
+        personId: "p1",
+        kind: "holiday",
+        startsOn: "2026-03-02",
+        endsOn: "2026-03-04",
+        status: "requested",
+        note: null,
+        createdAt: "2026-03-02T00:00:00Z",
+      },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listPendingAbsences()).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/absences", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("decideAbsence POSTs the decision to the absences decide route", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.decideAbsence("ab1", "rejected")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/absences/ab1/decide", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ decision: "rejected" }),
+    });
+  });
+});
+
+describe("DashboardApi — planned vs actual", () => {
+  it("getPlannedVsActual GETs the planned-vs-actual route with locationId/from/to", async () => {
+    const rows = [
+      {
+        personId: "p1",
+        workDate: "2026-03-02",
+        plannedMinutes: 240,
+        workedMinutes: 225,
+        lateMinutes: 15,
+        noShow: false,
+        unplanned: false,
+      },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getPlannedVsActual("loc-1", "2026-03-02", "2026-03-09")).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/planned-vs-actual?locationId=loc-1&from=2026-03-02&to=2026-03-09",
+      { method: "GET", credentials: "include" },
+    );
+  });
+});

@@ -19,6 +19,7 @@ import {
   type PlannedShift,
   type RosterBreach,
 } from "./roster-validation.js";
+import { comparePlannedVsActual, type PlannedVsActual } from "./planned-vs-actual.js";
 import type { WorkTimeRuleset } from "./ruleset.js";
 // Side-effect: registers this package's attendance.*/employment.* codes so `new AppError(...)`
 // below type-checks against the shared registry (packages/shared reachability rule).
@@ -282,6 +283,138 @@ export class WorkforceBackend {
       },
       overtimeModel,
     );
+  }
+
+  /**
+   * The planned-vs-actual read model for one location over a half-open local-date window (design §3c):
+   * assembles the PLANNED shifts (the currently-PUBLISHED roster version) and the ACTUAL projected work
+   * sessions for the location, both scoped to the same location, and hands them to the pure
+   * `comparePlannedVsActual`. One row per matched or unmatched (person, local day) — planned vs worked
+   * minutes, lateness, and the no-show/unplanned flags. A window with no shifts and no sessions is an
+   * empty array, not an error.
+   */
+  async getPlannedVsActual(
+    tx: Transaction,
+    query: { tenantId: string; locationId: string; period: Period },
+  ): Promise<PlannedVsActual[]> {
+    const plannedShifts = await this.plannedShiftsInPeriod(
+      tx,
+      query.tenantId,
+      query.locationId,
+      query.period,
+    );
+    const entries = await this.entriesForLocationInPeriod(
+      tx,
+      query.tenantId,
+      query.locationId,
+      query.period,
+    );
+    // The ±1-day widened fetch can return a session one local day outside the window; keep only the
+    // sessions whose LOCAL day is in [start, end) (the planned side is already exact — its SQL filters
+    // by local date directly).
+    const sessions = projectWorkSessions(entries).filter(
+      (s) => s.workDate >= query.period.start && s.workDate < query.period.end,
+    );
+    return comparePlannedVsActual(plannedShifts, sessions);
+  }
+
+  /** The location's shifts on the currently-PUBLISHED roster version whose LOCAL wall date falls in
+   * `[period.start, period.end)`, as neutral `PlannedShift`s. Mirrors `attachedShifts` but keyed on
+   * `location_id` + a local-date window + `roster_versions.status = 'published'` (an INNER JOIN on
+   * `shifts.roster_version_id`) instead of a single `roster_version_id`. Published-only is the owner
+   * decision (2026-08-15): an in-progress DRAFT (`shifts.roster_version_id` null → dropped by the INNER
+   * JOIN, `schema/shifts.ts:49-50`) and a SUPERSEDED version (`status <> 'published'` → dropped by the
+   * filter, `schema/roster-versions.ts:32-36`) must not manufacture phantom no-shows. The
+   * `roster_versions_published_period_uq` partial unique index (`schema/roster-versions.ts:108-110`)
+   * keeps at most one published version per (tenant, location, period), so the join yields a single
+   * coherent plan.
+   *
+   * The published-only predicate lives in the JOIN's ON clause, not in WHERE, so BOTH exclusions are
+   * independently provable by deletion (CLAUDE.md §4). With the INNER JOIN it is exactly equivalent to
+   * a WHERE placement (an inner join drops unmatched rows either way); the two negative-control
+   * mutations, however, are NOT symmetric, because the WHERE references only `s.*`. Turning the join
+   * OUTER re-admits BOTH the null-version DRAFT (no `rv.id` match) AND the SUPERSEDED version's shift
+   * (its `rv.status` fails the ON term): each keeps its shift row with NULL rv columns, and the s-only
+   * WHERE cannot drop either — so that mutation reddens, driven by the DRAFT (the row the drop-`status`
+   * mutation below leaves correctly excluded). Dropping the `status = 'published'` term instead
+   * re-admits ONLY the SUPERSEDED row (its `rv.id` still matches); the DRAFT stays out for want of any
+   * `rv.id`. Each guard is therefore necessary — one catches the DRAFT exclusion, the other the
+   * SUPERSEDED — even though the OUTER mutation happens to re-admit both. The
+   * `starts_at + starts_offset_minutes` → local
+   * date expression is offset-aware (offset 0 in this slice, so local = UTC) and matches
+   * publishRoster's shift-attach; `to_char` normalises the instants to UTC ISO so the pure comparator's
+   * `Date.parse` sees a string under either driver. */
+  private async plannedShiftsInPeriod(
+    tx: Transaction,
+    tenantId: string,
+    locationId: string,
+    period: Period,
+  ): Promise<PlannedShift[]> {
+    const { rows } = await tx.execute<{
+      id: string;
+      person_id: string;
+      starts_at: string;
+      starts_offset_minutes: number;
+      ends_at: string;
+      ends_offset_minutes: number;
+    }>(sql`
+      select s.id, s.person_id,
+        to_char(s.starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as starts_at,
+        s.starts_offset_minutes,
+        to_char(s.ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at,
+        s.ends_offset_minutes
+      from shifts s
+      join roster_versions rv
+        on rv.id = s.roster_version_id and rv.tenant_id = s.tenant_id and rv.status = 'published'
+      where s.tenant_id = ${tenantId} and s.location_id = ${locationId}
+        and (s.starts_at at time zone 'UTC' + s.starts_offset_minutes * interval '1 minute')::date >= ${period.start}::date
+        and (s.starts_at at time zone 'UTC' + s.starts_offset_minutes * interval '1 minute')::date < ${period.end}::date`);
+    return rows.map((r) => ({
+      shiftId: r.id,
+      personId: r.person_id,
+      startsAt: r.starts_at,
+      startsOffsetMinutes: r.starts_offset_minutes,
+      endsAt: r.ends_at,
+      endsOffsetMinutes: r.ends_offset_minutes,
+    }));
+  }
+
+  /** The location's `time_entries` over a ±1-day-widened UTC window, for ALL persons. Mirrors
+   * `entriesInPeriod` but filters on `location_id` (not one person — which is why this is a new helper,
+   * not a reuse) and applies the same ±1-day widening so a session whose LOCAL day is inside is not
+   * missed. Corrections are fetched alongside base events (no `entry_kind` filter) so
+   * `projectWorkSessions` can fold them in. */
+  private async entriesForLocationInPeriod(
+    tx: Transaction,
+    tenantId: string,
+    locationId: string,
+    period: Period,
+  ): Promise<TimeEntryRecord[]> {
+    const windowStart = shiftDay(period.start, -1);
+    const windowEnd = shiftDay(period.end, 1);
+    const rows = await tx
+      .select({
+        entryId: timeEntries.id,
+        personId: timeEntries.personId,
+        locationId: timeEntries.locationId,
+        entryKind: timeEntries.entryKind,
+        eventAt: sql<string>`to_char(${timeEntries.eventAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
+        offsetMinutes: timeEntries.eventOffsetMinutes,
+        ingestSeq: timeEntries.ingestSeq,
+        sequenceNo: timeEntries.sequenceNo,
+        correctsEntryId: timeEntries.correctsEntryId,
+        correctionStatus: timeEntries.correctionStatus,
+      })
+      .from(timeEntries)
+      .where(
+        and(
+          eq(timeEntries.tenantId, tenantId),
+          eq(timeEntries.locationId, locationId),
+          gte(timeEntries.eventAt, windowStart),
+          lt(timeEntries.eventAt, windowEnd),
+        ),
+      );
+    return rows;
   }
 
   /**

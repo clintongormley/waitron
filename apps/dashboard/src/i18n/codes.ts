@@ -136,6 +136,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Configure this location's working-time rules first",
     es: "Configura primero las reglas de jornada de este local",
   },
+  "swap.not_found": {
+    en: "That swap could not be found",
+    es: "No se ha encontrado ese cambio de turno",
+  },
+  "swap.not_decidable": {
+    en: "That swap can no longer be decided",
+    es: "Ese cambio de turno ya no se puede decidir",
+  },
+  "absence.not_found": {
+    en: "That absence could not be found",
+    es: "No se ha encontrado esa ausencia",
+  },
   "server.internal": {
     en: "Something went wrong, try again",
     es: "Algo salió mal, inténtalo de nuevo",

@@ -9,7 +9,13 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
 import { asAppUser, withTenant, locations, type Database, type Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
-import { WorkforceBackend } from "@waitron/workforce";
+import {
+  WorkforceBackend,
+  decideSwap,
+  listPendingSwaps,
+  setAbsenceStatus,
+  listPendingAbsences,
+} from "@waitron/workforce";
 import { resolveWorkTimeRuleset } from "@waitron/workforce-es";
 import { createErrorBoundary } from "./error-boundary.js";
 import { requireManagementSession } from "./management-session.js";
@@ -21,10 +27,13 @@ export interface WorkforceApiDeps {
   cfg: { tenantId: string };
 }
 
-/** The ONE permission gating every workforce route — referenced through this single constant, never
- * an inline literal (the catalogue-api CATALOGUE_WRITE_PERMISSION pattern). Later slices add
- * swap.approve / absence.decide beside it. */
+/** The permissions gating the workforce routes — referenced through these constants, never an inline
+ * literal (the catalogue-api CATALOGUE_WRITE_PERMISSION pattern). `schedule.manage` gates the roster
+ * read/write group and planned-vs-actual; `swap.approve` / `absence.decide` gate the two approval
+ * queues added in roster slice 2. */
 const SCHEDULE_PERMISSION: Permission = "schedule.manage";
+const SWAP_APPROVE_PERMISSION: Permission = "swap.approve";
+const ABSENCE_DECIDE_PERMISSION: Permission = "absence.decide";
 
 const YYYY_MM_DD = /^\d{4}-\d{2}-\d{2}$/;
 // ±14h — the wall-offset domain the `shifts_*_offset_ck` check constraints enforce
@@ -47,6 +56,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "shift.not_found": 404,
   "shift.invalid": 400,
   "convenio.not_found": 409,
+  "swap.not_found": 404,
+  "swap.not_decidable": 409,
+  "absence.not_found": 404,
 };
 
 const run = createErrorBoundary(STATUS, "workforce.failed");
@@ -57,18 +69,19 @@ function requireUuidParam(id: string, kind: string): string {
   return id;
 }
 
-/** Screen a `period` query/body value as a YYYY-MM-DD date that is BOTH well-shaped AND a real calendar
- * day. The regex alone admits impossible days (`2026-02-30`, `2026-13-01`), which would reach the
- * `::date` column as a 22008 → an opaque `server.internal` 500; the round-trip through `Date` (a
- * normalised or NaN result means the Y-M-D was not a real day) rejects them here as
- * `management.request_invalid` naming the field. */
-function requirePeriod(value: unknown): string {
+/** Screen a YYYY-MM-DD date value (a roster `period`, or a planned-vs-actual `from`/`to`) that is BOTH
+ * well-shaped AND a real calendar day. The regex alone admits impossible days (`2026-02-30`,
+ * `2026-13-01`), which would reach the `::date` column as a 22008 → an opaque `server.internal` 500;
+ * the round-trip through `Date` (a normalised or NaN result means the Y-M-D was not a real day) rejects
+ * them here as `management.request_invalid`. `field` names the offending parameter in the (log-only)
+ * error detail — `"period"`, `"from"` or `"to"` — mirroring `requireTimestamp`/`requireOffsetMinutes`. */
+function requirePeriod(value: unknown, field: string): string {
   if (typeof value !== "string" || !YYYY_MM_DD.test(value)) {
-    throw new AppError("management.request_invalid", { field: "period" });
+    throw new AppError("management.request_invalid", { field });
   }
   const asUtc = new Date(`${value}T00:00:00Z`);
   if (Number.isNaN(asUtc.getTime()) || asUtc.toISOString().slice(0, 10) !== value) {
-    throw new AppError("management.request_invalid", { field: "period" });
+    throw new AppError("management.request_invalid", { field });
   }
   return value;
 }
@@ -105,15 +118,24 @@ function requireNullableString(v: unknown, field: string): string | null {
   if (typeof v !== "string") throw new AppError("management.request_invalid", { field });
   return v;
 }
+/** Screen a body `decision` as exactly "approved" or "rejected" — any other value (a valid-looking
+ * status like "requested"/"accepted" included) is a 400 `management.request_invalid` naming the field,
+ * never a downstream enum 500. The `requireNullableString` pattern, narrowed to two literals. */
+function requireDecision(v: unknown): "approved" | "rejected" {
+  if (v !== "approved" && v !== "rejected")
+    throw new AppError("management.request_invalid", { field: "decision" });
+  return v;
+}
 
 export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger): void {
-  const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
+  const gated = <T>(
+    sessionId: string,
+    permission: Permission,
+    fn: (tx: Transaction) => Promise<T>,
+  ): Promise<T> =>
     withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      await authorizeManager(tx, {
-        managementSessionId: sessionId,
-        permission: SCHEDULE_PERMISSION,
-      });
+      await authorizeManager(tx, { managementSessionId: sessionId, permission });
       return fn(tx);
     });
 
@@ -121,7 +143,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
   app.get("/management-api/locations", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, (tx) =>
+      const rows = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
         tx.select({ id: locations.id, name: locations.name }).from(locations),
       );
       return c.json(rows);
@@ -132,8 +154,8 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const locationId = requireUuidParam(c.req.query("locationId") ?? "", "LocationId");
-      const period = requirePeriod(c.req.query("period"));
-      const snapshot = await gated(sessionId, (tx) =>
+      const period = requirePeriod(c.req.query("period"), "period");
+      const snapshot = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
         backend.getRoster(tx, { tenantId: deps.cfg.tenantId, locationId, period }),
       );
       return c.json(snapshot);
@@ -145,8 +167,8 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const body = (await c.req.json<{ locationId?: unknown; period?: unknown }>()) ?? {};
       const locationId = requireBodyUuid(body.locationId, "locationId");
-      const period = requirePeriod(body.period);
-      const versionId = await gated(sessionId, (tx) =>
+      const period = requirePeriod(body.period, "period");
+      const versionId = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
         backend.createRosterVersion(tx, { tenantId: deps.cfg.tenantId, locationId, period }),
       );
       return c.json({ versionId }, 201);
@@ -168,7 +190,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       );
       const endsOffsetMinutes = requireOffsetMinutes(body.endsOffsetMinutes, "endsOffsetMinutes");
       const role = requireNullableString(body.role, "role");
-      const shiftId = await gated(sessionId, (tx) =>
+      const shiftId = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
         backend.addShift(tx, {
           tenantId: deps.cfg.tenantId,
           versionId,
@@ -205,7 +227,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       if (body.endsOffsetMinutes !== undefined)
         patch.endsOffsetMinutes = requireOffsetMinutes(body.endsOffsetMinutes, "endsOffsetMinutes");
       if (body.role !== undefined) patch.role = requireNullableString(body.role, "role");
-      await gated(sessionId, (tx) => backend.updateShift(tx, patch));
+      await gated(sessionId, SCHEDULE_PERMISSION, (tx) => backend.updateShift(tx, patch));
       return c.body(null, 204);
     }),
   );
@@ -214,7 +236,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const shiftId = requireUuidParam(c.req.param("shiftId"), "ShiftId");
-      await gated(sessionId, (tx) =>
+      await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
         backend.removeShift(tx, { tenantId: deps.cfg.tenantId, shiftId }),
       );
       return c.body(null, 204);
@@ -250,6 +272,95 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
         });
       });
       return c.json({ breaches });
+    }),
+  );
+
+  // The tenant's accepted swaps awaiting a manager decision (approvals screen).
+  app.get("/management-api/swaps", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const rows = await gated(sessionId, SWAP_APPROVE_PERMISSION, (tx) =>
+        listPendingSwaps(tx, { tenantId: deps.cfg.tenantId }),
+      );
+      return c.json(rows);
+    }),
+  );
+
+  // Composed inline (not via `gated`) because it needs authorizeManager's returned `authorizedBy` for
+  // `decidedByPersonId` — the same reason the publish route composes inline.
+  app.post("/management-api/swaps/:swapId/decide", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const swapId = requireUuidParam(c.req.param("swapId"), "SwapId");
+      const body = (await c.req.json<{ decision?: unknown }>()) ?? {};
+      const decision = requireDecision(body.decision);
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        const { authorizedBy } = await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: SWAP_APPROVE_PERMISSION,
+        });
+        await decideSwap(tx, {
+          tenantId: deps.cfg.tenantId,
+          swapId,
+          decision,
+          decidedByPersonId: authorizedBy,
+        });
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  // The tenant's requested absences awaiting a manager decision.
+  app.get("/management-api/absences", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const rows = await gated(sessionId, ABSENCE_DECIDE_PERMISSION, (tx) =>
+        listPendingAbsences(tx, { tenantId: deps.cfg.tenantId }),
+      );
+      return c.json(rows);
+    }),
+  );
+
+  app.post("/management-api/absences/:absenceId/decide", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const absenceId = requireUuidParam(c.req.param("absenceId"), "AbsenceId");
+      const body = (await c.req.json<{ decision?: unknown }>()) ?? {};
+      const decision = requireDecision(body.decision);
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        const { authorizedBy } = await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: ABSENCE_DECIDE_PERMISSION,
+        });
+        // setAbsenceStatus accepts any AbsenceStatus; "approved"/"rejected" are two of its three values.
+        await setAbsenceStatus(tx, {
+          tenantId: deps.cfg.tenantId,
+          absenceId,
+          status: decision,
+          decidedByPersonId: authorizedBy,
+        });
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  // The location's planned-vs-actual comparison over a half-open [from, to) local window.
+  app.get("/management-api/planned-vs-actual", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const locationId = requireUuidParam(c.req.query("locationId") ?? "", "LocationId");
+      const from = requirePeriod(c.req.query("from"), "from");
+      const to = requirePeriod(c.req.query("to"), "to");
+      const rows = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
+        backend.getPlannedVsActual(tx, {
+          tenantId: deps.cfg.tenantId,
+          locationId,
+          period: { start: from, end: to },
+        }),
+      );
+      return c.json(rows);
     }),
   );
 }

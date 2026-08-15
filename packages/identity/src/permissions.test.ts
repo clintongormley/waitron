@@ -41,4 +41,15 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("staff", "schedule.manage")).toBe(false);
     expect(roleHasPermission("supervisor", "schedule.manage")).toBe(false);
   });
+  it("grants swap.approve and absence.decide to manager and admin only (roster slice 2)", () => {
+    // Two domain-named approval permissions (manager approve/reject of shift swaps and absences),
+    // granted to exactly the roles that hold schedule.manage — manager and admin — and NEVER to staff
+    // or supervisor, so the approval gate matches the roster-authoring gate.
+    for (const p of ["swap.approve", "absence.decide"] as const) {
+      expect(roleHasPermission("manager", p)).toBe(true);
+      expect(roleHasPermission("admin", p)).toBe(true);
+      expect(roleHasPermission("staff", p)).toBe(false);
+      expect(roleHasPermission("supervisor", p)).toBe(false);
+    }
+  });
 });

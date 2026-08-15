@@ -19,15 +19,8 @@ import type {
   Shift,
 } from "../api/client.js";
 import { selectStyles } from "../select-styles.js";
+import { MS_PER_DAY, mondayOf, today } from "../date-utils.js";
 
-const MS_PER_DAY = 86_400_000;
-
-/** The local Monday (YYYY-MM-DD) of the week `dateStr` falls in — mirrors roster-validation's weekStartOf. */
-function mondayOf(dateStr: string): string {
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  const mondayIndex = (d.getUTCDay() + 6) % 7; // Sun=0 → 6, Mon=1 → 0
-  return new Date(d.getTime() - mondayIndex * MS_PER_DAY).toISOString().slice(0, 10);
-}
 /** The 7 local dates Mon..Sun of the week starting at `monday`. */
 function weekDays(monday: string): string[] {
   const base = Date.parse(`${monday}T00:00:00Z`);
@@ -38,12 +31,6 @@ function weekDays(monday: string): string[] {
 /** The local wall date of an instant + its offset (the roster-validation localDate convention). */
 function localDate(instant: string, offsetMinutes: number): string {
   return new Date(Date.parse(instant) + offsetMinutes * 60_000).toISOString().slice(0, 10);
-}
-/** Today's date in UTC (YYYY-MM-DD) — the seed for the default week. `toISOString()` is UTC, so near
- * midnight this can name a different calendar day than the operator's local one; seeding from the
- * venue's local timezone is deferred (per-venue timezone is a later slice). */
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 /**
@@ -243,24 +230,19 @@ export class RosterScreen extends LitElement {
   }
 
   /**
-   * Open the dialog for one grid cell (person × day), pre-filling from that person's shift on the day
-   * (or null for an add). Only on an EDITABLE week — a published week's cells are inert.
+   * Open the dialog for a grid cell (person × day) targeting `shift` — an existing shift to edit/remove,
+   * or null to author a NEW one. Only on an EDITABLE week; a published week's cells are inert.
    *
-   * SLICE-1 LIMITATION (split shifts / jornada partida): the cell resolves to the FIRST matching shift
-   * via `.find`, so a person/day that already has a shift always re-opens THAT shift in edit mode — a
-   * SECOND shift on the same day cannot be authored through this UI, even though the backend and schema
-   * permit multiple shifts per person/day. Authoring split shifts is deferred to a later slice; for now
-   * an existing shift can only be edited or removed, not joined by another.
+   * Split shifts (jornada partida) ARE authorable: `#renderCell` renders each existing shift as its own
+   * edit button and an always-present add button, so the caller passes the exact target rather than this
+   * method resolving one — a populated cell can both edit its shift(s) and add another.
    */
-  openCell(personId: string, day: string): void {
+  openCell(personId: string, day: string, shift: Shift | null): void {
     if (!this.editable) return;
     this.errorKey = null;
     this.dialogPersonId = personId;
     this.dialogDay = day;
-    this.dialogShift =
-      this.snapshot.shifts.find(
-        (s) => s.personId === personId && localDate(s.startsAt, s.startsOffsetMinutes) === day,
-      ) ?? null;
+    this.dialogShift = shift;
     this.dialogOpen = true;
   }
 
@@ -446,31 +428,48 @@ export class RosterScreen extends LitElement {
   }
 
   /**
-   * One grid cell (person × day). On an EDITABLE week the cell's interactive affordance is a real
-   * `<button>` — so shift authoring is keyboard-operable (Tab to focus, Enter/Space to activate, native
-   * to the element) and announced to assistive tech, not a mouse-only `<td>` click target (which axe
-   * did not flag). An empty cell's button carries an `aria-label` so it is not a nameless button; a
-   * cell that already shows a shift uses that visible time as its accessible name. A PUBLISHED week is
-   * read-only, so its cells render plain, non-interactive content (a bare `<td>`, no handler).
+   * One grid cell (person × day). On an EDITABLE week each existing shift is its own real `<button>`
+   * (its visible time is its accessible name) and an always-present add button follows them — so a
+   * populated cell can BOTH edit any of its shifts and author another (a split shift / jornada partida),
+   * all keyboard-operable (Tab to focus, Enter/Space to activate) and announced to assistive tech, not
+   * a mouse-only `<td>` click target (which axe did not flag). The add button carries the
+   * `cell-<person>-<day>` test id; when the cell is EMPTY it has an `aria-label` (no visible text), and
+   * when populated it shows visible "add another" text so its name and content never mismatch (axe). A
+   * PUBLISHED week is read-only, so its cells render plain, non-interactive content (a bare `<td>`, no
+   * handler).
    */
   #renderCell(personId: string, day: string): TemplateResult {
     const cellShifts = this.snapshot.shifts.filter(
       (s) => s.personId === personId && localDate(s.startsAt, s.startsOffsetMinutes) === day,
     );
-    const spans = cellShifts.map(
-      (s) => html`<span>${s.startsAt.slice(11, 16)}–${s.endsAt.slice(11, 16)}</span>`,
-    );
     const testId = `cell-${personId}-${day}`;
-    if (!this.editable) return html`<td data-test=${testId}>${spans}</td>`;
+    const label = (s: Shift): string => `${s.startsAt.slice(11, 16)}–${s.endsAt.slice(11, 16)}`;
+    // A published week is read-only: plain, non-interactive spans, no handler.
+    if (!this.editable) {
+      return html`<td data-test=${testId}>
+        ${cellShifts.map((s) => html`<span>${label(s)}</span>`)}
+      </td>`;
+    }
     return html`<td>
+      ${cellShifts.map(
+        (s) =>
+          html`<button
+            type="button"
+            class="cell-button"
+            data-test=${`edit-${s.id}`}
+            @click=${() => this.openCell(personId, day, s)}
+          >
+            ${label(s)}
+          </button>`,
+      )}
       <button
         type="button"
         class="cell-button"
         data-test=${testId}
         aria-label=${cellShifts.length > 0 ? nothing : t("roster.new_shift")}
-        @click=${() => this.openCell(personId, day)}
+        @click=${() => this.openCell(personId, day, null)}
       >
-        ${spans}
+        ${cellShifts.length > 0 ? t("roster.add_another") : nothing}
       </button>
     </td>`;
   }
