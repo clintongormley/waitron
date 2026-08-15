@@ -23,7 +23,21 @@ describe("the sync error codes carry their declared params", () => {
     expect(error.params).toEqual({ table: "sales" });
   });
 
-  it("constructs sync.stream_stalled", () => {
+  it("constructs sync.stream_stalled with the TRANSPORT backoff-saturation params (pull.ts)", () => {
+    const error = new AppError("sync.stream_stalled", {
+      subscriberId: "cloud",
+      originId: "00000000-0000-0000-0000-000000000000",
+      backoffMs: 400,
+    });
+    expect(error.code).toBe("sync.stream_stalled");
+    expect(error.params).toEqual({
+      subscriberId: "cloud",
+      originId: "00000000-0000-0000-0000-000000000000",
+      backoffMs: 400,
+    });
+  });
+
+  it("constructs sync.stream_stalled with the RETENTION lag params (retention.ts)", () => {
     const error = new AppError("sync.stream_stalled", {
       subscriberId: "cloud",
       originId: "00000000-0000-0000-0000-000000000000",

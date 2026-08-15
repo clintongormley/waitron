@@ -25,10 +25,19 @@ declare module "@waitron/shared" {
      * statement for it. `table` is that table name, taken from `sync_log.table_name` — a schema
      * identifier, never row data. */
     "sync.table_not_enrolled": { table: string };
-    /** A subscriber's stream has fallen far enough behind its origin to be treated as stalled.
-     * `lag` is `origin max(seq) − last_applied_seq`, a count of unapplied rows and never their
-     * content; `subscriberId` and `originId` name the lagging (subscriber, origin) pair. */
-    "sync.stream_stalled": { subscriberId: string; originId: string; lag: number };
+    /** A subscriber's stream to one origin is stalled. TWO distinct vantage points raise this one
+     * code, so the params are a union — each emitter carries exactly the measure it holds, and
+     * neither carries row content (schema/identity fields and counts only):
+     *   - the TRANSPORT signal (pull.ts): a peer's pull has FAILED often enough that its exponential
+     *     backoff SATURATED at `maxBackoffMs`. `backoffMs` is that saturated interval in
+     *     milliseconds — a property of the retry schedule, not of any row.
+     *   - the RETENTION signal (retention.ts `lagFor`, design §9/§12 ops-policy — the alarm/evict
+     *     path is not wired here yet): the subscriber has fallen far behind. `lag` is
+     *     `origin max(seq) − last_applied_seq`, a count of unapplied rows, never their content.
+     * `subscriberId` and `originId` name the lagging (subscriber, origin) pair in both. */
+    "sync.stream_stalled":
+      | { subscriberId: string; originId: string; backoffMs: number }
+      | { subscriberId: string; originId: string; lag: number };
     /** A peer presented a missing, blank or wrong node token to this node's sync-api. NO PARAMS —
      * the response is uniform (fail-closed, no oracle), and a token must never reach a log line or a
      * test name. Mapped to HTTP 401 by `mountSyncApi`'s error boundary. */
