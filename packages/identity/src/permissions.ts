@@ -14,6 +14,11 @@ export const PERMISSIONS = [
   // CONFIG permission, distinct from staff admin (person.manage); granted to manager + admin, the
   // same roles as person.manage (design D9).
   "till.configure",
+  // Authoring the weekly roster (draft → warn → publish) from the management dashboard
+  // (@waitron/workforce). A domain-named SCHEDULING permission, distinct from staff admin
+  // (person.manage) and till config (till.configure); granted to manager + admin. Later slices add
+  // swap.approve / absence.decide beside it (shift-planning slice 1, 2026-08-15).
+  "schedule.manage",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -31,6 +36,7 @@ const MANAGER: ReadonlySet<Permission> = new Set([
   ...SUPERVISOR,
   "person.manage",
   "till.configure",
+  "schedule.manage",
 ]);
 const ALL: ReadonlySet<Permission> = new Set(PERMISSIONS);
 
