@@ -193,6 +193,7 @@ describe("runSyncPull loop control", () => {
       subscriberId: "node-a",
       originId: peerA.nodeId,
       backoffMs: 400,
+      lane: "ordered", // dummyDeps omits `lane`, so it defaults to 'ordered' (spec §4d)
     });
     expect(logs.filter((l) => l.code === "sync.pull_failed")).toHaveLength(4); // one per failed round
   });

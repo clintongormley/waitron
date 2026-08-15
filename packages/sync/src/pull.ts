@@ -9,6 +9,7 @@
 import { sql } from "drizzle-orm";
 import { type Database } from "@waitron/db";
 import { applyBatch, type ApplyBatchResult } from "./apply.js";
+import type { SyncLane } from "./registry.js";
 import { decodeBatch } from "./wire.js";
 // Side-effect import: keeps errors.ts's `declare module` augmentation reachable from a file in the
 // sync.* domain (the reachability rule), even though this module logs codes rather than throwing them.
@@ -39,30 +40,46 @@ export interface SyncPullDeps {
   http: HttpClient;
   /** Max rows per /sync-api/log request. */
   batchLimit: number;
+  /** Which replication lane this worker drives — 'fast' (payments/payment_refunds) or 'ordered'.
+   * Threaded into the `?lane=` request, the `(subscriber, origin, lane)` cursor read/advance, and the
+   * applyBatch opts. Optional, defaulting to 'ordered' (the wire + 0002 default), so an ordered worker
+   * need not name it; boot passes both lanes explicitly (spec §4d). */
+  lane?: SyncLane;
 }
 
 /** {@link syncPullOnce}'s result: the applied/deferred counts of {@link ApplyBatchResult} plus
  * `fetched` (rows the peer returned for this page) and `advanced` (whether this pull moved the
- * (subscriber, origin) cursor forward). The drain loop reads BOTH, never `applied`: it continues only
- * while the page was FULL (`fetched === batchLimit`, the source still has rows past the cursor) AND it
- * `advanced` the cursor (real progress this iteration). A short/empty page means caught up; a full page
- * with `advanced === false` is all-parked (every row cross-origin-parked on a `23503` whose FK parent
- * originates on a DIFFERENT peer, so applyBatch applied 0 and held the cursor below them, apply.ts:206-215)
- * and also breaks — so the loop yields to the per-peer round-robin instead of busy-looping the identical
- * page. See the drain in {@link runSyncPull} for why `applied` is the wrong signal. */
+ * (subscriber, origin, lane) cursor forward). The drain loop reads BOTH, never `applied`: it continues
+ * only while the page was FULL (`fetched === batchLimit`, the source still has rows past the cursor)
+ * AND it `advanced` the cursor (real progress this iteration). A short/empty page means caught up; a
+ * full page with `advanced === false` is all-parked — every row `23503`-parked on an FK parent that is
+ * absent because it originates on a DIFFERENT peer (cross-origin) OR rides the OTHER lane (cross-lane:
+ * a fast `payments` row whose `working_orders` parent is on the ordered lane, never in a fast batch),
+ * so applyBatch applied 0 and held the cursor below them (apply.ts:206-215) — and also breaks, so the
+ * loop yields to the per-peer round-robin instead of busy-looping the identical page. See the drain in
+ * {@link runSyncPull} for why `applied` is the wrong signal. */
 export interface SyncPullResult extends ApplyBatchResult {
   fetched: number;
-  /** Did this pull advance the (subscriber, origin) cursor? Derived by reading that cursor before and
-   * after applyBatch. The drain's progress guard against a full-but-all-parked page (Fix A). */
+  /** Did this pull advance the (subscriber, origin, lane) cursor? Derived by reading that cursor before
+   * and after applyBatch. The drain's progress guard against a full-but-all-parked page (Fix A). */
   advanced: boolean;
 }
 
 const trimSlash = (url: string): string => url.replace(/\/$/, "");
 
-async function readCursor(db: Database, subscriberId: string, originId: string): Promise<bigint> {
+async function readCursor(
+  db: Database,
+  subscriberId: string,
+  originId: string,
+  lane: SyncLane,
+): Promise<bigint> {
+  // `and lane = ${lane}` is load-bearing: with the 0002 lane column the PK is
+  // (subscriber_id, origin_id, lane), so a (subscriber, origin) pair can hold TWO cursor rows. Without
+  // the lane filter this would read an arbitrary one of them, so `advanced` (this pull moved MY lane's
+  // cursor) would be computed against the wrong lane's seq — breaking the drain/backoff guard (spec §4e).
   const r = await db.execute<{ seq: string }>(
     sql`select coalesce(last_applied_seq, 0)::text as seq from sync_cursor
-        where subscriber_id = ${subscriberId} and origin_id = ${originId}::uuid`,
+        where subscriber_id = ${subscriberId} and origin_id = ${originId}::uuid and lane = ${lane}`,
   );
   return r.rows[0] ? BigInt(r.rows[0].seq) : 0n;
 }
@@ -80,6 +97,7 @@ async function readCursor(db: Database, subscriberId: string, originId: string):
 export async function syncPullOnce(deps: SyncPullDeps, peer: PullPeer): Promise<SyncPullResult> {
   const base = trimSlash(peer.url);
   const auth = { Authorization: `Bearer ${peer.token}` };
+  const lane: SyncLane = deps.lane ?? "ordered";
 
   const hello = await deps.http(`${base}/sync-api/hello`, { headers: auth });
   if (hello.status !== 200) {
@@ -87,8 +105,8 @@ export async function syncPullOnce(deps: SyncPullDeps, peer: PullPeer): Promise<
   }
   const sourceEnvironment = (JSON.parse(await hello.text()) as { environment: string }).environment;
 
-  const before = await readCursor(deps.localDb, deps.subscriberId, peer.nodeId);
-  const url = `${base}/sync-api/log?originId=${peer.nodeId}&after=${before.toString()}&limit=${deps.batchLimit}`;
+  const before = await readCursor(deps.localDb, deps.subscriberId, peer.nodeId, lane);
+  const url = `${base}/sync-api/log?originId=${peer.nodeId}&after=${before.toString()}&limit=${deps.batchLimit}&lane=${lane}`;
   const res = await deps.http(url, { headers: auth });
   if (res.status !== 200) {
     throw new Error(`sync pull: peer /sync-api/log responded ${res.status}`);
@@ -98,11 +116,14 @@ export async function syncPullOnce(deps: SyncPullDeps, peer: PullPeer): Promise<
     subscriberId: deps.subscriberId,
     localEnvironment: deps.localEnvironment,
     sourceEnvironment,
+    lane,
   });
-  // Re-read the (subscriber, origin) cursor: `advanced` is whether applyBatch moved it this iteration.
-  // A full page that did NOT advance is all-parked (parents on another peer), and the drain must break
-  // on it rather than re-pull the identical page forever — see the progress guard in runSyncPull.
-  const after = await readCursor(deps.localDb, deps.subscriberId, peer.nodeId);
+  // Re-read the (subscriber, origin, lane) cursor: `advanced` is whether applyBatch moved THIS lane's
+  // cursor this iteration. A full page that did NOT advance is all-parked — every row 23503-parked on
+  // an FK parent that rides another peer (cross-origin) or the other lane (cross-lane) — and the drain
+  // must break on it rather than re-pull the identical page forever (see the progress guard in
+  // runSyncPull).
+  const after = await readCursor(deps.localDb, deps.subscriberId, peer.nodeId, lane);
   return { ...result, fetched: rows.length, advanced: after > before };
 }
 
@@ -145,20 +166,30 @@ function nextBackoff(current: number, minIdleMs: number, maxBackoffMs: number): 
  * regardless of how many rows actually changed the mirror.
  *
  * The drain continues only while the page was FULL **and** the cursor advanced this iteration, and
- * breaks on a short/empty page OR a full page that made no cursor progress. Two arguments hold it
- * together: (1) WITHIN one origin (each pull is single-origin, `?originId=<peer>`) a row's FK parent
- * commits before it and so carries a strictly lower seq, making ascending-seq apply a topological order
- * in which nothing stays parked across a batch (apply.ts's own §3.6 property), so a full same-origin
- * page always advances and the cursor climbs a page each round until the source returns a short page.
- * (2) ACROSS origins in active-active multi-peer, a row's FK parent can originate on a DIFFERENT peer,
- * so a full page can be entirely CROSS-ORIGIN-parked — every row `23503`-parked, applyBatch applies 0
- * and holds the cursor below every parked seq (apply.ts:206-215), `advanced === false`. Without the
- * progress guard the drain would re-pull that identical full page forever (busy-loop, hammering the
- * peer) and never round-robin to the peer that would deliver the parents; the guard breaks it so the
- * loop yields to the per-peer round-robin (and the idle sleep) and another peer makes progress.
+ * breaks on a short/empty page OR a full page that made no cursor progress. Each pull is single-origin
+ * (`?originId=<peer>`) and single-lane (`?lane=`); within one origin a row's FK parent commits before
+ * it and so carries a strictly lower seq, so ascending-seq apply is a topological order (apply.ts's own
+ * §3.6 property) in which a row parks ONLY when its FK parent is ABSENT from the page it applies
+ * against. That absence has two causes, both with the IDENTICAL signature — every row `23503`-parked,
+ * applyBatch applies 0 and holds the cursor below every parked seq (apply.ts:206-215), `advanced ===
+ * false`:
+ * (1) CROSS-ORIGIN — in active-active multi-peer the FK parent originates on a DIFFERENT peer, so it is
+ *     never in this peer's single-origin page.
+ * (2) CROSS-LANE — the FK parent rides the OTHER lane: a fast `payments` row's `working_orders`/`sales`
+ *     parent is an ordered-lane table, never in a fast batch, so the fast page stays parked until the
+ *     ordered lane has applied it (spec §4e; `payment_refunds → payments` is intra-fast-lane, so
+ *     seq-order within the fast batch already lands it — no cross-lane park). No ordered table
+ *     references a fast one (spec §4b/§4e), so an ORDERED page never parks cross-lane — a full ordered
+ *     same-origin page always advances, as in slice 1; only the fast lane hits case (2).
+ * Either way, without the progress guard the drain would re-pull that identical full page forever
+ * (busy-loop, hammering the peer) and never yield — to the round-robin that lets another peer deliver a
+ * cross-origin parent, or to the later fast tick that lands the row once the ordered lane has delivered
+ * the cross-lane parent. The guard breaks it so the loop yields to the per-peer round-robin (and the
+ * idle sleep) and progress resumes.
  */
 export async function runSyncPull(deps: RunSyncPullDeps): Promise<void> {
   const pullOnce = deps.pullOnce ?? syncPullOnce;
+  const lane: SyncLane = deps.lane ?? "ordered";
   const backoff = new Map<string, number>(); // per-peer current backoff (ms); 0 = healthy
 
   while (!deps.signal.aborted) {
@@ -179,12 +210,13 @@ export async function runSyncPull(deps: RunSyncPullDeps): Promise<void> {
         const prev = backoff.get(peer.nodeId) ?? 0;
         const next = nextBackoff(prev, deps.minIdleMs, deps.maxBackoffMs);
         backoff.set(peer.nodeId, next);
-        deps.log("warn", "sync.pull_failed", { originId: peer.nodeId, backoffMs: next });
+        deps.log("warn", "sync.pull_failed", { originId: peer.nodeId, backoffMs: next, lane });
         if (prev < deps.maxBackoffMs && next >= deps.maxBackoffMs) {
           deps.log("error", "sync.stream_stalled", {
             subscriberId: deps.subscriberId,
             originId: peer.nodeId,
             backoffMs: next,
+            lane,
           });
         }
       }

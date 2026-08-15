@@ -159,6 +159,66 @@ describe("syncPullOnce applies a peer's batch and advances the cursor", () => {
     }
   });
 
+  it("a fast pull requests ?lane=fast and advances ONLY the fast cursor row", async () => {
+    await setEnv("production");
+    const b = await seedBase();
+    const seriesId = await seedSeries(b);
+    const peerNode = uuid();
+    const subscriberId = uuid();
+    const sale = saleImage(b, seriesId, 1);
+    // pull.ts is lane-agnostic about which table rides which lane (that mapping is the SERVER's job,
+    // Task 7); a `sales` row on the fast lane proves the client threads `lane` end to end.
+    const batch: SyncLogRow[] = [
+      {
+        seq: 1n,
+        originId: peerNode,
+        table: "sales",
+        op: "insert",
+        tenantId: b.tenantId,
+        rowImage: JSON.stringify(sale),
+      },
+    ];
+    const ndjson = encodeBatch(batch);
+    const urls: string[] = [];
+    const http: HttpClient = async (url) => {
+      urls.push(url);
+      if (url.includes("/sync-api/hello")) {
+        return { status: 200, text: async () => JSON.stringify({ environment: "production" }) };
+      }
+      return { status: 200, text: async () => ndjson };
+    };
+    const applier = await postgres.pg.connectAs("sync_applier", "ap");
+    try {
+      const deps = {
+        localDb: applier,
+        subscriberId,
+        tenantId: b.tenantId,
+        localEnvironment: "production",
+        http,
+        batchLimit: 500,
+        lane: "fast" as const,
+      };
+      const peer = { nodeId: peerNode, url: "http://peer/", token: "tok" };
+      const result = await syncPullOnce(deps, peer);
+      expect(result.applied).toBe(1);
+      // The wire carried lane=fast (spec §4c/§4d).
+      expect(urls.some((u) => u.includes("/sync-api/log") && u.includes("lane=fast"))).toBe(true);
+      // The FAST cursor advanced; the ORDERED cursor row for this (subscriber, origin) does not exist.
+      const fast = await postgres.admin.execute<{ seq: string }>(
+        sql`select last_applied_seq::text as seq from sync_cursor
+            where subscriber_id = ${subscriberId} and origin_id = ${peerNode}::uuid and lane = 'fast'`,
+      );
+      expect(fast.rows[0]!.seq).toBe("1");
+      const ordered = await postgres.admin.execute<{ seq: string | null }>(
+        sql`select last_applied_seq::text as seq from sync_cursor
+            where subscriber_id = ${subscriberId} and origin_id = ${peerNode}::uuid and lane = 'ordered'`,
+      );
+      expect(ordered.rows[0]).toBeUndefined(); // no ordered cursor row — the lanes are disjoint
+    } finally {
+      await applier.close();
+    }
+  });
+
   it("throws on a non-200 from either endpoint (a transport error the loop backs off on)", async () => {
     await setEnv("production");
     const applier = await postgres.pg.connectAs("sync_applier", "ap");
