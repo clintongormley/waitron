@@ -26,7 +26,7 @@ a source"*; [catalogue model design](2026-08-05-catalogue-model-design.md) (#59)
 | D5 | **Flat composition (one level) this slice.** A product is made of ingredients; ingredients are leaves carrying their own allergen tags (alioli tagged "eggs" once). Nested sub-recipes (alioli auto-derived from egg+oil+garlic) — with the recursion, cycle-detection, and depth-wise PENDING propagation they require — are slice 2. Cheap to add later: pre-production, so a schema change is drop-and-recreate, not a migration. |
 | D6 | **No quantity / unit / cost columns this slice.** Allergen presence is *qualitative* — a sandwich contains egg because alioli is *in* it, regardless of grams. Quantities/units arrive with the costing and stock consumers, which actually need them. Slice 1 stores only the ingredient *list* per product. |
 | D7 | **`products.allergens` stays the published read surface.** ~15 shipped consumers (till counter/allergen screens, dashboard widgets, `/api/products`, i18n resolvers) read `products.allergens`; none change. It becomes a *computed* column (see §3). Staff authoring retargets to a new `manual_allergens` overlay — a ~2-op change in `catalogue/operations.ts`, versus ~15 consumer changes if we introduced a new published column instead. |
-| D8 | **Own-`drizzle/` migration module.** New tables live in `packages/recipes/drizzle` (the identity/sync/workforce pattern, registered in `packages/migrations/migrations.manifest.json`), NOT in `packages/db`. Keeps the optional module self-contained and off the `packages/db/_journal.json` collision hot-spot. The two additive `products` columns are unavoidably a small `packages/db` migration (they sit on a db-owned table). |
+| D8 | **Tables in `packages/db` core migrations (the catalogue precedent); ops in `@waitron/recipes`.** The new tables live beside `products` in `packages/db/src/schema` + `packages/db/drizzle`, exactly as catalogue's own tables do (`@waitron/catalogue` owns no migrations — its tables are in `CORE_MIGRATIONS`). Reconsidered against an own-`drizzle/` module (identity/sync pattern): all migration sets run on *every* deployment (the manifest runs them all), so own-`drizzle/` buys no *runtime* optionality — the "optional module" property is delivered entirely by `@waitron/recipes` being a separate package nothing depends on, plus the additive derivation. Meanwhile the `products` overlay columns force a `packages/db` migration regardless, and tables-in-core makes `recipe_lines → products` a same-package FK and avoids the manifest + `migratedSets`-pin churn an own-set would add. If recipes later grows an independent migration cadence, splitting to own-`drizzle/` is a cheap pre-production change. |
 | D9 | **Headless + demo this slice — no UI.** Authoring is the package API plus a runnable `recipes-demo.ts`, matching the #59/#65 "backend-first" precedent (catalogue design D12). The dashboard recipe editor and the derived-allergen locking in the allergen picker are a later UI slice. |
 | D10 | **Grants follow catalogue's posture (D11 there).** `app_user` gets `SELECT, INSERT, UPDATE` on `ingredients` (deactivate via `active`, no `DELETE` — an ingredient may be referenced by `recipe_lines`) and `SELECT, INSERT, UPDATE, DELETE` on `recipe_lines` (setting a product's recipe replaces its lines). Both tables are tenant-scoped → **FORCE RLS + tenant-isolation policy + grants**, hand-written custom migration, verified by the fiscal-verifactu `inmutabilidad` guard. |
 
@@ -34,8 +34,9 @@ a source"*; [catalogue model design](2026-08-05-catalogue-model-design.md) (#59)
 
 ## 2. Data model
 
-Two new tenant-scoped tables (`packages/recipes/drizzle`) and two additive columns on `products`
-(`packages/db/drizzle`).
+Two new tenant-scoped tables and two additive columns on `products` — all in `packages/db`
+(schema in `packages/db/src/schema/recipes.ts`, migrations in `packages/db/drizzle`, beside `products`
+which they FK), per the catalogue precedent (D8). `@waitron/recipes` owns the ops, not the schema.
 
 ```text
 ingredients                     recipe_lines                    products (2 columns added)
@@ -57,9 +58,9 @@ created_at / updated_at
   column (D6). `UNIQUE(product_id, ingredient_id)` — an ingredient appears at most once per product's
   recipe. FK `product_id → products` and `ingredient_id → ingredients`; both tenant-scoped, plain FKs
   under RLS (all writes are tenant-scoped, matching the catalogue design's composite-vs-plain call).
-- **Cross-set FK.** `recipe_lines.product_id → products` crosses migration sets (recipes set →
-  db/core set). This is the established pattern — `workforce` FKs `persons` (identity) and `locations`
-  (db). The manifest orders `core` first, so `products` exists when `recipe_lines` is created.
+- **Same-package FK.** `recipe_lines.product_id → products` and `ingredient_id → ingredients` are
+  all within `packages/db`'s core set (D8), so they are ordinary FKs in the same migration set — no
+  cross-set ordering to reason about, and `products` already exists when `recipe_lines` is created.
 - **`products.manual_allergens`** — the staff authoring overlay (what a human explicitly declared).
   `NULL` = not reviewed. Catalogue's authoring ops write here (retargeted from `allergens`).
 - **`products.recipe_derivation`** — the recipe module's overlay, a blob `{allergens, pending} | NULL`.
