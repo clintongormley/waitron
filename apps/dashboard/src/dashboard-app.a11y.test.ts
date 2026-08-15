@@ -48,6 +48,9 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     // The approvals screen (reachable via the nav) loads both queues on connect.
     listPendingSwaps: vi.fn().mockResolvedValue([]),
     listPendingAbsences: vi.fn().mockResolvedValue([]),
+    // The planned-vs-actual screen (reachable via the nav) loads this on connect (getLocations /
+    // listStaff are already stubbed above).
+    getPlannedVsActual: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -156,6 +159,24 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     const h1s = [
       ...el.shadowRoot!.querySelectorAll("h1"),
       ...(approvals!.shadowRoot?.querySelectorAll("h1") ?? []),
+    ];
+    expect(h1s).toHaveLength(1);
+    await expectNoA11yViolations(host);
+  });
+
+  it("the planned-vs-actual screen renders accessibly with a single, well-ordered heading", async () => {
+    // Navigate to the planned-vs-actual screen (its own <h1> "Previsto vs real" is then the sole
+    // heading; the shell's nav chrome carries none), and scan the composed tree in this theme.
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue(people) });
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-planned-actual]")!.click();
+    await flush(el);
+    const plannedActual = el.shadowRoot!.querySelector("dashboard-planned-actual-screen");
+    expect(plannedActual).toBeTruthy();
+    const h1s = [
+      ...el.shadowRoot!.querySelectorAll("h1"),
+      ...(plannedActual!.shadowRoot?.querySelectorAll("h1") ?? []),
     ];
     expect(h1s).toHaveLength(1);
     await expectNoA11yViolations(host);

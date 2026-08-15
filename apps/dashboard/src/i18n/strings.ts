@@ -32,6 +32,7 @@ export const en = {
   "nav.receipt": "Receipt",
   "nav.roster": "Shifts",
   "nav.approvals": "Approvals",
+  "nav.planned_actual": "Planned vs actual",
   // Login screen
   "login.roster": "User",
   "login.password": "Password",
@@ -131,6 +132,20 @@ export const en = {
   "approvals.none_absences": "No absences awaiting a decision.",
   "approvals.approve": "Approve",
   "approvals.reject": "Reject",
+  // Planned-vs-actual screen
+  "planned.title": "Planned vs actual",
+  "planned.location": "Location",
+  "planned.week": "Week",
+  "planned.person": "Person",
+  "planned.day": "Day",
+  "planned.planned_minutes": "Planned (min)",
+  "planned.worked_minutes": "Worked (min)",
+  "planned.late_minutes": "Late (min)",
+  "planned.flags": "Flags",
+  "planned.no_show": "No-show",
+  "planned.unplanned": "Unplanned",
+  "planned.empty": "No planned or worked time for this week.",
+  "planned.no_location": "No location configured yet.",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -154,6 +169,7 @@ export const es: Record<StringKey, string> = {
   "nav.receipt": "Recibo",
   "nav.roster": "Turnos",
   "nav.approvals": "Aprobaciones",
+  "nav.planned_actual": "Previsto vs real",
   "login.roster": "Usuario",
   "login.password": "Contraseña",
   "login.totp": "Código (si procede)",
@@ -237,6 +253,19 @@ export const es: Record<StringKey, string> = {
   "approvals.none_absences": "No hay ausencias pendientes.",
   "approvals.approve": "Aprobar",
   "approvals.reject": "Rechazar",
+  "planned.title": "Previsto vs real",
+  "planned.location": "Local",
+  "planned.week": "Semana",
+  "planned.person": "Persona",
+  "planned.day": "Día",
+  "planned.planned_minutes": "Previsto (min)",
+  "planned.worked_minutes": "Trabajado (min)",
+  "planned.late_minutes": "Retraso (min)",
+  "planned.flags": "Avisos",
+  "planned.no_show": "Ausencia",
+  "planned.unplanned": "No previsto",
+  "planned.empty": "No hay tiempo previsto ni trabajado esta semana.",
+  "planned.no_location": "Aún no hay ningún local configurado.",
 };
 
 // Locale → catalogue. `en` is included as its own catalogue so an explicit

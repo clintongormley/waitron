@@ -588,3 +588,26 @@ describe("DashboardApi — approvals", () => {
     });
   });
 });
+
+describe("DashboardApi — planned vs actual", () => {
+  it("getPlannedVsActual GETs the planned-vs-actual route with locationId/from/to", async () => {
+    const rows = [
+      {
+        personId: "p1",
+        workDate: "2026-03-02",
+        plannedMinutes: 240,
+        workedMinutes: 225,
+        lateMinutes: 15,
+        noShow: false,
+        unplanned: false,
+      },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getPlannedVsActual("loc-1", "2026-03-02", "2026-03-09")).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/planned-vs-actual?locationId=loc-1&from=2026-03-02&to=2026-03-09",
+      { method: "GET", credentials: "include" },
+    );
+  });
+});

@@ -308,6 +308,18 @@ export interface PendingAbsence {
   createdAt: string;
 }
 
+/** One `GET /management-api/planned-vs-actual` row — mirrors workforce's `PlannedVsActual`. Minutes
+ * are integers; `workDate` is the worker's LOCAL day (YYYY-MM-DD). */
+export interface PlannedVsActualRow {
+  personId: string;
+  workDate: string;
+  plannedMinutes: number;
+  workedMinutes: number;
+  lateMinutes: number;
+  noShow: boolean;
+  unplanned: boolean;
+}
+
 /** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -583,6 +595,17 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/absences/${absenceId}/decide`, "POST", {
       decision,
     });
+  }
+
+  // ── Planned vs actual (worked-time comparison) ───────────────────────────────────────────────────
+
+  /** `GET /management-api/planned-vs-actual?locationId=&from=&to=` — the location's planned-vs-actual
+   * comparison over a half-open [from, to) local window. */
+  getPlannedVsActual(locationId: string, from: string, to: string): Promise<PlannedVsActualRow[]> {
+    return this.#request<PlannedVsActualRow[]>(
+      `/management-api/planned-vs-actual?locationId=${locationId}&from=${from}&to=${to}`,
+      "GET",
+    );
   }
 
   /**

@@ -12,22 +12,32 @@ import "./screens/layout-screen.js";
 import "./screens/receipt-screen.js";
 import "./screens/roster-screen.js";
 import "./screens/approvals-screen.js";
+import "./screens/planned-actual-screen.js";
 import type { DashboardApi } from "./api/client.js";
 
 /**
  * The faces of the management dashboard: sign in, manage staff, author the catalogue, arrange the till
- * layout, edit the receipt trim, author the roster, or work the approvals queues. Exactly one shows at
- * a time. `staff`, `catalogue`, `layout`, `receipt`, `roster` and `approvals` are the six LOGGED-IN
- * faces the nav switches between; all carry the same chrome (nav + logout).
+ * layout, edit the receipt trim, author the roster, work the approvals queues, or review planned vs
+ * actual worked time. Exactly one shows at a time. `staff`, `catalogue`, `layout`, `receipt`,
+ * `roster`, `approvals` and `planned-actual` are the seven LOGGED-IN faces the nav switches between;
+ * all carry the same chrome (nav + logout).
  */
-type Screen = "login" | "staff" | "catalogue" | "layout" | "receipt" | "roster" | "approvals";
+type Screen =
+  | "login"
+  | "staff"
+  | "catalogue"
+  | "layout"
+  | "receipt"
+  | "roster"
+  | "approvals"
+  | "planned-actual";
 
 /**
  * The management dashboard's ROOT element — the shell that turns the screens into a working app.
  *
  * It owns one thing the whole flow shares: the injected {@link DashboardApi}. It runs a screen
- * machine (`login` | `staff` | `catalogue` | `layout` | `receipt` | `roster` | `approvals`) and does
- * the event wiring the screens deliberately do not:
+ * machine (`login` | `staff` | `catalogue` | `layout` | `receipt` | `roster` | `approvals` |
+ * `planned-actual`) and does the event wiring the screens deliberately do not:
  *
  *  - boot → a SESSION PROBE ({@link DashboardApp.#probeSession}) calls `api.listStaff()`; a success
  *    means a live management session, so the app opens on `staff`; ANY rejection (the common
@@ -36,9 +46,9 @@ type Screen = "login" | "staff" | "catalogue" | "layout" | "receipt" | "roster" 
  *    `apps/till` `#boot` defect (`docs/backlog.md`), so this shell mirrors the login/staff screens'
  *    own `try/catch`ed loaders instead;
  *  - `logged-in` (from the login screen, on a successful `api.login`) → show `staff`;
- *  - the NAV (the shell's own control, shown only when logged in) switches between the six logged-in
- *    faces `staff`, `catalogue`, `layout`, `receipt`, `roster` and `approvals` — a plain local state
- *    change, no server call;
+ *  - the NAV (the shell's own control, shown only when logged in) switches between the seven
+ *    logged-in faces `staff`, `catalogue`, `layout`, `receipt`, `roster`, `approvals` and
+ *    `planned-actual` — a plain local state change, no server call;
  *  - `logout` (the shell's own control, logged-in only) → end the server session, back to `login`.
  *
  * The default screen is `login`: before the probe resolves the shell shows the sign-in screen, and
@@ -49,7 +59,8 @@ type Screen = "login" | "staff" | "catalogue" | "layout" | "receipt" | "roster" 
  * `<h1>Usuarios</h1>`, `dashboard-catalogue-screen` the sole `<h1>Carta</h1>`,
  * `dashboard-layout-screen` the sole `<h1>Disposición</h1>`, `dashboard-receipt-screen` the sole
  * `<h1>Recibo</h1>`, `dashboard-roster-screen` the sole `<h1>Turnos</h1>`,
- * `dashboard-approvals-screen` the sole `<h1>Aprobaciones</h1>`, and `dashboard-login-screen`
+ * `dashboard-approvals-screen` the sole `<h1>Aprobaciones</h1>`, `dashboard-planned-actual-screen`
+ * the sole `<h1>Previsto vs real</h1>`, and `dashboard-login-screen`
  * none — so the shell adds no competing `<h1>`: its
  * logged-in chrome (the nav + logout button) sits in a plain `<header>` with no heading, keeping
  * exactly one `<h1>` in the DOM at a time.
@@ -188,6 +199,12 @@ export class DashboardApp extends LitElement {
             @click=${() => (this.screen = "approvals")}
             >${t("nav.approvals")}</wt-button
           >
+          <wt-button
+            variant=${this.screen === "planned-actual" ? "primary" : "secondary"}
+            data-test="nav-planned-actual"
+            @click=${() => (this.screen = "planned-actual")}
+            >${t("nav.planned_actual")}</wt-button
+          >
         </nav>
         <wt-button variant="secondary" data-test="logout" @click=${() => void this.#onLogout()}
           >${t("action.logout")}</wt-button
@@ -215,6 +232,10 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-roster-screen .api=${this.api}></dashboard-roster-screen>`;
       case "approvals":
         return html`<dashboard-approvals-screen .api=${this.api}></dashboard-approvals-screen>`;
+      case "planned-actual":
+        return html`<dashboard-planned-actual-screen
+          .api=${this.api}
+        ></dashboard-planned-actual-screen>`;
       default:
         return html`<dashboard-staff-screen .api=${this.api}></dashboard-staff-screen>`;
     }
