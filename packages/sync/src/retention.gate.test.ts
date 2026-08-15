@@ -69,6 +69,23 @@ async function seedLog(count: number, a: string, b: string): Promise<void> {
   }
 }
 
+/** Seeds sync_log seqs 1..count for ORIGIN, alternating a FAST-lane table (payments, odd seq) and an
+ * ORDERED-lane table (sales, even seq) across the two tenants by parity of a running index, so the
+ * fixture looks like a genuine interleaved two-lane stream. pruneSyncLog ignores table_name (its
+ * boundary is the min across cursor rows), so which lane a row "belongs" to is decided only by the two
+ * cursor rows the tests set — this proves that min waits for whichever lane is slower. Admin insert. */
+async function seedTwoLaneLog(count: number, a: string, b: string): Promise<void> {
+  for (let seq = 1; seq <= count; seq += 1) {
+    const table = seq % 2 === 1 ? "payments" : "sales";
+    const tenant = seq % 2 === 1 ? a : b;
+    await postgres.admin.execute(
+      sql`insert into sync_log (seq, origin_id, table_name, op, tenant_id, row_image)
+          overriding system value
+          values (${seq}, ${ORIGIN}::uuid, ${table}, 'insert', ${tenant}::uuid, '{}'::jsonb)`,
+    );
+  }
+}
+
 /** Upserts one subscriber's cursor for ORIGIN on the given lane as the superuser admin. `lane`
  * defaults to 'ordered' so every existing single-lane call is unchanged; the two-lane retention
  * tests pass 'fast'/'ordered' explicitly. The ON CONFLICT arbiter is the 0002 PK
@@ -266,6 +283,66 @@ describe("bounded sync_log retention under a down subscriber (gate 7)", () => {
       expect(await visible(b)).toEqual({ av: "0", bv: "1" }); // under B: only B (the retention policy did not leak)
     } finally {
       await tailer.close();
+    }
+  });
+});
+
+describe("fast and ordered lanes track independent cursors; retention waits for the slower lane (spec §4e)", () => {
+  it("holds sync_log at the min across BOTH lane cursors, and advancing the ahead lane alone does not move the boundary", async () => {
+    // Two cursor rows per (subscriber, origin) after 0002. pruneSyncLog groups by origin_id and takes
+    // min(last_applied_seq) across BOTH lane rows, so the log is held at the SLOWER lane — a fast-lane
+    // row below the fast cursor but above the ordered cursor is HELD, the deliberate over-retention of
+    // spec §4e. Prove-by-deletion of the "min across BOTH lanes" boundary (CLAUDE.md §1): advancing ONLY
+    // the already-ahead lane must NOT move the boundary, and advancing the TRAILING lane must.
+    await resetOutbox();
+    const a = await seedTenant(postgres.admin);
+    const b = await seedTenant(postgres.admin);
+    await seedTwoLaneLog(10, a, b);
+
+    const pruner = await postgres.pg.connectAs("sync_pruner", "pp");
+    try {
+      // FAST ahead (8), ORDERED behind (3): boundary = 3 (the slower, ordered lane).
+      await setCursor("main", 8, true, "fast");
+      await setCursor("main", 3, true, "ordered");
+      const first = await pruneSyncLog(pruner);
+      expect(first).toEqual({ pruned: 3, highWater: 3n }); // held at the ordered (slower) lane
+      expect(await remainingSeqs()).toEqual([4, 5, 6, 7, 8, 9, 10]);
+      // seq 5 is a FAST-lane (payments) row below the fast cursor (8) — yet it is HELD, because the
+      // ordered cursor (3) has not passed it. That is retention waiting for the slower lane.
+
+      // Advancing ONLY the ahead (fast) lane does not move the boundary — the ordered lane still holds it.
+      await setCursor("main", 10, true, "fast");
+      const second = await pruneSyncLog(pruner);
+      expect(second).toEqual({ pruned: 0, highWater: 3n }); // boundary UNMOVED
+      expect(await remainingSeqs()).toEqual([4, 5, 6, 7, 8, 9, 10]);
+
+      // Advancing the TRAILING (ordered) lane moves it.
+      await setCursor("main", 6, true, "ordered");
+      const third = await pruneSyncLog(pruner);
+      expect(third).toEqual({ pruned: 3, highWater: 6n }); // boundary tracks the slower lane
+      expect(await remainingSeqs()).toEqual([7, 8, 9, 10]);
+    } finally {
+      await pruner.close();
+    }
+  });
+
+  it("holds at the FAST lane when the fast lane is the slower one (the control in the other direction)", async () => {
+    // CLAUDE.md §1: the reverse direction must make the two answers visibly differ. Here FAST is behind,
+    // so the boundary is the fast lane's seq — not the ordered lane's, which a naive per-lane-max prune
+    // (deliberately NOT built, spec §4e) would have used.
+    await resetOutbox();
+    const a = await seedTenant(postgres.admin);
+    const b = await seedTenant(postgres.admin);
+    await seedTwoLaneLog(10, a, b);
+    const pruner = await postgres.pg.connectAs("sync_pruner", "pp");
+    try {
+      await setCursor("main", 2, true, "fast"); // fast is the slower lane now
+      await setCursor("main", 9, true, "ordered");
+      const result = await pruneSyncLog(pruner);
+      expect(result).toEqual({ pruned: 2, highWater: 2n }); // held at the FAST lane
+      expect(await remainingSeqs()).toEqual([3, 4, 5, 6, 7, 8, 9, 10]);
+    } finally {
+      await pruner.close();
     }
   });
 });
