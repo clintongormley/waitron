@@ -4,7 +4,6 @@ import {
   allergenStateName,
   breachKindName,
   roleName,
-  rosterStatusName,
   statusName,
   unitName,
   vatClassName,
@@ -78,11 +77,9 @@ it("resolves an allergen code to Spanish and English, unknown code raw", () => {
   expect(allergenName("kryptonite", "es")).toBe("kryptonite");
 });
 
-it("names every breach kind and roster status, falling back to the raw token (shift-planning slice 1)", () => {
+it("names every breach kind, falling back to the raw token (shift-planning slice 1)", () => {
   expect(breachKindName("exceeds_daily_max", "es")).not.toBe("exceeds_daily_max");
   expect(breachKindName("night_work", "es")).toBe("Trabajo nocturno");
-  expect(rosterStatusName("draft", "es")).not.toBe("draft");
-  expect(rosterStatusName("published", "en")).toBe("Published");
   // Raw-value fallback for an unmapped token (proven by deletion: make resolve() return "" for a miss
   // and this assertion goes red).
   expect(breachKindName("unknown_kind", "es")).toBe("unknown_kind");

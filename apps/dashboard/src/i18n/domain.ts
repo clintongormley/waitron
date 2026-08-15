@@ -98,13 +98,6 @@ const BREACH_KIND_NAMES: NameTable = {
   night_work: { en: "Night work", es: "Trabajo nocturno" },
 };
 
-// The three roster-version statuses (`@waitron/workforce`'s roster_version_status).
-const ROSTER_STATUS_NAMES: NameTable = {
-  draft: { en: "Draft", es: "Borrador" },
-  published: { en: "Published", es: "Publicado" },
-  superseded: { en: "Superseded", es: "Reemplazado" },
-};
-
 /** A person's management role (staff / supervisor / manager / admin) → its display name. */
 export function roleName(value: string, locale: string = currentLocale()): string {
   return resolve(ROLE_NAMES, value, locale);
@@ -113,11 +106,6 @@ export function roleName(value: string, locale: string = currentLocale()): strin
 /** An advisory roster-breach kind → its display name (raw-value fallback for an unmapped kind). */
 export function breachKindName(kind: string, locale: string = currentLocale()): string {
   return resolve(BREACH_KIND_NAMES, kind, locale);
-}
-
-/** A roster-version status (draft / published / superseded) → its display name. */
-export function rosterStatusName(status: string, locale: string = currentLocale()): string {
-  return resolve(ROSTER_STATUS_NAMES, status, locale);
 }
 
 /** A person's account status (active / suspended) → its display name. */
