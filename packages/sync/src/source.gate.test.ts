@@ -74,6 +74,30 @@ async function captureAProductWrite(b: Base, price: string): Promise<void> {
   }
 }
 
+/** An app_login write into a fast-lane table (payment_policy: watermark table, standalone PK tenant_id,
+ * no FK parent needed beyond the tenant) under withTenant{nodeId: NODE_A}, so sync_capture writes one
+ * payment_policy row to sync_log. Columns per packages/payments/src/schema/payment-policy.ts: tenant_id,
+ * offline_mode (text, NOT NULL, CHECK in ('accept_offline','cash_only')), offline_amount_cap (numeric,
+ * NOT NULL, CHECK >= 0); created_at/updated_at default. Same INSERT shape as packages/payments/test/
+ * seed.ts:136. Used to prove readSyncLogSince's `tables` filter separates the lanes. */
+async function capturePaymentPolicyWrite(b: Base): Promise<void> {
+  const app = await postgres.pg.connectAs("app_login", "app_pw");
+  try {
+    await withTenant(
+      app,
+      b.tenantId,
+      (tx) =>
+        tx.execute(
+          sql`insert into payment_policy (tenant_id, offline_mode, offline_amount_cap)
+              values (${b.tenantId}, 'cash_only', '0.00')`,
+        ),
+      { nodeId: NODE_A },
+    );
+  } finally {
+    await app.close();
+  }
+}
+
 describe("readSyncLogSince reads sync_log as sync_tailer under the tenant context", () => {
   it("selects sync_log rows past afterSeq as sync_tailer, with row_image as raw jsonb TEXT", async () => {
     // Failing case: no readSyncLogSince yet. It must (a) run under withTenant so RLS admits sync_tailer,
@@ -154,6 +178,43 @@ describe("readSyncLogSince reads sync_log as sync_tailer under the tenant contex
         }),
       );
       expect(none).toEqual([]);
+    } finally {
+      await reader.close();
+    }
+  });
+
+  it("restricts to the named tables when `tables` is supplied (the lane filter)", async () => {
+    // A fast-lane table (payment_policy) and ordered-lane tables (catalogues from seedBase, products)
+    // are all captured under one tenant. `tables: ['payment_policy','payments']` returns ONLY the fast
+    // rows; `tables: <the ordered set>` returns the ordered rows and NOT payment_policy. The array binds
+    // as a single `= any($n)` parameter — no identifier is interpolated (CLAUDE.md §3).
+    const b = await seedBase();
+    await captureAProductWrite(b, "1.50"); // products (ordered)
+    await capturePaymentPolicyWrite(b); //     payment_policy (fast)
+    const reader = await postgres.pg.connectAs("sync_reader", "rp");
+    try {
+      const fast = await withTenant(reader, b.tenantId, (tx) =>
+        readSyncLogSince(tx, { afterSeq: 0n, limit: 100, tables: ["payment_policy", "payments"] }),
+      );
+      expect(fast.length).toBeGreaterThanOrEqual(1);
+      expect(fast.every((r) => r.table === "payment_policy" || r.table === "payments")).toBe(true);
+      expect(fast.some((r) => r.table === "products")).toBe(false); // ordered rows excluded
+
+      const ordered = await withTenant(reader, b.tenantId, (tx) =>
+        readSyncLogSince(tx, { afterSeq: 0n, limit: 100, tables: ["catalogues", "products"] }),
+      );
+      expect(ordered.some((r) => r.table === "products")).toBe(true);
+      expect(ordered.some((r) => r.table === "payment_policy")).toBe(false); // fast rows excluded
+
+      // An EMPTY allowlist matches no table (a lane with no tables syncs nothing). The brief's
+      // `= any('{}')` mechanism is unavailable — drizzle-orm expands an interpolated JS array into a
+      // `($1, $2)` placeholder list, never a single Postgres array param (drain.ts:588) — so the guard
+      // maps `[]` to `and false` rather than to "every table". Omitted is the every-table case, proven
+      // by the three tests above that pass no `tables`.
+      const nothing = await withTenant(reader, b.tenantId, (tx) =>
+        readSyncLogSince(tx, { afterSeq: 0n, limit: 100, tables: [] }),
+      );
+      expect(nothing).toEqual([]);
     } finally {
       await reader.close();
     }
