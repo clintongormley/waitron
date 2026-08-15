@@ -1,6 +1,6 @@
 import { boolean, index, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants.js";
-import { products } from "./catalogue.js";
+import { products, type AllergenMap } from "./catalogue.js";
 
 /** A raw material / prep item. Carries its own EU-1169 allergen declaration (the same shape as
  * `products.allergens`); NULL = not yet reviewed (a PENDING ingredient, contagious up a recipe).
@@ -13,10 +13,7 @@ export const ingredients = pgTable(
       .notNull()
       .references(() => tenants.id),
     name: text("name").notNull(),
-    allergens:
-      jsonb("allergens").$type<
-        Record<string, { presence: "contains" | "may_contain"; source?: string }>
-      >(),
+    allergens: jsonb("allergens").$type<AllergenMap>(),
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),

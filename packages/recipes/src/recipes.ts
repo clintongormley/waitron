@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { ingredients, recipeLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -7,6 +7,7 @@ import {
   type ProductAllergens,
   type RecipeDerivation,
 } from "@waitron/catalogue";
+import { CURRENT_TENANT, INGREDIENT_COLUMNS } from "./columns.js";
 import type { Ingredient } from "./ingredients.js";
 
 /**
@@ -20,20 +21,9 @@ import type { Ingredient } from "./ingredients.js";
  *
  * The `Ingredient` import is TYPE-ONLY (`import type`), so it is erased at compile time and creates
  * no runtime edge back to `ingredients.ts`. `ingredients.ts` value-imports this module's propagation
- * helpers, so the only runtime edge runs ingredients → recipes; the type-only direction keeps that
- * from closing into a cycle. `INGREDIENT_COLUMNS` is kept local for the same reason — importing the
- * value would reintroduce the back edge.
+ * helpers, so the only runtime edge runs ingredients → recipes. `CURRENT_TENANT`/`INGREDIENT_COLUMNS`
+ * come from the leaf `./columns.js` (which imports neither file), so sharing them adds no back edge.
  */
-
-/** The tenant scope as an insertable value — reads the GUC the caller set via withTenant. */
-const CURRENT_TENANT = sql`current_tenant_id()`;
-
-const INGREDIENT_COLUMNS = {
-  id: ingredients.id,
-  name: ingredients.name,
-  allergens: ingredients.allergens,
-  active: ingredients.active,
-};
 
 /** The ingredients that make up a product (ordered by created_at then id — a stable order, not
  * the order the ids were passed to setProductRecipe: setProductRecipe inserts every line in one
