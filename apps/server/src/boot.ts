@@ -203,6 +203,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
 
   const reconciler = new StripeReconciler({
     db,
+    nodeId: config.till.nodeId,
     resolveAccount: stripeAccountResolver({
       db,
       ring,

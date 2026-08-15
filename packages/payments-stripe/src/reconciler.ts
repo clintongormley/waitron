@@ -54,6 +54,8 @@ export interface StripeReconcilerOptions {
   /** How long the processor may legitimately take to report a settlement. Defaults to the neutral
    * layer's own seven days. */
   settlementLagMs?: number;
+  /** This node's origin id, forwarded into `reconcilePayments`'s deps for sync origin attribution. */
+  nodeId: string;
 }
 
 /**
@@ -89,6 +91,7 @@ export class StripeReconciler implements PaymentReconciler {
         reverse: (paymentRef) => this.reverse(account, tenantId, paymentRef),
         incidents: recordIncidentOnce,
         settlementLagMs,
+        nodeId: this.opts.nodeId,
       },
       tenantId,
       period,

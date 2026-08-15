@@ -230,6 +230,10 @@ export interface ReconcileDeps {
   reverse: ReversalFn;
   incidents: IncidentSink;
   settlementLagMs: number;
+  /** This node's origin id, threaded into every write `withTenant` below so the enrolled `payments`
+   * UPDATE the sweep performs (the `reconcile_remediated_at` marker) captures a real origin, not the
+   * all-zero sentinel (design §4d(B); sync origin attribution). */
+  nodeId: string;
 }
 
 const CODE = {
@@ -277,8 +281,11 @@ export async function reconcilePayments(
   now: Date,
 ): Promise<PaymentReconcileResult> {
   // T1 — our rows for the period. No network call inside it.
-  const rows = await withTenant(deps.db, tenantId, (tx) =>
-    listReconcilable(tx, tenantId, deps.provider, period),
+  const rows = await withTenant(
+    deps.db,
+    tenantId,
+    (tx) => listReconcilable(tx, tenantId, deps.provider, period),
+    { nodeId: deps.nodeId },
   );
 
   // Network — outside every transaction, over a window widened by the settlement lag, because a
@@ -412,7 +419,7 @@ export async function reconcilePayments(
       now,
     );
     result.incidentsRaised += await raiseMissingLocal(tx, deps, tenantId, missing, now);
-  });
+  }, { nodeId: deps.nodeId });
 
   // Reversals — outside every transaction. See the marker-ordering note above. One failure does
   // not abort the pass: every remaining orphan still gets its turn. Every failure is recorded on
@@ -677,6 +684,6 @@ async function raiseRemediationFailures(
       });
       if (inserted) raised += 1;
     }
-  });
+  }, { nodeId: deps.nodeId });
   return raised;
 }

@@ -67,6 +67,7 @@ describe("reconcile under real row-level security", () => {
           },
           incidents: recordIncidentOnce,
           settlementLagMs: DEFAULT_SETTLEMENT_LAG_MS,
+          nodeId: "11111111-1111-4111-8111-111111111111", // origin irrelevant here (proven in server suite)
         },
         brandTenantId(seeded.tenantId),
         PERIOD,
@@ -131,6 +132,7 @@ describe("reconcile under real row-level security", () => {
           reverse: async () => {},
           incidents: recordIncidentOnce,
           settlementLagMs: DEFAULT_SETTLEMENT_LAG_MS,
+          nodeId: "11111111-1111-4111-8111-111111111111", // origin irrelevant here (proven in server suite)
         },
         brandTenantId(mine.tenantId),
         PERIOD,
