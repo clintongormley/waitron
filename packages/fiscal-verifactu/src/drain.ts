@@ -135,9 +135,11 @@ export interface DrainDeps {
    * (~4 round trips each) — which timed out under CI Docker contention (~32s vs ~1s locally) and
    * is the flake this seam was added to kill. Injecting a small cap (e.g. 3) reproduces the
    * IDENTICAL batching semantics — a full chunk sent now, the sub-cap tail deferred to the next
-   * gated pass — against a handful of rows. Never inject a value ABOVE `MAX_REGISTROS_POR_ENVIO`:
-   * `serializeEnvio` would then reject the oversized envío. The drain never sends more than the
-   * cap per envío, so a small cap keeps every submission comfortably under the XSD guard.
+   * gated pass — against a handful of rows. VALIDATED when provided: `drain()` throws unless it is
+   * an integer in `1..MAX_REGISTROS_POR_ENVIO`. `0` would claim nothing (work stuck `pendiente`),
+   * a negative becomes Postgres `LIMIT -1` (NO limit → an oversized envío `serializeEnvio` rejects),
+   * and the upper cap at `MAX_REGISTROS_POR_ENVIO` means an injected cap can never build an envío the
+   * XSD guard would refuse — the drain never sends more than the cap per envío.
    */
   maxRegistrosPorEnvio?: number;
 }
@@ -197,6 +199,27 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
   // The batch cap, resolved ONCE here (default `MAX_REGISTROS_POR_ENVIO`) and threaded to every
   // use site below, so a test injecting a small cap and production's default 1000 share one code
   // path. See `DrainDeps.maxRegistrosPorEnvio`'s own doc comment for why this is injectable.
+  //
+  // Validated the moment it is PROVIDED, never on the `?? MAX_REGISTROS_POR_ENVIO` default path
+  // (field omitted → 1000, production unchanged and unguarded). `maxRegistrosPorEnvio` is a public,
+  // plain-`number` input, and each out-of-range value fails a fiscal invariant silently rather than
+  // loudly if it reaches the SQL: `0` claims nothing, leaving due work stuck `pendiente` forever;
+  // a NEGATIVE value becomes Postgres `LIMIT -1`, i.e. NO limit, so a claim could pull >1000 rows
+  // and build an envío that `serializeEnvio` (serialize.ts:286) then rejects for exceeding the XSD
+  // `MAX_REGISTROS_POR_ENVIO` — a failure discovered only at submission, not at the input; a
+  // non-integer is nonsense to `limit`. Capping the upper bound at `MAX_REGISTROS_POR_ENVIO` (not
+  // merely `>= 1`) is what makes it impossible to inject a cap that could ever build an envío the
+  // XSD guard would refuse. A plain `throw new Error` matches this package's own dev/precondition
+  // guards (e.g. `backend.ts`'s `recordSubstitution` argument checks); no `AppError` code, which
+  // this file reserves for fiscal-domain outcomes, not a caller-side misconfiguration.
+  if (deps.maxRegistrosPorEnvio !== undefined) {
+    const cap = deps.maxRegistrosPorEnvio;
+    if (!Number.isInteger(cap) || cap < 1 || cap > MAX_REGISTROS_POR_ENVIO) {
+      throw new Error(
+        `maxRegistrosPorEnvio must be an integer in 1..${MAX_REGISTROS_POR_ENVIO}, got ${cap}`,
+      );
+    }
+  }
   const maxPorEnvio = deps.maxRegistrosPorEnvio ?? MAX_REGISTROS_POR_ENVIO;
   for (const tenantId of await tenantsWithWork(deps.db, now)) {
     try {

@@ -1280,3 +1280,57 @@ describe("backoffMs", () => {
     expect(backoffMs(20)).toBe(3_600_000); // stays capped, no overflow/misbehaviour for large intentos
   });
 });
+
+/**
+ * `maxRegistrosPorEnvio` is a public, plain-`number` input into `drain()`, and each out-of-range
+ * value fails a fiscal invariant if it reaches the SQL rather than being caught at the input: `0`
+ * claims nothing (due work stuck `pendiente`), a negative becomes Postgres `LIMIT -1` (NO limit → a
+ * claim of >1000 rows → an envío `serializeEnvio` rejects for exceeding the XSD cap), a non-integer
+ * is nonsense, and a value above `MAX_REGISTROS_POR_ENVIO` (1000) could likewise build an
+ * XSD-oversized envío. `drain()` validates the moment the field is PROVIDED and throws fast; the
+ * omitted-default path (→ 1000) stays unguarded, which every OTHER test in this file exercises.
+ */
+describe("drain — maxRegistrosPorEnvio validation", () => {
+  const NOW = new Date("2026-07-21T00:01:00Z");
+  const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+  const depsWith = (cap?: number): DrainDeps => ({
+    db: pg.db,
+    resolveClient: staticResolver(aeat.client()),
+    skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+    environment: "production",
+    ...(cap === undefined ? {} : { maxRegistrosPorEnvio: cap }),
+  });
+
+  it.each([[0], [-1], [2.5], [1001]])(
+    "throws for an out-of-range injected cap (%s), before touching the database",
+    async (cap) => {
+      await expect(drain(depsWith(cap), NOW)).rejects.toThrow(
+        `maxRegistrosPorEnvio must be an integer in 1..1000, got ${cap}`,
+      );
+    },
+  );
+
+  it("accepts a valid small cap (3) and the omitted default (→1000) without throwing", async () => {
+    // Both a valid cap and the omitted default pass the guard and return a well-formed DrainResult
+    // that drains this test's own seeded row. End-to-end cap SEMANTICS are proven by the batching
+    // and starvation tests above; here the point is only that the guard lets valid inputs through.
+    let capTenant: TenantId | undefined;
+    let defaultTenant: TenantId | undefined;
+    try {
+      capTenant = (await seedPendingEnvios(pg.db, { count: 1 })).tenantId;
+      const withCap = await drain(depsWith(3), NOW);
+      expect(withCap.recordsSubmitted).toBeGreaterThanOrEqual(1);
+
+      defaultTenant = (await seedPendingEnvios(pg.db, { count: 1 })).tenantId;
+      const omitted = await drain(depsWith(), NOW);
+      expect(omitted.recordsSubmitted).toBeGreaterThanOrEqual(1);
+    } finally {
+      if (capTenant !== undefined) {
+        await pg.db.execute(sql`delete from envios where tenant_id = ${capTenant}`);
+      }
+      if (defaultTenant !== undefined) {
+        await pg.db.execute(sql`delete from envios where tenant_id = ${defaultTenant}`);
+      }
+    }
+  });
+});
