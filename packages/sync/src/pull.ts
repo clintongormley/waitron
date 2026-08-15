@@ -41,6 +41,15 @@ export interface SyncPullDeps {
   batchLimit: number;
 }
 
+/** {@link syncPullOnce}'s result: the applied/deferred counts of {@link ApplyBatchResult} plus
+ * `fetched`, the number of rows the peer returned for this page. `fetched` is what the drain loop
+ * reads (NOT `applied`): a FULL page (`fetched === batchLimit`) means the source still has rows past
+ * the cursor, so the drain continues; a short/empty page means it is caught up. See the drain in
+ * {@link runSyncPull} for why `applied` is the wrong signal. */
+export interface SyncPullResult extends ApplyBatchResult {
+  fetched: number;
+}
+
 const trimSlash = (url: string): string => url.replace(/\/$/, "");
 
 async function readCursor(db: Database, subscriberId: string, originId: string): Promise<bigint> {
@@ -56,8 +65,11 @@ async function readCursor(db: Database, subscriberId: string, originId: string):
  * applyBatch's handshake, reads the local cursor for this (subscriber, peer), GETs the peer's log past
  * it, and applies the decoded batch (which advances the cursor). A non-200 from either endpoint throws
  * a plain transport error carrying only the HTTP status (never row content) — the caller backs off.
+ *
+ * Returns `fetched` (the page size the peer returned) alongside applyBatch's counts, because the drain
+ * loop keys off `fetched`, not `applied` — see {@link runSyncPull}.
  */
-export async function syncPullOnce(deps: SyncPullDeps, peer: PullPeer): Promise<ApplyBatchResult> {
+export async function syncPullOnce(deps: SyncPullDeps, peer: PullPeer): Promise<SyncPullResult> {
   const base = trimSlash(peer.url);
   const auth = { Authorization: `Bearer ${peer.token}` };
 
@@ -74,11 +86,12 @@ export async function syncPullOnce(deps: SyncPullDeps, peer: PullPeer): Promise<
     throw new Error(`sync pull: peer /sync-api/log responded ${res.status}`);
   }
   const rows = decodeBatch(await res.text());
-  return applyBatch(deps.localDb, rows, {
+  const result = await applyBatch(deps.localDb, rows, {
     subscriberId: deps.subscriberId,
     localEnvironment: deps.localEnvironment,
     sourceEnvironment,
   });
+  return { ...result, fetched: rows.length };
 }
 
 export interface RunSyncPullDeps extends SyncPullDeps {
@@ -95,7 +108,7 @@ export interface RunSyncPullDeps extends SyncPullDeps {
   log: (level: "info" | "warn" | "error", code: string, params?: Record<string, unknown>) => void;
   /** The per-batch pull, injectable so the loop-control test drives it off a real DB/network; defaults
    * to the real syncPullOnce, which boot uses. */
-  pullOnce?: (deps: SyncPullDeps, peer: PullPeer) => Promise<ApplyBatchResult>;
+  pullOnce?: (deps: SyncPullDeps, peer: PullPeer) => Promise<SyncPullResult>;
 }
 
 /** The next backoff for a peer: minIdleMs on the first failure, then doubling, capped at maxBackoffMs. */
@@ -105,12 +118,23 @@ function nextBackoff(current: number, minIdleMs: number, maxBackoffMs: number): 
 }
 
 /**
- * The background pull loop. Each round pulls every peer until its batch makes no progress
- * (applied === 0 — caught up, or nothing but redeliveries/parks that need a later pass), resetting a
- * healthy peer's backoff. A peer that throws grows its backoff; when a peer's backoff first reaches
- * maxBackoffMs, sync.stream_stalled is logged for the operator alarm (no row content, §6). The round
- * then sleeps the longest active backoff, or minIdleMs when every peer is healthy. Abort is checked
- * before every pull and before the sleep, so SIGTERM does not wait out a backoff.
+ * The background pull loop. Each round pulls every peer until it returns a SHORT page (fewer than
+ * `batchLimit` rows — the source has no more past the cursor), resetting a healthy peer's backoff. A
+ * peer that throws grows its backoff; when a peer's backoff first reaches maxBackoffMs,
+ * sync.stream_stalled is logged for the operator alarm (no row content, §6). The round then sleeps the
+ * longest active backoff, or minIdleMs when every peer is healthy. Abort is checked before every pull
+ * and before the sleep, so SIGTERM does not wait out a backoff.
+ *
+ * The drain keys off `fetched`, NOT `applied`. `applyBatch` can advance the cursor across a WHOLE
+ * batch of pure no-op redeliveries (rows committed above the cursor by a prior partial batch, now
+ * re-applied as `ON CONFLICT DO NOTHING`) while returning `applied: 0` — so breaking on `applied === 0`
+ * throttled recovery of a large backlog to one batch per idle round. `fetched === batchLimit` means the
+ * source still had a full page past the cursor, so there is more to drain regardless of how many rows
+ * actually changed the mirror. This terminates because a full batch always advances the cursor: within
+ * one origin (each pull is single-origin, `?originId=<peer>`) a row's FK parent commits before it and
+ * so carries a strictly lower seq, making ascending-seq apply a topological order in which nothing
+ * stays parked across a batch (apply.ts's own §3.6 property) — the cursor climbs a full page each round
+ * until the source is drained and returns a short page.
  */
 export async function runSyncPull(deps: RunSyncPullDeps): Promise<void> {
   const pullOnce = deps.pullOnce ?? syncPullOnce;
@@ -120,10 +144,11 @@ export async function runSyncPull(deps: RunSyncPullDeps): Promise<void> {
     for (const peer of deps.peers) {
       if (deps.signal.aborted) break;
       try {
-        // Drain this peer: keep pulling while a batch lands new rows; stop when it makes no progress.
+        // Drain this peer: keep pulling while the peer returns a FULL page (more past the cursor);
+        // stop on a short/empty page. Keyed on `fetched`, not `applied` — see the drain note above.
         while (!deps.signal.aborted) {
           const result = await pullOnce(deps, peer);
-          if (result.applied === 0) break;
+          if (result.fetched < deps.batchLimit) break;
         }
         backoff.set(peer.nodeId, 0); // healthy this round
       } catch {
