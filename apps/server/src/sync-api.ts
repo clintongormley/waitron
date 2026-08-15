@@ -33,6 +33,28 @@ function logLimit(raw: string | undefined): number {
   return Number.isInteger(n) && n > 0 ? n : DEFAULT_LOG_LIMIT;
 }
 
+/**
+ * The `?after=` cursor as a NON-NEGATIVE bigint, defaulting to `0n` (serve from the start) for anything
+ * that is NOT one: a missing/empty param, a non-integer string (`abc`, `1.5` — each makes `BigInt(...)`
+ * THROW a SyntaxError), or a negative value. A cursor is a monotonic non-negative `seq`, so the sibling
+ * of `logLimit` above: plain `BigInt(c.req.query("after") ?? "0")` let a non-integer `after` throw
+ * straight into this endpoint's boundary as an opaque `server.internal` 500 for a malformed peer
+ * request rather than a served page. Same fail-safe posture as `logLimit`'s clamp and for the same
+ * reason — this machine-to-machine surface has no 400 param-invalid convention (its boundary answers
+ * only `sync.node_unauthorized` -> 401, everything else -> opaque 500) and its sole caller (`pull.ts`)
+ * always sends a valid non-negative `after`, so a garbage cursor SAFELY means "from the start", never a
+ * 500. `BigInt("")` is already `0n`, so empty needs no special case; the `try/catch` is for the throwing
+ * (`abc`, `1.5`) forms, and `> 0n ? n : 0n` folds a negative cursor back to the start. */
+function afterSeq(raw: string | undefined): bigint {
+  if (raw === undefined) return 0n;
+  try {
+    const n = BigInt(raw);
+    return n > 0n ? n : 0n;
+  } catch {
+    return 0n;
+  }
+}
+
 export interface SyncApiDeps {
   db: Database; // a sync_tailer-member pool
   tenantId: string; // the deli tenant the source reads under
@@ -73,10 +95,14 @@ export function mountSyncApi(app: Hono, deps: SyncApiDeps, log: Logger): void {
     run(c, log, async () => {
       requireNodeToken(c, deps.nodeToken);
       const originId = c.req.query("originId");
-      const afterSeq = BigInt(c.req.query("after") ?? "0");
+      const after = afterSeq(c.req.query("after"));
       const limit = logLimit(c.req.query("limit"));
       const rows = await withTenant(deps.db, deps.tenantId, (tx) =>
-        readSyncLogSince(tx, { afterSeq, limit, ...(originId === undefined ? {} : { originId }) }),
+        readSyncLogSince(tx, {
+          afterSeq: after,
+          limit,
+          ...(originId === undefined ? {} : { originId }),
+        }),
       );
       return c.body(encodeBatch(rows), 200, { "content-type": "application/x-ndjson" });
     }),

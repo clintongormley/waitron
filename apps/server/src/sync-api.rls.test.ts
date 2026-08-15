@@ -144,6 +144,27 @@ describe("mountSyncApi node-token auth + handshake", () => {
         expect(clamped.status).toBe(200);
         expect(decodeBatch(await clamped.text()).some((r) => r.table === "products")).toBe(true);
       }
+
+      // A malformed `?after=` screens to seq 0 (serve from the start) instead of reaching `BigInt(...)`
+      // as a throw -> an opaque 500 (fix: afterSeq, the sibling of logLimit). Same two-direction shape
+      // as the limit clamp above (CLAUDE.md §1): `abc`/`1.5` throw inside `BigInt(...)` and are a 500
+      // without the screen, `-5` is a valid-but-negative cursor, and `""`/absent already mean 0
+      // (`BigInt("")` is 0n) — every one now serves the products row with 200 from seq 0.
+      for (const bad of ["abc", "1.5", "-5", ""]) {
+        const screened = await app.request(`/sync-api/log?after=${bad}&limit=10`, {
+          headers: { Authorization: "Bearer s3cret" },
+        });
+        expect(screened.status).toBe(200);
+        expect(decodeBatch(await screened.text()).some((r) => r.table === "products")).toBe(true);
+      }
+      // A well-formed positive `?after=` is PRESERVED as the cursor (the afterSeq > 0 branch), never
+      // clamped to 0: a value past every captured seq returns 200 with the products row filtered OUT —
+      // proof the screen keeps a good cursor rather than collapsing everything to the start.
+      const highCursor = await app.request(`/sync-api/log?after=999999999&limit=10`, {
+        headers: { Authorization: "Bearer s3cret" },
+      });
+      expect(highCursor.status).toBe(200);
+      expect(decodeBatch(await highCursor.text()).some((r) => r.table === "products")).toBe(false);
     } finally {
       await reader.close();
     }
