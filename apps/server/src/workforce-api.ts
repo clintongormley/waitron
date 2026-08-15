@@ -120,11 +120,8 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = (await c.req.json<{ locationId?: unknown; period?: unknown }>()) ?? {};
-      if (typeof body.locationId !== "string" || !isUuid(body.locationId)) {
-        throw new AppError("management.request_invalid", { field: "locationId" });
-      }
+      const locationId = requireBodyUuid(body.locationId, "locationId");
       const period = requirePeriod(body.period);
-      const { locationId } = body;
       const versionId = await gated(sessionId, (tx) =>
         backend.createRosterVersion(tx, { tenantId: deps.cfg.tenantId, locationId, period }),
       );
