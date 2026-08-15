@@ -122,6 +122,26 @@ export interface DrainDeps {
    * discovered only once a whole tenant's backlog is silently refused.
    */
   environment: Entorno;
+  /**
+   * The batch cap — the most registros claimed, submitted, and counted as a full envío per chunk.
+   * OPTIONAL, defaulting to `MAX_REGISTROS_POR_ENVIO` (`@waitron/verifactu`), the real XSD limit
+   * AEAT enforces (`serialize.ts`'s `maxOccurs="1000"` guard, which throws error 4113/4114 above
+   * it). EVERY production caller omits it — `apps/server`'s `boot.ts` builds `DrainDeps` without
+   * this field — so the default reproduces AEAT's own 1000-row cap exactly; nothing about a real
+   * submission changes.
+   *
+   * Present only as a TEST SEAM. A suite proving the >cap split, or a cap-filling refused backlog,
+   * would otherwise have to seed 1000+ rows through `seedPendingEnvios`'s per-row insert loop
+   * (~4 round trips each) — which timed out under CI Docker contention (~32s vs ~1s locally) and
+   * is the flake this seam was added to kill. Injecting a small cap (e.g. 3) reproduces the
+   * IDENTICAL batching semantics — a full chunk sent now, the sub-cap tail deferred to the next
+   * gated pass — against a handful of rows. VALIDATED when provided: `drain()` throws unless it is
+   * an integer in `1..MAX_REGISTROS_POR_ENVIO`. `0` would claim nothing (work stuck `pendiente`),
+   * a negative becomes Postgres `LIMIT -1` (NO limit → an oversized envío `serializeEnvio` rejects),
+   * and the upper cap at `MAX_REGISTROS_POR_ENVIO` means an injected cap can never build an envío the
+   * XSD guard would refuse — the drain never sends more than the cap per envío.
+   */
+  maxRegistrosPorEnvio?: number;
 }
 
 /** A due `envios` row joined to enough of its registro to rebuild and order it. */
@@ -176,10 +196,35 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
     incidentsRaised: 0,
     skipped: [],
   };
+  // The batch cap, resolved ONCE here (default `MAX_REGISTROS_POR_ENVIO`) and threaded to every
+  // use site below, so a test injecting a small cap and production's default 1000 share one code
+  // path. See `DrainDeps.maxRegistrosPorEnvio`'s own doc comment for why this is injectable.
+  //
+  // Validated the moment it is PROVIDED, never on the `?? MAX_REGISTROS_POR_ENVIO` default path
+  // (field omitted → 1000, production unchanged and unguarded). `maxRegistrosPorEnvio` is a public,
+  // plain-`number` input, and each out-of-range value fails a fiscal invariant silently rather than
+  // loudly if it reaches the SQL: `0` claims nothing, leaving due work stuck `pendiente` forever;
+  // a NEGATIVE value becomes Postgres `LIMIT -1`, i.e. NO limit, so a claim could pull >1000 rows
+  // and build an envío that `serializeEnvio` (serialize.ts:286) then rejects for exceeding the XSD
+  // `MAX_REGISTROS_POR_ENVIO` — a failure discovered only at submission, not at the input; a
+  // non-integer is nonsense to `limit`. Capping the upper bound at `MAX_REGISTROS_POR_ENVIO` (not
+  // merely `>= 1`) is what makes it impossible to inject a cap that could ever build an envío the
+  // XSD guard would refuse. A plain `throw new Error` matches this package's own dev/precondition
+  // guards (e.g. `backend.ts`'s `recordSubstitution` argument checks); no `AppError` code, which
+  // this file reserves for fiscal-domain outcomes, not a caller-side misconfiguration.
+  if (deps.maxRegistrosPorEnvio !== undefined) {
+    const cap = deps.maxRegistrosPorEnvio;
+    if (!Number.isInteger(cap) || cap < 1 || cap > MAX_REGISTROS_POR_ENVIO) {
+      throw new Error(
+        `maxRegistrosPorEnvio must be an integer in 1..${MAX_REGISTROS_POR_ENVIO}, got ${cap}`,
+      );
+    }
+  }
+  const maxPorEnvio = deps.maxRegistrosPorEnvio ?? MAX_REGISTROS_POR_ENVIO;
   for (const tenantId of await tenantsWithWork(deps.db, now)) {
     try {
       const client = await deps.resolveClient(tenantId);
-      await drainTenant(deps.db, client, tenantId, deps.environment, now, result);
+      await drainTenant(deps.db, client, tenantId, deps.environment, now, result, maxPorEnvio);
     } catch (error) {
       // Contained per tenant, deliberately. Before this, one tenant's failure threw straight out of
       // the sweep and every LATER tenant's submission — each with its own legal clock — never
@@ -227,26 +272,32 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
  * called at the top of this function) has real committed `enviando` rows to recover after a crash.
  * `client.submit` then runs OUTSIDE any transaction. Each response is persisted in its own short
  * transaction (T2) — or, if `client.submit` throws, the claimed batch is backed off in a T2 of its
- * own instead (`backoffBatch`, Task 8) — one pair of T1/T2 per ≤1000-row chunk this tenant's due
- * backlog is split into (spec §7.2's flow-control race, art. 16.4):
+ * own instead (`backoffBatch`, Task 8) — one pair of T1/T2 per ≤`maxPorEnvio`-row chunk this
+ * tenant's due backlog is split into (spec §7.2's flow-control race, art. 16.4). `maxPorEnvio` is
+ * the batch cap `drain` resolved from `DrainDeps.maxRegistrosPorEnvio` (default
+ * `MAX_REGISTROS_POR_ENVIO`, the XSD's 1000-row limit — production always takes the default; only a
+ * test injects a smaller cap):
  *
  *   - If `envio_flujo.proximo_envio_en` (the "gate") has not yet elapsed AND fewer than
- *     `MAX_REGISTROS_POR_ENVIO` rows are currently due, nothing is sent this pass — the tenant is
+ *     `maxPorEnvio` rows are currently due, nothing is sent this pass — the tenant is
  *     deferred to the gate (`bumpNextDue`), matching AEAT's own rule that a software system must
  *     otherwise wait `TiempoEsperaEnvio` seconds between envíos.
- *   - Otherwise (gate open, OR ≥1000 already accumulated), the pass is authorised: the loop below
- *     claims/submits/persists ≤1000-row chunks BACK TO BACK while ≥1000 rows remain due (the
- *     "1000 accumulated" exception) — but STOPS the moment fewer than 1000 remain after a chunk
- *     has been sent this pass. That remaining tail is neither a full batch nor `t`-elapsed, so it
- *     is deferred to a LATER `drain()` call gated on `t` (`bumpNextDue` below), not flushed
- *     back-to-back in the same pass.
+ *   - Otherwise (gate open, OR ≥ `maxPorEnvio` already accumulated), the pass is authorised: the
+ *     loop below claims/submits/persists ≤`maxPorEnvio`-row chunks BACK TO BACK while ≥ `maxPorEnvio`
+ *     rows remain due (the "full envío accumulated" exception) — but STOPS the moment fewer than
+ *     `maxPorEnvio` remain after a chunk has been sent this pass. That remaining tail is neither a
+ *     full batch nor `t`-elapsed, so it is deferred to a LATER `drain()` call gated on `t`
+ *     (`bumpNextDue` below), not flushed back-to-back in the same pass.
  *
- * Concretely: a 1001-row backlog on an open gate sends its first 1000-row chunk, sees 1 row left
- * (< 1000), and stops — `batchesSent: 1`, `recordsSubmitted: 1000` from THIS `drain()` call, with
- * the last row deferred until `nextDueAt` (`drain.test.ts`'s two-pass 1001 test). The pass's
- * FIRST envío still always goes once authorised — a standalone <1000 backlog on an open gate
- * sends now, per the top-of-function gate check — only a tail that FOLLOWS a sent chunk within
- * the same pass is deferred. `dueCount` therefore stays > 0 after the loop either via this
+ * Concretely, at the production default cap of 1000: a 1001-row backlog on an open gate sends its
+ * first 1000-row chunk, sees 1 row left (< 1000), and stops — `batchesSent: 1`,
+ * `recordsSubmitted: 1000` from THIS `drain()` call, with the last row deferred until `nextDueAt`.
+ * `drain.test.ts`'s two-pass batching test proves this SAME split with a small injected cap
+ * (`maxRegistrosPorEnvio: 3`, a 4-row backlog → a chunk of 3 now, the 1-row tail next pass) so it
+ * need not seed 1000+ rows. The pass's FIRST envío still always goes once authorised — a standalone
+ * sub-cap backlog on an open gate sends now, per the top-of-function gate check — only a tail that
+ * FOLLOWS a sent chunk within the same pass is deferred. `dueCount` therefore stays > 0 after the
+ * loop either via this
  * intentional break (a deferred tail) or the defensive `batch.length === 0` guard below (a
  * countDue/claimBatch race) — either way `bumpNextDue` below picks it up.
  */
@@ -257,6 +308,7 @@ async function drainTenant(
   environment: Entorno,
   now: Date,
   result: DrainResult,
+  maxPorEnvio: number,
 ): Promise<void> {
   // Recovery gets its OWN short tx, ahead of (and separate from) the flujo/dueCount0 read below —
   // it must COMMIT before anything else in this pass reads `envios`, so that a row it just
@@ -275,7 +327,7 @@ async function drainTenant(
   const gateOpen = flujo.proximoEnvioEn === null || flujo.proximoEnvioEn.getTime() <= now.getTime();
   // The race (spec §7.2, art. 16.4): send if the gate is open OR a full envío has already
   // accumulated. Otherwise defer this tenant entirely — nothing claimed, nothing sent.
-  if (!gateOpen && dueCount0 < MAX_REGISTROS_POR_ENVIO) {
+  if (!gateOpen && dueCount0 < maxPorEnvio) {
     bumpNextDue(result, flujo.proximoEnvioEn);
     return;
   }
@@ -294,7 +346,7 @@ async function drainTenant(
   // refused again, forever; see that guard's own doc comment for what actually releases it.
   const blockedSifIds = new Set<string>();
   while (dueCount > 0) {
-    // T1 — claim in its own transaction; ≤1000 due pending rows, ordered by chain sequence
+    // T1 — claim in its own transaction; ≤`maxPorEnvio` due pending rows, ordered by chain sequence
     // within each SIF. Any claimed row whose chain already carries an open `rechazado`/
     // `detenido` envío (Task 9's Incidencia-while-open rule, `haltOpenChainClaims`'s own doc
     // comment) is redirected straight to `detenido` here, in the SAME transaction as the claim —
@@ -312,7 +364,15 @@ async function drainTenant(
     let claimed: { sendable: DueRow[]; rawCount: number };
     for (;;) {
       claimed = await withTenant(db, tenantId, async (tx) => {
-        const c = await claimBatch(tx, tenantId, now, environment, result, blockedSifIds);
+        const c = await claimBatch(
+          tx,
+          tenantId,
+          now,
+          environment,
+          result,
+          blockedSifIds,
+          maxPorEnvio,
+        );
         const kept = await haltOpenChainClaims(tx, c.sendable, now, result);
         return { sendable: kept, rawCount: c.rawCount };
       });
@@ -346,7 +406,7 @@ async function drainTenant(
       // A chunk was just sent this pass; if fewer than a full envío's worth remain due, that
       // tail is neither a full batch nor `t`-elapsed — stop here and defer it to the NEXT pass
       // (gated on `t`, via `bumpNextDue` below), rather than riding back-to-back in this pass.
-      if (dueCount < MAX_REGISTROS_POR_ENVIO) break;
+      if (dueCount < maxPorEnvio) break;
     } catch {
       // Scope boundary (Task 8): this catches `client.submit` THROWING — a transient network/
       // transport failure. It does NOT catch a successful response carrying per-record
@@ -529,8 +589,9 @@ async function recoverStaleClaims(tx: Transaction, tenantId: string, now: Date):
  * design decision, not an oversight in this one.
  *
  * The `sif_id not in (...)` exclusion in the WHERE clause exists for the OTHER property the review
- * found missing: without it, a claim window entirely filled by refused rows (>= 1000 of them, or
- * however many distinct blocked chains sort ahead of everything else under `order by sif_id`) would
+ * found missing: without it, a claim window entirely filled by refused rows (`maxPorEnvio` of them
+ * at the production default, or however many distinct blocked chains sort ahead of everything else
+ * under `order by sif_id` fill the `limit`) would
  * return the SAME rows to every subsequent `claimBatch` call THIS PASS, since nothing about a
  * refused row changes its own due-ness — `drainTenant`'s retry loop could never advance past it,
  * and any genuinely sendable work sorting behind it would starve, this pass and every later one,
@@ -544,6 +605,7 @@ async function claimBatch(
   environment: Entorno,
   result: DrainResult,
   blockedSifIds: Set<string>,
+  maxPorEnvio: number,
 ): Promise<{ sendable: DueRow[]; rawCount: number }> {
   const alreadyBlocked = blockedSifIds.size > 0 ? [...blockedSifIds] : null;
   const rows = await tx.execute<DueRow>(sql`
@@ -552,7 +614,7 @@ async function claimBatch(
     where e.tenant_id = ${tenantId} and e.estado = 'pendiente' and e.proximo_intento_en <= ${now.toISOString()}
       ${alreadyBlocked === null ? sql`` : sql`and r.sif_id not in ${alreadyBlocked}`}
     order by r.sif_id, r.secuencia
-    limit ${MAX_REGISTROS_POR_ENVIO}
+    limit ${maxPorEnvio}
     for update of e skip locked
   `);
 
