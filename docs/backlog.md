@@ -1,6 +1,6 @@
 # Backlog — what is in flight, what is next, and why
 
-**Last reprioritised: 2026-08-02.** This file is the answer to "what should I work on?". It is
+**Last reprioritised: 2026-08-15.** This file is the answer to "what should I work on?". It is
 committed rather than held in a session's memory so that it can be diffed, reviewed, and checked
 against the tree — memory notes drift, and several currently point at pull request numbers that no
 longer exist (the repository was recreated for the licence change and numbering restarted at #1).
@@ -20,6 +20,25 @@ wait. Branch, `commit -s`, fast-forward `main`, push. Reserve it for docs; featu
 through a PR (where CI + Copilot run). The other rules (no force-push, no deletion) still apply.
 
 ## Current direction
+
+**Reprioritised 2026-08-15 — the autonomous campaign is COMPLETE (all queue items landed as #74–#82,
+plus #72/#73); the owner is back and chose the next two slices to run IN PARALLEL:**
+
+- **Shift-planning dashboard UI (sub-project 16)** — the one "build the UI" task ready now: the
+  scheduling *engine* landed headless (#50), and this slice builds the `apps/dashboard` surface on
+  top of it (author/publish rosters, surface `RosterBreach[]` on publish, manager approve/reject
+  swaps), plus whatever `/management-api` route group the workforce engine still needs.
+- **Sync transport / network layer (#33 §14)** — the largest unbuilt fiscal-topology piece after the
+  commercial-lane outbox (#74). This slice adds the transport that moves batches between nodes over
+  the network, plus redelivery handling. The **fiscal-lane / hash-chain sync stays a separate
+  owner-reviewed slice (H2)** and is excluded here.
+
+Both are commercial-lane and non-fiscal, and the migration-journal collision risk is low (the
+workforce UI adds no `packages/db` migration; sync's migrations live in its own `drizzle/`), so they
+can proceed independently. A first-draft transport protocol spec sits on branch
+`docs/sif-sync-protocol-design`. See *Now* for each track's state.
+
+---
 
 **Reprioritised 2026-08-07 — Menu & allergens (18) and the reporting *cierre Z* (8), in parallel.**
 
@@ -50,7 +69,8 @@ The two ran in parallel at the feature level without incident: the anticipated
 `packages/db/drizzle/meta/_journal.json` collision was avoided by sequencing the migrations
 (0031 allergens → 0032 8a → 0033 8b) as each branch landed. The **management dashboard** slice-1 auth
 floor is now **COMPLETE** — 1d (passkeys) LANDED as #71, so all four sub-slices are in; the
-**autonomous campaign** (below) is the active focus.
+**autonomous campaign** (below) ran to completion and its follow-on work is now the two parallel
+tracks recorded at the top of this section.
 
 **Management dashboard added 2026-08-07 (building).** The owner's off-premises management console —
 designed and fully planned this session
@@ -88,17 +108,18 @@ before the deli is ready to trade, so the deli's 1-Jan-2027 legal deadline is *n
 one piece of work above another — order by dependency, correctness, and de-risking the most-reused /
 most-uncertain foundations first.
 
-**Autonomous campaign armed (2026-08-08).** While the owner is away (Sun 2026-08-09 → Fri 2026-08-14;
-the weekly quota renews Tue 01:00) an unattended launchd-driven run works an ordered, pre-specced
-queue — **sync slice 1** (commercial outbox, **LANDED #74**), **reporting** (date-range + *modelo 303*, **LANDED #76**), the
-**catalogue / menu management UI** (with product images, **LANDED #78**), the **layout & receipt editors** (**LANDED #81**), and
-interleaved small follow-ups (createErrorBoundary **#75**, percentOf hoist **#77**, otplib v13 **#79**, reachability guard **#80**) — each via `finish-branch` → `land-branch`. The plan, ordered queue, and
-guardrails (never auto-land the unrepairable fiscal core; never land on a red gate; one item in flight
-at a time) are recorded in
+**Autonomous campaign — COMPLETE (armed 2026-08-08; ran 2026-08-09 → 2026-08-14).** While the owner
+was away, an unattended launchd-driven run worked an ordered, pre-specced queue — **sync slice 1**
+(commercial outbox, **#74**), **reporting** (date-range + *modelo 303*, **#76**), the
+**catalogue / menu management UI** (with product images, **#78**), the **layout & receipt editors**
+(**#81**), the **dashboard i18n layer** (**#82**), the **staff row-edit actions** (**#73**), and
+interleaved small follow-ups (createErrorBoundary **#75**, percentOf hoist **#77**, otplib v13
+**#79**, reachability guard **#80**) — each via `finish-branch` → `land-branch`. The plan, ordered
+queue, and guardrails (never auto-land the unrepairable fiscal core; never land on a red gate; one
+item in flight at a time) are recorded in
 [superpowers/specs/2026-08-08-autonomous-campaign-plan.md](superpowers/specs/2026-08-08-autonomous-campaign-plan.md);
-the per-item specs/plans are dated `2026-08-08`. Landed items move to *Recently shipped* as the run
-merges them; anything it cannot safely finish is left as an open PR marked `blocked` or
-`needs-owner-review`.
+the per-item specs/plans are dated `2026-08-08`. **All queue items landed** (listed in *Recently
+shipped*) and nothing was left blocked or `needs-owner-review`; the run is finished.
 
 ---
 
@@ -106,7 +127,9 @@ merges them; anything it cannot safely finish is left as an open PR marked `bloc
 
 | What | State |
 | --- | --- |
-| **Management dashboard** — owner's off-premises console | **Slice 1 COMPLETE — 1a (#67) + 1b (#69) + 1c (#70) + 1d (passkeys, #71) all LANDED.** The auth floor (staff admin + passkey / password+TOTP login) is done; **remote-access transport** (tunnel/snitun-pattern) is a future slice. Slice-1a/1b/1c/1d follow-ups under *Debt and odd jobs* — the biggest, **1c row-edit actions, LANDED (#73)**, so the dashboard now manages staff (role/suspend/reactivate/PIN/password), not only list+create; the first-admin-password provisioning gap is now **CLOSED (#72)**, so a real first dashboard login works. The dashboard now also **authors the catalogue** — create/edit products (price, VAT, pricing unit, per-locale descriptions, allergens, active, image) and categories, with local-file image upload/serve, gated on `person.manage` (**#78**) |
+| **Shift-planning dashboard UI** (sub-project 16) | **In flight (started 2026-08-15).** The scheduling *engine* landed headless (#50: rosters, `roster_versions`/`publishRoster`, the advisory `validateRoster`/`RosterBreach[]` guardrail engine, planned-vs-actual, shift swaps). This slice builds the **dashboard surface** in `apps/dashboard` to author/publish rosters, surface breaches on publish, and run the manager **approve/reject-swaps** flow — plus whatever `/management-api` route group the workforce engine still needs exposed. Non-fiscal, buildable now against #50; mirrors the existing dashboard screens (`staff`/`catalogue`/`layout`) + i18n + `@waitron/ui` primitives. |
+| **Sync transport / network layer** (#33 §14) | **In flight (started 2026-08-15).** The commercial-lane outbox landed as **#74** (`@waitron/sync`: capture triggers + idempotent seq-ordered apply + bounded retention/lag + origin attribution). This slice adds the **transport** that moves batches between nodes over the network, plus **redelivery handling** (slice-1 `applyBatch` is single-batch). The **fiscal-lane / hash-chain sync stays a separate owner-reviewed slice (H2)** and is excluded here. A first-draft protocol spec is on branch `docs/sif-sync-protocol-design`. See *SIF topology follow-ups*. |
+| **Management dashboard** — owner's off-premises console | **Slice 1 COMPLETE — 1a (#67) + 1b (#69) + 1c (#70) + 1d (passkeys, #71), row-edit (#73), i18n (#82) all LANDED.** The auth floor (staff admin + passkey / password+TOTP login) + catalogue authoring (#78) are done; **remote-access transport** (tunnel/snitun-pattern) is a future slice. Slice-1a…1d follow-ups under *Debt and odd jobs*. |
 
 ---
 
