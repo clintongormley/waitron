@@ -6,6 +6,7 @@ import { runMigrationSets, startMigratedPostgres } from "@waitron/db/testing/pos
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { lagFor, pruneSyncLog } from "./retention.js";
+import type { SyncLane } from "./registry.js";
 
 // Real Postgres, not PGlite: the prune MUST run as a genuine non-superuser member of sync_retention
 // so that FORCE ROW LEVEL SECURITY is actually in force and the per-role permissive policy is what
@@ -57,34 +58,33 @@ async function resetOutbox(): Promise<void> {
  * would pass on a single-tenant fixture and prove nothing, so the low seqs a correct prune deletes
  * must span BOTH tenants (CLAUDE.md §1 — a measurement where both answers look alike measures
  * nothing). Inserted as the superuser admin (RLS bypassed; pure setup).
+ *
+ * `tableFor` picks the seeded row's table_name per seq (default: always 'products', unchanged for
+ * every single-lane caller); the two-lane retention tests (spec §4e) pass a selector alternating a
+ * FAST-lane table (payments, odd seq) and an ORDERED-lane table (sales, even seq) so the fixture
+ * looks like a genuine interleaved two-lane stream. pruneSyncLog ignores table_name (its boundary is
+ * the min across cursor rows), so which lane a row "belongs" to is decided only by the two cursor
+ * rows the tests set — this proves that min waits for whichever lane is slower.
  */
-async function seedLog(count: number, a: string, b: string): Promise<void> {
+async function seedLog(
+  count: number,
+  a: string,
+  b: string,
+  tableFor: (seq: number) => string = () => "products",
+): Promise<void> {
   for (let seq = 1; seq <= count; seq += 1) {
     const tenant = seq % 2 === 1 ? a : b;
     await postgres.admin.execute(
       sql`insert into sync_log (seq, origin_id, table_name, op, tenant_id, row_image)
           overriding system value
-          values (${seq}, ${ORIGIN}::uuid, 'products', 'insert', ${tenant}::uuid, '{}'::jsonb)`,
+          values (${seq}, ${ORIGIN}::uuid, ${tableFor(seq)}, 'insert', ${tenant}::uuid, '{}'::jsonb)`,
     );
   }
 }
 
-/** Seeds sync_log seqs 1..count for ORIGIN, alternating a FAST-lane table (payments, odd seq) and an
- * ORDERED-lane table (sales, even seq) across the two tenants by parity of a running index, so the
- * fixture looks like a genuine interleaved two-lane stream. pruneSyncLog ignores table_name (its
- * boundary is the min across cursor rows), so which lane a row "belongs" to is decided only by the two
- * cursor rows the tests set — this proves that min waits for whichever lane is slower. Admin insert. */
-async function seedTwoLaneLog(count: number, a: string, b: string): Promise<void> {
-  for (let seq = 1; seq <= count; seq += 1) {
-    const table = seq % 2 === 1 ? "payments" : "sales";
-    const tenant = seq % 2 === 1 ? a : b;
-    await postgres.admin.execute(
-      sql`insert into sync_log (seq, origin_id, table_name, op, tenant_id, row_image)
-          overriding system value
-          values (${seq}, ${ORIGIN}::uuid, ${table}, 'insert', ${tenant}::uuid, '{}'::jsonb)`,
-    );
-  }
-}
+/** The two-lane table selector for `seedLog`: FAST-lane (payments) on odd seq, ORDERED-lane (sales)
+ * on even seq — see `seedLog`'s doc comment for why the split proves what it does. */
+const twoLaneTableFor = (seq: number): string => (seq % 2 === 1 ? "payments" : "sales");
 
 /** Upserts one subscriber's cursor for ORIGIN on the given lane as the superuser admin. `lane`
  * defaults to 'ordered' so every existing single-lane call is unchanged; the two-lane retention
@@ -94,7 +94,7 @@ async function setCursor(
   subscriberId: string,
   lastApplied: number,
   alive: boolean,
-  lane: "ordered" | "fast" = "ordered",
+  lane: SyncLane = "ordered",
 ): Promise<void> {
   await postgres.admin.execute(
     sql`insert into sync_cursor (subscriber_id, origin_id, last_applied_seq, alive, lane)
@@ -297,7 +297,7 @@ describe("fast and ordered lanes track independent cursors; retention waits for 
     await resetOutbox();
     const a = await seedTenant(postgres.admin);
     const b = await seedTenant(postgres.admin);
-    await seedTwoLaneLog(10, a, b);
+    await seedLog(10, a, b, twoLaneTableFor);
 
     const pruner = await postgres.pg.connectAs("sync_pruner", "pp");
     try {
@@ -333,7 +333,7 @@ describe("fast and ordered lanes track independent cursors; retention waits for 
     await resetOutbox();
     const a = await seedTenant(postgres.admin);
     const b = await seedTenant(postgres.admin);
-    await seedTwoLaneLog(10, a, b);
+    await seedLog(10, a, b, twoLaneTableFor);
     const pruner = await postgres.pg.connectAs("sync_pruner", "pp");
     try {
       await setCursor("main", 2, true, "fast"); // fast is the slower lane now

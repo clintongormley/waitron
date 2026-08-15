@@ -43,7 +43,7 @@ import { mountWorkforceApi } from "./workforce-api.js";
 import { mountMedia } from "./media-api.js";
 import { mountSyncApi } from "./sync-api.js";
 import { fetchHttpClient } from "./sync-http.js";
-import { runSyncPull } from "@waitron/sync";
+import { runSyncPull, type SyncLane } from "@waitron/sync";
 import { readOrderFlow } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
@@ -373,7 +373,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     // `let` declared outside this block, and TS widens a captured `let` back to `Database | undefined`
     // inside a nested function, whereas a `const` assigned here holds its narrowed `Database` type.
     const localSyncDb = syncDb;
-    const runLane = (lane: "ordered" | "fast", minIdleMs: number): Promise<void> =>
+    const runLane = (lane: SyncLane, minIdleMs: number): Promise<void> =>
       runSyncPull({
         localDb: localSyncDb,
         subscriberId: till.nodeId,
