@@ -99,6 +99,11 @@ export const DEFAULT_MAX_TICK_MS = 60 * 60 * 1000;
  * answer). Neither duty reports `now` for merely SKIPPED work any more — see `skipRetryMs` above,
  * and `drain` has no `deferred` concept at all. */
 const DEFAULT_MIN_TICK_MS = 5_000;
+/** The fast lane's idle interval when WAITRON_SYNC_FAST_TICK_MS is unset. A tight starting point that
+ * governing §9 explicitly calls a TUNING TARGET, not a settled constant (spec §4d). No cross-guard
+ * against minTickMs: a fast tick not tighter than the ordered tick is a mis-tuning, not a correctness
+ * failure. */
+const DEFAULT_SYNC_FAST_TICK_MS = 1000;
 const DEFAULT_HTTP_PORT = 8080;
 const DEFAULT_HTTP_HOST = "127.0.0.1";
 /** The highest port TCP/`net.Server.listen` accepts. Without this bound, `positiveInt` alone lets
@@ -149,6 +154,10 @@ export interface SyncTransportConfig {
   nodeToken: string;
   databaseUrl: string;
   peers: SyncPeer[];
+  /** The fast lane's idle interval (ms) — the tighter tick the payments lane polls at, beside the
+   * ordered lane's config.minTickMs. From WAITRON_SYNC_FAST_TICK_MS, default 1000 (spec §4d). Lives on
+   * the sync config because it is meaningless without sync enabled, like nodeToken/peers. */
+  fastMinIdleMs: number;
 }
 
 /**
@@ -193,6 +202,7 @@ export function loadSyncConfig(env: Env): SyncTransportConfig | undefined {
     nodeToken: required(env, "WAITRON_SYNC_NODE_TOKEN"),
     databaseUrl: required(env, "WAITRON_SYNC_DATABASE_URL"),
     peers,
+    fastMinIdleMs: positiveInt(env, "WAITRON_SYNC_FAST_TICK_MS", DEFAULT_SYNC_FAST_TICK_MS),
   };
 }
 
