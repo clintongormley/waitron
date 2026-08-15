@@ -35,7 +35,9 @@ const INGREDIENT_COLUMNS = {
   active: ingredients.active,
 };
 
-/** The ingredients that make up a product, in insertion order. */
+/** The ingredients that make up a product (ordered by created_at then id — a stable order, not
+ * the order the ids were passed to setProductRecipe: setProductRecipe inserts every line in one
+ * batch, so created_at ties on every row and the tiebreak falls to id, a random gen_random_uuid()). */
 export async function getProductRecipe(tx: Transaction, productId: string): Promise<Ingredient[]> {
   return tx
     .select(INGREDIENT_COLUMNS)

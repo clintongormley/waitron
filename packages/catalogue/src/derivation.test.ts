@@ -22,6 +22,14 @@ describe("mergeAllergenMaps", () => {
     });
   });
 
+  it("sorts joined sources regardless of argument order (deterministic, not iteration order)", () => {
+    const a = { eggs: { presence: "contains" as const, source: "mayonnaise" } };
+    const b = { eggs: { presence: "contains" as const, source: "egg" } };
+    expect(mergeAllergenMaps(a, b)).toEqual({
+      eggs: { presence: "contains", source: "egg, mayonnaise" },
+    });
+  });
+
   it("keeps a lone code's own presence (may_contain stays may_contain)", () => {
     expect(mergeAllergenMaps({}, { nuts: { presence: "may_contain" as const } })).toEqual({
       nuts: { presence: "may_contain" },
