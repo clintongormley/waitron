@@ -300,3 +300,56 @@ describe("createRosterVersion", () => {
     expect(other).toEqual(expect.any(String));
   });
 });
+
+describe("getRoster / getRosterVersion", () => {
+  it("returns the draft version and its attached shifts for the week", async () => {
+    const versionId = await run((tx) =>
+      backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-04-06" }),
+    );
+    const shiftId = await insertDraftShift(suite.db, {
+      tenantId, personId, locationId,
+      startsAt: "2026-04-06T09:00:00Z", endsAt: "2026-04-06T17:00:00Z",
+      rosterVersionId: versionId,
+    });
+    const snapshot = await run((tx) =>
+      backend.getRoster(tx, { tenantId, locationId, period: "2026-04-06" }),
+    );
+    expect(snapshot.version?.id).toBe(versionId);
+    expect(snapshot.version?.status).toBe("draft");
+    expect(snapshot.shifts.map((s) => s.id)).toEqual([shiftId]);
+    expect(snapshot.shifts[0]!.startsAt).toBe("2026-04-06T09:00:00Z");
+  });
+
+  it("returns { version: null, shifts: [] } for a week with no roster", async () => {
+    const snapshot = await run((tx) =>
+      backend.getRoster(tx, { tenantId, locationId, period: "2026-05-04" }),
+    );
+    expect(snapshot).toEqual({ version: null, shifts: [] });
+  });
+
+  it("falls back to the PUBLISHED version when there is no draft", async () => {
+    const versionId = await insertRosterVersion(suite.db, {
+      tenantId, locationId, periodStart: "2026-06-01", periodEnd: "2026-06-07",
+    });
+    await run((tx) => backend.publishRoster(tx, { tenantId, versionId }));
+    const snapshot = await run((tx) =>
+      backend.getRoster(tx, { tenantId, locationId, period: "2026-06-01" }),
+    );
+    expect(snapshot.version?.id).toBe(versionId);
+    expect(snapshot.version?.status).toBe("published");
+  });
+
+  it("getRosterVersion returns the row, or throws roster.not_found for an unknown id", async () => {
+    const versionId = await run((tx) =>
+      backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-07-06" }),
+    );
+    const row = await run((tx) => backend.getRosterVersion(tx, { tenantId, versionId }));
+    expect(row.locationId).toBe(locationId);
+    const code = await codeOfRejection(() =>
+      run((tx) =>
+        backend.getRosterVersion(tx, { tenantId, versionId: "00000000-0000-0000-0000-000000000000" }),
+      ),
+    );
+    expect(code).toBe("roster.not_found");
+  });
+});

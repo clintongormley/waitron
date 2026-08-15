@@ -116,6 +116,38 @@ export interface CreateRosterVersionInput {
   period: string;
 }
 
+/** One `roster_versions` row, mapped to the camelCase shape the API/screen read (dates as
+ * 'YYYY-MM-DD' strings, `published_at` as a UTC ISO instant). */
+export interface RosterVersionRow {
+  id: string;
+  locationId: string;
+  periodStart: string;
+  periodEnd: string;
+  status: "draft" | "published" | "superseded";
+  publishedAt: string | null;
+  publishedByPersonId: string | null;
+}
+
+/** One `shifts` row, mapped to camelCase with UTC ISO instants for the grid. */
+export interface ShiftRow {
+  id: string;
+  personId: string;
+  locationId: string;
+  startsAt: string;
+  startsOffsetMinutes: number;
+  endsAt: string;
+  endsOffsetMinutes: number;
+  role: string | null;
+  rosterVersionId: string | null;
+}
+
+/** The week's roster snapshot for the authoring grid — the current draft (or, if none, the published
+ * version) and its attached shifts, or `{ version: null, shifts: [] }` for an unrostered week. */
+export interface RosterSnapshot {
+  version: RosterVersionRow | null;
+  shifts: ShiftRow[];
+}
+
 /** The three states a worker's shift can be in, derived from the most recent clock event. */
 type ShiftState = "out" | "working" | "on_break";
 
@@ -362,6 +394,77 @@ export class WorkforceBackend {
       values (${input.tenantId}, ${input.locationId}, ${input.period}, ${input.period}::date + 6)
       returning id`);
     return rows[0]!.id;
+  }
+
+  /**
+   * Reads the roster snapshot for one location's week (design §3a) — the current DRAFT (what is being
+   * edited) or, when there is none, the current PUBLISHED version, plus its attached shifts. Returns
+   * `{ version: null, shifts: [] }` for a week with no roster.
+   */
+  async getRoster(
+    tx: Transaction,
+    input: { tenantId: string; locationId: string; period: string },
+  ): Promise<RosterSnapshot> {
+    // Prefer the DRAFT (what is being edited); fall back to the current PUBLISHED version for the week.
+    // `period_start/end::text`: node-postgres parses a `date` column into a JS Date, PGlite into a
+    // string — the same driver divergence `attachedShifts` handles with `to_char`. The `::text` cast
+    // pins both to a 'YYYY-MM-DD' string, so the row (and its JSON to the browser) is stable.
+    const { rows } = await tx.execute<RosterVersionDbRow>(sql`
+      select id, location_id, period_start::text as period_start, period_end::text as period_end, status,
+        to_char(published_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as published_at,
+        published_by_person_id
+      from roster_versions
+      where tenant_id = ${input.tenantId} and location_id = ${input.locationId}
+        and period_start = ${input.period} and status in ('draft', 'published')
+      order by case when status = 'draft' then 0 else 1 end
+      limit 1`);
+    const row = rows[0];
+    if (row === undefined) return { version: null, shifts: [] };
+    const version = mapRosterVersion(row);
+    return { version, shifts: await this.shiftsForVersion(tx, input.tenantId, version.id) };
+  }
+
+  /**
+   * Reads one `roster_versions` row by id, or throws `roster.not_found`. The publish route reads a
+   * version's `locationId` off this before resolving its convenio ruleset.
+   */
+  async getRosterVersion(
+    tx: Transaction,
+    input: { tenantId: string; versionId: string },
+  ): Promise<RosterVersionRow> {
+    const { rows } = await tx.execute<RosterVersionDbRow>(sql`
+      select id, location_id, period_start::text as period_start, period_end::text as period_end, status,
+        to_char(published_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as published_at,
+        published_by_person_id
+      from roster_versions
+      where tenant_id = ${input.tenantId} and id = ${input.versionId}
+      limit 1`);
+    const row = rows[0];
+    if (row === undefined) {
+      throw new AppError("roster.not_found", {
+        tenantId: input.tenantId,
+        rosterVersionId: input.versionId,
+      });
+    }
+    return mapRosterVersion(row);
+  }
+
+  /** The shifts attached to a version, mapped to `ShiftRow`s ordered by start instant. */
+  private async shiftsForVersion(
+    tx: Transaction,
+    tenantId: string,
+    versionId: string,
+  ): Promise<ShiftRow[]> {
+    const { rows } = await tx.execute<ShiftDbRow>(sql`
+      select id, person_id, location_id,
+        to_char(starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as starts_at,
+        starts_offset_minutes,
+        to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at,
+        ends_offset_minutes, role, roster_version_id
+      from shifts
+      where tenant_id = ${tenantId} and roster_version_id = ${versionId}
+      order by starts_at`);
+    return rows.map(mapShift);
   }
 
   /**
@@ -789,4 +892,57 @@ export class WorkforceBackend {
 /** The UTC ISO instant `deltaDays` from a local date's midnight — bounds the fetch window. */
 function shiftDay(date: string, deltaDays: number): string {
   return new Date(Date.parse(`${date}T00:00:00Z`) + deltaDays * MS_PER_DAY).toISOString();
+}
+
+/** The raw `roster_versions` shape `getRoster`/`getRosterVersion` read — snake_case, dates cast to
+ * 'YYYY-MM-DD' text and `published_at` to a UTC ISO instant, so no driver divergence reaches the map. */
+type RosterVersionDbRow = {
+  id: string;
+  location_id: string;
+  period_start: string;
+  period_end: string;
+  status: string;
+  published_at: string | null;
+  published_by_person_id: string | null;
+};
+
+/** The raw `shifts` shape the read verbs return — instants normalised to UTC ISO by `to_char`. A
+ * `type` object literal (not an `interface`) so it satisfies `tx.execute`'s `Record<string, unknown>`
+ * constraint via TypeScript's implicit index signature, matching this file's inline row types. */
+type ShiftDbRow = {
+  id: string;
+  person_id: string;
+  location_id: string;
+  starts_at: string;
+  starts_offset_minutes: number;
+  ends_at: string;
+  ends_offset_minutes: number;
+  role: string | null;
+  roster_version_id: string | null;
+};
+
+function mapRosterVersion(r: RosterVersionDbRow): RosterVersionRow {
+  return {
+    id: r.id,
+    locationId: r.location_id,
+    periodStart: r.period_start,
+    periodEnd: r.period_end,
+    status: r.status as RosterVersionRow["status"],
+    publishedAt: r.published_at,
+    publishedByPersonId: r.published_by_person_id,
+  };
+}
+
+function mapShift(r: ShiftDbRow): ShiftRow {
+  return {
+    id: r.id,
+    personId: r.person_id,
+    locationId: r.location_id,
+    startsAt: r.starts_at,
+    startsOffsetMinutes: r.starts_offset_minutes,
+    endsAt: r.ends_at,
+    endsOffsetMinutes: r.ends_offset_minutes,
+    role: r.role,
+    rosterVersionId: r.roster_version_id,
+  };
 }
