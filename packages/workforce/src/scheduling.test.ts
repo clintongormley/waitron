@@ -11,6 +11,7 @@ import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import {
   insertDraftShift,
   insertRosterVersion,
+  insertTimeEntry,
   makeRuleset,
   seedLocation,
   seedPerson,
@@ -596,5 +597,181 @@ describe("updateShift / removeShift", () => {
     expect(
       await codeOfRejection(() => run((tx) => backend.removeShift(tx, { tenantId, shiftId }))),
     ).toBe("roster.not_draft");
+  });
+});
+
+describe("getPlannedVsActual", () => {
+  const week = { start: "2026-03-02", end: "2026-03-09" }; // Mon..Sun, half-open
+  // A worked session = an `in` + `out` pair appended through the chain (fixtures.insertTimeEntry).
+  async function seedSession(
+    person: string,
+    loc: string,
+    inAt: string,
+    outAt: string,
+  ): Promise<void> {
+    await insertTimeEntry(suite.db, {
+      tenantId,
+      personId: person,
+      locationId: loc,
+      entryKind: "in",
+      eventAt: inAt,
+    });
+    await insertTimeEntry(suite.db, {
+      tenantId,
+      personId: person,
+      locationId: loc,
+      entryKind: "out",
+      eventAt: outAt,
+    });
+  }
+  // Publish a new version at `loc` for the test's week — `publishRoster` attaches every in-period
+  // null-version draft shift AT `loc`, so the planned side (published-only) then sees them.
+  async function publishWeek(loc: string): Promise<void> {
+    const versionId = await insertRosterVersion(suite.db, {
+      tenantId,
+      locationId: loc,
+      periodStart: week.start,
+      periodEnd: "2026-03-08",
+    });
+    await run((tx) => backend.publishRoster(tx, { tenantId, versionId }));
+  }
+
+  it("matches a PUBLISHED planned shift to its worked session, and reports late minutes", async () => {
+    const loc = await seedLocation(suite.db, tenantId);
+    const p = await seedPerson(suite.db, tenantId, `pva-${crypto.randomUUID()}`);
+    await insertDraftShift(suite.db, {
+      tenantId,
+      personId: p,
+      locationId: loc,
+      startsAt: "2026-03-02T09:00:00Z",
+      endsAt: "2026-03-02T13:00:00Z",
+    });
+    await publishWeek(loc); // the shift is now on a published version
+    // Clocked in 15 min late, worked to 13:00 → 225 worked minutes, lateMinutes 15.
+    await seedSession(p, loc, "2026-03-02T09:15:00Z", "2026-03-02T13:00:00Z");
+    const rows = await run((tx) =>
+      backend.getPlannedVsActual(tx, { tenantId, locationId: loc, period: week }),
+    );
+    const row = rows.find((r) => r.personId === p && r.workDate === "2026-03-02")!;
+    expect(row.plannedMinutes).toBe(240);
+    expect(row.workedMinutes).toBe(225);
+    expect(row.lateMinutes).toBe(15);
+    expect(row.noShow).toBe(false);
+    expect(row.unplanned).toBe(false);
+  });
+
+  it("flags a no-show (published shift, not worked) and an unplanned day (worked, not planned)", async () => {
+    const loc = await seedLocation(suite.db, tenantId);
+    const noShowPerson = await seedPerson(suite.db, tenantId, `ns-${crypto.randomUUID()}`);
+    await insertDraftShift(suite.db, {
+      tenantId,
+      personId: noShowPerson,
+      locationId: loc,
+      startsAt: "2026-03-03T09:00:00Z",
+      endsAt: "2026-03-03T17:00:00Z",
+    });
+    await publishWeek(loc);
+    const unplannedPerson = await seedPerson(suite.db, tenantId, `up-${crypto.randomUUID()}`);
+    await seedSession(unplannedPerson, loc, "2026-03-04T09:00:00Z", "2026-03-04T12:00:00Z");
+    const rows = await run((tx) =>
+      backend.getPlannedVsActual(tx, { tenantId, locationId: loc, period: week }),
+    );
+    const noShow = rows.find((r) => r.personId === noShowPerson)!;
+    expect(noShow.noShow).toBe(true);
+    expect(noShow.workedMinutes).toBe(0);
+    const unplanned = rows.find((r) => r.personId === unplannedPerson)!;
+    expect(unplanned.unplanned).toBe(true);
+    expect(unplanned.plannedMinutes).toBe(0);
+  });
+
+  it("counts only the PUBLISHED version's shifts — excludes drafts and superseded versions", async () => {
+    // Owner decision (2026-08-15): "planned" = the currently-published roster, so an in-progress draft
+    // and a retired (superseded) version must NOT manufacture phantom no-shows.
+    const loc = await seedLocation(suite.db, tenantId);
+    const p = await seedPerson(suite.db, tenantId, `pub-${crypto.randomUUID()}`);
+    // Version A: a shift on 2026-03-02, published.
+    await insertDraftShift(suite.db, {
+      tenantId,
+      personId: p,
+      locationId: loc,
+      startsAt: "2026-03-02T09:00:00Z",
+      endsAt: "2026-03-02T13:00:00Z",
+    });
+    await publishWeek(loc);
+    // Version B: a NEW shift on 2026-03-03, published for the SAME (location, period) → B supersedes A.
+    // publishWeek attaches only null-version in-period shifts, so B gets 03-03 (03-02 is now on A).
+    await insertDraftShift(suite.db, {
+      tenantId,
+      personId: p,
+      locationId: loc,
+      startsAt: "2026-03-03T09:00:00Z",
+      endsAt: "2026-03-03T17:00:00Z",
+    });
+    await publishWeek(loc);
+    // A standalone DRAFT shift on 2026-03-04 (roster_version_id null) — never published (inserted AFTER
+    // the last publish, so publishRoster never attaches it).
+    await insertDraftShift(suite.db, {
+      tenantId,
+      personId: p,
+      locationId: loc,
+      startsAt: "2026-03-04T09:00:00Z",
+      endsAt: "2026-03-04T17:00:00Z",
+    });
+    const rows = await run((tx) =>
+      backend.getPlannedVsActual(tx, { tenantId, locationId: loc, period: week }),
+    );
+    // Only 03-03 (version B, published) is planned; 03-02 (superseded A) and 03-04 (draft) are not.
+    const plannedDays = rows
+      .filter((r) => r.personId === p && r.plannedMinutes > 0)
+      .map((r) => r.workDate);
+    expect(plannedDays).toEqual(["2026-03-03"]);
+  });
+
+  it("excludes a session whose local day is OUTSIDE the window, includes one inside", async () => {
+    const loc = await seedLocation(suite.db, tenantId);
+    const p = await seedPerson(suite.db, tenantId, `bound-${crypto.randomUUID()}`);
+    // One day BEFORE the window (2026-03-01) — must be excluded even though the widened fetch grabs it.
+    await seedSession(p, loc, "2026-03-01T09:00:00Z", "2026-03-01T12:00:00Z");
+    // The last in-window day (2026-03-08) — included.
+    await seedSession(p, loc, "2026-03-08T09:00:00Z", "2026-03-08T12:00:00Z");
+    // The first day AT/AFTER the window's exclusive end (2026-03-09) — the widened fetch grabs it, the
+    // half-open `< end` filter drops it. Exercises the upper boundary alongside the lower one.
+    await seedSession(p, loc, "2026-03-09T09:00:00Z", "2026-03-09T12:00:00Z");
+    const rows = await run((tx) =>
+      backend.getPlannedVsActual(tx, { tenantId, locationId: loc, period: week }),
+    );
+    const days = rows.filter((r) => r.personId === p).map((r) => r.workDate);
+    expect(days).toEqual(["2026-03-08"]);
+  });
+
+  it("scopes to the queried location — another location's published shifts and entries do not leak in", async () => {
+    const loc = await seedLocation(suite.db, tenantId);
+    const other = await seedLocation(suite.db, tenantId);
+    const p = await seedPerson(suite.db, tenantId, `scope-${crypto.randomUUID()}`);
+    await insertDraftShift(suite.db, {
+      tenantId,
+      personId: p,
+      locationId: other,
+      startsAt: "2026-03-05T09:00:00Z",
+      endsAt: "2026-03-05T13:00:00Z",
+    });
+    await publishWeek(other);
+    await seedSession(p, other, "2026-03-05T09:00:00Z", "2026-03-05T13:00:00Z");
+    const rows = await run((tx) =>
+      backend.getPlannedVsActual(tx, { tenantId, locationId: loc, period: week }),
+    );
+    expect(rows.filter((r) => r.personId === p)).toEqual([]);
+  });
+
+  it("returns [] for a window with no shifts and no sessions", async () => {
+    const loc = await seedLocation(suite.db, tenantId);
+    const rows = await run((tx) =>
+      backend.getPlannedVsActual(tx, {
+        tenantId,
+        locationId: loc,
+        period: { start: "2026-12-07", end: "2026-12-14" },
+      }),
+    );
+    expect(rows).toEqual([]);
   });
 });
