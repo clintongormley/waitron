@@ -127,18 +127,24 @@ shipped*) and nothing was left blocked or `needs-owner-review`; the run is finis
 
 ## Now
 
-**Nothing in flight.** The two 2026-08-15 parallel slices both landed — **shift-planning authoring
-(#83)** and **sync transport (#84)** — see *Recently shipped*. The **management dashboard** slice-1
-auth floor + catalogue authoring are COMPLETE (1a #67 → 1d passkeys #71, row-edit #73, i18n #82,
-catalogue #78); its remote-access transport is a future slice.
+**In flight: workforce roster management — slice 2 ([#87](https://github.com/clintongormley/waitron/pull/87)).**
+A second pair of follow-on slices to #83/#84 was built 2026-08-15 in parallel worktrees via
+subagent-driven TDD (per-task + whole-branch review + fix wave + 4-lens simplify). The first — **sync
+transport slice 2, the payments fast lane — LANDED as #85** (see *Recently shipped*). The second —
+**workforce roster management slice 2** (split-shift *jornada partida* authoring, manager
+approve/reject of swaps + absences, and a planned-vs-actual view) — is open as **#87**, CI-green and
+Copilot-addressed, ready to land. The **management dashboard** slice-1 auth floor + catalogue
+authoring remain COMPLETE (1a #67 → 1d passkeys #71, row-edit #73, i18n #82, catalogue #78); its
+remote-access transport is a future slice.
 
 **Next candidates** (owner's call — detail under *Not started*, *Debt and odd jobs*, and *SIF topology
 follow-ups*):
 
-- **Fast-follows flagged by the two slices:** **split-shift (*jornada partida*) authoring** (#83
-  deferred — a person/day with a shift opens edit-only; notable for a Spanish deli), and the **sync
-  transport-2** pieces (payments fast-lane, cloud-mirror peer, dead-subscriber cleanup, multi-tenant
-  transport, node-token rotation, and the separate **fiscal-lane / hash-chain sync, H2**).
+- **Fast-follows flagged by the slices:** the **staff-facing request path** for swaps/absences (#87
+  built the manager-approval half only — where/how a staff member requests one, and its auth surface,
+  is its own slice), and the remaining **sync transport-2** pieces (cloud-mirror peer,
+  dead-subscriber cleanup, multi-tenant transport, node-token rotation, and the separate
+  **fiscal-lane / hash-chain sync, H2**).
 - **Bigger next slices:** **Recipes / BOM** (sub-project 18 — the linchpin, greenfield; wants a design
   session), and the **reporting input-VAT / *modelo 303* deducible side** (needs a purchase-invoice
   module).
@@ -152,6 +158,24 @@ One line per landed PR, newest first. The git log, the linked designs/plans, and
 detail — **this file is not a history** (see *How to keep this file honest*). Open follow-ups from
 these live under *Debt and odd jobs*; their designs/plans stay in `docs/superpowers/`.
 
+- **#85** Sync transport — slice 2, the **payments fast lane** (#33 §14) — on top of #84's transport, a
+  second, tighter replication cadence carrying only `payments` + `payment_refunds` on an **independent
+  per-`(subscriber, origin, lane)` cursor**, so the double-charge exposure of active-active selling is
+  mirrored ahead of the ordered stream. Migration **`0002`** (`sync_cursor.lane` + a 3-col PK repivot),
+  `tablesForLane()` in the registry (fast = exactly `{payments, payment_refunds}`), a lane→tables filter
+  on the source read + a `?lane=` param on `/sync-api/log` (unknown/missing clamps to `ordered`), `lane`
+  threaded through `applyBatch`/`syncPullOnce`/`runSyncPull` (BOTH cursor reads lane-filter so the lanes
+  never clobber each other's cursor), a `WAITRON_SYNC_FAST_TICK_MS` knob, and two lane-scoped boot loops.
+  **§4e invariant:** the two lanes read disjoint tables → disjoint `seq` streams → neither cursor drags
+  the other; `pruneSyncLog` needs no change (min across both lane rows holds at the slower lane); the
+  cross-lane FK hazard (a fast `payments` row before its ordered `working_orders` parent) is absorbed by
+  the pre-existing `23503` park — proven by deletion in real-Postgres tests + a two-lane e2e over the real
+  HTTP wire. **Fiscal safety (H2):** commercial-lane only — nothing near `registros`/the hash chain/
+  invoice numbers/`envios`/`acks`; confirmed by a whole-branch review. Reviews: 10-task subagent-driven
+  TDD → whole-branch review (caught a `payment_policy`-as-fast §1 mislabel the per-task passes missed) →
+  fix wave → 4-lens simplify → Copilot (log a rejecting sync worker rather than swallowing it). **Trimmed
+  by owner decision:** dead-subscriber cleanup (deferred to a future retention-ops slice — see *SIF
+  topology follow-ups*). Built in parallel with #87 (workforce roster mgmt slice 2).
 - **#84** Sync transport / network layer — slice 1 (#33 §14) — on top of the #74 commercial-lane
   outbox, the thing that **moves `sync_log` batches between the two shop servers**: a `@waitron/sync`
   transport module (`readSyncLogSince` sync_tailer source read, an NDJSON wire codec, `syncPullOnce` +
@@ -309,8 +333,14 @@ decided the **topology only**; its §14 defers the buildable pieces, each to its
   HTTP pull + redelivery + node-token auth + the `0037` trigger-gating) — LANDED as #84** (2026-08-15):
   the two constraints slice 1 flagged were both closed — the three state-dependent business BEFORE
   triggers are gated on `app.sync_apply`, and `nodeId` is threaded through every enrolled writer (a
-  re-audit found three the design had missed). What NOW remains: the payments **fast lane** (a tighter
-  cadence than the ordered lane), the **cloud-mirror** peer, **dead-subscriber** cleanup (releasing the
+  re-audit found three the design had missed), and **Slice 3 — the payments fast lane — LANDED as #85**
+  (2026-08-15): a second, tighter cadence carrying `payments`/`payment_refunds` on an independent
+  per-`(subscriber, origin, lane)` cursor (`sync_cursor.lane` + a 3-col PK repivot, a lane-filtered
+  source read + a `?lane=` wire param, two boot cadences), with the cross-lane FK order absorbed by the
+  pre-existing `23503` park (no new correctness machinery). **Dead-subscriber cleanup was TRIMMED out
+  of #85 by owner decision** (it needs retention actually scheduled in boot + cross-node cursor
+  visibility — a future retention-ops slice, not a capability shipped two layers ahead). What NOW
+  remains: the **cloud-mirror** peer, **dead-subscriber** cleanup (releasing the
   retained log), **multi-tenant** transport (a whole-log reader role), node-token **rotation**, and the
   **fiscal-lane sync** (the `registros`/hash-chain lane, a separate owner-reviewed slice — H2,
   deliberately excluded).
