@@ -201,6 +201,90 @@ export interface ReceiptConfig {
   footerMessage?: string;
 }
 
+// ── Shift-planning types ──────────────────────────────────────────────────────────────────────────
+// LOCAL copies of the server's roster/shift JSON shapes (the `workforce-api.ts` routes wrapping
+// `@waitron/workforce`'s verbs), deliberately NOT imported from `@waitron/workforce`/`@waitron/db` — a
+// runtime import would drag their barrels + Node builtins into the browser bundle (the #70 rule, as
+// the staff/catalogue/layout shapes above do). These are the CONTRACT the roster screen + shift dialog
+// build on; if the server shapes change these follow, and a mismatch surfaces as a runtime shape error
+// a view test catches, not a compile break.
+
+/** One `roster_versions` row — mirrors workforce's `RosterVersionRow`. Dates are 'YYYY-MM-DD' strings
+ * (inclusive `periodStart`/`periodEnd`); `publishedAt` is a UTC ISO instant or null. */
+export interface RosterVersion {
+  id: string;
+  locationId: string;
+  periodStart: string;
+  periodEnd: string;
+  status: "draft" | "published" | "superseded";
+  publishedAt: string | null;
+  publishedByPersonId: string | null;
+}
+
+/** One `shifts` row — mirrors workforce's `ShiftRow`. Instants are UTC ISO strings. */
+export interface Shift {
+  id: string;
+  personId: string;
+  locationId: string;
+  startsAt: string;
+  startsOffsetMinutes: number;
+  endsAt: string;
+  endsOffsetMinutes: number;
+  role: string | null;
+  rosterVersionId: string | null;
+}
+
+/** The week's roster snapshot — mirrors workforce's `RosterSnapshot`. */
+export interface RosterSnapshot {
+  version: RosterVersion | null;
+  shifts: Shift[];
+}
+
+/** The `POST …/roster/:versionId/shifts` body — mirrors workforce's `AddShiftInput` minus the
+ * tenant/version the route supplies. The SCREEN fills `locationId` from the selected roster. */
+export interface ShiftInput {
+  personId: string;
+  locationId: string;
+  startsAt: string;
+  startsOffsetMinutes: number;
+  endsAt: string;
+  endsOffsetMinutes: number;
+  role: string | null;
+}
+
+/** The `PATCH …/roster/shifts/:shiftId` body — mirrors workforce's `UpdateShiftInput` (partial). */
+export interface ShiftPatch {
+  personId?: string;
+  startsAt?: string;
+  startsOffsetMinutes?: number;
+  endsAt?: string;
+  endsOffsetMinutes?: number;
+  role?: string | null;
+}
+
+/** The 7 advisory breach kinds `validateRoster` reports (mirrors workforce's `RosterBreachKind`). */
+export type RosterBreachKind =
+  | "rest_too_short"
+  | "exceeds_daily_max"
+  | "exceeds_weekly_max"
+  | "overtime_cap_exceeded"
+  | "weekly_rest_insufficient"
+  | "break_owed"
+  | "night_work";
+
+/** One advisory breach from `POST …/publish` — the kind + person plus per-kind detail fields. */
+export interface RosterBreach {
+  kind: RosterBreachKind;
+  personId: string;
+  [detail: string]: unknown;
+}
+
+/** One `GET /management-api/locations` row — the location picker's option. */
+export interface LocationSummary {
+  id: string;
+  name: string;
+}
+
 /** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -401,6 +485,45 @@ export class DashboardApi {
    */
   putReceipt(receipt: ReceiptConfig): Promise<void> {
     return this.#request<void>("/management-api/receipt", "PUT", { receipt });
+  }
+
+  // ── Shift planning (roster authoring) ──────────────────────────────────────────────────────────
+
+  /** `GET /management-api/locations` — the tenant's centros de trabajo for the roster location picker. */
+  getLocations(): Promise<LocationSummary[]> {
+    return this.#request<LocationSummary[]>("/management-api/locations", "GET");
+  }
+
+  /** `GET /management-api/roster?locationId=&period=` — the week's draft-or-published snapshot + shifts. */
+  getRoster(locationId: string, period: string): Promise<RosterSnapshot> {
+    return this.#request<RosterSnapshot>(
+      `/management-api/roster?locationId=${locationId}&period=${period}`, "GET",
+    );
+  }
+
+  /** `POST /management-api/roster` — open a draft for the week; returns `{ versionId }` (201). */
+  createRosterVersion(locationId: string, period: string): Promise<{ versionId: string }> {
+    return this.#request<{ versionId: string }>("/management-api/roster", "POST", { locationId, period });
+  }
+
+  /** `POST …/roster/:versionId/shifts` — add a planned shift; returns `{ shiftId }` (201). */
+  addShift(versionId: string, input: ShiftInput): Promise<{ shiftId: string }> {
+    return this.#request<{ shiftId: string }>(`/management-api/roster/${versionId}/shifts`, "POST", input);
+  }
+
+  /** `PATCH …/roster/shifts/:shiftId` — edit a shift's fields. Answers an empty 204. */
+  updateShift(shiftId: string, patch: ShiftPatch): Promise<void> {
+    return this.#request<void>(`/management-api/roster/shifts/${shiftId}`, "PATCH", patch);
+  }
+
+  /** `DELETE …/roster/shifts/:shiftId` — remove a shift. Answers an empty 204. */
+  removeShift(shiftId: string): Promise<void> {
+    return this.#request<void>(`/management-api/roster/shifts/${shiftId}`, "DELETE");
+  }
+
+  /** `POST …/roster/:versionId/publish` — publish the draft; returns the advisory `{ breaches }`. */
+  publishRoster(versionId: string): Promise<{ breaches: RosterBreach[] }> {
+    return this.#request<{ breaches: RosterBreach[] }>(`/management-api/roster/${versionId}/publish`, "POST");
   }
 
   /**
