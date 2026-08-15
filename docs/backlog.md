@@ -22,7 +22,9 @@ through a PR (where CI + Copilot run). The other rules (no force-push, no deleti
 ## Current direction
 
 **Reprioritised 2026-08-15 — the autonomous campaign is COMPLETE (all queue items landed as #74–#82,
-plus #72/#73); the owner is back and chose the next two slices to run IN PARALLEL:**
+plus #72/#73); the owner chose the next two slices to run in parallel — both now LANDED 2026-08-15
+(#83 shift-planning authoring, #84 sync transport), built in parallel worktrees via subagent-driven
+TDD + whole-branch review + Copilot:**
 
 - **Shift-planning dashboard UI (sub-project 16)** — the one "build the UI" task ready now: the
   scheduling *engine* landed headless (#50), and this slice builds the `apps/dashboard` surface on
@@ -125,10 +127,21 @@ shipped*) and nothing was left blocked or `needs-owner-review`; the run is finis
 
 ## Now
 
-| What | State |
-| --- | --- |
-| **Sync transport / network layer** (#33 §14) | **In flight (started 2026-08-15).** The commercial-lane outbox landed as **#74** (`@waitron/sync`: capture triggers + idempotent seq-ordered apply + bounded retention/lag + origin attribution). This slice adds the **transport** that moves batches between nodes over the network, plus **redelivery handling** (slice-1 `applyBatch` is single-batch). The **fiscal-lane / hash-chain sync stays a separate owner-reviewed slice (H2)** and is excluded here. A first-draft protocol spec is on branch `docs/sif-sync-protocol-design`. See *SIF topology follow-ups*. |
-| **Management dashboard** — owner's off-premises console | **Slice 1 COMPLETE — 1a (#67) + 1b (#69) + 1c (#70) + 1d (passkeys, #71), row-edit (#73), i18n (#82) all LANDED.** The auth floor (staff admin + passkey / password+TOTP login) + catalogue authoring (#78) are done; **remote-access transport** (tunnel/snitun-pattern) is a future slice. Slice-1a…1d follow-ups under *Debt and odd jobs*. |
+**Nothing in flight.** The two 2026-08-15 parallel slices both landed — **shift-planning authoring
+(#83)** and **sync transport (#84)** — see *Recently shipped*. The **management dashboard** slice-1
+auth floor + catalogue authoring are COMPLETE (1a #67 → 1d passkeys #71, row-edit #73, i18n #82,
+catalogue #78); its remote-access transport is a future slice.
+
+**Next candidates** (owner's call — detail under *Not started*, *Debt and odd jobs*, and *SIF topology
+follow-ups*):
+
+- **Fast-follows flagged by the two slices:** **split-shift (*jornada partida*) authoring** (#83
+  deferred — a person/day with a shift opens edit-only; notable for a Spanish deli), and the **sync
+  transport-2** pieces (payments fast-lane, cloud-mirror peer, dead-subscriber cleanup, multi-tenant
+  transport, node-token rotation, and the separate **fiscal-lane / hash-chain sync, H2**).
+- **Bigger next slices:** **Recipes / BOM** (sub-project 18 — the linchpin, greenfield; wants a design
+  session), and the **reporting input-VAT / *modelo 303* deducible side** (needs a purchase-invoice
+  module).
 
 ---
 
@@ -139,6 +152,34 @@ One line per landed PR, newest first. The git log, the linked designs/plans, and
 detail — **this file is not a history** (see *How to keep this file honest*). Open follow-ups from
 these live under *Debt and odd jobs*; their designs/plans stay in `docs/superpowers/`.
 
+- **#84** Sync transport / network layer — slice 1 (#33 §14) — on top of the #74 commercial-lane
+  outbox, the thing that **moves `sync_log` batches between the two shop servers**: a `@waitron/sync`
+  transport module (`readSyncLogSince` sync_tailer source read, an NDJSON wire codec, `syncPullOnce` +
+  `runSyncPull` — per-peer backoff + a **progress-guarded drain**), a node-token-authed `mountSyncApi`
+  (`/sync-api/hello` + `/log`) wired into boot behind `WAITRON_SYNC_*` config (fail-closed on a blank
+  secret), and migration **`0037`** gating the three **state-dependent** business BEFORE-triggers on
+  `app.sync_apply` so at-least-once redelivery can't wedge the stream (proven by deletion; the two
+  data-validity triggers are left ungated deliberately — a valid row stays valid on re-apply).
+  **Byte-identity:** `row_image` travels as Postgres's canonical `jsonb::text` and binds `$1::jsonb` —
+  JS never parses the row's numerics, so a money value like `1.50` can't collapse to `1.5` (the control
+  was re-targeted off `sales.total`, a fixed-scale numeric that normalizes and so measured nothing, onto
+  `sales.vat_breakdown` jsonb). **Origin attribution:** `nodeId` threaded through every enrolled-table
+  writer — a completeness re-audit found **three** the design had missed (the Stripe webhook settlement,
+  both terminal/on-device providers' `collect`, and the reconcile reversal — each opening its own tx),
+  without which a card settlement is lost on failover. **Fiscal safety (H2):** commercial-lane only —
+  `0037` touches only `tenders`/`working_orders`/`working_order_lines` (functions byte-unchanged),
+  nothing near `registros`/the hash chain; the fiscal-lane sync stays a separate owner-reviewed slice.
+  Reviews: simplify → two-lens whole-branch review → fix wave (webhook fix + re-audit; `0037` header §1
+  correction; `limit`-NaN; `stream_stalled` contract; drain-loop) → re-review **caught two regressions
+  the fixes introduced** (a false trigger-fires claim in the corrected header; a cross-origin busy-loop
+  in the drain fix) → round-2 fix (progress-guard + header correction, both verified on real PG) →
+  **Copilot** caught the `after`-cursor 500 (twin of the `limit` fix) + a `close()` teardown that leaked
+  the server/pools on a worker rejection — all fixed, replied on-thread, resolved. `@waitron/sync`
+  100/100/100/100 (109 tests), server 99.72. Rebased cleanly onto #83's main before landing (all three
+  route mounts co-exist in `boot.ts`). **Deferred:** the payments **fast lane**, the **cloud-mirror**
+  peer, **dead-subscriber** cleanup, **multi-tenant** transport, node-token **rotation**,
+  promotion/fencing, the **fiscal-lane sync (H2)**, and a test-strengthening fast-follow (assert
+  `.advanced` in the real-PG pull gate test). Built in parallel with #83.
 - **#83** Shift-planning authoring — slice 1 (sub-project 16) — a management-dashboard surface for the
   headless #50 scheduling engine: a manager authors a draft weekly roster on a **person × day grid**,
   sees the advisory `RosterBreach[]` warnings, and publishes. Five new `@waitron/workforce` verbs
@@ -264,12 +305,15 @@ decided the **topology only**; its §14 defers the buildable pieces, each to its
   fast lane** — with `envios`/`acks` ordered-lane-only (no monotonic column). The `node_id` re-key it
   depended on landed (#54), so the columns already exist. **Slice 1 — the commercial-lane outbox
   (capture triggers + idempotent seq-ordered apply + bounded retention/lag + origin attribution) —
-  LANDED as #74** (2026-08-11, `@waitron/sync`). What remains: the **transport/network layer** that
-  moves batches between nodes; **redelivery handling** (this slice's `applyBatch` is single-batch, so
-  the un-gated business-rule BEFORE triggers on the apply path and the shared all-zero default
-  `origin_id` are documented transport-slice constraints, not bugs here); and the **fiscal-lane sync**
-  (the `registros`/hash-chain lane, a separate owner-reviewed slice — H2, deliberately excluded from
-  slice 1).
+  LANDED as #74** (2026-08-11, `@waitron/sync`), and **Slice 2 — the transport/network layer (symmetric
+  HTTP pull + redelivery + node-token auth + the `0037` trigger-gating) — LANDED as #84** (2026-08-15):
+  the two constraints slice 1 flagged were both closed — the three state-dependent business BEFORE
+  triggers are gated on `app.sync_apply`, and `nodeId` is threaded through every enrolled writer (a
+  re-audit found three the design had missed). What NOW remains: the payments **fast lane** (a tighter
+  cadence than the ordered lane), the **cloud-mirror** peer, **dead-subscriber** cleanup (releasing the
+  retained log), **multi-tenant** transport (a whole-log reader role), node-token **rotation**, and the
+  **fiscal-lane sync** (the `registros`/hash-chain lane, a separate owner-reviewed slice — H2,
+  deliberately excluded).
 - **Promotion + fencing tooling and the till-side failover list** — boot-time role resolution,
   continuous conflict-detection, the "one primary" invariant.
 - **The submitter as a relocatable role** — one venue submitter, certificate resolved from wherever
