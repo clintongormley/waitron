@@ -332,6 +332,30 @@ Also left open by that design:
   jobs*) are the backstop for the design's double-charge-across-failover path (§10) — no new work, but
   now they have a second caller.
 
+**2026-08-15 — the distribution & client-topology design landed (#86,
+[spec](superpowers/specs/2026-08-15-distribution-and-client-topology-design.md)),** the packaging /
+install / client-routing layer beneath this topology (the deferred deployment sub-project #9 plus the
+client side of the failover list above). A captured brainstorm, items labelled decided/lean/open.
+What it adds here:
+
+- **The till-side failover list** (bullet above) now has concrete reroute mechanics: the till reaches
+  *any* live server (selling is active-active), keeping a **stable local origin** in front — a
+  service-worker interim vs an on-device agent, decided by the auth model.
+- **A new dependency, not previously tracked — identity-config flow-down** (its own spec). Verified
+  against the code: `sessions` and the whole `identity` package are outside the sync set, so a failover
+  logs the user out today. Identity *config* (persons + credentials) must flow down to a secondary
+  read-only, the way catalogue already does; the *session* must **not** replicate (write-amplification
+  + single-writer conflict). Session re-establishment: PIN-re-prompt v1 → portable signed token later.
+- **Direction:** cloud-hosted is a **first-class mode** — the zero-hardware trial on-ramp (buildable
+  now, preproduction, shared demo tenant); production-cloud-primary is **gated on the asesor question
+  already noted above**. And **production uses Postgres everywhere** (PGlite demoted to dev/test/demo,
+  revising architecture §4).
+- **Recommended first build:** the **cloud trial on-ramp** — cheapest and least new code (today's
+  same-origin PWA pointed at a cloud instance).
+
+  Still unbuilt from that design: the on-device agent (own spec/spike), identity-config flow-down, the
+  appliance image + AP-mode onboarding, and the reroute itself.
+
 ---
 
 ## The advisor gap
