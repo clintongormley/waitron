@@ -1,0 +1,93 @@
+import { eq, sql } from "drizzle-orm";
+import { ingredients } from "@waitron/db";
+import type { Transaction } from "@waitron/db";
+import { validateAllergens, type ProductAllergens } from "@waitron/catalogue";
+
+/**
+ * Ingredient operations — CRUD over the `ingredients` table (raw materials / prep items).
+ *
+ * Every function takes a `(tx, …)` and runs under the CALLER's tenant context: the caller opens the
+ * transaction with `withTenant` (and `asAppUser` in the running POS), so writes adopt that tenant
+ * through `current_tenant_id()` and reads are filtered to it by the tenant-isolation policy. Nothing
+ * here takes a `tenantId` argument — the GUC the caller already set is the single source of it, which
+ * also satisfies the table's `WITH CHECK (tenant_id = current_tenant_id())`. Mirrors the
+ * `packages/catalogue` operations for the identical reasons.
+ *
+ * Deactivation is `active = false`, never DELETE: an ingredient may sit behind `recipe_lines`, and
+ * the app role holds no DELETE grant on `ingredients` anyway (SELECT/INSERT/UPDATE only). All SQL is
+ * built with Drizzle query builders — no string concatenation.
+ */
+
+/** The tenant scope as an insertable value — reads the GUC the caller set via withTenant. */
+const CURRENT_TENANT = sql`current_tenant_id()`;
+
+export interface Ingredient {
+  id: string;
+  name: string;
+  /** EU-1169 declaration, or null when not yet reviewed (a PENDING ingredient). */
+  allergens: ProductAllergens | null;
+  active: boolean;
+}
+
+const INGREDIENT_COLUMNS = {
+  id: ingredients.id,
+  name: ingredients.name,
+  allergens: ingredients.allergens,
+  active: ingredients.active,
+};
+
+export interface CreateIngredientInput {
+  name: string;
+  /** Omitted leaves it null (unreviewed); validated against the EU-14 taxonomy on insert. */
+  allergens?: ProductAllergens;
+}
+
+export interface UpdateIngredientInput {
+  name?: string;
+  /** `null` clears the declaration back to unreviewed; omitted leaves it unchanged. */
+  allergens?: ProductAllergens | null;
+  active?: boolean;
+}
+
+export async function createIngredient(
+  tx: Transaction,
+  input: CreateIngredientInput,
+): Promise<Ingredient> {
+  // Validate before the write: an unreviewed ingredient stores null, a supplied map is checked
+  // against the EU-14 taxonomy and rejected (throws `allergen.invalid_code`/`allergen.invalid_presence`)
+  // before any row is inserted.
+  const allergens = input.allergens === undefined ? null : validateAllergens(input.allergens);
+  const [row] = await tx
+    .insert(ingredients)
+    .values({ tenantId: CURRENT_TENANT, name: input.name, allergens })
+    .returning(INGREDIENT_COLUMNS);
+  return row!;
+}
+
+export async function listIngredients(tx: Transaction): Promise<Ingredient[]> {
+  return tx
+    .select(INGREDIENT_COLUMNS)
+    .from(ingredients)
+    .orderBy(ingredients.createdAt, ingredients.id);
+}
+
+export async function getIngredient(tx: Transaction, id: string): Promise<Ingredient | null> {
+  const [row] = await tx.select(INGREDIENT_COLUMNS).from(ingredients).where(eq(ingredients.id, id));
+  return row ?? null;
+}
+
+export async function updateIngredient(
+  tx: Transaction,
+  id: string,
+  patch: UpdateIngredientInput,
+): Promise<void> {
+  // A supplied map is validated before the write; `null` (clear) and `undefined` (leave unchanged)
+  // both skip validation. The patch keys map 1:1 to `ingredients` columns, so the spread stays fully
+  // typed against `.set()`.
+  if (patch.allergens != null) validateAllergens(patch.allergens);
+  await tx
+    .update(ingredients)
+    .set({ ...patch, updatedAt: sql`now()` })
+    .where(eq(ingredients.id, id));
+  // Propagation to dependent products is added in Task 5.
+}
