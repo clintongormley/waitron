@@ -213,6 +213,13 @@ optional `origin_id`, `source.ts:37-39`). The array binds as a single parameter 
 identifier is interpolated and the `CLAUDE.md` §3 concatenation question does not arise — the values
 are fixed registry names regardless.
 
+> **2026-08-15 (shipped):** the filter binds as `and table_name in ${tables}`, **not** `= any(${tables})`.
+> Drizzle expands an interpolated JS array into a parenthesised placeholder list — `in ($1, $2, …)` — so
+> `= any(${tables})` becomes `any(($1, $2))` and fails Postgres **42809** (`op ANY/ALL (array)` wants an
+> array, not a row); the receipt is in `packages/fiscal-verifactu/src/drain.ts:588`. The property this
+> paragraph asserts still holds — every value binds as its own parameter, no identifier interpolated — and
+> an empty `tables: []` maps to `and false` (there is no valid `in ()` form). See `source.ts:37-42`.
+
 **`/sync-api/log`** (`sync-api.ts:94-109`) gains a `lane` query param. The **lane** is the wire
 dimension, not a client-supplied table list: both nodes run the same registry, so the route maps
 `?lane=` → `tablesForLane(lane)` server-side and passes that to `readSyncLogSince`. Concretely:

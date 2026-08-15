@@ -266,6 +266,7 @@ describe("two-node sync end-to-end over a real HTTP wire", () => {
     const fast = await syncPullOnce({ ...base, lane: "fast" as const }, peer);
     expect(fast.applied).toBeGreaterThanOrEqual(1);
     expect(await targetPaymentCount(paymentId)).toBe("1");
+    expect(await targetSaleCount(saleId)).toBe("0"); // the fast lane EXCLUDES the sale at composition level
 
     // ORDERED lane → the sale lands on its own cursor.
     const ordered = await syncPullOnce({ ...base, lane: "ordered" as const }, peer);

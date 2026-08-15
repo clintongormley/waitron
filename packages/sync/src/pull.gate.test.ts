@@ -199,11 +199,22 @@ describe("syncPullOnce applies a peer's batch and advances the cursor", () => {
         lane: "fast" as const,
       };
       const peer = { nodeId: peerNode, url: "http://peer/", token: "tok" };
+      // Seed a COMPETING ordered cursor at a DIFFERENT seq (5) for the SAME (subscriber, origin) BEFORE
+      // the fast pull. This deletion-proofs readCursor's `and lane = ${lane}` filter (pull.ts:82) inside
+      // this package: without it, readCursor's `before` (fast) would instead read THIS ordered row's seq
+      // (5, the only cursor that exists pre-pull), so `advanced` (after=1 > before=5) would read FALSE and
+      // the assertion below fails. It also lets the disjointness check assert the ordered cursor is left
+      // UNTOUCHED (still 5) rather than merely absent.
+      await postgres.admin.execute(
+        sql`insert into sync_cursor (subscriber_id, origin_id, lane, last_applied_seq)
+            values (${subscriberId}, ${peerNode}::uuid, 'ordered', 5)`,
+      );
       const result = await syncPullOnce(deps, peer);
       expect(result.applied).toBe(1);
+      expect(result.advanced).toBe(true); // the FAST cursor moved (0 → 1); load-bearing lane filter
       // The wire carried lane=fast (spec §4c/§4d).
       expect(urls.some((u) => u.includes("/sync-api/log") && u.includes("lane=fast"))).toBe(true);
-      // The FAST cursor advanced; the ORDERED cursor row for this (subscriber, origin) does not exist.
+      // The FAST cursor advanced to 1; the pre-seeded ORDERED cursor is UNTOUCHED — the lanes are disjoint.
       const fast = await postgres.admin.execute<{ seq: string }>(
         sql`select last_applied_seq::text as seq from sync_cursor
             where subscriber_id = ${subscriberId} and origin_id = ${peerNode}::uuid and lane = 'fast'`,
@@ -213,7 +224,7 @@ describe("syncPullOnce applies a peer's batch and advances the cursor", () => {
         sql`select last_applied_seq::text as seq from sync_cursor
             where subscriber_id = ${subscriberId} and origin_id = ${peerNode}::uuid and lane = 'ordered'`,
       );
-      expect(ordered.rows[0]).toBeUndefined(); // no ordered cursor row — the lanes are disjoint
+      expect(ordered.rows[0]!.seq).toBe("5"); // the fast pull did not advance the ordered lane's cursor
     } finally {
       await applier.close();
     }

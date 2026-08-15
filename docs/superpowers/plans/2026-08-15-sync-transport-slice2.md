@@ -388,6 +388,8 @@ git commit -s -m "feat(sync): mark payments/payment_refunds as the fast lane + t
 
 ## Task 4: `source.ts` — `readSyncLogSince` gains a `tables?` filter
 
+> **2026-08-15 (shipped):** the filter binds as `and table_name in ${tables}`, not `= any($n)` — drizzle expands an interpolated array to `in ($1, $2, …)`, so `= any(...)` becomes `any(($1, $2))` and fails 42809. Same param-binding property (no identifier interpolated); empty `[]` → `and false`. See `source.ts:37-42` and `drain.ts:588`.
+
 **Files:**
 - Modify: `packages/sync/src/source.ts` (`ReadSyncLogArgs.tables?: string[]` + the `where` clause).
 - Modify: `packages/sync/src/source.gate.test.ts` (add a table-filter assertion — reuses the suite's already-booting container).

@@ -179,8 +179,8 @@ function nextBackoff(current: number, minIdleMs: number, maxBackoffMs: number): 
  *     parent is an ordered-lane table, never in a fast batch, so the fast page stays parked until the
  *     ordered lane has applied it (spec §4e; `payment_refunds → payments` is intra-fast-lane, so
  *     seq-order within the fast batch already lands it — no cross-lane park). No ordered table
- *     references a fast one (spec §4b/§4e), so an ORDERED page never parks cross-lane — a full ordered
- *     same-origin page always advances, as in slice 1; only the fast lane hits case (2).
+ *     references a fast one (spec §4b/§4e), so an ORDERED page never parks CROSS-LANE (it can still
+ *     cross-origin-park — case (1)); only the fast lane adds case (2).
  * Either way, without the progress guard the drain would re-pull that identical full page forever
  * (busy-loop, hammering the peer) and never yield — to the round-robin that lets another peer deliver a
  * cross-origin parent, or to the later fast tick that lands the row once the ordered lane has delivered
