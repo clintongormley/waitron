@@ -105,6 +105,12 @@ export const en = {
   // Product list
   "product.active_badge": "Active",
   "product.inactive_badge": "Inactive",
+  // Roster — shift dialog
+  "roster.new_shift": "New shift",
+  "roster.edit_shift": "Edit shift",
+  "roster.shift_start": "Start",
+  "roster.shift_end": "End",
+  "roster.shift_role": "Role",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -188,6 +194,11 @@ export const es: Record<StringKey, string> = {
   "product.active": "Activo",
   "product.active_badge": "Activo",
   "product.inactive_badge": "Inactivo",
+  "roster.new_shift": "Nuevo turno",
+  "roster.edit_shift": "Editar turno",
+  "roster.shift_start": "Inicio",
+  "roster.shift_end": "Fin",
+  "roster.shift_role": "Puesto",
 };
 
 // Locale → catalogue. `en` is included as its own catalogue so an explicit
