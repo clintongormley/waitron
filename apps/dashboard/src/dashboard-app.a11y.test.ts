@@ -45,6 +45,9 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     getLayout: vi.fn().mockResolvedValue({ definition: [], receipt: {} }),
     putLayout: vi.fn().mockResolvedValue(undefined),
     putReceipt: vi.fn().mockResolvedValue(undefined),
+    // The approvals screen (reachable via the nav) loads both queues on connect.
+    listPendingSwaps: vi.fn().mockResolvedValue([]),
+    listPendingAbsences: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -135,6 +138,24 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     const h1s = [
       ...el.shadowRoot!.querySelectorAll("h1"),
       ...(receipt!.shadowRoot?.querySelectorAll("h1") ?? []),
+    ];
+    expect(h1s).toHaveLength(1);
+    await expectNoA11yViolations(host);
+  });
+
+  it("the approvals screen renders accessibly with a single, well-ordered heading", async () => {
+    // Navigate to the approvals screen (its own <h1> "Aprobaciones" is then the sole heading; the
+    // shell's nav chrome carries none), and scan the composed tree in this theme.
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue(people) });
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-approvals]")!.click();
+    await flush(el);
+    const approvals = el.shadowRoot!.querySelector("dashboard-approvals-screen");
+    expect(approvals).toBeTruthy();
+    const h1s = [
+      ...el.shadowRoot!.querySelectorAll("h1"),
+      ...(approvals!.shadowRoot?.querySelectorAll("h1") ?? []),
     ];
     expect(h1s).toHaveLength(1);
     await expectNoA11yViolations(host);

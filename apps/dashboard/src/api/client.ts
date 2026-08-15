@@ -285,6 +285,29 @@ export interface LocationSummary {
   name: string;
 }
 
+/** One `GET /management-api/swaps` row — mirrors workforce's `PendingSwapRow` (always `accepted`). */
+export interface PendingSwap {
+  id: string;
+  requestedByPersonId: string;
+  fromShiftId: string;
+  toPersonId: string;
+  toShiftId: string | null;
+  status: string;
+  createdAt: string;
+}
+
+/** One `GET /management-api/absences` row — mirrors workforce's `PendingAbsenceRow` (always `requested`). */
+export interface PendingAbsence {
+  id: string;
+  personId: string;
+  kind: string;
+  startsOn: string;
+  endsOn: string;
+  status: string;
+  note: string | null;
+  createdAt: string;
+}
+
 /** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -535,6 +558,31 @@ export class DashboardApi {
       `/management-api/roster/${versionId}/publish`,
       "POST",
     );
+  }
+
+  // ── Approvals (shift swaps + absences) ──────────────────────────────────────────────────────────
+
+  /** `GET /management-api/swaps` — the tenant's accepted swaps awaiting a manager decision. */
+  listPendingSwaps(): Promise<PendingSwap[]> {
+    return this.#request<PendingSwap[]>("/management-api/swaps", "GET");
+  }
+
+  /** `POST …/swaps/:id/decide` — approve/reject an accepted swap. Answers an empty 204. */
+  decideSwap(swapId: string, decision: "approved" | "rejected"): Promise<void> {
+    return this.#request<void>(`/management-api/swaps/${swapId}/decide`, "POST", { decision });
+  }
+
+  /** `GET /management-api/absences` — the tenant's requested absences awaiting a manager decision. */
+  listPendingAbsences(): Promise<PendingAbsence[]> {
+    return this.#request<PendingAbsence[]>("/management-api/absences", "GET");
+  }
+
+  /** `POST …/absences/:id/decide` — approve/reject a requested absence. Answers an empty 204.
+   * Named `decideAbsence` for symmetry with `decideSwap`; it hits the same route → `setAbsenceStatus`. */
+  decideAbsence(absenceId: string, decision: "approved" | "rejected"): Promise<void> {
+    return this.#request<void>(`/management-api/absences/${absenceId}/decide`, "POST", {
+      decision,
+    });
   }
 
   /**

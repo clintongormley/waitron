@@ -1,8 +1,10 @@
 import { afterEach, expect, it } from "vitest";
 import {
+  absenceKindName,
   allergenName,
   allergenStateName,
   breachKindName,
+  decisionStatusName,
   roleName,
   statusName,
   unitName,
@@ -83,6 +85,15 @@ it("names every breach kind, falling back to the raw token (shift-planning slice
   // Raw-value fallback for an unmapped token (proven by deletion: make resolve() return "" for a miss
   // and this assertion goes red).
   expect(breachKindName("unknown_kind", "es")).toBe("unknown_kind");
+});
+
+it("names every absence kind and decision status, raw fallback for an unknown token (roster slice 2)", () => {
+  expect(absenceKindName("holiday", "es")).toBe("Vacaciones");
+  expect(absenceKindName("sick_leave", "en")).toBe("Sick leave");
+  expect(absenceKindName("unknown_kind", "es")).toBe("unknown_kind");
+  expect(decisionStatusName("accepted", "es")).toBe("Aceptado");
+  expect(decisionStatusName("rejected", "en")).toBe("Rejected");
+  expect(decisionStatusName("weird_status", "es")).toBe("weird_status");
 });
 
 it("passes a prototype-chain token (toString/constructor) through raw, never undefined", () => {

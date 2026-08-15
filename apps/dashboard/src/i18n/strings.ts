@@ -31,6 +31,7 @@ export const en = {
   "nav.layout": "Layout",
   "nav.receipt": "Receipt",
   "nav.roster": "Shifts",
+  "nav.approvals": "Approvals",
   // Login screen
   "login.roster": "User",
   "login.password": "Password",
@@ -122,6 +123,14 @@ export const en = {
   "roster.breaches_intro": "Published with advisory warnings:",
   "roster.published_readonly":
     "This week is published — create changes as a new draft (coming soon).",
+  // Approvals screen
+  "approvals.title": "Approvals",
+  "approvals.swaps_title": "Shift swaps",
+  "approvals.absences_title": "Absences",
+  "approvals.none_swaps": "No swaps awaiting a decision.",
+  "approvals.none_absences": "No absences awaiting a decision.",
+  "approvals.approve": "Approve",
+  "approvals.reject": "Reject",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -144,6 +153,7 @@ export const es: Record<StringKey, string> = {
   "nav.layout": "Disposición",
   "nav.receipt": "Recibo",
   "nav.roster": "Turnos",
+  "nav.approvals": "Aprobaciones",
   "login.roster": "Usuario",
   "login.password": "Contraseña",
   "login.totp": "Código (si procede)",
@@ -220,6 +230,13 @@ export const es: Record<StringKey, string> = {
   "roster.breaches_intro": "Publicado con avisos:",
   "roster.published_readonly":
     "Esta semana está publicada — crea los cambios como un nuevo borrador (próximamente).",
+  "approvals.title": "Aprobaciones",
+  "approvals.swaps_title": "Cambios de turno",
+  "approvals.absences_title": "Ausencias",
+  "approvals.none_swaps": "No hay cambios de turno pendientes.",
+  "approvals.none_absences": "No hay ausencias pendientes.",
+  "approvals.approve": "Aprobar",
+  "approvals.reject": "Rechazar",
 };
 
 // Locale → catalogue. `en` is included as its own catalogue so an explicit
