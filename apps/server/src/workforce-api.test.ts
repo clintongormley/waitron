@@ -372,3 +372,177 @@ describe("mountWorkforceApi — publish", () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe("mountWorkforceApi — swap + absence approvals", () => {
+  async function seedAcceptedSwap(): Promise<string> {
+    return withTenant(suite.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const shift = await tx.execute<{ id: string }>(sql`
+        insert into shifts (tenant_id, person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes)
+        values (current_tenant_id(), ${personId}, ${locationId}, '2026-03-02T09:00:00Z', 0, '2026-03-02T13:00:00Z', 0)
+        returning id`);
+      const swap = await tx.execute<{ id: string }>(sql`
+        insert into shift_swaps (tenant_id, requested_by_person_id, from_shift_id, to_person_id, status)
+        values (current_tenant_id(), ${personId}, ${shift.rows[0]!.id}, ${personId}, 'accepted') returning id`);
+      return swap.rows[0]!.id;
+    });
+  }
+  async function seedRequestedAbsence(): Promise<string> {
+    return withTenant(suite.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const r = await tx.execute<{ id: string }>(sql`
+        insert into absences (tenant_id, person_id, absence_kind, starts_on, ends_on)
+        values (current_tenant_id(), ${personId}, 'holiday', '2026-03-02', '2026-03-04') returning id`);
+      return r.rows[0]!.id;
+    });
+  }
+
+  it("GET /management-api/swaps lists the tenant's accepted swaps", async () => {
+    const swapId = await seedAcceptedSwap();
+    const res = await send(mountApp(), "GET", "/management-api/swaps");
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as { id: string; status: string }[];
+    expect(rows.map((r) => r.id)).toContain(swapId);
+    expect(rows.every((r) => r.status === "accepted")).toBe(true);
+  });
+
+  it("POST /management-api/swaps/:id/decide approves an accepted swap (204)", async () => {
+    const swapId = await seedAcceptedSwap();
+    const res = await send(mountApp(), "POST", `/management-api/swaps/${swapId}/decide`, {
+      body: { decision: "approved" },
+    });
+    expect(res.status).toBe(204);
+    // No longer pending.
+    const list = await send(mountApp(), "GET", "/management-api/swaps");
+    expect(((await list.json()) as { id: string }[]).map((r) => r.id)).not.toContain(swapId);
+  });
+
+  it("404s a decide on an unknown swap (swap.not_found)", async () => {
+    const res = await send(
+      mountApp(),
+      "POST",
+      "/management-api/swaps/00000000-0000-0000-0000-000000000000/decide",
+      { body: { decision: "approved" } },
+    );
+    expect(res.status).toBe(404);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "swap.not_found" },
+    });
+  });
+
+  it("409s a decide on a non-accepted swap (swap.not_decidable)", async () => {
+    const swapId = await seedAcceptedSwap();
+    await send(mountApp(), "POST", `/management-api/swaps/${swapId}/decide`, {
+      body: { decision: "approved" },
+    });
+    const again = await send(mountApp(), "POST", `/management-api/swaps/${swapId}/decide`, {
+      body: { decision: "rejected" },
+    });
+    expect(again.status).toBe(409);
+    expect((await again.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "swap.not_decidable" },
+    });
+  });
+
+  it("400s a bad decision body (management.request_invalid, never an enum 500)", async () => {
+    const swapId = await seedAcceptedSwap();
+    const res = await send(mountApp(), "POST", `/management-api/swaps/${swapId}/decide`, {
+      body: { decision: "maybe" },
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "management.request_invalid" },
+    });
+  });
+
+  it("GET /management-api/absences lists the tenant's requested absences", async () => {
+    const absenceId = await seedRequestedAbsence();
+    const res = await send(mountApp(), "GET", "/management-api/absences");
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as { id: string; status: string }[];
+    expect(rows.map((r) => r.id)).toContain(absenceId);
+    expect(rows.every((r) => r.status === "requested")).toBe(true);
+  });
+
+  it("POST /management-api/absences/:id/decide approves a requested absence (204)", async () => {
+    const absenceId = await seedRequestedAbsence();
+    const res = await send(mountApp(), "POST", `/management-api/absences/${absenceId}/decide`, {
+      body: { decision: "approved" },
+    });
+    expect(res.status).toBe(204);
+    const list = await send(mountApp(), "GET", "/management-api/absences");
+    expect(((await list.json()) as { id: string }[]).map((r) => r.id)).not.toContain(absenceId);
+  });
+
+  it("404s a decide on an unknown absence (absence.not_found)", async () => {
+    const res = await send(
+      mountApp(),
+      "POST",
+      "/management-api/absences/00000000-0000-0000-0000-000000000000/decide",
+      { body: { decision: "rejected" } },
+    );
+    expect(res.status).toBe(404);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "absence.not_found" },
+    });
+  });
+
+  it("403s the swap routes to a staff-role session (no swap.approve)", async () => {
+    const res = await send(mountApp(), "GET", "/management-api/swaps", { cookie: staffCookie });
+    expect(res.status).toBe(403);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "authorization.not_permitted" },
+    });
+  });
+
+  it("403s the absence routes to a staff-role session (no absence.decide)", async () => {
+    const res = await send(mountApp(), "GET", "/management-api/absences", { cookie: staffCookie });
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("mountWorkforceApi — planned-vs-actual", () => {
+  it("GET /management-api/planned-vs-actual returns [] for an empty window", async () => {
+    const res = await send(
+      mountApp(),
+      "GET",
+      `/management-api/planned-vs-actual?locationId=${locationId}&from=2026-03-02&to=2026-03-09`,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([]);
+  });
+
+  it("400s a non-UUID locationId (shared.invalid_id)", async () => {
+    const res = await send(
+      mountApp(),
+      "GET",
+      "/management-api/planned-vs-actual?locationId=not-a-uuid&from=2026-03-02&to=2026-03-09",
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "shared.invalid_id" },
+    });
+  });
+
+  it("400s a malformed from/to (management.request_invalid)", async () => {
+    const res = await send(
+      mountApp(),
+      "GET",
+      `/management-api/planned-vs-actual?locationId=${locationId}&from=nope&to=2026-03-09`,
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "management.request_invalid" },
+    });
+  });
+
+  it("403s a staff-role session (no schedule.manage)", async () => {
+    const res = await send(
+      mountApp(),
+      "GET",
+      `/management-api/planned-vs-actual?locationId=${locationId}&from=2026-03-02&to=2026-03-09`,
+      { cookie: staffCookie },
+    );
+    expect(res.status).toBe(403);
+  });
+});

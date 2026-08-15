@@ -117,6 +117,26 @@ async function send(
   });
 }
 
+async function seedAcceptedSwap(
+  tenantId: string,
+  personId: string,
+  locationId: string,
+): Promise<string> {
+  const shift = await suite.admin.execute<{ id: string }>(sql`
+    insert into shifts (tenant_id, person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes)
+    values (${tenantId}, ${personId}, ${locationId}, '2026-03-02T09:00:00Z', 0, '2026-03-02T13:00:00Z', 0) returning id`);
+  const swap = await suite.admin.execute<{ id: string }>(sql`
+    insert into shift_swaps (tenant_id, requested_by_person_id, from_shift_id, to_person_id, status)
+    values (${tenantId}, ${personId}, ${shift.rows[0]!.id}, ${personId}, 'accepted') returning id`);
+  return swap.rows[0]!.id;
+}
+async function seedRequestedAbsence(tenantId: string, personId: string): Promise<string> {
+  const r = await suite.admin.execute<{ id: string }>(sql`
+    insert into absences (tenant_id, person_id, absence_kind, starts_on, ends_on)
+    values (${tenantId}, ${personId}, 'holiday', '2026-03-02', '2026-03-04') returning id`);
+  return r.rows[0]!.id;
+}
+
 describe("Workforce API over real Postgres (RLS end-to-end)", () => {
   it("isolates rosters across tenants — a manager sees only their OWN tenant's draft", async () => {
     // Differential cross-tenant isolation. The load-bearing differential is the LOCATIONS read below:
@@ -271,5 +291,171 @@ describe("Workforce API over real Postgres (RLS end-to-end)", () => {
     );
     expect(res.status).toBe(200);
     expect((await res.json()) as { breaches: unknown[] }).toEqual({ breaches: [] });
+  });
+
+  it("isolates the swap + absence queues across tenants, and decides only own-tenant rows", async () => {
+    // NOT the asAppUser differential — and measured, not assumed. `listPendingSwaps`,
+    // `listPendingAbsences` and `decideSwap` all carry an explicit `where tenant_id = ${cfg.tenantId}`
+    // (shift-swaps.ts / absences.ts), so these queues are isolated by that filter REGARDLESS of RLS —
+    // belt-and-suspenders, exactly like the roster reads in the sibling "isolates rosters across
+    // tenants" test above (which uses the bare-select GET /locations as ITS load-bearing asAppUser
+    // differential; these routes have no bare-select equivalent). Verified 2026-08-15 against
+    // postgres:18 via Testcontainers (TESTCONTAINERS_RYUK_DISABLED=true): removing `await asAppUser(tx);`
+    // from workforce-api.ts's `gated` reddened THAT sibling test (`bLocIds` leaked `a.locationId`) while
+    // THIS test stayed fully green — proving the explicit filter, not asAppUser, is what isolates the
+    // queues here. Restored the line; all six green. What this test DOES prove that the sibling does
+    // not: (1) a cross-tenant decide is a 404 (explicit filter hides A's swap from B), and (2) the §5
+    // decider-column grant receipt below — the app_user write covers `decided_by_person_id`.
+    const a = await setupVenue();
+    const b = await setupVenue();
+    const swapA = await seedAcceptedSwap(a.tenantId, a.personId, a.locationId);
+    const absA = await seedRequestedAbsence(a.tenantId, a.personId);
+    const appA = mountApp(a.tenantId);
+    const appB = mountApp(b.tenantId);
+
+    const aSwaps = (
+      (await (await send(appA, "GET", "/management-api/swaps", a.managerCookie)).json()) as {
+        id: string;
+      }[]
+    ).map((r) => r.id);
+    expect(aSwaps).toContain(swapA);
+    const bSwaps = (
+      (await (await send(appB, "GET", "/management-api/swaps", b.managerCookie)).json()) as {
+        id: string;
+      }[]
+    ).map((r) => r.id);
+    expect(bSwaps).not.toContain(swapA);
+
+    const bAbs = (
+      (await (await send(appB, "GET", "/management-api/absences", b.managerCookie)).json()) as {
+        id: string;
+      }[]
+    ).map((r) => r.id);
+    expect(bAbs).not.toContain(absA);
+
+    // B deciding A's swap sees swap.not_found — `decideSwap`'s `where tenant_id = b.tenantId and id =
+    // swapA` matches no row (belt-and-suspenders with RLS; the explicit filter is what returns 404 here).
+    const bDecidesA = await send(appB, "POST", `/management-api/swaps/${swapA}/decide`, b.managerCookie, {
+      decision: "approved",
+    });
+    expect(bDecidesA.status).toBe(404);
+
+    // A decides its own swap as app_user under FORCE RLS; the decider column is stamped. This is the §5
+    // receipt Task 2 deferred: migration 0010 added `decided_by_person_id`/`decided_at` with NO new
+    // grant, relying on 0008's TABLE-level `GRANT ... UPDATE ON shift_swaps TO app_user` covering the
+    // later-added columns. Proven load-bearing in BOTH directions on 2026-08-15 against postgres:18
+    // (TESTCONTAINERS_RYUK_DISABLED=true): with the table-level grant (production reality) this decide
+    // is a 204 and the read-back shows the stamp; when instead app_user's UPDATE was narrowed to
+    // `grant update (status, decided_at)` — i.e. a grant NOT covering decided_by_person_id — a direct
+    // app_user write of that column raised `42501 permission denied for table shift_swaps` and the
+    // route returned 500, reddening `expect(aDecides.status).toBe(204)`. (A column-level
+    // `revoke update (decided_by_person_id)` was a NO-OP — Postgres won't revoke a column privilege
+    // held implicitly via a table-level grant, CLAUDE.md §3 — hence the revoke-table-then-partial-grant
+    // shape.) Restored the grant; all six green.
+    const aDecides = await send(appA, "POST", `/management-api/swaps/${swapA}/decide`, a.managerCookie, {
+      decision: "approved",
+    });
+    expect(aDecides.status).toBe(204);
+    const decided = await suite.admin.execute<{
+      status: string;
+      decided_by_person_id: string | null;
+      decided_at: string | null;
+    }>(sql`select status, decided_by_person_id, decided_at from shift_swaps where id = ${swapA}`);
+    expect(decided.rows[0]!.status).toBe("approved");
+    expect(decided.rows[0]!.decided_by_person_id).toBe(a.personId);
+    expect(decided.rows[0]!.decided_at).not.toBeNull();
+
+    // And the absence decide lands its decider column too (same grant receipt on `absences`).
+    const aDecidesAbs = await send(
+      appA,
+      "POST",
+      `/management-api/absences/${absA}/decide`,
+      a.managerCookie,
+      { decision: "rejected" },
+    );
+    expect(aDecidesAbs.status).toBe(204);
+    const decidedAbs = await suite.admin.execute<{
+      status: string;
+      decided_by_person_id: string | null;
+    }>(sql`select status, decided_by_person_id from absences where id = ${absA}`);
+    expect(decidedAbs.rows[0]!.status).toBe("rejected");
+    expect(decidedAbs.rows[0]!.decided_by_person_id).toBe(a.personId);
+  });
+
+  it("refuses the swap + absence + planned-vs-actual routes to a staff-role session — 403", async () => {
+    // GATE-BY-DELETION (authorizeManager). Each of the three gate mechanisms proven independently on
+    // 2026-08-15 against postgres:18 via Testcontainers (TESTCONTAINERS_RYUK_DISABLED=true); restored
+    // after each, all six green:
+    //  (1) `gated` helper (GET /swaps, GET /absences, planned-vs-actual): removing its authorizeManager
+    //      call made the staff GET /management-api/swaps below return 200 not 403 — red at the FIRST
+    //      expect403 (`expected 200 to be 403`); it halted there so the later routes weren't exercised
+    //      in THAT run, hence (2)/(3) below ran with (1) restored.
+    //  (2) inline swap-decide compose: removing its authorizeManager (and stubbing authorizedBy) made
+    //      POST /swaps/:missing/decide return 404 not 403 (the gate gone, the request reaches
+    //      `decideSwap`, which 404s on the missing id) — red at the swap-decide expect403.
+    //  (3) inline absence-decide compose: same, red at the absence-decide expect403 (line ~410),
+    //      `expected 404 to be 403`, with (1) and (2) intact so #1-#3 passed and it reached #4.
+    // A 404 rather than 200 for the decide routes is still a genuine gate signal: the 403 is what the
+    // gate produces; without it the request falls through to the verb.
+    const { tenantId, locationId, staffCookie } = await setupVenue();
+    const app = mountApp(tenantId);
+    const missing = "00000000-0000-0000-0000-000000000000";
+    const expect403 = async (res: Response) => {
+      expect(res.status).toBe(403);
+      expect((await res.json()) as { error: { code: string } }).toMatchObject({
+        error: { code: "authorization.not_permitted" },
+      });
+    };
+    await expect403(await send(app, "GET", "/management-api/swaps", staffCookie));
+    await expect403(
+      await send(app, "POST", `/management-api/swaps/${missing}/decide`, staffCookie, {
+        decision: "approved",
+      }),
+    );
+    await expect403(await send(app, "GET", "/management-api/absences", staffCookie));
+    await expect403(
+      await send(app, "POST", `/management-api/absences/${missing}/decide`, staffCookie, {
+        decision: "approved",
+      }),
+    );
+    await expect403(
+      await send(
+        app,
+        "GET",
+        `/management-api/planned-vs-actual?locationId=${locationId}&from=2026-03-02&to=2026-03-09`,
+        staffCookie,
+      ),
+    );
+  });
+
+  it("assembles planned-vs-actual under RLS for the tenant's own location", async () => {
+    // The route assembles + returns rows under withTenant + asAppUser (the windowing/scoping logic is
+    // already covered on PGlite in Task 5). Seed one shift on a PUBLISHED roster version as admin
+    // (tenant_id explicit; the planned side is published-only, so a null-version draft would be excluded)
+    // and assert it comes back as a no-show — proving the read runs as app_user without leaking or 500-ing.
+    const v = await setupVenue();
+    const version = await suite.admin.execute<{ id: string }>(sql`
+      insert into roster_versions (tenant_id, location_id, period_start, period_end, status, published_at)
+      values (${v.tenantId}, ${v.locationId}, '2026-03-02', '2026-03-08', 'published', now()) returning id`);
+    await suite.admin.execute(sql`
+      insert into shifts (tenant_id, person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes, roster_version_id)
+      values (${v.tenantId}, ${v.personId}, ${v.locationId}, '2026-03-02T09:00:00Z', 0, '2026-03-02T13:00:00Z', 0, ${version.rows[0]!.id})`);
+    const res = await send(
+      mountApp(v.tenantId),
+      "GET",
+      `/management-api/planned-vs-actual?locationId=${v.locationId}&from=2026-03-02&to=2026-03-09`,
+      v.managerCookie,
+    );
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as {
+      personId: string;
+      workDate: string;
+      noShow: boolean;
+      plannedMinutes: number;
+    }[];
+    const row = rows.find((r) => r.personId === v.personId && r.workDate === "2026-03-02");
+    expect(row).toBeDefined();
+    expect(row!.noShow).toBe(true);
+    expect(row!.plannedMinutes).toBe(240);
   });
 });
