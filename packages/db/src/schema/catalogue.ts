@@ -80,6 +80,19 @@ export const products = pgTable(
       jsonb("allergens").$type<
         Record<string, { presence: "contains" | "may_contain"; source?: string }>
       >(),
+    // Staff-authored allergen overlay — what a human explicitly declared. NULL = not reviewed.
+    // `allergens` (published) is the computed union of this and `recipe_derivation`; the recipe
+    // module (@waitron/recipes) writes `recipe_derivation`, catalogue republishes `allergens`.
+    manualAllergens:
+      jsonb("manual_allergens").$type<
+        Record<string, { presence: "contains" | "may_contain"; source?: string }>
+      >(),
+    // The recipe module's derived floor + a `pending` flag (a recipe with an unreviewed ingredient).
+    // NULL = no recipe / module unused. Written only via catalogue's applyRecipeDerivation.
+    recipeDerivation: jsonb("recipe_derivation").$type<{
+      allergens: Record<string, { presence: "contains" | "may_contain"; source?: string }>;
+      pending: boolean;
+    }>(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
