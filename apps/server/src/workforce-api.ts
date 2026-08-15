@@ -10,6 +10,7 @@ import { AppError } from "@waitron/shared";
 import { asAppUser, withTenant, locations, type Database, type Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { WorkforceBackend } from "@waitron/workforce";
+import { resolveWorkTimeRuleset } from "@waitron/workforce-es";
 import { createErrorBoundary } from "./error-boundary.js";
 import { requireManagementSession } from "./management-session.js";
 import { isUuid } from "./till-session.js";
@@ -171,6 +172,35 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const shiftId = requireUuidParam(c.req.param("shiftId"), "ShiftId");
       await gated(sessionId, (tx) => backend.removeShift(tx, { tenantId: deps.cfg.tenantId, shiftId }));
       return c.body(null, 204);
+    }),
+  );
+
+  app.post("/management-api/roster/:versionId/publish", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const versionId = requireUuidParam(c.req.param("versionId"), "RosterVersionId");
+      // Composed inline rather than via `gated`, because it needs authorizeManager's returned
+      // `authorizedBy` for `publishedByPersonId` — the same reason management-api.ts's GET
+      // /management-api/layout calls authorizeManager inline.
+      const breaches = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        const { authorizedBy } = await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: SCHEDULE_PERMISSION,
+        });
+        const version = await backend.getRosterVersion(tx, { tenantId: deps.cfg.tenantId, versionId });
+        const ruleset = await resolveWorkTimeRuleset(tx, {
+          tenantId: deps.cfg.tenantId,
+          locationId: version.locationId,
+        });
+        return backend.publishRoster(tx, {
+          tenantId: deps.cfg.tenantId,
+          versionId,
+          publishedByPersonId: authorizedBy,
+          ruleset,
+        });
+      });
+      return c.json({ breaches });
     }),
   );
 }

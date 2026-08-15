@@ -166,3 +166,68 @@ describe("mountWorkforceApi — shift routes", () => {
     expect((await res.json()) as { error: { code: string } }).toMatchObject({ error: { code: "shared.invalid_id" } });
   });
 });
+
+describe("mountWorkforceApi — publish", () => {
+  async function seedConvenio(): Promise<void> {
+    await withTenant(suite.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      await tx.execute(sql`
+        insert into convenio_config (tenant_id, location_id)
+        values (current_tenant_id(), ${locationId})
+        on conflict (tenant_id, location_id) do nothing`);
+    });
+  }
+
+  it("publishes a draft and returns { breaches } (a clean roster → empty array)", async () => {
+    await seedConvenio();
+    const app = mountApp();
+    const create = await send(app, "POST", "/management-api/roster", { body: { locationId, period: "2026-05-04" } });
+    const { versionId } = (await create.json()) as { versionId: string };
+    await send(app, "POST", `/management-api/roster/${versionId}/shifts`, {
+      body: { personId, locationId, startsAt: "2026-05-04T09:00:00Z", startsOffsetMinutes: 0, endsAt: "2026-05-04T14:00:00Z", endsOffsetMinutes: 0, role: null },
+    });
+    const res = await send(app, "POST", `/management-api/roster/${versionId}/publish`);
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { breaches: unknown[] }).toEqual({ breaches: [] });
+  });
+
+  it("returns the advisory breaches but still publishes a breaching roster (owner decision 2026-08-02)", async () => {
+    await seedConvenio();
+    const app = mountApp();
+    const create = await send(app, "POST", "/management-api/roster", { body: { locationId, period: "2026-05-11" } });
+    const { versionId } = (await create.json()) as { versionId: string };
+    // A 12h shift breaches the 9h ordinary-daily max AND owes a break — a non-empty breaches array.
+    await send(app, "POST", `/management-api/roster/${versionId}/shifts`, {
+      body: { personId, locationId, startsAt: "2026-05-11T08:00:00Z", startsOffsetMinutes: 0, endsAt: "2026-05-11T20:00:00Z", endsOffsetMinutes: 0, role: null },
+    });
+    const res = await send(app, "POST", `/management-api/roster/${versionId}/publish`);
+    expect(res.status).toBe(200);
+    const { breaches } = (await res.json()) as { breaches: { kind: string }[] };
+    expect(breaches.map((b) => b.kind)).toContain("exceeds_daily_max");
+    // Still published:
+    const roster = await send(app, "GET", `/management-api/roster?locationId=${locationId}&period=2026-05-11`);
+    expect(((await roster.json()) as { version: { status: string } }).version.status).toBe("published");
+  });
+
+  it("409s publish when the location has no convenio_config (convenio.not_found)", async () => {
+    const app = mountApp();
+    // A DIFFERENT location with no convenio row.
+    const otherLoc = await withTenant(suite.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const r = await tx.execute<{ id: string }>(sql`
+        insert into locations (tenant_id, name, invoice_locales, operation_description)
+        values (current_tenant_id(), 'Annex', array['es-ES'], 'Sale on premises') returning id`);
+      return r.rows[0]!.id;
+    });
+    const create = await send(app, "POST", "/management-api/roster", { body: { locationId: otherLoc, period: "2026-05-18" } });
+    const { versionId } = (await create.json()) as { versionId: string };
+    const res = await send(app, "POST", `/management-api/roster/${versionId}/publish`);
+    expect(res.status).toBe(409);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({ error: { code: "convenio.not_found" } });
+  });
+
+  it("404s publish of an unknown version (roster.not_found)", async () => {
+    const res = await send(mountApp(), "POST", "/management-api/roster/00000000-0000-0000-0000-000000000000/publish");
+    expect(res.status).toBe(404);
+  });
+});
