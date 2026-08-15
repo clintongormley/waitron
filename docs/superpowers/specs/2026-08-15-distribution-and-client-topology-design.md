@@ -12,8 +12,9 @@ network. It is the design for the deferred **deployment sub-project (#9)** plus 
 layer the failover spec left as spec-only.
 
 **Conviction legend**, used per item because this is a captured brainstorm rather than a settled
-spec: **[decided-elsewhere]** already fixed by a landed spec; **[lean]** a recommendation this doc
-argues for but has not ratified; **[open]** a genuine fork left for a later decision.
+spec: **[decided-elsewhere]** already fixed by a landed spec; **[decided-by-user]** a decision the
+owner took in this brainstorm; **[lean]** a recommendation this doc argues for but has not ratified;
+**[open]** a genuine fork left for a later decision.
 
 ---
 
@@ -228,19 +229,19 @@ in the same flow-down lane catalogue uses, excluding the ephemeral `webauthn_cha
 
 **[lean] Re-establish the session at the target instead, three ways (in ascending cost):**
 
-- **(iii) Quick PIN re-prompt** — on a server switch, "re-enter your PIN." The **open order already
+- **(i) Quick PIN re-prompt** — on a server switch, "re-enter your PIN." The **open order already
   survived on B**, so this is a ~2 s re-auth on a *rare* event, not a lost sale. A reasonable **v1**.
-- **(i) Portable signed token** — replace the DB-row session with a stateless token (person + till +
+- **(ii) Portable signed token** — replace the DB-row session with a stateless token (person + till +
   expiry) that *any* venue server validates via a shared key — no row, no lookup, no replication. It
   fits what we learned: the session is keyed to the **till**, and till_id is stable across failover,
   so a token carrying it is naturally node-independent. Cost: a real auth-model change and harder
   revocation. The **seamless upgrade.**
-- **(ii) Agent re-mints** — the agent holds a durable device credential and silently re-authenticates
+- **(iii) Agent re-mints** — the agent holds a durable device credential and silently re-authenticates
   person X to B. Invisible, but the heaviest (needs the native agent *and* a trusted device
   credential *and* identity config on B). A later refinement, not the start.
 
-**Recommended path:** build identity-config flow-down (needed regardless) → ship **PIN-re-prompt (iii)
-as v1** → upgrade to the **portable token (i)** for seamless failover.
+**Recommended path:** build identity-config flow-down (needed regardless) → ship **PIN-re-prompt (i)
+as v1** → upgrade to the **portable token (ii)** for seamless failover.
 
 ---
 
@@ -250,8 +251,8 @@ as v1** → upgrade to the **portable token (i)** for seamless failover.
 
 A cloud server **cannot** open a connection to a printer on the shop LAN: the printer has a private,
 non-internet-routable IP behind the shop router's NAT (RFC 1918 / RFC 2663 — §13). The connection
-must be **initiated from inside the shop, outward.** There are exactly two places that outbound
-initiator can live:
+must be **initiated from inside the shop, outward** — by one of two things: a **relay on the LAN**, or
+**the printer itself**. Those two initiators give three practical bridges:
 
 ### Three bridge options
 
@@ -342,7 +343,8 @@ image. Both are Postgres.
 
 **[decided-by-user] The server may be cloud-hosted, and this is a first-class supported deployment
 mode — it is the zero-hardware on-ramp.** A configured, resilient on-prem setup now runs **€500–1000**
-in hardware (worse under the 2026 RAM surge — §deli-hardware), and asking a prospect to buy a box
+in hardware (worse under the 2026 RAM surge — see the
+[deli-hardware design](2026-07-30-deli-hardware-design.md)), and asking a prospect to buy a box
 before they have evaluated the product is a real adoption barrier. A cloud-hosted primary removes it.
 
 This is not new architecture. The failover design §9 already sanctioned a **dedicated single-tenant
@@ -354,7 +356,7 @@ sanctioned topology to a **first-class supported mode.**
 Two very different cases hide under "cloud-first"; they must not be conflated:
 
 - **(A) Cloud for trial / evaluation — buildable now, low-risk.** A prospect explores with no
-  hardware: the PWA points at a cloud origin — **the same same-origin model that ships today, so no
+  hardware: the PWA points at a cloud origin — **the same-origin model that ships today, so no
   agent, no routing, no local hardware, the least new code of any shape in this document** — in
   **preproduction** (test payment keys, no real fiscal certificate). Because every trial runs the same
   deployed version, trials can share a **multi-tenant demo instance** — cheap for us, free for them —
