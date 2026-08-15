@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { ingredients } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { validateAllergens, type ProductAllergens } from "@waitron/catalogue";
+import { productsUsingIngredient, recomputeProductAllergens } from "./recipes.js";
 
 /**
  * Ingredient operations — CRUD over the `ingredients` table (raw materials / prep items).
@@ -89,5 +90,9 @@ export async function updateIngredient(
     .update(ingredients)
     .set({ ...patch, updatedAt: sql`now()` })
     .where(eq(ingredients.id, id));
-  // Propagation to dependent products is added in Task 5.
+  // Propagate the change to every product whose recipe uses this ingredient: recompute each one's
+  // derived allergen floor so a newly-tagged ingredient publishes (or a cleared one goes PENDING).
+  for (const productId of await productsUsingIngredient(tx, id)) {
+    await recomputeProductAllergens(tx, productId);
+  }
 }
