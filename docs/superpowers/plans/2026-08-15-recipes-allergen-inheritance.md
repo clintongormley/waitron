@@ -1136,9 +1136,10 @@ git commit -s -m "test(recipes): real-PG RLS + grant proofs for ingredients and 
 
 **Files:**
 - Modify: `packages/db/src/english-only.ts` (add `"recipes"` to `GENERIC_PACKAGES`)
-- Modify: `packages/fiscal-verifactu/src/vocabulary-scope.test.ts` (update the pinned regex)
+- Modify: `scripts/english-only.test.ts` (**pin #1** — the root project's `expect([...GENERIC_PACKAGES]).toEqual([...])` list, plus the "thirteen generic packages" → "fourteen" wording)
+- Modify: `packages/fiscal-verifactu/src/vocabulary-scope.test.ts` (**pin #2** — the regex that pins the ordered array, plus its "thirteen" comment → "fourteen")
 
-**Why this task exists:** `GENERIC_PACKAGES` and its pinned regex are a hardcoded cross-package list; adding a package leaves the pin stale, and neither `fiscal-verifactu` nor the root guard is in a `packages/recipes` scoped run — so the failure only surfaces on the unfiltered `main` run unless caught here (CLAUDE.md §2). The new tenant tables also need the fiscal-verifactu `inmutabilidad` FORCE-RLS guard to pass.
+**Why this task exists:** `GENERIC_PACKAGES` is a hardcoded cross-package list with **TWO** pinned copies; adding a package leaves both stale, and neither `fiscal-verifactu` nor the root guard is in a `packages/recipes` scoped run — so the failure only surfaces on the unfiltered `main` run unless caught here (CLAUDE.md §2). **Verified empirically 2026-08-15** (probe: add `"recipes"`, run `scripts/english-only.test.ts`): the guard scans `recipes/src` CLEANLY (the src-test food words `alioli`/`salsa` are NOT in `SPANISH_WORDS`; `test/fixtures.ts` is under `test/`, not scanned) — the ONLY failure is pin #1's `toEqual`. The new tenant tables also need the fiscal-verifactu `inmutabilidad` FORCE-RLS guard to pass (already run green during Task 2).
 
 - [ ] **Step 1: Add `recipes` to the English-only guard**
 
