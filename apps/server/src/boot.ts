@@ -309,7 +309,7 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     app,
     {
       db,
-      cfg: { tenantId: till.tenantId },
+      cfg: { tenantId: till.tenantId, nodeId: till.nodeId },
       mediaDir: config.mediaDir,
       maxUploadBytes: MAX_UPLOAD_BYTES,
     },
