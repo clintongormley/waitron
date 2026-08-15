@@ -162,6 +162,18 @@ export interface AddShiftInput {
   role: string | null;
 }
 
+/** A partial edit of a shift on a DRAFT roster version (design §3a) — only the supplied fields change. */
+export interface UpdateShiftInput {
+  tenantId: string;
+  shiftId: string;
+  personId?: string;
+  startsAt?: string;
+  startsOffsetMinutes?: number;
+  endsAt?: string;
+  endsOffsetMinutes?: number;
+  role?: string | null;
+}
+
 /** The three states a worker's shift can be in, derived from the most recent clock event. */
 type ShiftState = "out" | "working" | "on_break";
 
@@ -506,6 +518,59 @@ export class WorkforceBackend {
         ${input.role}, ${input.versionId})
       returning id`);
     return rows[0]!.id;
+  }
+
+  /** Edits a shift on a DRAFT version. Reads the shift + its version status (`shift.not_found` if the
+   * shift is gone, `roster.not_draft` if its version is published). Validates the EFFECTIVE interval
+   * (patch value ?? current) so a partial edit cannot land a malformed interval as a 500 — `shift.invalid`. */
+  async updateShift(tx: Transaction, input: UpdateShiftInput): Promise<void> {
+    const shift = await this.shiftForWrite(tx, input.tenantId, input.shiftId);
+    const startsAt = input.startsAt ?? shift.startsAt;
+    const endsAt = input.endsAt ?? shift.endsAt;
+    if (Date.parse(startsAt) >= Date.parse(endsAt)) {
+      throw new AppError("shift.invalid", { tenantId: input.tenantId, reason: "ends_not_after_starts" });
+    }
+    await tx.execute(sql`
+      update shifts set
+        person_id = ${input.personId ?? shift.personId},
+        starts_at = ${startsAt},
+        starts_offset_minutes = ${input.startsOffsetMinutes ?? shift.startsOffsetMinutes},
+        ends_at = ${endsAt},
+        ends_offset_minutes = ${input.endsOffsetMinutes ?? shift.endsOffsetMinutes},
+        role = ${input.role === undefined ? shift.role : input.role}
+      where tenant_id = ${input.tenantId} and id = ${input.shiftId}`);
+  }
+
+  /** Deletes a shift on a DRAFT version. Same guards as `updateShift`. */
+  async removeShift(tx: Transaction, input: { tenantId: string; shiftId: string }): Promise<void> {
+    await this.shiftForWrite(tx, input.tenantId, input.shiftId);
+    await tx.execute(sql`delete from shifts where tenant_id = ${input.tenantId} and id = ${input.shiftId}`);
+  }
+
+  /** Reads a shift + its version's status, throwing `shift.not_found` (no such shift) or
+   * `roster.not_draft` (the shift's non-null version is not a draft). A null `roster_version_id`
+   * (an unattached draft shift) is editable — there is no published version to protect. */
+  private async shiftForWrite(
+    tx: Transaction,
+    tenantId: string,
+    shiftId: string,
+  ): Promise<ShiftRow> {
+    const { rows } = await tx.execute<ShiftDbRow & { version_status: string | null }>(sql`
+      select s.id, s.person_id, s.location_id,
+        to_char(s.starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as starts_at,
+        s.starts_offset_minutes,
+        to_char(s.ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at,
+        s.ends_offset_minutes, s.role, s.roster_version_id, rv.status as version_status
+      from shifts s
+      left join roster_versions rv on rv.id = s.roster_version_id and rv.tenant_id = ${tenantId}
+      where s.tenant_id = ${tenantId} and s.id = ${shiftId}
+      limit 1`);
+    const row = rows[0];
+    if (row === undefined) throw new AppError("shift.not_found", { tenantId, shiftId });
+    if (row.version_status !== null && row.version_status !== "draft") {
+      throw new AppError("roster.not_draft", { tenantId, rosterVersionId: row.roster_version_id! });
+    }
+    return mapShift(row);
   }
 
   /**

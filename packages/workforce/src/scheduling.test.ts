@@ -406,3 +406,55 @@ describe("addShift", () => {
     expect(code).toBe("shift.invalid");
   });
 });
+
+describe("updateShift / removeShift", () => {
+  async function draftShift(period: string): Promise<{ versionId: string; shiftId: string }> {
+    const versionId = await run((tx) => backend.createRosterVersion(tx, { tenantId, locationId, period }));
+    const shiftId = await run((tx) =>
+      backend.addShift(tx, {
+        tenantId, versionId, personId, locationId,
+        startsAt: `${period}T09:00:00Z`, startsOffsetMinutes: 0,
+        endsAt: `${period}T17:00:00Z`, endsOffsetMinutes: 0, role: null,
+      }),
+    );
+    return { versionId, shiftId };
+  }
+
+  it("edits a shift's times and role", async () => {
+    const { shiftId } = await draftShift("2026-09-07");
+    await run((tx) =>
+      backend.updateShift(tx, { tenantId, shiftId, endsAt: "2026-09-07T15:00:00Z", role: "kitchen" }),
+    );
+    const row = await suite.db.execute<{ ends_at: string; role: string | null }>(sql`
+      select to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at, role
+      from shifts where id = ${shiftId}`);
+    expect(row.rows[0]!.ends_at).toBe("2026-09-07T15:00:00Z");
+    expect(row.rows[0]!.role).toBe("kitchen");
+  });
+
+  it("removes a shift", async () => {
+    const { shiftId } = await draftShift("2026-09-14");
+    await run((tx) => backend.removeShift(tx, { tenantId, shiftId }));
+    const row = await suite.db.execute(sql`select id from shifts where id = ${shiftId}`);
+    expect(row.rows).toEqual([]);
+  });
+
+  it("rejects an unknown shift — shift.not_found (both verbs)", async () => {
+    const missing = "00000000-0000-0000-0000-000000000000";
+    expect(await codeOfRejection(() => run((tx) => backend.updateShift(tx, { tenantId, shiftId: missing, role: "x" })))).toBe("shift.not_found");
+    expect(await codeOfRejection(() => run((tx) => backend.removeShift(tx, { tenantId, shiftId: missing })))).toBe("shift.not_found");
+  });
+
+  it("rejects editing/removing a shift whose version is PUBLISHED — roster.not_draft", async () => {
+    const versionId = await insertRosterVersion(suite.db, {
+      tenantId, locationId, periodStart: "2026-09-21", periodEnd: "2026-09-27",
+    });
+    const shiftId = await insertDraftShift(suite.db, {
+      tenantId, personId, locationId,
+      startsAt: "2026-09-21T09:00:00Z", endsAt: "2026-09-21T17:00:00Z", rosterVersionId: versionId,
+    });
+    await run((tx) => backend.publishRoster(tx, { tenantId, versionId }));
+    expect(await codeOfRejection(() => run((tx) => backend.updateShift(tx, { tenantId, shiftId, role: "x" })))).toBe("roster.not_draft");
+    expect(await codeOfRejection(() => run((tx) => backend.removeShift(tx, { tenantId, shiftId })))).toBe("roster.not_draft");
+  });
+});
