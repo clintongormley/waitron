@@ -202,8 +202,13 @@ describe("Workforce API over real Postgres (RLS end-to-end)", () => {
   });
 
   it("refuses every roster write route to a staff-role session — 403 authorization.not_permitted", async () => {
-    // GUARD-BY-DELETION (authorizeManager): remove the authorizeManager call from workforce-api.ts's
-    // `gated` (and the inline one in the publish route) and these 403s flip to success.
+    // GUARD-BY-DELETION (authorizeManager), run 2026-08-15 against postgres:18 via Testcontainers
+    // (TESTCONTAINERS_RYUK_DISABLED=true): with the authorizeManager call removed from
+    // workforce-api.ts's `gated` helper (and the inline publish one stubbed to a fixed authorizedBy),
+    // the staff GET /roster below returned 200 instead of 403 — this test went red at the FIRST
+    // `expect403`, `expected 200 to be 403`, and halted there, so routes 2-5 weren't individually
+    // exercised in that run; the gate is what turns this suite red when removed. Restored the call and
+    // the test passed again.
     const { tenantId, locationId, staffCookie } = await setupVenue();
     const app = mountApp(tenantId);
     const missing = "00000000-0000-0000-0000-000000000000";
