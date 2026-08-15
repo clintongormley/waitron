@@ -108,6 +108,14 @@ export interface PublishRosterInput {
   ruleset?: WorkTimeRuleset;
 }
 
+/** A request to open a DRAFT roster version for one location's week (design §3a). */
+export interface CreateRosterVersionInput {
+  tenantId: string;
+  locationId: string;
+  /** The Monday (YYYY-MM-DD) of the week to author — period_start; period_end is derived as +6 days. */
+  period: string;
+}
+
 /** The three states a worker's shift can be in, derived from the most recent clock event. */
 type ShiftState = "out" | "working" | "on_break";
 
@@ -326,6 +334,34 @@ export class WorkforceBackend {
   private async lockPerson(tx: Transaction, tenantId: string, personId: string): Promise<void> {
     await tx.execute(sql`
       select id from persons where tenant_id = ${tenantId} and id = ${personId} for no key update`);
+  }
+
+  /**
+   * Opens a DRAFT roster version for one location's week (design §3a) — planning data (mutable),
+   * inserted with status 'draft' and a null publish stamp. `period_end` is derived in SQL as the
+   * inclusive Sunday (`+ 6` days), so no date value round-trips through TypeScript. Throws
+   * `roster.draft_exists` when a draft for this (tenant, location, week) already exists — the
+   * published-uniqueness index does not cover drafts, so this check-then-insert is the guard.
+   * Slice-1 single-author screen: a concurrent double-create could still fork two drafts (no draft
+   * unique index — that would be a migration); acceptable and documented here.
+   */
+  async createRosterVersion(tx: Transaction, input: CreateRosterVersionInput): Promise<string> {
+    const existing = await tx.execute<{ id: string }>(sql`
+      select id from roster_versions
+      where tenant_id = ${input.tenantId} and location_id = ${input.locationId}
+        and period_start = ${input.period} and status = 'draft'
+      limit 1`);
+    if (existing.rows.length > 0) {
+      throw new AppError("roster.draft_exists", {
+        tenantId: input.tenantId,
+        locationId: input.locationId,
+      });
+    }
+    const { rows } = await tx.execute<{ id: string }>(sql`
+      insert into roster_versions (tenant_id, location_id, period_start, period_end)
+      values (${input.tenantId}, ${input.locationId}, ${input.period}, ${input.period}::date + 6)
+      returning id`);
+    return rows[0]!.id;
   }
 
   /**

@@ -7,6 +7,7 @@ export {
   workforceEntryKind,
 } from "./schema/time-entries.js";
 export type { PublishRosterInput } from "./clocking.js";
+export type { CreateRosterVersionInput } from "./clocking.js";
 export { workforceChains } from "./schema/workforce-chains.js";
 export { rosterVersions, rosterVersionStatus } from "./schema/roster-versions.js";
 export { shifts } from "./schema/shifts.js";

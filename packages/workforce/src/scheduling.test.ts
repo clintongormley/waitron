@@ -265,3 +265,38 @@ describe("publishRoster", () => {
     expect(rows.rows[0]!.roster_version_id).toBeNull();
   });
 });
+
+describe("createRosterVersion", () => {
+  it("inserts a draft for the week (period_start = the Monday, period_end = +6 days) and returns its id", async () => {
+    const versionId = await run((tx) =>
+      backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-03-02" }),
+    );
+    const row = await suite.db.execute<{
+      status: string;
+      period_start: string;
+      period_end: string;
+      published_at: string | null;
+    }>(sql`select status, period_start, period_end, published_at
+           from roster_versions where id = ${versionId}`);
+    expect(row.rows[0]!.status).toBe("draft");
+    expect(row.rows[0]!.period_start).toBe("2026-03-02");
+    expect(row.rows[0]!.period_end).toBe("2026-03-08");
+    expect(row.rows[0]!.published_at).toBeNull();
+  });
+
+  it("refuses a second draft for the same (tenant, location, week) — roster.draft_exists", async () => {
+    await run((tx) => backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-03-09" }));
+    const code = await codeOfRejection(() =>
+      run((tx) => backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-03-09" })),
+    );
+    expect(code).toBe("roster.draft_exists");
+  });
+
+  it("allows a draft for a DIFFERENT week at the same location", async () => {
+    await run((tx) => backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-03-16" }));
+    const other = await run((tx) =>
+      backend.createRosterVersion(tx, { tenantId, locationId, period: "2026-03-23" }),
+    );
+    expect(other).toEqual(expect.any(String));
+  });
+});
