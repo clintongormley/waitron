@@ -3,10 +3,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
- * Task 3's English-only guard (packages/db/src/english-only.ts) scans the thirteen `GENERIC_PACKAGES`
+ * Task 3's English-only guard (packages/db/src/english-only.ts) scans the fourteen `GENERIC_PACKAGES`
  * ("db", "core", "fiscal", "shared", "payments", "scheduler", "credentials", "workforce",
- * "reporting", "identity", "catalogue", "sync", "layouts") and explicitly names this package — alongside
- * packages/verifactu — in `EXEMPT_PACKAGES`.
+ * "reporting", "identity", "catalogue", "sync", "layouts", "recipes") and explicitly names this
+ * package — alongside packages/verifactu — in `EXEMPT_PACKAGES`.
  *
  * Its constants are read here as SOURCE TEXT rather than imported from `@waitron/db`, and that is
  * not merely a style choice carried over from packages/fiscal/src/no-regime-vocabulary.test.ts's
@@ -28,7 +28,7 @@ const englishOnlySource = readFileSync(
 describe("the English-only vocabulary guard is scoped out of this package", () => {
   it("does not scan fiscal-verifactu", () => {
     expect(englishOnlySource).toMatch(
-      /GENERIC_PACKAGES\s*=\s*\[\s*"db",\s*"core",\s*"fiscal",\s*"shared",\s*"payments",\s*"scheduler",\s*"credentials",\s*"workforce",\s*"reporting",\s*"identity",\s*"catalogue",\s*"sync",\s*"layouts",?\s*\]/,
+      /GENERIC_PACKAGES\s*=\s*\[\s*"db",\s*"core",\s*"fiscal",\s*"shared",\s*"payments",\s*"scheduler",\s*"credentials",\s*"workforce",\s*"reporting",\s*"identity",\s*"catalogue",\s*"sync",\s*"layouts",\s*"recipes",?\s*\]/,
     );
   });
 
