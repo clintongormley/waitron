@@ -546,7 +546,14 @@ export async function startServer(env: Record<string, string | undefined>): Prom
       // worker's abort-aware sleep returns promptly rather than waiting out a backoff.
       syncController.abort();
       await loop;
-      if (syncWorker !== undefined) await syncWorker;
+      // Swallow a worker rejection so it can never skip the guaranteed teardown below. The worker is
+      // still AWAITED — a clean shutdown drains it exactly as before, its abort-aware sleep returning
+      // promptly — but if it settles by rejection (an unexpected throw escaping runSyncPull's own
+      // per-peer catch), `.catch(() => {})` keeps that from throwing out of close() BEFORE the
+      // try/finally below, which would leak the HTTP server and both connection pools on exactly the
+      // path that failed. close() resolves either way; the worker's own errors are logged inside
+      // runSyncPull (sync.pull_failed / sync.stream_stalled), not here.
+      if (syncWorker !== undefined) await syncWorker.catch(() => {});
       // `finally`, not a plain sequential `await`: a rejecting `server.close()` (the listener
       // already gone — see bin.ts's own double-signal guard) must still drain the pool. `close()`
       // is exported on `StartedServer`, and a caller reaching for it outside `bin.ts` — a test hook

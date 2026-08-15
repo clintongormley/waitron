@@ -18,6 +18,7 @@ import { loadKeyRing, putCredential } from "@waitron/credentials";
 // restricts either package, so the deep import resolves the same way a same-package one would.
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { runSyncPull } from "@waitron/sync";
 import {
   DEFAULT_MIGRATIONS_ROOT,
   MAX_UPLOAD_BYTES,
@@ -56,6 +57,21 @@ vi.mock("undici", async (importOriginal) => {
       ),
     ),
   };
+});
+
+/**
+ * `boot.ts` starts the background pull worker via `runSyncPull`, imported directly (no injection seam).
+ * The worker is robust by construction — its loop catches every per-peer error and backs off, so no
+ * config makes its return promise reject — yet close()'s teardown ordering must survive a worker that
+ * settles by rejection anyway (an unexpected throw escaping the loop). The ONE test that pins that path
+ * forces the settle by mocking `runSyncPull`'s return; the default here calls THROUGH to the real
+ * implementation, so every other test in this file (the live-worker sync test included) drives the
+ * genuine loop unchanged — only the rejection test overrides it, with `mockReturnValueOnce`. Spreading
+ * `...actual` keeps `encodeBatch`/`readSyncLogSince` (used by `sync-api.ts` in this same graph) real.
+ */
+vi.mock("@waitron/sync", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/sync")>();
+  return { ...actual, runSyncPull: vi.fn(actual.runSyncPull) };
 });
 
 /**
@@ -460,6 +476,50 @@ describe("startServer, against a real container as the deployment role", () => {
       await server.close();
     }
     await expect(fetch(`http://127.0.0.1:${port}/sync-api/hello`)).rejects.toThrow(); // listener gone
+  }, 60_000);
+
+  it("close() swallows a REJECTING pull worker and still tears down the listener and pools", async () => {
+    // Teardown-ordering fix: close() used to `await syncWorker` BEFORE the try/finally that guarantees
+    // server.close() + the pool teardown, so a worker that settled by rejection threw out of close()
+    // there and leaked the HTTP server and both connection pools. Force exactly that settle: a
+    // pre-rejected worker promise returned once from the mocked runSyncPull. It carries its OWN benign
+    // `.catch` so it is never an unhandled rejection in the window before close() attaches its swallowing
+    // catch. Two directions differ visibly (CLAUDE.md §1): without the fix close() REJECTS with this
+    // error and the listener stays up; with it close() RESOLVES and the listener is gone.
+    const port = await freePort();
+    const workerBoom = new Error("sync pull worker rejected");
+    const rejectedWorker = Promise.reject(workerBoom);
+    rejectedWorker.catch(() => {}); // handled here, so never an unhandled rejection pre-close()
+    vi.mocked(runSyncPull).mockReturnValueOnce(rejectedWorker);
+
+    const server = await startServer({
+      ...KEY_ENV,
+      DATABASE_URL: databaseUrl,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "production",
+      WAITRON_SYNC_PEERS: JSON.stringify([
+        {
+          nodeId: "77777777-7777-4777-8777-777777777777",
+          url: "http://127.0.0.1:1/",
+          token: "peer-token",
+        },
+      ]),
+      WAITRON_SYNC_NODE_TOKEN: "boot-node-token",
+      WAITRON_SYNC_DATABASE_URL: databaseUrl,
+    });
+
+    // The listener is up before close(): the sync source mounted and bound.
+    const hello = await fetch(`http://127.0.0.1:${port}/sync-api/hello`, {
+      headers: { Authorization: "Bearer boot-node-token" },
+    });
+    expect(hello.status).toBe(200);
+
+    // close() RESOLVES despite the worker rejection (the swallow), and the guaranteed teardown ran: the
+    // listener is gone — which it could only be if close() got PAST the swallowed worker await into the
+    // try (server.close), whose finally then closed both the app pool and the sync pool.
+    await expect(server.close()).resolves.toBeUndefined();
+    await expect(fetch(`http://127.0.0.1:${port}/sync-api/hello`)).rejects.toThrow();
   }, 60_000);
 
   it("boots without WAITRON_SETTLEMENT_LAG_MS, taking the neutral layer's own default", async () => {
