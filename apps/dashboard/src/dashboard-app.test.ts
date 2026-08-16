@@ -16,18 +16,27 @@ const people: PersonSummary[] = [
 
 /**
  * A fake `DashboardApi` covering every method the shell (and the screens it mounts) calls: the shell
- * itself calls `listStaff` (the session probe) and `logout`; the login screen it mounts calls
- * `getStaffRoster`/`login`, and the staff screen calls `listStaff`/`createPerson`. Each defaults to a
- * resolved value; a test overrides any with its own `vi.fn()`. Cast through `unknown` because the
- * shell touches only this method surface, mirroring `apps/till/src/till-app.test.ts`'s `stubApi`.
+ * itself calls `getMe` (the WHOAMI session probe) and `logout`; the login screen it mounts calls
+ * `getStaffRoster`/`login`, the manager staff screen calls `listStaff`/`createPerson`, and the staff
+ * self-service screen calls `getStaffRoster`/`listMyShifts`/`listMySwaps`/`listMyAbsences`. Each
+ * defaults to a resolved value; `getMe` defaults to a MANAGER (so the default probe lands on the
+ * manager `staff` screen, the pre-role-awareness behaviour). A test overrides any with its own
+ * `vi.fn()`. Cast through `unknown` because the shell touches only this method surface, mirroring
+ * `apps/till/src/till-app.test.ts`'s `stubApi`.
  */
 function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
   return {
+    getMe: vi.fn().mockResolvedValue({ personId: "p1", role: "manager" }),
     listStaff: vi.fn().mockResolvedValue(people),
     getStaffRoster: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ada" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
     createPerson: vi.fn().mockResolvedValue({ id: "p2" }),
     logout: vi.fn().mockResolvedValue(undefined),
+    // The staff self-service (my-schedule) screen loads these on connect; resolve them so a staff-role
+    // session (or navigating there) leaves no stray rejection.
+    listMyShifts: vi.fn().mockResolvedValue([]),
+    listMySwaps: vi.fn().mockResolvedValue([]),
+    listMyAbsences: vi.fn().mockResolvedValue([]),
     // The catalogue screen the nav mounts loads these on connect; resolve them so navigating to it
     // does not leave a stray rejection (a rejection is a finding — the suite runs pristine).
     listCatalogues: vi.fn().mockResolvedValue([]),
@@ -60,6 +69,8 @@ async function flush(el: DashboardApp): Promise<void> {
 }
 
 const login = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-login-screen");
+const mySchedule = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector("dashboard-my-schedule-screen");
 const staff = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-staff-screen");
 const catalogue = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-catalogue-screen");
 const layout = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-layout-screen");
@@ -85,8 +96,10 @@ const navApprovals = (el: DashboardApp) =>
 const navPlannedActual = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-planned-actual]");
 
-/** The seven logged-in screen tags — exactly one is mounted at a time. */
+/** The logged-in screen tags — exactly one is mounted at a time (the staff self-service face plus the
+ * seven manager faces). */
 const SCREEN_TAGS = [
+  "dashboard-my-schedule-screen",
   "dashboard-staff-screen",
   "dashboard-catalogue-screen",
   "dashboard-layout-screen",
@@ -126,9 +139,14 @@ describe("dashboard-app", () => {
     expect(customElements.get("dashboard-app")).toBe(DashboardApp);
   });
 
-  it("shows login when no session, staff after logged-in", async () => {
+  it("shows login when no session, manager staff screen after a manager logs in", async () => {
+    // getMe rejects at boot (no session) then resolves as a MANAGER after login — the real shape: the
+    // whoami 401s before login and resolves once the cookie is set.
     const api = stubApi({
-      listStaff: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+      getMe: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "management_session.required" })
+        .mockResolvedValue({ personId: "p1", role: "manager" }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -141,11 +159,61 @@ describe("dashboard-app", () => {
     expect(login(el)).toBeNull();
   });
 
-  it("starts on staff when a session already exists", async () => {
-    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+  it("starts on the manager staff screen when a manager session already exists", async () => {
+    // Default getMe resolves as a manager → the shell lands on the manager `staff` screen.
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
     await flush(el);
     expect(staff(el)).toBeTruthy();
+    expect(mySchedule(el)).toBeNull();
+    expect(login(el)).toBeNull();
+  });
+
+  it("a STAFF-role session opens on the self-service my-schedule screen, never the manager staff screen", async () => {
+    // The whole point of the fast-follow: a staff person (empty permission set) resolves via role-blind
+    // getMe and lands on the self-service view, not the manager screens. Proven by deletion: dropping
+    // the `role === "staff" ? "my-schedule" : "staff"` branch in #applyMe lands them on `staff` instead.
+    const api = stubApi({ getMe: vi.fn().mockResolvedValue({ personId: "p9", role: "staff" }) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(mySchedule(el)).toBeTruthy();
+    expect(staff(el)).toBeNull();
+    expect(mountedScreens(el)).toEqual(["dashboard-my-schedule-screen"]);
+    expect(countH1(el)).toBe(1);
+  });
+
+  it("a staff session shows NO manager nav (its only face is self-service)", async () => {
+    const api = stubApi({ getMe: vi.fn().mockResolvedValue({ personId: "p9", role: "staff" }) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    // No nav faces…
+    expect(navStaff(el)).toBeNull();
+    expect(navCatalogue(el)).toBeNull();
+    expect(navRoster(el)).toBeNull();
+    // …but the logout control is still present (a staff person can sign out).
+    expect(logoutBtn(el)).toBeTruthy();
+  });
+
+  it("threads the logged-in person's id to the my-schedule screen", async () => {
+    const api = stubApi({ getMe: vi.fn().mockResolvedValue({ personId: "p9", role: "staff" }) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect((mySchedule(el) as unknown as { myPersonId: string }).myPersonId).toBe("p9");
+  });
+
+  it("a STAFF login (after no session) lands on the my-schedule screen", async () => {
+    const api = stubApi({
+      getMe: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "management_session.required" })
+        .mockResolvedValue({ personId: "p9", role: "staff" }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(login(el)).toBeTruthy();
+
+    emitLoggedIn(login(el)!);
+    await flush(el);
+    expect(mySchedule(el)).toBeTruthy();
     expect(login(el)).toBeNull();
   });
 
@@ -153,7 +221,7 @@ describe("dashboard-app", () => {
     // The common case is the `management_session.required`/401 reject, but the probe catches
     // EVERYTHING so a stray/network rejection still lands on login rather than escaping unhandled
     // (the whole suite runs with pristine output, which pins that). A bare Error carries no `code`.
-    const api = stubApi({ listStaff: vi.fn().mockRejectedValue(new Error("network down")) });
+    const api = stubApi({ getMe: vi.fn().mockRejectedValue(new Error("network down")) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
     expect(login(el)).toBeTruthy();
@@ -165,7 +233,10 @@ describe("dashboard-app", () => {
     // the shadow boundary rather than letting it bubble on to the document. `host` is the light-DOM
     // node OUTSIDE the shell's shadow root, so a listener there fires only if propagation escaped.
     const api = stubApi({
-      listStaff: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+      getMe: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "management_session.required" })
+        .mockResolvedValue({ personId: "p1", role: "manager" }),
     });
     const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -181,7 +252,7 @@ describe("dashboard-app", () => {
 
   it("does not show the logout control on the login screen", async () => {
     const api = stubApi({
-      listStaff: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+      getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -313,7 +384,7 @@ describe("dashboard-app", () => {
 
   it("does not show the nav on the login screen", async () => {
     const api = stubApi({
-      listStaff: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+      getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
