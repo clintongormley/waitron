@@ -127,7 +127,17 @@ shipped*) and nothing was left blocked or `needs-owner-review`; the run is finis
 
 ## Now
 
-**Nothing in flight.** **Staff-facing swap/absence request path — LANDED as #90** (2026-08-16): the
+**Nothing in flight.** **Purchase invoices + modelo 303 IVA deducible — LANDED as #91** (2026-08-16):
+the input-VAT side of modelo 303 — a new `@waitron/purchasing` module (received supplier-invoice
+capture, FORCE-RLS tables, migrations 0041/0042), `computeInputVat` + net `computeVatReturn`, the
+`mapModelo303` casilla map, and a **byte-exact DR303 fixed-layout file writer** whose field layout is
+machine-generated from the committed official `DR303e26.xlsx` (contiguity-guarded). No
+correctness/fiscal defects across three reviews (incl. a dedicated fiscal-correctness pass) + Copilot;
+fiscal core untouched (H2). **Two pre-filing caveats a human must clear before the first LIVE filing**
+(under *Debt*): validate the file once against the real AEAT sede "por fichero" (página 2 omitted), and
+asesor-confirm the prorrata base-unscaled treatment. Details in *Recently shipped*.
+
+**Staff-facing swap/absence request path — LANDED as #90** (2026-08-16): the
 till-PIN-session-gated *request* half that #87's manager-approval half was built to consume — a
 logged-in operator views their own shifts, requests a shift give-away/cover, accepts a swap offered to
 them, and views/requests absences (requester identity from `session.person_id`, never the body).
@@ -162,13 +172,11 @@ follow-ups*):
   **fiscal-lane / hash-chain sync, H2**). *(The staff-facing swap/absence request path LANDED as #90;
   its own follow-ups — the staff dashboard portal, the two-sided swap UI, staff cancel/withdraw — are
   under Debt.)*
-- **Bigger next slices:** the **reporting input-VAT / *modelo 303* deducible side** — **design spec
-  written 2026-08-16** ([purchase-invoice module + modelo 303 deducible](superpowers/specs/2026-08-16-purchase-invoices-and-modelo-303-deducible-design.md),
-  awaiting owner review; sliced A capture → B deducible+net → C casilla map → D submittable; the exact
-  casilla numbers must be transcribed from the official **DR303** record-design before coding, and
-  recargo de equivalencia / prorrata / deducibility-% are flagged **asesor-fiscal**), and
-  **Recipes/BOM's next slices** now that its allergen-inheritance
-  *backend* has landed (#89): the **recipe-authoring UI** (dashboard — must reseed the allergen picker
+- **Bigger next slices:** **Recipes/BOM's next slices** now that its allergen-inheritance
+  *backend* has landed (#89) — *(the reporting input-VAT / **modelo 303** deducible side LANDED as #91;
+  its deferred slices — rectificativas, the prorrata rule, quarterly/annual periods, intra-community
+  boxes, the purchase-invoice **authoring UI**, wiring the DR303 writer to a download route — plus the
+  two pre-filing caveats are under Debt / Not started)*: the **recipe-authoring UI** (dashboard — must reseed the allergen picker
   from `manual_allergens`, not the published `allergens`, a documented follow-up), **nested
   sub-recipes** (alioli auto-derived from egg+oil+garlic), and — each still greenfield — **plate
   costing (*escandallo*)** and **stock depletion** (sub-project 20). A scale-gated set-based rewrite of
@@ -184,6 +192,40 @@ One line per landed PR, newest first. The git log, the linked designs/plans, and
 detail — **this file is not a history** (see *How to keep this file honest*). Open follow-ups from
 these live under *Debt and odd jobs*; their designs/plans stay in `docs/superpowers/`.
 
+- **#91** Reporting — **purchase invoices + modelo 303 IVA deducible → DR303 file** (sub-project 8) — the
+  input-VAT counterpart to #76's output side, built as four slices on one branch. **A** — a new optional
+  **`@waitron/purchasing`** module: received supplier-invoice capture in two **mutable** tenant tables in
+  `packages/db` (`purchase_invoices` + `purchase_invoice_vat`, migrations **0041** auto / **0042** custom
+  FORCE-RLS + policy + `app_user` GRANT incl. DELETE), CRUD ops with `purchase.*` errors, real-PG RLS
+  isolation proven by deletion. **B** — `computeInputVat` (per-rate + `kind`, bucketed by **`received_on`**
+  = the deduction period, `regime='general'` excludes recargo de equivalencia, cuota scaled by
+  `deductible_proportion`) + `computeVatReturn` extended to `{devengado, deductible, result}`
+  (**46 = 27 − 45**); exactness inherited (sums filed cuotas, difference-method test). **C** —
+  `mapModelo303` casilla map (devengado 01–09 + 150–152; deducible 28/29 ordinary + 30/31 capital; totals
+  27/45; result 46/64/65/66/69/71 — casilla 27/45 summations + **casilla 67 absent** confirmed from the
+  official file). **D** — a **byte-exact DR303 fixed-layout file writer** (`toDr303Record`, ISO-8859-1,
+  `N`-prefixed negatives, load-bearing offsets), **receipt-grade:** the field layout (`dr303-layout.ts`)
+  is machine-generated from the committed official **`DR303e26.xlsx`** (md5-cited, in `packages/reporting/reference/`)
+  and guarded by a contiguity/page-length self-check. **Fiscal safety (H2):** commercial/accounting lane
+  only — a received invoice gets no huella/registro/chain/invoice-number, a DR303 file is our *output* to
+  AEAT; nothing in `verifactu`/`fiscal-verifactu` touched but the `vocabulary-scope` pin (`SPANISH_WORDS`
+  unchanged — English identifiers, Spanish in comments; `purchasing` added to `GENERIC_PACKAGES`); the
+  `inmutabilidad` guard genuinely enumerates both new tables. Built **subagent-driven TDD** → 4-lens
+  simplify → **three independent reviews** (wide correctness + narrow diff/CLAUDE.md + a dedicated
+  **fiscal-correctness** pass that re-parsed the xlsx, re-ran the generator to byte-identical output, and
+  independently verified the summations/formulas/offsets/exactness) — **no correctness or fiscal defects** —
+  → triage (a `RETURNING` perf fix, drop an unused `kind?` filter, a tipo-box cross-check test pinning the
+  two independent rate encodings, casilla-67 comment precision, a self-validating `demo:modelo-303` DR303
+  emit) → **Copilot** caught a real **envelope-period-mismatch** hazard (the file's ejercicio/período could
+  disagree with its casilla amounts) three reviewers + four lenses missed — fixed with a guard (TDD, proven
+  by deletion) + two demo minors; all replied on-thread + resolved. purchasing + reporting **100%**; CI full
+  suite green. **⚠️ PRE-FILING CAVEATS (a human must clear these before the first LIVE filing, NOT before
+  merge):** (1) validate the generated file once against the real AEAT sede "por fichero" uploader — it
+  emits común + página 1 + página 3 and **omits página 2** (régimen simplificado), and we can't verify from
+  here the uploader accepts that; (2) **prorrata** emits the deducible base in full and scales only the
+  cuota — an **asesor-fiscal** must confirm AEAT expects the base unscaled. Both are in *Debt*. Design/plan:
+  [spec](superpowers/specs/2026-08-16-purchase-invoices-and-modelo-303-deducible-design.md) ·
+  [plan](superpowers/plans/2026-08-16-purchase-invoices-modelo-303-deducible.md).
 - **#90** Workforce — **staff-facing swap & absence request path** (sub-project 16) — the *request* half
   that #87's manager-approval half was built to consume, gated by the **till PIN session** (requester
   identity from `session.person_id`, NEVER the request body — proven by deletion in `schedule-api.rls.test.ts`).
@@ -600,7 +642,7 @@ active work (see *Now* / *Current direction*).
 | **7 — Counter POS** | **Operable counter POS complete** — 7a walk-up cash (#60), 7b park/retrieve + idempotency (#61), manual card (#62), 7c prepare & collect (#63), integrated Stripe card (#64); the **layout & receipt editors DONE (#81)** — owner-authorable till layout arrangement + non-fiscal receipt trim, `@waitron/layouts` + `till_layouts` + dashboard editors; all in *Recently shipped*. **Remaining:** a **SumUp** card provider (a future vendor beside Stripe). Deferred edges under *Debt and odd jobs* → **Counter POS follow-ups** (7a / 7b / 7c / integrated card / layout-receipt) |
 | **5 — Identity** | **Headless first slice merged (#58, 2026-08-05).** `@waitron/identity` owns `persons` + `sessions` (FORCE-RLS tenant isolation, now also scanned by fiscal-verifactu's `inmutabilidad` guard), salted-PIN hashing, a role/permission catalog, `authorize()` (operator session + supervisor `{personId, pin}` override), `loginWithPin` / `endSession`, and a `person.manage`-gated staff API. `recordVoid` / `recordCorrection` now require `sale.void` / `sale.rectify` authorization; `sales.authorized_by` / `sales.operator_id` + `payment_refunds.authorized_by` seams and a `waitron-provision venue` admin seed are in place. Remaining sub-project 5 scope (mid-shift-suspension enforcement, the discount gate, till-refund enforcement, the workforce-gate consolidation, branded ids) is under *Debt and odd jobs* → **Identity follow-ups**. The human-facing call sites (must-be-logged-in to ring, till refunds must be authorized) land with the counter POS (#7) |
 | **6 — Locations** | **Provision-a-sellable-venue slice merged (#57)** (2026-08-04; see *Now*) — the foundational till-track unblocker. Country/territory-driven fiscal identity, `resolveFiscalModules` (común → Veri\*Factu + IVA, others refused), `planVenue` / `applyVenue` and the `waitron-provision venue` CLI stand up tenant → location → till → node → SIF → series so `recordSale` can chain a sale; the stale `bootstrap-tenant.sql` was **deleted**. Remaining sub-project 6 scope (multiple locations, editing/deactivation, the #33 SIF-topology deferrals) is under *Debt and odd jobs* → **Locations follow-ups** |
-| **8 — Reporting** | **Daily-close first slice done (#56)** — `@waitron/reporting`'s `computeDailyClose`. ***Cierre Z* (frozen/signed daily close) DONE** — 8a VAT-exact close (#66, `sales.vat_breakdown`), 8b immutable numbered `daily_closes` + per-node hash chain + per-till *descuadre* (#68). **Date-range VAT summary (`computeVatSummaryForPeriod`) + *modelo 303* output-VAT month aggregate (`computeVatReturn`) DONE (#76)** — pure reads over the filed desglose, one shared `aggregateVatByRate` core, civil-date bucketing, real-PG cross-tenant RLS proof; all in *Recently shipped*. Further unstarted slices: the **IVA deducible/soportado (input-VAT)** side (needs a purchase-invoice module), the **AEAT casilla mapping + submittable 303 form**, quarterly/annual periods, and the reporting **UI** (belongs to the till, #7). Reporting follow-ups are under *Debt* |
+| **8 — Reporting** | **Daily-close first slice done (#56)** — `@waitron/reporting`'s `computeDailyClose`. ***Cierre Z* (frozen/signed daily close) DONE** — 8a VAT-exact close (#66, `sales.vat_breakdown`), 8b immutable numbered `daily_closes` + per-node hash chain + per-till *descuadre* (#68). **Date-range VAT summary (`computeVatSummaryForPeriod`) + *modelo 303* output-VAT month aggregate (`computeVatReturn`) DONE (#76)** — pure reads over the filed desglose, one shared `aggregateVatByRate` core, civil-date bucketing, real-PG cross-tenant RLS proof; all in *Recently shipped*. **IVA deducible/soportado (input-VAT) side + AEAT casilla mapping + submittable DR303 file DONE (#91)** — the `@waitron/purchasing` module (purchase-invoice capture), `computeInputVat` + net `computeVatReturn`, `mapModelo303`, and the byte-exact DR303 writer (layout from the committed official `DR303e26.xlsx`); see *Recently shipped*. Further unstarted slices: **rectificativas** (40/41), the **prorrata rule** (44), **quarterly/annual periods**, **intra-community/import boxes** (32–39), the purchase-invoice **authoring UI** (dashboard), and wiring the DR303 writer to a **download route** — plus the two #91 **pre-filing caveats** (real-sede validation; asesor prorrata confirmation). Reporting follow-ups are under *Debt* |
 | **16 — Workforce** | *Registro de jornada* legal floor **DONE (#47)**; **D2 scheduling DONE (#50)** — `convenio_config` surface (overtime de-hard-coded, single-sourced), shifts + `roster_versions` + `publishRoster`, absences/availability/shift_templates/shift_swaps, an **advisory** guardrail engine (`validateRoster` → `RosterBreach[]`; publish surfaces breaches but proceeds — owner chose warn+override) + a planned-vs-actual read model, and supersede-on-republish (partial unique index, one published roster per `(location, period)`). The overtime *rule* the both-model projection computes stays convenio-driven — an **asesor-laboral** call, not code. Remaining: **D3 payroll export** (integrate-not-build), plus the workforce follow-ups under *Debt and odd jobs*. Deferred edges from the floor: the registro export doesn't yet surface overtime (belongs to the payslip/D3); the correction period-fetch is a ±1-day window (a >1-day-relocation correction is out of the floor's scope, chained but maybe missed by the period fetch). A post-#47 `/finish-branch` review (landed as #52) corrected four floor defects: the registro export rendered UTC instead of local wall-clock; the tamper chain omitted a correction's reason/actor and the capturing till; correction precedence tie-broke on the unhashed `ingest_seq` (a floor-bypasser could reorder corrections undetected) — now on the hashed `sequence_no`; and a `clockIn`/`clockOut` TOCTOU (an unlocked state read before the chain-head lock let two concurrent same-person clock-ins append a double-`in` that undercounts worked time) — now serialized per person with a `persons` row lock proven by a real-PG concurrency test. **Authoring UI (dashboard) LANDED (#83, 2026-08-15)** — author a draft weekly roster on a person×day grid → view breaches → publish (`mountWorkforceApi` + `schedule.manage` + `<dashboard-roster-screen>`, no migration). **Roster-management slice 2 LANDED (#87, 2026-08-15)** — split-shift (*jornada partida*) authoring, manager approve/reject of swaps + absences (`decideSwap`/`setAbsenceStatus` + `swap.approve`/`absence.decide` + migration 0010 decider columns + approvals screen), and the planned-vs-actual view (`getPlannedVsActual`, published-roster only) — the **manager-approval half**; the **staff-facing request path** for swaps/absences **LANDED (#90, 2026-08-16)** — a till-PIN-session-gated surface (request a give-away/cover, accept an offered swap, request an absence), built surface-agnostic for a future staff dashboard portal. D3 payroll export remains. See *Recently shipped* → #87/#90 for the deferred follow-ups |
 | **18 — Menu and allergens** | **Slice 1 (EU-14 allergen declaration) DONE (#65)** — taxonomy + `validateAllergens` + `allergen.*` codes (`@waitron/catalogue`), `products.allergens jsonb` (0031), `/api/products` + `TillProduct` exposure, en/es names, a till allergen screen (matrix + operator lookup + print), a demo; in *Recently shipped*. Allergen declaration is a **launch-day legal duty** (EU 1169/2011, RD 126/2015). **Recipes/BOM allergen-inheritance backend DONE (#89)** — `@waitron/recipes` derives a product's allergens from its ingredients (add-only, PENDING contagious). **Remaining:** the recipe-authoring **UI** (dashboard; reseed the picker from `manual_allergens`), **nested sub-recipes**, plate costing + stock (greenfield, sub-project 20), variants, customer-facing browse; the allergen list stays a food-safety-advisor call. Deferred `@media print` sheet-isolation edge under *Debt* |
 | 10-15, 17, 19, 20 | Tabs, floor plan, KDS, tip payroll, bookings, online ordering, accounting export, opening hours, procurement |
@@ -1164,6 +1206,26 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   `packages/provisioning/src/instance-apply.rls.test.ts` (pins the manifest's `migratedSets`) red;
   both were fixed on this branch. See the receipted `CLAUDE.md` §2 entry. When you add a member to a
   repo-wide list, grep every package for a test that pins it and run the WHOLE workspace's suites.
+- **Purchase invoices / modelo 303 deducible follow-ups (#91).** **⚠️ TWO PRE-FILING CAVEATS a human
+  must clear before the first LIVE 303 filing (operational, not code):** (a) **validate the generated
+  DR303 file once against the real AEAT sede "por fichero" uploader** — Waitron emits común + página 1 +
+  página 3 and OMITS página 2 (régimen simplificado, out of scope), and we cannot verify from here that
+  the uploader accepts a página-2-omitted file (documented in `dr303.ts`'s header); (b) **an
+  asesor-fiscal must confirm the prorrata treatment** — `computeInputVat` emits the deducible *base* in
+  full and scales only the *cuota* by `deductible_proportion`; confirm AEAT expects the base unscaled
+  (spec §9 seam). **Deferred build slices** (each its own): **rectificativas de facturas recibidas**
+  (casilla 40/41 — the schema needs a `corrects_purchase_invoice_id` self-FK, and `validateLines` +
+  the app-layer non-negative check must relax to allow credit-note negatives; NO DB CHECK forbids them,
+  by design); **bienes-de-inversión regularización** (43); the **prorrata rule** that sets
+  `deducible_proportion` (44) — asesor-driven; **quarterly/annual periods** (`computeVatReturn` is
+  monthly; a quarter is a thin sum of three, and the DR303 período accepts `1T`–`4T` which the
+  serializer's period guard deliberately leaves cross-check-exempt); **intra-community/import boxes**
+  (32–39); the purchase-invoice **authoring UI** (a dashboard surface like catalogue→catalogue, the
+  module is headless); wiring **`toDr303Record` to a download/route** (today only unit tests + the
+  `demo:modelo-303` self-check consume it); and the **duplicate-invoice key** decision
+  (`(tenant_id, supplier_tax_id, supplier_invoice_number)` is unique-forever today — asesor to confirm
+  per-year vs forever). Also open: a libro-registro / **Pre303** export (the owner chose the raw DR303
+  file as the primary output; Pre303 is a possible later addition).
 - **Reporting follow-ups (#56), surfaced by the finish-branch review.**
   (1) **Lift `percentOf` into `@waitron/shared` — LANDED (#77).** The formula
   `divideDecimal(multiplyDecimal(base, rate), "100", MONEY_SCALE)` had drifted into **four** copies —
