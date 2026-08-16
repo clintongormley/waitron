@@ -308,8 +308,14 @@ export class TillApp extends LitElement {
     await this.#refreshPrepQueue();
     // The colleague roster for the staff schedule screen (unauthenticated `GET /api/staff`). Loaded
     // AFTER the counter is shown so a roster fetch failure never blocks the sale flow; the schedule
-    // screen picks it up reactively via its `.staff` prop whenever it lands.
-    this.staff = await this.api.listStaff();
+    // screen picks it up reactively via its `.staff` prop whenever it lands. A rejection is SWALLOWED,
+    // leaving `staff` at its default `[]` — the picker stays empty rather than surfacing an error or
+    // (under `void #onLoggedIn`) escaping as an unhandled rejection; the operator can still sell.
+    try {
+      this.staff = await this.api.listStaff();
+    } catch {
+      // Non-fatal: leave `this.staff` as its `[]` default (degrade gracefully, never rethrow).
+    }
   }
 
   /**

@@ -200,6 +200,42 @@ describe("till-app", () => {
     expect(c.operatorName).toBe("Ana");
   });
 
+  it("a failing listStaff leaves the roster empty and never blocks the counter (no unhandled rejection)", async () => {
+    // `#onLoggedIn` loads the colleague roster AFTER the counter is shown, so a roster failure must
+    // degrade gracefully: leave `staff` at its default `[]` and surface no error. Under
+    // `void this.#onLoggedIn(...)` an uncaught rejection escapes as an UNHANDLED promise rejection —
+    // the load-bearing assertion below is `rejections === []`, since `staff` is `[]` either way (the
+    // unguarded assignment simply never completes). Removing the try/catch makes `rejections` hold the
+    // roster error and this test go red — the deletion proof.
+    const rejections: unknown[] = [];
+    const onRejection = (event: PromiseRejectionEvent): void => {
+      rejections.push(event.reason);
+      event.preventDefault(); // mark handled so it doesn't pollute sibling tests
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    try {
+      const { el } = await mountApp({
+        listStaff: vi.fn().mockRejectedValue(new Error("roster down")),
+      });
+      const c = await toCounter(el);
+      // Give any pending unhandled-rejection notification a couple of macrotasks to surface.
+      await flush(el);
+      await flush(el);
+
+      // The counter still shows — the sale flow is never blocked by the roster fetch.
+      expect(c).not.toBeNull();
+      expect(counter(el)).not.toBeNull();
+      // The roster degraded to empty rather than throwing.
+      expect((el as unknown as { staff: unknown[] }).staff).toEqual([]);
+      // No error banner: a roster failure is non-fatal, not a surfaced error.
+      expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+      // The rejection was caught, not left unhandled.
+      expect(rejections).toEqual([]);
+    } finally {
+      window.removeEventListener("unhandledrejection", onRejection);
+    }
+  });
+
   it("confirm-payment: records the sale with the mapped lines + tender, then shows the ticket", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
