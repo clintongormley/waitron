@@ -5,28 +5,19 @@ import type { VatReturn } from "./types.js";
 /**
  * Maps a `computeVatReturn` result onto the official modelo 303 casillas (boxes).
  *
- * SOURCES AND VERIFICATION (CLAUDE.md §1). Every box NUMBER below is from the spec's §7 casilla map,
- * whose provenance table (§13) sources it to AEAT Instrucciones 2026 unless flagged. The box numbers
- * used here — the devengado per-rate triples 01–09 and 150–152, the deducible pairs 28/29 (corrientes)
- * and 30/31 (bienes de inversión), the result boxes 46/64/65/66/69/71 and their formulas — are the
- * VERIFIED subset. Two things the spec marks **[UNVERIFIED — confirm against DR303]** are handled
- * conservatively rather than invented:
+ * SOURCES AND VERIFICATION (CLAUDE.md §1). Every box NUMBER and every SUMMATION below is transcribed
+ * from the AEAT-published record design **DR303e26.xlsx** (modelo 303 diseño de registro, ejercicio
+ * 2026, version 1.01; md5 `e42cbe6baf7f21dd95c274b4c6f11bbe`), committed verbatim at
+ * `packages/reporting/reference/DR303e26.xlsx` and machine-extracted into the self-validated field
+ * table `packages/reporting/src/dr303-layout.ts` (the DR303 file writer, Slice D). The devengado
+ * per-rate triples 01–09 and 150–152, the deducible pairs 28/29 (corrientes) and 30/31 (bienes de
+ * inversión), and the result boxes 46/64/65/66/69/71 are the boxes that table places; this map delivers
+ * their values. The two summations the spec had flagged **[UNVERIFIED — confirm against DR303]** are now
+ * CONFIRMED against DR303e26, and casilla 67 is CONFIRMED ABSENT — details at each box below.
  *
- *   - **Casillas 27 and 45** (total cuota devengada / total a deducir): the exact official SUMMATION
- *     box-list is unverified. Here they are the sum of the régimen-general boxes this deli actually
- *     files — 27 = `vatReturn.taxTotal` (Σ of the populated devengado cuota boxes), 45 =
- *     `vatReturn.deductible.taxTotal` (28/29 + 30/31). For a deli with only domestic régimen-general
- *     operations that IS the whole sum; whether the official 27/45 also fold in out-of-scope boxes
- *     (importaciones, intracomunitarias, modificaciones…) is a **TODO: confirm against the DR303
- *     diseño de registro** (spec §7/§13). No box-list is hardcoded as the official definition.
- *   - **Casilla 67** (which an earlier draft named for prior-period compensation) **could not be
- *     located on the current form** (spec §7: two sources returned not-found; compensation now flows
- *     through 78). It is therefore **NOT emitted** — a **TODO: confirm 67's status against DR303**
- *     rather than a guessed value.
- *
- * The full DR303 record layout (Slice D) is the machine-readable primary source for the box positions;
- * this map delivers the casilla-mapped aggregate it will consume, and stands alone as something an
- * operator can read box-by-box.
+ * The full DR303 record layout is now Slice D (`dr303-layout.ts` / `dr303.ts`), the machine-readable
+ * primary source for the box positions; this map delivers the casilla-mapped aggregate that writer
+ * consumes, and stands alone as something an operator can read box-by-box.
  *
  * DEFERRED / OUT OF SCOPE (spec §11), so deliberately NOT emitted here: importaciones (32–35),
  * intracomunitarias (36–39), rectificación de deducciones (40/41), compensaciones REAGP (42),
@@ -102,24 +93,48 @@ export function mapModelo303(vatReturn: VatReturn): Modelo303 {
   boxes["30"] = capitalBase;
   boxes["31"] = capitalTax;
 
-  // Totals + result. 27/45 are the in-scope sums (see the [UNVERIFIED] note above); 46 = 27 − 45 is
-  // VERIFIED arithmetic and already computed as `vatReturn.result`.
-  boxes["27"] = vatReturn.taxTotal; // total cuota devengada (in-scope: Σ populated devengado cuotas)
-  boxes["45"] = vatReturn.deductible.taxTotal; // total a deducir (in-scope: 29 + 31)
-  boxes["46"] = vatReturn.result; // resultado régimen general = 27 − 45
+  // Totals + result. Box-lists confirmed against DR303e26.xlsx (sheet DP30301).
+  //
+  // Casilla 27 (field 67, "Total cuota devengada"): the official 2026 summation is
+  //   [152] + [167] + [03] + [155] + [06] + [09] + [11] + [13] + [15] + [158] + [170] + [18] + [21] +
+  //   [24] + [26]  — it CHANGED from 2021, now folding in the new-rate cuota boxes (167/155/158/170).
+  // For a régimen-general deli the in-scope cuota boxes are exactly the ones this map populates — 152
+  // (0 %), 03 (4 %), 06 (10 %), 09 (21 %) — and every other operand is out of scope and therefore ZERO:
+  // 167/155 (other 0 %-rate rows), 158/170 (recargo cuotas), 11/13 (intracom / ISP), 15 (modificación),
+  // 18/21/24/26 (recargo / recargo modificación). So 27 == Σ(populated devengado cuotas) ==
+  // `vatReturn.taxTotal`, exactly — the full official box-list with the out-of-scope boxes proven zero.
+  boxes["27"] = vatReturn.taxTotal;
+  //
+  // Casilla 45 (field 85, "Total a deducir"): official 2026 summation is
+  //   [29] + [31] + [33] + [35] + [37] + [39] + [41] + [42] + [43] + [44].
+  // In scope: 29 (corrientes cuota) + 31 (inversión cuota); out of scope → ZERO: 33/35 (importaciones),
+  // 37/39 (intracomunitarias), 41 (rectificación), 42 (REAGP), 43/44 (regularización / prorrata). So
+  // 45 == 29 + 31 == `vatReturn.deductible.taxTotal`, exactly.
+  boxes["45"] = vatReturn.deductible.taxTotal;
+  //
+  // Casilla 46 (field 86): "Resultado régimen general ( [27] - [45] )" — verified arithmetic, already
+  // computed as `vatReturn.result`. Type N (signed): a net-credit month renders with the `N` prefix.
+  boxes["46"] = vatReturn.result;
 
-  // 64 suma de resultados = 46 for a single-regime deli (the general formula sums other-regime results,
-  // which are out of scope → 0). 65 = % Estado (100, common-territory). 66 = 64 × 65/100 (VERIFIED
-  // formula). 69 = 66 + 77 − 78 + 68 + 108, with 77/78/68/108 out of scope = 0 → 66. 71 = 69 − 70 + 109,
-  // with 70/109 out of scope = 0 → 69.
+  // Result cascade on página 3 (DR303e26.xlsx sheet DP30303), out-of-scope operands proven ZERO:
+  //   64 (field 16) "Suma de resultados ( [46] + [58] + [76] )": 58 (resultado régimen simplificado,
+  //      página 2) and 76 (regularización art. 80.cinco) are out of scope → 64 == 46.
+  //   65 (field 17) "% Atribuible a la Administración del Estado" = 100 for a common-territory deli.
+  //   66 (field 18) "Atribuible al Estado" = 64 × 65 / 100 — verified.
+  //   69 (field 25) "Resultado de la autoliquidación ( [66] + [77] - [78] + [68] + [108] )": 77 (IVA
+  //      importación Aduana), 78 (compensación periodos anteriores), 68 (regularización anual), 108
+  //      (ajuste rectificativa) out of scope → 69 == 66.
+  //   71 (field 29) "Resultado ( [69] - [70] + [109] - [112] )": 70 (ingresos previos), 109
+  //      (devoluciones acordadas), 112 (pago a cuenta gasolinas mod. 319) out of scope → 71 == 69.
   boxes["64"] = boxes["46"];
   boxes["65"] = STATE_SHARE_PERCENT;
   boxes["66"] = percentOf(boxes["64"], STATE_SHARE_PERCENT);
   boxes["69"] = boxes["66"];
   boxes["71"] = boxes["69"];
 
-  // Casilla 67 deliberately NOT emitted — TODO: confirm its status against the DR303 record design
-  // (spec §7: not located on the current form).
+  // Casilla 67 is CONFIRMED ABSENT from the current form: DR303e26.xlsx has no [67] on any página
+  // (checked páginas 1 and 3; compensation of prior-period credits flows through 110/78/87 on página 3,
+  // not a box 67). It is therefore deliberately NOT emitted — no longer a TODO.
 
   return { tenantId: vatReturn.tenantId, year: vatReturn.year, month: vatReturn.month, boxes };
 }

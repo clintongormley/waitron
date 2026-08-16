@@ -149,7 +149,7 @@ describe("mapModelo303", () => {
     expect(m.boxes["150"]).toBeUndefined();
     // The retired 5% boxes never exist.
     expect(m.boxes["153"]).toBeUndefined();
-    // Casilla 67 is deliberately NOT emitted (UNVERIFIED — see modelo-303.ts).
+    // Casilla 67 is deliberately NOT emitted — confirmed ABSENT from DR303e26 (see modelo-303.ts).
     expect(m.boxes["67"]).toBeUndefined();
   });
 });
