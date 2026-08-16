@@ -33,6 +33,18 @@ export type {
   DecideSwapInput,
   PendingSwapRow,
 } from "./shift-swaps.js";
+export {
+  listShiftsForPerson,
+  listSwapsForPerson,
+  listAbsencesForPerson,
+} from "./schedule-reads.js";
+export type {
+  ListShiftsForPersonInput,
+  PersonShiftRow,
+  PersonSwapRow,
+  PersonAbsenceRow,
+  SwapDirection,
+} from "./schedule-reads.js";
 export { appendToChain, isUniqueViolation, lockChainHead } from "./chain.js";
 export type { ChainHead, TimeEntryAppend } from "./chain.js";
 export { computeEntryHash, verifyChain } from "./chain-hash.js";
