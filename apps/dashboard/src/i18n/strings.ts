@@ -173,6 +173,7 @@ export const en = {
   "purchase.add": "Add invoice",
   "purchase.empty": "No purchase invoices yet.",
   "purchase.delete": "Delete",
+  "purchase.delete_confirm": "Confirm delete?",
   // Purchase form — header
   "purchase.new": "New purchase invoice",
   "purchase.edit": "Edit purchase invoice",
@@ -338,6 +339,7 @@ export const es: Record<StringKey, string> = {
   "purchase.add": "Añadir factura",
   "purchase.empty": "Aún no hay facturas recibidas.",
   "purchase.delete": "Eliminar",
+  "purchase.delete_confirm": "¿Confirmar eliminación?",
   "purchase.new": "Nueva factura recibida",
   "purchase.edit": "Editar factura recibida",
   "purchase.supplier_tax_id": "NIF del proveedor",

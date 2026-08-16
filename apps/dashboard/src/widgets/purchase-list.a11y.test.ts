@@ -50,4 +50,16 @@ describe.each(["light", "dark"] as const)("purchase-list a11y (%s theme)", (them
     );
     await expectNoA11yViolations(host);
   });
+
+  it("renders accessibly with a row's Delete armed (confirm prompt showing)", async () => {
+    const { el, host } = await mountWidget<PurchaseList>(
+      "dashboard-purchase-list",
+      { invoices },
+      theme,
+    );
+    // Arm the first row's Delete — its label + aria-label flip to the confirm prompt.
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-pi-1]")!.click();
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
 });
