@@ -25,3 +25,15 @@ export function currentLocale(): string {
 export function t(key: StringKey, l: string = locale): string {
   return catalogues[l]?.[key] ?? en[key];
 }
+
+/**
+ * Pick an `{ en, es }` entry's column for a locale: strip the region subtag
+ * ("es-ES" → "es"), then the language's text if present, else the English base.
+ * This is the ONE place the region-strip + English-degrade rule lives; the
+ * allergen-name and error-code resolvers both call it, and each supplies its own
+ * missing-entry fallback (the raw code / the GENERIC message) around it.
+ */
+export function pickLocale(entry: { en: string; es: string }, l: string = locale): string {
+  const lang = l.replace(/-.*$/, "");
+  return (entry as Record<string, string>)[lang] ?? entry.en;
+}

@@ -1,4 +1,4 @@
-import { currentLocale } from "./t.js";
+import { currentLocale, pickLocale } from "./t.js";
 
 // Localised copy for the raw error CODES the schedule routes reject with. The till's API client rejects
 // with a bare `{ code }` (see api/client.ts), and this module is the ONE place a schedule code becomes
@@ -64,6 +64,5 @@ export function codeMessage(code: string, locale: string = currentLocale()): str
   // `constructor`, …) would resolve the inherited method under a bare lookup. Object.hasOwn keeps the
   // "only ever a sentence" guarantee true for every string input.
   const entry = Object.hasOwn(CODE_MESSAGES, code) ? CODE_MESSAGES[code]! : GENERIC;
-  const language = locale.split("-")[0];
-  return language === "es" ? entry.es : entry.en;
+  return pickLocale(entry, locale);
 }
