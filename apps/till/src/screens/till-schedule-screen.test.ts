@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import "./till-schedule-screen.js";
+import { localIsoDate, scheduleWindow } from "./till-schedule-screen.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { TillScheduleScreen } from "./till-schedule-screen.js";
@@ -258,5 +258,44 @@ describe("till-schedule-screen", () => {
     const api = stubApi({ listMyShifts: vi.fn().mockRejectedValue(new Error("network")) });
     const { el } = await mount(api);
     expect(root(el).textContent).toContain(t("schedule.load_failed"));
+  });
+});
+
+describe("localIsoDate / scheduleWindow (LOCAL wall-date window bounds)", () => {
+  it("formats a Date's LOCAL calendar date as zero-padded YYYY-MM-DD", () => {
+    // Constructed with the local-time Date constructor, so its components ARE its local wall date.
+    // January is month 0 and the day is single-digit, so this also proves the `+ 1` and the padStart.
+    const d = new Date(2026, 0, 5, 12, 0, 0); // 2026-01-05 12:00 local
+    expect(localIsoDate(d)).toBe("2026-01-05");
+    expect(localIsoDate(d)).toBe(
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+    );
+  });
+
+  it("uses the LOCAL date, not the UTC date, when the two differ (the regression guard)", () => {
+    // The bug: `toISOString()` reads the UTC date. Near local midnight in a non-UTC venue (Spain is
+    // UTC+1/+2) the UTC date is a DIFFERENT day, so the requested window would shift by a day and a
+    // boundary shift be missed or wrongly included. A stub Date whose LOCAL date (4 May) and UTC date
+    // (5 May) deliberately diverge pins that the LOCAL one wins REGARDLESS of this machine's timezone —
+    // a real Date can only diverge in a non-UTC test host, so the stub makes the guard deterministic.
+    // Reverting `localIsoDate` to `date.toISOString().slice(0, 10)` makes this return "2026-05-05" red.
+    const localMay4ButUtcMay5 = {
+      getFullYear: () => 2026,
+      getMonth: () => 4, // May, 0-indexed
+      getDate: () => 4,
+      toISOString: () => "2026-05-05T00:30:00.000Z", // the next day in UTC
+    } as unknown as Date;
+    expect(localIsoDate(localMay4ButUtcMay5)).toBe("2026-05-04");
+  });
+
+  it("builds a half-open [from, to) window of LOCAL dates spanning `days`", () => {
+    const now = new Date(2026, 4, 4, 12, 0, 0); // 2026-05-04 12:00 local
+    expect(scheduleWindow(now, 14)).toEqual({ from: "2026-05-04", to: "2026-05-18" });
+  });
+
+  it("advances the upper bound on a copy, leaving the caller's Date untouched", () => {
+    const now = new Date(2026, 4, 4, 12, 0, 0);
+    scheduleWindow(now, 14);
+    expect(localIsoDate(now)).toBe("2026-05-04"); // `now` not mutated by the `+ days`
   });
 });

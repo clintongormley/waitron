@@ -20,9 +20,31 @@ const ABSENCE_KINDS: readonly AbsenceKind[] = ["holiday", "sick_leave", "leave",
  * recorded follow-up). */
 const WINDOW_DAYS = 14;
 
-/** A `YYYY-MM-DD` string for `date` in UTC — the wire format the schedule window bounds use. */
-function isoDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
+/**
+ * A `YYYY-MM-DD` string for `date`'s LOCAL calendar day — the wire format the schedule window bounds
+ * use. The till device sits AT the venue, so its local wall date is the venue wall date the server's
+ * window compares against: `listShiftsForPerson` filters on
+ * `(starts_at at time zone 'UTC' + starts_offset_minutes)::date`, a LOCAL date, not the raw UTC instant.
+ * Built from local components (`getFullYear`/`getMonth`/`getDate`) rather than `toISOString()`, which is
+ * UTC and, near local midnight in a non-UTC venue (Spain is UTC+1/+2), names a different day — shifting
+ * the requested window by one and missing or wrongly including a boundary shift.
+ */
+export function localIsoDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * The half-open `[from, to)` window of LOCAL dates for the shifts read: `now`'s local day through it plus
+ * `days`, both `YYYY-MM-DD`. The upper bound is advanced on a LOCAL `Date` (`getDate`/`setDate`) so it
+ * tracks local calendar days, matching {@link localIsoDate}; a copy is advanced, so `now` is untouched.
+ */
+export function scheduleWindow(now: Date, days: number): { from: string; to: string } {
+  const to = new Date(now);
+  to.setDate(to.getDate() + days);
+  return { from: localIsoDate(now), to: localIsoDate(to) };
 }
 
 /**
@@ -181,12 +203,10 @@ export class TillScheduleScreen extends LitElement {
     void this.#reload();
   }
 
-  /** The half-open `[from, to)` window for the shifts read: today through today + {@link WINDOW_DAYS}. */
+  /** The half-open `[from, to)` window for the shifts read: today through today + {@link WINDOW_DAYS},
+   * as LOCAL calendar dates (the device is at the venue) — see {@link scheduleWindow}. */
   #window(): { from: string; to: string } {
-    const now = new Date();
-    const to = new Date(now);
-    to.setUTCDate(to.getUTCDate() + WINDOW_DAYS);
-    return { from: isoDate(now), to: isoDate(to) };
+    return scheduleWindow(new Date(), WINDOW_DAYS);
   }
 
   /**
