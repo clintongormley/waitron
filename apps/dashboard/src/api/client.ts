@@ -377,6 +377,90 @@ export interface MyAbsence {
   createdAt: string;
 }
 
+// ── Purchase-invoice types ──────────────────────────────────────────────────────────────────────
+// LOCAL copies of the server's purchase-invoice JSON shapes (the `purchasing-api.ts` routes wrapping
+// `@waitron/purchasing`'s ops), deliberately NOT imported from `@waitron/purchasing`/`@waitron/db` — a
+// runtime import would drag their barrels + Node builtins into the browser bundle (the #70 rule, as
+// the staff/catalogue/layout/shift shapes above do). These are the CONTRACT the purchase screen +
+// form build on; every `Decimal` is a `numeric` decimal STRING browser-side (never a number), and the
+// two enums are re-declared as local unions. If the server shapes change these follow, and a mismatch
+// surfaces as a runtime shape error a view test catches, not a compile break.
+
+/** The VAT regime a received invoice is treated under — the `purchase_regime` enum. `general` is
+ * deductible (on the 303); `equivalence_surcharge` (recargo de equivalencia) is non-deductible. */
+export type PurchaseRegime = "general" | "equivalence_surcharge";
+
+/** What a VAT line was spent on — the `purchase_vat_kind` enum. `ordinary` = operaciones corrientes;
+ * `capital` = bienes de inversión. */
+export type PurchaseVatKind = "ordinary" | "capital";
+
+/** One per-rate VAT line of a received invoice — mirrors purchasing's `PurchaseInvoiceLine`. `tax` is
+ * the cuota (IVA soportado); `rate`/`base`/`tax` are `numeric` decimal STRINGS. */
+export interface PurchaseInvoiceLine {
+  rate: string;
+  base: string;
+  tax: string;
+  kind: PurchaseVatKind;
+}
+
+/**
+ * One received supplier invoice as `GET/POST /management-api/purchase-invoices` return it — a faithful
+ * mirror of purchasing's `PurchaseInvoice`. `total`/`deductibleProportion` are decimal STRINGS;
+ * `issuedOn`/`receivedOn` are `YYYY-MM-DD` civil dates.
+ */
+export interface PurchaseInvoice {
+  id: string;
+  supplierTaxId: string;
+  supplierName: string;
+  supplierInvoiceNumber: string;
+  issuedOn: string;
+  receivedOn: string;
+  total: string;
+  regime: PurchaseRegime;
+  deductibleProportion: string;
+  note: string | null;
+  lines: PurchaseInvoiceLine[];
+}
+
+/** A VAT line supplied on create/update — mirrors purchasing's `PurchaseInvoiceLineInput`; `kind`
+ * omitted defaults to `ordinary` server-side. */
+export interface PurchaseInvoiceLineInput {
+  rate: string;
+  base: string;
+  tax: string;
+  kind?: PurchaseVatKind;
+}
+
+/** The header fields supplied on create — mirrors purchasing's `PurchaseInvoiceHeaderInput`;
+ * `regime`/`deductibleProportion` omitted fall to their server defaults. */
+export interface PurchaseInvoiceHeaderInput {
+  supplierTaxId: string;
+  supplierName: string;
+  supplierInvoiceNumber: string;
+  issuedOn: string;
+  receivedOn: string;
+  total: string;
+  regime?: PurchaseRegime;
+  deductibleProportion?: string;
+  note?: string | null;
+}
+
+/** The `POST /management-api/purchase-invoices` body — the nested header + the VAT desglose. */
+export interface PurchaseInvoiceInput {
+  header: PurchaseInvoiceHeaderInput;
+  lines: PurchaseInvoiceLineInput[];
+}
+
+/**
+ * The `PATCH /management-api/purchase-invoices/:id` body — mirrors purchasing's
+ * `UpdatePurchaseInvoiceInput`. `header` is a partial (only named fields change); `lines`, when
+ * present, is a FULL replacement of the desglose (omitted leaves it unchanged).
+ */
+export interface PurchaseInvoicePatch {
+  header?: Partial<PurchaseInvoiceHeaderInput>;
+  lines?: PurchaseInvoiceLineInput[];
+}
+
 /** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -740,6 +824,31 @@ export class DashboardApi {
       "POST",
       req,
     );
+  }
+
+  // ── Purchase invoices (facturas recibidas) ────────────────────────────────────────────────────
+
+  /** `GET /management-api/purchase-invoices` — every received invoice (header + its VAT lines). */
+  listPurchaseInvoices(): Promise<PurchaseInvoice[]> {
+    return this.#request<PurchaseInvoice[]>("/management-api/purchase-invoices", "GET");
+  }
+
+  /** `POST /management-api/purchase-invoices` — create a received invoice from its header + desglose;
+   * returns the created `PurchaseInvoice` (201). */
+  createPurchaseInvoice(input: PurchaseInvoiceInput): Promise<PurchaseInvoice> {
+    return this.#request<PurchaseInvoice>("/management-api/purchase-invoices", "POST", input);
+  }
+
+  /** `PATCH /management-api/purchase-invoices/:id` — patch the header and/or fully replace the VAT
+   * lines. Answers an empty 204. */
+  updatePurchaseInvoice(id: string, patch: PurchaseInvoicePatch): Promise<void> {
+    return this.#request<void>(`/management-api/purchase-invoices/${id}`, "PATCH", patch);
+  }
+
+  /** `DELETE /management-api/purchase-invoices/:id` — remove a received invoice (its VAT lines
+   * cascade). Answers an empty 204. */
+  deletePurchaseInvoice(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/purchase-invoices/${id}`, "DELETE");
   }
 
   /**
