@@ -232,6 +232,53 @@ export type PayOutcome =
   | { outcome: "timeout" }
   | { outcome: "network_unavailable" };
 
+/**
+ * The four `absence_kind` enum members (`@waitron/workforce`'s `absenceKind`), a LOCAL union — never a
+ * runtime import from the engine (the bundle rule, see the file header). The staff schedule screen's
+ * kind picker offers these; the server re-validates against the real enum.
+ */
+export type AbsenceKind = "holiday" | "sick_leave" | "leave" | "unpaid";
+
+/** One of my upcoming shifts (`GET /api/schedule/shifts`; mirrors the server's `PersonShiftRow`). */
+export interface MyShift {
+  id: string;
+  locationId: string;
+  startsAt: string;
+  startsOffsetMinutes: number;
+  endsAt: string;
+  endsOffsetMinutes: number;
+  role: string | null;
+  rosterVersionId: string | null;
+}
+
+/**
+ * One swap I'm party to (`GET /api/schedule/swaps`; mirrors the server's `PersonSwapRow`). `direction`
+ * says which side I'm on — `offered_to_me` (I can Accept it while `status === "requested"`) or
+ * `requested_by_me` — and `status` its lifecycle stage.
+ */
+export interface MySwap {
+  id: string;
+  requestedByPersonId: string;
+  fromShiftId: string;
+  toPersonId: string;
+  toShiftId: string | null;
+  status: "requested" | "accepted" | "approved" | "rejected";
+  createdAt: string;
+  direction: "offered_to_me" | "requested_by_me";
+}
+
+/** One of my absences, any status (`GET /api/schedule/absences`; mirrors the server's `PersonAbsenceRow`). */
+export interface MyAbsence {
+  id: string;
+  personId: string;
+  kind: AbsenceKind;
+  startsOn: string;
+  endsOn: string;
+  status: "requested" | "approved" | "rejected";
+  note: string | null;
+  createdAt: string;
+}
+
 export class TillApi {
   readonly #baseUrl: string;
   readonly #fetchImpl: FetchLike;
@@ -398,6 +445,62 @@ export class TillApi {
    */
   listPrepQueue(): Promise<PrepQueueEntry[]> {
     return this.#request<PrepQueueEntry[]>("/api/prep-queue", "GET");
+  }
+
+  // --- Staff schedule (the till-session-gated request path, `apps/server/src/schedule-api.ts`). The
+  // requester is ALWAYS the session's operator server-side; these methods never send a personId. ---
+
+  /** My shifts over a half-open `[from, to)` window (`YYYY-MM-DD`) → `GET /api/schedule/shifts`. */
+  listMyShifts(from: string, to: string): Promise<MyShift[]> {
+    return this.#request<MyShift[]>(
+      `/api/schedule/shifts?from=${from}&to=${to}`,
+      "GET",
+    );
+  }
+
+  /** The swaps I'm party to (offered to me, or requested by me) → `GET /api/schedule/swaps`. */
+  listMySwaps(): Promise<MySwap[]> {
+    return this.#request<MySwap[]>("/api/schedule/swaps", "GET");
+  }
+
+  /**
+   * Request a swap → `POST /api/schedule/swaps`. Offer one of MY shifts (`fromShiftId`) to a colleague
+   * (`toPersonId`); `toShiftId` null is a one-sided give-away (the case this slice's UI files). A shift
+   * that is not mine rejects `{ code: "swap.not_permitted" }`. Returns the new swap's id.
+   */
+  requestSwap(req: {
+    fromShiftId: string;
+    toPersonId: string;
+    toShiftId: string | null;
+  }): Promise<{ swapId: string }> {
+    return this.#request<{ swapId: string }>("/api/schedule/swaps", "POST", req);
+  }
+
+  /**
+   * Accept a swap offered TO me → `POST /api/schedule/swaps/:swapId/accept`. Only the named recipient
+   * may accept; a swap not offered to me rejects `{ code: "swap.not_permitted" }`, one no longer
+   * `requested` `{ code: "swap.not_acceptable" }`. The server answers an empty 204.
+   */
+  async acceptSwap(swapId: string): Promise<void> {
+    await this.#request<void>(`/api/schedule/swaps/${swapId}/accept`, "POST");
+  }
+
+  /** My absences, every status → `GET /api/schedule/absences`. */
+  listMyAbsences(): Promise<MyAbsence[]> {
+    return this.#request<MyAbsence[]>("/api/schedule/absences", "GET");
+  }
+
+  /**
+   * Request an absence for myself → `POST /api/schedule/absences`. A range overlapping an existing
+   * absence rejects `{ code: "absence.overlaps" }`. Returns the new absence's id.
+   */
+  requestAbsence(req: {
+    kind: AbsenceKind;
+    startsOn: string;
+    endsOn: string;
+    note: string | null;
+  }): Promise<{ absenceId: string }> {
+    return this.#request<{ absenceId: string }>("/api/schedule/absences", "POST", req);
   }
 
   /**

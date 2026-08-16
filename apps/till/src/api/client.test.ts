@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { TillApi, type TillProduct } from "./client.js";
+import { TillApi, type MyAbsence, type MyShift, type MySwap, type TillProduct } from "./client.js";
 
 /** A stub `fetch` reply: JSON body at the given status, content-type set like the server's. */
 function jsonResponse(body: unknown, status = 200): Response {
@@ -553,5 +553,169 @@ describe("TillApi", () => {
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
     expect(r).toEqual(queue);
+  });
+
+  it("listMyShifts GETs the schedule shifts window and returns the rows", async () => {
+    // Typed `MyShift[]` so the mock is a compile-time proof the client shape carries every field the
+    // server sends (offsets, role, rosterVersionId).
+    const shifts: MyShift[] = [
+      {
+        id: "s1",
+        locationId: "loc1",
+        startsAt: "2026-05-04T09:00:00Z",
+        startsOffsetMinutes: 0,
+        endsAt: "2026-05-04T17:00:00Z",
+        endsOffsetMinutes: 0,
+        role: "bar",
+        rosterVersionId: null,
+      },
+    ];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(shifts));
+
+    const r = await new TillApi("", fetchStub).listMyShifts("2026-05-04", "2026-05-11");
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/schedule/shifts?from=2026-05-04&to=2026-05-11",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual(shifts);
+  });
+
+  it("listMySwaps GETs the schedule swaps and returns the rows (with direction + status)", async () => {
+    const swaps: MySwap[] = [
+      {
+        id: "sw1",
+        requestedByPersonId: "other",
+        fromShiftId: "s1",
+        toPersonId: "me",
+        toShiftId: null,
+        status: "requested",
+        createdAt: "2026-05-04T10:00:00Z",
+        direction: "offered_to_me",
+      },
+    ];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(swaps));
+
+    const r = await new TillApi("", fetchStub).listMySwaps();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/schedule/swaps",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual(swaps);
+  });
+
+  it("requestSwap POSTs the offer and returns { swapId }", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ swapId: "sw1" }, 201));
+    const api = new TillApi("", fetchStub);
+
+    const r = await api.requestSwap({ fromShiftId: "s1", toPersonId: "col", toShiftId: null });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/schedule/swaps",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fromShiftId: "s1", toPersonId: "col", toShiftId: null }),
+      }),
+    );
+    expect(r).toEqual({ swapId: "sw1" });
+  });
+
+  it("requestSwap surfaces { code } for a shift the requester does not own", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "swap.not_permitted" } }), { status: 403 }),
+    );
+
+    await expect(
+      new TillApi("", fetchStub).requestSwap({
+        fromShiftId: "s1",
+        toPersonId: "col",
+        toShiftId: null,
+      }),
+    ).rejects.toMatchObject({ code: "swap.not_permitted" });
+  });
+
+  it("acceptSwap POSTs to the addressed swap's /accept route (empty 204 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+
+    await expect(new TillApi("", fetchStub).acceptSwap("sw1")).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/schedule/swaps/sw1/accept",
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    );
+    // A no-body POST carries neither a request body nor a content-type header.
+    const init = fetchStub.mock.calls[0]![1] as RequestInit;
+    expect(init.body).toBeUndefined();
+    expect(init.headers).toBeUndefined();
+  });
+
+  it("listMyAbsences GETs the schedule absences and returns the rows", async () => {
+    const absences: MyAbsence[] = [
+      {
+        id: "a1",
+        personId: "me",
+        kind: "holiday",
+        startsOn: "2026-06-01",
+        endsOn: "2026-06-03",
+        status: "requested",
+        note: null,
+        createdAt: "2026-05-04T10:00:00Z",
+      },
+    ];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(absences));
+
+    const r = await new TillApi("", fetchStub).listMyAbsences();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/schedule/absences",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual(absences);
+  });
+
+  it("requestAbsence POSTs the request and returns { absenceId }", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ absenceId: "a1" }, 201));
+    const api = new TillApi("", fetchStub);
+
+    const r = await api.requestAbsence({
+      kind: "holiday",
+      startsOn: "2026-07-01",
+      endsOn: "2026-07-05",
+      note: "Vacaciones",
+    });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/schedule/absences",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          kind: "holiday",
+          startsOn: "2026-07-01",
+          endsOn: "2026-07-05",
+          note: "Vacaciones",
+        }),
+      }),
+    );
+    expect(r).toEqual({ absenceId: "a1" });
+  });
+
+  it("requestAbsence surfaces { code } on an overlapping range", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "absence.overlaps" } }), { status: 409 }),
+    );
+
+    await expect(
+      new TillApi("", fetchStub).requestAbsence({
+        kind: "leave",
+        startsOn: "2026-08-12",
+        endsOn: "2026-08-18",
+        note: null,
+      }),
+    ).rejects.toMatchObject({ code: "absence.overlaps" });
   });
 });
