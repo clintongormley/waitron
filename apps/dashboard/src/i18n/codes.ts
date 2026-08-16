@@ -148,8 +148,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   // only what is offered to you (swap.not_permitted); a swap already accepted/decided can't be accepted
   // again (swap.not_acceptable).
   "swap.not_permitted": {
-    en: "You can only swap your own shifts",
-    es: "Solo puedes cambiar tus propios turnos",
+    en: "You can only offer your own shifts, and accept only swaps offered to you",
+    es: "Solo puedes ofrecer tus propios turnos y aceptar los cambios que te ofrezcan",
   },
   "swap.not_acceptable": {
     en: "That swap can no longer be accepted",

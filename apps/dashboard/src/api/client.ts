@@ -673,8 +673,9 @@ export class DashboardApi {
   /**
    * `GET /management-api/session/me` — WHOAMI: who is signed into this browser, and with what role. The
    * shell probes this on boot / after login to decide whether to open the STAFF view (`role === "staff"`)
-   * or the manager screens. Role-blind (no `authorizeManager`), so a staff session resolves rather than
-   * 401ing.
+   * or the manager screens. Role-blind (no `authorizeManager`), so a staff session RESOLVES here —
+   * unlike the old boot probe (`listStaff`, `person.manage`-gated), which 403'd a staff session and
+   * dropped it to the login screen. (A request with no session still 401s via `management_session.required`.)
    */
   getMe(): Promise<{ personId: string; role: PersonRole }> {
     return this.#request<{ personId: string; role: PersonRole }>(
