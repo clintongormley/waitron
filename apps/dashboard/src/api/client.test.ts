@@ -611,3 +611,132 @@ describe("DashboardApi — planned vs actual", () => {
     );
   });
 });
+
+describe("DashboardApi — whoami + my schedule (staff self-service)", () => {
+  it("getMe GETs the whoami route and returns { personId, role }", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ personId: "p1", role: "staff" }));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getMe()).toEqual({ personId: "p1", role: "staff" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/session/me", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("listMyShifts GETs my shifts over the [from, to) window", async () => {
+    const rows = [
+      {
+        id: "sh1",
+        locationId: "loc-1",
+        startsAt: "2026-05-04T09:00:00Z",
+        startsOffsetMinutes: 0,
+        endsAt: "2026-05-04T17:00:00Z",
+        endsOffsetMinutes: 0,
+        role: "bar",
+        rosterVersionId: null,
+      },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listMyShifts("2026-05-04", "2026-05-11")).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/me/schedule/shifts?from=2026-05-04&to=2026-05-11",
+      { method: "GET", credentials: "include" },
+    );
+  });
+
+  it("listMySwaps GETs the swaps I'm party to", async () => {
+    const rows = [
+      {
+        id: "sw1",
+        requestedByPersonId: "p2",
+        fromShiftId: "sh2",
+        toPersonId: "p1",
+        toShiftId: null,
+        status: "requested",
+        createdAt: "2026-05-05T00:00:00Z",
+        direction: "offered_to_me",
+      },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listMySwaps()).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/me/schedule/swaps", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("requestSwap POSTs a give-away and returns { swapId } — never carries a personId", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ swapId: "sw9" }, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    const req = { fromShiftId: "sh1", toPersonId: "p2", toShiftId: null };
+    expect(await api.requestSwap(req)).toEqual({ swapId: "sw9" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/me/schedule/swaps", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(req),
+    });
+  });
+
+  it("acceptSwap POSTs the accept route and resolves undefined on an empty 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.acceptSwap("sw1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/me/schedule/swaps/sw1/accept", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
+  it("listMyAbsences GETs my absences (any status)", async () => {
+    const rows = [
+      {
+        id: "ab1",
+        personId: "p1",
+        kind: "holiday",
+        startsOn: "2026-06-01",
+        endsOn: "2026-06-03",
+        status: "requested",
+        note: null,
+        createdAt: "2026-06-01T00:00:00Z",
+      },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listMyAbsences()).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/me/schedule/absences", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("requestAbsence POSTs the request and returns { absenceId } — never carries a personId", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ absenceId: "ab9" }, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    const req = {
+      kind: "holiday" as const,
+      startsOn: "2026-07-01",
+      endsOn: "2026-07-05",
+      note: "Away",
+    };
+    expect(await api.requestAbsence(req)).toEqual({ absenceId: "ab9" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/me/schedule/absences", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(req),
+    });
+  });
+
+  it("requestSwap throws the envelope code on a non-2xx", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "swap.not_permitted" } }, false, 403));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(
+      api.requestSwap({ fromShiftId: "sh1", toPersonId: "p2", toShiftId: null }),
+    ).rejects.toMatchObject({ code: "swap.not_permitted" });
+  });
+});
