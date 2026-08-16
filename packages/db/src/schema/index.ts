@@ -11,6 +11,7 @@ export * from "./order-amendments.js";
 export * from "./order-prep.js";
 export * from "./catalogue.js";
 export * from "./recipes.js";
+export * from "./purchase-invoices.js";
 export * from "./layouts.js";
 export * from "./working-order-counters.js";
 export * from "./sales.js";
