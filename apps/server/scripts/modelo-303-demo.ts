@@ -49,12 +49,14 @@ import {
   addDecimal,
   compareDecimal,
   decimal,
+  subtractDecimal,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { Decimal, NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { InputVatRateLine } from "@waitron/reporting";
 
 const LOCALE = "es-ES";
 const TIME_ZONE = "Europe/Madrid";
@@ -137,6 +139,76 @@ const RECTIFICATIVA = {
   tax: "-1.05",
   description: "Rectificación menú del día",
 } as const;
+
+// Received supplier invoices (facturas recibidas) — the IVA DEDUCIBLE / soportado side. `base`/`tax`
+// are the FILED per-rate figures (the supplier's own cuota, which may round by the difference method).
+// `regime` general is deductible and on the 303; recargo de equivalencia is NON-deductible and off the
+// 303, so it must NOT appear in the deducible aggregate. `kind` corriente (ordinary) → casilla 28/29,
+// bienes de inversión (capital) → casilla 30/31.
+interface SeedPurchase {
+  supplierName: string;
+  supplierTaxId: string;
+  number: string;
+  /** Civil date "YYYY-MM-DD" the invoice was received — the deduction period. */
+  receivedOn: string;
+  regime: "general" | "equivalence_surcharge";
+  rate: string;
+  base: string;
+  tax: string;
+  kind: "ordinary" | "capital";
+  description: string;
+}
+
+const PURCHASE_INVOICES: readonly SeedPurchase[] = [
+  {
+    supplierName: "Café del Puerto SL",
+    supplierTaxId: "B11111111",
+    number: "2026/501",
+    receivedOn: "2026-08-04",
+    regime: "general",
+    rate: "21.00",
+    base: "200.00",
+    tax: "41.99", // difference method: round(200 × 21%) would be 42.00; we file 41.99 verbatim
+    kind: "ordinary",
+    description: "Café y suministros (operación interior corriente)",
+  },
+  {
+    supplierName: "Distribuciones Norte SL",
+    supplierTaxId: "B22222222",
+    number: "F-88",
+    receivedOn: "2026-08-09",
+    regime: "general",
+    rate: "10.00",
+    base: "100.00",
+    tax: "10.00",
+    kind: "ordinary",
+    description: "Producto fresco al 10% (corriente)",
+  },
+  {
+    supplierName: "Fríos Industriales SA",
+    supplierTaxId: "A33333333",
+    number: "INV-7",
+    receivedOn: "2026-08-14",
+    regime: "general",
+    rate: "21.00",
+    base: "1000.00",
+    tax: "210.00",
+    kind: "capital",
+    description: "Cámara frigorífica (bien de inversión)",
+  },
+  {
+    supplierName: "Kiosco Minorista SL",
+    supplierTaxId: "B44444444",
+    number: "T-3",
+    receivedOn: "2026-08-20",
+    regime: "equivalence_surcharge",
+    rate: "21.00",
+    base: "50.00",
+    tax: "10.50",
+    kind: "ordinary",
+    description: "Prensa en recargo de equivalencia — NO deducible, fuera del 303",
+  },
+];
 
 /**
  * A `TrustedClock` fixed at `instant`/`offsetMinutes`. `recordSale`/`recordCorrection` read `now()`
@@ -270,6 +342,99 @@ function printPeriodSummary(label: string, summary: VatSummary): void {
   console.log("");
 }
 
+/** Seeds the received supplier invoices directly (as the PGlite superuser, RLS bypassed), exactly as
+ * seedVenue seeds the tenant — a received invoice is a plain accounting record, no fiscal write path. */
+async function seedPurchaseInvoices(db: Database, tenantId: TenantId): Promise<void> {
+  for (const p of PURCHASE_INVOICES) {
+    const total = addDecimal(decimal(p.base), decimal(p.tax));
+    const inv = await db.execute<{ id: string }>(sql`
+      insert into purchase_invoices
+        (tenant_id, supplier_tax_id, supplier_name, supplier_invoice_number, issued_on, received_on, total, regime)
+      values (${tenantId}, ${p.supplierTaxId}, ${p.supplierName}, ${p.number}, ${p.receivedOn}, ${p.receivedOn}, ${total}, ${p.regime})
+      returning id`);
+    const id = inv.rows[0]!.id;
+    await db.execute(sql`
+      insert into purchase_invoice_vat (tenant_id, purchase_invoice_id, rate, base, tax, kind)
+      values (${tenantId}, ${id}, ${p.rate}, ${p.base}, ${p.tax}, ${p.kind})`);
+  }
+}
+
+/** The expected IVA deducible per (rate, kind), summed independently from the seeded figures — general
+ * invoices only (recargo de equivalencia excluded), sorted rate asc then corriente before inversión,
+ * matching computeInputVat. This is the check's left-hand side: pure addDecimal, not a DB read-back. */
+function expectedDeducibleByRate(): InputVatRateLine[] {
+  const kindOrder = { ordinary: 0, capital: 1 } as const;
+  const byKey = new Map<string, InputVatRateLine>();
+  for (const p of PURCHASE_INVOICES) {
+    if (p.regime !== "general") continue; // recargo de equivalencia is off the 303
+    const key = `${p.rate}:${p.kind}`;
+    const cur = byKey.get(key);
+    if (cur === undefined) {
+      byKey.set(key, {
+        rate: decimal(p.rate),
+        base: decimal(p.base),
+        tax: decimal(p.tax),
+        kind: p.kind,
+      });
+    } else {
+      cur.base = addDecimal(cur.base, decimal(p.base));
+      cur.tax = addDecimal(cur.tax, decimal(p.tax));
+    }
+  }
+  return [...byKey.values()].sort((a, b) => {
+    const r = compareDecimal(a.rate, b.rate);
+    return r !== 0 ? r : kindOrder[a.kind] - kindOrder[b.kind];
+  });
+}
+
+function printDeducibleTable(lines: readonly InputVatRateLine[]): void {
+  console.log("    tipo      clase          base imponible        cuota");
+  for (const l of lines) {
+    const clase = l.kind === "capital" ? "inversión" : "corriente";
+    console.log(
+      `    ${`${l.rate}%`.padEnd(8)}  ${clase.padEnd(12)}  ${l.base.padStart(12)}  ${l.tax.padStart(12)}`,
+    );
+  }
+}
+
+/** Throws with a diff if the deducible aggregate's per-(rate,kind) figures or totals differ from the
+ * independently-summed expectation. Checks `kind` too — the casilla 28/29-vs-30/31 split. */
+function reconcileDeducible(
+  actual: { byRate: readonly InputVatRateLine[]; baseTotal: Decimal; taxTotal: Decimal },
+  expected: readonly InputVatRateLine[],
+): void {
+  const expBase = expected.reduce((a, l) => addDecimal(a, l.base), decimal("0.00"));
+  const expTax = expected.reduce((a, l) => addDecimal(a, l.tax), decimal("0.00"));
+  const problems: string[] = [];
+  if (compareDecimal(actual.baseTotal, expBase) !== 0) {
+    problems.push(`deducible baseTotal ${actual.baseTotal} != expected ${expBase}`);
+  }
+  if (compareDecimal(actual.taxTotal, expTax) !== 0) {
+    problems.push(`deducible taxTotal (cuota) ${actual.taxTotal} != expected ${expTax}`);
+  }
+  if (actual.byRate.length !== expected.length) {
+    problems.push(`deducible byRate has ${actual.byRate.length} lines, expected ${expected.length}`);
+  } else {
+    for (let i = 0; i < expected.length; i++) {
+      const a = actual.byRate[i]!;
+      const e = expected[i]!;
+      if (
+        a.kind !== e.kind ||
+        compareDecimal(a.rate, e.rate) !== 0 ||
+        compareDecimal(a.base, e.base) !== 0 ||
+        compareDecimal(a.tax, e.tax) !== 0
+      ) {
+        problems.push(
+          `deducible ${a.rate}/${a.kind}: base ${a.base}/cuota ${a.tax} != expected base ${e.base}/cuota ${e.tax} (${e.kind})`,
+        );
+      }
+    }
+  }
+  if (problems.length > 0) {
+    throw new Error(`modelo-303-demo: IVA deducible did not reconcile:\n  ${problems.join("\n  ")}`);
+  }
+}
+
 async function main(): Promise<void> {
   const db = await createPgliteDb();
   try {
@@ -369,6 +534,10 @@ async function main(): Promise<void> {
       await recordCorrection(tx, backend, correctionInput);
     });
 
+    // The IVA DEDUCIBLE side: received supplier invoices (facturas recibidas). A plain accounting
+    // record — no fiscal write path — so seeded directly like the tenant itself.
+    await seedPurchaseInvoices(db, venue.tenantId);
+
     // The reads: RLS-safe, as the application role, exactly as a report consumer would call them.
     const monthLabel = `${YEAR}-${String(MONTH).padStart(2, "0")}`;
     const period = { fromBusinessDay: `${monthLabel}-01`, toBusinessDay: `${monthLabel}-31` };
@@ -428,11 +597,22 @@ async function main(): Promise<void> {
     printPeriodSummary(`all nodes, one week ${monthLabel}-03 … ${monthLabel}-09`, weekOne);
 
     console.log(`computeVatReturn — modelo 303, ${monthLabel} (obligado ${venue.tenantId})`);
-    console.log("  IVA DEVENGADO (OUTPUT side only). NOT the IVA deducible/soportado side; no");
-    console.log("  recargo de equivalencia and no casilla mapping — spec §4/D6.");
+    console.log("  IVA DEVENGADO (output side, casilla 27) — régimen general, corrections netted:");
     printRateTable(vatReturn.byRate);
     console.log(
       `    ${"totales".padEnd(8)}  ${vatReturn.baseTotal.padStart(12)}  ${vatReturn.taxTotal.padStart(12)}`,
+    );
+    console.log("");
+
+    console.log("  IVA DEDUCIBLE (input side, casilla 45) — régimen general, recargo de equivalencia");
+    console.log("  excluded; bienes de inversión split out from operaciones corrientes:");
+    printDeducibleTable(vatReturn.deductible.byRate);
+    console.log(
+      `    ${"totales".padEnd(8)}  ${" ".repeat(12)}  ${vatReturn.deductible.baseTotal.padStart(12)}  ${vatReturn.deductible.taxTotal.padStart(12)}`,
+    );
+    console.log("");
+    console.log(
+      `  RESULTADO régimen general (casilla 46 = 27 − 45) = ${vatReturn.taxTotal} − ${vatReturn.deductible.taxTotal} = ${vatReturn.result}`,
     );
     console.log("");
 
@@ -444,9 +624,19 @@ async function main(): Promise<void> {
     // witness that the two functions agree over this month.
     reconcile("period roll-up over the whole month", periodAll, expected);
 
-    const expectedTax = sumTax(expected);
+    // The deducible side and the net result reconcile end-to-end: Σ filed deducible cuotas
+    // (general only), and result = devengado − deducible (casilla 46 = 27 − 45).
+    const expectedDeducible = expectedDeducibleByRate();
+    reconcileDeducible(vatReturn.deductible, expectedDeducible);
+    const expectedResult = subtractDecimal(sumTax(expected), sumTax(expectedDeducible));
+    if (compareDecimal(vatReturn.result, expectedResult) !== 0) {
+      throw new Error(
+        `modelo-303-demo: resultado ${vatReturn.result} != expected ${expectedResult} (devengado − deducible)`,
+      );
+    }
+
     console.log(
-      `OK — cuota (IVA devengado) total ${vatReturn.taxTotal} equals the summed filed figures ${expectedTax}.`,
+      `OK — IVA devengado ${vatReturn.taxTotal} − IVA deducible ${vatReturn.deductible.taxTotal} = resultado ${vatReturn.result}, reconciled against the summed filed figures.`,
     );
   } finally {
     await db.close();
