@@ -1,12 +1,5 @@
-// Side-effect: loads this host's errors.ts augmentation for `management.request_invalid`, thrown by
-// `requireAbsenceKind` below and by the shared body/query screens in `request-screens.ts` (the "every
-// file that throws imports ./errors.js" convention). The workforce codes (swap.*/shift.*/absence.*)
-// load transitively via the verb value-imports below; shared.invalid_id loads via the AppError value
-// import; `management_session.*` / `person.suspended` load via `resolveManagementSession`'s package.
-import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { AppError } from "@waitron/shared";
 import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
 import {
   acceptSwap,
@@ -17,12 +10,12 @@ import {
   requestSwap,
   absenceKind,
 } from "@waitron/workforce";
-import type { AbsenceKind } from "@waitron/workforce";
 import { resolveManagementSession } from "@waitron/identity";
 import { createErrorBoundary } from "./error-boundary.js";
 import { requireManagementSession } from "./management-session.js";
 import {
   requireBodyUuid,
+  requireEnum,
   requireNullableBodyUuid,
   requireNullableString,
   requirePeriod,
@@ -70,17 +63,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 const run = createErrorBoundary(STATUS, "me.failed");
-
-/** Screen a body `kind` as one of the four `absence_kind` enum members — the SAME screen
- * `schedule-api.ts` uses. Any other value (a valid-looking-but-unknown string included) is a 400
- * `management.request_invalid` naming the field, never a downstream 22P02 enum 500. Validated against
- * the enum's own `enumValues` so it cannot drift from the schema. */
-function requireAbsenceKind(v: unknown): AbsenceKind {
-  if (typeof v !== "string" || !(absenceKind.enumValues as readonly string[]).includes(v)) {
-    throw new AppError("management.request_invalid", { field: "kind" });
-  }
-  return v as AbsenceKind;
-}
 
 /**
  * Mounts the STAFF SELF-SERVICE routes on the management dashboard's HTTP surface (prefixes
@@ -197,7 +179,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = (await c.req.json<Record<string, unknown>>()) ?? {};
-      const kind = requireAbsenceKind(body.kind);
+      const kind = requireEnum(body.kind, "kind", absenceKind.enumValues);
       const startsOn = requirePeriod(body.startsOn, "startsOn");
       const endsOn = requirePeriod(body.endsOn, "endsOn");
       const note = requireNullableString(body.note, "note");
