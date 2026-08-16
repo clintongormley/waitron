@@ -254,3 +254,34 @@ describe("toDr303Record — deli-month fixture", () => {
     }
   });
 });
+
+// ── Envelope-period consistency: the ejercicio/período stamped from `options` must match the
+//    liquidation period the aggregate's amounts are FOR (`modelo303.year`/`modelo303.month`). Passing a
+//    wrong year/period would emit an internally inconsistent tax file — envelope period ≠ casilla
+//    amounts. deliMonth() is the aggregate for month 8 of 2026 (its `year`/`month` say so). ──
+describe("toDr303Record — envelope period must match the aggregate's liquidation period", () => {
+  it("throws when the option period's month disagrees with the aggregate's liquidation month", () => {
+    // deliMonth() aggregates month 8; filing it under período "07" stamps a month the amounts are not
+    // for. Refuse, consistent with the writer's other unplaceable-box/overflow throws (plain Error).
+    expect(() => toDr303Record(deliMonth(), { ...OPTIONS, period: "07" })).toThrow(
+      /liquidation month/,
+    );
+  });
+
+  it("throws when the option year disagrees with the aggregate's liquidation year", () => {
+    expect(() => toDr303Record(deliMonth(), { ...OPTIONS, year: 2025 })).toThrow(
+      /liquidation year/,
+    );
+  });
+
+  it("accepts a monthly period token that matches the aggregate's month (8 → '08')", () => {
+    // OPTIONS already carries year 2026 / período "08" for the month-8 aggregate — no throw.
+    expect(() => toDr303Record(deliMonth(), OPTIONS)).not.toThrow();
+  });
+
+  it("does not cross-check a trimestral (quarterly) period token against a single-month aggregate", () => {
+    // A "1T".."4T" período spans three months, so a single-month aggregate cannot be pinned to one
+    // quarter; only the monthly case is enforced (documented in toDr303Record). "4t" must not throw.
+    expect(() => toDr303Record(deliMonth(), { ...OPTIONS, period: "4t" })).not.toThrow();
+  });
+});

@@ -227,15 +227,41 @@ function buildSegment(
   return out;
 }
 
+/** The monthly período ("01".."12") for a liquidation month 1..12; zero-padded to 2 chars. */
+function monthlyPeriod(month: number): string {
+  return String(month).padStart(2, "0");
+}
+
 /**
  * Serializes `modelo303` to the DR303 fixed-layout file (ISO-8859-1 bytes). The obligado identity
  * (taxId/name), the ejercicio/período (`year`/`period`) and the tipo de declaración come from
  * `options`; every casilla value comes from `modelo303.boxes`, placed at its record-design position
  * (an absent box is a zero importe, as on the form). Returns a Buffer already encoded in ISO-8859-1.
+ *
+ * The envelope's ejercicio/período (from `options`) is guarded against the liquidation period the
+ * aggregate's amounts are FOR (`modelo303.year`/`modelo303.month`): a caller passing the wrong
+ * year/period would emit an internally inconsistent tax file (envelope period ≠ casilla amounts). The
+ * year is always cross-checked; the período only when it is MONTHLY ("01".."12"), which maps 1:1 to a
+ * month. A trimestral período ("1T".."4T") spans three months, so a single-month aggregate cannot be
+ * pinned to one quarter unambiguously and is left unchecked. A mismatch throws a plain Error, matching
+ * the writer's other guards.
  */
 export function toDr303Record(modelo303: Modelo303, options: Dr303Options): Buffer {
   const year = formatYear(options.year);
   const period = formatPeriod(options.period);
+
+  // Envelope period must match the aggregate's liquidation period, or the file's ejercicio/período
+  // would disagree with the casilla amounts it wraps (see the doc comment above).
+  if (options.year !== modelo303.year) {
+    throw new Error(
+      `dr303: envelope year ${options.year} does not match the aggregate's liquidation year ${modelo303.year}`,
+    );
+  }
+  if (/^\d{2}$/.test(period) && period !== monthlyPeriod(modelo303.month)) {
+    throw new Error(
+      `dr303: envelope period ${period} does not match the aggregate's liquidation month ${monthlyPeriod(modelo303.month)}`,
+    );
+  }
 
   // A computed box that this writer does not place would be silently dropped from the filing — refuse
   // rather than emit an incomplete return (e.g. a future map that populates a página-2 box).
