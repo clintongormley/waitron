@@ -58,6 +58,9 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     // The planned-vs-actual screen the nav mounts loads this on connect (after getLocations/listStaff,
     // both already stubbed above); resolve it so navigating to it leaves no stray rejection.
     getPlannedVsActual: vi.fn().mockResolvedValue([]),
+    // The purchases screen the nav mounts loads this on connect; resolve it so navigating to it leaves
+    // no stray rejection.
+    listPurchaseInvoices: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -79,6 +82,7 @@ const roster = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-ros
 const approvals = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-approvals-screen");
 const plannedActual = (el: DashboardApp) =>
   el.shadowRoot!.querySelector("dashboard-planned-actual-screen");
+const purchases = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-purchases-screen");
 const logoutBtn = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]");
 const navStaff = (el: DashboardApp) =>
@@ -95,9 +99,11 @@ const navApprovals = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-approvals]");
 const navPlannedActual = (el: DashboardApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-planned-actual]");
+const navPurchases = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-purchases]");
 
 /** The logged-in screen tags — exactly one is mounted at a time (the staff self-service face plus the
- * seven manager faces). */
+ * eight manager faces). */
 const SCREEN_TAGS = [
   "dashboard-my-schedule-screen",
   "dashboard-staff-screen",
@@ -107,6 +113,7 @@ const SCREEN_TAGS = [
   "dashboard-roster-screen",
   "dashboard-approvals-screen",
   "dashboard-planned-actual-screen",
+  "dashboard-purchases-screen",
 ] as const;
 
 /** The screen tags currently mounted in the shell (should always be exactly one when logged in). */
@@ -335,11 +342,23 @@ describe("dashboard-app", () => {
     expect(countH1(el)).toBe(1);
   });
 
-  // The logged-in shell now switches between SEVEN screens (staff / catalogue / layout / receipt /
-  // roster / approvals / planned-actual). Roster ("Turnos"), approvals ("Aprobaciones") and
-  // planned-actual ("Previsto vs real") each have their own dedicated nav test above, so this test
-  // walks the remaining four faces. Exactly one screen — and exactly one <h1> (each screen owns its
-  // own; the shell adds none) — shows at a time.
+  it("navigates to the purchases screen", async () => {
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(navPurchases(el)).toBeTruthy();
+    navPurchases(el)!.click();
+    await flush(el);
+    expect(purchases(el)).toBeTruthy();
+    expect(mountedScreens(el)).toEqual(["dashboard-purchases-screen"]);
+    expect(countH1(el)).toBe(1);
+  });
+
+  // The logged-in shell now switches between EIGHT screens (staff / catalogue / layout / receipt /
+  // roster / approvals / planned-actual / purchases). Roster ("Turnos"), approvals ("Aprobaciones"),
+  // planned-actual ("Previsto vs real") and purchases ("Compras") each have their own dedicated nav
+  // test above, so this test walks the remaining four faces. Exactly one screen — and exactly one <h1>
+  // (each screen owns its own; the shell adds none) — shows at a time.
   it("navigates the four non-roster logged-in screens, one screen and one h1 at a time", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });

@@ -740,3 +740,101 @@ describe("DashboardApi — whoami + my schedule (staff self-service)", () => {
     ).rejects.toMatchObject({ code: "swap.not_permitted" });
   });
 });
+
+describe("DashboardApi — purchase invoices", () => {
+  const invoice = {
+    id: "pi-1",
+    supplierTaxId: "B12345678",
+    supplierName: "Distribuciones García SL",
+    supplierInvoiceNumber: "F-2026/001",
+    issuedOn: "2026-08-10",
+    receivedOn: "2026-08-12",
+    total: "121.00",
+    regime: "general",
+    deductibleProportion: "100.00",
+    note: null,
+    lines: [{ rate: "21.00", base: "100.00", tax: "21.00", kind: "ordinary" }],
+  };
+
+  it("listPurchaseInvoices GETs the collection with credentials", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse([invoice]));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listPurchaseInvoices()).toEqual([invoice]);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/purchase-invoices", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("createPurchaseInvoice POSTs the header + lines and returns the created invoice (201)", async () => {
+    const input = {
+      header: {
+        supplierTaxId: "B12345678",
+        supplierName: "Distribuciones García SL",
+        supplierInvoiceNumber: "F-2026/001",
+        issuedOn: "2026-08-10",
+        receivedOn: "2026-08-12",
+        total: "121.00",
+        regime: "general" as const,
+        deductibleProportion: "100.00",
+        note: null,
+      },
+      lines: [{ rate: "21.00", base: "100.00", tax: "21.00", kind: "ordinary" as const }],
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(invoice, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.createPurchaseInvoice(input)).toEqual(invoice);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/purchase-invoices", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  });
+
+  it("updatePurchaseInvoice PATCHes the header + lines and resolves undefined on a 204", async () => {
+    const patch = {
+      header: { supplierName: "Nombre corregido", total: "242.00" },
+      lines: [{ rate: "10.00", base: "100.00", tax: "10.00", kind: "capital" as const }],
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.updatePurchaseInvoice("pi-1", patch)).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/purchase-invoices/pi-1", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+  });
+
+  it("deletePurchaseInvoice DELETEs the invoice and resolves undefined on a 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.deletePurchaseInvoice("pi-1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/purchase-invoices/pi-1", {
+      method: "DELETE",
+      credentials: "include",
+    });
+  });
+
+  it("rejects with the envelope code on a duplicate (409)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "purchase.duplicate" } }, false, 409));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(
+      api.createPurchaseInvoice({
+        header: {
+          supplierTaxId: "B1",
+          supplierName: "X",
+          supplierInvoiceNumber: "DUP",
+          issuedOn: "2026-08-10",
+          receivedOn: "2026-08-12",
+          total: "0.00",
+        },
+        lines: [{ rate: "0.00", base: "0.00", tax: "0.00" }],
+      }),
+    ).rejects.toMatchObject({ code: "purchase.duplicate" });
+  });
+});

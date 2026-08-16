@@ -52,4 +52,13 @@ describe("roleHasPermission", () => {
       expect(roleHasPermission("supervisor", p)).toBe(false);
     }
   });
+  it("grants purchase.manage to manager and admin only (purchase-invoice authoring)", () => {
+    // A domain-named accounting permission (received purchase-invoice authoring, the commercial lane),
+    // granted to exactly the roles that hold person.manage — manager and admin — and NEVER to staff or
+    // supervisor, so the purchase write gate matches the staff-admin gate.
+    expect(roleHasPermission("manager", "purchase.manage")).toBe(true);
+    expect(roleHasPermission("admin", "purchase.manage")).toBe(true);
+    expect(roleHasPermission("staff", "purchase.manage")).toBe(false);
+    expect(roleHasPermission("supervisor", "purchase.manage")).toBe(false);
+  });
 });
