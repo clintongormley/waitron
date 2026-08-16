@@ -127,7 +127,17 @@ shipped*) and nothing was left blocked or `needs-owner-review`; the run is finis
 
 ## Now
 
-**Nothing in flight.** **Purchase invoices + modelo 303 IVA deducible — LANDED as #91** (2026-08-16):
+**Nothing in flight.** **Two dashboard fast-follows LANDED (2026-08-16):** the **staff self-service
+portal (#92)** — a `staff`-role person logs into the (role-blind) management dashboard and gets a
+self-service view (own roster + request/accept swaps + view/request absences), reusing #90's
+surface-agnostic verbs via a management-session-gated `/management-api/me/*` group (whoami + role-aware
+shell; **no migration**); and the **purchase-invoice authoring UI (#93)** — a `purchase.manage`-gated
+dashboard surface to create/edit/list received supplier invoices (header + a VAT-desglose sub-editor)
+feeding #91's headless deducible reporting (**no migration**). Both subagent-driven-TDD → two-lens
+review → Copilot; fiscal core untouched (H2); #93 was rebased onto #92 with a keep-both dashboard-shell
+merge. Details in *Recently shipped*.
+
+**Purchase invoices + modelo 303 IVA deducible — LANDED as #91** (2026-08-16):
 the input-VAT side of modelo 303 — a new `@waitron/purchasing` module (received supplier-invoice
 capture, FORCE-RLS tables, migrations 0041/0042), `computeInputVat` + net `computeVatReturn`, the
 `mapModelo303` casilla map, and a **byte-exact DR303 fixed-layout file writer** whose field layout is
@@ -169,14 +179,14 @@ follow-ups*):
 
 - **Fast-follows flagged by the slices:** the remaining **sync transport-2** pieces (cloud-mirror
   peer, dead-subscriber cleanup, multi-tenant transport, node-token rotation, and the separate
-  **fiscal-lane / hash-chain sync, H2**). *(The staff-facing swap/absence request path LANDED as #90;
-  its own follow-ups — the staff dashboard portal, the two-sided swap UI, staff cancel/withdraw — are
-  under Debt.)*
+  **fiscal-lane / hash-chain sync, H2**). *(The staff-facing swap/absence request path LANDED as #90 and
+  the **staff dashboard portal as #92**; its remaining follow-ups — the two-sided swap UI, staff
+  cancel/withdraw — are under Debt.)*
 - **Bigger next slices:** **Recipes/BOM's next slices** now that its allergen-inheritance
   *backend* has landed (#89) — *(the reporting input-VAT / **modelo 303** deducible side LANDED as #91;
   its deferred slices — rectificativas, the prorrata rule, quarterly/annual periods, intra-community
-  boxes, the purchase-invoice **authoring UI**, wiring the DR303 writer to a download route — plus the
-  two pre-filing caveats are under Debt / Not started)*: the **recipe-authoring UI** (dashboard — must reseed the allergen picker
+  boxes, wiring the DR303 writer to a download route — plus the two pre-filing caveats are under Debt /
+  Not started; the purchase-invoice **authoring UI LANDED #93**)*: the **recipe-authoring UI** (dashboard — must reseed the allergen picker
   from `manual_allergens`, not the published `allergens`, a documented follow-up), **nested
   sub-recipes** (alioli auto-derived from egg+oil+garlic), and — each still greenfield — **plate
   costing (*escandallo*)** and **stock depletion** (sub-project 20). A scale-gated set-based rewrite of
@@ -192,6 +202,43 @@ One line per landed PR, newest first. The git log, the linked designs/plans, and
 detail — **this file is not a history** (see *How to keep this file honest*). Open follow-ups from
 these live under *Debt and odd jobs*; their designs/plans stay in `docs/superpowers/`.
 
+- **#93** Dashboard — **purchase-invoice authoring UI** (sub-project 8, #91 fast-follow) — a
+  management-dashboard surface to create/edit/list received supplier invoices, feeding #91's headless
+  modelo 303 deducible reporting. A **`purchase.manage`** permission (`@waitron/identity`, manager+admin,
+  code-only — **no migration**); **`mountPurchasingApi`** (`GET/POST/PATCH/DELETE /management-api/purchase-invoices`)
+  over the #91 `@waitron/purchasing` ops via the catalogue `gated()` pattern (real-PG cross-tenant isolation
+  + the gate proven by deletion); a `<dashboard-purchases-screen>` + `<dashboard-purchase-form>` (header +
+  an add/remove **VAT-desglose sub-editor** of rate/base/cuota/kind) + `<dashboard-purchase-list>`, wired
+  into the shell + `DashboardApi` + i18n (browser-local types, `Decimal`→string). **Fiscal boundary (H2):**
+  commercial/accounting lane — a *received* invoice is not issued by us; #91's tables already existed, so no
+  migration. Reviews: subagent-driven TDD → two-lens review → **Copilot** (no comments). The two-lens review
+  took one **Important** fix: the form's client validation *claimed* to mirror the op's checks but let the two
+  commonest create flows (a blank pre-added VAT line — `Number("")===0` passed "in range"; a Spanish-comma
+  `total` like `121,00`) slip to an opaque **500** instead of a friendly message — now genuinely mirrored (a
+  decimal-format guard + a `total` numeric check, proven by deletion), plus a confirm-before-delete. Coverage:
+  identity 100%, server 99.68, dashboard 99.78. **Rebased onto #92** with a keep-both dashboard-shell merge
+  (its `purchases` nav ported into #92's role-aware `#nav()`); CI green on the rebased head. Plan:
+  [purchase-invoice-authoring-ui](superpowers/plans/2026-08-16-purchase-invoice-authoring-ui.md). **Deferred:**
+  supplier master/autocomplete, bulk/OCR import, per-invoice attachment (the #91 fiscal deferrals — rectificativas,
+  prorrata rule, quarterly, the DR303 download route — remain separate, under *Debt*).
+- **#92** Dashboard — **staff self-service portal** (sub-project 16, #90 fast-follow) — a `staff`-role person
+  logs into the existing management dashboard and gets a self-service view (their own roster + request a shift
+  give-away/cover + accept a swap offered to them + view/request absences), the browser twin of #90's till-PIN
+  surface. **Key insight — no new auth story:** the management-session layer is already **role-blind**
+  (`loginManager`/`startManagementSession`/`resolveManagementSession` all work for a staff-role person; only the
+  `authorizeManager` permission gate refuses staff), so a staff member logs in via the existing screen (a manager
+  provisions their password, or a passkey). Added: a **whoami** `GET /management-api/session/me` → `{personId,role}`;
+  a **staff route group** `/management-api/me/schedule/*` (`apps/server/src/me-api.ts`) resolving `personId` from
+  the session (`requireManagementSession`→`resolveManagementSession`, **never `authorizeManager`**) and feeding it
+  into #90's verbs (identity always the session's, never the body — proven by deletion); a **role-aware shell**
+  (`staff` → the new `<dashboard-my-schedule-screen>`, everyone else → the unchanged manager screens) + client +
+  i18n. **No migration** (`management_sessions` exists, role-blind). **Fiscal boundary (H2):** clean (only
+  `apps/server` + `apps/dashboard`). Reviews: subagent-driven TDD (identity property + role branch proven by
+  deletion) → two-lens review (no correctness/CLAUDE.md findings) → triage (deduped a verbatim `requireAbsenceKind`
+  into a shared `requireEnum`) → **Copilot** (2 minor copy/comment fixes, resolved). Coverage: server 99.68,
+  dashboard 99.74. Plan: [staff-dashboard-portal](superpowers/plans/2026-08-16-staff-dashboard-portal.md).
+  **Deferred:** staff cancel/withdraw of a pending request; worked-hours/registro-de-jornada/payslips; staff
+  self-service password enrollment (a manager provisions it now); the two-sided swap UI.
 - **#91** Reporting — **purchase invoices + modelo 303 IVA deducible → DR303 file** (sub-project 8) — the
   input-VAT counterpart to #76's output side, built as four slices on one branch. **A** — a new optional
   **`@waitron/purchasing`** module: received supplier-invoice capture in two **mutable** tenant tables in
@@ -642,8 +689,8 @@ active work (see *Now* / *Current direction*).
 | **7 — Counter POS** | **Operable counter POS complete** — 7a walk-up cash (#60), 7b park/retrieve + idempotency (#61), manual card (#62), 7c prepare & collect (#63), integrated Stripe card (#64); the **layout & receipt editors DONE (#81)** — owner-authorable till layout arrangement + non-fiscal receipt trim, `@waitron/layouts` + `till_layouts` + dashboard editors; all in *Recently shipped*. **Remaining:** a **SumUp** card provider (a future vendor beside Stripe). Deferred edges under *Debt and odd jobs* → **Counter POS follow-ups** (7a / 7b / 7c / integrated card / layout-receipt) |
 | **5 — Identity** | **Headless first slice merged (#58, 2026-08-05).** `@waitron/identity` owns `persons` + `sessions` (FORCE-RLS tenant isolation, now also scanned by fiscal-verifactu's `inmutabilidad` guard), salted-PIN hashing, a role/permission catalog, `authorize()` (operator session + supervisor `{personId, pin}` override), `loginWithPin` / `endSession`, and a `person.manage`-gated staff API. `recordVoid` / `recordCorrection` now require `sale.void` / `sale.rectify` authorization; `sales.authorized_by` / `sales.operator_id` + `payment_refunds.authorized_by` seams and a `waitron-provision venue` admin seed are in place. Remaining sub-project 5 scope (mid-shift-suspension enforcement, the discount gate, till-refund enforcement, the workforce-gate consolidation, branded ids) is under *Debt and odd jobs* → **Identity follow-ups**. The human-facing call sites (must-be-logged-in to ring, till refunds must be authorized) land with the counter POS (#7) |
 | **6 — Locations** | **Provision-a-sellable-venue slice merged (#57)** (2026-08-04; see *Now*) — the foundational till-track unblocker. Country/territory-driven fiscal identity, `resolveFiscalModules` (común → Veri\*Factu + IVA, others refused), `planVenue` / `applyVenue` and the `waitron-provision venue` CLI stand up tenant → location → till → node → SIF → series so `recordSale` can chain a sale; the stale `bootstrap-tenant.sql` was **deleted**. Remaining sub-project 6 scope (multiple locations, editing/deactivation, the #33 SIF-topology deferrals) is under *Debt and odd jobs* → **Locations follow-ups** |
-| **8 — Reporting** | **Daily-close first slice done (#56)** — `@waitron/reporting`'s `computeDailyClose`. ***Cierre Z* (frozen/signed daily close) DONE** — 8a VAT-exact close (#66, `sales.vat_breakdown`), 8b immutable numbered `daily_closes` + per-node hash chain + per-till *descuadre* (#68). **Date-range VAT summary (`computeVatSummaryForPeriod`) + *modelo 303* output-VAT month aggregate (`computeVatReturn`) DONE (#76)** — pure reads over the filed desglose, one shared `aggregateVatByRate` core, civil-date bucketing, real-PG cross-tenant RLS proof; all in *Recently shipped*. **IVA deducible/soportado (input-VAT) side + AEAT casilla mapping + submittable DR303 file DONE (#91)** — the `@waitron/purchasing` module (purchase-invoice capture), `computeInputVat` + net `computeVatReturn`, `mapModelo303`, and the byte-exact DR303 writer (layout from the committed official `DR303e26.xlsx`); see *Recently shipped*. Further unstarted slices: **rectificativas** (40/41), the **prorrata rule** (44), **quarterly/annual periods**, **intra-community/import boxes** (32–39), the purchase-invoice **authoring UI** (dashboard), and wiring the DR303 writer to a **download route** — plus the two #91 **pre-filing caveats** (real-sede validation; asesor prorrata confirmation). Reporting follow-ups are under *Debt* |
-| **16 — Workforce** | *Registro de jornada* legal floor **DONE (#47)**; **D2 scheduling DONE (#50)** — `convenio_config` surface (overtime de-hard-coded, single-sourced), shifts + `roster_versions` + `publishRoster`, absences/availability/shift_templates/shift_swaps, an **advisory** guardrail engine (`validateRoster` → `RosterBreach[]`; publish surfaces breaches but proceeds — owner chose warn+override) + a planned-vs-actual read model, and supersede-on-republish (partial unique index, one published roster per `(location, period)`). The overtime *rule* the both-model projection computes stays convenio-driven — an **asesor-laboral** call, not code. Remaining: **D3 payroll export** (integrate-not-build), plus the workforce follow-ups under *Debt and odd jobs*. Deferred edges from the floor: the registro export doesn't yet surface overtime (belongs to the payslip/D3); the correction period-fetch is a ±1-day window (a >1-day-relocation correction is out of the floor's scope, chained but maybe missed by the period fetch). A post-#47 `/finish-branch` review (landed as #52) corrected four floor defects: the registro export rendered UTC instead of local wall-clock; the tamper chain omitted a correction's reason/actor and the capturing till; correction precedence tie-broke on the unhashed `ingest_seq` (a floor-bypasser could reorder corrections undetected) — now on the hashed `sequence_no`; and a `clockIn`/`clockOut` TOCTOU (an unlocked state read before the chain-head lock let two concurrent same-person clock-ins append a double-`in` that undercounts worked time) — now serialized per person with a `persons` row lock proven by a real-PG concurrency test. **Authoring UI (dashboard) LANDED (#83, 2026-08-15)** — author a draft weekly roster on a person×day grid → view breaches → publish (`mountWorkforceApi` + `schedule.manage` + `<dashboard-roster-screen>`, no migration). **Roster-management slice 2 LANDED (#87, 2026-08-15)** — split-shift (*jornada partida*) authoring, manager approve/reject of swaps + absences (`decideSwap`/`setAbsenceStatus` + `swap.approve`/`absence.decide` + migration 0010 decider columns + approvals screen), and the planned-vs-actual view (`getPlannedVsActual`, published-roster only) — the **manager-approval half**; the **staff-facing request path** for swaps/absences **LANDED (#90, 2026-08-16)** — a till-PIN-session-gated surface (request a give-away/cover, accept an offered swap, request an absence), built surface-agnostic for a future staff dashboard portal. D3 payroll export remains. See *Recently shipped* → #87/#90 for the deferred follow-ups |
+| **8 — Reporting** | **Daily-close first slice done (#56)** — `@waitron/reporting`'s `computeDailyClose`. ***Cierre Z* (frozen/signed daily close) DONE** — 8a VAT-exact close (#66, `sales.vat_breakdown`), 8b immutable numbered `daily_closes` + per-node hash chain + per-till *descuadre* (#68). **Date-range VAT summary (`computeVatSummaryForPeriod`) + *modelo 303* output-VAT month aggregate (`computeVatReturn`) DONE (#76)** — pure reads over the filed desglose, one shared `aggregateVatByRate` core, civil-date bucketing, real-PG cross-tenant RLS proof; all in *Recently shipped*. **IVA deducible/soportado (input-VAT) side + AEAT casilla mapping + submittable DR303 file DONE (#91)** — the `@waitron/purchasing` module (purchase-invoice capture), `computeInputVat` + net `computeVatReturn`, `mapModelo303`, and the byte-exact DR303 writer (layout from the committed official `DR303e26.xlsx`); see *Recently shipped*. Further unstarted slices: **rectificativas** (40/41), the **prorrata rule** (44), **quarterly/annual periods**, **intra-community/import boxes** (32–39) and wiring the DR303 writer to a **download route** — plus the two #91 **pre-filing caveats** (real-sede validation; asesor prorrata confirmation). **The purchase-invoice authoring UI LANDED (#93)** — a `purchase.manage`-gated dashboard create/edit/list surface (header + VAT-desglose sub-editor), see *Recently shipped*. Reporting follow-ups are under *Debt* |
+| **16 — Workforce** | *Registro de jornada* legal floor **DONE (#47)**; **D2 scheduling DONE (#50)** — `convenio_config` surface (overtime de-hard-coded, single-sourced), shifts + `roster_versions` + `publishRoster`, absences/availability/shift_templates/shift_swaps, an **advisory** guardrail engine (`validateRoster` → `RosterBreach[]`; publish surfaces breaches but proceeds — owner chose warn+override) + a planned-vs-actual read model, and supersede-on-republish (partial unique index, one published roster per `(location, period)`). The overtime *rule* the both-model projection computes stays convenio-driven — an **asesor-laboral** call, not code. Remaining: **D3 payroll export** (integrate-not-build), plus the workforce follow-ups under *Debt and odd jobs*. Deferred edges from the floor: the registro export doesn't yet surface overtime (belongs to the payslip/D3); the correction period-fetch is a ±1-day window (a >1-day-relocation correction is out of the floor's scope, chained but maybe missed by the period fetch). A post-#47 `/finish-branch` review (landed as #52) corrected four floor defects: the registro export rendered UTC instead of local wall-clock; the tamper chain omitted a correction's reason/actor and the capturing till; correction precedence tie-broke on the unhashed `ingest_seq` (a floor-bypasser could reorder corrections undetected) — now on the hashed `sequence_no`; and a `clockIn`/`clockOut` TOCTOU (an unlocked state read before the chain-head lock let two concurrent same-person clock-ins append a double-`in` that undercounts worked time) — now serialized per person with a `persons` row lock proven by a real-PG concurrency test. **Authoring UI (dashboard) LANDED (#83, 2026-08-15)** — author a draft weekly roster on a person×day grid → view breaches → publish (`mountWorkforceApi` + `schedule.manage` + `<dashboard-roster-screen>`, no migration). **Roster-management slice 2 LANDED (#87, 2026-08-15)** — split-shift (*jornada partida*) authoring, manager approve/reject of swaps + absences (`decideSwap`/`setAbsenceStatus` + `swap.approve`/`absence.decide` + migration 0010 decider columns + approvals screen), and the planned-vs-actual view (`getPlannedVsActual`, published-roster only) — the **manager-approval half**; the **staff-facing request path** for swaps/absences **LANDED (#90, 2026-08-16)** — a till-PIN-session-gated surface (request a give-away/cover, accept an offered swap, request an absence), built surface-agnostic for the staff dashboard portal — **which LANDED (#92, 2026-08-16)**: a role-aware dashboard where a `staff`-role person logs in and sees a self-service view (own roster + request/accept swaps + request absences), reusing #90's verbs via a management-session `/management-api/me/*` group (no migration). D3 payroll export remains. See *Recently shipped* → #87/#90/#92 for the deferred follow-ups |
 | **18 — Menu and allergens** | **Slice 1 (EU-14 allergen declaration) DONE (#65)** — taxonomy + `validateAllergens` + `allergen.*` codes (`@waitron/catalogue`), `products.allergens jsonb` (0031), `/api/products` + `TillProduct` exposure, en/es names, a till allergen screen (matrix + operator lookup + print), a demo; in *Recently shipped*. Allergen declaration is a **launch-day legal duty** (EU 1169/2011, RD 126/2015). **Recipes/BOM allergen-inheritance backend DONE (#89)** — `@waitron/recipes` derives a product's allergens from its ingredients (add-only, PENDING contagious). **Remaining:** the recipe-authoring **UI** (dashboard; reseed the picker from `manual_allergens`), **nested sub-recipes**, plate costing + stock (greenfield, sub-project 20), variants, customer-facing browse; the allergen list stays a food-safety-advisor call. Deferred `@media print` sheet-isolation edge under *Debt* |
 | 10-15, 17, 19, 20 | Tabs, floor plan, KDS, tip payroll, bookings, online ordering, accounting export, opening hours, procurement |
 
@@ -1220,8 +1267,9 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   `deducible_proportion` (44) — asesor-driven; **quarterly/annual periods** (`computeVatReturn` is
   monthly; a quarter is a thin sum of three, and the DR303 período accepts `1T`–`4T` which the
   serializer's period guard deliberately leaves cross-check-exempt); **intra-community/import boxes**
-  (32–39); the purchase-invoice **authoring UI** (a dashboard surface like catalogue→catalogue, the
-  module is headless); wiring **`toDr303Record` to a download/route** (today only unit tests + the
+  (32–39); *(the purchase-invoice **authoring UI LANDED #93** — a `purchase.manage`-gated dashboard
+  create/edit/list surface with a VAT-desglose sub-editor, so the module is no longer headless-only)*;
+  wiring **`toDr303Record` to a download/route** (today only unit tests + the
   `demo:modelo-303` self-check consume it); and the **duplicate-invoice key** decision
   (`(tenant_id, supplier_tax_id, supplier_invoice_number)` is unique-forever today — asesor to confirm
   per-year vs forever). Also open: a libro-registro / **Pre303** export (the owner chose the raw DR303
@@ -1284,8 +1332,9 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
 - **Workforce follow-ups (D2, #50)** — none blocking. (1) **Swap-workflow hardening — CLOSED (#90,
   2026-08-16):** `acceptSwap` now guards `status='requested'` (new `swap.not_acceptable`) and
   `requestSwap` verifies the return shift is owned by `toPerson`, both proven by deletion. **New #90
-  deferrals:** the **staff dashboard portal** (reuses #90's surface-agnostic verbs/read-models via a
-  management/staff session resolver); the **two-sided swap UI** (offer to take a colleague's specific
+  deferrals:** the **staff dashboard portal LANDED (#92)** (reused #90's surface-agnostic verbs via a
+  management-session `/management-api/me/*` group + a role-aware shell — no migration); still open — the
+  **two-sided swap UI** (offer to take a colleague's specific
   return shift — needs cross-person shift visibility; the verb+route already defend it, only the UI is
   deferred); `requestSwap`'s **`toPersonId` FK→500** on a give-away to a non-existent person
   (hostile/non-UI-client-only, the FK backstops integrity — needs a deliberate error-code choice);
