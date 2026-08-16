@@ -127,6 +127,50 @@ describe("createAbsence", () => {
     expect(rows.rows[0]!.n).toBe(1);
   });
 
+  it("rejects an INVERTED date range (ends_on < starts_on) — absence.invalid", async () => {
+    // The cross-field ordering guard: 10 May starts, 1 May ends — end before start. Both are real
+    // calendar days (so the route's requirePeriod screen passes each in isolation), but the interval
+    // is malformed. createAbsence must refuse it here with `absence.invalid` BEFORE the insert, not
+    // let it reach the `absences_range_ck` (ends_on >= starts_on) 23514 → a raw driver error. Delete
+    // the guard in createAbsence and this reddens: the code becomes the raw PGlite constraint error,
+    // not `absence.invalid` (CLAUDE.md §4 prove-by-deletion).
+    const p = await seedPerson(suite.db, tenantId, `abs-${crypto.randomUUID()}`);
+    const code = await codeOfRejection(() =>
+      run((tx) =>
+        createAbsence(tx, {
+          tenantId,
+          personId: p,
+          kind: "holiday",
+          startsOn: "2026-05-10",
+          endsOn: "2026-05-01",
+          note: null,
+        }),
+      ),
+    );
+    expect(code).toBe("absence.invalid");
+  });
+
+  it("allows a single-day absence (ends_on == starts_on) — the range is inclusive", async () => {
+    // The boundary the ordering guard must NOT reject: a one-day absence is starts_on = ends_on, which
+    // the `absences_range_ck` (>=) allows. A guard written `endsOn <= startsOn` would wrongly reject
+    // this; `endsOn < startsOn` accepts it.
+    const p = await seedPerson(suite.db, tenantId, `abs-${crypto.randomUUID()}`);
+    const id = await run((tx) =>
+      createAbsence(tx, {
+        tenantId,
+        personId: p,
+        kind: "leave",
+        startsOn: "2026-04-20",
+        endsOn: "2026-04-20",
+        note: null,
+      }),
+    );
+    const rows = await suite.db.execute<{ n: number }>(
+      sql`select count(*)::int as n from absences where id = ${id}`,
+    );
+    expect(rows.rows[0]!.n).toBe(1);
+  });
+
   it("does not treat another person's overlapping absence as a conflict", async () => {
     // The overlap is scoped to the SAME person: a second person's absence over the same days must not
     // block this one. Dropping the person_id predicate from the guard fails this.

@@ -113,6 +113,18 @@ declare module "@waitron/shared" {
      * cannot be absent twice over the same day, so the overlapping range is refused before insert.
      * `absence.*`, same reasoning as `absence.not_found`. */
     "absence.overlaps": { tenantId: string; personId: string };
+    /** An absence's date range is malformed — its end day is BEFORE its start day
+     * (`ends_on < starts_on`). Refused by `createAbsence` (../absences.ts) BEFORE the overlap SELECT
+     * and the insert so a caller gets a structured 4xx (400 at the schedule route) rather than the
+     * `absences_range_ck` (`ends_on >= starts_on`, schema/absences.ts) 23514 surfacing as an opaque
+     * 500; that DB check stays the backstop. The range is INCLUSIVE, so `ends_on == starts_on` (a
+     * single-day absence) is VALID and does not trigger this. Param shape MIRRORS `shift.invalid`, the
+     * sibling malformed-interval code — `{ reason }`, not the `{ personId }` of `absence.overlaps` /
+     * `{ absenceId }` of `absence.not_found`: on create the absence row does not exist yet (no id to
+     * name), and `reason` names WHICH interval invariant failed, leaving room for later ones exactly as
+     * `shift.invalid` does. `absence.*`, grepped against the registry (`absence.not_found`,
+     * `absence.overlaps`) — never renamed once shipped. */
+    "absence.invalid": { tenantId: string; reason: string };
     /** No `shift_swaps` row for this id under the current tenant — never created, or hidden by RLS.
      * Raised by `acceptSwap` (../shift-swaps.ts) when asked to accept a swap that does not exist.
      * `swap.*`, grepped against the registry — unused before D2; the entity is the swap (a shift is

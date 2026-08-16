@@ -408,4 +408,20 @@ describe("mountScheduleApi — absences", () => {
       error: { code: "management.request_invalid" },
     });
   });
+
+  it("400s an INVERTED date range (absence.invalid), never a 23514 500", async () => {
+    // The CROSS-field case the impossible-day test above does not reach: startsOn (10 May) and endsOn
+    // (1 May) are each a real calendar day, so requirePeriod passes BOTH in isolation — only the PAIR
+    // is malformed. createAbsence's ordering guard turns this into a structured 400 `absence.invalid`;
+    // without it the insert violates `absences_range_ck` → PG 23514 → a non-AppError → an opaque
+    // server.internal 500, the very outcome the screening layer promises never to produce.
+    const res = await send(mountApp(), "POST", "/api/schedule/absences", {
+      cookie: await cookieFor(me, "1111"),
+      body: { kind: "holiday", startsOn: "2026-05-10", endsOn: "2026-05-01", note: null },
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "absence.invalid" },
+    });
+  });
 });

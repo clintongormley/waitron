@@ -43,15 +43,19 @@ export interface ScheduleApiDeps {
  * Every AppError code the schedule API answers, and its HTTP status. CLIENT faults only (a genuine
  * server fault reaches `run` as a NON-AppError → an opaque 500). `session.required` (no/expired
  * cookie) is 401; a malformed body/query field is `management.request_invalid` 400 and a malformed
- * path `:swapId` is `shared.invalid_id` 400 (the request-screens split); the swap/shift/absence domain
- * codes carry their meaning — `swap.not_permitted` is a 403 (a permission fact: you may only offer your
- * own shift and accept only what is offered to you), `swap.not_acceptable`/`absence.overlaps` are 409
- * (exists but wrong state), the `not_found` pair 404. A registered code absent here defaults to 400.
+ * path `:swapId` is `shared.invalid_id` 400 (the request-screens split); a cross-field bad interval (an
+ * inverted absence range) is `absence.invalid` 400. The swap/shift/absence domain
+ * codes carry their meaning — `swap.not_permitted` is a 403 (a permission fact: you may offer only your
+ * own shift, supply only the recipient's own shift as the return leg, and accept only what is offered to
+ * you — the three cases in errors.ts's `swap.not_permitted` doc), `swap.not_acceptable`/`absence.overlaps`
+ * are 409 (exists but wrong state), the `not_found` pair 404. A registered code absent here defaults to
+ * 400; the client codes are enumerated anyway so this map is the surface's whole 4xx contract.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "session.required": 401,
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
+  "absence.invalid": 400,
   "shift.not_found": 404,
   "swap.not_found": 404,
   "swap.not_permitted": 403,
