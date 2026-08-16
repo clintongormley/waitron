@@ -77,3 +77,21 @@ it("has a sentence for each roster/shift/convenio code (shift-planning slice 1)"
     expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
   }
 });
+
+it("has a sentence for each staff self-service code (my-schedule portal)", () => {
+  // Every code the staff schedule surface (apps/server/src/me-api.ts) can reject with must map to real
+  // copy, never the raw wire code and never the GENERIC fallback — so the banner reads as an actionable
+  // message. These four are the staff-only additions beyond the roster codes above (swap.not_found /
+  // absence.not_found / shift.not_found are already covered). Proven by deletion: drop any of these from
+  // CODE_MESSAGES and codeMessage returns GENERIC_ES → the not.toBe(GENERIC_ES) assertion goes red.
+  const GENERIC_ES = "Algo salió mal, inténtalo de nuevo";
+  for (const code of [
+    "swap.not_permitted",
+    "swap.not_acceptable",
+    "absence.overlaps",
+    "absence.invalid",
+  ]) {
+    expect(codeMessage(code, "es")).not.toBe(code);
+    expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
+  }
+});

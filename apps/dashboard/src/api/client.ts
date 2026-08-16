@@ -320,6 +320,63 @@ export interface PlannedVsActualRow {
   unplanned: boolean;
 }
 
+// ── Staff self-service (my schedule) types ──────────────────────────────────────────────────────
+// LOCAL copies of the server's STAFF-FACING schedule JSON shapes (the `me-api.ts` routes wrapping
+// `@waitron/workforce`'s #90 read-models/verbs), deliberately NOT imported from
+// `@waitron/workforce`/`@waitron/db` — a runtime import would drag their barrels + Node builtins into
+// the browser bundle (the #70 rule, as every shape above does, and exactly as `apps/till/src/api/client.ts`
+// keeps its own `MyShift`/`MySwap`/`MyAbsence` copies). These are DISTINCT from the manager-view
+// `Shift`/`PendingSwap`/`PendingAbsence` above: a staff person sees their OWN rows (a swap tagged with the
+// `direction` they are on, an absence of ANY status), never the manager queues. If the server shapes
+// change these follow, and a mismatch surfaces as a runtime shape error a view test catches, not a
+// compile break.
+
+/** The four absence kinds the request form offers — mirrors the server's `absence_kind` enum; the
+ * server re-validates against the real enum. */
+export type AbsenceKind = "holiday" | "sick_leave" | "leave" | "unpaid";
+
+/** One of my upcoming shifts (`GET /management-api/me/schedule/shifts`; mirrors the server's
+ * `PersonShiftRow`). Instants are UTC ISO strings; person is implied (me), so it is not repeated. */
+export interface MyShift {
+  id: string;
+  locationId: string;
+  startsAt: string;
+  startsOffsetMinutes: number;
+  endsAt: string;
+  endsOffsetMinutes: number;
+  role: string | null;
+  rosterVersionId: string | null;
+}
+
+/**
+ * One swap I'm party to (`GET /management-api/me/schedule/swaps`; mirrors the server's `PersonSwapRow`).
+ * `direction` says which side I'm on — `offered_to_me` (I can Accept it while `status === "requested"`)
+ * or `requested_by_me` — and `status` its lifecycle stage.
+ */
+export interface MySwap {
+  id: string;
+  requestedByPersonId: string;
+  fromShiftId: string;
+  toPersonId: string;
+  toShiftId: string | null;
+  status: "requested" | "accepted" | "approved" | "rejected";
+  createdAt: string;
+  direction: "offered_to_me" | "requested_by_me";
+}
+
+/** One of my absences, any status (`GET /management-api/me/schedule/absences`; mirrors the server's
+ * `PersonAbsenceRow`). */
+export interface MyAbsence {
+  id: string;
+  personId: string;
+  kind: AbsenceKind;
+  startsOn: string;
+  endsOn: string;
+  status: "requested" | "approved" | "rejected";
+  note: string | null;
+  createdAt: string;
+}
+
 /** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -605,6 +662,83 @@ export class DashboardApi {
     return this.#request<PlannedVsActualRow[]>(
       `/management-api/planned-vs-actual?locationId=${locationId}&from=${from}&to=${to}`,
       "GET",
+    );
+  }
+
+  // ── Staff self-service (my schedule) ─────────────────────────────────────────────────────────────
+  // The staff portal half of the dashboard (`apps/server/src/me-api.ts`), gated by the MANAGEMENT
+  // session and role-blind. The requester is ALWAYS the session's person server-side; these methods
+  // never send a personId (the #90 identity property).
+
+  /**
+   * `GET /management-api/session/me` — WHOAMI: who is signed into this browser, and with what role. The
+   * shell probes this on boot / after login to decide whether to open the STAFF view (`role === "staff"`)
+   * or the manager screens. Role-blind (no `authorizeManager`), so a staff session RESOLVES here —
+   * unlike the old boot probe (`listStaff`, `person.manage`-gated), which 403'd a staff session and
+   * dropped it to the login screen. (A request with no session still 401s via `management_session.required`.)
+   */
+  getMe(): Promise<{ personId: string; role: PersonRole }> {
+    return this.#request<{ personId: string; role: PersonRole }>(
+      "/management-api/session/me",
+      "GET",
+    );
+  }
+
+  /** `GET /management-api/me/schedule/shifts?from=&to=` — my shifts over a half-open `[from, to)`
+   * window (`YYYY-MM-DD`). */
+  listMyShifts(from: string, to: string): Promise<MyShift[]> {
+    return this.#request<MyShift[]>(
+      `/management-api/me/schedule/shifts?from=${from}&to=${to}`,
+      "GET",
+    );
+  }
+
+  /** `GET /management-api/me/schedule/swaps` — the swaps I'm party to (offered to me, or requested by me). */
+  listMySwaps(): Promise<MySwap[]> {
+    return this.#request<MySwap[]>("/management-api/me/schedule/swaps", "GET");
+  }
+
+  /**
+   * `POST /management-api/me/schedule/swaps` — request a swap: offer one of MY shifts (`fromShiftId`) to
+   * a colleague (`toPersonId`); `toShiftId` null is a one-sided give-away (the case this slice's UI files).
+   * A shift that is not mine rejects `{ code: "swap.not_permitted" }`. Returns the new swap's id.
+   */
+  requestSwap(req: {
+    fromShiftId: string;
+    toPersonId: string;
+    toShiftId: string | null;
+  }): Promise<{ swapId: string }> {
+    return this.#request<{ swapId: string }>("/management-api/me/schedule/swaps", "POST", req);
+  }
+
+  /**
+   * `POST /management-api/me/schedule/swaps/:swapId/accept` — accept a swap offered TO me. Only the named
+   * recipient may accept; a swap not offered to me rejects `{ code: "swap.not_permitted" }`, one no
+   * longer `requested` `{ code: "swap.not_acceptable" }`. The server answers an empty 204.
+   */
+  acceptSwap(swapId: string): Promise<void> {
+    return this.#request<void>(`/management-api/me/schedule/swaps/${swapId}/accept`, "POST");
+  }
+
+  /** `GET /management-api/me/schedule/absences` — my absences, every status. */
+  listMyAbsences(): Promise<MyAbsence[]> {
+    return this.#request<MyAbsence[]>("/management-api/me/schedule/absences", "GET");
+  }
+
+  /**
+   * `POST /management-api/me/schedule/absences` — request an absence for myself. A range overlapping an
+   * existing absence rejects `{ code: "absence.overlaps" }`. Returns the new absence's id.
+   */
+  requestAbsence(req: {
+    kind: AbsenceKind;
+    startsOn: string;
+    endsOn: string;
+    note: string | null;
+  }): Promise<{ absenceId: string }> {
+    return this.#request<{ absenceId: string }>(
+      "/management-api/me/schedule/absences",
+      "POST",
+      req,
     );
   }
 
