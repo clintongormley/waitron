@@ -40,6 +40,7 @@ import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
+import { mountPurchasingApi } from "./purchasing-api.js";
 import { mountWorkforceApi } from "./workforce-api.js";
 import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
@@ -336,6 +337,14 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     },
     log,
   );
+  // The dashboard's gated purchase-invoice write group (facturas recibidas: header + VAT desglose) on
+  // the SAME app, the identical convention. Reuses the EXACT `db` and tenant `mountCatalogueApi` above
+  // receives (`till.tenantId`, this venue's one tenant) so the two cannot drift. No `nodeId` (the
+  // purchase tables carry no sync-capture trigger), no fiscal backend, clock, card provider or media
+  // store — these routes touch only the two purchase-invoice tables. Routes only — no database work at
+  // boot; the `purchase.manage` gate runs per request. This is the #91 fast-follow's capture surface,
+  // feeding the headless modelo 303 IVA-deducible reporting.
+  mountPurchasingApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
   // The dashboard's gated shift-planning surface (roster authoring + publish) on the SAME app, the
   // identical convention. Reuses the EXACT db + tenant (till.tenantId, this venue's one tenant); no
   // fiscal backend, clock, card provider or media store — these routes touch only roster_versions /

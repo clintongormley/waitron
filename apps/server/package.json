@@ -39,6 +39,7 @@
     "@waitron/payments": "workspace:*",
     "@waitron/payments-stripe": "workspace:*",
     "@waitron/provisioning": "workspace:*",
+    "@waitron/purchasing": "workspace:*",
     "@waitron/recipes": "workspace:*",
     "@waitron/reporting": "workspace:*",
     "@waitron/scheduler": "workspace:*",
