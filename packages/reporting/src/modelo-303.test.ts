@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { decimal, subtractDecimal } from "@waitron/shared";
 import type { Decimal, TenantId } from "@waitron/shared";
 import { mapModelo303 } from "./modelo-303.js";
+import { DR303_LAYOUT } from "./dr303-layout.js";
+import { formatNumericField } from "./dr303.js";
 import type { VatReturn } from "./types.js";
 
 // A pure mapping over a VatReturn — no DB, so a plain unit test with constructed inputs (the DB-backed
@@ -152,4 +154,59 @@ describe("mapModelo303", () => {
     // Casilla 67 is deliberately NOT emitted — confirmed ABSENT from DR303e26 (see modelo-303.ts).
     expect(m.boxes["67"]).toBeUndefined();
   });
+});
+
+// ── Tipo-% box cross-check: the map's rate value ⇔ the DR303 layout's hardcoded constant ──
+//
+// The devengado tipo-% boxes (02 → 4 %, 05 → 10 %, 08 → 21 %, 151 → 0 %) are written TWICE by two
+// independent encodings that must always agree: `mapModelo303` writes the rate itself (e.g. "21.00")
+// into the box key, while the DR303 serializer NEVER reads that key — it emits `dr303-layout.ts`'s
+// hardcoded `constant` for the field. They currently agree because `DEVENGADO_BOXES` was transcribed
+// to match the layout, but nothing pins it, so a future edit to either side could silently diverge in
+// a live tax file. This asserts the seam: format the map's rate through the serializer's OWN numeric
+// formatter and it must be byte-identical to the layout constant.
+describe("mapModelo303 tipo-% boxes agree with the DR303 layout constants", () => {
+  const TIPO_BOXES: ReadonlyArray<{ casilla: string; rate: string }> = [
+    { casilla: "02", rate: "4.00" },
+    { casilla: "05", rate: "10.00" },
+    { casilla: "08", rate: "21.00" },
+    { casilla: "151", rate: "0.00" },
+  ];
+
+  // Every devengado rate present, so mapModelo303 emits all four tipo boxes at once.
+  const allRates = vatReturn({
+    byRate: [
+      { rate: d("0.00"), base: d("50.00"), tax: d("0.00") },
+      { rate: d("4.00"), base: d("25.00"), tax: d("1.00") },
+      { rate: d("10.00"), base: d("160.00"), tax: d("16.00") },
+      { rate: d("21.00"), base: d("335.00"), tax: d("70.35") },
+    ],
+    taxTotal: d("87.35"),
+    result: d("87.35"),
+  });
+
+  const layoutFields = [DR303_LAYOUT.comun, DR303_LAYOUT.pagina1, DR303_LAYOUT.pagina3].flatMap(
+    (s) => s.fields,
+  );
+
+  it.each(TIPO_BOXES)(
+    "casilla $casilla: the map's rate encodes to the layout's hardcoded tipo constant",
+    ({ casilla, rate }) => {
+      const boxes = mapModelo303(allRates).boxes;
+      // The map placed the rate itself (the tipo box holds the rate, not a money amount).
+      expect(boxes[casilla]).toBe(rate);
+
+      const field = layoutFields.find((f) => f.casilla === casilla);
+      if (!field) throw new Error(`no casilla ${casilla} in the DR303 layout`);
+      // The serializer emits this field as a CONSTANT (it never reads the map's rate box). Its declared
+      // `decimals` is 0 (an artifact of being a constant), but a "Tipo %" packs 3 int + 2 dec per the
+      // AEAT manual, which is what the constant already carries — so format the map's rate at the field
+      // width with 2 decimals and the two independent encodings must be byte-identical.
+      expect(field.role).toBe("constant");
+      expect(
+        formatNumericField(boxes[casilla]!, field.len, "Num", 2),
+        `tipo drift for casilla ${casilla}`,
+      ).toBe(field.value);
+    },
+  );
 });
