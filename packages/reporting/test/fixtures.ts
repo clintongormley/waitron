@@ -9,7 +9,15 @@ import {
   percentOf,
 } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
-import { saleLines, saleSubstitutions, saleVoids, sales, tenders } from "@waitron/db";
+import {
+  purchaseInvoiceVat,
+  purchaseInvoices,
+  saleLines,
+  saleSubstitutions,
+  saleVoids,
+  sales,
+  tenders,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import type { TenderMethod } from "../src/types.js";
@@ -176,6 +184,55 @@ export async function seedVoid(
     reason: "test void",
     voidedAt,
   });
+}
+
+/**
+ * Seeds one received supplier invoice (factura recibida) and its per-rate VAT lines directly, as the
+ * connection owner (superuser bypasses RLS — pure setup). Inserts the raw tables rather than going
+ * through `@waitron/purchasing`, so `@waitron/reporting`'s tests take no dependency on that package
+ * (it reads the tables directly, exactly as it reads `sales`). `supplierInvoiceNumber` must be unique
+ * per (tenant, supplierTaxId).
+ */
+export async function seedPurchaseInvoice(
+  db: Database,
+  seed: { tenantId: TenantId },
+  opts: {
+    supplierTaxId?: string;
+    supplierInvoiceNumber: string;
+    issuedOn: string;
+    receivedOn: string;
+    total: string;
+    regime?: "general" | "equivalence_surcharge";
+    deductibleProportion?: string;
+    lines: Array<{ rate: string; base: string; tax: string; kind?: "ordinary" | "capital" }>;
+  },
+): Promise<string> {
+  const [row] = await db
+    .insert(purchaseInvoices)
+    .values({
+      tenantId: seed.tenantId,
+      supplierTaxId: opts.supplierTaxId ?? "B00000000",
+      supplierName: "Proveedor",
+      supplierInvoiceNumber: opts.supplierInvoiceNumber,
+      issuedOn: opts.issuedOn,
+      receivedOn: opts.receivedOn,
+      total: opts.total,
+      regime: opts.regime,
+      deductibleProportion: opts.deductibleProportion,
+    })
+    .returning({ id: purchaseInvoices.id });
+  const id = row!.id;
+  await db.insert(purchaseInvoiceVat).values(
+    opts.lines.map((l) => ({
+      tenantId: seed.tenantId,
+      purchaseInvoiceId: id,
+      rate: l.rate,
+      base: l.base,
+      tax: l.tax,
+      kind: l.kind,
+    })),
+  );
+  return id;
 }
 
 export async function seedSubstitution(

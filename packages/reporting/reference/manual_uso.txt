@@ -1,0 +1,379 @@
+DISEÑOS DE REGISTRO
+    BREVE MANUAL DE USO
+
+
+
+
+  Agencia Tributaria
+Centro de Atención Telefónica
+        Departamento de
+    Informática Tributaria
+                                                                                              CAT - Informática Tributaria
+
+
+
+                                                           ÍNDICE
+ÍNDICE ................................................................................................................. 2
+DISEÑOS DE REGISTRO ........................................................................................ 3
+    Introducción ..................................................................................................................... 3
+    Conceptos básicos ........................................................................................................... 4
+
+      Requisitos...................................................................................................................... 4
+
+      Composición .................................................................................................................. 5
+
+      Alineación ...................................................................................................................... 6
+
+    Ejemplo de cumplimentación y edición siguiendo un diseño de registro........................... 7
+
+      Hoja 1 .. ......................................................................................................................... 8
+
+      Hoja 2 (Página 01) ......................................................................................................... 9
+
+    Edición de un fichero...................................................................................................... 12
+
+ANEXO I. OTROS TIPOS DE ESQUEMAS DE DISEÑOS DE REGISTRO ........................ 13
+    Ejemplo de Modelo 190 ................................................................................................. 13
+    Ejemplo de “Suministros e intercambios de información con AA.PP.” ............................ 14
+    Modelos o suministros vía Servicios Web (SII y otros): archivos XML ............................ 15
+
+
+
+
+Diseños de registro (v.2, 12/12/2022)                                                                                                    2
+                                                              CAT - Informática Tributaria
+
+
+
+
+                         DISEÑOS DE REGISTRO
+
+INTRODUCCIÓN
+El objeto de este breve resumen es proporcionar información básica sobre la confección de
+un fichero de envío telemático, partiendo de ejemplos comunes de diseños de registro. No
+se pretende dar una información específica sobre cada modelo, sino más bien una pauta
+para que cada elemento vaya en su lugar correspondiente y así minimizar los errores.
+Para obtener información sobre el contenido específico de los campos en cada modelo,
+basta con acceder a “Ayuda”, “Diseños de registro” y localizar el modelo concreto del que
+se quiere obtener información. En función del ejercicio puede variar el diseño así que,
+además de localizar el modelo adecuado, es necesario tener en cuenta también el ejercicio.
+
+El apartado “Ayuda” (que incluye “Diseños de registro”) se localiza en el margen inferior,
+con fondo azul, de la página web. En necesario desplazarse hasta el final de la página para
+localizarlo:
+
+
+
+
+Diseños de registro (v.2, 12/12/2022)                                                    3
+                                                                   CAT - Informática Tributaria
+
+
+
+
+CONCEPTOS BÁSICOS
+
+Requisitos
+Para generar ficheros siguiendo un diseño de registro es necesario utilizar un editor de
+texto plano, que genere un tipo de archivo TXT. Es recomendable usar aplicaciones del tipo
+“Bloc de notas” o cualquier otro editor de texto que permita visualizar la posición del
+cursor, para facilitar la identificación de la línea y columna en la que se sitúan los caracteres.
+
+Las suites ofimáticas suelen incluir en sus editores de texto y hojas de cálculo funciones
+para convertir un texto en un archivo TXT, pero tienen el inconveniente de que enriquecen el
+contenido. No son en absoluto recomendables para confeccionar un fichero plano, ya que
+habría que depurarlo una vez generado y puede resultar muy costoso.
+
+Normalmente, los caracteres en un editor de texto plano están estandarizados (ASCII), por
+lo que no suelen dar problemas.
+De forma general (aunque esto puede venir especificado en el propio Diseño de Registro) se
+debe tener en cuenta que:
+      Todos los campos alfanuméricos y alfabéticos se presentarán alineados a la
+       izquierda y rellenos de blancos por la derecha, en mayúsculas sin caracteres
+       especiales, y sin vocales acentuadas.
+      Para los caracteres específicos del idioma se utilizará la codificación ISO-8859-1. De
+       esta forma la letra “Ñ” tendrá el valor ASCII 209 (Hex. D1) y la “Ç” (cedilla
+       mayúscula) el valor ASCII 199 (Hex. C7).
+      Todos los campos obligatorios tendrán contenido, a no ser que se especifique lo
+       contrario en la descripción del campo. Si no corresponde aportar información en un
+       campo obligatorio, los campos numéricos se rellenarán a ceros y tanto los
+       alfanuméricos como los alfabéticos a blancos.
+
+
+
+
+Diseños de registro (v.2, 12/12/2022)                                                           4
+                                                               CAT - Informática Tributaria
+
+
+No obstante, en la mayoría de los Diseños de Registro publicados (cada vez es más
+frecuente que se publiquen en formato XLSX) suelen venir notas específicas sobre cómo
+debe ir cumplimentada la información.
+Se incluye ejemplo de aclaraciones incluidas en la última hoja del DR del modelo 303 del
+ejercicio 2023:
+
+
+
+
+Composición
+Todos los diseños de registro presentan una estructura constante y común. Cada modelo
+tiene una normativa reguladora que indica qué ha de ir relleno en cada campo y de qué
+forma, por lo que, si se presentan dudas, la mejor forma de aclararlas es acudir al diseño
+lógico de registro publicado.
+En la actualidad, muchos de los Diseños de Registro están publicados en formato .XLSX.
+Cuando se trata de modelos cuyo diseño se divide en páginas, este archivo Excel incluye
+una “hoja” por cada página con sus correspondientes notas.
+De forma general, la información recogida en los diseños de registro publicados es la
+siguiente:
+
+   Tipo de registro: solo para determinados modelos de Informativas. Diferencia las
+    distintas clases de registro dentro de un mismo fichero de declaración (registro tipo 1:
+    declarante, registro tipo 2: declarados, etc.)
+
+   Registro: conjunto de campos que siguen el diseño establecido por la AEAT.
+
+
+
+
+Diseños de registro (v.2, 12/12/2022)                                                     5
+                                                               CAT - Informática Tributaria
+
+
+   Campo: es cada uno de los elementos que se requieren en una declaración, tales como
+    NIF, nombre y apellidos, datos numéricos, etc.
+
+   Número: es el orden en el que se ha de poner cada campo.
+
+   Posición: es el lugar que ocupa cada campo dentro del diseño numerado. Si el campo
+    está formado por un grupo de caracteres, se indica siempre la posición que ocupa el
+    primer carácter del grupo.
+
+   Longitud: cantidad de posiciones que ocupa un campo.
+
+   Tipo/Naturaleza: es el formato de carácter que se requiere para un campo. Podemos
+    encontrarnos cuatro tipos:
+       o   A: carácter/es alfabético/s (letras)
+       o   Num: numérico sin signo. Solo admiten números.
+       o   N: numérico con signo. Admiten números más el carácter N. Los datos numéricos
+           deberán estar alineados a la derecha rellenando con ceros por la izqda. Los
+           datos numéricos negativos llevarán una N en la primera posición del campo.
+       o   An: carácter/es alfanumérico/s (letras y números)
+       o   Blanco: es un espacio. Cada pulsación de la barra espaciadora es un blanco.
+   Descripción: indica el campo al que se refiere.
+   Contenido: aclaraciones relativas al formato del campo, valores que puede tomar, etc.
+   Notas: aclaraciones al contenido.
+
+
+Alineación
+Como se ha mencionado en anteriores apartados:
+   Todos los campos alfanuméricos y alfabéticos se presentarán alineados a la izquierda y
+    rellenos de blancos por la derecha, en mayúsculas, sin caracteres especiales y sin
+    vocales acentuadas.
+   Todos los campos numéricos se presentarán alineados a la derecha y rellenos a ceros
+    por la izquierda, sin signos y sin empaquetar.
+   Los campos numéricos negativos se presentarán alineados a la derecha y rellenos a
+    ceros por la izquierda, precedidos del carácter “N”.
+   Todos los campos tendrán contenido, a no ser que se especifique lo contrario en la
+    descripción del campo. Si no lo tuvieran, los campos numéricos se rellenarán a ceros y
+    tanto los alfanuméricos como los alfabéticos a blancos.
+
+
+
+
+Diseños de registro (v.2, 12/12/2022)                                                       6
+                                                             CAT - Informática Tributaria
+
+
+EJEMPLO DE CUMPLIMENTACIÓN Y EDICIÓN SIGUIENDO
+UN DISEÑO DE REGISTRO
+Para este ejemplo, se utiliza el diseño de registro del modelo 111 correspondiente al
+ejercicio 2022 (111 - Orden EHA/3127/2009 (Ejercicios 2019 y siguientes, actualizado Mayo
+2021)):
+
+
+
+
+Diseños de registro (v.2, 12/12/2022)                                                  7
+                                        CAT - Informática Tributaria
+
+
+Hoja 1
+
+
+
+
+Diseños de registro (v.2, 12/12/2022)                             8
+                                        CAT - Informática Tributaria
+
+
+Hoja 2 (Página 01)
+
+
+
+
+Diseños de registro (v.2, 12/12/2022)                             9
+                                                               CAT - Informática Tributaria
+
+
+El aspecto que tiene el diseño de registro procesado en texto plano por un editor, sería
+como el que se muestra a continuación:
+
+
+
+
+El fichero se genera siguiendo la estructura del diseño lógico de ambas tablas (hojas 1 y 2),
+donde es importante tener en cuenta que cada columna (posición) debe respetar en su
+totalidad el tipo de información definida para cada campo, sin que exista separación alguna
+entre ellos. Se recuerda que todos los campos tendrán contenido, a no ser que se
+especifique lo contrario en la descripción del campo, en cuyo caso los campos numéricos se
+rellenan a ceros y tanto los alfanuméricos como los alfabéticos se completan con espacios
+en blanco.
+Tomando como ejemplo el fichero anterior, observamos que se abre con la constante “<T”
+ocupando la primera y segunda posición de la primera línea, tal como viene definida en el
+diseño. De forma análoga, el resto de posiciones toman el valor correspondiente al campo
+que representan según el diseño (posición 3-5: número de modelo, posición 6: número de
+página, posición 7-10: ejercicio de devengo, y así sucesivamente).
+A partir de la posición 329 se incorpora el contenido de la segunda hoja que, para el modelo
+111, estará constituido por 1000 posiciones entre las cuales se encuentran los campos de
+“Identificación”, “Sujeto Pasivo”, “NIF” (9 posiciones), “Identificación”, “Sujeto
+Pasivo”, “Denominación o Apellidos” (60 posiciones), “Rendimientos del trabajo”,
+“Rendimientos dinerarios”, “Importe de las percepciones” (17 posiciones), entre otros.
+
+Nota importante: La primera posición de la hoja 2 se corresponde a la posición 329 en el
+fichero real y así de manera sucesiva.
+
+
+
+
+Diseños de registro (v.2, 12/12/2022)                                                     10
+                                                                           CAT - Informática Tributaria
+
+
+Se recomienda utilizar un programa editor de texto en el que se puedan visualizar los
+espacios y posibles saltos de línea de forma:
+
+
+
+
+El fichero cierra con la constante “</T1110+Ejercicio+periodo+0000>” de 18 posiciones,
+cuyo contenido viene definido en la hoja 1.
+Siguiendo este diseño, organizado por líneas y campos, los contenidos tendrían una
+estructura como la que se muestra a continuación:
+
+
+
+
+                     Esquema gráfico de la estructura de la parte inicial del fichero
+
+
+
+Diseños de registro (v.2, 12/12/2022)                                                               11
+                                                                            CAT - Informática Tributaria
+
+
+EDICIÓN DE UN FICHERO
+En ciertas ocasiones se considera necesario editar el fichero para corregir alguna posición o
+campo, cuyo contenido es improcedente. Ante esta circunstancia es conveniente tener en
+cuenta algunas recomendaciones:
+   En primer lugar, conviene habilitar la barra de estado en el editor de texto elegido, de tal
+    manera que permita conocer la posición exacta (línea y columna) que ocupa cada uno
+    de los caracteres que conforman el fichero.
+
+
+
+
+    Imagen fichero modelo 111 (que consiste en un único registro) desde Bloc de notas con “Ajuste de línea”
+
+
+
+
+    Imagen fichero modelo 111 (que consiste en un único registro) desde Notepad ++ con “Ajuste de línea”
+
+    El hecho de poder conocer la posición exacta, permite una localización más sencilla de
+    la posición o campo cuyo contenido debe ser examinado para, si fuera necesario,
+    adaptarlo al tipo y descripción, según las especificaciones del diseño lógico descrito.
+   En caso de ser necesaria alguna modificación, es aconsejable utilizar la función
+    “reemplazar”, de tal manera que permita realizar el cambio en una posición concreta y
+    evitar así, el desplazamiento de las posiciones consecutivas y en consecuencia el
+    descuadre de los siguientes campos.
+
+
+
+
+Diseños de registro (v.2, 12/12/2022)                                                                         12
+                                                               CAT - Informática Tributaria
+
+
+
+
+        ANEXO I. OTROS TIPOS DE ESQUEMAS DE
+                 DISEÑOS DE REGISTRO
+En el epígrafe anterior se han mostrado partes de los diseños de registro de una
+autoliquidación (modelo 111), a continuación, se muestran diferentes formatos oficiales para
+la publicación de diseños de registro de otro tipo de modelos o servicios.
+
+
+EJEMPLO DE MODELO 190
+En concreto, el referido a la Orden EHA/3127/2009 (actualizada por Orden HAC/1285/2020)
+y publicado en formato .PDF.
+Incluye información sobre la normativa correspondiente, descripción general de los registros,
+detalle de cada tipo de registro (y sus campos pertinentes) y otras aclaraciones al respecto:
+
+
+
+
+Diseños de registro (v.2, 12/12/2022)                                                     13
+                                                               CAT - Informática Tributaria
+
+
+EJEMPLO DE “SUMINISTROS E INTERCAMBIOS DE
+INFORMACIÓN CON AA.PP.”
+En concreto, el correspondiente al suministro Nivel de Renta 2021 general.
+En este caso, también en formato PDF, al tratarse de un intercambio de información,
+además de especificarse el diseño que debe cumplir el fichero que se envía, también se
+incluye el diseño de registro del fichero con que responde Agencia Tributaria:
+
+
+
+
+Diseños de registro (v.2, 12/12/2022)                                                   14
+                                                               CAT - Informática Tributaria
+
+
+MODELOS O SUMINISTROS VÍA SERVICIOS WEB (SII Y
+OTROS): ARCHIVOS XML
+Cuando el envío se realiza por medio de Servicios Web, tanto la forma en que se remite la
+información como el diseño que deben cumplir los ficheros están especificados dentro del
+apartado “Información” del propio modelo o servicio.
+Tomando como ejemplo el SII, dentro de sus trámites está disponible toda la información
+técnica necesaria para poder realizar los envíos, confeccionar los ficheros XML y recibir (e
+interpretar) las respuestas.
+
+
+
+
+Se debe tener en cuenta que
+el envío de los XML debe
+realizarse a través de los
+servicios web descritos en los
+ficheros WDSL de la sede
+electrónica de la AEAT.
+En   cualquier    caso,    es
+necesario    disponer      de
+conocimientos    informáticos
+avanzados.
+Si no se dispone de dichos
+conocimientos o del tiempo
+necesario, siempre es posible
+acudir a un colaborador social
+o empresa desarrolladora que
+disponga          de        los
+conocimientos, tanto técnicos
+como de negocio, necesarios
+para realizar la presentación.
+
+
+
+
+Diseños de registro (v.2, 12/12/2022)                                                    15
+

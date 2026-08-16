@@ -8,6 +8,11 @@
 // registration. Both functions read only `sales.vat_breakdown` (a queryable copy of the filed
 // desglose, migration 0032), so CORE_MIGRATIONS alone suffices; the fiscal chain is never read.
 //
+// It then produces the SUBMITTABLE output end-to-end: `mapModelo303` maps the reconciled aggregate
+// onto the modelo 303 casillas and `toDr303Record` serializes it to the AEAT sede "por fichero"
+// fixed-layout file, whose bytes the demo SELF-VALIDATES (length 2944, a known box at its documented
+// offset, and — this month is a net credit — the 'N' sign prefix on the negative resultado).
+//
 // apps/* is exempt from the english-only guard, so the printed labels use the fiscal vocabulary
 // (IVA devengado, base imponible, cuota, tipo).
 //
@@ -36,8 +41,13 @@
 // The script recomputes that 86.35 independently from the seeded figures (`addDecimal`, not a JS
 // number) and asserts it equals `computeVatReturn`'s summed cuota — printing OK or throwing.
 import { sql } from "drizzle-orm";
-import { computeVatReturn, computeVatSummaryForPeriod } from "@waitron/reporting";
-import type { VatRateLine, VatSummary } from "@waitron/reporting";
+import {
+  computeVatReturn,
+  computeVatSummaryForPeriod,
+  mapModelo303,
+  toDr303Record,
+} from "@waitron/reporting";
+import type { Dr303Options, Modelo303, VatRateLine, VatSummary } from "@waitron/reporting";
 import { recordCorrection, recordSale } from "@waitron/core";
 import type { RecordCorrectionInput, RecordSaleInput } from "@waitron/core";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
@@ -49,12 +59,14 @@ import {
   addDecimal,
   compareDecimal,
   decimal,
+  subtractDecimal,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { Decimal, NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { InputVatRateLine } from "@waitron/reporting";
 
 const LOCALE = "es-ES";
 const TIME_ZONE = "Europe/Madrid";
@@ -137,6 +149,83 @@ const RECTIFICATIVA = {
   tax: "-1.05",
   description: "Rectificación menú del día",
 } as const;
+
+// Received supplier invoices (facturas recibidas) — the IVA DEDUCIBLE / soportado side. `base`/`tax`
+// are the FILED per-rate figures (the supplier's own cuota, which may round by the difference method).
+// `regime` general is deductible and on the 303; recargo de equivalencia is NON-deductible and off the
+// 303, so it must NOT appear in the deducible aggregate. `kind` corriente (ordinary) → casilla 28/29,
+// bienes de inversión (capital) → casilla 30/31.
+interface SeedPurchase {
+  supplierName: string;
+  supplierTaxId: string;
+  number: string;
+  /** The supplier's *fecha de expedición* ("YYYY-MM-DD") — distinct from `receivedOn`: an invoice is
+   * expedida by the supplier some days before we receive it. It does NOT drive the deduction period. */
+  issuedOn: string;
+  /** Civil date "YYYY-MM-DD" the invoice was received — the deduction period. */
+  receivedOn: string;
+  regime: "general" | "equivalence_surcharge";
+  rate: string;
+  base: string;
+  tax: string;
+  kind: "ordinary" | "capital";
+  description: string;
+}
+
+const PURCHASE_INVOICES: readonly SeedPurchase[] = [
+  {
+    supplierName: "Café del Puerto SL",
+    supplierTaxId: "B11111111",
+    number: "2026/501",
+    issuedOn: "2026-08-01",
+    receivedOn: "2026-08-04",
+    regime: "general",
+    rate: "21.00",
+    base: "200.00",
+    tax: "41.99", // difference method: round(200 × 21%) would be 42.00; we file 41.99 verbatim
+    kind: "ordinary",
+    description: "Café y suministros (operación interior corriente)",
+  },
+  {
+    supplierName: "Distribuciones Norte SL",
+    supplierTaxId: "B22222222",
+    number: "F-88",
+    issuedOn: "2026-08-06",
+    receivedOn: "2026-08-09",
+    regime: "general",
+    rate: "10.00",
+    base: "100.00",
+    tax: "10.00",
+    kind: "ordinary",
+    description: "Producto fresco al 10% (corriente)",
+  },
+  {
+    supplierName: "Fríos Industriales SA",
+    supplierTaxId: "A33333333",
+    number: "INV-7",
+    issuedOn: "2026-08-11",
+    receivedOn: "2026-08-14",
+    regime: "general",
+    rate: "21.00",
+    base: "1000.00",
+    tax: "210.00",
+    kind: "capital",
+    description: "Cámara frigorífica (bien de inversión)",
+  },
+  {
+    supplierName: "Kiosco Minorista SL",
+    supplierTaxId: "B44444444",
+    number: "T-3",
+    issuedOn: "2026-08-17",
+    receivedOn: "2026-08-20",
+    regime: "equivalence_surcharge",
+    rate: "21.00",
+    base: "50.00",
+    tax: "10.50",
+    kind: "ordinary",
+    description: "Prensa en recargo de equivalencia — NO deducible, fuera del 303",
+  },
+];
 
 /**
  * A `TrustedClock` fixed at `instant`/`offsetMinutes`. `recordSale`/`recordCorrection` read `now()`
@@ -270,6 +359,103 @@ function printPeriodSummary(label: string, summary: VatSummary): void {
   console.log("");
 }
 
+/** Seeds the received supplier invoices directly (as the PGlite superuser, RLS bypassed), exactly as
+ * seedVenue seeds the tenant — a received invoice is a plain accounting record, no fiscal write path. */
+async function seedPurchaseInvoices(db: Database, tenantId: TenantId): Promise<void> {
+  for (const p of PURCHASE_INVOICES) {
+    const total = addDecimal(decimal(p.base), decimal(p.tax));
+    const inv = await db.execute<{ id: string }>(sql`
+      insert into purchase_invoices
+        (tenant_id, supplier_tax_id, supplier_name, supplier_invoice_number, issued_on, received_on, total, regime)
+      values (${tenantId}, ${p.supplierTaxId}, ${p.supplierName}, ${p.number}, ${p.issuedOn}, ${p.receivedOn}, ${total}, ${p.regime})
+      returning id`);
+    const id = inv.rows[0]!.id;
+    await db.execute(sql`
+      insert into purchase_invoice_vat (tenant_id, purchase_invoice_id, rate, base, tax, kind)
+      values (${tenantId}, ${id}, ${p.rate}, ${p.base}, ${p.tax}, ${p.kind})`);
+  }
+}
+
+/** The expected IVA deducible per (rate, kind), summed independently from the seeded figures — general
+ * invoices only (recargo de equivalencia excluded), sorted rate asc then corriente before inversión,
+ * matching computeInputVat. This is the check's left-hand side: pure addDecimal, not a DB read-back. */
+function expectedDeducibleByRate(): InputVatRateLine[] {
+  const kindOrder = { ordinary: 0, capital: 1 } as const;
+  const byKey = new Map<string, InputVatRateLine>();
+  for (const p of PURCHASE_INVOICES) {
+    if (p.regime !== "general") continue; // recargo de equivalencia is off the 303
+    const key = `${p.rate}:${p.kind}`;
+    const cur = byKey.get(key);
+    if (cur === undefined) {
+      byKey.set(key, {
+        rate: decimal(p.rate),
+        base: decimal(p.base),
+        tax: decimal(p.tax),
+        kind: p.kind,
+      });
+    } else {
+      cur.base = addDecimal(cur.base, decimal(p.base));
+      cur.tax = addDecimal(cur.tax, decimal(p.tax));
+    }
+  }
+  return [...byKey.values()].sort((a, b) => {
+    const r = compareDecimal(a.rate, b.rate);
+    return r !== 0 ? r : kindOrder[a.kind] - kindOrder[b.kind];
+  });
+}
+
+function printDeducibleTable(lines: readonly InputVatRateLine[]): void {
+  console.log("    tipo      clase          base imponible        cuota");
+  for (const l of lines) {
+    const clase = l.kind === "capital" ? "inversión" : "corriente";
+    console.log(
+      `    ${`${l.rate}%`.padEnd(8)}  ${clase.padEnd(12)}  ${l.base.padStart(12)}  ${l.tax.padStart(12)}`,
+    );
+  }
+}
+
+/** Throws with a diff if the deducible aggregate's per-(rate,kind) figures or totals differ from the
+ * independently-summed expectation. Checks `kind` too — the casilla 28/29-vs-30/31 split. */
+function reconcileDeducible(
+  actual: { byRate: readonly InputVatRateLine[]; baseTotal: Decimal; taxTotal: Decimal },
+  expected: readonly InputVatRateLine[],
+): void {
+  const expBase = expected.reduce((a, l) => addDecimal(a, l.base), decimal("0.00"));
+  const expTax = expected.reduce((a, l) => addDecimal(a, l.tax), decimal("0.00"));
+  const problems: string[] = [];
+  if (compareDecimal(actual.baseTotal, expBase) !== 0) {
+    problems.push(`deducible baseTotal ${actual.baseTotal} != expected ${expBase}`);
+  }
+  if (compareDecimal(actual.taxTotal, expTax) !== 0) {
+    problems.push(`deducible taxTotal (cuota) ${actual.taxTotal} != expected ${expTax}`);
+  }
+  if (actual.byRate.length !== expected.length) {
+    problems.push(
+      `deducible byRate has ${actual.byRate.length} lines, expected ${expected.length}`,
+    );
+  } else {
+    for (let i = 0; i < expected.length; i++) {
+      const a = actual.byRate[i]!;
+      const e = expected[i]!;
+      if (
+        a.kind !== e.kind ||
+        compareDecimal(a.rate, e.rate) !== 0 ||
+        compareDecimal(a.base, e.base) !== 0 ||
+        compareDecimal(a.tax, e.tax) !== 0
+      ) {
+        problems.push(
+          `deducible ${a.rate}/${a.kind}: base ${a.base}/cuota ${a.tax} != expected base ${e.base}/cuota ${e.tax} (${e.kind})`,
+        );
+      }
+    }
+  }
+  if (problems.length > 0) {
+    throw new Error(
+      `modelo-303-demo: IVA deducible did not reconcile:\n  ${problems.join("\n  ")}`,
+    );
+  }
+}
+
 async function main(): Promise<void> {
   const db = await createPgliteDb();
   try {
@@ -369,6 +555,10 @@ async function main(): Promise<void> {
       await recordCorrection(tx, backend, correctionInput);
     });
 
+    // The IVA DEDUCIBLE side: received supplier invoices (facturas recibidas). A plain accounting
+    // record — no fiscal write path — so seeded directly like the tenant itself.
+    await seedPurchaseInvoices(db, venue.tenantId);
+
     // The reads: RLS-safe, as the application role, exactly as a report consumer would call them.
     const monthLabel = `${YEAR}-${String(MONTH).padStart(2, "0")}`;
     const period = { fromBusinessDay: `${monthLabel}-01`, toBusinessDay: `${monthLabel}-31` };
@@ -428,11 +618,24 @@ async function main(): Promise<void> {
     printPeriodSummary(`all nodes, one week ${monthLabel}-03 … ${monthLabel}-09`, weekOne);
 
     console.log(`computeVatReturn — modelo 303, ${monthLabel} (obligado ${venue.tenantId})`);
-    console.log("  IVA DEVENGADO (OUTPUT side only). NOT the IVA deducible/soportado side; no");
-    console.log("  recargo de equivalencia and no casilla mapping — spec §4/D6.");
+    console.log("  IVA DEVENGADO (output side, casilla 27) — régimen general, corrections netted:");
     printRateTable(vatReturn.byRate);
     console.log(
       `    ${"totales".padEnd(8)}  ${vatReturn.baseTotal.padStart(12)}  ${vatReturn.taxTotal.padStart(12)}`,
+    );
+    console.log("");
+
+    console.log(
+      "  IVA DEDUCIBLE (input side, casilla 45) — régimen general, recargo de equivalencia",
+    );
+    console.log("  excluded; bienes de inversión split out from operaciones corrientes:");
+    printDeducibleTable(vatReturn.deductible.byRate);
+    console.log(
+      `    ${"totales".padEnd(8)}  ${" ".repeat(12)}  ${vatReturn.deductible.baseTotal.padStart(12)}  ${vatReturn.deductible.taxTotal.padStart(12)}`,
+    );
+    console.log("");
+    console.log(
+      `  RESULTADO régimen general (casilla 46 = 27 − 45) = ${vatReturn.taxTotal} − ${vatReturn.deductible.taxTotal} = ${vatReturn.result}`,
     );
     console.log("");
 
@@ -444,12 +647,121 @@ async function main(): Promise<void> {
     // witness that the two functions agree over this month.
     reconcile("period roll-up over the whole month", periodAll, expected);
 
-    const expectedTax = sumTax(expected);
+    // The deducible side and the net result reconcile end-to-end: Σ filed deducible cuotas
+    // (general only), and result = devengado − deducible (casilla 46 = 27 − 45).
+    const expectedDeducible = expectedDeducibleByRate();
+    reconcileDeducible(vatReturn.deductible, expectedDeducible);
+    const expectedResult = subtractDecimal(sumTax(expected), sumTax(expectedDeducible));
+    if (compareDecimal(vatReturn.result, expectedResult) !== 0) {
+      throw new Error(
+        `modelo-303-demo: resultado ${vatReturn.result} != expected ${expectedResult} (devengado − deducible)`,
+      );
+    }
+
     console.log(
-      `OK — cuota (IVA devengado) total ${vatReturn.taxTotal} equals the summed filed figures ${expectedTax}.`,
+      `OK — IVA devengado ${vatReturn.taxTotal} − IVA deducible ${vatReturn.deductible.taxTotal} = resultado ${vatReturn.result}, reconciled against the summed filed figures.`,
+    );
+    console.log("");
+
+    // ── The submittable output: the DR303 fixed-layout file the sede "por fichero" path uploads. Map
+    //    the reconciled aggregate onto the modelo 303 casillas, serialize to the AEAT record, and
+    //    SELF-VALIDATE the produced bytes (this month's resultado is a NET CREDIT, so box 46/71 must
+    //    carry the 'N' sign). The `tipo de declaración` is an operator/asesor input, not computed —
+    //    "C" (a compensar) is illustrative here for the net-credit month.
+    const modelo = mapModelo303(vatReturn);
+    const dr303Options: Dr303Options = {
+      taxId: "50000000K",
+      name: "Deli Demo SL",
+      year: YEAR,
+      period: String(MONTH).padStart(2, "0"),
+      declarationType: "C",
+    };
+    const record = toDr303Record(modelo, dr303Options);
+    validateDr303Record(record, modelo);
+
+    console.log("DR303 — modelo 303 fixed-layout file (AEAT sede 'por fichero')");
+    console.log(
+      `  ${record.length} bytes: envelope + común + página 1 + página 3 (página 2 régimen simplificado omitted, out of scope)`,
+    );
+    const shown = boxAt(record, "46");
+    console.log(
+      `  casilla 46 (resultado régimen general ${modelo.boxes["46"]}) at byte offset ${shown.offset}: ${shown.bytes}  ← 'N' sign prefix for the net credit`,
+    );
+    console.log(
+      `OK — DR303 file self-validated: length 2944, box 27 (${modelo.boxes["27"]}) at its documented offset, negative resultado rendered with the N prefix.`,
     );
   } finally {
     await db.close();
+  }
+}
+
+// Fixed 0-based byte offsets of the two casillas this demo reads back out of the produced record;
+// both are 17-char money boxes on página 1. These are the SAME offsets the serializer's own test
+// pins (packages/reporting/src/dr303.test.ts's OFFSET table: box 27 at 1023, box 46 at 1346), where
+// they are derived from the layout and asserted to match — a layout shift turns that test red.
+// Hardcoding them keeps the demo on the public @waitron/reporting barrel, with no deep import into
+// the internal dr303-layout.ts.
+const DR303_BOX_OFFSETS: Readonly<Record<string, { offset: number; len: number }>> = {
+  "27": { offset: 1023, len: 17 },
+  "46": { offset: 1346, len: 17 },
+};
+
+/** Reads a casilla's raw bytes back out of the record at its FIXED offset (see DR303_BOX_OFFSETS). */
+function boxAt(record: Buffer, casilla: string): { offset: number; len: number; bytes: string } {
+  const box = DR303_BOX_OFFSETS[casilla];
+  if (box === undefined) {
+    throw new Error(`modelo-303-demo: casilla ${casilla} has no fixed offset in this demo`);
+  }
+  return {
+    offset: box.offset,
+    len: box.len,
+    bytes: record.toString("latin1", box.offset, box.offset + box.len),
+  };
+}
+
+/** Independently packs a Decimal into an AEAT fixed-width numeric field — the demo's OWN witness, NOT
+ * the serializer's `formatNumericField`: magnitude in cents, right-aligned and zero-filled, a negative
+ * value taking an 'N' in position 1 (manual_uso.txt). Used only to cross-check `toDr303Record`'s bytes. */
+function packAeatNumeric(value: Decimal, width: number): string {
+  const negative = value.startsWith("-");
+  const magnitude = (negative ? value.slice(1) : value).replace(".", "");
+  return negative ? "N" + magnitude.padStart(width - 1, "0") : magnitude.padStart(width, "0");
+}
+
+/** Throws unless the produced DR303 file self-validates: total length 2944, box 27 (a positive money
+ * box) landing at its documented offset with the expected bytes, and box 46 (this month's NEGATIVE
+ * resultado) carrying the 'N' sign prefix. Expected bytes come from `packAeatNumeric` — a second,
+ * independent encoder — so a bug in the serializer's own formatter cannot mask itself. */
+function validateDr303Record(record: Buffer, modelo: Modelo303): void {
+  const problems: string[] = [];
+  if (record.length !== 2944) {
+    problems.push(
+      `record is ${record.length} bytes, expected 2944 (común 328 + página1 1581 + página3 1017 + envelope close 18)`,
+    );
+  }
+  const at27 = boxAt(record, "27");
+  const want27 = packAeatNumeric(modelo.boxes["27"]!, at27.len);
+  if (at27.bytes !== want27) {
+    problems.push(
+      `box 27 at offset ${at27.offset}: bytes ${JSON.stringify(at27.bytes)} != expected ${JSON.stringify(want27)}`,
+    );
+  }
+  const at46 = boxAt(record, "46");
+  const want46 = packAeatNumeric(modelo.boxes["46"]!, at46.len);
+  if (at46.bytes !== want46) {
+    problems.push(
+      `box 46 at offset ${at46.offset}: bytes ${JSON.stringify(at46.bytes)} != expected ${JSON.stringify(want46)}`,
+    );
+  }
+  if (!at46.bytes.startsWith("N")) {
+    problems.push(
+      `box 46 (resultado ${modelo.boxes["46"]}) should carry the N sign prefix for a negative value, got ${JSON.stringify(at46.bytes)}`,
+    );
+  }
+  if (problems.length > 0) {
+    throw new Error(
+      `modelo-303-demo: DR303 file did not self-validate:\n  ${problems.join("\n  ")}`,
+    );
   }
 }
 

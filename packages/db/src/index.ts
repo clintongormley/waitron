@@ -19,6 +19,12 @@ export type {
 export { orderPrep, prepState } from "./schema/order-prep.js";
 export { catalogues, categories, products } from "./schema/catalogue.js";
 export { ingredients, recipeLines } from "./schema/recipes.js";
+export {
+  purchaseInvoiceVat,
+  purchaseInvoices,
+  purchaseRegime,
+  purchaseVatKind,
+} from "./schema/purchase-invoices.js";
 export { tillLayouts } from "./schema/layouts.js";
 export { workingOrderCounters } from "./schema/working-order-counters.js";
 export {

@@ -4,6 +4,7 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { TenantId } from "@waitron/shared";
 import {
   seedNodeAndSeries,
+  seedPurchaseInvoice,
   seedSale,
   seedSubstitution,
   seedVenue,
@@ -167,6 +168,51 @@ describe("computeVatReturn", () => {
     ]);
   });
 
+  it("computes the deducible side and the net result (devengado − deducible)", async () => {
+    // Output: a 21% sale, cuota 21.00. Input: a régimen-general 21% received invoice (cuota 15.00) and
+    // a 10% capital-goods one (cuota 4.00) → deducible total 19.00; result = 21.00 − 19.00 = 2.00. An
+    // equivalence-surcharge invoice is seeded too and must NOT reduce the result (it is off the 303).
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: augNoonUtc,
+      total: "121.00",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+      vatBreakdown: [{ rate: "21.00", base: "100.00", tax: "21.00" }],
+    });
+    await seedPurchaseInvoice(suite.db, venue, {
+      supplierInvoiceNumber: "P1",
+      issuedOn: "2026-08-01",
+      receivedOn: "2026-08-02",
+      total: "86.43",
+      lines: [{ rate: "21.00", base: "71.43", tax: "15.00" }],
+    });
+    await seedPurchaseInvoice(suite.db, venue, {
+      supplierInvoiceNumber: "P2",
+      issuedOn: "2026-08-01",
+      receivedOn: "2026-08-03",
+      total: "44.00",
+      lines: [{ rate: "10.00", base: "40.00", tax: "4.00", kind: "capital" }],
+    });
+    await seedPurchaseInvoice(suite.db, venue, {
+      supplierInvoiceNumber: "RE",
+      issuedOn: "2026-08-01",
+      receivedOn: "2026-08-04",
+      total: "121.00",
+      regime: "equivalence_surcharge",
+      lines: [{ rate: "21.00", base: "100.00", tax: "21.00" }],
+    });
+
+    const ret = await run({ year: 2026, month: 8 });
+    expect(ret.taxTotal).toBe("21.00"); // devengado (output)
+    expect(ret.deductible.byRate).toEqual([
+      { rate: "10.00", base: "40.00", tax: "4.00", kind: "capital" },
+      { rate: "21.00", base: "71.43", tax: "15.00", kind: "ordinary" },
+    ]);
+    expect(ret.deductible.baseTotal).toBe("111.43");
+    expect(ret.deductible.taxTotal).toBe("19.00");
+    expect(ret.result).toBe("2.00"); // 21.00 − 19.00, the equivalence-surcharge invoice excluded
+  });
+
   it("throws on a month outside 1..12 or a non-integer month", async () => {
     await expect(run({ year: 2026, month: 0 })).rejects.toThrow();
     await expect(run({ year: 2026, month: 13 })).rejects.toThrow();
@@ -188,6 +234,9 @@ describe("computeVatReturn", () => {
   });
 
   it("returns zeros for an empty month", async () => {
+    // Extended for the deducible side (#89 slice B): with no sales AND no received invoices, the
+    // deducible aggregate is empty and the result is 0.00 − 0.00. The devengado fields
+    // (byRate/baseTotal/taxTotal) keep their #76 shape and values.
     expect(await run({ year: 2026, month: 3 })).toEqual({
       tenantId: venue.tenantId,
       year: 2026,
@@ -195,6 +244,8 @@ describe("computeVatReturn", () => {
       byRate: [],
       baseTotal: "0.00",
       taxTotal: "0.00",
+      deductible: { byRate: [], baseTotal: "0.00", taxTotal: "0.00" },
+      result: "0.00",
     });
   });
 });
