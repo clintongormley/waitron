@@ -42,6 +42,7 @@ import { mountManagementApi } from "./management-api.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountWorkforceApi } from "./workforce-api.js";
 import { mountScheduleApi } from "./schedule-api.js";
+import { mountMeApi } from "./me-api.js";
 import { mountMedia } from "./media-api.js";
 import { mountSyncApi } from "./sync-api.js";
 import { fetchHttpClient } from "./sync-http.js";
@@ -345,6 +346,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // the counterpart to mountWorkforceApi's manager approval half. Same minimal deps (db + this venue's
   // tenant); the till PIN session gates it (requireSession), not a management session. Routes only.
   mountScheduleApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
+  // The STAFF SELF-SERVICE half of the management dashboard on the SAME app — the browser twin of the
+  // till's mountScheduleApi. Its whoami (`GET /management-api/session/me`) + `/management-api/me/schedule/*`
+  // routes gate on the MANAGEMENT session (requireManagementSession + resolveManagementSession), never
+  // authorizeManager, so a staff-role person acts on their own roster/swaps/absences. Same minimal deps
+  // (db + this venue's tenant); no fiscal backend, clock or card provider. Routes only.
+  mountMeApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
   // The PUBLIC read half of the product-image feature on the SAME app — the `mountWebhook` /
   // `mountTillApi` / `mountManagementApi` convention again. Deliberately UNAUTHENTICATED and taking
   // no `db`/session: it serves bytes from `config.mediaDir` (the store `mkdirSync` above ensured),
