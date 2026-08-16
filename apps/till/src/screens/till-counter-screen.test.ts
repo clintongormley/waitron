@@ -193,6 +193,19 @@ describe("till-counter-screen", () => {
     expect(captured!.composed).toBe(true);
   });
 
+  it("labels and emits a composed, bubbling show-schedule event when My schedule is tapped", async () => {
+    const { el } = await mount();
+    expect(el.shadowRoot!.querySelector("wt-button.schedule")!.textContent).toContain(
+      t("schedule.open"),
+    );
+    let captured: Event | undefined;
+    el.addEventListener("show-schedule", (event) => (captured = event));
+    el.shadowRoot!.querySelector<HTMLElement>("wt-button.schedule")!.click();
+    expect(captured).toBeInstanceOf(CustomEvent);
+    expect(captured!.composed).toBe(true);
+    expect(captured!.bubbles).toBe(true);
+  });
+
   it("labels the Allergens control with the localised action and shows the sale body by default", async () => {
     const { el } = await mount();
     expect(el.shadowRoot!.querySelector("wt-button.allergens")!.textContent).toContain(

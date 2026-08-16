@@ -33,8 +33,9 @@ export interface AcceptSwapInput {
  *
  * - the offered `fromShift` must exist under the tenant (`shift.not_found` otherwise) AND be OWNED by
  *   the requester — you may only offer a shift that is yours (`swap.not_permitted` otherwise);
- * - a supplied `toShift` must exist under the tenant (`shift.not_found` otherwise); a null `toShift`
- *   is a one-sided give-away and skips the check.
+ * - a supplied `toShift` must exist under the tenant (`shift.not_found` otherwise) AND be OWNED by the
+ *   `toPerson` the swap is offered to — the return leg must be that person's own shift, not a third
+ *   party's (`swap.not_permitted` otherwise); a null `toShift` is a one-sided give-away and skips both.
  *
  * Returns the new swap's id, status `requested`.
  */
@@ -54,6 +55,16 @@ export async function requestSwap(tx: Transaction, input: RequestSwapInput): Pro
     if (toShiftOwner === undefined) {
       throw new AppError("shift.not_found", { tenantId: input.tenantId, shiftId: input.toShiftId });
     }
+    // The return leg must be the OFFERED person's own shift — a swap that put up a third party's shift
+    // in return is not a permitted arrangement (guards the two-sided API even though this slice's UI
+    // only files give-aways). `swap.not_permitted` names the person the offer is for, mirroring the
+    // from-shift ownership check above.
+    if (toShiftOwner !== input.toPersonId) {
+      throw new AppError("swap.not_permitted", {
+        tenantId: input.tenantId,
+        personId: input.toPersonId,
+      });
+    }
   }
   const { rows } = await tx.execute<{ id: string }>(sql`
     insert into shift_swaps (
@@ -67,11 +78,23 @@ export async function requestSwap(tx: Transaction, input: RequestSwapInput): Pro
 }
 
 /**
- * Accepts a pending swap on behalf of the offered person — a plain status flip `requested →
- * accepted` over PLANNING data. Throws `swap.not_found` if no such swap exists under the tenant, and
- * `swap.not_permitted` if the acceptor is not the swap's `to_person` (only the person a swap is
- * offered to may accept it). The manager approve/reject transition is a later slice's owner-gated
- * workflow (plan §7), not built here.
+ * Accepts a pending swap on behalf of the offered person — a status flip `requested → accepted` over
+ * PLANNING data. Guards, in order (IDENTITY before STATE, mirroring the read order):
+ *
+ * - `swap.not_found` if no such swap exists under the tenant;
+ * - `swap.not_permitted` if the acceptor is not the swap's `to_person` (only the person a swap is
+ *   offered to may accept it) — screened BEFORE the state check, so a non-recipient never learns the
+ *   swap's state;
+ * - `swap.not_acceptable` if the swap is not `requested` (already `accepted`, or `approved`/`rejected`
+ *   terminal): only a `requested` swap may be accepted, so accepting a decided one is refused rather
+ *   than silently flipping it back to `accepted`.
+ *
+ * The `and status = 'requested'` predicate on the UPDATE IS that requested-only guard: the conditional
+ * UPDATE only fires while the swap is still `requested`, and `RETURNING id` reports whether it matched.
+ * A no-match after the two checks above can only mean the swap exists and the acceptor is the
+ * recipient but the state is wrong — so it maps straight to `swap.not_acceptable`, no re-SELECT needed
+ * (existence is already confirmed by the permission read above, unlike `decideSwap` which has no prior
+ * read). The manager approve/reject transition is `decideSwap`, not this verb.
  */
 export async function acceptSwap(tx: Transaction, input: AcceptSwapInput): Promise<void> {
   const { rows } = await tx.execute<{ to_person_id: string }>(sql`
@@ -88,9 +111,13 @@ export async function acceptSwap(tx: Transaction, input: AcceptSwapInput): Promi
       personId: input.acceptingPersonId,
     });
   }
-  await tx.execute(sql`
+  const { rows: accepted } = await tx.execute<{ id: string }>(sql`
     update shift_swaps set status = 'accepted'
-    where tenant_id = ${input.tenantId} and id = ${input.swapId}`);
+    where tenant_id = ${input.tenantId} and id = ${input.swapId} and status = 'requested'
+    returning id`);
+  if (accepted.length === 0) {
+    throw new AppError("swap.not_acceptable", { tenantId: input.tenantId, swapId: input.swapId });
+  }
 }
 
 /** A manager's decision on an ACCEPTED swap. */

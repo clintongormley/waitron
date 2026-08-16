@@ -141,6 +141,32 @@ describe("requestSwap", () => {
     );
     expect(code).toBe("shift.not_found");
   });
+
+  it("throws swap.not_permitted when a supplied to_shift is not owned by the to_person", async () => {
+    // Fix B: a supplied return shift must belong to the person the swap is offered TO — you cannot put
+    // up SOMEONE ELSE's shift as the return leg. Here the return shift belongs to a THIRD person, not
+    // `toPerson`. Prove by deletion — drop the `toShiftOwner === toPersonId` check in requestSwap and
+    // this offer inserts instead of throwing, reddening the assertion.
+    const { requester, toPerson, fromShift } = await twoPeopleAndAShift();
+    const thirdPerson = await seedPerson(suite.db, tenantId, `third-${crypto.randomUUID()}`);
+    const foreignReturnShift = await insertDraftShift(suite.db, {
+      tenantId,
+      personId: thirdPerson,
+      locationId,
+    });
+    const code = await codeOfRejection(() =>
+      run((tx) =>
+        requestSwap(tx, {
+          tenantId,
+          requestedByPersonId: requester,
+          fromShiftId: fromShift,
+          toPersonId: toPerson,
+          toShiftId: foreignReturnShift,
+        }),
+      ),
+    );
+    expect(code).toBe("swap.not_permitted");
+  });
 });
 
 describe("acceptSwap", () => {
@@ -182,6 +208,49 @@ describe("acceptSwap", () => {
       requestedByPersonId: requester,
       fromShiftId: fromShift,
       toPersonId: toPerson,
+    });
+    const code = await codeOfRejection(() =>
+      run((tx) => acceptSwap(tx, { tenantId, swapId, acceptingPersonId: stranger })),
+    );
+    expect(code).toBe("swap.not_permitted");
+  });
+
+  it.each(["accepted", "approved", "rejected"] as const)(
+    "throws swap.not_acceptable when the to_person accepts a swap already in '%s' state",
+    async (status) => {
+      // Fix A, the requested-only guard: only a `requested` swap may be accepted. The
+      // `and status = 'requested'` predicate on acceptSwap's conditional UPDATE IS that guard — drop
+      // it and this already-decided swap is flipped back to `accepted` (the 0-row no-match path is
+      // never taken, so nothing throws), reddening the assertion. Distinct from swap.not_found (the
+      // swap EXISTS) and swap.not_permitted (the acceptor IS the to_person) — exists-but-wrong-state.
+      const { requester, toPerson, fromShift } = await twoPeopleAndAShift();
+      const swapId = await insertShiftSwap(suite.db, {
+        tenantId,
+        requestedByPersonId: requester,
+        fromShiftId: fromShift,
+        toPersonId: toPerson,
+        status,
+      });
+      const code = await codeOfRejection(() =>
+        run((tx) => acceptSwap(tx, { tenantId, swapId, acceptingPersonId: toPerson })),
+      );
+      expect(code).toBe("swap.not_acceptable");
+    },
+  );
+
+  it("checks IDENTITY before STATE — a non-recipient accepting an already-accepted swap gets swap.not_permitted", async () => {
+    // Screen identity before state (mirroring the read order today): a stranger accepting a swap that
+    // is BOTH not theirs AND no longer `requested` gets swap.not_permitted, never swap.not_acceptable —
+    // the permission check runs before the state-guarded UPDATE, so the non-recipient never learns the
+    // swap's state.
+    const { requester, toPerson, fromShift } = await twoPeopleAndAShift();
+    const stranger = await seedPerson(suite.db, tenantId, `str-${crypto.randomUUID()}`);
+    const swapId = await insertShiftSwap(suite.db, {
+      tenantId,
+      requestedByPersonId: requester,
+      fromShiftId: fromShift,
+      toPersonId: toPerson,
+      status: "accepted",
     });
     const code = await codeOfRejection(() =>
       run((tx) => acceptSwap(tx, { tenantId, swapId, acceptingPersonId: stranger })),

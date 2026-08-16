@@ -5,7 +5,6 @@ import { AppError } from "@waitron/shared";
 import { asAppUser, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { sessions } from "@waitron/identity";
-import type { TillConfig } from "./till-config.js";
 // Side-effect only: keeps this host's `session.required` code (errors.ts) reachable from the file
 // that throws it — the reachability convention `till-config.ts`/`webhook.ts` follow (a bare import,
 // no value used here). See the note atop `errors.ts`.
@@ -69,9 +68,13 @@ export function readSessionId(c: Context): string | null {
  * routes Tasks 5/6 add (`GET /api/staff`, `POST /api/sales`) call this before doing any work; the
  * login/logout routes in `till-api.ts` deliberately do NOT (logging in has no prior session, and
  * logout tolerates a missing or already-closed one).
+ *
+ * `deps.cfg` is typed to the ONE field this reads — `tenantId` — rather than the full `TillConfig`, so
+ * both the till API (`TillApiDeps`) and the staff schedule API (`ScheduleApiDeps`, which carries only
+ * `{ tenantId }`) can gate their routes on it without contriving a full till config.
  */
 export async function requireSession(
-  deps: { db: Database; cfg: TillConfig },
+  deps: { db: Database; cfg: { tenantId: string } },
   c: Context,
 ): Promise<{ personId: string; sessionId: string }> {
   const id = readSessionId(c);

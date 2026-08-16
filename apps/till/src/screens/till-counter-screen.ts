@@ -165,6 +165,12 @@ export class TillCounterScreen extends LitElement {
     this.dispatchEvent(new CustomEvent("logout", { bubbles: true, composed: true }));
   }
 
+  /** Announce that the operator wants their staff schedule. The app switches to the schedule screen
+   * WITHOUT clearing the basket (like logout — the basket is till-owned). */
+  #showSchedule(): void {
+    this.dispatchEvent(new CustomEvent("show-schedule", { bubbles: true, composed: true }));
+  }
+
   /** Reveal the allergen lookup screen in place of the sale body. */
   #openAllergens(): void {
     this.showAllergens = true;
@@ -225,6 +231,9 @@ export class TillCounterScreen extends LitElement {
           <div class="session">
             <wt-button class="allergens" variant="secondary" @click=${() => this.#openAllergens()}>
               ${t("allergens.open")}
+            </wt-button>
+            <wt-button class="schedule" variant="secondary" @click=${() => this.#showSchedule()}>
+              ${t("schedule.open")}
             </wt-button>
             <span class="operator">${this.operatorName}</span>
             <wt-button class="logout" variant="secondary" @click=${() => this.#logout()}>

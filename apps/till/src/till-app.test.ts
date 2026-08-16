@@ -5,6 +5,7 @@ import { currentLocale, setLocale, t } from "./i18n/t.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
+import type { TillScheduleScreen } from "./screens/till-schedule-screen.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillPrepQueue } from "./widgets/prep-queue.js";
 import type { TillProductGrid } from "./widgets/product-grid.js";
@@ -134,6 +135,8 @@ const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen");
 const ticket = (el: TillApp) => el.shadowRoot!.querySelector<TillTicketView>("till-ticket-view");
+const schedule = (el: TillApp) =>
+  el.shadowRoot!.querySelector<TillScheduleScreen>("till-schedule-screen");
 /** The pay widget nested inside the counter screen's OWN shadow root (7c per-mode control). */
 const tenderPay = (el: TillApp) =>
   counter(el)!.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
@@ -195,6 +198,42 @@ describe("till-app", () => {
     expect(c).not.toBeNull();
     expect(c.products).toEqual([cafe]);
     expect(c.operatorName).toBe("Ana");
+  });
+
+  it("a failing listStaff leaves the roster empty and never blocks the counter (no unhandled rejection)", async () => {
+    // `#onLoggedIn` loads the colleague roster AFTER the counter is shown, so a roster failure must
+    // degrade gracefully: leave `staff` at its default `[]` and surface no error. Under
+    // `void this.#onLoggedIn(...)` an uncaught rejection escapes as an UNHANDLED promise rejection —
+    // the load-bearing assertion below is `rejections === []`, since `staff` is `[]` either way (the
+    // unguarded assignment simply never completes). Removing the try/catch makes `rejections` hold the
+    // roster error and this test go red — the deletion proof.
+    const rejections: unknown[] = [];
+    const onRejection = (event: PromiseRejectionEvent): void => {
+      rejections.push(event.reason);
+      event.preventDefault(); // mark handled so it doesn't pollute sibling tests
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    try {
+      const { el } = await mountApp({
+        listStaff: vi.fn().mockRejectedValue(new Error("roster down")),
+      });
+      const c = await toCounter(el);
+      // Give any pending unhandled-rejection notification a couple of macrotasks to surface.
+      await flush(el);
+      await flush(el);
+
+      // The counter still shows — the sale flow is never blocked by the roster fetch.
+      expect(c).not.toBeNull();
+      expect(counter(el)).not.toBeNull();
+      // The roster degraded to empty rather than throwing.
+      expect((el as unknown as { staff: unknown[] }).staff).toEqual([]);
+      // No error banner: a roster failure is non-fatal, not a surfaced error.
+      expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+      // The rejection was caught, not left unhandled.
+      expect(rejections).toEqual([]);
+    } finally {
+      window.removeEventListener("unhandledrejection", onRejection);
+    }
   });
 
   it("confirm-payment: records the sale with the mapped lines + tender, then shows the ticket", async () => {
@@ -796,6 +835,55 @@ describe("till-app", () => {
     expect(lock(el)).not.toBeNull();
     expect(counter(el)).toBeNull();
     // THE load-bearing assertion: a shift change never loses the half-built order.
+    expect(store.lines).toHaveLength(2);
+    expect(store.lines[0]!.product).toBe(cafe);
+  });
+
+  it("show-schedule shows the schedule screen (basket preserved) and threads the roster + operator id", async () => {
+    const { el } = await mountApp({
+      listMyShifts: vi.fn().mockResolvedValue([]),
+      listMySwaps: vi.fn().mockResolvedValue([]),
+      listMyAbsences: vi.fn().mockResolvedValue([]),
+    });
+    const c = await toCounter(el);
+    const store = c.store;
+    store.addProduct(cafe, "2");
+    await el.updateComplete;
+
+    emit(c, "show-schedule");
+    await flush(el);
+
+    expect(schedule(el)).not.toBeNull();
+    expect(counter(el)).toBeNull();
+    // Basket-preserving, like logout: navigating to the schedule never loses the half-built order.
+    expect(store.lines).toHaveLength(1);
+    // The roster (from listStaff) and the logged-in operator id reach the schedule screen.
+    expect(schedule(el)!.operatorPersonId).toBe("p1");
+    expect(schedule(el)!.staff).toEqual([{ personId: "p1", displayName: "Ana" }]);
+  });
+
+  it("back-to-counter returns to the counter with the basket intact after a schedule round trip", async () => {
+    const { el } = await mountApp({
+      listMyShifts: vi.fn().mockResolvedValue([]),
+      listMySwaps: vi.fn().mockResolvedValue([]),
+      listMyAbsences: vi.fn().mockResolvedValue([]),
+    });
+    const c = await toCounter(el);
+    const store = c.store;
+    store.addProduct(cafe, "2");
+    store.addProduct(cafe, "1");
+    await el.updateComplete;
+
+    emit(c, "show-schedule");
+    await flush(el);
+    expect(schedule(el)).not.toBeNull();
+
+    emit(schedule(el)!, "back-to-counter");
+    await flush(el);
+
+    expect(counter(el)).not.toBeNull();
+    expect(schedule(el)).toBeNull();
+    // The load-bearing assertion: the basket survives the whole counter → schedule → counter round trip.
     expect(store.lines).toHaveLength(2);
     expect(store.lines[0]!.product).toBe(cafe);
   });

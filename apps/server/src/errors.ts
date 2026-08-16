@@ -342,10 +342,17 @@ declare module "@waitron/shared" {
      */
     "order_prep.invalid_transition": { workingOrderId: string };
     /**
-     * A request to the management-dashboard surface (the gated staff routes in `management-api.ts` —
-     * create, patch, reset-pin, set-password) carried a body whose SHAPE is wrong: a field absent
-     * (where it is required) or present with the wrong declared type. The routes divide by whether
-     * the field is required:
+     * A request to a gated server API surface carried a body/query whose SHAPE is wrong: a field
+     * absent (where it is required) or present with the wrong declared type — a malformed date, a
+     * non-string, a bad enum member. Originally the management-dashboard surface (the gated staff
+     * routes in `management-api.ts` — create, patch, reset-pin, set-password), it is now the generic
+     * request-shape code for EVERY gated API surface: `catalogue-api.ts`, `workforce-api.ts` and — via
+     * the shared screens in `request-screens.ts` (`requirePeriod`/`requireBodyUuid`/… , extracted so no
+     * two surfaces validate "subtly differently") — the till-session-gated staff schedule routes in
+     * `schedule-api.ts`. The `management.*` prefix names the request-shape DOMAIN CONCEPT the code was
+     * first minted for, kept because codes are never renamed once shipped; a malformed PATH `:id` is a
+     * separate concern carried by `shared.invalid_id` (the branded-id family). The routes divide by
+     * whether the field is required:
      *  - create (`displayName`/`role`/`pin`), reset-pin (`pin`), set-password (`password`) screen
      *    REQUIRED fields — absent OR non-string → 400.
      *  - patch (`role`/`status`) screens OPTIONAL fields — an ABSENT field is a legitimate no-op

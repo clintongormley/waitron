@@ -113,17 +113,41 @@ declare module "@waitron/shared" {
      * cannot be absent twice over the same day, so the overlapping range is refused before insert.
      * `absence.*`, same reasoning as `absence.not_found`. */
     "absence.overlaps": { tenantId: string; personId: string };
+    /** An absence's date range is malformed — its end day is BEFORE its start day
+     * (`ends_on < starts_on`). Refused by `createAbsence` (../absences.ts) BEFORE the overlap SELECT
+     * and the insert so a caller gets a structured 4xx (400 at the schedule route) rather than the
+     * `absences_range_ck` (`ends_on >= starts_on`, schema/absences.ts) 23514 surfacing as an opaque
+     * 500; that DB check stays the backstop. The range is INCLUSIVE, so `ends_on == starts_on` (a
+     * single-day absence) is VALID and does not trigger this. Param shape MIRRORS `shift.invalid`, the
+     * sibling malformed-interval code — `{ reason }`, not the `{ personId }` of `absence.overlaps` /
+     * `{ absenceId }` of `absence.not_found`: on create the absence row does not exist yet (no id to
+     * name), and `reason` names WHICH interval invariant failed, leaving room for later ones exactly as
+     * `shift.invalid` does. `absence.*`, grepped against the registry (`absence.not_found`,
+     * `absence.overlaps`) — never renamed once shipped. */
+    "absence.invalid": { tenantId: string; reason: string };
     /** No `shift_swaps` row for this id under the current tenant — never created, or hidden by RLS.
      * Raised by `acceptSwap` (../shift-swaps.ts) when asked to accept a swap that does not exist.
      * `swap.*`, grepped against the registry — unused before D2; the entity is the swap (a shift is
      * `shift.*`, a person `person.*`). */
     "swap.not_found": { tenantId: string; swapId: string };
-    /** A swap action was attempted by a person not permitted it: `requestSwap` (../shift-swaps.ts)
-     * refuses a requester offering a `from_shift` that is not THEIRS, and `acceptSwap` refuses anyone
-     * but the swap's named `to_person` accepting it. A fact about the swap's permission rule, not a
-     * missing entity (that is `swap.not_found`/`shift.not_found`). `swap.*`, grepped — never
-     * renamed. */
+    /** A swap action was attempted by a person not permitted it. Three cases, all in
+     * `requestSwap`/`acceptSwap` (../shift-swaps.ts): `requestSwap` refuses a requester offering a
+     * `from_shift` that is not THEIRS, and refuses a supplied return `to_shift` that is not owned by
+     * the person the swap is offered TO (`to_person`) — you may put up only your own shift as the
+     * offer, and only that person's own shift as the return leg; `acceptSwap` refuses anyone but the
+     * swap's named `to_person` accepting it. A fact about the swap's permission rule, not a missing
+     * entity (that is `swap.not_found`/`shift.not_found`) and not a wrong state (that is
+     * `swap.not_acceptable`/`swap.not_decidable`). `swap.*`, grepped — never renamed. */
     "swap.not_permitted": { tenantId: string; personId: string };
+    /** `acceptSwap` (../shift-swaps.ts) was asked to accept a swap whose `status` is not `requested` —
+     * an already-`accepted` swap, or an `approved`/`rejected` terminal one. Only a `requested` swap may
+     * be accepted; accepting again would flip a decided swap back to `accepted`. Distinct from
+     * `swap.not_found` (no such swap) and `swap.not_permitted` (the acceptor is not the `to_person`):
+     * here the swap EXISTS and the acceptor IS the recipient, but its state forbids the accept —
+     * exactly mirroring `swap.not_decidable`'s exists-but-wrong-state shape for the manager's decide.
+     * `swap.*`, grepped against the siblings (`swap.not_found`, `swap.not_permitted`,
+     * `swap.not_decidable`) — all `swap.not_<x>`, so the shape matches; never renamed once shipped. */
+    "swap.not_acceptable": { tenantId: string; swapId: string };
     /** `decideSwap` (../shift-swaps.ts) was asked to approve/reject a swap whose `status` is not
      * `accepted` — a `requested` swap has not been accepted yet, and an `approved`/`rejected` one is
      * terminal. Distinct from `swap.not_found` (no such swap); here it EXISTS but is not in a decidable

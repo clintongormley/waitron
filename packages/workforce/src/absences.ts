@@ -42,6 +42,22 @@ export interface SetAbsenceStatusInput {
  * absence's id.
  */
 export async function createAbsence(tx: Transaction, input: CreateAbsenceInput): Promise<string> {
+  // Cross-field ordering guard, mirroring `addShift`'s `assertShiftInterval` (../clocking.ts): a
+  // malformed interval whose end day precedes its start day is refused HERE, in the verb, before the
+  // overlap SELECT and the insert. This is a public `@waitron/workforce` API and must honour its own
+  // interval contract even when the HTTP route also screens — the route's `requirePeriod` validates
+  // each date in ISOLATION and so passes an inverted PAIR straight through (and a direct verb caller
+  // has no route screen at all). Without this the insert violates `absences_range_ck`
+  // (ends_on >= starts_on) → PG 23514 → a non-AppError → an opaque 500; the check constraint stays the
+  // backstop. `startsOn` and `endsOn` are `YYYY-MM-DD` per CreateAbsenceInput, and for fixed-width
+  // zero-padded YYYY-MM-DD lexicographic order equals calendar order, so a string `<` orders the two
+  // days. The range is inclusive, so `endsOn == startsOn` (a single-day absence) is valid — hence `<`.
+  if (input.endsOn < input.startsOn) {
+    throw new AppError("absence.invalid", {
+      tenantId: input.tenantId,
+      reason: "ends_before_starts",
+    });
+  }
   const { rows: conflicts } = await tx.execute<{ one: number }>(sql`
     select 1 as one from absences
     where tenant_id = ${input.tenantId} and person_id = ${input.personId}

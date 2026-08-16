@@ -1,4 +1,5 @@
 import type { AllergenCode } from "@waitron/catalogue";
+import { pickLocale } from "./t.js";
 
 // Canonical display names for the 14 EU allergens (Regulation (EU) No 1169/2011, Annex II).
 //
@@ -49,6 +50,5 @@ export const ALLERGEN_NAMES: Record<AllergenCode, { en: string; es: string }> = 
 export function allergenName(code: string, locale: string): string {
   const entry = (ALLERGEN_NAMES as Record<string, { en: string; es: string }>)[code];
   if (!entry) return code;
-  const lang = locale.replace(/-.*$/, "");
-  return (entry as Record<string, string>)[lang] ?? entry.en;
+  return pickLocale(entry, locale);
 }
