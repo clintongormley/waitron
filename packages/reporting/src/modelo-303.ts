@@ -13,7 +13,8 @@ import type { VatReturn } from "./types.js";
  * per-rate triples 01–09 and 150–152, the deducible pairs 28/29 (corrientes) and 30/31 (bienes de
  * inversión), and the result boxes 46/64/65/66/69/71 are the boxes that table places; this map delivers
  * their values. The two summations the spec had flagged **[UNVERIFIED — confirm against DR303]** are now
- * CONFIRMED against DR303e26, and casilla 67 is CONFIRMED ABSENT — details at each box below.
+ * CONFIRMED against DR303e26, and casilla 67 is CONFIRMED ABSENT from the emitted páginas — details at
+ * each box below.
  *
  * The full DR303 record layout is now Slice D (`dr303-layout.ts` / `dr303.ts`), the machine-readable
  * primary source for the box positions; this map delivers the casilla-mapped aggregate that writer
@@ -132,9 +133,11 @@ export function mapModelo303(vatReturn: VatReturn): Modelo303 {
   boxes["69"] = boxes["66"];
   boxes["71"] = boxes["69"];
 
-  // Casilla 67 is CONFIRMED ABSENT from the current form: DR303e26.xlsx has no [67] on any página
-  // (checked páginas 1 and 3; compensation of prior-period credits flows through 110/78/87 on página 3,
-  // not a box 67). It is therefore deliberately NOT emitted — no longer a TODO.
+  // Casilla 67 is absent from either emitted página (1 and 3): the común, DP30301 and DP30303 sheets
+  // extracted from DR303e26.xlsx carry no [67] (compensation of prior-period credits flows through
+  // 110/78/87 on página 3, not a box 67). This is scoped to what we extracted — página 2 (régimen
+  // simplificado, DP30302) and the DID/domiciliación sheet were NOT, so "any página" would overstate
+  // the evidence. It is therefore deliberately NOT emitted — no longer a TODO.
 
   return { tenantId: vatReturn.tenantId, year: vatReturn.year, month: vatReturn.month, boxes };
 }

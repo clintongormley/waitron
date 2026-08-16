@@ -26,6 +26,17 @@ import type { Modelo303 } from "./modelo-303.js";
  * (régimen simplificado) are out of scope. The DID / domiciliación (IBAN) page is a payment-mechanics
  * follow-up, deliberately NOT emitted here (it carries no VAT computation).
  *
+ * PRE-FILING CAVEATS (operational — a human MUST clear both before the FIRST LIVE filing; this
+ * serializer produces a CANDIDATE file, not a proven submission-ready one):
+ *  1. Página 2 (régimen simplificado, DP30302) is OMITTED. Nothing in this codebase verifies that the
+ *     AEAT sede "por fichero" uploader accepts a file with página 2 absent — that can only be
+ *     established by uploading a real file to the real sede — so the generated file MUST be validated
+ *     once against that uploader before any live submission.
+ *  2. Under prorrata (deductible_proportion < 100), the deducible BASE (casilla 28/30) is emitted in
+ *     FULL and only the cuota (29/31) is scaled by the proportion (upstream, in computeInputVat).
+ *     Whether AEAT expects the base unscaled under prorrata is NOT confirmed here; it is the documented
+ *     spec §9 seam and an asesor-fiscal must confirm it before a live prorrata filing.
+ *
  * English identifiers throughout (the repo's english-only guard scans packages/reporting): the option
  * `year`/`period`/`declarationType` are the AEAT ejercicio/período/tipo de declaración, named in the
  * doc comments (which the guard excludes) rather than the identifiers (which it does not).
