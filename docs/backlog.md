@@ -1,6 +1,6 @@
 # Backlog — what is in flight, what is next, and why
 
-**Last reprioritised: 2026-08-15.** This file is the answer to "what should I work on?". It is
+**Last reprioritised 2026-08-15; tidied 2026-08-16.** This file is the answer to "what should I work on?". It is
 committed rather than held in a session's memory so that it can be diffed, reviewed, and checked
 against the tree — memory notes drift, and several currently point at pull request numbers that no
 longer exist (the repository was recreated for the licence change and numbering restarted at #1).
@@ -21,177 +21,35 @@ through a PR (where CI + Copilot run). The other rules (no force-push, no deleti
 
 ## Current direction
 
-**Reprioritised 2026-08-15 — the autonomous campaign is COMPLETE (all queue items landed as #74–#82,
-plus #72/#73); the owner chose the next two slices to run in parallel — both now LANDED 2026-08-15
-(#83 shift-planning authoring, #84 sync transport), built in parallel worktrees via subagent-driven
-TDD + whole-branch review + Copilot:**
+**Nothing in flight (2026-08-16).** The last active work — the two parallel tracks #83 (shift-planning
+authoring) and #84 (sync transport) plus their follow-ons — has landed. Where things stand:
 
-- **Shift-planning dashboard UI (sub-project 16)** — the one "build the UI" task ready now: the
-  scheduling *engine* landed headless (#50), and this slice builds the `apps/dashboard` surface on
-  top of it (author/publish rosters, surface `RosterBreach[]` on publish, manager approve/reject
-  swaps), plus whatever `/management-api` route group the workforce engine still needs.
-- **Sync transport / network layer (#33 §14)** — the largest unbuilt fiscal-topology piece after the
-  commercial-lane outbox (#74). This slice adds the transport that moves batches between nodes over
-  the network, plus redelivery handling. The **fiscal-lane / hash-chain sync stays a separate
-  owner-reviewed slice (H2)** and is excluded here.
+- **The fiscal sequence is complete** (settlement #39, rectificativas #46, F3 canje #51,
+  invoice-first #55) and the **SIF topology is settled** (#33, `node_id` re-key #54). The unrepairable
+  fiscal core — hash-chained records, never-reused invoice numbers — is done.
+- **The Counter POS is operable end to end** — walk-up cash #60, park/retrieve #61, manual card #62,
+  prepare & collect #63, integrated Stripe #64, layout/receipt editors #81.
+- **The management dashboard slice-1 auth floor is COMPLETE** (identity #67 → passkeys #71) with staff
+  admin, catalogue authoring #78, and the staff self-service portal #92.
+- **An autonomous campaign** ran 2026-08-09 → 14 while the owner was away, landing #74–#82 (plus
+  #72/#73) off a pre-specced queue; its plan and guardrails are in
+  [superpowers/specs/2026-08-08-autonomous-campaign-plan.md](superpowers/specs/2026-08-08-autonomous-campaign-plan.md).
+- **Since:** recipes/BOM allergen inheritance #89, the workforce request/approval halves #87/#90, the
+  sync fast lane #85, purchase invoices + modelo 303 deducible #91, and the purchase-invoice authoring
+  UI #93.
 
-Both are commercial-lane and non-fiscal, and the migration-journal collision risk is low (the
-workforce UI adds no `packages/db` migration; sync's migrations live in its own `drizzle/`), so they
-were built independently in parallel worktrees. (The first-draft `docs/sif-sync-protocol-design`
-branch was superseded by the landed slice's spec/plan and removed.) See *Recently shipped*.
+**Prioritisation is by soundness, not the calendar** (decided 2026-08-02): Waitron will be finished
+before the deli must trade, so the 1-Jan-2027 deadline is not a reason to rank one piece above
+another — order by dependency, correctness, and de-risking the most-reused / most-uncertain
+foundations first. **Never autonomously land anything touching the unrepairable fiscal core (H2).**
 
----
-
-**Reprioritised 2026-08-07 — Menu & allergens (18) and the reporting *cierre Z* (8), in parallel.**
-
-The fiscal-first ordering has done its job. The **fiscal sequence** is complete (settlement #39,
-rectificativas #46, F3 canje #51, invoice-first #55), the **SIF topology** is settled (#33, `node_id`
-re-key #54), and the **operable Counter POS** is built end to end — walk-up cash #60,
-park/retrieve #61, manual card #62, prepare & collect #63, integrated Stripe card #64. A person can
-ring up a
-sandwich, hold an order, take cash or card, and hand over a legal Veri\*Factu ticket. The invoicing
-model the till builds against is no longer moving, and the unrepairable fiscal work — hash-chained
-records, never-reused invoice numbers — is done, which is where care paid best.
-
-With both the fiscal story and the operable till complete, the owner chose the next two slices, and
-**both have now landed their first cut** (2026-08-07):
-
-- **Menu & allergens (sub-project 18)** — a launch-day legal duty (EU 1169/2011, RD 126/2015).
-  **Slice 1 (EU-14 allergen declaration end-to-end) LANDED as #65.** Recipes/BOM (the linchpin —
-  allergen-inheritance backend since landed #89, 2026-08-16), variants, and customer-facing browse are
-  the remainder; the allergen list stays a food-safety-advisor call.
-- **Reporting — *cierre Z* (sub-project 8)** — the frozen/signed daily close (numbered, immutable,
-  counted-cash / opening float / *descuadre*). `computeDailyClose` (#56) deliberately left the seam,
-  and it is now filled: **8a VAT-exact close LANDED as #66, 8b frozen cierre Z LANDED as #68.** The
-  **date-range VAT summary + *modelo 303* output-VAT aggregate LANDED as #76**; the unstarted reporting
-  remainder (the input-VAT/deducible side, the casilla mapping + submittable form, the reporting UI) is
-  under *Not started*.
-
-The two ran in parallel at the feature level without incident: the anticipated
-`packages/db/drizzle/meta/_journal.json` collision was avoided by sequencing the migrations
-(0031 allergens → 0032 8a → 0033 8b) as each branch landed. The **management dashboard** slice-1 auth
-floor is now **COMPLETE** — 1d (passkeys) LANDED as #71, so all four sub-slices are in; the
-**autonomous campaign** (below) ran to completion and its follow-on work is now the two parallel
-tracks recorded at the top of this section.
-
-**Management dashboard added 2026-08-07 (building).** The owner's off-premises management console —
-designed and fully planned this session
-([spec](superpowers/specs/2026-08-07-management-dashboard-design.md); plans
-[1a](superpowers/plans/2026-08-07-dashboard-slice1a-identity-auth-foundation.md),
-[1b](superpowers/plans/2026-08-07-dashboard-slice1b-server-management-api.md),
-[1c](superpowers/plans/2026-08-07-dashboard-slice1c-dashboard-app.md),
-[1d](superpowers/plans/2026-08-07-dashboard-slice1d-passkeys.md)). It is a **local-server app**
-(`apps/dashboard`) consuming the existing headless APIs, with **remote access decoupled as a pluggable
-transport** (tunnel-first, snitun-pattern reimplemented in Node; Spain-hosted cloud removes ROF art.
-22.2). Slice 1 = staff admin + an offline-verifiable **passkey / password+TOTP** auth floor, delivered
-as four sub-slices (identity → server API → dashboard app → passkeys). **1a (identity auth foundation)
-LANDED as #67** (2026-08-07): the `management_sessions` table with FORCE RLS, the password/TOTP
-credentials + verifier seam (`loginManager`/`authorizeManager`, passkey plugs in at 1d), the session
-lifecycle (idle timeout + mid-session `persons.status` re-check), the staff mutations repointed off
-till sessions, and a `person.manage`-gated `listPersons` — `@waitron/identity` at 100% coverage.
-**1b (server management API) LANDED as #69** (2026-08-08): the slice-1a auth exposed over HTTP as a
-`/management-api/*` Hono route group on `apps/server` (a `waitron_management_session` cookie,
-login/logout, `person.manage`-gated staff CRUD), plus `setPassword` in `@waitron/identity`. **1c (the
-dashboard app) LANDED as #70** (2026-08-08): `apps/dashboard`, a Lit/Vite browser console — a boot
-session probe → login (roster + password + optional TOTP) or the staff screen (list + create person),
-on `@waitron/ui` primitives with a11y in both themes, plus its own Chromium CI shard. **1d (passkeys)
-LANDED as #71** (2026-08-08): WebAuthn as the phishing-resistant primary login — two FORCE-RLS tables
-(`webauthn_credentials`/`webauthn_challenges`), the `@simplewebauthn/server` v13 ceremonies plugged
-into the 1a verifier seam (auth gates on `person.suspended` like `loginManager`), four
-`/management-api/passkey/*` routes (register GATED, auth UNGATED), and the `@simplewebauthn/browser`
-UI. Challenges are single-use (consume-first locking `DELETE`) + TTL-bounded; only the public key +
-a monotonic counter are stored; Copilot's two concurrency findings (single-use race + counter
-regression) were fixed with a real-PG concurrency test. **Slice 1 (the auth floor) is now COMPLETE.**
-Slice-1a/1b/1c/1d follow-ups are under *Debt and odd jobs*; the first-admin-password provisioning gap
-that blocked a true first login is now **CLOSED (#72)** — `venue` seeds the admin's dashboard password.
-
-**Prioritisation is by soundness, not the calendar (decided 2026-08-02).** Waitron will be finished
-before the deli is ready to trade, so the deli's 1-Jan-2027 legal deadline is *not* a reason to rank
-one piece of work above another — order by dependency, correctness, and de-risking the most-reused /
-most-uncertain foundations first.
-
-**Autonomous campaign — COMPLETE (armed 2026-08-08; ran 2026-08-09 → 2026-08-14).** While the owner
-was away, an unattended launchd-driven run worked an ordered, pre-specced queue — **sync slice 1**
-(commercial outbox, **#74**), **reporting** (date-range + *modelo 303*, **#76**), the
-**catalogue / menu management UI** (with product images, **#78**), the **layout & receipt editors**
-(**#81**), the **dashboard i18n layer** (**#82**), the **staff row-edit actions** (**#73**), and
-interleaved small follow-ups (createErrorBoundary **#75**, percentOf hoist **#77**, otplib v13
-**#79**, reachability guard **#80**) — each via `finish-branch` → `land-branch`. The plan, ordered
-queue, and guardrails (never auto-land the unrepairable fiscal core; never land on a red gate; one
-item in flight at a time) are recorded in
-[superpowers/specs/2026-08-08-autonomous-campaign-plan.md](superpowers/specs/2026-08-08-autonomous-campaign-plan.md);
-the per-item specs/plans are dated `2026-08-08`. **All queue items landed** (listed in *Recently
-shipped*) and nothing was left blocked or `needs-owner-review`; the run is finished.
-
----
-
-## Now
-
-**Nothing in flight.** **Two dashboard fast-follows LANDED (2026-08-16):** the **staff self-service
-portal (#92)** — a `staff`-role person logs into the (role-blind) management dashboard and gets a
-self-service view (own roster + request/accept swaps + view/request absences), reusing #90's
-surface-agnostic verbs via a management-session-gated `/management-api/me/*` group (whoami + role-aware
-shell; **no migration**); and the **purchase-invoice authoring UI (#93)** — a `purchase.manage`-gated
-dashboard surface to create/edit/list received supplier invoices (header + a VAT-desglose sub-editor)
-feeding #91's headless deducible reporting (**no migration**). Both subagent-driven-TDD → two-lens
-review → Copilot; fiscal core untouched (H2); #93 was rebased onto #92 with a keep-both dashboard-shell
-merge. Details in *Recently shipped*.
-
-**Purchase invoices + modelo 303 IVA deducible — LANDED as #91** (2026-08-16):
-the input-VAT side of modelo 303 — a new `@waitron/purchasing` module (received supplier-invoice
-capture, FORCE-RLS tables, migrations 0041/0042), `computeInputVat` + net `computeVatReturn`, the
-`mapModelo303` casilla map, and a **byte-exact DR303 fixed-layout file writer** whose field layout is
-machine-generated from the committed official `DR303e26.xlsx` (contiguity-guarded). No
-correctness/fiscal defects across three reviews (incl. a dedicated fiscal-correctness pass) + Copilot;
-fiscal core untouched (H2). **Two pre-filing caveats a human must clear before the first LIVE filing**
-(under *Debt*): validate the file once against the real AEAT sede "por fichero" (página 2 omitted), and
-asesor-confirm the prorrata base-unscaled treatment. Details in *Recently shipped*.
-
-**Staff-facing swap/absence request path — LANDED as #90** (2026-08-16): the
-till-PIN-session-gated *request* half that #87's manager-approval half was built to consume — a
-logged-in operator views their own shifts, requests a shift give-away/cover, accepts a swap offered to
-them, and views/requests absences (requester identity from `session.person_id`, never the body).
-**Surface-agnostic** so a future **staff dashboard portal** reuses the verbs/read-models; two swap-verb
-hardening fixes folded in (closes the recorded swap-workflow-hardening debt). No migration; fiscal core
-untouched (H2). Details in *Recently shipped*.
-
-**Recipes/BOM slice 1 — allergen inheritance — LANDED as #89** (2026-08-16):
-the optional `@waitron/recipes` module (ingredient master + product→ingredients composition) derives a
-product's EU-1169 allergen declaration from its ingredients — `products.allergens` became a computed
-union of a `manual_allergens` overlay and a recipe-derived floor, **add-only, PENDING contagious**; two
-FORCE-RLS tenant tables (`ingredients`/`recipe_lines`, migrations 0038/0039 + a 0040 `ingredient_id`
-index), headless + a demo. Built subagent-driven-TDD (8 tasks, per-task reviews caught a missing-id
-`TypeError` regression and a vacuous `recipe_lines` RLS test) → whole-branch review → 4-lens simplify →
-Copilot (4 findings incl. the 0040 index). Fiscal core untouched (H2). Details in *Recently shipped*.
-Earlier, both 2026-08-15 follow-on slices to #83/#84 also LANDED — **sync transport
-slice 2, the payments fast lane (#85)** and **workforce roster management slice 2 (#87)** (split-shift
-*jornada partida* authoring, manager approve/reject of swaps + absences, and a planned-vs-actual view)
-— built in parallel worktrees via subagent-driven TDD (per-task + whole-branch review + fix wave +
-4-lens simplify + Copilot). A test-infra fix, **#88**, also LANDED (2026-08-15) — de-flakes the `fiscal-verifactu` drain
-1001-split test by making the drain's batch cap an injectable, defaulted param (production
-unchanged; the ~1001-row fixture drops to ~4 rows, ~30s → ~90ms), removing that intermittent CI
-timeout for every future PR. The **management dashboard** slice-1 auth floor + catalogue
-authoring remain COMPLETE (1a #67 → 1d passkeys #71, row-edit #73, i18n #82, catalogue #78); its
-remote-access transport is a future slice.
-
-**Next candidates** (owner's call — detail under *Not started*, *Debt and odd jobs*, and *SIF topology
-follow-ups*):
-
-- **Fast-follows flagged by the slices:** the remaining **sync transport-2** pieces (cloud-mirror
-  peer, dead-subscriber cleanup, multi-tenant transport, node-token rotation, and the separate
-  **fiscal-lane / hash-chain sync, H2**). *(The staff-facing swap/absence request path LANDED as #90 and
-  the **staff dashboard portal as #92**; its remaining follow-ups — the two-sided swap UI, staff
-  cancel/withdraw — are under Debt.)*
-- **Bigger next slices:** **Recipes/BOM's next slices** now that its allergen-inheritance
-  *backend* has landed (#89) — *(the reporting input-VAT / **modelo 303** deducible side LANDED as #91;
-  its deferred slices — rectificativas, the prorrata rule, quarterly/annual periods, intra-community
-  boxes, wiring the DR303 writer to a download route — plus the two pre-filing caveats are under Debt /
-  Not started; the purchase-invoice **authoring UI LANDED #93**)*: the **recipe-authoring UI** (dashboard — must reseed the allergen picker
-  from `manual_allergens`, not the published `allergens`, a documented follow-up), **nested
-  sub-recipes** (alioli auto-derived from egg+oil+garlic), and — each still greenfield — **plate
-  costing (*escandallo*)** and **stock depletion** (sub-project 20). A scale-gated set-based rewrite of
-  the O(N) ingredient→product allergen propagation is also deferred (the #89 0040 index fixes the
-  lookup scan; the fan-out remains O(N), documented in code).
+**Next candidates** are the owner's call — detailed under *Not started*, *Debt and odd jobs*, and *SIF
+topology follow-ups*. The largest unbuilt threads: **recipes/BOM's next slices** (recipe-authoring UI,
+nested sub-recipes, plate costing, stock depletion — the linchpin), the **reporting** remainder
+(rectificativas, prorrata, quarterly/annual periods, the DR303 download route), the **sync
+transport-2** pieces (cloud-mirror peer, dead-subscriber cleanup, multi-tenant transport, node-token
+rotation) and the separate **fiscal-lane / hash-chain sync (H2)**, and the greenfield **inventory /
+procurement** (sub-project 20) downstream of recipes.
 
 ---
 
@@ -202,275 +60,25 @@ One line per landed PR, newest first. The git log, the linked designs/plans, and
 detail — **this file is not a history** (see *How to keep this file honest*). Open follow-ups from
 these live under *Debt and odd jobs*; their designs/plans stay in `docs/superpowers/`.
 
-- **#93** Dashboard — **purchase-invoice authoring UI** (sub-project 8, #91 fast-follow) — a
-  management-dashboard surface to create/edit/list received supplier invoices, feeding #91's headless
-  modelo 303 deducible reporting. A **`purchase.manage`** permission (`@waitron/identity`, manager+admin,
-  code-only — **no migration**); **`mountPurchasingApi`** (`GET/POST/PATCH/DELETE /management-api/purchase-invoices`)
-  over the #91 `@waitron/purchasing` ops via the catalogue `gated()` pattern (real-PG cross-tenant isolation
-  + the gate proven by deletion); a `<dashboard-purchases-screen>` + `<dashboard-purchase-form>` (header +
-  an add/remove **VAT-desglose sub-editor** of rate/base/cuota/kind) + `<dashboard-purchase-list>`, wired
-  into the shell + `DashboardApi` + i18n (browser-local types, `Decimal`→string). **Fiscal boundary (H2):**
-  commercial/accounting lane — a *received* invoice is not issued by us; #91's tables already existed, so no
-  migration. Reviews: subagent-driven TDD → two-lens review → **Copilot** (no comments). The two-lens review
-  took one **Important** fix: the form's client validation *claimed* to mirror the op's checks but let the two
-  commonest create flows (a blank pre-added VAT line — `Number("")===0` passed "in range"; a Spanish-comma
-  `total` like `121,00`) slip to an opaque **500** instead of a friendly message — now genuinely mirrored (a
-  decimal-format guard + a `total` numeric check, proven by deletion), plus a confirm-before-delete. Coverage:
-  identity 100%, server 99.68, dashboard 99.78. **Rebased onto #92** with a keep-both dashboard-shell merge
-  (its `purchases` nav ported into #92's role-aware `#nav()`); CI green on the rebased head. Plan:
-  [purchase-invoice-authoring-ui](superpowers/plans/2026-08-16-purchase-invoice-authoring-ui.md). **Deferred:**
-  supplier master/autocomplete, bulk/OCR import, per-invoice attachment (the #91 fiscal deferrals — rectificativas,
-  prorrata rule, quarterly, the DR303 download route — remain separate, under *Debt*).
-- **#92** Dashboard — **staff self-service portal** (sub-project 16, #90 fast-follow) — a `staff`-role person
-  logs into the existing management dashboard and gets a self-service view (their own roster + request a shift
-  give-away/cover + accept a swap offered to them + view/request absences), the browser twin of #90's till-PIN
-  surface. **Key insight — no new auth story:** the management-session layer is already **role-blind**
-  (`loginManager`/`startManagementSession`/`resolveManagementSession` all work for a staff-role person; only the
-  `authorizeManager` permission gate refuses staff), so a staff member logs in via the existing screen (a manager
-  provisions their password, or a passkey). Added: a **whoami** `GET /management-api/session/me` → `{personId,role}`;
-  a **staff route group** `/management-api/me/schedule/*` (`apps/server/src/me-api.ts`) resolving `personId` from
-  the session (`requireManagementSession`→`resolveManagementSession`, **never `authorizeManager`**) and feeding it
-  into #90's verbs (identity always the session's, never the body — proven by deletion); a **role-aware shell**
-  (`staff` → the new `<dashboard-my-schedule-screen>`, everyone else → the unchanged manager screens) + client +
-  i18n. **No migration** (`management_sessions` exists, role-blind). **Fiscal boundary (H2):** clean (only
-  `apps/server` + `apps/dashboard`). Reviews: subagent-driven TDD (identity property + role branch proven by
-  deletion) → two-lens review (no correctness/CLAUDE.md findings) → triage (deduped a verbatim `requireAbsenceKind`
-  into a shared `requireEnum`) → **Copilot** (2 minor copy/comment fixes, resolved). Coverage: server 99.68,
-  dashboard 99.74. Plan: [staff-dashboard-portal](superpowers/plans/2026-08-16-staff-dashboard-portal.md).
-  **Deferred:** staff cancel/withdraw of a pending request; worked-hours/registro-de-jornada/payslips; staff
-  self-service password enrollment (a manager provisions it now); the two-sided swap UI.
-- **#91** Reporting — **purchase invoices + modelo 303 IVA deducible → DR303 file** (sub-project 8) — the
-  input-VAT counterpart to #76's output side, built as four slices on one branch. **A** — a new optional
-  **`@waitron/purchasing`** module: received supplier-invoice capture in two **mutable** tenant tables in
-  `packages/db` (`purchase_invoices` + `purchase_invoice_vat`, migrations **0041** auto / **0042** custom
-  FORCE-RLS + policy + `app_user` GRANT incl. DELETE), CRUD ops with `purchase.*` errors, real-PG RLS
-  isolation proven by deletion. **B** — `computeInputVat` (per-rate + `kind`, bucketed by **`received_on`**
-  = the deduction period, `regime='general'` excludes recargo de equivalencia, cuota scaled by
-  `deductible_proportion`) + `computeVatReturn` extended to `{devengado, deductible, result}`
-  (**46 = 27 − 45**); exactness inherited (sums filed cuotas, difference-method test). **C** —
-  `mapModelo303` casilla map (devengado 01–09 + 150–152; deducible 28/29 ordinary + 30/31 capital; totals
-  27/45; result 46/64/65/66/69/71 — casilla 27/45 summations + **casilla 67 absent** confirmed from the
-  official file). **D** — a **byte-exact DR303 fixed-layout file writer** (`toDr303Record`, ISO-8859-1,
-  `N`-prefixed negatives, load-bearing offsets), **receipt-grade:** the field layout (`dr303-layout.ts`)
-  is machine-generated from the committed official **`DR303e26.xlsx`** (md5-cited, in `packages/reporting/reference/`)
-  and guarded by a contiguity/page-length self-check. **Fiscal safety (H2):** commercial/accounting lane
-  only — a received invoice gets no huella/registro/chain/invoice-number, a DR303 file is our *output* to
-  AEAT; nothing in `verifactu`/`fiscal-verifactu` touched but the `vocabulary-scope` pin (`SPANISH_WORDS`
-  unchanged — English identifiers, Spanish in comments; `purchasing` added to `GENERIC_PACKAGES`); the
-  `inmutabilidad` guard genuinely enumerates both new tables. Built **subagent-driven TDD** → 4-lens
-  simplify → **three independent reviews** (wide correctness + narrow diff/CLAUDE.md + a dedicated
-  **fiscal-correctness** pass that re-parsed the xlsx, re-ran the generator to byte-identical output, and
-  independently verified the summations/formulas/offsets/exactness) — **no correctness or fiscal defects** —
-  → triage (a `RETURNING` perf fix, drop an unused `kind?` filter, a tipo-box cross-check test pinning the
-  two independent rate encodings, casilla-67 comment precision, a self-validating `demo:modelo-303` DR303
-  emit) → **Copilot** caught a real **envelope-period-mismatch** hazard (the file's ejercicio/período could
-  disagree with its casilla amounts) three reviewers + four lenses missed — fixed with a guard (TDD, proven
-  by deletion) + two demo minors; all replied on-thread + resolved. purchasing + reporting **100%**; CI full
-  suite green. **⚠️ PRE-FILING CAVEATS (a human must clear these before the first LIVE filing, NOT before
-  merge):** (1) validate the generated file once against the real AEAT sede "por fichero" uploader — it
-  emits común + página 1 + página 3 and **omits página 2** (régimen simplificado), and we can't verify from
-  here the uploader accepts that; (2) **prorrata** emits the deducible base in full and scales only the
-  cuota — an **asesor-fiscal** must confirm AEAT expects the base unscaled. Both are in *Debt*. Design/plan:
-  [spec](superpowers/specs/2026-08-16-purchase-invoices-and-modelo-303-deducible-design.md) ·
-  [plan](superpowers/plans/2026-08-16-purchase-invoices-modelo-303-deducible.md).
-- **#90** Workforce — **staff-facing swap & absence request path** (sub-project 16) — the *request* half
-  that #87's manager-approval half was built to consume, gated by the **till PIN session** (requester
-  identity from `session.person_id`, NEVER the request body — proven by deletion in `schedule-api.rls.test.ts`).
-  A logged-in operator views their own shifts, requests a shift give-away/cover, accepts a swap offered
-  to them, and views/requests absences. **Surface-agnostic** (the verbs + person-scoped read-models take a
-  `personId`) so the planned **staff dashboard portal** reuses them by swapping only the session→personId
-  resolver. New: two swap-verb hardening fixes (`acceptSwap` requested-only guard + `swap.not_acceptable`;
-  `requestSwap` return-shift ownership — **closes the recorded swap-workflow-hardening debt**, both proven
-  by deletion), three person-scoped read-models (`listShiftsForPerson`/`listSwapsForPerson`/`listAbsencesForPerson`,
-  filtering `person_id` in SQL since the planning-table RLS is tenant-only), six `/api/schedule` routes
-  gated by `requireSession` (shared request-shape screens extracted to `request-screens.ts`, now used by
-  `workforce-api` too), till client methods + a basket-preserving `<till-schedule-screen>` + i18n.
-  **No migration** (tables/grants already exist); **fiscal core untouched (H2)** — commercial/management-lane
-  only, both whole-branch reviewers confirmed. Reviews: subagent-driven TDD (every guard proven by deletion)
-  → simplify (shared `pickLocale`) → two-lens whole-branch review (caught the inverted-absence-range 500 →
-  a `absence.invalid` verb guard mirroring `shift.invalid`) → **Copilot caught a real timezone bug two
-  whole-branch reviewers missed** — the my-shifts window was computed in UTC but the server reads LOCAL wall
-  dates, so it shifted by a day near midnight in a non-UTC venue (Spain is UTC+1/+2); fixed to compute from
-  the device's local date — plus the unguarded post-login roster load; both fixed, replied on-thread,
-  resolved. Coverage workforce 99.89 / server 99.67 / till 100; CI green. **Deferred follow-ups** (under
-  *Debt* → Workforce follow-ups): the **staff dashboard portal**, the **two-sided swap UI** (needs
-  cross-person shift visibility; the verb+route already defend it), `requestSwap`'s **`toPersonId` FK→500**
-  on a give-away to a non-existent person (hostile/non-UI-client-only), staff **cancel/withdraw**, and
-  widening the fixed **14-day** my-shifts window. Plan:
-  [staff-request-path](superpowers/plans/2026-08-16-workforce-staff-request-path.md).
-- **#89** Recipes/BOM — slice 1, **allergen inheritance** (sub-project 18) — the linchpin's first cut, a
-  new optional **`@waitron/recipes`** module (ingredient master + product→ingredients composition) that
-  DERIVES a product's EU-1169 allergen declaration from its ingredients. `products.allergens` becomes a
-  **computed published column** = `republish(manual_allergens, recipe_derivation)`: staff authoring
-  writes a new `manual_allergens` overlay, the recipe module writes `recipe_derivation`, catalogue
-  republishes — all ~15 consumers read the same column unchanged. **Derived floor + add-only, PENDING
-  contagious** (never *fewer* allergens than the ingredients imply; an unreviewed ingredient keeps the
-  product PENDING). **Flat** composition (nesting deferred); **no quantity/unit/cost** (allergen presence
-  is qualitative). Two tenant tables `ingredients`/`recipe_lines` in `packages/db` (catalogue precedent —
-  ops in `@waitron/recipes`, no own migrations), **FORCE RLS + policy + grants** (0038 auto / 0039 custom
-  / 0040 `ingredient_id` index), proven by real-PG differential tests (isolation + grant, by deletion) +
-  the `inmutabilidad` guard. Pure `mergeAllergenMaps`/`republish` in catalogue; the ingredients↔recipes
-  cycle broken by a type-only import. Headless + a self-checking `demo:recipes`. **Fiscal safety (H2):**
-  commercial/catalogue-lane only — `products.allergens` feeds no `computeHuella`/hash-chain/registro path
-  (grep-verified; whole-branch review confirmed); the only `fiscal-verifactu` change is the sanctioned
-  `vocabulary-scope` pin (recipes added to `GENERIC_PACKAGES` — both pins). Built **subagent-driven TDD**
-  (8 tasks, each task-reviewed — two fix rounds: a `republishProduct` missing-id `TypeError` regression,
-  and a **vacuous `recipe_lines` RLS test** masked by the ingredients join, fixed with a direct
-  single-table read proven by deletion) → whole-branch base-to-tip review (caught the §1 "insertion
-  order" false comment + the dashboard round-trip latent gap) → fix wave → **4-lens simplify** (dedup
-  `INGREDIENT_COLUMNS` into a leaf module, collapse the allergen-map type literal, guard the propagation
-  loop) → **Copilot** (4 valid findings, all fixed + resolved — incl. the **0040 index** on
-  `recipe_lines.ingredient_id` that no prior reviewer caught). db/recipes/catalogue at 100% coverage;
-  full unfiltered CI green. **Deferred follow-ups** (under *Now* / *Not started*): the recipe-authoring
-  **UI** (must reseed the dashboard allergen picker from `manual_allergens`, not published — a no-op
-  today with no recipe UI), **nested sub-recipes**, a scale-gated **set-based batched propagation**
-  (O(N) fan-out; the 0040 index fixes the lookup, not the fan-out), **plate costing**, **stock
-  depletion**, customer browse. Design/plan: [spec](superpowers/specs/2026-08-15-recipes-bom-allergen-inheritance-design.md)
-  · [plan](superpowers/plans/2026-08-15-recipes-allergen-inheritance.md).
-- **#88** De-flake the `fiscal-verifactu` `drain — 1001-split` CI timeout — the test seeded 1001 rows
-  through a per-row fixture (~4000 DB round-trips, ~32s in CI vs ~1.2s local, right on the 30s wall).
-  Root fix: the drain's batch cap `MAX_REGISTROS_POR_ENVIO` (1000, the AEAT XSD cap) becomes an
-  optional, defaulted `DrainDeps.maxRegistrosPorEnvio`, so the batching/starvation tests prove the
-  IDENTICAL split semantics with a ~4-row fixture (cap 3) instead of 1001 — ~30s → ~90ms.
-  **Production unchanged** (every non-test caller omits the field → 1000; `serialize.ts`'s XSD guard
-  and all submission/huella/registro logic untouched — verified by a fresh-context fiscal-safety
-  review); the injected cap is validated (integer in 1..1000, fail-fast — Copilot), proven by deletion.
-  Removes the flake for every future PR. This was the CLAUDE.md §2 "bump its timeout or shrink the
-  fixture" debt item — done as the shrink.
-- **#87** Workforce roster management — slice 2 (sub-project 16) — surfaces the remaining
-  roster-management engine behind the management dashboard, the **manager-approval half**:
-  **split-shift (*jornada partida*) authoring** (a populated person×day cell can now author a SECOND
-  shift — pure UI; the schema/backend already permitted it), **manager approve/reject of swaps** (new
-  `decideSwap` verb + `swap.not_decidable` + `listPendingSwaps`) and **absences** (`setAbsenceStatus`
-  extended to record the decider + `listPendingAbsences`), and a **planned-vs-actual** view
-  (`getPlannedVsActual` — planned = **published-roster shifts only** via INNER JOIN + `status='published'`,
-  so a draft or superseded version can't produce a phantom no-show; proven by deletion on distinct
-  rows). Migration **`0010`** (nullable `decided_by_person_id`/`decided_at` audit columns + restrict-FK
-  to `persons`, no grant/policy). Two `@waitron/identity` permissions (`swap.approve`/`absence.decide`),
-  five `/management-api` routes on a generalised `gated(permission)` helper with a real-PG RLS/gate/grant
-  suite, and three dashboard screens (split-shift on the roster grid, an approvals queue, a
-  planned-vs-actual table) with axe a11y in both themes. **Fiscal safety (H2):** commercial/management-lane
-  only — `0010` is additive nullable columns on two management tables, nothing near the fiscal core;
-  whole-branch review confirmed. Reviews: 9-task subagent-driven TDD → whole-branch review (verdict
-  READY TO MERGE; caught a dead-code i18n resolver + the ORDER-BY-`to_char`-text fragility) → fix wave →
-  4-lens simplify (shared `date-utils`/`person-utils`, a `decideSwap` 2→1-round-trip perf fix with both
-  guards re-proven by deletion) → Copilot (order pending queues by the timestamp column not the text
-  alias; drop an unused import). **Deferred follow-ups:** the **staff-facing request path** for
-  swaps/absences (this slice is the approval half only); widen `gated` to pass `authorizedBy` + collapse
-  the 3 inline decide/publish routes; unify `entriesForLocationInPeriod`/`entriesInPeriod` (registro-de-jornada
-  read path); a composite/partial index on the pending-queue reads (scale-gated, per the #76 precedent);
-  an inherited initial-load-error-banner edge shared with the sibling roster-screen. Built in parallel
-  with #85.
-- **#85** Sync transport — slice 2, the **payments fast lane** (#33 §14) — on top of #84's transport, a
-  second, tighter replication cadence carrying only `payments` + `payment_refunds` on an **independent
-  per-`(subscriber, origin, lane)` cursor**, so the double-charge exposure of active-active selling is
-  mirrored ahead of the ordered stream. Migration **`0002`** (`sync_cursor.lane` + a 3-col PK repivot),
-  `tablesForLane()` in the registry (fast = exactly `{payments, payment_refunds}`), a lane→tables filter
-  on the source read + a `?lane=` param on `/sync-api/log` (unknown/missing clamps to `ordered`), `lane`
-  threaded through `applyBatch`/`syncPullOnce`/`runSyncPull` (BOTH cursor reads lane-filter so the lanes
-  never clobber each other's cursor), a `WAITRON_SYNC_FAST_TICK_MS` knob, and two lane-scoped boot loops.
-  **§4e invariant:** the two lanes read disjoint tables → disjoint `seq` streams → neither cursor drags
-  the other; `pruneSyncLog` needs no change (min across both lane rows holds at the slower lane); the
-  cross-lane FK hazard (a fast `payments` row before its ordered `working_orders` parent) is absorbed by
-  the pre-existing `23503` park — proven by deletion in real-Postgres tests + a two-lane e2e over the real
-  HTTP wire. **Fiscal safety (H2):** commercial-lane only — nothing near `registros`/the hash chain/
-  invoice numbers/`envios`/`acks`; confirmed by a whole-branch review. Reviews: 10-task subagent-driven
-  TDD → whole-branch review (caught a `payment_policy`-as-fast §1 mislabel the per-task passes missed) →
-  fix wave → 4-lens simplify → Copilot (log a rejecting sync worker rather than swallowing it). **Trimmed
-  by owner decision:** dead-subscriber cleanup (deferred to a future retention-ops slice — see *SIF
-  topology follow-ups*). Built in parallel with #87 (workforce roster mgmt slice 2).
-- **#84** Sync transport / network layer — slice 1 (#33 §14) — on top of the #74 commercial-lane
-  outbox, the thing that **moves `sync_log` batches between the two shop servers**: a `@waitron/sync`
-  transport module (`readSyncLogSince` sync_tailer source read, an NDJSON wire codec, `syncPullOnce` +
-  `runSyncPull` — per-peer backoff + a **progress-guarded drain**), a node-token-authed `mountSyncApi`
-  (`/sync-api/hello` + `/log`) wired into boot behind `WAITRON_SYNC_*` config (fail-closed on a blank
-  secret), and migration **`0037`** gating the three **state-dependent** business BEFORE-triggers on
-  `app.sync_apply` so at-least-once redelivery can't wedge the stream (proven by deletion; the two
-  data-validity triggers are left ungated deliberately — a valid row stays valid on re-apply).
-  **Byte-identity:** `row_image` travels as Postgres's canonical `jsonb::text` and binds `$1::jsonb` —
-  JS never parses the row's numerics, so a money value like `1.50` can't collapse to `1.5` (the control
-  was re-targeted off `sales.total`, a fixed-scale numeric that normalizes and so measured nothing, onto
-  `sales.vat_breakdown` jsonb). **Origin attribution:** `nodeId` threaded through every enrolled-table
-  writer — a completeness re-audit found **three** the design had missed (the Stripe webhook settlement,
-  both terminal/on-device providers' `collect`, and the reconcile reversal — each opening its own tx),
-  without which a card settlement is lost on failover. **Fiscal safety (H2):** commercial-lane only —
-  `0037` touches only `tenders`/`working_orders`/`working_order_lines` (functions byte-unchanged),
-  nothing near `registros`/the hash chain; the fiscal-lane sync stays a separate owner-reviewed slice.
-  Reviews: simplify → two-lens whole-branch review → fix wave (webhook fix + re-audit; `0037` header §1
-  correction; `limit`-NaN; `stream_stalled` contract; drain-loop) → re-review **caught two regressions
-  the fixes introduced** (a false trigger-fires claim in the corrected header; a cross-origin busy-loop
-  in the drain fix) → round-2 fix (progress-guard + header correction, both verified on real PG) →
-  **Copilot** caught the `after`-cursor 500 (twin of the `limit` fix) + a `close()` teardown that leaked
-  the server/pools on a worker rejection — all fixed, replied on-thread, resolved. `@waitron/sync`
-  100/100/100/100 (109 tests), server 99.72. Rebased cleanly onto #83's main before landing (all three
-  route mounts co-exist in `boot.ts`). **Deferred:** the payments **fast lane**, the **cloud-mirror**
-  peer, **dead-subscriber** cleanup, **multi-tenant** transport, node-token **rotation**,
-  promotion/fencing, the **fiscal-lane sync (H2)**, and a test-strengthening fast-follow (assert
-  `.advanced` in the real-PG pull gate test). Built in parallel with #83.
-- **#83** Shift-planning authoring — slice 1 (sub-project 16) — a management-dashboard surface for the
-  headless #50 scheduling engine: a manager authors a draft weekly roster on a **person × day grid**,
-  sees the advisory `RosterBreach[]` warnings, and publishes. Five new `@waitron/workforce` verbs
-  (`createRosterVersion`/`getRoster`/`getRosterVersion`/`addShift`/`updateShift`/`removeShift` — the
-  `period` normalized to its Monday via `weekStartOf`, unparseable-timestamp guarded), a new
-  `schedule.manage` permission (manager+admin), a `mountWorkforceApi` `/management-api` group (roster
-  CRUD + publish + `GET /locations`) gated `withTenant`+`asAppUser`+`authorizeManager`, and a
-  `<dashboard-roster-screen>` (week picker + keyboard-accessible grid + publish/breach banner) +
-  `<dashboard-shift-dialog>`. **No migration** (`app_user` already held the workforce grants,
-  `0006_scheduling_rls.sql`). **Fiscal safety (H2):** commercial/management-lane only, nothing near the
-  fiscal core; two whole-branch reviewers confirmed. Reviews: simplify (2 reuse cleanups) → two-lens
-  whole-branch review caught a **vacuous RLS test** (dropping `asAppUser` didn't leak because the reads
-  carry explicit `tenant_id` filters — replaced with a `GET /locations` differential that genuinely
-  bites) + 400-not-500 validation gaps + stale "four screens" doc comments; **Copilot** caught the
-  engine-level unparseable-timestamp twin-miss, a non-Monday-period duplicate-draft hole (fixed by
-  Monday-normalization), a cleared-date-input crash, and keyboard-inaccessible grid cells — all fixed,
-  replied on-thread, resolved. workforce 99.87 / server 99.63 / dashboard 99.67. **Deferred:**
-  split-shift (*jornada partida*) authoring (a person/day with a shift opens edit-only — notable for a
-  Spanish deli), manager approve/reject swaps + absence approval + planned-vs-actual (slice 2), and
-  per-venue timezone. Built in parallel with the sync-transport slice (#84).
-- **#82** Dashboard **i18n layer** (campaign queue item #11, the last campaign item) — the management
-  dashboard rendered raw error CODES and inline Spanish literals; this adds an `apps/dashboard/src/i18n/`
-  layer mirroring `apps/till/src/i18n` (four modules: `strings.ts` en-base + a fully-typed `es`
-  catalogue, `t.ts` with `t`/`setLocale`/`currentLocale`/`pickLocale`, `codes.ts` `codeMessage`
-  code→copy that degrades an unmapped code to a GENERIC sentence and never returns the raw code,
-  `domain.ts` role/status/vat/unit/allergen-state/allergen-name resolvers with raw-value fallback) and
-  wires the shell + all 5 screens + all 8 widgets to translate at the **render edge** — the raw
-  code/token stays in state, `<option value>`/`.value` wire bindings are unchanged, only visible text
-  is localised. `codeMessage`/`domain.resolve` gate on `Object.hasOwn` so a prototype-chain key
-  (`toString`/`constructor`) can't skip the fallback and return `undefined`. **Fiscal safety (H2):**
-  browser-only, no fiscal core touched (confirmed by both reviewers). 286 tests, coverage
-  99.94/97.27/100/99.94. Deferred edges under *Debt* → dashboard 1c follow-ups.
-- **#81** Counter POS **layout & receipt editors** (campaign queue item #8, sub-project 7) — the counter
-  screen was already layout-driven from a `LayoutDef` of empty per-widget config bags; this makes both
-  the layout *arrangement* and a non-fiscal *receipt trim* owner-authorable. New **`@waitron/layouts`**
-  package (canonical `LayoutDef`/`ReceiptConfig` types, a `WIDGET_CONFIG` validation registry,
-  `validateLayout`/`validateReceiptConfig`, and a `getLayout`/`putLayout`/`putReceipt` store gated on a
-  new `till.configure` permission); a **`till_layouts`** table (tenant_id PK, jsonb `definition` +
-  `receipt`) with FORCE-RLS + tenant-isolation policy in a hand-written custom migration (split
-  `0035` auto CREATE+ENABLE / `0036` custom FORCE+policy+GRANT — `0034` was taken by catalogue);
-  management-api GET/PUT `/layout` + PUT `/receipt`; `GET /api/till` now returns `layout` + `receipt`;
-  the till renders the authored layout + `product-grid.columns` + receipt header/footer trim; and
-  dashboard **layout** + **receipt** editor screens. **Fiscal safety (H2):** commercial-lane only —
-  no fiscal-core source touched (the only `fiscal-verifactu` change is the vocabulary-scope test pin);
-  the receipt trim renders *around* the immutable art. 7.1 core of `till-ticket-view`, pinned by a
-  load-bearing test that the invoice core, QR and legend render unconditionally regardless of config;
-  two reviewers confirmed the boundary. **Review fixes:** simplify hoisted `LAYOUT_A`'s per-render
-  `JSON.stringify` out of the counter render hot path; the wide-lens review found (TDD, proven by
-  running the loop) that `validateLayout` used a bare `schema[key]` **prototype-chain** lookup, so
-  `config` keys `toString`/`constructor` rode into jsonb and `valueOf`/`hasOwnProperty`/`__proto__`
-  threw a raw `TypeError` → 500 instead of `400 layout.invalid` — fixed with `Object.hasOwn`, five
-  hostile keys pinned (this makes the three "fail-closed" comments true, §1); two stale `LAYOUT_A`
-  line-number citations corrected (34-41 → 47-54 after a `ReceiptConfig` insert). CI ran the **full
-  unfiltered suite** (scripts/ + a db migration trigger everything, both mutation shards), all green;
-  Copilot's two inline comments both addressed + resolved — see *Debt and odd jobs* → **Counter POS
-  follow-ups** for the one they surfaced. Adds `layouts` to `GENERIC_PACKAGES` (both pins).
-
-- **#80** `errors.reachability.test.ts` real fix (campaign queue item #7) — the 13 per-package `errors.reachability.test.ts` copies **did not test reachability**: proven by deletion, a *smoke*-variant package (remove `import "./errors.js"` from `migrations`' barrel **and** every other file) passed 2/2 with `errors.ts` fully unreachable, because `tsconfig`'s `include:["src"]` makes every file a compilation root and `vitest run` never typechecks. The copies had **drifted into two variants** — a text-walk import-graph one (7 pkgs: core/db/fiscal/fiscal-verifactu/payments/workforce/workforce-es) that *does* fail on deletion, and a smoke/`AppError`-construct one (6 pkgs: credentials/migrations/payments-stripe/identity/reporting/sync) that does not; `CLAUDE.md` §4's by-deletion receipt had been written against a *smoke* package, so it held for smoke only and its "eight packages" figure was stale (real = 13). Replaced all 13 with **one root guard**, `scripts/errors-reachable.test.ts` (joins `english-only`/`teardown` in the root Vitest project), that **discovers** every `packages/*` carrying `index.ts` + `errors.ts` (17 today — including `catalogue`/`provisioning`, which had *no* copy, and `shared`) and text-walks the barrel's transitive import graph, failing if `errors.ts` is unreachable from the package's public entry. Chose the conservative existing-pattern text-walk over the brief's suggested `tsc`-downstream-probe / narrowed-`include` — most conservative, matches the repo's tree-wide-guard-in-root direction; **proven by deletion through the new guard** (drop `db`'s barrel import → the guard fails, the other 15 pass, restore → green). Branch renamed `…-tsc-probe` → `…-import-graph` to match the choice. **KNOWN LIMITATION (documented in the header):** the walk is static text, so a specifier reachable only across an intervening comment token can read as unreachable — `reporting/record-daily-close.ts` carries `import … "./errors.js"` across a `//`-wrapped break the `\s+` regex won't span; harmless (that file reaches `errors.ts` by other imports). **Fiscal core untouched (H2):** test-infra only — deletes `fiscal`/`fiscal-verifactu` *test* files, nothing near `computeHuella`/the hash chain/`registros`/invoice numbers. Reviews (2-lens, both confirmed by running): fixed a **§1 fabricated receipt** in the guard header (it cited a `db/errors.ts` doc-comment that does not exist), an `EISDIR` try/catch on directory-imports, and stale guard counts; **Copilot** flagged that "does not match a keyword split from its specifier" was inaccurate (`\s+` *does* span a bare newline — it is the intervening `//` token that breaks the match), reworded + re-verified on 4 regex cases, replied + resolved. CI ran the **full unfiltered suite** (a root-config change triggers everything, both mutation shards included), all green; `CLAUDE.md` §4 rewritten to un-conflate the two variants. Closes the *Debt* item below.
-- **#79** otplib v12 → v13 + `totp.ts` rewrite (dashboard 1a follow-up, campaign queue item #6) — otplib was pinned `^12.0.1`, whose transitive `@otplib/*` + `thirty-two` deps are all **deprecated** ("upgrade to v13"). v13 is a **breaking redesign**: the pre-configured `authenticator` export is gone (undefined on v13; `totp.ts` failed at import), so this was a rewrite, not a bump. `@waitron/identity` is the **sole** otplib consumer. `totp.ts` moves to v13's functional API — `generateSecret()`, `generateURI({issuer,label,secret})`, `verifySync({secret,token,epochTolerance}).valid` — with the public contract (`generateTotpSecret`/`totpAuthUri`/`verifyTotp`, all synchronous) preserved byte-for-byte; v12's period-counted `window:1` becomes v13's `epochTolerance:30` (**seconds**). Every receipt was **re-probed by running** the installed otplib@13.4.1 (§1, not reasoned): `epochTolerance:30` ≡ `window:1` (E-30/E/E+30 valid delta −1/0/+1, E±60 invalid, E-30@tol0 invalid); fail-closed is airtight — `verifySync` throws on a malformed base32 secret / non-six-digit token / missing secret and `verifyTotp` returns a strict `false` for every non-string token (7 shapes tested), a well-formed-but-wrong 6-digit token returns `{valid:false}` without throwing; `totpAuthUri` issuer/label not swapped. **Fiscal core untouched (H2):** TOTP is dashboard auth only — nothing near `computeHuella`/the hash chain/`registros`/invoice numbers; both whole-branch reviewers confirmed. Install-time deprecation warnings **gone**. The whole-branch review's one Important finding was a **§1 stale receipt** — `apps/server/src/management-api.ts` cited "probed against otplib@12.0.1, a non-string token returns false, never throws", retired by the library swap — fixed by re-probing v13 (verifySync throws, `verifyTotp`'s catch swallows, fail-closed result unchanged) and dropping the un-reprobable v12 contrast; grep of the whole tree found no other stale source receipt (dated plan/spec docs left per the history rule). identity 125 @ 100% (totp.ts 100%), server 452 green; Copilot reviewed 5/6, zero comments. **The `totp_secret`-at-rest encryption is a SEPARATE deferred item — not folded in** (still open below).
-- **#78** Catalogue / menu management UI — Slice 1 (campaign queue item #5) — lets an owner author the menu end-to-end. A nullable `products.image text` column (migration **0034**, plain add) with a **real-PG receipt** that the existing 0027 grant + `products_tenant_isolation` policy already cover the new column as the non-owner `app_user` (differential; fails if `asAppUser` is dropped). `@waitron/catalogue` threads `image`/`active` through the product ops and adds a pure, browser-safe `media.ts` (magic-byte JPEG/PNG/WEBP sniffing) + three domain-named `media.*` codes (`missing`/`unsupported_type`/`too_large`). `apps/server` gains `WAITRON_MEDIA_DIR` config (empty-string→cwd trap guarded) + a boot mkdir; `mountMedia` (public `GET /media/:filename` serve behind an **explicit, unit-tested** filename regex as the path-traversal guard — a custom fs handler, not `serve-static`); and `mountCatalogueApi`, a gated `/management-api/*` write group (catalogues/categories/products + a `POST /management-api/product-images` upload). The stored name is always **server-generated** `<sha256hex>.<ext>` from **sniffed** bytes, never the client filename/Content-Type; the upload's `bodyLimit` sits at `maxUploadBytes + 16 KiB` so the precise per-file `file.size` check stays reachable. Every route funnels through one `gated()` helper = `withTenant` + `asAppUser` + `authorizeManager(person.manage)` (the `catalogue.manage` seam is one constant away); a **real-Postgres** RLS suite proves differential cross-tenant isolation and the `person.manage` gate, both by deletion. `apps/dashboard` ships `DashboardApi` catalogue methods + `uploadImage`, the widgets (allergen-picker with the three-state null=PENDING invariant, image-upload, product-form, product-list, category-manager), a catalogue screen, and app-shell nav — a11y (axe) both themes per widget/screen, browser-local types only (no `@waitron/*` runtime import). **Fiscal core untouched (H2):** two independent whole-branch reviewers confirmed the boundary clean; the one schema change is an additive nullable column, nothing near `computeHuella`/the hash chain/`registros`/invoice numbers. Reviews: simplify found the branch already high-quality (dropped one dead type alias); the two-lens review took the **atomic create-inactive** fix (create was a non-atomic two-request write — `createProduct` then a follow-up `updateProduct(active:false)` — that could leave a product active/sellable if the follow-up failed; `active?` is now threaded through the create path, one request) plus doc/receipt minors; **Copilot** flagged the create-side `image` type as `string | null` where the POST route rejects `null` (fixed: tightened to `string`, `ProductPatch.image` stays nullable to clear on PATCH), replied on-thread, resolved. db 487 / catalogue 59 @ 100% / server 452 / dashboard 210, all green; FORCE-RLS immutability + tree-wide guards green. **Deferred (design §8 + review):** catalogue/category rename+deactivate UX, `catalogue.not_found`/`category.not_found` pre-checks + cross-tenant-FK hardening, orphaned-image GC, till-side image rendering, multi-locale description seeding, realising the `catalogue.manage` permission, single-sourcing the accepted image-extension set across `media.ts`↔`media-api.ts`, and a browser-safe shared allergen-code constant — see *Catalogue follow-ups*.
-- **#77** Hoist `percentOf` into `@waitron/shared` (reporting #56 follow-up) — the VAT formula `base × rate ÷ 100` (money-scaled, half-away-from-zero) had drifted into **four** copies (`packages/core/src/vat.ts`'s `percentOf`, both `apps/server/scripts/{record-one-sale,settle-invoice-first}.ts`, and `packages/reporting/test/fixtures.ts`). Consolidated into ONE `percentOf` in `@waitron/shared`'s `money.ts` beside `divideDecimal`/`multiplyDecimal`; `core/vat.ts` + its test deleted (the test moved to `packages/shared/src/percent-of.test.ts`, every assertion preserved + exact-integer/sub-cent/negative-base cases added); all four call sites now import the shared one. **Behaviour-preserving:** the hoisted body is byte-for-byte the deleted core one and the previously-explicit `MONEY_SCALE`/`decimal("100")` equal `percentOf`'s defaults, so `core/record-sale.ts`'s `percentOf(base, rate)` → `sales.vat_breakdown` → `computeHuella` input is unchanged (H2 respected; no fiscal-core change) — proven by the 38 record-sale tests (incl. the difference-method desglose cases) and the whole-workspace suite staying green. Two-lens review CONFIRMED behaviour-identical + complete (ran the tests) and fixed two §1 comment over-claims; I caught an `english-only` miss a package-filtered run doesn't surface ("rectificativa" in a moved test description → "correction"). Copilot: no posted comments; one suppressed non-blocking test-quality note (the float-exactness test's inputs don't diverge under `Number` math) deferred to *Debt* → reporting follow-ups. shared 138 @ 100%, core 143, reporting 125 @ 100%; `mutation-shared` green. **Campaign queue item #4.**
-- **#76** Reporting — date-range VAT summary + *modelo 303* output-VAT aggregate (sub-project 8, scopes 3–4) — two read-only functions in `@waitron/reporting`, both over the already-filed `sales.vat_breakdown` (#66) with **no migration, no schema change**: `computeVatSummaryForPeriod` (the daily-close per-rate VAT figures over a closed range of business days, node-grain or tenant-wide via optional `nodeId`; same DST cutover-shifted bucketing extended `= businessDay` → `between from and to`) and `computeVatReturn` (the *modelo 303* régimen-general **IVA devengado** per rate over one calendar month, per obligado across all nodes, bucketed by the filed *fecha de expedición* — civil date via the sale's own snapshot offset, **not** the operational business day). Both delegate to one extracted `aggregateVatByRate` core (the daily close's `computeVatSummary` delegates too, so its suite is the behaviour-preserving guard). Exactness is inherited, not re-derived — aggregates sum the already-filed per-invoice cuotas, never `round(Σ base × rate)`, proven at period and month level by a catalogue difference-method test. **Fiscal core untouched (H2):** read-only over the commercial lane; no `computeHuella` change. Real-PG `vat-return.rls.test.ts` proves cross-tenant refusal under the non-superuser `app_user` with FORCE RLS (the 303 drops the node predicate, so RLS + the explicit tenant predicate are the only cross-node scoping). simplify deduped the DST cutover-shift SQL fragment + the range validator; the two-lens review verified the civil-date SQL reproduces `formatDate` (a reviewer ran real-PG 18 to check `make_date`) and found the one fix taken (TDD): `computeVatReturn` now bounds `year` to 4 digits so a mistyped year can't silently return an empty 303. reporting **125 tests @ 100%**; Copilot no comments. A runnable `demo:modelo-303` reconciles both aggregates end-to-end. **Deferred (spec §8):** the IVA deducible/soportado (input-VAT) side (no purchase-invoice data yet), recargo de equivalencia, the exact AEAT casilla mapping + submittable form, quarterly/annual periods, the reporting UI (belongs to the till, #7), and the sargable index rewrite (gated on scale). **Campaign queue item #3.**
-- **#75** Shared `createErrorBoundary` (dashboard 1b follow-up) — `apps/server/src/till-api.ts` and `management-api.ts` held a **byte-identical** `run` error boundary differing only in their `STATUS` map and log tag (`till.failed` / `management.failed`); extracted `createErrorBoundary(status, tag)` into `apps/server/src/error-boundary.ts`, both call sites now `= createErrorBoundary(STATUS, "<tag>")` (till's `run` stays **exported** for other route files, management's stays local). **Behaviour-preserving:** zero existing assertions changed; the only body change is a forced local `status`→`httpStatus` rename (the map param took `status`). TDD: a new `error-boundary.test.ts` drives real Hono requests through a collecting logger over all three branches — mapped `AppError`→status, unmapped→`?? 400`, non-`AppError`→opaque `server.internal` 500 with an explicit no-`.message`-leak assertion — watched failing first. simplify (4 agents) applied a `type Line` alias + a comment trim and **skipped** a shared-`collect`-test-util extraction as out-of-diff-scope (the repo pattern is a per-file local `collect`); the finish-branch two-lens review caught a **§1 comment drift** — both API files' `import "./errors.js"` comments justified the import as "the file that answers with `server.internal`", which this refactor moved into `error-boundary.ts`, so both were reconciled to the accurate "every file that **throws** one of these" convention (`till-api` throws `working_order.*`/`order_prep.*` via `requireUuidId`; `management-api` throws `management.request_invalid`, all declared in `errors.ts`) + fixed an overstated "byte-identical" doc claim. `@waitron/server` 383 tests, touched files 100%; Copilot no findings. **Campaign queue item #2.**
-- **#74** Sync slice 1 — commercial-lane outbox — a new `@waitron/sync` package: a `sync_log` outbox fed by a generic `sync_capture` AFTER-trigger on all 14 commercial-lane tables (sales/lines/tenders/settlements/substitutions/voids, payments/refunds/policy, catalogues/categories/products, working-orders/lines), an **idempotent, seq-ordered apply loop** (whole-row `jsonb_populate_record` restore bound as `$1`; `ON CONFLICT` non-regression; 23503 FK-deferral; an **environment handshake** that reads `deployment.environment` and refuses to cross it), bounded **retention** (`pruneSyncLog` holds the log at the slowest subscriber's cursor — `min(last_applied_seq)` across ALL `sync_cursor` rows, alive **or** down, per origin) and per-`(subscriber, origin)` **lag** reporting, plus origin attribution via an **additive** `withTenant(…, { nodeId })` threaded through the server working-order write paths. Migrations 0000 (`sync_log`/`sync_cursor` FORCE-RLS + per-tenant policy + `sync_tailer`) and 0001 (a dedicated `sync_retention` role + whole-log permissive policy — a per-tenant tailer cannot prune cross-tenant). **The fiscal-lane boundary is HARD and was respected (H2):** commercial tables only; the fiscal `registros`/hash-chain lane is a separate owner-reviewed slice. Reviews: the finish-branch two-lens pass fixed a false "`sync_tailer` sees unfiltered" claim (§1) and **documented, for the owner, two transport-slice constraints** — business-rule BEFORE triggers fire un-gated on the apply path (a redelivery-wedge that cannot occur in this single-batch slice) and the all-zero default `origin_id` shared across sources; **Copilot** caught a false `to_jsonb`-keeps-numeric-as-a-JSON-string migration comment (verified on postgres:18-alpine it is a JSON **number**; the `jsonb_populate_record` round-trip preserves `1.50::numeric` byte-for-byte) and a `lag` `Number()`→`bigint` precision loss past 2^53−1 — both fixed (TDD), replied on-thread, resolved. sync **91 tests @ 100%**. **Campaign queue item #1**, landed this session. The transport/network layer, redelivery handling, and fiscal-lane sync remain (see *SIF topology follow-ups*).
+- **#93** Dashboard — purchase-invoice authoring UI (sub-project 8, #91 fast-follow): a `purchase.manage`-gated create/edit/list surface (header + VAT-desglose sub-editor) over #91's `@waitron/purchasing`; no migration; rebased onto #92. [plan](superpowers/plans/2026-08-16-purchase-invoice-authoring-ui.md).
+- **#92** Dashboard — staff self-service portal (sub-project 16, #90 fast-follow): a `staff`-role person logs into the role-blind dashboard for a self-service view (own roster + swap/absence requests), reusing #90's verbs via a `/management-api/me/*` group; no migration. [plan](superpowers/plans/2026-08-16-staff-dashboard-portal.md).
+- **#91** Reporting — purchase invoices + modelo 303 IVA deducible → DR303 file (sub-project 8): new `@waitron/purchasing` (received-invoice capture, FORCE-RLS tables, 0041/0042), `computeInputVat` + net `computeVatReturn`, `mapModelo303`, and a byte-exact DR303 writer generated from the official `DR303e26.xlsx`. Two pre-filing caveats under *Debt*. [spec](superpowers/specs/2026-08-16-purchase-invoices-and-modelo-303-deducible-design.md) · [plan](superpowers/plans/2026-08-16-purchase-invoices-modelo-303-deducible.md).
+- **#90** Workforce — staff-facing swap & absence request path (sub-project 16): the till-PIN-gated *request* half (requester identity from the session, never the body), surface-agnostic for the staff portal; no migration. [plan](superpowers/plans/2026-08-16-workforce-staff-request-path.md).
+- **#89** Recipes/BOM slice 1 — allergen inheritance (sub-project 18): new optional `@waitron/recipes` derives a product's EU-1169 allergens from its ingredients (add-only, PENDING contagious); two FORCE-RLS tables (0038/0039 + a 0040 index). [spec](superpowers/specs/2026-08-15-recipes-bom-allergen-inheritance-design.md) · [plan](superpowers/plans/2026-08-15-recipes-allergen-inheritance.md).
+- **#88** De-flake the `fiscal-verifactu` `drain — 1001-split` CI timeout: the drain's batch cap becomes an injectable defaulted param so the split tests use a ~4-row fixture (~30s → ~90ms); production unchanged.
+- **#87** Workforce roster management slice 2 (sub-project 16): split-shift (*jornada partida*) authoring, manager approve/reject of swaps + absences (`decideSwap`/`setAbsenceStatus`, migration 0010 decider columns), and a planned-vs-actual view — the manager-approval half. Parallel with #85.
+- **#85** Sync transport slice 3 — payments fast lane (#33 §14): a tighter cadence carrying `payments`/`payment_refunds` on an independent per-`(subscriber, origin, lane)` cursor (`sync_cursor.lane` + a `?lane=` param). Dead-subscriber cleanup trimmed to a future slice. Parallel with #87.
+- **#84** Sync transport slice 1 (#33 §14): the `@waitron/sync` transport moving `sync_log` batches between servers (NDJSON wire, `syncPullOnce`/`runSyncPull`, node-token `mountSyncApi`) + migration 0037 gating the state-dependent business triggers on `app.sync_apply`. Parallel with #83.
+- **#83** Shift-planning authoring slice 1 (sub-project 16): a dashboard surface for the #50 engine — author a draft weekly roster on a person×day grid, view `RosterBreach[]`, publish (`mountWorkforceApi` + `schedule.manage` + `<dashboard-roster-screen>`); no migration.
+- **#82** Dashboard i18n layer: an `apps/dashboard/src/i18n/` layer (mirrors `apps/till`) translating at the render edge; raw codes / inline Spanish gone from every screen and widget.
+- **#81** Counter POS layout & receipt editors (sub-project 7): owner-authorable till layout + non-fiscal receipt trim — new `@waitron/layouts` + a `till_layouts` FORCE-RLS table (0035/0036) + management-api + dashboard editors; the fiscal invoice core stays unconditional.
+- **#80** `errors.reachability` real fix: replaced 13 drifted per-package copies (only 7 tested reachability) with one discovering root guard `scripts/errors-reachable.test.ts`, proven by deletion; CLAUDE.md §4 rewritten.
+- **#79** otplib v12 → v13 + `totp.ts` rewrite: v13 was a breaking redesign (the `authenticator` export gone); rewrote to the functional API preserving the public contract, every fail-closed receipt re-probed against otplib@13.4.1.
+- **#78** Catalogue / menu management UI slice 1: `products.image` (0034), `media.ts` byte-sniffing + `mountMedia` serve + `mountCatalogueApi` write group (server-generated `<sha256>.<ext>` names), dashboard widgets/screen.
+- **#77** Hoist `percentOf` into `@waitron/shared`: consolidated four drifted copies of `base × rate ÷ 100`; behaviour-preserving (huella input unchanged).
+- **#76** Reporting — date-range VAT summary + modelo 303 output-VAT aggregate (sub-project 8): `computeVatSummaryForPeriod` + `computeVatReturn` over the filed `sales.vat_breakdown`, one shared `aggregateVatByRate`, civil-date bucketing; no migration.
+- **#75** Shared `createErrorBoundary`: extracted the byte-identical `run` boundary from till-api/management-api into `apps/server/src/error-boundary.ts`.
+- **#74** Sync slice 1 — commercial-lane outbox (#33 §14): new `@waitron/sync` — a `sync_log` outbox fed by a `sync_capture` trigger on all 14 commercial tables, an idempotent seq-ordered apply loop, bounded retention/lag, origin attribution; migrations 0000/0001. Fiscal-lane sync stays separate (H2).
 - **#73** Dashboard slice 1c — staff row-edit actions — wires the staff list's per-row "Editar" (a live-but-unheard `edit-person` seam since #70) to the four existing slice-1b mutations via a new `<dashboard-person-edit>` dialog: role change, suspend/reactivate, reset-PIN, set-password, each committed **independently** (a role change never forces a PIN retype). The screen turns each bubbling/composed domain event into the matching `DashboardApi` call, reloads, and re-resolves the open dialog's person from the fresh list; a shared single-flight guard drops a re-fired action; secrets are masked (`type=password`) and reset on close. **Browser-only** — `@waitron/identity`/`apps/server` unchanged. The role `<select>` is reconciled to state in `updated()`: a `.value` bound before its options fails a non-default preset (the backlog's latent-picker bug) and a `?selected` attribute keeps a dirtied pick after a revert-on-close+reopen — **both failure modes proven by deletion**. The finish-branch two-lens review (fresh-context reviewer verified findings empirically vs real Lit 3 in Chromium) caught the select reopen-desync + an error banner rendered **behind** the modal backdrop (now surfaced inside the dialog's own top layer) + plaintext secret fields (now masked) + a false "Escape/backdrop" comment (`wt-dialog` has no backdrop light-dismiss). **Copilot** caught three more, all the same stale-claim class the `?selected`→`updated()` swap introduced (`editingPerson` not cleared on close → invariant false + latent stale-id; a stale preset-test comment) — all fixed, replied on-thread, resolved. Dashboard suite 100 tests @ **100/98.9/100/100**, axe clean both themes. **Campaign queue item #10**, landed this session (subagents used for the two reviews; build inline). Deferred edges under *Debt* below.
 - **#72** First venue admin's initial dashboard password — `waitron-provision venue` now seeds the first admin's dashboard **password** (`persons.password_hash`) alongside the till PIN, closing the bootstrap deadlock where a first management-dashboard login was impossible (every credential path except the provisioning seed — `setPassword`, passkey enrollment — is gated on an already-authenticated session). The password is read from `WAITRON_ADMIN_PASSWORD` (env or echo-off prompt, never argv), validated `assertPasswordLength` ≥8, and hashed at the CLI boundary; threaded `VenueRequest.admin` → `seed-admin` action → the `applyVenue` insert, mirroring the PIN. **No schema migration** (the nullable `persons.password_hash` column already existed) and **no grant change** (`applyVenue` runs as the table owner). A gap-closing e2e proves `loginManager` succeeds after `venue` under `app_user`+RLS (and by deletion). Both runbooks corrected (document `WAITRON_ADMIN_PASSWORD`, list all five secrets, fix the stale worked example that omitted `--admin-name`/the PIN env var). Making the field required broke 10 `apps/server` `VenueRequest` consumers (4 demos + 6 tests) — caught by the pre-push gate (the plan enumerated the provisioning fixtures but missed the cross-package ones), all fixed. Copilot: run the e2e login under the app role. Owner decisions: password required; no force-change-on-first-login. (SDD executed inline — the account's weekly limit blocked subagents mid-run.)
 - **#71** Dashboard slice 1d — passkeys (WebAuthn) — the final auth-floor sub-slice: passkeys as the phishing-resistant primary management-dashboard login, plugged into the slice-1a verifier seam. `@waitron/identity` gains two tenant-scoped **FORCE-RLS** tables (`webauthn_credentials`/`webauthn_challenges`; 0007 tables / 0008 hand-written RLS) and the `@simplewebauthn/server` v13 ceremonies (register + auth; auth ends in `startManagementSession` and gates on `person.suspended` like `loginManager`); `apps/server` gains config (`WAITRON_MANAGEMENT_RP_ID`/`_ORIGIN`) + four `/management-api/passkey/*` routes (**register GATED, auth UNGATED**, auth/verify sets the cookie); `apps/dashboard` gains four client methods + `@simplewebauthn/browser` v13 ("Entrar con passkey" / "Añadir passkey"). Only the public key + counter are stored (never a private key); challenges are single-use + `CHALLENGE_TTL_MS`-bounded. Whole-branch review twin-caught a suspended-person auth gap + an unauthenticated-500 behind a false "library maps codes" comment; the finish-branch two-lens review caught three §1 comment overstatements (incl. a "swept" claim the simplify pass left in the sibling migration); **Copilot caught two real concurrency findings** — challenge single-use under concurrency (fixed with a consume-first locking `DELETE … RETURNING` + a deterministic real-PG lock-timeout test) and a counter that could REGRESS under concurrent logins (fixed with a monotonic `counter < newCounter` guard, weakening clone detection). identity 125 tests @ 100%. The crypto is verify-mocked in unit/route tests — a real-ceremony virtual-authenticator test is a follow-up (below).
@@ -740,10 +348,6 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     every enrolled second factor. Latent — nothing writes `totp_secret` in 1a. **The enrollment slice
     must encrypt `totp_secret` at rest via the credentials vault (AES-256-GCM), decrypting on the box
     before `verifyTotp`** (keeps the offline-verifiable property). A comment on the column records it.
-  - **otplib v12 → v13 + `totp.ts` rewrite — LANDED #79** (campaign queue item #6). v13 was a breaking
-    redesign (the `authenticator` export gone; `totp.ts` failed at import), so a rewrite to the functional
-    API + a re-probe of v13's fail-closed behaviour, not a dep bump. Install-time deprecation warnings are
-    now gone; every receipt re-probed by running otplib@13.4.1. See *Recently shipped*.
   - **Deferred (untouched by 1b, which was the HTTP-API layer only — these touch the session internals /
     `authorize.ts`):** stamp `ended_at` when a management session expires (today the idle timeout is
     enforced at read time — matters once a `(tenant_id, person_id) WHERE ended_at IS NULL` open-session
@@ -755,9 +359,6 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     sibling `sessions.rls` doesn't test it either).
 - **Dashboard slice 1b follow-ups (#69, server management API). None blocking; each deferred with a
   reason during the SDD build / simplify / finish-branch / Copilot review chain.**
-  - **Share the `run` error boundary — LANDED #75.** `createErrorBoundary(status, tag)` now lives in
-    `apps/server/src/error-boundary.ts`; `till-api.ts` (exported `run`) and `management-api.ts` (local
-    `run`) both call it. See *Recently shipped*.
   - **PATCH `/staff/:id` re-runs authz per field + double-`UPDATE`.** A combined `{role, status}` PATCH
     calls `authorizeManager` (→ `resolveManagementSession` SELECT+UPDATE) twice and issues two
     `UPDATE persons`; authorize once up front + one combined `UPDATE`. Low-frequency admin path — the
@@ -776,10 +377,6 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     the thrown code + a gate-deletion proof (`setPassword` authorizes before it writes), and the four sibling
     negative tests share the pattern (Copilot, held); `run`'s `?? 400` unmapped-code fallback is honestly
     uncovered (every code a route throws is in `STATUS`) until a future route throws an unmapped one.
-  - **Test-infra flaky (not 1b-specific, surfaced by #69's CI):** `packages/fiscal-verifactu`'s
-    `drain — batching (the 1001-split)` test can exceed its 30s `testTimeout` under a contended CI shard
-    (measured 32s in CI, ~1.2s locally). A heavy 1001-record test; bump its per-test timeout or shrink the
-    fixture. Passes on re-run — a flaky timeout, not a regression.
 - **Dashboard slice 1c follow-ups (#70, dashboard app). None blocking; each deferred with a reason
   during the SDD build / simplify / finish-branch / Copilot review chain.**
   - **Row-edit ACTIONS — DONE (#73).** The staff list's "Editar" now opens a `<dashboard-person-edit>`
@@ -859,8 +456,6 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     ceremonies (different challenge handles) for the same person can each mint a session — both belong to
     the legitimately-authenticated owner, the same race as `loginManager`, no trust boundary crossed. The
     single-use fix (#71) closes the SAME-handle race; this different-handle case is left as harmless.
-  - **i18n DONE (#82).** Passkey button labels + status/error keys now render through the dashboard
-    i18n layer (`login-screen`/`staff-screen` via `t()`/`codeMessage`).
 - **Counter POS follow-ups (sub-project 7, slice 1 / 7a — the walk-up cash sale). None blocking; each
   is a deliberate slice-1 boundary or a small review Minor, deferred rather than dropped.**
   - **TLS termination, LAN binding and serving the built bundle are deployment (#9).** In dev the till
@@ -944,18 +539,6 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
       running-total / drift guard lacks a regression test pinning a weighed line whose gross rounds in
       a way that could drift the displayed total from the authoritative re-price.
   - **Whole-branch review deferrals (surfaced by the pre-merge review; none blocking):**
-    - **Server-side sale idempotency for the lost-response retry.** The walk-up-sale PR added a
-      CLIENT-side single-flight guard (`till-app`'s `submitting`), which stops a double-tap firing a
-      second `POST /api/sales`. It does NOT cover the case where the request succeeded on the server
-      but the RESPONSE was lost (dropped link, tab reload) and the operator re-rings: that is a fresh
-      request the client cannot dedupe. The server fix is a client-generated `workingOrderId` threaded
-      through `POST /api/sales` plus a `UNIQUE(tenant_id, working_order_id)` on `sales`, so a retried
-      identical sale collides instead of filing a second chained `registros_facturacion` record
-      (CLAUDE.md §5 — the double-file is unrepairable). **DONE — landed in 7b (#61):**
-      `payWorkingOrder` keys idempotency on a client-minted `workingOrderId` + `UNIQUE(tenant_id,
-      working_order_id)` on `sales`, replaying an already-settled order (files nothing) and catching a
-      concurrent `23505` as a replay; three DB backstops (UNIQUE + PK + the state trigger) stand behind
-      it, proven on real Postgres.
     - **Return priced lines from `POST /api/sales` so the receipt is server-authoritative.** The ticket
       computes each per-line gross CLIENT-side from the login-time `TillProduct.unitPrice` (`lineGross`),
       because the sale response carries only `total` + `vatBreakdown`, no per-line amounts. In slice 1
@@ -1099,15 +682,6 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     FKs precisely so a line cannot point at another tenant's row independently of RLS. Cheap
     belt-and-suspenders in pre-production: a `UNIQUE(tenant_id, id)` on `catalogues`/`categories` +
     composite FKs from `products`. Flagged by the base-to-tip review; non-blocking.
-  - **Daily-close VAT report vs the filed desglose — CLOSED by #66 (stale entry pruned 2026-08-08).**
-    This entry described `computeVatSummary` recomputing cuota **multiplicatively** and so overstating
-    difference-method (catalogue) cuota, with the filed desglose "not persisted queryably". #66 (slice
-    8a) retired both: it persisted the filed per-rate breakdown to `sales.vat_breakdown` (0032) written
-    from the same variable that enters the huella, and `computeVatSummary` now **reads** it
-    (`packages/reporting/src/vat-summary.ts:9,28` — `cross join lateral jsonb_array_elements(vat_breakdown)`),
-    so the reported cuota is the exact filed value. The per-rate *gross* stays unstored but is unneeded
-    (`gross = base + tax`; *modelo 303* has no gross box). This was a stale receipt contradicting the
-    #66 line under *Recently shipped* — see `CLAUDE.md` §1 "a behaviour change retires every receipt".
   - **Difference-method rounding — AEAT acceptance CLOSED on primary source (FAQ §20, 4 Dec 2025);
     one residual + configurability remain.** The AEAT developer FAQ documents the only `ImporteTotal`
     validation: `ImporteTotal == Σ(BaseImponible + CuotaRepercutida + CuotaRecargoEquivalencia)` with a
@@ -1245,14 +819,6 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     `applyVenue` runs for the same tenant could each pass `where not exists` under READ COMMITTED and
     insert two admins (no unique constraint enforces one) — realistic risk ~nil (provisioning is a
     serial operator CLI action), consequence a spare non-fiscal admin row.
-- **The stale-hardcoded-list class (two instances fixed in #58).** A cross-package test
-  that pins a repo-wide manifest/scope list goes stale the moment a member is added, and scoped CI
-  hides it because the changing task's scope never runs the pinning package. Adding `identity` to
-  `packages/migrations/migrations.manifest.json` and to `english-only.ts`'s `GENERIC_PACKAGES` left
-  `packages/fiscal-verifactu/src/vocabulary-scope.test.ts` (pins `GENERIC_PACKAGES`) and
-  `packages/provisioning/src/instance-apply.rls.test.ts` (pins the manifest's `migratedSets`) red;
-  both were fixed on this branch. See the receipted `CLAUDE.md` §2 entry. When you add a member to a
-  repo-wide list, grep every package for a test that pins it and run the WHOLE workspace's suites.
 - **Purchase invoices / modelo 303 deducible follow-ups (#91).** **⚠️ TWO PRE-FILING CAVEATS a human
   must clear before the first LIVE 303 filing (operational, not code):** (a) **validate the generated
   DR303 file once against the real AEAT sede "por fichero" uploader** — Waitron emits común + página 1 +
@@ -1312,12 +878,6 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   what remains is the *reporting* — a shard that ran two packages and one that ran the whole workspace
   both report `success`, and only the step log tells them apart. Make the job name the packages it
   selected. Non-blocking.
-- **`errors.reachability.test.ts` does not test reachability — CLOSED as #80.** The 13 per-package
-  copies (not eight; that figure was stale) were replaced by one discovering root guard,
-  `scripts/errors-reachable.test.ts`, that fails when a barrel's `import "./errors.js"` is removed —
-  proven by deletion through the new guard. Neither of the two suggested closings (`tsc`-downstream
-  probe / narrowed `include`) was taken; the conservative text-walk was. See Recently shipped #80 and
-  the rewritten `CLAUDE.md` §4.
 - **`packages/db`'s test suite is 189s**, mostly one Testcontainers Postgres per suite. It is now its
   own CI shard (`test-heavy`), which stops it blocking the other packages but does not make it any
   shorter. Sharing a container across suites beats every CI-config change combined, but it means
@@ -1475,36 +1035,6 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     relief is wanted sooner: squash only the corrective churn (fold the `add_node_id`/`rekey` sequences
     back into their originating table migrations) and leave the custom RLS migrations as separate
     readable units.
-
----
-
-## Task: consolidate the session-memory notes against this file
-
-The per-topic memory entries were the only record of priorities before this file existed, and now
-they overlap it. Left alone they will disagree with it, and memory is the copy nobody can review.
-
-Three specific problems, all present today:
-
-- **Dangling references.** Entries cite pull requests up to #35. The repository was recreated for the
-  licence change and numbering restarted at #1, so those point at nothing. Commit SHAs in them
-  dangle for the same reason.
-- **Overlap.** Several are titled "follow-ups" and hold exactly what the **Debt and odd jobs**
-  section above now holds.
-- **A known contradiction.** One entry records that `CLAUDE.md` still says the opposite of it.
-
-What to do: move anything that is genuinely a *task* into this file, keep in memory only what memory
-is for — durable preferences and hard-won lessons that change how work is done — and delete the
-rest. Strip or annotate the dead PR numbers wherever the surrounding fact is still worth keeping.
-
-**A worked precedent, 2026-07-31.** The same treatment was applied to a session handoff rather than a
-memory note, and it is the shape to copy. `docs/handoffs/2026-07-31-migrate-gate-landed.md`
-listed six loose ends in a file that is **not committed** — `docs/handoffs/` is gitignored, so
-everything in it disappears the moment someone tidies up, which `CLAUDE.md` §6 tells them to do once
-the work is finished. Its unclaimed items are now in the sections above; its history is in the git
-log; the file was deleted. Two of its items had also gone stale in ways only a check against the tree
-would reveal — one had already shipped, and one open question had been narrowed by a later design
-decision. **Do not migrate a note without first checking each item against the current tree**; the
-value is in what has changed since it was written, not in the copying.
 
 ---
 
