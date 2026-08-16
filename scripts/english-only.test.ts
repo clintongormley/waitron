@@ -34,7 +34,7 @@ const discovered = GENERIC_PACKAGES.flatMap((name) =>
 );
 
 describe("configuration", () => {
-  it("scopes itself to the fourteen generic packages", () => {
+  it("scopes itself to the fifteen generic packages", () => {
     expect([...GENERIC_PACKAGES]).toEqual([
       "db",
       "core",
@@ -50,6 +50,7 @@ describe("configuration", () => {
       "sync",
       "layouts",
       "recipes",
+      "purchasing",
     ]);
   });
 
