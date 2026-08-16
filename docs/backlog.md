@@ -335,6 +335,28 @@ task today:
 - **Supplies ordering / procurement** (sub-project 20) — greenfield; sits on inventory. **AI-assisted
   reorder is explicitly deferred.**
 
+**Table-service track — planned 2026-08-16 (SUPERVISED; spec 2026-08-17).** The owner chose to build
+table service and its dependent surfaces. Unlike the autonomous campaign's five extension-items, these
+are greenfield and product-heavy, so they are **specced with the owner and run supervised** (from
+2026-08-17, owner in the loop) — **NOT landed unattended**. Owner-scoped first slices (decided
+2026-08-16):
+
+- **Table service (foundation, sub-project 10 — *tabs*)** — the *tables* primitive the other three
+  need: table identity + **live state** (free / seated / ordering) tied to orders. Confirmed needed once
+  floor plan chose live occupancy and KDS chose routing; the counter POS (#60–64) is walk-up only, so
+  this is a real ordering-model addition, not a UI.
+- **Floor plan (sub-project 11)** — a layout editor **with live occupancy** (table state tied to
+  orders), not a standalone layout.
+- **KDS (sub-project 12)** — **multi-station routing** (per-station displays, route each line to its
+  station, course firing) — a station/routing model, not merely an extension of #63's prep surface.
+- **Bookings (sub-project 17)** — **staff-entered reservations** (date / time / party size / contact,
+  optional table assignment) from the dashboard; **no** public/online surface in slice 1.
+
+Build order once specced: **table-service foundation → floor plan (occupancy) → KDS (routing) →
+bookings**. Each gets its own brainstorm → spec → plan cycle, starting 2026-08-17. The owner **may be
+reachable by laptop** during the 2026-08-19 → 25 trip, so this track can also progress remotely rather
+than waiting for the return.
+
 ---
 
 ## Debt and odd jobs
