@@ -19,7 +19,12 @@ import {
 import { resolveWorkTimeRuleset } from "@waitron/workforce-es";
 import { createErrorBoundary } from "./error-boundary.js";
 import { requireManagementSession } from "./management-session.js";
-import { isUuid } from "./till-session.js";
+import {
+  requireBodyUuid,
+  requireNullableString,
+  requirePeriod,
+  requireUuidParam,
+} from "./request-screens.js";
 import type { Logger } from "./logger.js";
 
 export interface WorkforceApiDeps {
@@ -35,7 +40,6 @@ const SCHEDULE_PERMISSION: Permission = "schedule.manage";
 const SWAP_APPROVE_PERMISSION: Permission = "swap.approve";
 const ABSENCE_DECIDE_PERMISSION: Permission = "absence.decide";
 
-const YYYY_MM_DD = /^\d{4}-\d{2}-\d{2}$/;
 // ±14h — the wall-offset domain the `shifts_*_offset_ck` check constraints enforce
 // (`packages/workforce/src/schema/shifts.ts`); an offset outside it is a 23514 at the DB, screened
 // here to a 400 instead.
@@ -64,39 +68,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 const run = createErrorBoundary(STATUS, "workforce.failed");
 const backend = new WorkforceBackend();
 
-function requireUuidParam(id: string, kind: string): string {
-  if (!isUuid(id)) throw new AppError("shared.invalid_id", { kind, value: id });
-  return id;
-}
-
-/** Screen a YYYY-MM-DD date value (a roster `period`, or a planned-vs-actual `from`/`to`) that is BOTH
- * well-shaped AND a real calendar day. The regex alone admits impossible days (`2026-02-30`,
- * `2026-13-01`), which would reach the `::date` column as a 22008 → an opaque `server.internal` 500;
- * the round-trip through `Date` (a normalised or NaN result means the Y-M-D was not a real day) rejects
- * them here as `management.request_invalid`. `field` names the offending parameter in the (log-only)
- * error detail — `"period"`, `"from"` or `"to"` — mirroring `requireTimestamp`/`requireOffsetMinutes`. */
-function requirePeriod(value: unknown, field: string): string {
-  if (typeof value !== "string" || !YYYY_MM_DD.test(value)) {
-    throw new AppError("management.request_invalid", { field });
-  }
-  const asUtc = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(asUtc.getTime()) || asUtc.toISOString().slice(0, 10) !== value) {
-    throw new AppError("management.request_invalid", { field });
-  }
-  return value;
-}
-
 /** Screen a body `startsAt`/`endsAt` as a parseable instant. A non-parseable string is still a
  * `string`, so a bare type check would admit it — and `addShift`'s `Date.parse(x) >= Date.parse(y)`
  * interval guard then passes it too (`NaN >= NaN` is `false`) — so it lands in the `::timestamptz`
  * column as a 22007 → 500; screened here to a 400 `management.request_invalid` naming the field. */
 function requireTimestamp(v: unknown, field: string): string {
   if (typeof v !== "string" || Number.isNaN(Date.parse(v)))
-    throw new AppError("management.request_invalid", { field });
-  return v;
-}
-function requireBodyUuid(v: unknown, field: string): string {
-  if (typeof v !== "string" || !isUuid(v))
     throw new AppError("management.request_invalid", { field });
   return v;
 }
@@ -111,11 +88,6 @@ function requireOffsetMinutes(v: unknown, field: string): number {
     v > MAX_OFFSET_MINUTES
   )
     throw new AppError("management.request_invalid", { field });
-  return v;
-}
-function requireNullableString(v: unknown, field: string): string | null {
-  if (v === null) return null;
-  if (typeof v !== "string") throw new AppError("management.request_invalid", { field });
   return v;
 }
 /** Screen a body `decision` as exactly "approved" or "rejected" — any other value (a valid-looking

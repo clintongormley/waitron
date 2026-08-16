@@ -41,6 +41,7 @@ import { mountTillApi } from "./till-api.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountWorkforceApi } from "./workforce-api.js";
+import { mountScheduleApi } from "./schedule-api.js";
 import { mountMedia } from "./media-api.js";
 import { mountSyncApi } from "./sync-api.js";
 import { fetchHttpClient } from "./sync-http.js";
@@ -339,6 +340,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // fiscal backend, clock, card provider or media store — these routes touch only roster_versions /
   // shifts / convenio_config / locations. Routes only; the schedule.manage gate runs per request.
   mountWorkforceApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
+  // The STAFF-FACING half of the schedule surface on the SAME app — the till-session-gated request
+  // routes (view my shifts/swaps/absences, request a swap or absence, accept a swap offered to me),
+  // the counterpart to mountWorkforceApi's manager approval half. Same minimal deps (db + this venue's
+  // tenant); the till PIN session gates it (requireSession), not a management session. Routes only.
+  mountScheduleApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
   // The PUBLIC read half of the product-image feature on the SAME app — the `mountWebhook` /
   // `mountTillApi` / `mountManagementApi` convention again. Deliberately UNAUTHENTICATED and taking
   // no `db`/session: it serves bytes from `config.mediaDir` (the store `mkdirSync` above ensured),
