@@ -8,6 +8,11 @@
 // registration. Both functions read only `sales.vat_breakdown` (a queryable copy of the filed
 // desglose, migration 0032), so CORE_MIGRATIONS alone suffices; the fiscal chain is never read.
 //
+// It then produces the SUBMITTABLE output end-to-end: `mapModelo303` maps the reconciled aggregate
+// onto the modelo 303 casillas and `toDr303Record` serializes it to the AEAT sede "por fichero"
+// fixed-layout file, whose bytes the demo SELF-VALIDATES (length 2944, a known box at its documented
+// offset, and — this month is a net credit — the 'N' sign prefix on the negative resultado).
+//
 // apps/* is exempt from the english-only guard, so the printed labels use the fiscal vocabulary
 // (IVA devengado, base imponible, cuota, tipo).
 //
@@ -36,8 +41,14 @@
 // The script recomputes that 86.35 independently from the seeded figures (`addDecimal`, not a JS
 // number) and asserts it equals `computeVatReturn`'s summed cuota — printing OK or throwing.
 import { sql } from "drizzle-orm";
-import { computeVatReturn, computeVatSummaryForPeriod } from "@waitron/reporting";
-import type { VatRateLine, VatSummary } from "@waitron/reporting";
+import {
+  computeVatReturn,
+  computeVatSummaryForPeriod,
+  mapModelo303,
+  toDr303Record,
+} from "@waitron/reporting";
+import type { Dr303Options, Modelo303, VatRateLine, VatSummary } from "@waitron/reporting";
+import { DR303_LAYOUT } from "@waitron/reporting/src/dr303-layout.js";
 import { recordCorrection, recordSale } from "@waitron/core";
 import type { RecordCorrectionInput, RecordSaleInput } from "@waitron/core";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
@@ -644,8 +655,104 @@ async function main(): Promise<void> {
     console.log(
       `OK — IVA devengado ${vatReturn.taxTotal} − IVA deducible ${vatReturn.deductible.taxTotal} = resultado ${vatReturn.result}, reconciled against the summed filed figures.`,
     );
+    console.log("");
+
+    // ── The submittable output: the DR303 fixed-layout file the sede "por fichero" path uploads. Map
+    //    the reconciled aggregate onto the modelo 303 casillas, serialize to the AEAT record, and
+    //    SELF-VALIDATE the produced bytes (this month's resultado is a NET CREDIT, so box 46/71 must
+    //    carry the 'N' sign). The `tipo de declaración` is an operator/asesor input, not computed —
+    //    "C" (a compensar) is illustrative here for the net-credit month.
+    const modelo = mapModelo303(vatReturn);
+    const dr303Options: Dr303Options = {
+      taxId: "50000000K",
+      name: "Deli Demo SL",
+      year: YEAR,
+      period: String(MONTH).padStart(2, "0"),
+      declarationType: "C",
+    };
+    const record = toDr303Record(modelo, dr303Options);
+    validateDr303Record(record, modelo);
+
+    console.log("DR303 — modelo 303 fixed-layout file (AEAT sede 'por fichero')");
+    console.log(
+      `  ${record.length} bytes: envelope + común + página 1 + página 3 (página 2 régimen simplificado omitted, out of scope)`,
+    );
+    const shown = boxAt(record, "46");
+    console.log(
+      `  casilla 46 (resultado régimen general ${modelo.boxes["46"]}) at byte offset ${shown.offset}: ${shown.bytes}  ← 'N' sign prefix for the net credit`,
+    );
+    console.log(
+      `OK — DR303 file self-validated: length 2944, box 27 (${modelo.boxes["27"]}) at its documented offset, negative resultado rendered with the N prefix.`,
+    );
   } finally {
     await db.close();
+  }
+}
+
+/** Locate a casilla in the emitted DR303 layout and read its raw bytes back out of the record. The
+ * offset is DERIVED from DR303_LAYOUT (segment base + posición − 1), not hardcoded, so a layout shift
+ * moves it automatically. */
+function boxAt(record: Buffer, casilla: string): { offset: number; len: number; bytes: string } {
+  const order = [DR303_LAYOUT.comun, DR303_LAYOUT.pagina1, DR303_LAYOUT.pagina3];
+  let base = 0;
+  for (const seg of order) {
+    const field = seg.fields.find((f) => f.casilla === casilla);
+    if (field) {
+      const offset = base + (field.pos - 1);
+      return {
+        offset,
+        len: field.len,
+        bytes: record.toString("latin1", offset, offset + field.len),
+      };
+    }
+    base += seg.length;
+  }
+  throw new Error(`modelo-303-demo: casilla ${casilla} is not in the emitted DR303 layout`);
+}
+
+/** Independently packs a Decimal into an AEAT fixed-width numeric field — the demo's OWN witness, NOT
+ * the serializer's `formatNumericField`: magnitude in cents, right-aligned and zero-filled, a negative
+ * value taking an 'N' in position 1 (manual_uso.txt). Used only to cross-check `toDr303Record`'s bytes. */
+function packAeatNumeric(value: Decimal, width: number): string {
+  const negative = value.startsWith("-");
+  const magnitude = (negative ? value.slice(1) : value).replace(".", "");
+  return negative ? "N" + magnitude.padStart(width - 1, "0") : magnitude.padStart(width, "0");
+}
+
+/** Throws unless the produced DR303 file self-validates: total length 2944, box 27 (a positive money
+ * box) landing at its documented offset with the expected bytes, and box 46 (this month's NEGATIVE
+ * resultado) carrying the 'N' sign prefix. Expected bytes come from `packAeatNumeric` — a second,
+ * independent encoder — so a bug in the serializer's own formatter cannot mask itself. */
+function validateDr303Record(record: Buffer, modelo: Modelo303): void {
+  const problems: string[] = [];
+  if (record.length !== 2944) {
+    problems.push(
+      `record is ${record.length} bytes, expected 2944 (común 328 + página1 1581 + página3 1017 + envelope close 18)`,
+    );
+  }
+  const at27 = boxAt(record, "27");
+  const want27 = packAeatNumeric(modelo.boxes["27"]!, at27.len);
+  if (at27.bytes !== want27) {
+    problems.push(
+      `box 27 at offset ${at27.offset}: bytes ${JSON.stringify(at27.bytes)} != expected ${JSON.stringify(want27)}`,
+    );
+  }
+  const at46 = boxAt(record, "46");
+  const want46 = packAeatNumeric(modelo.boxes["46"]!, at46.len);
+  if (at46.bytes !== want46) {
+    problems.push(
+      `box 46 at offset ${at46.offset}: bytes ${JSON.stringify(at46.bytes)} != expected ${JSON.stringify(want46)}`,
+    );
+  }
+  if (!at46.bytes.startsWith("N")) {
+    problems.push(
+      `box 46 (resultado ${modelo.boxes["46"]}) should carry the N sign prefix for a negative value, got ${JSON.stringify(at46.bytes)}`,
+    );
+  }
+  if (problems.length > 0) {
+    throw new Error(
+      `modelo-303-demo: DR303 file did not self-validate:\n  ${problems.join("\n  ")}`,
+    );
   }
 }
 
