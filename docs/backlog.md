@@ -57,9 +57,9 @@ With both the fiscal story and the operable till complete, the owner chose the n
 **both have now landed their first cut** (2026-08-07):
 
 - **Menu & allergens (sub-project 18)** — a launch-day legal duty (EU 1169/2011, RD 126/2015).
-  **Slice 1 (EU-14 allergen declaration end-to-end) LANDED as #65.** Recipes/BOM (the linchpin),
-  variants, and customer-facing browse are the unstarted remainder; the allergen list stays a
-  food-safety-advisor call.
+  **Slice 1 (EU-14 allergen declaration end-to-end) LANDED as #65.** Recipes/BOM (the linchpin —
+  allergen-inheritance backend since landed #89, 2026-08-16), variants, and customer-facing browse are
+  the remainder; the allergen list stays a food-safety-advisor call.
 - **Reporting — *cierre Z* (sub-project 8)** — the frozen/signed daily close (numbered, immutable,
   counted-cash / opening float / *descuadre*). `computeDailyClose` (#56) deliberately left the seam,
   and it is now filled: **8a VAT-exact close LANDED as #66, 8b frozen cierre Z LANDED as #68.** The
@@ -127,7 +127,15 @@ shipped*) and nothing was left blocked or `needs-owner-review`; the run is finis
 
 ## Now
 
-**Nothing in flight.** Both 2026-08-15 follow-on slices to #83/#84 have LANDED — **sync transport
+**Nothing in flight.** **Recipes/BOM slice 1 — allergen inheritance — LANDED as #89** (2026-08-16):
+the optional `@waitron/recipes` module (ingredient master + product→ingredients composition) derives a
+product's EU-1169 allergen declaration from its ingredients — `products.allergens` became a computed
+union of a `manual_allergens` overlay and a recipe-derived floor, **add-only, PENDING contagious**; two
+FORCE-RLS tenant tables (`ingredients`/`recipe_lines`, migrations 0038/0039 + a 0040 `ingredient_id`
+index), headless + a demo. Built subagent-driven-TDD (8 tasks, per-task reviews caught a missing-id
+`TypeError` regression and a vacuous `recipe_lines` RLS test) → whole-branch review → 4-lens simplify →
+Copilot (4 findings incl. the 0040 index). Fiscal core untouched (H2). Details in *Recently shipped*.
+Earlier, both 2026-08-15 follow-on slices to #83/#84 also LANDED — **sync transport
 slice 2, the payments fast lane (#85)** and **workforce roster management slice 2 (#87)** (split-shift
 *jornada partida* authoring, manager approve/reject of swaps + absences, and a planned-vs-actual view)
 — built in parallel worktrees via subagent-driven TDD (per-task + whole-branch review + fix wave +
@@ -146,9 +154,14 @@ follow-ups*):
   is its own slice), and the remaining **sync transport-2** pieces (cloud-mirror peer,
   dead-subscriber cleanup, multi-tenant transport, node-token rotation, and the separate
   **fiscal-lane / hash-chain sync, H2**).
-- **Bigger next slices:** **Recipes / BOM** (sub-project 18 — the linchpin, greenfield; wants a design
-  session), and the **reporting input-VAT / *modelo 303* deducible side** (needs a purchase-invoice
-  module).
+- **Bigger next slices:** the **reporting input-VAT / *modelo 303* deducible side** (needs a
+  purchase-invoice module), and **Recipes/BOM's next slices** now that its allergen-inheritance
+  *backend* has landed (#89): the **recipe-authoring UI** (dashboard — must reseed the allergen picker
+  from `manual_allergens`, not the published `allergens`, a documented follow-up), **nested
+  sub-recipes** (alioli auto-derived from egg+oil+garlic), and — each still greenfield — **plate
+  costing (*escandallo*)** and **stock depletion** (sub-project 20). A scale-gated set-based rewrite of
+  the O(N) ingredient→product allergen propagation is also deferred (the #89 0040 index fixes the
+  lookup scan; the fan-out remains O(N), documented in code).
 
 ---
 
@@ -159,6 +172,35 @@ One line per landed PR, newest first. The git log, the linked designs/plans, and
 detail — **this file is not a history** (see *How to keep this file honest*). Open follow-ups from
 these live under *Debt and odd jobs*; their designs/plans stay in `docs/superpowers/`.
 
+- **#89** Recipes/BOM — slice 1, **allergen inheritance** (sub-project 18) — the linchpin's first cut, a
+  new optional **`@waitron/recipes`** module (ingredient master + product→ingredients composition) that
+  DERIVES a product's EU-1169 allergen declaration from its ingredients. `products.allergens` becomes a
+  **computed published column** = `republish(manual_allergens, recipe_derivation)`: staff authoring
+  writes a new `manual_allergens` overlay, the recipe module writes `recipe_derivation`, catalogue
+  republishes — all ~15 consumers read the same column unchanged. **Derived floor + add-only, PENDING
+  contagious** (never *fewer* allergens than the ingredients imply; an unreviewed ingredient keeps the
+  product PENDING). **Flat** composition (nesting deferred); **no quantity/unit/cost** (allergen presence
+  is qualitative). Two tenant tables `ingredients`/`recipe_lines` in `packages/db` (catalogue precedent —
+  ops in `@waitron/recipes`, no own migrations), **FORCE RLS + policy + grants** (0038 auto / 0039 custom
+  / 0040 `ingredient_id` index), proven by real-PG differential tests (isolation + grant, by deletion) +
+  the `inmutabilidad` guard. Pure `mergeAllergenMaps`/`republish` in catalogue; the ingredients↔recipes
+  cycle broken by a type-only import. Headless + a self-checking `demo:recipes`. **Fiscal safety (H2):**
+  commercial/catalogue-lane only — `products.allergens` feeds no `computeHuella`/hash-chain/registro path
+  (grep-verified; whole-branch review confirmed); the only `fiscal-verifactu` change is the sanctioned
+  `vocabulary-scope` pin (recipes added to `GENERIC_PACKAGES` — both pins). Built **subagent-driven TDD**
+  (8 tasks, each task-reviewed — two fix rounds: a `republishProduct` missing-id `TypeError` regression,
+  and a **vacuous `recipe_lines` RLS test** masked by the ingredients join, fixed with a direct
+  single-table read proven by deletion) → whole-branch base-to-tip review (caught the §1 "insertion
+  order" false comment + the dashboard round-trip latent gap) → fix wave → **4-lens simplify** (dedup
+  `INGREDIENT_COLUMNS` into a leaf module, collapse the allergen-map type literal, guard the propagation
+  loop) → **Copilot** (4 valid findings, all fixed + resolved — incl. the **0040 index** on
+  `recipe_lines.ingredient_id` that no prior reviewer caught). db/recipes/catalogue at 100% coverage;
+  full unfiltered CI green. **Deferred follow-ups** (under *Now* / *Not started*): the recipe-authoring
+  **UI** (must reseed the dashboard allergen picker from `manual_allergens`, not published — a no-op
+  today with no recipe UI), **nested sub-recipes**, a scale-gated **set-based batched propagation**
+  (O(N) fan-out; the 0040 index fixes the lookup, not the fan-out), **plate costing**, **stock
+  depletion**, customer browse. Design/plan: [spec](superpowers/specs/2026-08-15-recipes-bom-allergen-inheritance-design.md)
+  · [plan](superpowers/plans/2026-08-15-recipes-allergen-inheritance.md).
 - **#88** De-flake the `fiscal-verifactu` `drain — 1001-split` CI timeout — the test seeded 1001 rows
   through a per-row fixture (~4000 DB round-trips, ~32s in CI vs ~1.2s local, right on the 30s wall).
   Root fix: the drain's batch cap `MAX_REGISTROS_POR_ENVIO` (1000, the AEAT XSD cap) becomes an
@@ -310,7 +352,7 @@ these live under *Debt and odd jobs*; their designs/plans stay in `docs/superpow
 - **#69** Dashboard slice 1b — server management API — the slice-1a identity auth exposed over HTTP as a `/management-api/*` Hono route group on `apps/server` mirroring `mountTillApi`: a `waitron_management_session` cookie (httpOnly / SameSite=Strict / Secure-iff-TLS), login/logout, and `person.manage`-gated staff CRUD (list/create/patch/reset-pin/set-password), plus `setPassword` in `@waitron/identity` (an admin grants dashboard access). New `management.request_invalid` body-shape code; every handler scoped to the one venue tenant via `withTenant` + `asAppUser`. Real-PG e2e incl. a **differential** cross-tenant isolation proof (fails if `asAppUser` is dropped) + refusal proofs (unauth 401, wrong-password 401 + no cookie, staff-role 403). Finish-branch fixed a null/non-object-body → 500 class (now the routes' own 4xx), the PATCH type-screening gap (`role`/`status` now 400 not pgEnum-500) + its false errors.ts doc, and three overstating comments; a Copilot NIF-collision flag was verified a **false positive** (one PG container per file → isolated DBs). Headless — the UI is 1c.
 - **#68** Frozen *cierre Z* (sub-project 8, slice 8b) — immutable numbered `daily_closes` (0033, the immutability recipe: `REVOKE ALL` + `GRANT SELECT,INSERT` + append-only/anti-TRUNCATE triggers + FORCE RLS + tenant policy) freezing a snapshot of the derived close, a per-node `daily_close_chain` head that `recordDailyClose` advances in the **same transaction** as the close (single-active-writer `FOR UPDATE`, `UNIQUE(scope, sequence_no)` backstop), per-till counted-cash vs expected reconciliation → `cash_variance` (*descuadre*), and `verifyDailyCloseChain` which re-walks a `(tenant, node)` chain reporting the first break (`sequence`/`genesis`/`broken_link`/`hash_mismatch`/`tail_truncation`/`missing_head`). Headless; English schema tokens (`daily_closes`/`cash_variance`/`entry_hash`), Spanish *cierre Z*/*descuadre* UI-only. Copilot caught a tamper-detection gap in review — a deleted chain head with surviving closes read as `ok:true`; now caught as `missing_head`, proven by deletion in a real-PG test.
 - **#66** VAT-exact daily close (sub-project 8, slice 8a) — `sales.vat_breakdown jsonb NOT NULL` (0032) written from the *same* variable each sale-creating backend files (one source, cannot diverge from the huella); `computeVatSummary` reads it (`cross join lateral`, rate normalised as `numeric(5,2)::text`) so the daily close is exact per-rate for catalogue difference-method sales. No `computeHuella` change. Prerequisite for the frozen cierre Z (8b).
-- **#65** Menu & allergens (sub-project 18, slice 1) — EU-14 allergen declaration end-to-end: taxonomy + `validateAllergens` + `allergen.*` codes (`@waitron/catalogue`), a nullable `products.allergens jsonb` (0031), catalogue-ops threading, `/api/products` + `TillProduct` exposure, en/es names, a till **allergen screen** (matrix + operator lookup + print) with the `null`=PENDING-never-allergen-free invariant, and a demo. Legal basis (RD 126/2015 Art. 6.5) verified on primary source. Deferred: a `@media print` stylesheet so Print isolates the allergen sheet (convenience-only). Further sub-project-18 scope (recipes/BOM, variants, customer-facing browse) not started.
+- **#65** Menu & allergens (sub-project 18, slice 1) — EU-14 allergen declaration end-to-end: taxonomy + `validateAllergens` + `allergen.*` codes (`@waitron/catalogue`), a nullable `products.allergens jsonb` (0031), catalogue-ops threading, `/api/products` + `TillProduct` exposure, en/es names, a till **allergen screen** (matrix + operator lookup + print) with the `null`=PENDING-never-allergen-free invariant, and a demo. Legal basis (RD 126/2015 Art. 6.5) verified on primary source. Deferred: a `@media print` stylesheet so Print isolates the allergen sheet (convenience-only). Further sub-project-18 scope (recipes/BOM, variants, customer-facing browse) not started then — recipes/BOM allergen-inheritance backend since landed as #89.
 - **#64** Counter POS — integrated card terminal (Stripe Terminal / Tap-to-Pay): split-transaction pay (collect outside the fiscal tx), working-order-derived capture idempotency + lost-response recovery, `POST /api/pay`.
 - **#63** Counter POS 7c — prepare & collect: line-add price-snapshot lock, placing, per-location pay-timing (prepay / invoice-first / ticket-then-pay), amendment log, prep surface.
 - **#62** Counter POS — manual (*datáfono*) card tender + captured `payments` row.
@@ -523,7 +565,7 @@ active work (see *Now* / *Current direction*).
 | **6 — Locations** | **Provision-a-sellable-venue slice merged (#57)** (2026-08-04; see *Now*) — the foundational till-track unblocker. Country/territory-driven fiscal identity, `resolveFiscalModules` (común → Veri\*Factu + IVA, others refused), `planVenue` / `applyVenue` and the `waitron-provision venue` CLI stand up tenant → location → till → node → SIF → series so `recordSale` can chain a sale; the stale `bootstrap-tenant.sql` was **deleted**. Remaining sub-project 6 scope (multiple locations, editing/deactivation, the #33 SIF-topology deferrals) is under *Debt and odd jobs* → **Locations follow-ups** |
 | **8 — Reporting** | **Daily-close first slice done (#56)** — `@waitron/reporting`'s `computeDailyClose`. ***Cierre Z* (frozen/signed daily close) DONE** — 8a VAT-exact close (#66, `sales.vat_breakdown`), 8b immutable numbered `daily_closes` + per-node hash chain + per-till *descuadre* (#68). **Date-range VAT summary (`computeVatSummaryForPeriod`) + *modelo 303* output-VAT month aggregate (`computeVatReturn`) DONE (#76)** — pure reads over the filed desglose, one shared `aggregateVatByRate` core, civil-date bucketing, real-PG cross-tenant RLS proof; all in *Recently shipped*. Further unstarted slices: the **IVA deducible/soportado (input-VAT)** side (needs a purchase-invoice module), the **AEAT casilla mapping + submittable 303 form**, quarterly/annual periods, and the reporting **UI** (belongs to the till, #7). Reporting follow-ups are under *Debt* |
 | **16 — Workforce** | *Registro de jornada* legal floor **DONE (#47)**; **D2 scheduling DONE (#50)** — `convenio_config` surface (overtime de-hard-coded, single-sourced), shifts + `roster_versions` + `publishRoster`, absences/availability/shift_templates/shift_swaps, an **advisory** guardrail engine (`validateRoster` → `RosterBreach[]`; publish surfaces breaches but proceeds — owner chose warn+override) + a planned-vs-actual read model, and supersede-on-republish (partial unique index, one published roster per `(location, period)`). The overtime *rule* the both-model projection computes stays convenio-driven — an **asesor-laboral** call, not code. Remaining: **D3 payroll export** (integrate-not-build), plus the workforce follow-ups under *Debt and odd jobs*. Deferred edges from the floor: the registro export doesn't yet surface overtime (belongs to the payslip/D3); the correction period-fetch is a ±1-day window (a >1-day-relocation correction is out of the floor's scope, chained but maybe missed by the period fetch). A post-#47 `/finish-branch` review (landed as #52) corrected four floor defects: the registro export rendered UTC instead of local wall-clock; the tamper chain omitted a correction's reason/actor and the capturing till; correction precedence tie-broke on the unhashed `ingest_seq` (a floor-bypasser could reorder corrections undetected) — now on the hashed `sequence_no`; and a `clockIn`/`clockOut` TOCTOU (an unlocked state read before the chain-head lock let two concurrent same-person clock-ins append a double-`in` that undercounts worked time) — now serialized per person with a `persons` row lock proven by a real-PG concurrency test. **Authoring UI (dashboard) LANDED (#83, 2026-08-15)** — author a draft weekly roster on a person×day grid → view breaches → publish (`mountWorkforceApi` + `schedule.manage` + `<dashboard-roster-screen>`, no migration). **Roster-management slice 2 LANDED (#87, 2026-08-15)** — split-shift (*jornada partida*) authoring, manager approve/reject of swaps + absences (`decideSwap`/`setAbsenceStatus` + `swap.approve`/`absence.decide` + migration 0010 decider columns + approvals screen), and the planned-vs-actual view (`getPlannedVsActual`, published-roster only) — the **manager-approval half**; the **staff-facing request path** for swaps/absences is a separate later slice, and D3 payroll export remains. See *Recently shipped* → #87 for the deferred follow-ups |
-| **18 — Menu and allergens** | **Slice 1 (EU-14 allergen declaration) DONE (#65)** — taxonomy + `validateAllergens` + `allergen.*` codes (`@waitron/catalogue`), `products.allergens jsonb` (0031), `/api/products` + `TillProduct` exposure, en/es names, a till allergen screen (matrix + operator lookup + print), a demo; in *Recently shipped*. Allergen declaration is a **launch-day legal duty** (EU 1169/2011, RD 126/2015). **Remaining:** recipes/BOM (the linchpin), variants, customer-facing browse; the allergen list stays a food-safety-advisor call. Deferred `@media print` sheet-isolation edge under *Debt* |
+| **18 — Menu and allergens** | **Slice 1 (EU-14 allergen declaration) DONE (#65)** — taxonomy + `validateAllergens` + `allergen.*` codes (`@waitron/catalogue`), `products.allergens jsonb` (0031), `/api/products` + `TillProduct` exposure, en/es names, a till allergen screen (matrix + operator lookup + print), a demo; in *Recently shipped*. Allergen declaration is a **launch-day legal duty** (EU 1169/2011, RD 126/2015). **Recipes/BOM allergen-inheritance backend DONE (#89)** — `@waitron/recipes` derives a product's allergens from its ingredients (add-only, PENDING contagious). **Remaining:** the recipe-authoring **UI** (dashboard; reseed the picker from `manual_allergens`), **nested sub-recipes**, plate costing + stock (greenfield, sub-project 20), variants, customer-facing browse; the allergen list stays a food-safety-advisor call. Deferred `@media print` sheet-isolation edge under *Debt* |
 | 10-15, 17, 19, 20 | Tabs, floor plan, KDS, tip payroll, bookings, online ordering, accounting export, opening hours, procurement |
 
 **#18 (allergens) is a launch-day legal duty** — not fiscal, not optional — which is why its first
@@ -549,9 +591,11 @@ task today:
   view, and — flagged for an early fast-follow — **split-shift (*jornada partida*) authoring** (a
   person/day that already has a shift opens edit-only; the backend supports a second shift, the UI does
   not yet).
-- **Recipes / BOM** (sub-project 18) — **the linchpin**, and greenfield (no backend, no UI). Unlocks
-  stock depletion per sale, allergen *inheritance* from ingredients, and plate costing. Backend-first;
-  **declined for the autonomous window** (too many product + food-safety decisions to model unsupervised).
+- **Recipes / BOM** (sub-project 18) — **the linchpin**. **Allergen-inheritance backend LANDED (#89,
+  2026-08-16)** — `@waitron/recipes` (ingredient master + recipe composition) derives a product's
+  allergens from its ingredients. Still open on this linchpin: the recipe-authoring **UI** (dashboard —
+  reseed the allergen picker from `manual_allergens`), **nested sub-recipes**, and its other two
+  consumers, still greenfield — **plate costing** and **stock depletion per sale** ("150 g ham used").
 - **Stock-taking / inventory** (sub-project 20) — greenfield; downstream of recipes (a sale only becomes
   "150 g ham used" through the recipe).
 - **Supplies ordering / procurement** (sub-project 20) — greenfield; sits on inventory. **AI-assisted
