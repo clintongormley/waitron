@@ -41,8 +41,22 @@ function blankLine(): LineDraft {
   return { rate: "", base: "", tax: "", kind: "ordinary" };
 }
 
-/** True when `value` is a finite number within [min, max] — the form's amount-range check. */
+/**
+ * A well-formed non-negative decimal literal: one or more digits, an optional fractional part, and a
+ * leading-dot form (`.5`) allowed. Browser-local by design — the dashboard never imports `@waitron/shared`
+ * at runtime. Deliberately looser than the server's `decimal()` (it also accepts leading zeros): its only
+ * job is to reject the inputs that would otherwise reach the `numeric` column as an opaque 500 — empty,
+ * whitespace, a Spanish comma-decimal (`121,00`), or letters. Exact-format edge cases stay the server's.
+ */
+const DECIMAL = /^(?:\d+(?:\.\d+)?|\.\d+)$/;
+
+/**
+ * True when `value` is a well-formed non-negative decimal literal within [min, max] — the form's amount
+ * check. The `DECIMAL` test runs BEFORE the range test so an empty, whitespace or comma-decimal amount is
+ * rejected here (`Number("")` and `Number("  ")` are both `0`, which would otherwise pass the range).
+ */
 function inRange(value: string, min: number, max: number): boolean {
+  if (!DECIMAL.test(value)) return false;
   const n = Number(value);
   return Number.isFinite(n) && n >= min && n <= max;
 }
@@ -66,10 +80,14 @@ function inRange(value: string, min: number, max: number): boolean {
  *
  * CLIENT VALIDATION mirrors the op's checks for UX (the server stays authoritative): the required
  * header fields must be non-empty (`purchase.fields_required`), at least one VAT line must remain
- * (`purchase.lines_required`), and every line's base/tax must be ≥ 0 with a rate in 0–100 and the
- * deductible proportion in 0–100 (`purchase.amounts_invalid`). A failing check blocks confirm and shows
- * a `role="alert"`. A single-flight `busy` property (set by the screen while a write round-trips) makes
- * confirm a no-op — the create/update are not server-idempotent.
+ * (`purchase.lines_required`), and every amount — each line's base/tax, its rate, the gross total and
+ * the deductible proportion — must be a well-formed non-negative decimal (base/tax ≥ 0, rate 0–100,
+ * proportion 0–100), rejecting a blank, whitespace or comma-decimal value (`purchase.amounts_invalid`).
+ * That last check is what keeps a blank desglose line or a Spanish `121,00` from reaching the `numeric`
+ * column as a `22P02` → opaque 500; the server's exact-format check (`decimal()`) stays authoritative
+ * for the edge cases the browser-local `DECIMAL` pattern leaves through. A failing check blocks confirm
+ * and shows a `role="alert"`. A single-flight `busy` property (set by the screen while a write
+ * round-trips) makes confirm a no-op — the create/update are not server-idempotent.
  */
 @customElement("dashboard-purchase-form")
 export class PurchaseForm extends LitElement {
@@ -220,6 +238,7 @@ export class PurchaseForm extends LitElement {
       if (!inRange(line.tax, 0, Infinity)) return "purchase.amounts_invalid";
       if (!inRange(line.rate, 0, 100)) return "purchase.amounts_invalid";
     }
+    if (!inRange(this.total, 0, Infinity)) return "purchase.amounts_invalid";
     if (!inRange(this.deductibleProportion, 0, 100)) return "purchase.amounts_invalid";
     return null;
   }

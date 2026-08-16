@@ -47,14 +47,19 @@ function nextEvent<T>(el: PurchaseForm, type: string): Promise<CustomEvent<T>> {
   );
 }
 
-/** Fill the header + the first (auto-present) line with a valid single-rate invoice. */
-async function fillValid(el: PurchaseForm): Promise<void> {
+/** Fill ONLY the header (a valid total), leaving the auto-present first VAT line blank. */
+async function fillHeaderOnly(el: PurchaseForm): Promise<void> {
   await setInput(el, "supplier-tax-id", "B12345678");
   await setInput(el, "supplier-name", "Distribuciones García SL");
   await setInput(el, "supplier-invoice-number", "F-2026/001");
   await setInput(el, "issued-on", "2026-08-10");
   await setInput(el, "received-on", "2026-08-12");
   await setInput(el, "total", "121.00");
+}
+
+/** Fill the header + the first (auto-present) line with a valid single-rate invoice. */
+async function fillValid(el: PurchaseForm): Promise<void> {
+  await fillHeaderOnly(el);
   await setInput(el, "line-rate-0", "21.00");
   await setInput(el, "line-base-0", "100.00");
   await setInput(el, "line-tax-0", "21.00");
@@ -237,6 +242,84 @@ describe("purchase-form", () => {
     expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
       codeMessage("purchase.amounts_invalid", "es-ES"),
     );
+  });
+
+  // ── Empty / non-decimal amounts must be caught client-side, not slipped through to an opaque 500 ──
+  // A blank line (the create form's default) and a Spanish comma-decimal both pass `typeof === string`
+  // at the server boundary and reach the `numeric` column as a `22P02` → opaque `server.internal` 500.
+  // The form must mirror the op's checks so these show the friendly `amounts_invalid` instead.
+
+  it("blocks confirm on the default single BLANK VAT line (amounts_invalid, not an opaque 500)", async () => {
+    const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+    await fillHeaderOnly(el); // header valid; the auto-present first line is left blank
+    let fired = false;
+    el.addEventListener("create-purchase", () => (fired = true));
+    await click(el, "confirm");
+    expect(fired).toBe(false);
+    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
+      codeMessage("purchase.amounts_invalid", "es-ES"),
+    );
+  });
+
+  it.each([
+    ["empty base", { field: "line-base-0", value: "" }],
+    ["whitespace tax", { field: "line-tax-0", value: "  " }],
+    ["comma-decimal base", { field: "line-base-0", value: "100,00" }],
+    ["comma-decimal total", { field: "total", value: "121,00" }],
+    ["comma-decimal proportion", { field: "deductible-proportion", value: "50,5" }],
+  ])(
+    "blocks confirm with amounts_invalid on a %s (no opaque 500)",
+    async (_label, { field, value }) => {
+      const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+      await fillValid(el);
+      await setInput(el, field, value);
+      let fired = false;
+      el.addEventListener("create-purchase", () => (fired = true));
+      await click(el, "confirm");
+      expect(fired).toBe(false);
+      expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
+        codeMessage("purchase.amounts_invalid", "es-ES"),
+      );
+    },
+  );
+
+  // A blank/whitespace TOTAL is a missing REQUIRED field, so the required-field check (which runs
+  // first) wins — the operator is told to fill it in rather than to fix an amount. Either way, no 500.
+  it("blocks a whitespace total as fields_required, never reaching the server", async () => {
+    const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+    await fillValid(el);
+    await setInput(el, "total", "  ");
+    let fired = false;
+    el.addEventListener("create-purchase", () => (fired = true));
+    await click(el, "confirm");
+    expect(fired).toBe(false);
+    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
+      codeMessage("purchase.fields_required", "es-ES"),
+    );
+  });
+
+  it.each([".5", "21.00", "0", "100"])(
+    "still emits create-purchase for a valid dot-decimal total %s",
+    async (total) => {
+      const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+      await fillValid(el);
+      await setInput(el, "total", total);
+      let fired = false;
+      el.addEventListener("create-purchase", () => (fired = true));
+      await click(el, "confirm");
+      expect(fired).toBe(true);
+    },
+  );
+
+  it("still emits create-purchase for a leading-dot decimal line amount (.5)", async () => {
+    const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+    await fillValid(el);
+    await setInput(el, "line-base-0", ".5");
+    await setInput(el, "line-tax-0", ".5");
+    let fired = false;
+    el.addEventListener("create-purchase", () => (fired = true));
+    await click(el, "confirm");
+    expect(fired).toBe(true);
   });
 
   it("clears the validation error once a header or line field is edited after a failed confirm", async () => {
