@@ -5,6 +5,7 @@ import { currentLocale, setLocale, t } from "./i18n/t.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
+import type { TillScheduleScreen } from "./screens/till-schedule-screen.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillPrepQueue } from "./widgets/prep-queue.js";
 import type { TillProductGrid } from "./widgets/product-grid.js";
@@ -134,6 +135,8 @@ const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen");
 const ticket = (el: TillApp) => el.shadowRoot!.querySelector<TillTicketView>("till-ticket-view");
+const schedule = (el: TillApp) =>
+  el.shadowRoot!.querySelector<TillScheduleScreen>("till-schedule-screen");
 /** The pay widget nested inside the counter screen's OWN shadow root (7c per-mode control). */
 const tenderPay = (el: TillApp) =>
   counter(el)!.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
@@ -796,6 +799,55 @@ describe("till-app", () => {
     expect(lock(el)).not.toBeNull();
     expect(counter(el)).toBeNull();
     // THE load-bearing assertion: a shift change never loses the half-built order.
+    expect(store.lines).toHaveLength(2);
+    expect(store.lines[0]!.product).toBe(cafe);
+  });
+
+  it("show-schedule shows the schedule screen (basket preserved) and threads the roster + operator id", async () => {
+    const { el } = await mountApp({
+      listMyShifts: vi.fn().mockResolvedValue([]),
+      listMySwaps: vi.fn().mockResolvedValue([]),
+      listMyAbsences: vi.fn().mockResolvedValue([]),
+    });
+    const c = await toCounter(el);
+    const store = c.store;
+    store.addProduct(cafe, "2");
+    await el.updateComplete;
+
+    emit(c, "show-schedule");
+    await flush(el);
+
+    expect(schedule(el)).not.toBeNull();
+    expect(counter(el)).toBeNull();
+    // Basket-preserving, like logout: navigating to the schedule never loses the half-built order.
+    expect(store.lines).toHaveLength(1);
+    // The roster (from listStaff) and the logged-in operator id reach the schedule screen.
+    expect(schedule(el)!.operatorPersonId).toBe("p1");
+    expect(schedule(el)!.staff).toEqual([{ personId: "p1", displayName: "Ana" }]);
+  });
+
+  it("back-to-counter returns to the counter with the basket intact after a schedule round trip", async () => {
+    const { el } = await mountApp({
+      listMyShifts: vi.fn().mockResolvedValue([]),
+      listMySwaps: vi.fn().mockResolvedValue([]),
+      listMyAbsences: vi.fn().mockResolvedValue([]),
+    });
+    const c = await toCounter(el);
+    const store = c.store;
+    store.addProduct(cafe, "2");
+    store.addProduct(cafe, "1");
+    await el.updateComplete;
+
+    emit(c, "show-schedule");
+    await flush(el);
+    expect(schedule(el)).not.toBeNull();
+
+    emit(schedule(el)!, "back-to-counter");
+    await flush(el);
+
+    expect(counter(el)).not.toBeNull();
+    expect(schedule(el)).toBeNull();
+    // The load-bearing assertion: the basket survives the whole counter → schedule → counter round trip.
     expect(store.lines).toHaveLength(2);
     expect(store.lines[0]!.product).toBe(cafe);
   });

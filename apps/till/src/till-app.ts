@@ -10,6 +10,7 @@ import { LAYOUT_A } from "./layout.js";
 import "./screens/till-lock-screen.js";
 import "./screens/till-counter-screen.js";
 import "./screens/till-ticket-view.js";
+import "./screens/till-schedule-screen.js";
 import type { StringKey } from "./i18n/strings.js";
 import type {
   HeldOrderSummary,
@@ -17,6 +18,7 @@ import type {
   PayOutcome,
   PrepQueueEntry,
   PrepState,
+  StaffMember,
   TillInfo,
   TillProduct,
   TillSaleResult,
@@ -31,8 +33,8 @@ import type {
   ParkOrderDetail,
 } from "./widgets/tender-pay.js";
 
-/** The three faces of the till: sign in, ring up, print. The app shows exactly one at a time. */
-type Screen = "lock" | "counter" | "ticket";
+/** The faces of the till: sign in, ring up, print, and the staff schedule. One at a time. */
+type Screen = "lock" | "counter" | "ticket" | "schedule";
 
 /**
  * The quantity string to DISPLAY for a retrieved parked line. The server stores and returns every
@@ -140,6 +142,13 @@ export class TillApp extends LitElement {
   @state() private products: TillProduct[] = [];
   /** The logged-in operator's display name, shown in the counter header. */
   @state() private operatorName = "";
+  /** The logged-in operator's person id — threaded to the schedule screen so it can filter the
+   * operator out of the colleague picker (you cannot offer a shift to yourself). */
+  @state() private operatorPersonId = "";
+  /** The active staff roster, loaded at login (unauthenticated `GET /api/staff`) and threaded to the
+   * schedule screen's colleague picker. Defaults empty — a roster fetch failure leaves the picker
+   * empty rather than blocking the counter. */
+  @state() private staff: StaffMember[] = [];
   /**
    * The node's OPEN parked orders (the cross-till held list), handed to the counter's held-orders
    * widget. Refreshed from `listWorkingOrders` on entering the counter and after every park, retrieve,
@@ -286,16 +295,21 @@ export class TillApp extends LitElement {
   }
 
   /** A confirmed login: load the catalogue, remember the operator, show the counter, list held orders
-   * and (Modes I/T) the prep queue. */
+   * and (Modes I/T) the prep queue, then load the colleague roster for the schedule screen. */
   async #onLoggedIn(event: Event): Promise<void> {
-    const { displayName } = (event as CustomEvent<LoggedInDetail>).detail;
+    const { personId, displayName } = (event as CustomEvent<LoggedInDetail>).detail;
     const products = await this.api.listProducts();
     this.products = products;
     this.operatorName = displayName;
+    this.operatorPersonId = personId;
     this.errorKey = undefined;
     this.screen = "counter";
     await this.#refreshHeldOrders();
     await this.#refreshPrepQueue();
+    // The colleague roster for the staff schedule screen (unauthenticated `GET /api/staff`). Loaded
+    // AFTER the counter is shown so a roster fetch failure never blocks the sale flow; the schedule
+    // screen picks it up reactively via its `.staff` prop whenever it lands.
+    this.staff = await this.api.listStaff();
   }
 
   /**
@@ -693,6 +707,19 @@ export class TillApp extends LitElement {
     this.screen = "counter";
   }
 
+  /** Show the staff schedule screen (from the counter's "My schedule" control) WITHOUT clearing the
+   * basket — the basket is till-owned and survives the round trip, exactly like logout. */
+  #onShowSchedule(): void {
+    this.errorKey = undefined;
+    this.screen = "schedule";
+  }
+
+  /** Return from the schedule screen to the counter, basket intact. */
+  #onBackToCounter(): void {
+    this.errorKey = undefined;
+    this.screen = "counter";
+  }
+
   /** End the shift: tear the server session down, back to lock — but KEEP the basket (till-owned). */
   async #onLogout(): Promise<void> {
     await this.api.logout();
@@ -736,6 +763,8 @@ export class TillApp extends LitElement {
         @retrieve-order=${(event: Event) => void this.#onRetrieveOrder(event)}
         @discard-order=${(event: Event) => void this.#onDiscardOrder(event)}
         @new-sale=${() => this.#onNewSale()}
+        @show-schedule=${() => this.#onShowSchedule()}
+        @back-to-counter=${() => this.#onBackToCounter()}
         @logout=${() => void this.#onLogout()}
       >
         ${this.errorKey ? html`<p class="error" role="alert">${t(this.errorKey)}</p>` : nothing}
@@ -771,6 +800,12 @@ export class TillApp extends LitElement {
           .invoiceLocale=${this.invoiceLocale}
           .receipt=${this.receipt}
         ></till-ticket-view>`;
+      case "schedule":
+        return html`<till-schedule-screen
+          .api=${this.api}
+          .staff=${this.staff}
+          .operatorPersonId=${this.operatorPersonId}
+        ></till-schedule-screen>`;
     }
   }
 }
