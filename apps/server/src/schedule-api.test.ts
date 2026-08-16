@@ -113,18 +113,28 @@ describe("mountScheduleApi — shifts", () => {
     const shiftId = await insertShift(me, "2026-05-04T09:00:00Z", "2026-05-04T17:00:00Z");
     // A colleague's shift in the same window must NOT appear.
     await insertShift(colleague, "2026-05-04T10:00:00Z", "2026-05-04T18:00:00Z");
-    const res = await send(mountApp(), "GET", "/api/schedule/shifts?from=2026-05-04&to=2026-05-11", {
-      cookie: await cookieFor(me, "1111"),
-    });
+    const res = await send(
+      mountApp(),
+      "GET",
+      "/api/schedule/shifts?from=2026-05-04&to=2026-05-11",
+      {
+        cookie: await cookieFor(me, "1111"),
+      },
+    );
     expect(res.status).toBe(200);
     const rows = (await res.json()) as { id: string }[];
     expect(rows.map((r) => r.id)).toEqual([shiftId]);
   });
 
   it("401s (session.required) when no session cookie is sent", async () => {
-    const res = await send(mountApp(), "GET", "/api/schedule/shifts?from=2026-05-04&to=2026-05-11", {
-      cookie: null,
-    });
+    const res = await send(
+      mountApp(),
+      "GET",
+      "/api/schedule/shifts?from=2026-05-04&to=2026-05-11",
+      {
+        cookie: null,
+      },
+    );
     expect(res.status).toBe(401);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "session.required" },
@@ -147,7 +157,11 @@ describe("mountScheduleApi — swaps", () => {
     const myShift = await insertShift(me, "2026-05-05T09:00:00Z", "2026-05-05T17:00:00Z");
     const theirShift = await insertShift(colleague, "2026-05-06T09:00:00Z", "2026-05-06T17:00:00Z");
     const mine = await insertSwap({ requestedBy: me, fromShiftId: myShift, toPerson: colleague });
-    const toMe = await insertSwap({ requestedBy: colleague, fromShiftId: theirShift, toPerson: me });
+    const toMe = await insertSwap({
+      requestedBy: colleague,
+      fromShiftId: theirShift,
+      toPerson: me,
+    });
     const res = await send(mountApp(), "GET", "/api/schedule/swaps", {
       cookie: await cookieFor(me, "1111"),
     });
@@ -164,7 +178,12 @@ describe("mountScheduleApi — swaps", () => {
       cookie: await cookieFor(me, "1111"),
       // A hostile `requestedByPersonId` in the body is IGNORED — identity comes from the session only
       // (the real-PG identity test proves this by deletion; here we assert the filed row is `me`).
-      body: { fromShiftId: myShift, toPersonId: colleague, toShiftId: null, requestedByPersonId: colleague },
+      body: {
+        fromShiftId: myShift,
+        toPersonId: colleague,
+        toShiftId: null,
+        requestedByPersonId: colleague,
+      },
     });
     expect(res.status).toBe(201);
     const { swapId } = (await res.json()) as { swapId: string };
@@ -230,7 +249,11 @@ describe("mountScheduleApi — swaps", () => {
 
   it("POST /api/schedule/swaps/:swapId/accept accepts a swap offered to me (204)", async () => {
     const theirShift = await insertShift(colleague, "2026-05-09T09:00:00Z", "2026-05-09T17:00:00Z");
-    const swapId = await insertSwap({ requestedBy: colleague, fromShiftId: theirShift, toPerson: me });
+    const swapId = await insertSwap({
+      requestedBy: colleague,
+      fromShiftId: theirShift,
+      toPerson: me,
+    });
     const res = await send(mountApp(), "POST", `/api/schedule/swaps/${swapId}/accept`, {
       cookie: await cookieFor(me, "1111"),
     });
@@ -311,7 +334,13 @@ describe("mountScheduleApi — absences", () => {
   it("POST /api/schedule/absences files an absence as the SESSION's person (201 { absenceId })", async () => {
     const res = await send(mountApp(), "POST", "/api/schedule/absences", {
       cookie: await cookieFor(me, "1111"),
-      body: { kind: "holiday", startsOn: "2026-07-01", endsOn: "2026-07-05", note: "Vacaciones", personId: colleague },
+      body: {
+        kind: "holiday",
+        startsOn: "2026-07-01",
+        endsOn: "2026-07-05",
+        note: "Vacaciones",
+        personId: colleague,
+      },
     });
     expect(res.status).toBe(201);
     const { absenceId } = (await res.json()) as { absenceId: string };

@@ -84,9 +84,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   } as unknown as TillApi;
 }
 
-async function mount(
-  api: TillApi,
-): Promise<{ el: TillScheduleScreen; host: HTMLElement }> {
+async function mount(api: TillApi): Promise<{ el: TillScheduleScreen; host: HTMLElement }> {
   const mounted = await mountWidget<TillScheduleScreen>("till-schedule-screen", {
     api,
     staff,
@@ -115,7 +113,9 @@ function setSelect(el: TillScheduleScreen, selector: string, value: string): voi
 function setInput(el: TillScheduleScreen, selector: string, value: string): void {
   root(el)
     .querySelector(selector)!
-    .dispatchEvent(new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }));
+    .dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
 }
 
 afterEach(cleanupWidgets);
@@ -140,9 +140,9 @@ describe("till-schedule-screen", () => {
 
   it("names an off-roster swap requester by their id when they are not on the roster", async () => {
     const api = stubApi({
-      listMySwaps: vi.fn().mockResolvedValue([
-        { ...swaps[0], id: "sw-x", requestedByPersonId: "ghost" },
-      ]),
+      listMySwaps: vi
+        .fn()
+        .mockResolvedValue([{ ...swaps[0], id: "sw-x", requestedByPersonId: "ghost" }]),
     });
     const { el } = await mount(api);
     // Not on the roster (`staff` has only me + col1), so the raw id shows as a defensive fallback.

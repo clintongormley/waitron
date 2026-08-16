@@ -452,10 +452,7 @@ export class TillApi {
 
   /** My shifts over a half-open `[from, to)` window (`YYYY-MM-DD`) → `GET /api/schedule/shifts`. */
   listMyShifts(from: string, to: string): Promise<MyShift[]> {
-    return this.#request<MyShift[]>(
-      `/api/schedule/shifts?from=${from}&to=${to}`,
-      "GET",
-    );
+    return this.#request<MyShift[]>(`/api/schedule/shifts?from=${from}&to=${to}`, "GET");
   }
 
   /** The swaps I'm party to (offered to me, or requested by me) → `GET /api/schedule/swaps`. */

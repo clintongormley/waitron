@@ -624,9 +624,11 @@ describe("TillApi", () => {
   });
 
   it("requestSwap surfaces { code } for a shift the requester does not own", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: { code: "swap.not_permitted" } }), { status: 403 }),
-    );
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ error: { code: "swap.not_permitted" } }), { status: 403 }),
+      );
 
     await expect(
       new TillApi("", fetchStub).requestSwap({
@@ -705,9 +707,11 @@ describe("TillApi", () => {
   });
 
   it("requestAbsence surfaces { code } on an overlapping range", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: { code: "absence.overlaps" } }), { status: 409 }),
-    );
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ error: { code: "absence.overlaps" } }), { status: 409 }),
+      );
 
     await expect(
       new TillApi("", fetchStub).requestAbsence({

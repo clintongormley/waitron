@@ -3,7 +3,14 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import type { AbsenceKind, MyAbsence, MyShift, MySwap, StaffMember, TillApi } from "../api/client.js";
+import type {
+  AbsenceKind,
+  MyAbsence,
+  MyShift,
+  MySwap,
+  StaffMember,
+  TillApi,
+} from "../api/client.js";
 
 /** The four absence kinds, in display order — the request form's Type picker. Mirrors the server's
  * `absence_kind` enum; the server re-validates. */
@@ -282,9 +289,11 @@ export class TillScheduleScreen extends LitElement {
             ${t("schedule.back")}
           </wt-button>
         </header>
-        ${this.noticeCode
-          ? html`<p class="notice" role="alert">${codeMessage(this.noticeCode)}</p>`
-          : nothing}
+        ${
+          this.noticeCode
+            ? html`<p class="notice" role="alert">${codeMessage(this.noticeCode)}</p>`
+            : nothing
+        }
         ${this.#body()}
       </wt-card>
     `;
@@ -295,9 +304,11 @@ export class TillScheduleScreen extends LitElement {
       return html`<p class="status">${t("schedule.loading")}</p>`;
     }
     return html`
-      ${this.loadFailed
-        ? html`<p class="status notice" role="alert">${t("schedule.load_failed")}</p>`
-        : nothing}
+      ${
+        this.loadFailed
+          ? html`<p class="status notice" role="alert">${t("schedule.load_failed")}</p>`
+          : nothing
+      }
       ${this.#shiftsSection()} ${this.#swapsSection()} ${this.#coverSection()}
       ${this.#absencesSection()} ${this.#absenceForm()}
     `;
@@ -307,15 +318,18 @@ export class TillScheduleScreen extends LitElement {
     const shifts = this.shifts ?? [];
     return html`<section class="shifts">
       <h2>${t("schedule.shifts_title")}</h2>
-      ${shifts.length === 0
-        ? html`<p class="status">${t("schedule.shifts_empty")}</p>`
-        : html`<ul>
-            ${shifts.map(
-              (shift) => html`<li class="shift" data-shift=${shift.id}>
-                <span>${this.#shiftLabel(shift)}</span>
-              </li>`,
-            )}
-          </ul>`}
+      ${
+        shifts.length === 0
+          ? html`<p class="status">${t("schedule.shifts_empty")}</p>`
+          : html`<ul>
+              ${shifts.map(
+                (shift) =>
+                  html`<li class="shift" data-shift=${shift.id}>
+                    <span>${this.#shiftLabel(shift)}</span>
+                  </li>`,
+              )}
+            </ul>`
+      }
     </section>`;
   }
 
@@ -326,23 +340,26 @@ export class TillScheduleScreen extends LitElement {
     );
     return html`<section class="swaps">
       <h2>${t("schedule.swaps_title")}</h2>
-      ${offered.length === 0
-        ? html`<p class="status">${t("schedule.swaps_empty")}</p>`
-        : html`<ul>
-            ${offered.map(
-              (swap) => html`<li class="swap" data-swap=${swap.id}>
-                <span class="meta">${this.#personName(swap.requestedByPersonId)}</span>
-                <wt-button
-                  class="accept"
-                  variant="primary"
-                  ?disabled=${this.busy}
-                  @click=${() => this.#accept(swap.id)}
-                >
-                  ${t("schedule.accept")}
-                </wt-button>
-              </li>`,
-            )}
-          </ul>`}
+      ${
+        offered.length === 0
+          ? html`<p class="status">${t("schedule.swaps_empty")}</p>`
+          : html`<ul>
+              ${offered.map(
+                (swap) =>
+                  html`<li class="swap" data-swap=${swap.id}>
+                    <span class="meta">${this.#personName(swap.requestedByPersonId)}</span>
+                    <wt-button
+                      class="accept"
+                      variant="primary"
+                      ?disabled=${this.busy}
+                      @click=${() => this.#accept(swap.id)}
+                    >
+                      ${t("schedule.accept")}
+                    </wt-button>
+                  </li>`,
+              )}
+            </ul>`
+      }
     </section>`;
   }
 
@@ -396,16 +413,22 @@ export class TillScheduleScreen extends LitElement {
     const absences = this.absences ?? [];
     return html`<section class="absences">
       <h2>${t("schedule.absences_title")}</h2>
-      ${absences.length === 0
-        ? html`<p class="status">${t("schedule.absences_empty")}</p>`
-        : html`<ul>
-            ${absences.map(
-              (absence) => html`<li class="absence" data-absence=${absence.id}>
-                <span>${t(`schedule.kind.${absence.kind}`)} · ${absence.startsOn} – ${absence.endsOn}</span>
-                <span class="meta">${t(`schedule.status.${absence.status}`)}</span>
-              </li>`,
-            )}
-          </ul>`}
+      ${
+        absences.length === 0
+          ? html`<p class="status">${t("schedule.absences_empty")}</p>`
+          : html`<ul>
+              ${absences.map(
+                (absence) =>
+                  html`<li class="absence" data-absence=${absence.id}>
+                    <span
+                      >${t(`schedule.kind.${absence.kind}`)} · ${absence.startsOn} –
+                      ${absence.endsOn}</span
+                    >
+                    <span class="meta">${t(`schedule.status.${absence.status}`)}</span>
+                  </li>`,
+              )}
+            </ul>`
+      }
     </section>`;
   }
 
