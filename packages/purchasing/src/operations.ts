@@ -53,6 +53,10 @@ const LINE_SELECT = {
   kind: purchaseInvoiceVat.kind,
 };
 
+// The line INSERT's RETURNING columns: LINE_SELECT plus the generated `id`, needed to reproduce
+// `selectLines`' `orderBy(asc(rate), asc(id))` tie-break in JS without a re-read.
+const LINE_RETURNING = { ...LINE_SELECT, id: purchaseInvoiceVat.id };
+
 interface HeaderRow {
   id: string;
   supplierTaxId: string;
@@ -72,6 +76,10 @@ interface LineRow {
   base: string;
   tax: string;
   kind: PurchaseVatKind;
+}
+
+interface LineRowWithId extends LineRow {
+  id: string;
 }
 
 function mapHeader(row: HeaderRow): Omit<PurchaseInvoice, "lines"> {
@@ -122,22 +130,44 @@ function validateLines(lines: readonly PurchaseInvoiceLineInput[]): void {
   }
 }
 
-/** Insert the VAT lines of one invoice. `kind` omitted falls to the column default (`ordinary`). */
+/**
+ * Insert the VAT lines of one invoice and return the STORED rows via RETURNING, so DB defaults (`kind`
+ * omitted → `ordinary`) and numeric-scale normalization ("21" → "21.00") are reflected without a
+ * re-read. `kind` omitted falls to the column default. Callers that do not need the rows discard them.
+ */
 async function insertLines(
   tx: Transaction,
   invoiceId: string,
   lines: readonly PurchaseInvoiceLineInput[],
-): Promise<void> {
-  await tx.insert(purchaseInvoiceVat).values(
-    lines.map((line) => ({
-      tenantId: CURRENT_TENANT,
-      purchaseInvoiceId: invoiceId,
-      rate: line.rate,
-      base: line.base,
-      tax: line.tax,
-      kind: line.kind,
-    })),
-  );
+): Promise<LineRowWithId[]> {
+  return tx
+    .insert(purchaseInvoiceVat)
+    .values(
+      lines.map((line) => ({
+        tenantId: CURRENT_TENANT,
+        purchaseInvoiceId: invoiceId,
+        rate: line.rate,
+        base: line.base,
+        tax: line.tax,
+        kind: line.kind,
+      })),
+    )
+    .returning(LINE_RETURNING);
+}
+
+/**
+ * Order RETURNING'd line rows exactly as `selectLines`' `orderBy(asc(rate), asc(id))` would: by rate
+ * ascending (numeric compare, so "10.00" precedes "21.00"), ties broken by `id` — the canonical
+ * lowercase UUID string compares the same way PostgreSQL orders the `uuid` type. Sorts in place.
+ */
+function sortLineRows(rows: LineRowWithId[]): LineRowWithId[] {
+  return rows.sort((a, b) => {
+    const byRate = compareDecimal(a.rate as Decimal, b.rate as Decimal);
+    if (byRate !== 0) return byRate;
+    // Branchless id compare (no dependence on random-UUID ordering for coverage): the canonical
+    // lowercase UUID string compares the same way PostgreSQL orders the `uuid` type.
+    return Number(a.id > b.id) - Number(a.id < b.id);
+  });
 }
 
 /** VAT lines of one invoice, in a stable order (rate asc, then id). */
@@ -164,7 +194,12 @@ export async function createPurchaseInvoice(
   validateProportion(input.header.deductibleProportion);
   validateLines(input.lines);
 
-  let id: string;
+  // RETURNING the STORED header + line tuples rather than re-reading them: the DB applies the same
+  // column defaults (`regime` → general, `deductible_proportion` → 100.00, line `kind` → ordinary) and
+  // numeric-scale normalization it would on a SELECT, so the returned shape is identical to the old
+  // insert-then-getPurchaseInvoice re-read — two fewer round-trips, mirroring the catalogue/recipes
+  // `.values(...).returning(COLUMNS)` house pattern this module follows.
+  let header: Omit<PurchaseInvoice, "lines">;
   try {
     const [row] = await tx
       .insert(purchaseInvoices)
@@ -180,8 +215,8 @@ export async function createPurchaseInvoice(
         deductibleProportion: input.header.deductibleProportion,
         note: input.header.note ?? null,
       })
-      .returning({ id: purchaseInvoices.id });
-    id = row!.id;
+      .returning(HEADER_SELECT);
+    header = mapHeader(row!);
   } catch (error) {
     if (isUniqueViolation(error)) {
       // A translation, not a recovery: Postgres has already aborted the transaction (the same note
@@ -195,9 +230,8 @@ export async function createPurchaseInvoice(
     throw error;
   }
 
-  await insertLines(tx, id, input.lines);
-  const created = await getPurchaseInvoice(tx, id);
-  return created!;
+  const lines = sortLineRows(await insertLines(tx, header.id, input.lines)).map(mapLine);
+  return { ...header, lines };
 }
 
 /** The header plus its VAT lines, or null when no invoice with `id` is visible in this tenant. */

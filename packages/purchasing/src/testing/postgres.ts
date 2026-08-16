@@ -10,7 +10,8 @@ export type { RealPostgres };
 /**
  * The setup budget the container suite needs (image pull on a cold runner), passed to
  * `useRealPostgres`'s `timeoutMs`; without it the per-hook argument would drop to Vitest's 5s
- * default. Mirrors packages/recipes/reporting's own copies.
+ * default. Mirrors the same constant in reporting/fiscal-verifactu/identity/workforce/workforce-es's
+ * own copies (packages/recipes inlines the 180_000 at its call sites rather than naming a constant).
  */
 export const CONTAINER_SETUP_TIMEOUT_MS = 180_000;
 

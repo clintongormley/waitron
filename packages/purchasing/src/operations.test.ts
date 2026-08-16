@@ -80,6 +80,27 @@ describe("purchase-invoice operations", () => {
     expect(fetched).toEqual(created);
   });
 
+  it("orders same-rate lines identically to the DB read-back (RETURNING sort ⇔ selectLines)", async () => {
+    // Three lines at the SAME rate exercise the id tie-break in create's RETURNING sort. `created` is
+    // built from RETURNING and sorted in JS; `fetched` is read back via selectLines' `orderBy(asc(rate),
+    // asc(id))`. They must be line-for-line identical — proving the JS id compare reproduces
+    // PostgreSQL's uuid ordering, which is the ordering the old insert-then-re-read guaranteed.
+    const { created, fetched } = await asApp(async (tx) => {
+      const created = await createPurchaseInvoice(tx, {
+        header: { ...baseInput().header, supplierInvoiceNumber: "SAME-RATE" },
+        lines: [
+          { rate: d("21.00"), base: d("200.00"), tax: d("42.00") },
+          { rate: d("21.00"), base: d("10.00"), tax: d("2.10"), kind: "capital" },
+          { rate: d("21.00"), base: d("30.00"), tax: d("6.30") },
+        ],
+      });
+      return { created, fetched: await getPurchaseInvoice(tx, created.id) };
+    });
+    expect(created.lines).toHaveLength(3);
+    expect(created.lines.map((l) => l.rate)).toEqual(["21.00", "21.00", "21.00"]);
+    expect(fetched).toEqual(created);
+  });
+
   it("stores the supplier's filed tax verbatim, not a recomputed base×rate", async () => {
     // A difference-method supplier cuota: 20.99, not round(100 × 21%) = 21.00. We file what they
     // charged (the exactness rule the sales/output side follows).
