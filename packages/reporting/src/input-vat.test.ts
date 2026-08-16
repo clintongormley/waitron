@@ -55,9 +55,7 @@ describe("computeInputVat", () => {
       lines: [{ rate: "21.00", base: "100.00", tax: "20.99" }],
     });
     const ret = await run({ year: 2026, month: 8 });
-    expect(ret.byRate).toEqual([
-      { rate: "21.00", base: "200.00", tax: "41.98", kind: "ordinary" },
-    ]);
+    expect(ret.byRate).toEqual([{ rate: "21.00", base: "200.00", tax: "41.98", kind: "ordinary" }]);
     expect(ret).toMatchObject({
       tenantId: venue.tenantId,
       year: 2026,

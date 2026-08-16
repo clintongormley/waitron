@@ -51,13 +51,14 @@ export interface Modelo303 {
 // The devengado per-rate box triple [base, rate(tipo), cuota] per VERIFIED rate (spec §7). 4% → 01/02/03,
 // 10% → 04/05/06, 21% → 07/08/09, 0% → 150/151/152. The 5% row (153/154/155) is GONE from the 2026 form
 // (the temporary energy rate expired), so it is absent here and a 5% line is refused rather than misfiled.
-const DEVENGADO_BOXES: Readonly<Record<string, readonly [baseBox: string, rateBox: string, taxBox: string]>> =
-  {
-    "4.00": ["01", "02", "03"],
-    "10.00": ["04", "05", "06"],
-    "21.00": ["07", "08", "09"],
-    "0.00": ["150", "151", "152"],
-  };
+const DEVENGADO_BOXES: Readonly<
+  Record<string, readonly [baseBox: string, rateBox: string, taxBox: string]>
+> = {
+  "4.00": ["01", "02", "03"],
+  "10.00": ["04", "05", "06"],
+  "21.00": ["07", "08", "09"],
+  "0.00": ["150", "151", "152"],
+};
 
 const ZERO = decimal("0.00");
 /** % atribuible al Estado for a common-territory-only deli (spec §7, VERIFIED for that case). */

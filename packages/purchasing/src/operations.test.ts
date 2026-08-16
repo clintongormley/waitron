@@ -125,7 +125,11 @@ describe("purchase-invoice operations", () => {
     const after = await asApp(async (tx) => {
       const c = await createPurchaseInvoice(tx, baseInput());
       await updatePurchaseInvoice(tx, c.id, {
-        header: { supplierName: "Renombrado SL", deductibleProportion: d("50.00"), note: "prorrata" },
+        header: {
+          supplierName: "Renombrado SL",
+          deductibleProportion: d("50.00"),
+          note: "prorrata",
+        },
       });
       return getPurchaseInvoice(tx, c.id);
     });
@@ -228,7 +232,9 @@ describe("purchase-invoice operations", () => {
         }),
       ),
     );
-    expect(hasCode(error, "purchase.invalid") && error.params.reason).toBe("proportion_out_of_range");
+    expect(hasCode(error, "purchase.invalid") && error.params.reason).toBe(
+      "proportion_out_of_range",
+    );
   });
 
   it("propagates a non-unique DB error from the header insert (not swallowed as a duplicate)", async () => {
@@ -259,7 +265,9 @@ describe("purchase-invoice operations", () => {
 });
 
 /** Runs `fn`, returning the AppError it throws — failing loudly if it does not throw one. */
-async function captureAppError(fn: () => Promise<unknown>): Promise<import("@waitron/shared").AppError> {
+async function captureAppError(
+  fn: () => Promise<unknown>,
+): Promise<import("@waitron/shared").AppError> {
   const error = await captureThrown(fn);
   if (isAppError(error)) return error;
   throw error instanceof Error ? error : new Error("expected an AppError to be thrown");

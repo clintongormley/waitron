@@ -205,7 +205,10 @@ export async function getPurchaseInvoice(
   tx: Transaction,
   id: string,
 ): Promise<PurchaseInvoice | null> {
-  const [row] = await tx.select(HEADER_SELECT).from(purchaseInvoices).where(eq(purchaseInvoices.id, id));
+  const [row] = await tx
+    .select(HEADER_SELECT)
+    .from(purchaseInvoices)
+    .where(eq(purchaseInvoices.id, id));
   if (row === undefined) return null;
   return { ...mapHeader(row), lines: await selectLines(tx, id) };
 }

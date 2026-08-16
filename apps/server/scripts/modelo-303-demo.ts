@@ -413,7 +413,9 @@ function reconcileDeducible(
     problems.push(`deducible taxTotal (cuota) ${actual.taxTotal} != expected ${expTax}`);
   }
   if (actual.byRate.length !== expected.length) {
-    problems.push(`deducible byRate has ${actual.byRate.length} lines, expected ${expected.length}`);
+    problems.push(
+      `deducible byRate has ${actual.byRate.length} lines, expected ${expected.length}`,
+    );
   } else {
     for (let i = 0; i < expected.length; i++) {
       const a = actual.byRate[i]!;
@@ -431,7 +433,9 @@ function reconcileDeducible(
     }
   }
   if (problems.length > 0) {
-    throw new Error(`modelo-303-demo: IVA deducible did not reconcile:\n  ${problems.join("\n  ")}`);
+    throw new Error(
+      `modelo-303-demo: IVA deducible did not reconcile:\n  ${problems.join("\n  ")}`,
+    );
   }
 }
 
@@ -604,7 +608,9 @@ async function main(): Promise<void> {
     );
     console.log("");
 
-    console.log("  IVA DEDUCIBLE (input side, casilla 45) — régimen general, recargo de equivalencia");
+    console.log(
+      "  IVA DEDUCIBLE (input side, casilla 45) — régimen general, recargo de equivalencia",
+    );
     console.log("  excluded; bienes de inversión split out from operaciones corrientes:");
     printDeducibleTable(vatReturn.deductible.byRate);
     console.log(
