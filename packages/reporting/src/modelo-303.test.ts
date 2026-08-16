@@ -165,8 +165,8 @@ describe("mapModelo303", () => {
 // to match the layout, but nothing pins it, so a future edit to either side could silently diverge in
 // a live tax file. This asserts the seam: format the map's rate through the serializer's OWN numeric
 // formatter and it must be byte-identical to the layout constant.
-describe("mapModelo303 tipo-% boxes agree with the DR303 layout constants", () => {
-  const TIPO_BOXES: ReadonlyArray<{ casilla: string; rate: string }> = [
+describe("mapModelo303 rate-% boxes agree with the DR303 layout constants", () => {
+  const RATE_BOXES: ReadonlyArray<{ casilla: string; rate: string }> = [
     { casilla: "02", rate: "4.00" },
     { casilla: "05", rate: "10.00" },
     { casilla: "08", rate: "21.00" },
@@ -189,8 +189,8 @@ describe("mapModelo303 tipo-% boxes agree with the DR303 layout constants", () =
     (s) => s.fields,
   );
 
-  it.each(TIPO_BOXES)(
-    "casilla $casilla: the map's rate encodes to the layout's hardcoded tipo constant",
+  it.each(RATE_BOXES)(
+    "casilla $casilla: the map's rate encodes to the layout's hardcoded rate constant",
     ({ casilla, rate }) => {
       const boxes = mapModelo303(allRates).boxes;
       // The map placed the rate itself (the tipo box holds the rate, not a money amount).
@@ -205,7 +205,7 @@ describe("mapModelo303 tipo-% boxes agree with the DR303 layout constants", () =
       expect(field.role).toBe("constant");
       expect(
         formatNumericField(boxes[casilla]!, field.len, "Num", 2),
-        `tipo drift for casilla ${casilla}`,
+        `rate drift for casilla ${casilla}`,
       ).toBe(field.value);
     },
   );
