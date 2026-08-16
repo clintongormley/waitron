@@ -36,16 +36,50 @@ export interface VatReturnInput {
   /** Civil calendar month of the liquidation period, 1..12. */
   month: number;
 }
+
+/** What an input-VAT line was spent on (mirrors the `purchase_vat_kind` enum): `ordinary` =
+ * operaciones corrientes (casilla 28/29); `capital` = bienes de inversión (casilla 30/31). */
+export type PurchaseVatKind = "ordinary" | "capital";
+
+/** One deducible line, grouped by (rate, kind). `tax` is the deductible cuota (Σ of the filed
+ * per-invoice cuotas × deductible_proportion/100, rounded per invoice line), never re-rounded on the
+ * monthly base — the same exactness rule the output side follows. */
+export interface InputVatRateLine {
+  rate: Decimal;
+  base: Decimal;
+  tax: Decimal;
+  kind: PurchaseVatKind;
+}
+
+/** The régimen-general IVA deducible aggregate (recargo de equivalencia excluded), per (rate, kind). */
+export interface InputVatSummary {
+  byRate: InputVatRateLine[];
+  /** Σ base imponible deducible. */
+  baseTotal: Decimal;
+  /** Σ cuota deducible (the input-VAT total to deduct). */
+  taxTotal: Decimal;
+}
+
+export interface InputVatReturn extends InputVatSummary {
+  tenantId: TenantId;
+  year: number;
+  month: number;
+}
+
 export interface VatReturn {
   tenantId: TenantId;
   year: number;
   month: number;
-  /** Régimen-general IVA devengado per rate {rate, base, tax}, corrections netted. */
+  /** Régimen-general IVA devengado per rate {rate, base, tax}, corrections netted (the output side). */
   byRate: VatRateLine[];
   /** Σ base imponible devengada. */
   baseTotal: Decimal;
-  /** Σ cuota devengada (the output-VAT total). */
+  /** Σ cuota devengada (the output-VAT total — casilla 27 side). */
   taxTotal: Decimal;
+  /** IVA deducible (input side), régimen general only, bucketed by received_on (casilla 45 side). */
+  deductible: InputVatSummary;
+  /** Resultado régimen general = taxTotal (devengado) − deductible.taxTotal (casilla 46 = 27 − 45). */
+  result: Decimal;
 }
 
 export interface VatRateLine {

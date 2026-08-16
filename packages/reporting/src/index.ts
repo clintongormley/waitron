@@ -1,6 +1,8 @@
 export { computeDailyClose } from "./daily-close.js";
 export { computeVatSummaryForPeriod } from "./vat-summary.js";
 export { computeVatReturn } from "./vat-return.js";
+export { computeInputVat } from "./input-vat.js";
+export type { InputVatInput } from "./input-vat.js";
 export { recordDailyClose } from "./record-daily-close.js";
 export { computeCloseEntryHash } from "./daily-close-hash.js";
 export type { CloseHashContent } from "./daily-close-hash.js";
@@ -21,7 +23,11 @@ export type {
   CloseCounts,
   DailyClose,
   DailyCloseInput,
+  InputVatRateLine,
+  InputVatReturn,
+  InputVatSummary,
   PeriodVatInput,
+  PurchaseVatKind,
   TenderMethod,
   TenderMethodLine,
   TillCashUp,
