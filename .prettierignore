@@ -14,3 +14,9 @@ packages/*/drizzle/
 # .xsd or .wsdl and would skip them anyway, but a future parser addition must not
 # be able to reformat a primary source.
 packages/verifactu/schemas/
+
+# AEAT's published modelo 303 record design (DR303e26.xlsx, committed verbatim as the
+# provenance for src/dr303-layout.ts) plus its offline generator/README. Same rule as
+# the schemas above: a primary source must never be reformatted. The GENERATED
+# src/dr303-layout.ts is NOT here — it is prettier-checked like all src.
+packages/reporting/reference/
