@@ -26,6 +26,12 @@ export const PERMISSIONS = [
   // Manager approve/reject of a REQUESTED absence (@waitron/workforce setAbsenceStatus), same screen.
   // Domain-named beside swap.approve; granted to manager + admin (roster slice 2, 2026-08-15).
   "absence.decide",
+  // Authoring received purchase invoices (facturas recibidas: supplier + dates + VAT desglose) from
+  // the management dashboard (@waitron/purchasing), the data source for the modelo 303 IVA-deducible
+  // reporting (#91). A domain-named ACCOUNTING permission on the commercial lane, distinct from staff
+  // admin (person.manage); granted to manager + admin, the same roles as the other write gates
+  // (purchase-invoice authoring UI, 2026-08-16).
+  "purchase.manage",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -46,6 +52,7 @@ const MANAGER: ReadonlySet<Permission> = new Set([
   "schedule.manage",
   "swap.approve",
   "absence.decide",
+  "purchase.manage",
 ]);
 const ALL: ReadonlySet<Permission> = new Set(PERMISSIONS);
 
