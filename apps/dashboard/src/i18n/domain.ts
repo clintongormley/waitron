@@ -107,6 +107,33 @@ const ABSENCE_KIND_NAMES: NameTable = {
   unpaid: { en: "Unpaid leave", es: "Permiso sin sueldo" },
 };
 
+// The three absence statuses (@waitron/workforce absence_status), shown on the staff self-service
+// portal so a staff member sees where each of their own requests stands. Raw string-keyed LOCAL copy,
+// same bundle-decoupling reason as the tables above. (Feminine agreement — "ausencia" is feminine.)
+const ABSENCE_STATUS_NAMES: NameTable = {
+  requested: { en: "Requested", es: "Solicitada" },
+  approved: { en: "Approved", es: "Aprobada" },
+  rejected: { en: "Rejected", es: "Rechazada" },
+};
+
+// The four shift-swap statuses (@waitron/workforce shift_swap_status), shown on the staff self-service
+// portal. Raw string-keyed LOCAL copy, same bundle-decoupling reason as the tables above. (Masculine
+// agreement — "cambio" is masculine.)
+const SWAP_STATUS_NAMES: NameTable = {
+  requested: { en: "Requested", es: "Solicitado" },
+  accepted: { en: "Accepted", es: "Aceptado" },
+  approved: { en: "Approved", es: "Aprobado" },
+  rejected: { en: "Rejected", es: "Rechazado" },
+};
+
+// Which side of a swap the staff member is on (@waitron/workforce SwapDirection), shown on the staff
+// self-service portal so the two directions read distinctly. Raw string-keyed LOCAL copy, same
+// bundle-decoupling reason as the tables above.
+const SWAP_DIRECTION_NAMES: NameTable = {
+  offered_to_me: { en: "Offered to me", es: "Me lo ofrecen" },
+  requested_by_me: { en: "Requested by me", es: "Lo pido yo" },
+};
+
 /** A person's management role (staff / supervisor / manager / admin) → its display name. */
 export function roleName(value: string, locale: string = currentLocale()): string {
   return resolve(ROLE_NAMES, value, locale);
@@ -120,6 +147,21 @@ export function breachKindName(kind: string, locale: string = currentLocale()): 
 /** An absence kind (holiday / sick_leave / leave / unpaid) → its display name (raw-value fallback). */
 export function absenceKindName(kind: string, locale: string = currentLocale()): string {
   return resolve(ABSENCE_KIND_NAMES, kind, locale);
+}
+
+/** An absence status (requested / approved / rejected) → its display name (raw-value fallback). */
+export function absenceStatusName(status: string, locale: string = currentLocale()): string {
+  return resolve(ABSENCE_STATUS_NAMES, status, locale);
+}
+
+/** A shift-swap status (requested / accepted / approved / rejected) → its display name (raw fallback). */
+export function swapStatusName(status: string, locale: string = currentLocale()): string {
+  return resolve(SWAP_STATUS_NAMES, status, locale);
+}
+
+/** A swap direction (offered_to_me / requested_by_me) → its display name (raw-value fallback). */
+export function swapDirectionName(direction: string, locale: string = currentLocale()): string {
+  return resolve(SWAP_DIRECTION_NAMES, direction, locale);
 }
 
 /** A person's account status (active / suspended) → its display name. */

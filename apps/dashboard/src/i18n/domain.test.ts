@@ -1,11 +1,14 @@
 import { afterEach, expect, it } from "vitest";
 import {
   absenceKindName,
+  absenceStatusName,
   allergenName,
   allergenStateName,
   breachKindName,
   roleName,
   statusName,
+  swapDirectionName,
+  swapStatusName,
   unitName,
   vatClassName,
 } from "./domain.js";
@@ -90,6 +93,28 @@ it("names every absence kind, raw fallback for an unknown token (roster slice 2)
   expect(absenceKindName("holiday", "es")).toBe("Vacaciones");
   expect(absenceKindName("sick_leave", "en")).toBe("Sick leave");
   expect(absenceKindName("unknown_kind", "es")).toBe("unknown_kind");
+});
+
+it("names every absence status, raw fallback for an unknown token (staff portal)", () => {
+  expect(absenceStatusName("requested", "es")).toBe("Solicitada");
+  expect(absenceStatusName("approved", "es")).toBe("Aprobada");
+  expect(absenceStatusName("rejected", "en")).toBe("Rejected");
+  expect(absenceStatusName("unknown_status", "es")).toBe("unknown_status");
+});
+
+it("names every swap status, raw fallback for an unknown token (staff portal)", () => {
+  expect(swapStatusName("requested", "es")).toBe("Solicitado");
+  expect(swapStatusName("accepted", "es")).toBe("Aceptado");
+  expect(swapStatusName("approved", "es")).toBe("Aprobado");
+  expect(swapStatusName("rejected", "en")).toBe("Rejected");
+  expect(swapStatusName("unknown_status", "es")).toBe("unknown_status");
+});
+
+it("names both swap directions, raw fallback for an unknown token (staff portal)", () => {
+  expect(swapDirectionName("offered_to_me", "es")).toBe("Me lo ofrecen");
+  expect(swapDirectionName("requested_by_me", "es")).toBe("Lo pido yo");
+  expect(swapDirectionName("offered_to_me", "en")).toBe("Offered to me");
+  expect(swapDirectionName("sideways", "es")).toBe("sideways");
 });
 
 it("passes a prototype-chain token (toString/constructor) through raw, never undefined", () => {

@@ -144,9 +144,30 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That swap can no longer be decided",
     es: "Ese cambio de turno ya no se puede decidir",
   },
+  // Staff self-service faults (apps/server/src/me-api.ts): you may offer only your own shift and accept
+  // only what is offered to you (swap.not_permitted); a swap already accepted/decided can't be accepted
+  // again (swap.not_acceptable).
+  "swap.not_permitted": {
+    en: "You can only swap your own shifts",
+    es: "Solo puedes cambiar tus propios turnos",
+  },
+  "swap.not_acceptable": {
+    en: "That swap can no longer be accepted",
+    es: "Ese cambio de turno ya no se puede aceptar",
+  },
   "absence.not_found": {
     en: "That absence could not be found",
     es: "No se ha encontrado esa ausencia",
+  },
+  // Staff self-service time-off faults (apps/server/src/me-api.ts): the requested dates overlap time
+  // off you already have (absence.overlaps), or the range is back to front (absence.invalid).
+  "absence.overlaps": {
+    en: "That time off overlaps time off you already have",
+    es: "Esa ausencia se solapa con otra que ya tienes",
+  },
+  "absence.invalid": {
+    en: "Check the time-off dates",
+    es: "Revisa las fechas de la ausencia",
   },
   "server.internal": {
     en: "Something went wrong, try again",
