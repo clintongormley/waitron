@@ -118,12 +118,24 @@ declare module "@waitron/shared" {
      * `swap.*`, grepped against the registry — unused before D2; the entity is the swap (a shift is
      * `shift.*`, a person `person.*`). */
     "swap.not_found": { tenantId: string; swapId: string };
-    /** A swap action was attempted by a person not permitted it: `requestSwap` (../shift-swaps.ts)
-     * refuses a requester offering a `from_shift` that is not THEIRS, and `acceptSwap` refuses anyone
-     * but the swap's named `to_person` accepting it. A fact about the swap's permission rule, not a
-     * missing entity (that is `swap.not_found`/`shift.not_found`). `swap.*`, grepped — never
-     * renamed. */
+    /** A swap action was attempted by a person not permitted it. Three cases, all in
+     * `requestSwap`/`acceptSwap` (../shift-swaps.ts): `requestSwap` refuses a requester offering a
+     * `from_shift` that is not THEIRS, and refuses a supplied return `to_shift` that is not owned by
+     * the person the swap is offered TO (`to_person`) — you may put up only your own shift as the
+     * offer, and only that person's own shift as the return leg; `acceptSwap` refuses anyone but the
+     * swap's named `to_person` accepting it. A fact about the swap's permission rule, not a missing
+     * entity (that is `swap.not_found`/`shift.not_found`) and not a wrong state (that is
+     * `swap.not_acceptable`/`swap.not_decidable`). `swap.*`, grepped — never renamed. */
     "swap.not_permitted": { tenantId: string; personId: string };
+    /** `acceptSwap` (../shift-swaps.ts) was asked to accept a swap whose `status` is not `requested` —
+     * an already-`accepted` swap, or an `approved`/`rejected` terminal one. Only a `requested` swap may
+     * be accepted; accepting again would flip a decided swap back to `accepted`. Distinct from
+     * `swap.not_found` (no such swap) and `swap.not_permitted` (the acceptor is not the `to_person`):
+     * here the swap EXISTS and the acceptor IS the recipient, but its state forbids the accept —
+     * exactly mirroring `swap.not_decidable`'s exists-but-wrong-state shape for the manager's decide.
+     * `swap.*`, grepped against the siblings (`swap.not_found`, `swap.not_permitted`,
+     * `swap.not_decidable`) — all `swap.not_<x>`, so the shape matches; never renamed once shipped. */
+    "swap.not_acceptable": { tenantId: string; swapId: string };
     /** `decideSwap` (../shift-swaps.ts) was asked to approve/reject a swap whose `status` is not
      * `accepted` — a `requested` swap has not been accepted yet, and an `approved`/`rejected` one is
      * terminal. Distinct from `swap.not_found` (no such swap); here it EXISTS but is not in a decidable
