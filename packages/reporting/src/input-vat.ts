@@ -12,8 +12,6 @@ export interface InputVatInput {
   year: number;
   /** Civil calendar month of the liquidation period, 1..12. */
   month: number;
-  /** Optional: restrict to one kind (ordinary/capital), for the casilla 28/29-vs-30/31 split. */
-  kind?: PurchaseVatKind;
 }
 
 // ordinary (corrientes, casilla 28/29) before capital (bienes de inversión, casilla 30/31) — the
@@ -33,6 +31,10 @@ const KIND_ORDER: Record<PurchaseVatKind, number> = { ordinary: 0, capital: 1 };
  * rule the output side follows (#76/#66); with the default proportion 100 it collapses to `Σ` of the
  * filed cuotas verbatim. The explicit `p.tenant_id` predicate is belt-and-suspenders over RLS
  * (mirrors `aggregateVatByRate`); across nodes, RLS + that predicate are the only scoping.
+ *
+ * The result carries every (rate, kind) line UNFILTERED — the casilla 28/29 (corrientes) vs 30/31
+ * (bienes de inversión) split is applied DOWNSTREAM in `mapModelo303`, which sums `deductible.byRate`
+ * by `kind`; this aggregate deliberately does not pre-filter to one kind.
  */
 export async function computeInputVat(
   tx: Transaction,
@@ -42,7 +44,6 @@ export async function computeInputVat(
   validateLiquidationPeriod(input.year, input.month);
 
   const dateFilter = calendarMonthFilter(sql`p.received_on`, input.year, input.month);
-  const kindFilter = input.kind ? sql`and v.kind = ${input.kind}` : sql``;
 
   // The deductible cuota is rounded (half away from zero, Postgres `round(numeric, 2)`) PER invoice
   // line before summing — matching `@waitron/shared`'s `percentOf` rounding and the per-invoice
@@ -65,7 +66,6 @@ export async function computeInputVat(
     where p.tenant_id = ${input.tenantId}
       and p.regime = 'general'
       and ${dateFilter}
-      ${kindFilter}
     group by (v.rate)::numeric(5, 2)::text, v.kind
   `);
 

@@ -5,7 +5,7 @@ import type { TenantId } from "@waitron/shared";
 import { seedPurchaseInvoice, seedVenue } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { computeInputVat } from "./input-vat.js";
-import type { InputVatReturn, PurchaseVatKind } from "./types.js";
+import type { InputVatReturn } from "./types.js";
 
 // PGlite for the deterministic arithmetic (per-(rate,kind) Σ, received_on bucketing, regime and
 // deductible_proportion handling), read under the app_user role — where FORCE RLS IS live (verified:
@@ -21,16 +21,11 @@ beforeEach(async () => {
   venue = await seedVenue(suite.db);
 });
 
-function run(opts: {
-  year: number;
-  month: number;
-  kind?: PurchaseVatKind;
-  tenantId?: TenantId;
-}): Promise<InputVatReturn> {
+function run(opts: { year: number; month: number; tenantId?: TenantId }): Promise<InputVatReturn> {
   const tenantId = opts.tenantId ?? venue.tenantId;
   return withTenant(suite.db, tenantId, async (tx) => {
     await asAppUser(tx);
-    return computeInputVat(tx, { tenantId, year: opts.year, month: opts.month, kind: opts.kind });
+    return computeInputVat(tx, { tenantId, year: opts.year, month: opts.month });
   });
 }
 
@@ -156,22 +151,6 @@ describe("computeInputVat", () => {
       baseTotal: "0.00",
       taxTotal: "0.00",
     });
-  });
-
-  it("optionally filters to a single kind", async () => {
-    await seedPurchaseInvoice(suite.db, venue, {
-      supplierInvoiceNumber: "K1",
-      issuedOn: "2026-08-01",
-      receivedOn: "2026-08-05",
-      total: "363.00",
-      lines: [
-        { rate: "21.00", base: "200.00", tax: "42.00" },
-        { rate: "21.00", base: "100.00", tax: "21.00", kind: "capital" },
-      ],
-    });
-    expect((await run({ year: 2026, month: 8, kind: "capital" })).byRate).toEqual([
-      { rate: "21.00", base: "100.00", tax: "21.00", kind: "capital" },
-    ]);
   });
 
   it("scopes to the explicit tenant predicate under a superuser (RLS-bypassed) connection", async () => {
