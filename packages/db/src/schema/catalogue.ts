@@ -14,6 +14,14 @@ import {
 } from "drizzle-orm/pg-core";
 import { tenants } from "./tenants.js";
 
+/**
+ * The db-layer copy of the allergen-declaration shape: a per-code presence map with an optional
+ * specific-substance source. Structurally identical to `@waitron/catalogue`'s `ProductAllergens`, but
+ * a LOCAL type here on purpose — `@waitron/catalogue` depends on THIS package, so the dependency runs
+ * the other way and the exact `AllergenCode`-keyed type cannot be imported here without a cycle.
+ */
+export type AllergenMap = Record<string, { presence: "contains" | "may_contain"; source?: string }>;
+
 /** A named, shareable menu. Many locations may point at one catalogue (N identical delis share it);
  * a heterogeneous venue set uses one catalogue each. `version` is the sync seam (bumped later). */
 export const catalogues = pgTable(
@@ -74,12 +82,20 @@ export const products = pgTable(
     image: text("image"),
     // Allergen declaration (EU 1169/2011 Annex II). NULL = not yet reviewed (a compliance gap the
     // till surfaces distinctly); {} = reviewed, contains none of the 14; else per-code presence +
-    // optional specific-substance source. Structural type only — the exact AllergenCode-keyed type
-    // lives in @waitron/catalogue (which depends on THIS package, so it cannot be imported here).
-    allergens:
-      jsonb("allergens").$type<
-        Record<string, { presence: "contains" | "may_contain"; source?: string }>
-      >(),
+    // optional specific-substance source. Typed with the local `AllergenMap` alias — the db-layer
+    // copy of @waitron/catalogue's `ProductAllergens` (structurally identical), kept local because
+    // that package depends on THIS one, so the exact AllergenCode-keyed type cannot be imported here.
+    allergens: jsonb("allergens").$type<AllergenMap>(),
+    // Staff-authored allergen overlay — what a human explicitly declared. NULL = not reviewed.
+    // `allergens` (published) is the computed union of this and `recipe_derivation`; the recipe
+    // module (@waitron/recipes) writes `recipe_derivation`, catalogue republishes `allergens`.
+    manualAllergens: jsonb("manual_allergens").$type<AllergenMap>(),
+    // The recipe module's derived floor + a `pending` flag (a recipe with an unreviewed ingredient).
+    // NULL = no recipe / module unused. Written only via catalogue's applyRecipeDerivation.
+    recipeDerivation: jsonb("recipe_derivation").$type<{
+      allergens: AllergenMap;
+      pending: boolean;
+    }>(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },

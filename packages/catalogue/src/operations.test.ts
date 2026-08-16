@@ -6,6 +6,7 @@ import type { TenantId } from "@waitron/shared";
 import { priceBasket } from "./pricing.js";
 import type { PriceableProduct } from "./pricing.js";
 import {
+  applyRecipeDerivation,
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
@@ -318,6 +319,95 @@ describe("catalogue operations", () => {
       await assignCatalogueToLocation(tx, locationId, cat.id);
       const [available] = await listAvailableProducts(tx, locationId);
       expect(available!.allergens).toEqual({ milk: { presence: "contains" } });
+    });
+  });
+
+  // A product with no recipe still publishes exactly the manual value (today's behavior).
+  it("createProduct publishes the manual allergen map when there is no recipe", async () => {
+    const result = await withTenant(fx.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cat = await createCatalogue(tx, { name: "C" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "sandwich" },
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+        allergens: { gluten: { presence: "contains" } },
+      });
+      return p;
+    });
+    expect(result.allergens).toEqual({ gluten: { presence: "contains" } });
+  });
+
+  // applyRecipeDerivation unions the floor over the manual overlay (add-only).
+  it("applyRecipeDerivation republishes allergens as floor ∪ manual", async () => {
+    const seen = await withTenant(fx.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cat = await createCatalogue(tx, { name: "C" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "sandwich" },
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+        allergens: { nuts: { presence: "may_contain" } },
+      });
+      await applyRecipeDerivation(tx, p.id, {
+        allergens: { eggs: { presence: "contains" } },
+        pending: false,
+      });
+      const [row] = await listProducts(tx, cat.id);
+      return row!.allergens;
+    });
+    expect(seen).toEqual({ eggs: { presence: "contains" }, nuts: { presence: "may_contain" } });
+  });
+
+  // A pending derivation forces PENDING (null), even with a manual overlay present.
+  it("applyRecipeDerivation with pending=true publishes PENDING (null)", async () => {
+    const seen = await withTenant(fx.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cat = await createCatalogue(tx, { name: "C" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "x" },
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+        allergens: { nuts: { presence: "contains" } },
+      });
+      await applyRecipeDerivation(tx, p.id, { allergens: {}, pending: true });
+      const [row] = await listProducts(tx, cat.id);
+      return row!.allergens;
+    });
+    expect(seen).toBeNull();
+  });
+
+  // A caller-supplied id that names no product is a SILENT no-op, exactly as every other patch field
+  // is (image/active/…) — updateProduct does not pre-check existence, and republishProduct's SELECT
+  // returns no row, so `republish(null, null) = null` and the follow-up UPDATE matches nothing. This
+  // also exercises republishProduct's `row === undefined` branch.
+  it("updateProduct with allergens on a nonexistent id does not throw and affects no row", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "C" });
+      const missing = "00000000-0000-0000-0000-0000000000ff";
+      await expect(
+        updateProduct(tx, missing, { allergens: { eggs: { presence: "contains" } } }),
+      ).resolves.toBeUndefined();
+      // No row was created or altered: the catalogue stays empty.
+      expect(await listProducts(tx, cat.id)).toEqual([]);
+    });
+  });
+
+  it("applyRecipeDerivation on a nonexistent id does not throw", async () => {
+    await asTenant(async (tx) => {
+      const missing = "00000000-0000-0000-0000-0000000000fe";
+      await expect(
+        applyRecipeDerivation(tx, missing, { allergens: {}, pending: false }),
+      ).resolves.toBeUndefined();
     });
   });
 
