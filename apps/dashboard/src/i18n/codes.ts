@@ -169,6 +169,33 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Check the time-off dates",
     es: "Revisa las fechas de la ausencia",
   },
+  // Purchase invoices (facturas recibidas). The first three are the server codes the purchasing routes
+  // reject with; the last three are the form's own client-side validation messages (mirroring the op's
+  // checks for UX — the server stays authoritative).
+  "purchase.not_found": {
+    en: "That purchase invoice could not be found",
+    es: "No se ha encontrado esa factura recibida",
+  },
+  "purchase.duplicate": {
+    en: "That supplier invoice is already recorded",
+    es: "Esa factura del proveedor ya está registrada",
+  },
+  "purchase.invalid": {
+    en: "Check the amounts and VAT breakdown",
+    es: "Revisa los importes y el desglose de IVA",
+  },
+  "purchase.fields_required": {
+    en: "Fill in the supplier, dates and total",
+    es: "Rellena el proveedor, las fechas y el total",
+  },
+  "purchase.lines_required": {
+    en: "Add at least one VAT line",
+    es: "Añade al menos una línea de IVA",
+  },
+  "purchase.amounts_invalid": {
+    en: "Check the amounts: rates 0–100, no negatives",
+    es: "Revisa los importes: tipos 0–100, sin negativos",
+  },
   "server.internal": {
     en: "Something went wrong, try again",
     es: "Algo salió mal, inténtalo de nuevo",

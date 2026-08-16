@@ -5,12 +5,14 @@ import {
   allergenName,
   allergenStateName,
   breachKindName,
+  regimeName,
   roleName,
   statusName,
   swapDirectionName,
   swapStatusName,
   unitName,
   vatClassName,
+  vatKindName,
 } from "./domain.js";
 import { setLocale } from "./t.js";
 
@@ -130,6 +132,22 @@ it("falls back to English for a known value in an unknown language", () => {
   // "fr" is not a column, so the `?? table[value]?.en` arm fires — proven across resolvers.
   expect(roleName("manager", "fr")).toBe("Manager");
   expect(allergenName("milk", "fr")).toBe("Milk");
+});
+
+it("resolves a purchase-regime token to Spanish and English, unknown value raw", () => {
+  expect(regimeName("general", "es")).toBe("Régimen general");
+  expect(regimeName("equivalence_surcharge", "es")).toBe("Recargo de equivalencia");
+  expect(regimeName("general", "en")).toBe("General regime");
+  expect(regimeName("equivalence_surcharge", "en")).toBe("Equivalence surcharge");
+  expect(regimeName("simplified", "es")).toBe("simplified");
+});
+
+it("resolves a purchase-VAT-kind token to Spanish and English, unknown value raw", () => {
+  expect(vatKindName("ordinary", "es")).toBe("Corriente");
+  expect(vatKindName("capital", "es")).toBe("Bien de inversión");
+  expect(vatKindName("ordinary", "en")).toBe("Ordinary");
+  expect(vatKindName("capital", "en")).toBe("Capital goods");
+  expect(vatKindName("import", "es")).toBe("import");
 });
 
 it("strips a region subtag before the language lookup", () => {

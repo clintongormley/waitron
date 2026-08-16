@@ -134,6 +134,20 @@ const SWAP_DIRECTION_NAMES: NameTable = {
   requested_by_me: { en: "Requested by me", es: "Lo pido yo" },
 };
 
+// The two purchase-invoice VAT regimes (@waitron/purchasing PurchaseRegime), shown on the purchases
+// screen/form. Raw string-keyed LOCAL copy, same bundle-decoupling reason as the tables above.
+const PURCHASE_REGIME_NAMES: NameTable = {
+  general: { en: "General regime", es: "Régimen general" },
+  equivalence_surcharge: { en: "Equivalence surcharge", es: "Recargo de equivalencia" },
+};
+
+// The two purchase-invoice VAT kinds (@waitron/purchasing PurchaseVatKind), the desglose line's
+// box-split marker. Raw string-keyed LOCAL copy, same bundle-decoupling reason as the tables above.
+const PURCHASE_VAT_KIND_NAMES: NameTable = {
+  ordinary: { en: "Ordinary", es: "Corriente" },
+  capital: { en: "Capital goods", es: "Bien de inversión" },
+};
+
 /** A person's management role (staff / supervisor / manager / admin) → its display name. */
 export function roleName(value: string, locale: string = currentLocale()): string {
   return resolve(ROLE_NAMES, value, locale);
@@ -187,4 +201,15 @@ export function allergenStateName(value: string, locale: string = currentLocale(
 /** An EU allergen code → its display name. */
 export function allergenName(code: string, locale: string = currentLocale()): string {
   return resolve(ALLERGEN_NAMES, code, locale);
+}
+
+/** A purchase-invoice VAT regime (general / equivalence_surcharge) → its display name (raw-value
+ * fallback for an unmapped regime). */
+export function regimeName(value: string, locale: string = currentLocale()): string {
+  return resolve(PURCHASE_REGIME_NAMES, value, locale);
+}
+
+/** A purchase-invoice VAT kind (ordinary / capital) → its display name (raw-value fallback). */
+export function vatKindName(value: string, locale: string = currentLocale()): string {
+  return resolve(PURCHASE_VAT_KIND_NAMES, value, locale);
 }
