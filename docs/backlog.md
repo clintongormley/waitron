@@ -127,7 +127,15 @@ shipped*) and nothing was left blocked or `needs-owner-review`; the run is finis
 
 ## Now
 
-**Nothing in flight.** **Recipes/BOM slice 1 — allergen inheritance — LANDED as #89** (2026-08-16):
+**Nothing in flight.** **Staff-facing swap/absence request path — LANDED as #90** (2026-08-16): the
+till-PIN-session-gated *request* half that #87's manager-approval half was built to consume — a
+logged-in operator views their own shifts, requests a shift give-away/cover, accepts a swap offered to
+them, and views/requests absences (requester identity from `session.person_id`, never the body).
+**Surface-agnostic** so a future **staff dashboard portal** reuses the verbs/read-models; two swap-verb
+hardening fixes folded in (closes the recorded swap-workflow-hardening debt). No migration; fiscal core
+untouched (H2). Details in *Recently shipped*.
+
+**Recipes/BOM slice 1 — allergen inheritance — LANDED as #89** (2026-08-16):
 the optional `@waitron/recipes` module (ingredient master + product→ingredients composition) derives a
 product's EU-1169 allergen declaration from its ingredients — `products.allergens` became a computed
 union of a `manual_allergens` overlay and a recipe-derived floor, **add-only, PENDING contagious**; two
@@ -149,13 +157,17 @@ remote-access transport is a future slice.
 **Next candidates** (owner's call — detail under *Not started*, *Debt and odd jobs*, and *SIF topology
 follow-ups*):
 
-- **Fast-follows flagged by the slices:** the **staff-facing request path** for swaps/absences (#87
-  built the manager-approval half only — where/how a staff member requests one, and its auth surface,
-  is its own slice), and the remaining **sync transport-2** pieces (cloud-mirror peer,
-  dead-subscriber cleanup, multi-tenant transport, node-token rotation, and the separate
-  **fiscal-lane / hash-chain sync, H2**).
-- **Bigger next slices:** the **reporting input-VAT / *modelo 303* deducible side** (needs a
-  purchase-invoice module), and **Recipes/BOM's next slices** now that its allergen-inheritance
+- **Fast-follows flagged by the slices:** the remaining **sync transport-2** pieces (cloud-mirror
+  peer, dead-subscriber cleanup, multi-tenant transport, node-token rotation, and the separate
+  **fiscal-lane / hash-chain sync, H2**). *(The staff-facing swap/absence request path LANDED as #90;
+  its own follow-ups — the staff dashboard portal, the two-sided swap UI, staff cancel/withdraw — are
+  under Debt.)*
+- **Bigger next slices:** the **reporting input-VAT / *modelo 303* deducible side** — **design spec
+  written 2026-08-16** ([purchase-invoice module + modelo 303 deducible](superpowers/specs/2026-08-16-purchase-invoices-and-modelo-303-deducible-design.md),
+  awaiting owner review; sliced A capture → B deducible+net → C casilla map → D submittable; the exact
+  casilla numbers must be transcribed from the official **DR303** record-design before coding, and
+  recargo de equivalencia / prorrata / deducibility-% are flagged **asesor-fiscal**), and
+  **Recipes/BOM's next slices** now that its allergen-inheritance
   *backend* has landed (#89): the **recipe-authoring UI** (dashboard — must reseed the allergen picker
   from `manual_allergens`, not the published `allergens`, a documented follow-up), **nested
   sub-recipes** (alioli auto-derived from egg+oil+garlic), and — each still greenfield — **plate
@@ -172,6 +184,31 @@ One line per landed PR, newest first. The git log, the linked designs/plans, and
 detail — **this file is not a history** (see *How to keep this file honest*). Open follow-ups from
 these live under *Debt and odd jobs*; their designs/plans stay in `docs/superpowers/`.
 
+- **#90** Workforce — **staff-facing swap & absence request path** (sub-project 16) — the *request* half
+  that #87's manager-approval half was built to consume, gated by the **till PIN session** (requester
+  identity from `session.person_id`, NEVER the request body — proven by deletion in `schedule-api.rls.test.ts`).
+  A logged-in operator views their own shifts, requests a shift give-away/cover, accepts a swap offered
+  to them, and views/requests absences. **Surface-agnostic** (the verbs + person-scoped read-models take a
+  `personId`) so the planned **staff dashboard portal** reuses them by swapping only the session→personId
+  resolver. New: two swap-verb hardening fixes (`acceptSwap` requested-only guard + `swap.not_acceptable`;
+  `requestSwap` return-shift ownership — **closes the recorded swap-workflow-hardening debt**, both proven
+  by deletion), three person-scoped read-models (`listShiftsForPerson`/`listSwapsForPerson`/`listAbsencesForPerson`,
+  filtering `person_id` in SQL since the planning-table RLS is tenant-only), six `/api/schedule` routes
+  gated by `requireSession` (shared request-shape screens extracted to `request-screens.ts`, now used by
+  `workforce-api` too), till client methods + a basket-preserving `<till-schedule-screen>` + i18n.
+  **No migration** (tables/grants already exist); **fiscal core untouched (H2)** — commercial/management-lane
+  only, both whole-branch reviewers confirmed. Reviews: subagent-driven TDD (every guard proven by deletion)
+  → simplify (shared `pickLocale`) → two-lens whole-branch review (caught the inverted-absence-range 500 →
+  a `absence.invalid` verb guard mirroring `shift.invalid`) → **Copilot caught a real timezone bug two
+  whole-branch reviewers missed** — the my-shifts window was computed in UTC but the server reads LOCAL wall
+  dates, so it shifted by a day near midnight in a non-UTC venue (Spain is UTC+1/+2); fixed to compute from
+  the device's local date — plus the unguarded post-login roster load; both fixed, replied on-thread,
+  resolved. Coverage workforce 99.89 / server 99.67 / till 100; CI green. **Deferred follow-ups** (under
+  *Debt* → Workforce follow-ups): the **staff dashboard portal**, the **two-sided swap UI** (needs
+  cross-person shift visibility; the verb+route already defend it), `requestSwap`'s **`toPersonId` FK→500**
+  on a give-away to a non-existent person (hostile/non-UI-client-only), staff **cancel/withdraw**, and
+  widening the fixed **14-day** my-shifts window. Plan:
+  [staff-request-path](superpowers/plans/2026-08-16-workforce-staff-request-path.md).
 - **#89** Recipes/BOM — slice 1, **allergen inheritance** (sub-project 18) — the linchpin's first cut, a
   new optional **`@waitron/recipes`** module (ingredient master + product→ingredients composition) that
   DERIVES a product's EU-1169 allergen declaration from its ingredients. `products.allergens` becomes a
@@ -564,7 +601,7 @@ active work (see *Now* / *Current direction*).
 | **5 — Identity** | **Headless first slice merged (#58, 2026-08-05).** `@waitron/identity` owns `persons` + `sessions` (FORCE-RLS tenant isolation, now also scanned by fiscal-verifactu's `inmutabilidad` guard), salted-PIN hashing, a role/permission catalog, `authorize()` (operator session + supervisor `{personId, pin}` override), `loginWithPin` / `endSession`, and a `person.manage`-gated staff API. `recordVoid` / `recordCorrection` now require `sale.void` / `sale.rectify` authorization; `sales.authorized_by` / `sales.operator_id` + `payment_refunds.authorized_by` seams and a `waitron-provision venue` admin seed are in place. Remaining sub-project 5 scope (mid-shift-suspension enforcement, the discount gate, till-refund enforcement, the workforce-gate consolidation, branded ids) is under *Debt and odd jobs* → **Identity follow-ups**. The human-facing call sites (must-be-logged-in to ring, till refunds must be authorized) land with the counter POS (#7) |
 | **6 — Locations** | **Provision-a-sellable-venue slice merged (#57)** (2026-08-04; see *Now*) — the foundational till-track unblocker. Country/territory-driven fiscal identity, `resolveFiscalModules` (común → Veri\*Factu + IVA, others refused), `planVenue` / `applyVenue` and the `waitron-provision venue` CLI stand up tenant → location → till → node → SIF → series so `recordSale` can chain a sale; the stale `bootstrap-tenant.sql` was **deleted**. Remaining sub-project 6 scope (multiple locations, editing/deactivation, the #33 SIF-topology deferrals) is under *Debt and odd jobs* → **Locations follow-ups** |
 | **8 — Reporting** | **Daily-close first slice done (#56)** — `@waitron/reporting`'s `computeDailyClose`. ***Cierre Z* (frozen/signed daily close) DONE** — 8a VAT-exact close (#66, `sales.vat_breakdown`), 8b immutable numbered `daily_closes` + per-node hash chain + per-till *descuadre* (#68). **Date-range VAT summary (`computeVatSummaryForPeriod`) + *modelo 303* output-VAT month aggregate (`computeVatReturn`) DONE (#76)** — pure reads over the filed desglose, one shared `aggregateVatByRate` core, civil-date bucketing, real-PG cross-tenant RLS proof; all in *Recently shipped*. Further unstarted slices: the **IVA deducible/soportado (input-VAT)** side (needs a purchase-invoice module), the **AEAT casilla mapping + submittable 303 form**, quarterly/annual periods, and the reporting **UI** (belongs to the till, #7). Reporting follow-ups are under *Debt* |
-| **16 — Workforce** | *Registro de jornada* legal floor **DONE (#47)**; **D2 scheduling DONE (#50)** — `convenio_config` surface (overtime de-hard-coded, single-sourced), shifts + `roster_versions` + `publishRoster`, absences/availability/shift_templates/shift_swaps, an **advisory** guardrail engine (`validateRoster` → `RosterBreach[]`; publish surfaces breaches but proceeds — owner chose warn+override) + a planned-vs-actual read model, and supersede-on-republish (partial unique index, one published roster per `(location, period)`). The overtime *rule* the both-model projection computes stays convenio-driven — an **asesor-laboral** call, not code. Remaining: **D3 payroll export** (integrate-not-build), plus the workforce follow-ups under *Debt and odd jobs*. Deferred edges from the floor: the registro export doesn't yet surface overtime (belongs to the payslip/D3); the correction period-fetch is a ±1-day window (a >1-day-relocation correction is out of the floor's scope, chained but maybe missed by the period fetch). A post-#47 `/finish-branch` review (landed as #52) corrected four floor defects: the registro export rendered UTC instead of local wall-clock; the tamper chain omitted a correction's reason/actor and the capturing till; correction precedence tie-broke on the unhashed `ingest_seq` (a floor-bypasser could reorder corrections undetected) — now on the hashed `sequence_no`; and a `clockIn`/`clockOut` TOCTOU (an unlocked state read before the chain-head lock let two concurrent same-person clock-ins append a double-`in` that undercounts worked time) — now serialized per person with a `persons` row lock proven by a real-PG concurrency test. **Authoring UI (dashboard) LANDED (#83, 2026-08-15)** — author a draft weekly roster on a person×day grid → view breaches → publish (`mountWorkforceApi` + `schedule.manage` + `<dashboard-roster-screen>`, no migration). **Roster-management slice 2 LANDED (#87, 2026-08-15)** — split-shift (*jornada partida*) authoring, manager approve/reject of swaps + absences (`decideSwap`/`setAbsenceStatus` + `swap.approve`/`absence.decide` + migration 0010 decider columns + approvals screen), and the planned-vs-actual view (`getPlannedVsActual`, published-roster only) — the **manager-approval half**; the **staff-facing request path** for swaps/absences is a separate later slice, and D3 payroll export remains. See *Recently shipped* → #87 for the deferred follow-ups |
+| **16 — Workforce** | *Registro de jornada* legal floor **DONE (#47)**; **D2 scheduling DONE (#50)** — `convenio_config` surface (overtime de-hard-coded, single-sourced), shifts + `roster_versions` + `publishRoster`, absences/availability/shift_templates/shift_swaps, an **advisory** guardrail engine (`validateRoster` → `RosterBreach[]`; publish surfaces breaches but proceeds — owner chose warn+override) + a planned-vs-actual read model, and supersede-on-republish (partial unique index, one published roster per `(location, period)`). The overtime *rule* the both-model projection computes stays convenio-driven — an **asesor-laboral** call, not code. Remaining: **D3 payroll export** (integrate-not-build), plus the workforce follow-ups under *Debt and odd jobs*. Deferred edges from the floor: the registro export doesn't yet surface overtime (belongs to the payslip/D3); the correction period-fetch is a ±1-day window (a >1-day-relocation correction is out of the floor's scope, chained but maybe missed by the period fetch). A post-#47 `/finish-branch` review (landed as #52) corrected four floor defects: the registro export rendered UTC instead of local wall-clock; the tamper chain omitted a correction's reason/actor and the capturing till; correction precedence tie-broke on the unhashed `ingest_seq` (a floor-bypasser could reorder corrections undetected) — now on the hashed `sequence_no`; and a `clockIn`/`clockOut` TOCTOU (an unlocked state read before the chain-head lock let two concurrent same-person clock-ins append a double-`in` that undercounts worked time) — now serialized per person with a `persons` row lock proven by a real-PG concurrency test. **Authoring UI (dashboard) LANDED (#83, 2026-08-15)** — author a draft weekly roster on a person×day grid → view breaches → publish (`mountWorkforceApi` + `schedule.manage` + `<dashboard-roster-screen>`, no migration). **Roster-management slice 2 LANDED (#87, 2026-08-15)** — split-shift (*jornada partida*) authoring, manager approve/reject of swaps + absences (`decideSwap`/`setAbsenceStatus` + `swap.approve`/`absence.decide` + migration 0010 decider columns + approvals screen), and the planned-vs-actual view (`getPlannedVsActual`, published-roster only) — the **manager-approval half**; the **staff-facing request path** for swaps/absences **LANDED (#90, 2026-08-16)** — a till-PIN-session-gated surface (request a give-away/cover, accept an offered swap, request an absence), built surface-agnostic for a future staff dashboard portal. D3 payroll export remains. See *Recently shipped* → #87/#90 for the deferred follow-ups |
 | **18 — Menu and allergens** | **Slice 1 (EU-14 allergen declaration) DONE (#65)** — taxonomy + `validateAllergens` + `allergen.*` codes (`@waitron/catalogue`), `products.allergens jsonb` (0031), `/api/products` + `TillProduct` exposure, en/es names, a till allergen screen (matrix + operator lookup + print), a demo; in *Recently shipped*. Allergen declaration is a **launch-day legal duty** (EU 1169/2011, RD 126/2015). **Recipes/BOM allergen-inheritance backend DONE (#89)** — `@waitron/recipes` derives a product's allergens from its ingredients (add-only, PENDING contagious). **Remaining:** the recipe-authoring **UI** (dashboard; reseed the picker from `manual_allergens`), **nested sub-recipes**, plate costing + stock (greenfield, sub-project 20), variants, customer-facing browse; the allergen list stays a food-safety-advisor call. Deferred `@media print` sheet-isolation edge under *Debt* |
 | 10-15, 17, 19, 20 | Tabs, floor plan, KDS, tip payroll, bookings, online ordering, accounting export, opening hours, procurement |
 
@@ -1182,11 +1219,16 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   settle. What remains on it is the **`recordSale` sale-chaining hand-off**, deferred because it
   needs the till / working-orders model before a settled webhook can chain a sale (the `server_id`/node
   rekey it also needed **landed as #54**). Also still open: the pre-existing `forward` retry backoff and the reconcile remediation UI
-- **Workforce follow-ups (D2, #50)** — none blocking. (1) **Swap-workflow hardening** (Copilot,
-  deferred): `acceptSwap` has no "requested-only" status guard, and `requestSwap` doesn't verify the
-  return shift is owned by `toPerson`. Latent today — the manager approve/reject slice that produces
-  the `approved` / `rejected` statuses isn't built and nothing consumes swaps yet; closing the first
-  guard needs a new permanent error code + TDD. (2) **Guardrail advisory notes:** `break_owed` /
+- **Workforce follow-ups (D2, #50)** — none blocking. (1) **Swap-workflow hardening — CLOSED (#90,
+  2026-08-16):** `acceptSwap` now guards `status='requested'` (new `swap.not_acceptable`) and
+  `requestSwap` verifies the return shift is owned by `toPerson`, both proven by deletion. **New #90
+  deferrals:** the **staff dashboard portal** (reuses #90's surface-agnostic verbs/read-models via a
+  management/staff session resolver); the **two-sided swap UI** (offer to take a colleague's specific
+  return shift — needs cross-person shift visibility; the verb+route already defend it, only the UI is
+  deferred); `requestSwap`'s **`toPersonId` FK→500** on a give-away to a non-existent person
+  (hostile/non-UI-client-only, the FK backstops integrity — needs a deliberate error-code choice);
+  staff **cancel/withdraw** of a pending swap/absence request; and widening the fixed **14-day**
+  my-shifts window / pagination. (2) **Guardrail advisory notes:** `break_owed` /
   `night_work` breaches surface obligations on ordinary shifts (callers filter by `kind`), and
   `weekly_rest` under-reports at roster edges **by design** (documented safe — judging edge weeks
   needs the roster period boundaries passed in). (3) **Supersede** self-join could be a single
