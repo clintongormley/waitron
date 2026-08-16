@@ -1,7 +1,7 @@
 # Purchase Invoices & Modelo 303 Deducible — Design Spec
 
 **Date:** 2026-08-16
-**Status:** Design for review (implementation is a later, sliced track — see §10).
+**Status:** APPROVED 2026-08-16 (implementation is a later, sliced track — see §10). Submittable output = a **raw DR303 fixed-layout file** (owner decision 2026-08-16, §8/D5).
 **Sub-project:** 8 — Reporting (the input-VAT side deferred by #76/#66/#68).
 **Depends on:** a NEW purchase-invoice module (this spec designs it); the output-VAT side already shipped (`computeVatReturn`, #76).
 
@@ -72,12 +72,13 @@ A whole-branch review must confirm this boundary on every implementation slice (
   régimen general, but a packaged-goods retail activity *could* be RE. The schema carries a regime
   marker so a RE line is excluded from the deducible aggregate; **which activities are RE is an
   asesor-fiscal call** we flag, never hardcode.
-- **D5 — "Submittable" means a DR303-conforming file and/or a Pre303-ready libro, NOT an API.** There
-  is no public REST submission endpoint for modelo 303 (§8, quoted). The realistic outputs are: (a) a
-  fixed-layout **DR303 diseño-de-registro** file a human uploads via the AEAT sede, and/or (b) a
-  **libro registro de facturas recibidas** that feeds AEAT's **Pre303** assisted pre-fill. The
-  first implementation slices produce the *casilla-mapped aggregate*; the file/libro writer is the
-  final slice, and the choice between (a) and (b) is confirmed before that slice (§8/§10).
+- **D5 — "Submittable" means a raw DR303 fixed-layout file (owner decision, 2026-08-16), NOT an API.**
+  There is no public REST submission endpoint for modelo 303 (§8, quoted). Slice D produces a
+  fixed-layout **DR303 diseño-de-registro** file (ISO-8859-1) that a human uploads via the AEAT sede
+  "por fichero" path. A **libro registro de facturas recibidas → Pre303** export remains a possible
+  later addition (and the libro is itself a legal obligation worth tracking) but is NOT the chosen
+  primary output. The earlier implementation slices produce the *casilla-mapped aggregate* the DR303
+  serializer consumes.
 - **D6 — No backwards-compatibility / backfill code** (CLAUDE.md §3): nothing is deployed; new tables
   start empty.
 - **D7 — Single currency per tenant** (memory): no currency column; money is `numeric(12,2)` in the
@@ -220,20 +221,19 @@ not this spec.
 
 ## 8. The submittable / pre-filled 303 (D5)
 
-There is **no REST submission API** (§13, quoted). Options, in the order this spec recommends:
+There is **no REST submission API** (§13, quoted). **Chosen output (owner decision, 2026-08-16): the
+raw DR303 fixed-layout file.** The pipeline:
 
-1. **Produce the casilla-mapped aggregate first** (§7's `Modelo303` structure) — this is the reusable
-   core every output shape needs, and it delivers value on its own (an operator reads the boxes and
-   types/imports them).
-2. **Then a DR303 fixed-layout file writer** — a `Modelo303 → DR303 record` serializer (ISO-8859-1,
-   fixed positions from the DR303 Excel), which a human uploads via the AEAT sede "por fichero" path.
-   This is the literal "submittable file."
-3. **Alternatively/additionally, a `libro registro de facturas recibidas` export** feeding AEAT's
-   **Pre303** assisted pre-fill (Pre303 imports libros and pre-fills the 303). This is lower-risk than
-   generating the full 303 file (AEAT does the box arithmetic) and doubles as the legal libro
-   registro. **Decision to confirm before the form slice (§10):** file (2) vs libro/Pre303 (3) vs
-   both. Recommendation: (3) first (libro registro is itself a legal obligation and the safer path),
-   (2) as a follow-up if the owner wants a one-click file.
+1. **Produce the casilla-mapped aggregate first** (§7's `Modelo303` structure) — the reusable core the
+   file writer consumes; it also delivers value on its own (an operator can read the boxes directly).
+2. **Then the DR303 fixed-layout file writer (the chosen submittable output)** — a
+   `Modelo303 → DR303 record` serializer (ISO-8859-1, fixed positions transcribed from the official
+   DR303 Excel record-design), which a human uploads via the AEAT sede "por fichero" path. This is the
+   literal "submittable file" and is Slice D.
+3. **Not chosen as the primary, but tracked:** a `libro registro de facturas recibidas` → **Pre303**
+   assisted-pre-fill export. Lower-risk (AEAT does the box arithmetic) and the libro registro is itself
+   a legal obligation, so this remains a worthwhile LATER addition — but the owner chose the raw DR303
+   file as the submittable output, so the file writer (2), not Pre303, is Slice D.
 
 SII is **not** in scope (it is the large-filer real-time libros feed, not the 303, and a small deli is
 not on SII).
@@ -273,8 +273,10 @@ The scope is large; build it as sound, reviewable slices (prioritise by soundnes
 - **Slice C — The casilla map.** Transcribe DR303 (Excel) → a `Modelo303` structure mapping the
   aggregates onto the in-force boxes (§7), with the box numbers/summations taken from DR303, not this
   spec. Unit-tested against a worked example.
-- **Slice D — Submittable output.** Per the D5/§8 decision: the libro-registro / Pre303 export and/or
-  the DR303 file writer.
+- **Slice D — Submittable output = the raw DR303 file** (owner decision, 2026-08-16). A
+  `Modelo303 → DR303 record` serializer (ISO-8859-1, fixed positions transcribed from the official
+  DR303 record-design), validated against that record-design; a human uploads it via the AEAT sede
+  "por fichero" path. (A libro-registro/Pre303 export is a possible LATER addition, not this slice.)
 - **Later:** rectificación de facturas recibidas (40/41), bienes de inversión regularización (43),
   prorrata definitiva (44), quarterly/annual periods, the 4-year carry-forward + compensation boxes,
   a purchase-invoice authoring UI (dashboard), and OCR/supplier-feed capture. Each its own slice.
