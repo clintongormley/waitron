@@ -451,9 +451,12 @@ cash-drawer** consumer is **now specced + planned** too (2026-08-17) — a per-t
 per-location `receipt_print_mode` (auto default), an ESC/POS `qr()` addition, a faithful `formatReceipt`
 (reproduces every art. 7.1 / arts. 20–21 element — the fiscal record is untouched; it re-renders the filed
 receipt), server-side print-on-sale + a cash-drawer kick + an audited manual open; spec + plan in
-`docs/superpowers/{specs,plans}/2026-08-17-counter-receipt-drawer-printing*`. **Still to spec:** the
-printing **cloud_poll** transport (fast-follow), a `cash.drawer` permission gate (needs the first
-till-side `authorize()` path), and the KDS **expo device kind**. **Nothing in this track is
+`docs/superpowers/{specs,plans}/2026-08-17-counter-receipt-drawer-printing*`. The printing **cloud_poll
+transport (Star CloudPRNT)** is **now specced + planned** too (2026-08-17) — a poll→fetch→ack endpoint
+group served from the central outbox, token-authed, so a NAT'd printer prints jobs enqueued on any node
+with no agent (the exact Star contract pinned against the vendor spec at build); `docs/superpowers/{specs,plans}/2026-08-17-printing-cloud-poll-transport*`.
+**Still to spec:** **Epson Server Direct Print** (the second cloud-poll vendor), a `cash.drawer` permission
+gate (needs the first till-side `authorize()` path), and the KDS **expo device kind**. **Nothing in this track is
 built yet**; TS-1 is the first buildable slice of the table-service track (the printing subsystem can build
 independently of it). The owner
 **may be reachable by laptop** during the 2026-08-19 → 25 trip, so this track can also progress remotely.
