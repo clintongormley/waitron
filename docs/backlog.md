@@ -388,11 +388,20 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   feeding the floor an "en camino" hint between kitchen-`ready` and waiter-`served`). Session-gated (an
   `expo` device kind follows device-identity). Non-fiscal; blocked on KDS-1 + KDS-2. Spec + plan in
   `docs/superpowers/{specs,plans}/2026-08-17-kds-3*`. **So the KDS track's DESIGN is complete** (KDS-1
-  core, KDS-2 courses, KDS-3 expo, + the always-on device identity). **KDS-4 — kitchen printers (paper
-  tickets): TO SPEC** — a station should be able to route its tickets to a **physical printer** for a
-  paper ticket (owner requirement 2026-08-17), as an output alongside/instead of the KDS screen. Distinct
-  concern (station *output* + print/hardware integration) → its own brainstorm → spec → plan; needs
-  grounding on any existing receipt-print/hardware infra. The
+  core, KDS-2 courses, KDS-3 expo, + the always-on device identity). **Kitchen printers (owner requirement
+  2026-08-17)** grew into a **printing subsystem** (there is *no* printing in the tree today; the
+  deli-hardware spec specifies but never built an ESC/POS-over-TCP:9100 server-driven `ReceiptPrinter`),
+  split into two slices: **Printing subsystem — DESIGNED + PLANNED 2026-08-17** (a new infra sub-project) —
+  central-managed `printers` + **print agents** (local processes that enrol/revoke centrally via a
+  pairing code reusing the device-identity crypto, **pull** jobs from a central `print_jobs` **outbox**,
+  **push** to the physical printer, **report** status), a **transport abstraction** (`usb` +
+  `network_tcp` built, `cloud_poll`/CloudPRNT a fast-follow), an ESC/POS builder, and central dashboard
+  management — so config is central while execution is distributed on whatever box holds the printer, and
+  a job enqueued on **any node (local or cloud)** is delivered by the right agent. **Printing never blocks
+  a fire/sale** (outbox). Largely independent of the table-service track; security review before build.
+  Spec + plan in `docs/superpowers/{specs,plans}/2026-08-17-printing-subsystem*`. **KDS-4 — kitchen
+  printing (Slice B): TO SPEC** — station→printer many-to-many routing + print-on-fire + kitchen-ticket
+  formatting **on top of** the printing subsystem + KDS-1. The
   **always-on device identity** is **now specced + planned** (see its own row below).
   Non-fiscal (pay/collect unchanged). Spec + plan in
   `docs/superpowers/{specs,plans}/2026-08-17-kds-1*`. **Reworks shipped #63** (`order_prep` + its
@@ -431,10 +440,13 @@ features build-blocked on TS-1 + FP-1. So **all three surfaces the owner set out
 KDS, bookings — now have a first slice specced + planned**, plus the **always-on device identity** (a KDS
 spin-off) specced + planned too, build-blocked on KDS-1. **KDS-2** (courses + fire control) and **KDS-3**
 (expo/pass) are **now specced + planned** too (2026-08-17), build-blocked on KDS-1(/KDS-2). So **the KDS
-track's design is complete** (KDS-1/2/3 + device identity). **Still to spec:** **KDS-4 — kitchen printers**
-(route a station's tickets to a physical printer for a paper ticket; owner requirement 2026-08-17) — its
-own brainstorm → spec → plan, needing print/hardware grounding. **Nothing in this track is built yet**; TS-1 is the first buildable
-slice (everything else depends on it). The owner
+track's design is complete** (KDS-1/2/3 + device identity). The **kitchen-printers** requirement grew into
+a **printing subsystem** (central printers + print agents + a transport-pluggable outbox), **now specced +
+planned** (2026-08-17), largely independent of the table-service track. **Still to spec:** **KDS-4 —
+kitchen printing** (station→printer routing + print-on-fire on top of the printing subsystem + KDS-1), the
+printing **cloud_poll** transport (fast-follow), and the printing **customer-receipt + cash-drawer**
+consumers. **Nothing in this track is built yet**; TS-1 is the first buildable slice of the table-service
+track (the printing subsystem can build independently of it). The owner
 **may be reachable by laptop** during the 2026-08-19 → 25 trip, so this track can also progress remotely.
 
 ---
