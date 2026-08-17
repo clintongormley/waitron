@@ -14,7 +14,16 @@ rest of the track leans on (floor plan renders it, KDS routes it, bookings reser
 
 - **Service model: hybrid.** The venue runs full table service (a waiter tab held open at a table) AND
   counter-order-delivered-to-a-table, side by side.
-- **A table carries at most ONE open tab, plus counter deliveries.** Not multiple concurrent tabs.
+- **A table carries at most ONE open tab, plus counter deliveries.** Not multiple concurrent tabs
+  (confirmed 2026-08-17 over two alternatives — "one tab per dining table + a multi-tab counter table"
+  and "many tabs per table everywhere" — both rejected).
+- **The counter is NOT a table.** It stays the existing held-order queue (#61 — many concurrent open
+  counter orders, no `table_id`), because it is a *queue*, not an occupancy-bearing spot. Modelling it
+  as a multi-tab "table" was considered and rejected: it would force the clean one-tab-per-table DB
+  constraint to become conditional, for little gain.
+- **QR-code ordering (a future feature) needs NO change to this model.** Order-and-pay-in-one-go is a
+  counter-delivery (`delivery_table_id`, no tab); order-onto-the-tab is an `addTabRound` on the table's
+  one shared tab; separate checks are TS-5 split-bill. None require multiple concurrent tabs per table.
 - **The track is decomposed into slices; this is TS-1 (core).** TS-2 configurable statuses, TS-3
   move/merge, TS-4 transfer-items, TS-5 split-bill each get their own spec. All were requested; they are
   sequenced, not dropped.
@@ -125,6 +134,12 @@ identity, "server" here is only the backend-app directory name.)
   (`working-order.ts:474`) deletes and re-inserts the whole basket (`:511-513`), which re-locks every
   line at the current catalogue price and is wrong for an incremental tab. Throws `tab.not_open` if the
   order is not `open` (or not a tab).
+  - **Concurrency (load-bearing for QR).** `line_no` must be allocated under a **per-tab lock** (a
+    `SELECT … FOR UPDATE` on the tab row) or a sequence — several rounds can append at once, and with
+    QR-code ordering *multiple guests append to one shared tab simultaneously*, so a naïve
+    `max(line_no)+1` read races and collides on the `(working_order_id, line_no)` unique
+    (`orders.ts:186`). Follow the locking shape the per-node `order_number` allocator already uses
+    (`working-order.ts:263`). A real-PG concurrent-`addTabRound` test proves it (§7).
 - `voidTabLine(tx, cfg, tabId, lineNo) → void` — deletes one not-yet-paid line from an `open` tab
   (pre-fiscal — nothing is filed, so no fiscal record or amendment is involved). Throws `tab.not_open`,
   `tab.line_not_found`.
@@ -209,7 +224,9 @@ plan and cited:
   the tenant predicate; the **one-open-tab-per-table** partial unique proven by deletion of the index
   **and** by a concurrent-`openTab` race (two backends, same table → exactly one wins, the other gets
   `tab.already_open`); the `working_orders` new columns visible to the non-superuser `app_user` under the
-  existing policy (differential — fails if `asAppUser` is dropped).
+  existing policy (differential — fails if `asAppUser` is dropped); and a **concurrent-`addTabRound`**
+  race (two backends append to one tab at once → both rounds land with distinct `line_no`s, no
+  `(working_order_id, line_no)` collision — proven by deletion of the per-tab lock, which then collides).
 - **PGlite** — the verb logic: `openTab` sets `table_id` and refuses a second tab; **`addTabRound`
   appends without re-pricing** (open a tab, add a round, change the catalogue price, add a second round →
   the first round's `unit_price_gross` is unchanged — the load-bearing test, contrasted against
