@@ -369,16 +369,31 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   is their UI; FP-2 builds on FP-1) — execute only after they land, FP-1 before FP-2.
 - **KDS (sub-project 12)** — **multi-station routing** (per-station displays, route each line to its
   station, course firing) — a station/routing model, not merely an extension of #63's prep surface.
+  **KDS-1 DESIGNED + PLANNED 2026-08-17** — brainstormed with the owner (visual companion), full scope
+  chosen then sliced **KDS-1 → KDS-2 → KDS-3**. **KDS-1** (this) = `kitchen_stations` config (one
+  default) + routing (`category.station_id` default, `product.station_id` override, snapshotted at fire
+  time) + the big rework: **`order_prep` (one-row-per-order) is replaced by per-line/per-station
+  `ticket_items`** (`queued→preparing→ready`), so tab rounds and multi-station orders finally reach the
+  kitchen; a **session-gated** till station-display (kanban ⇄ rail, per-line bump, whole-ticket
+  configurable); and the **ready→floor** loop (a `ready` ticket → FP-1's "N listos", distinct from
+  `served_at`). **KDS-2** (courses + fire control) and **KDS-3** (expo/pass) + the **always-on device
+  identity** (net-new — no device auth exists today, so deferred to its own slice) **remain to spec**.
+  Non-fiscal (pay/collect unchanged). Spec + plan in
+  `docs/superpowers/{specs,plans}/2026-08-17-kds-1*`. **Reworks shipped #63** (`order_prep` + its
+  verbs/widget) and **build-blocked on TS-1 + FP-1** (tab firing + the floor read) — execute after both
+  land.
 - **Bookings (sub-project 17)** — **staff-entered reservations** (date / time / party size / contact,
   optional table assignment) from the dashboard; **no** public/online surface in slice 1.
 
 Build order: the **table-service core (TS-1 → TS-5) is specced + planned** (2026-08-17), and **the whole
 floor-plan surface (FP-1 operable live floor + FP-2 spatial canvas/editor) is now specced + planned**
-too (2026-08-17), build-blocked on TS-1/TS-2 (FP-1 before FP-2). **Still to spec:** **KDS** (multi-station
-routing) and **bookings** (staff reservations) — each its own brainstorm → spec → plan cycle. **Nothing
-in this track is built yet**; TS-1 is the first buildable slice (everything else depends on it). The
-owner **may be reachable by laptop** during the 2026-08-19 → 25 trip, so this track can also progress
-remotely.
+too (2026-08-17), build-blocked on TS-1/TS-2 (FP-1 before FP-2). **KDS-1** (stations + routing + the
+per-line ticket rework + station display + ready→floor) is **now specced + planned** too (2026-08-17),
+build-blocked on TS-1 + FP-1 and reworking shipped #63. **Still to spec:** **KDS-2** (courses), **KDS-3**
+(expo/pass), the **always-on device identity**, and **bookings** (staff reservations) — each its own
+brainstorm → spec → plan cycle. **Nothing in this track is built yet**; TS-1 is the first buildable slice
+(everything else depends on it). The owner **may be reachable by laptop** during the 2026-08-19 → 25 trip,
+so this track can also progress remotely.
 
 ---
 
