@@ -381,8 +381,18 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   course auto-fires, later courses hold (greyed on the station display) until fired; **`fire_control`**
   is a venue setting (`waiter` default / `kitchen`, both built; `expo` reserved for KDS-3). `fired_at` +
   `course_id` on `ticket_items`; held items can't advance (`ticket.item_held`). Non-fiscal; blocked on
-  KDS-1. Spec + plan in `docs/superpowers/{specs,plans}/2026-08-17-kds-2*`. **KDS-3** (expo/pass) **remains
-  to spec**; the
+  KDS-1. Spec + plan in `docs/superpowers/{specs,plans}/2026-08-17-kds-2*`. **KDS-3 DESIGNED + PLANNED
+  2026-08-17** — a **dedicated expo/pass display** aggregating every open order across all stations by
+  course, with the pass's levers: **fire** the next course (KDS-2's `expo` `fire_control` value), one-tap
+  **bump-course-ready** across stations, and **away** (`ticket_items.away_at` — plated & dispatched,
+  feeding the floor an "en camino" hint between kitchen-`ready` and waiter-`served`). Session-gated (an
+  `expo` device kind follows device-identity). Non-fiscal; blocked on KDS-1 + KDS-2. Spec + plan in
+  `docs/superpowers/{specs,plans}/2026-08-17-kds-3*`. **So the KDS track's DESIGN is complete** (KDS-1
+  core, KDS-2 courses, KDS-3 expo, + the always-on device identity). **KDS-4 — kitchen printers (paper
+  tickets): TO SPEC** — a station should be able to route its tickets to a **physical printer** for a
+  paper ticket (owner requirement 2026-08-17), as an output alongside/instead of the KDS screen. Distinct
+  concern (station *output* + print/hardware integration) → its own brainstorm → spec → plan; needs
+  grounding on any existing receipt-print/hardware infra. The
   **always-on device identity** is **now specced + planned** (see its own row below).
   Non-fiscal (pay/collect unchanged). Spec + plan in
   `docs/superpowers/{specs,plans}/2026-08-17-kds-1*`. **Reworks shipped #63** (`order_prep` + its
@@ -419,9 +429,11 @@ build-blocked on TS-1 + FP-1 and reworking shipped #63. **Bookings-1** (staff re
 + reserved-on-floor) is **now specced + planned** too (2026-08-17); its core is independent, the seat/floor
 features build-blocked on TS-1 + FP-1. So **all three surfaces the owner set out to design — floor plan,
 KDS, bookings — now have a first slice specced + planned**, plus the **always-on device identity** (a KDS
-spin-off) specced + planned too, build-blocked on KDS-1. **KDS-2** (courses + fire control) is **now
-specced + planned** too (2026-08-17), build-blocked on KDS-1. **Still to spec:** **KDS-3** (expo/pass) —
-its own brainstorm → spec → plan cycle. **Nothing in this track is built yet**; TS-1 is the first buildable
+spin-off) specced + planned too, build-blocked on KDS-1. **KDS-2** (courses + fire control) and **KDS-3**
+(expo/pass) are **now specced + planned** too (2026-08-17), build-blocked on KDS-1(/KDS-2). So **the KDS
+track's design is complete** (KDS-1/2/3 + device identity). **Still to spec:** **KDS-4 — kitchen printers**
+(route a station's tickets to a physical printer for a paper ticket; owner requirement 2026-08-17) — its
+own brainstorm → spec → plan, needing print/hardware grounding. **Nothing in this track is built yet**; TS-1 is the first buildable
 slice (everything else depends on it). The owner
 **may be reachable by laptop** during the 2026-08-19 → 25 trip, so this track can also progress remotely.
 
