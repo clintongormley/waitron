@@ -3,7 +3,9 @@
 **Date:** 2026-08-17. **Status:** design (approved with the owner); plan to follow. **Track:** the
 third slice of the **table-service track** (sub-project 10). **Runs SUPERVISED**, not in the campaign.
 **Builds on TS-1** ([tables + tabs](2026-08-17-table-service-ts1-tables-and-tabs-design.md), the
-`dining_tables.tab_id` **back-pointer**) and interacts with TS-2 (statuses).
+`dining_tables.tab_id` **back-pointer**) **and TS-2** — it reads/writes `dining_tables.status_id` (TS-2's
+column) and its behaviour is entangled with TS-2's abandon/settle reset trigger, so it executes **after
+TS-2 has landed** (build order TS-1 → TS-2 → TS-3).
 
 The back-pointer — each table points at the open tab covering it, and several tables may point at the
 same tab — makes re-seating and combining parties fall out with **no new schema**: these verbs only
@@ -58,10 +60,18 @@ UPDATE` in ascending id order** — a fixed lock order so two concurrent table-s
 - **`mergeTabs(tx, cfg, intoTabId, fromTabId, { freeSourceTable }) → void`** — combine two tabs onto one
   bill. Validates both are distinct (`tab.merge_self` if equal) `open` tabs (`tab.not_open`). Then:
   1. `moveTabLines(tx, fromTabId, intoTabId)` — move **all** of `fromTab`'s lines onto `intoTab`.
-  2. abandon `fromTab` (`open → abandoned`, now empty).
-  3. source table fate: `freeSourceTable = true` → the source table's `tab_id → NULL` (freed; its TS-2
-     status clears — the 2+2 *consolidate* case). `freeSourceTable = false` → the source table's
-     `tab_id → intoTabId` (both tables now covered by the one bill — the 4+4 *join* case).
+  2. **Re-point the source table BEFORE abandoning `fromTab`** (this ordering is load-bearing — see
+     below): `freeSourceTable = true` → source table `tab_id → NULL` **and** `status_id → NULL` (freed;
+     the 2+2 *consolidate* case); `freeSourceTable = false` → source table `tab_id → intoTabId`, status
+     **kept** (both tables now covered by one bill — the 4+4 *join* case).
+  3. abandon `fromTab` (`open → abandoned`, now empty).
+
+  **Why step 2 precedes step 3:** TS-2's `working_orders_clear_table_status` trigger fires on
+  `open → abandoned` too (not only on pay), clearing `status_id` on every table where `tab_id = fromTab`.
+  Re-pointing the source table first means that by step 3 **no** table points at `fromTab`, so the trigger
+  is a no-op — abandon-then-repoint would instead wrongly clear the status of a **still-joined**
+  (`freeSourceTable:false`) source table. TS-3's plan proves this ordering load-bearing by deletion.
+
   The merged `intoTab` (holding every line) files **one** sale on pay; `fromTab`, abandoned and empty,
   files nothing — no double-file (H2, §5).
 - **`moveTabLines(tx, fromTabId, toTabId, lineNos?) → void`** (shared helper) — move the named lines
@@ -80,8 +90,11 @@ operations.
 
 A freed table's manual status clears: `moveTab` and `mergeTabs{freeSourceTable:true}` null the source
 table's `status_id` in the same statement that nulls its `tab_id` (the tab left → turnover). A table that
-stays joined keeps its status. This is the same "clear on turnover" TS-2 established, applied at the
-move/merge boundary (the TS-2 settle-trigger only fires on pay, so these verbs clear explicitly).
+stays joined keeps its status. This is the same "clear on turnover" TS-2 established, applied explicitly
+at the move/merge boundary. **Note** TS-2's reset trigger fires on `open → settled` **and**
+`open → abandoned`, so `mergeTabs`'s own `abandon fromTab` would itself trip it — which is exactly why
+step 2 (re-point) must precede step 3 (abandon), §3: by the time `fromTab` is abandoned no table points
+at it, so the trigger is inert and the explicit clears above are the single source of the status change.
 
 ## 5. Fiscal safety (H2)
 

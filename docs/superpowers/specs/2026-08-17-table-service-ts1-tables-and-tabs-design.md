@@ -105,11 +105,15 @@ working_orders.delivery_table_id uuid NULL  composite FK (tenant_id, delivery_ta
 
 One `packages/db` migration set (number via `pnpm --filter @waitron/db db:generate` against the live
 tree — **do not hardcode**; the campaign may consume numbers first): the auto part (create
-`dining_tables`, add `dining_tables.tab_id` + `working_orders.delivery_table_id` + their composite FKs)
-plus a **custom** part (FORCE RLS + policy + grant on `dining_tables`). `dining_tables.tab_id` → `working_orders`
-and `working_orders.delivery_table_id` → `dining_tables` form a **mutual FK between the two tables**, so
-`db:generate` emits them as two `ALTER TABLE … ADD CONSTRAINT` statements (both tables exist before either
-FK is added, and both columns are nullable, so there is no create/insert ordering problem). Commit the
+`dining_tables` + its `tab_id` **column**, add the `working_orders.delivery_table_id` **column**) plus a
+**custom** part (FORCE RLS + policy + grant on `dining_tables`, **and both composite FKs**).
+`dining_tables.tab_id` → `working_orders` and `working_orders.delivery_table_id` → `dining_tables` form a
+**mutual FK between the two tables** — and declaring them as Drizzle schema `foreignKey()`s would make
+`dining-tables.ts` and `orders.ts` eagerly import each other's tables at load time (a cycle the
+lazy-thunk trick the `locations↔catalogue` cycle uses can't break for a *composite* FK). So the columns
+stay **bare** in the schema and **both FKs are hand-written** in the custom migration as
+`ALTER TABLE … ADD CONSTRAINT` (both tables exist before either is added, both columns nullable — no
+create/insert ordering problem). Verify `db:generate` emits only the column ADDs. Commit the
 `meta/_journal.json` + snapshot. No backfill (pre-production, CLAUDE.md §3).
 
 ## 3. Behaviour

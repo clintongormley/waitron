@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Introduce the real `dining_tables` primitive and the running **tab** (an `open` working order anchored to a table), plus per-line void, pay-closes-the-tab (reusing the existing fiscal path unchanged), a counter "deliver to table N" link, and a derived occupancy read-model — headless, SUPERVISED (owner in the loop).
+**Goal:** Introduce the real `dining_tables` primitive and the running **tab** (an `open` working order a table points at via a `tab_id` back-pointer), plus per-line void, pay-closes-the-tab (reusing the existing fiscal path unchanged), a counter "deliver to table N" link, and a derived occupancy read-model — headless, SUPERVISED (owner in the loop).
 
-**Architecture:** Schema (`dining_tables` + two nullable `working_orders` columns) lives in `packages/db`; the domain verbs live in `apps/server` beside the existing order logic (`working-order.ts`, `till-sale.ts`, a new `tables.ts`), each taking a caller-supplied `tx` and run under `withTenant`/`asAppUser` by the HTTP layer (`till-api.ts`). A tab is an `open` working order, so it reuses the existing order → pay → file machinery and **nothing fiscal changes**: pay reuses `payWorkingOrder` → `recordSale` UNCHANGED, and the two new columns never enter the sale or the huella.
+**Architecture:** Schema (`dining_tables` with a `tab_id` back-pointer + one nullable `working_orders.delivery_table_id` column) lives in `packages/db`; the domain verbs live in `apps/server` beside the existing order logic (`working-order.ts`, `till-sale.ts`, a new `tables.ts`), each taking a caller-supplied `tx` and run under `withTenant`/`asAppUser` by the HTTP layer (`till-api.ts`). The table↔tab link is a **back-pointer on the table** (`dining_tables.tab_id → working_orders`), so one open tab per table is automatic from a single nullable FK — **no partial-unique, no CHECK** — and the per-table `FOR UPDATE` lock in `openTab` is the concurrency guard. A tab is an `open` working order, so pay reuses `payWorkingOrder` → `recordSale` UNCHANGED and **nothing fiscal changes**: the filed `working_orders` row carries no tab-membership at all (only `delivery_table_id`, which `recordSale` does not read).
 
 **Tech Stack:** TypeScript (ESM, Node), Drizzle ORM + drizzle-kit (PostgreSQL 18), Hono HTTP, Vitest, PGlite (hermetic) + Testcontainers (real Postgres for RLS/concurrency), pnpm workspace.
 
@@ -14,12 +14,12 @@
 
 - **Coverage thresholds 98/98/98/95** (statements/lines/functions/branches) for both `packages/db` and `apps/server`. CI shards run `test:coverage`, not `test` — verify each package green with `pnpm --filter <pkg> test:coverage`.
 - **Migration numbers are INDICATIVE.** Assign every number via `pnpm --filter @waitron/db db:generate` (auto part) and `pnpm --filter @waitron/db db:generate:custom` (custom part) against the LIVE tree — never hardcode a number; the autonomous campaign may consume numbers first. Commit the generated `packages/db/drizzle/meta/_journal.json` + snapshot alongside each `.sql`.
-- **FORCE RLS + tenant-isolation policy + grants go in a HAND-WRITTEN custom migration.** `.enableRLS()` emits only `ENABLE ROW LEVEL SECURITY`; it is insufficient (CLAUDE.md §3). A new `tenant_id`-bearing table needs `FORCE ROW LEVEL SECURITY`, a `<t>_tenant_isolation` policy (`USING/WITH CHECK (tenant_id = current_tenant_id())`), and grants — pattern in `packages/db/drizzle/0039_recipes_rls.sql` and `0001_tenancy_rls.sql`.
-- **English identifiers only.** `dining_tables`, `table_id`, `delivery_table_id`, `zone`, `capacity`, `label`. `mesa`/`mesas` are banned (`packages/db/src/english-only.ts:209-210`); the UI renders "Mesa" via i18n. Add NO new `SPANISH_WORDS` tokens.
+- **FORCE RLS + tenant-isolation policy + grants + any trigger go in a HAND-WRITTEN custom migration.** `.enableRLS()` emits only `ENABLE ROW LEVEL SECURITY`; it is insufficient (CLAUDE.md §3). A new `tenant_id`-bearing table needs `FORCE ROW LEVEL SECURITY`, a `<t>_tenant_isolation` policy (`USING/WITH CHECK (tenant_id = current_tenant_id())`), and grants — pattern in `packages/db/drizzle/0039_recipes_rls.sql`.
+- **English identifiers only.** `dining_tables`, `tab_id`, `delivery_table_id`, `zone`, `capacity`, `label`. `mesa`/`mesas` are banned (`packages/db/src/english-only.ts`); the UI renders "Mesa" via i18n. Add NO new `SPANISH_WORDS` tokens.
 - **Domain-named error codes, never renamed once shipped.** `table.not_found`, `table.label_taken`, `table.inactive`, `tab.already_open`, `tab.not_open`, `tab.line_not_found` — declared in `apps/server/src/errors.ts` (the host registry that already declares `working_order.*`/`order_prep.*`), and every throwing file carries `import "./errors.js"`. The root `errors-reachable` guard covers `packages/*` barrels, NOT `apps/*`, so keep the import present.
-- **H2 — the fiscal core is untouched.** `computeHuella`, the hash chain, `registros_facturacion`, invoice numbers, and the alta builders are not modified. Pay reuses `recordSale` UNCHANGED; the two new columns MUST NOT enter the sale or the huella (grep-proven + a huella-identity test).
 - **Real Postgres for RLS/concurrency; PGlite is a false pass there.** PGlite runs every connection as a superuser (bypasses FORCE RLS) and serialises every query onto one backend (no race). Put RLS isolation, both concurrency races, and the huella-identity test on Testcontainers; note `TESTCONTAINERS_RYUK_DISABLED=true` locally (CLAUDE.md §4).
-- **Prove every guard by deletion.** Remove the RLS predicate / index / lock / gate, confirm the test fails, restore it. A test that still passes with the guard removed is not testing the guard.
+- **H2 — the fiscal core is untouched.** `computeHuella`, the hash chain, `registros_facturacion`, invoice numbers, and the alta builders are not modified. Pay reuses `recordSale` UNCHANGED; the filed `working_orders` row carries no tab-membership (the link is on the table), only `delivery_table_id`, which `recordSale` MUST NOT read (grep-proven + a huella-identity test).
+- **Prove every guard by deletion.** Remove the RLS predicate / FK / lock / gate, confirm the test fails, restore it. A test that still passes with the guard removed is not testing the guard.
 - **No backwards-compat / data-migration code.** Pre-production; schema changes drop-and-recreate, CI builds fresh. No backfill.
 - **Every commit `git commit -s`.**
 
@@ -28,46 +28,57 @@
 ## File Structure
 
 **Created:**
-- `packages/db/src/schema/dining-tables.ts` — the `dining_tables` Drizzle table (tenant + location scoped, `.enableRLS()`), its two uniques, composite location FK. One responsibility: the table definition.
-- `packages/db/drizzle/00NN_<name>.sql` (auto, Task 1) — `CREATE TABLE dining_tables` + FKs + uniques (drizzle-kit generated).
+- `packages/db/src/schema/dining-tables.ts` — the `dining_tables` Drizzle table (tenant + location scoped, `.enableRLS()`), its two uniques, the composite location FK, and a **bare** `tab_id` column (its FK is hand-written in Task 2 — see there). One responsibility: the table definition.
+- `packages/db/drizzle/00NN_dining_tables.sql` (auto, Task 1) — `CREATE TABLE dining_tables` + uniques + location FK, plus `ALTER TABLE locations ADD CONSTRAINT locations_tenant_id_key`.
 - `packages/db/drizzle/00NN_dining_tables_rls.sql` (custom, Task 1) — FORCE RLS + `dining_tables_tenant_isolation` policy + `GRANT SELECT, INSERT, UPDATE` (no DELETE).
-- `packages/db/drizzle/00NN_<name>.sql` (auto, Task 2) — `working_orders` two columns + composite FKs + CHECK + partial unique index.
+- `packages/db/drizzle/00NN_tab_link.sql` (auto, Task 2) — `ALTER TABLE working_orders ADD COLUMN delivery_table_id uuid`.
+- `packages/db/drizzle/00NN_tab_link_fks.sql` (custom, Task 2) — the two mutual composite FKs (`dining_tables_tab_fk`, `working_orders_delivery_table_fk`), hand-written to avoid a schema-module import cycle (see Task 2).
 - `packages/db/src/schema/dining-tables.rls.test.ts` — real-PG: cross-tenant RLS isolation (prove-by-deletion), grant shape (SELECT/INSERT/UPDATE, no DELETE).
-- `packages/db/src/schema/orders.tab-columns.rls.test.ts` — real-PG: the CHECK (not-both-set, prove-by-deletion), the one-open-tab partial unique (prove-by-deletion), and the new columns visible to `app_user` under the existing policy (differential).
+- `packages/db/src/schema/tab-link.rls.test.ts` — real-PG: `tab_id`/`delivery_table_id` visible to `app_user` under the existing policies (differential), and both mutual FKs bite (prove-by-deletion).
 - `apps/server/src/tables.ts` — table CRUD verbs (`createTable`/`listTables`/`updateTable`/`deactivateTable`) + `DiningTable` type.
 - `apps/server/src/tables.test.ts` — PGlite: CRUD logic + `table.label_taken`/`table.not_found`.
-- `apps/server/src/tabs.test.ts` — PGlite: `openTab` (sets `table_id`, refuses a 2nd tab via pre-check), `addTabRound` (append without re-price), `voidTabLine`, `listTablesWithState` occupancy.
-- `apps/server/src/tabs.rls.test.ts` — real-PG: concurrent `openTab` race, concurrent `addTabRound` race, pay-closes-tab, huella-identity (table_id not hashed), `deliveryTableId` write.
+- `apps/server/src/tabs.test.ts` — PGlite: `openTab` (sets `tab_id`, refuses a 2nd tab, overwrites a stale pointer), `addTabRound` (append without re-price), `voidTabLine`, `listTablesWithState` occupancy.
+- `apps/server/src/tabs.rls.test.ts` — real-PG: concurrent `openTab` race (prove-by-deletion of the per-table lock), concurrent `addTabRound` race (prove-by-deletion of the per-tab lock), pay-closes-tab, huella-identity, `deliveryTableId` write.
 - `apps/server/src/till-api.tables.test.ts` — the new HTTP routes (session-guard, `isUuid` 4xx, status mapping).
 
 **Modified:**
 - `packages/db/src/schema/index.ts` — re-export `dining-tables.js` (widens `Database`'s schema type).
 - `packages/db/src/index.ts` — `export { diningTables } from "./schema/dining-tables.js"`.
-- `packages/db/src/schema/orders.ts` — add `tableId`/`deliveryTableId` columns, their composite FKs, the not-both-set CHECK, the one-open-tab partial unique index.
+- `packages/db/src/schema/tenants.ts` — add `locations_tenant_id_key (tenant_id, id)` unique to `locations` (the composite target `dining_tables_location_fk` needs).
+- `packages/db/src/schema/orders.ts` — add the bare `deliveryTableId` column (its FK is hand-written in Task 2).
 - `apps/server/src/errors.ts` — declare the six new codes (across Tasks 3–6).
-- `apps/server/src/working-order.ts` — extend `createOpenOrder` with a `placement` param; add `openTab`, `addTabRound`, `voidTabLine`, `listTablesWithState`.
+- `apps/server/src/working-order.ts` — guard `createOpenOrder`'s line insert (Task 4) + add its `placement` param (Task 8); add `openTab`, `lockOpenTab`, `addTabRound`, `voidTabLine`, `listTablesWithState`.
 - `apps/server/src/till-sale.ts` — thread `deliveryTableId` through `TillSaleRequest`/`PayWorkingOrderRequest` → `recordTillSale` → `payWorkingOrder` → `createOpenOrder`.
 - `apps/server/src/till-api.ts` — mount the table + tab routes; extend the `STATUS` map.
 
 ---
 
-## Task 1: `dining_tables` schema + custom RLS migration + inmutabilidad-green
+## Task 1: `dining_tables` schema (incl. `tab_id`) + custom RLS migration + inmutabilidad-green
 
 **Files:**
 - Create: `packages/db/src/schema/dining-tables.ts`
-- Modify: `packages/db/src/schema/index.ts`, `packages/db/src/index.ts`
-- Create (generated): `packages/db/drizzle/00NN_<name>.sql` (auto) + `packages/db/drizzle/00NN_dining_tables_rls.sql` (custom) + `meta/_journal.json`/snapshot updates
+- Modify: `packages/db/src/schema/index.ts`, `packages/db/src/index.ts`, `packages/db/src/schema/tenants.ts`
+- Create (generated): `packages/db/drizzle/00NN_dining_tables.sql` (auto) + `packages/db/drizzle/00NN_dining_tables_rls.sql` (custom) + `meta/_journal.json`/snapshot updates
 - Test: `packages/db/src/schema/dining-tables.rls.test.ts`
 
 **Interfaces:**
-- Produces: `diningTables` (Drizzle `pgTable`) exported from `@waitron/db`, with columns `id`, `tenantId`, `locationId`, `label`, `zone`, `capacity`, `active`, `createdAt`; uniques `dining_tables_tenant_id_key (tenant_id, id)` and `dining_tables_location_label_key (tenant_id, location_id, label)`; composite FK `(tenant_id, location_id) → locations(tenant_id, id)`. RLS: FORCE + `dining_tables_tenant_isolation` policy + `GRANT SELECT, INSERT, UPDATE` to `app_user`.
+- Produces: `diningTables` (Drizzle `pgTable`) exported from `@waitron/db`, columns `id`, `tenantId`, `locationId`, `label`, `zone`, `capacity`, `active`, `createdAt`, and a **bare** `tabId` (`tab_id uuid NULL`); uniques `dining_tables_tenant_id_key (tenant_id, id)` and `dining_tables_location_label_key (tenant_id, location_id, label)`; composite FK `(tenant_id, location_id) → locations(tenant_id, id)`. RLS: FORCE + `dining_tables_tenant_isolation` policy + `GRANT SELECT, INSERT, UPDATE` to `app_user`.
+- Produces: `locations` gains `locations_tenant_id_key (tenant_id, id)`.
 
-- [ ] **Step 1: Write the `dining_tables` schema.** Mirror `order-prep.ts`/`orders.ts` conventions (composite FK via `foreignKey(...)`, `.enableRLS()`, custom-migration comment).
+- [ ] **Step 1: Add the composite `(tenant_id, id)` unique to `locations`.** In `packages/db/src/schema/tenants.ts`, add to the `locations` `extraConfig` array (it already imports `unique`), so `dining_tables_location_fk` has a target — the same role `tills_tenant_id_key`/`nodes_tenant_id_key` play for their composite FKs:
+
+```typescript
+    // Composite (tenant_id, id) UNIQUE — the target for dining_tables_location_fk's tenant-consistent
+    // (tenant_id, location_id) FK (dining-tables.ts), the same role tills_tenant_id_key plays for
+    // order_amendments_till_fk. A single-column-PK table takes the extra unique the way tills/nodes do.
+    unique("locations_tenant_id_key").on(t.tenantId, t.id),
+```
+
+- [ ] **Step 2: Write the `dining_tables` schema.** Mirror `order-prep.ts`/`orders.ts` conventions (composite FK via `foreignKey(...)`, `.enableRLS()`, custom-migration comment). The `tab_id` column is BARE — no `foreignKey()` for it here, because the `dining_tables_tab_fk (tenant_id, tab_id) → working_orders` FK and the reverse `working_orders_delivery_table_fk` form a MUTUAL FK between the two schema modules; declaring both in the Drizzle schemas would make each module import the other and eagerly reference its columns in `foreignKey()` at load time — an import cycle. Both FKs are hand-written in Task 2's custom migration instead (§2c).
 
 `packages/db/src/schema/dining-tables.ts`:
 
 ```typescript
-import { sql } from "drizzle-orm";
 import {
   boolean,
   foreignKey,
@@ -85,12 +96,18 @@ import { locations, tenants } from "./tenants.js";
  * `node` (working orders, the held list, the order-number counter and the prep queue are all
  * node-scoped, but a table must not fragment when a venue runs a second node — design §2a).
  *
- * Deactivate, never hard-delete (`active`), because a table has order history: `working_orders` carries
- * `table_id`/`delivery_table_id` composite FKs onto it. `.enableRLS()` emits only ENABLE ROW LEVEL
- * SECURITY; the FORCE ROW LEVEL SECURITY, the `dining_tables_tenant_isolation` policy and the
- * SELECT/INSERT/UPDATE grant (no DELETE — deactivate) are hand-written in the custom migration, exactly
- * as 0039 does for `ingredients`/`recipe_lines`. The `inmutabilidad` guard in packages/fiscal-verifactu
- * scans every tenant_id-bearing table for both RLS flags, so a missing FORCE here fails that suite.
+ * `tab_id` is the BACK-POINTER to the open tab covering this table (design §2b): set ⇒ this table is
+ * covered by that open working order; a single nullable FK gives one-open-tab-per-table automatically
+ * (no partial-unique, no CHECK). Several tables pointing at the SAME tab is a join (TS-3); TS-1 only
+ * ever sets one table's tab_id per tab. It is a BARE column here — its FK to working_orders is
+ * hand-written in the mutual-FK migration (Task 2), because the reverse FK
+ * (working_orders.delivery_table_id → dining_tables) would otherwise close a load-time import cycle.
+ *
+ * Deactivate, never hard-delete (`active`), because a table has order history. `.enableRLS()` emits only
+ * ENABLE ROW LEVEL SECURITY; the FORCE ROW LEVEL SECURITY, the `dining_tables_tenant_isolation` policy
+ * and the SELECT/INSERT/UPDATE grant (no DELETE — deactivate) are hand-written in the custom migration,
+ * exactly as 0039 does for `ingredients`. The `inmutabilidad` guard in packages/fiscal-verifactu scans
+ * every tenant_id-bearing table for both RLS flags, so a missing FORCE here fails that suite.
  */
 export const diningTables = pgTable(
   "dining_tables",
@@ -111,11 +128,15 @@ export const diningTables = pgTable(
     capacity: integer("capacity"),
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
+    // The open tab covering this table (design §2b). Nullable back-pointer; a set value points at an
+    // `open` working order. BARE column — its (tenant_id, tab_id) → working_orders(tenant_id, id) FK is
+    // hand-written in Task 2's custom migration (the mutual-FK cycle note above).
+    tabId: uuid("tab_id"),
   },
   (t) => [
     // Composite (tenant_id, id) UNIQUE — the target for working_orders' tenant-consistent
-    // (tenant_id, table_id) / (tenant_id, delivery_table_id) FKs, the same role nodes_tenant_id_key
-    // plays for working_orders_node_fk.
+    // (tenant_id, delivery_table_id) FK (Task 2), the same role nodes_tenant_id_key plays for
+    // working_orders_node_fk.
     unique("dining_tables_tenant_id_key").on(t.tenantId, t.id),
     // No duplicate labels within a venue.
     unique("dining_tables_location_label_key").on(t.tenantId, t.locationId, t.label),
@@ -130,9 +151,7 @@ export const diningTables = pgTable(
 ).enableRLS();
 ```
 
-> NB `locations` currently declares no composite `(tenant_id, id)` unique of its own (`tenants.ts:69`). Run Step 4's `db:generate` and read the emitted SQL: if drizzle-kit reports it cannot target `locations(tenant_id, id)`, add `unique("locations_tenant_id_key").on(t.tenantId, t.id)` to `locations` in `tenants.ts` in THIS step (a single-column-PK table takes the extra unique the way `nodes`/`tills` already do), regenerate, and note it. Do not proceed on an FK drizzle-kit refused to emit.
-
-- [ ] **Step 2: Re-export from both barrels.**
+- [ ] **Step 3: Re-export from both barrels.**
 
 `packages/db/src/schema/index.ts` — add after the `order-prep.js` line:
 
@@ -146,17 +165,17 @@ export * from "./dining-tables.js";
 export { diningTables } from "./schema/dining-tables.js";
 ```
 
-- [ ] **Step 3: Typecheck the schema compiles.**
+- [ ] **Step 4: Typecheck the schema compiles.**
 
 Run: `pnpm --filter @waitron/db typecheck`
 Expected: PASS (the new table and its re-exports compile; `Database`'s schema widens for free).
 
-- [ ] **Step 4: Generate the auto migration.**
+- [ ] **Step 5: Generate the auto migration and read it.**
 
 Run: `pnpm --filter @waitron/db db:generate --name dining_tables`
-Expected: a new `packages/db/drizzle/00NN_dining_tables.sql` containing `CREATE TABLE "dining_tables" (...)`, the two uniques, and the `dining_tables_location_fk` composite FK; `meta/_journal.json` + a new snapshot updated. Open the file and confirm the FK, both uniques, and `active boolean NOT NULL DEFAULT true` are present. The NUMBER is whatever drizzle-kit assigned — do not edit it.
+Expected: a new `packages/db/drizzle/00NN_dining_tables.sql` containing `CREATE TABLE "dining_tables" (...)` with `tab_id uuid` and `active boolean NOT NULL DEFAULT true`, the two uniques, the `dining_tables_location_fk` composite FK, AND `ALTER TABLE "locations" ADD CONSTRAINT "locations_tenant_id_key" UNIQUE("tenant_id","id")`. **Open the file and confirm `locations_tenant_id_key` is added BEFORE `dining_tables_location_fk` references it** (drizzle-kit orders a dependency's unique ahead of the FK; if the order is inverted, move the `ALTER TABLE locations` statement above the FK). The NUMBER is whatever drizzle-kit assigned — do not edit it. Commit `meta/_journal.json` + snapshot.
 
-- [ ] **Step 5: Generate + hand-write the custom RLS migration.**
+- [ ] **Step 6: Generate + hand-write the custom RLS migration.**
 
 Run: `pnpm --filter @waitron/db db:generate:custom --name dining_tables_rls`
 Then write into the emitted `packages/db/drizzle/00NN_dining_tables_rls.sql` (mirroring `0039_recipes_rls.sql`):
@@ -177,14 +196,14 @@ REVOKE ALL ON "dining_tables" FROM app_user;--> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE ON "dining_tables" TO app_user;
 ```
 
-- [ ] **Step 6: Run the inmutabilidad guard — it must discover `dining_tables` and require FORCE.**
+- [ ] **Step 7: Run the inmutabilidad guard — it must discover `dining_tables` and require FORCE.**
 
 Run: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/fiscal-verifactu test inmutabilidad`
 Expected: PASS. The tenant_id-scan (`inmutabilidad.test.ts`, keyed on "has a `tenant_id` column") now enumerates `dining_tables`; its `nonCompliant` filter would list `dining_tables: relrowsecurity=... relforcerowsecurity=false` if the custom migration were missing. Green confirms `relforcerowsecurity = true`.
 
 > If this fails with `dining_tables` in the `nonCompliant` list, the custom migration did not run or was misnamed — confirm both `.sql` files are in `packages/db/drizzle/` and `meta/_journal.json` lists both.
 
-- [ ] **Step 7: Write the RLS isolation + grant-shape test (real Postgres, prove-by-deletion).** Mirror `packages/db/src/schema/order-prep.rls.test.ts` (its `useRealPostgres`, `rollBackAfter`, `asApp`/`asAppB`, predicate-deletion idiom).
+- [ ] **Step 8: Write the RLS isolation + grant-shape test (real Postgres, prove-by-deletion).** Mirror `packages/db/src/schema/order-prep.rls.test.ts` (its `useRealPostgres`, `rollBackAfter`, `asApp`/`asAppB`, predicate-deletion idiom).
 
 `packages/db/src/schema/dining-tables.rls.test.ts`:
 
@@ -315,77 +334,45 @@ describe("dining_tables schema (RLS + grants)", () => {
 });
 ```
 
-- [ ] **Step 8: Run the RLS test.**
+- [ ] **Step 9: Run the RLS test.**
 
 Run: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/db test dining-tables.rls`
 Expected: PASS (4 tests). To PROVE the isolation test bites, temporarily change the policy in the migration to `using (true) with check (true)`, rerun the isolation test → the "isolates INSERT between tenants" test FAILS (no 42501); restore.
 
-- [ ] **Step 9: Package green + commit.**
+- [ ] **Step 10: Package green + commit.**
 
 Run: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/db test:coverage`
 Expected: PASS at 98/98/98/95.
 
 ```bash
-git add packages/db/src/schema/dining-tables.ts packages/db/src/schema/index.ts packages/db/src/index.ts packages/db/drizzle/ packages/db/src/schema/dining-tables.rls.test.ts
-git commit -s -m "feat(db): dining_tables entity + custom RLS migration (TS-1)"
+git add packages/db/src/schema/dining-tables.ts packages/db/src/schema/tenants.ts packages/db/src/schema/index.ts packages/db/src/index.ts packages/db/drizzle/ packages/db/src/schema/dining-tables.rls.test.ts
+git commit -s -m "feat(db): dining_tables entity (incl. tab_id back-pointer) + custom RLS migration (TS-1)"
 ```
 
 ---
 
-## Task 2: `working_orders` tab columns + composite FKs + CHECK + one-open-tab partial unique
+## Task 2: `working_orders.delivery_table_id` + the two mutual composite FKs
 
 **Files:**
 - Modify: `packages/db/src/schema/orders.ts`
-- Create (generated): `packages/db/drizzle/00NN_<name>.sql` (auto) + `meta/_journal.json`/snapshot
-- Test: `packages/db/src/schema/orders.tab-columns.rls.test.ts`
+- Create (generated): `packages/db/drizzle/00NN_tab_link.sql` (auto, the column) + `packages/db/drizzle/00NN_tab_link_fks.sql` (custom, both FKs) + `meta/_journal.json`/snapshot
+- Test: `packages/db/src/schema/tab-link.rls.test.ts`
 
 **Interfaces:**
-- Consumes: `diningTables` (Task 1).
-- Produces: `workingOrders.tableId` (`table_id uuid NULL`) and `workingOrders.deliveryTableId` (`delivery_table_id uuid NULL`), each a composite FK `(tenant_id, <col>) → dining_tables(tenant_id, id)`; CHECK `working_orders_table_delivery_ck` (not both set); partial unique index `working_orders_one_open_tab (tenant_id, table_id) WHERE status = 'open' AND table_id IS NOT NULL`.
+- Consumes: `diningTables` (Task 1); `workingOrders` (existing).
+- Produces: `workingOrders.deliveryTableId` (`delivery_table_id uuid NULL`) — a bare column; the DB carries two composite FKs added by the custom migration: `dining_tables_tab_fk (tenant_id, tab_id) → working_orders(tenant_id, id)` and `working_orders_delivery_table_fk (tenant_id, delivery_table_id) → dining_tables(tenant_id, id)`. **No partial-unique, no CHECK.**
 
-- [ ] **Step 1: Add the two columns + FKs + CHECK + partial unique to the schema.** In `packages/db/src/schema/orders.ts`, add `import { diningTables } from "./dining-tables.js";` at the top, add the `boolean`-free set of imports already present (`uniqueIndex` must be added to the `drizzle-orm/pg-core` import), add the two columns after `settledAt`, and add the FKs/CHECK/index to the `extraConfig` array.
+> **Why both FKs are hand-written (not schema-declared).** `dining_tables.tab_id` → `working_orders` and `working_orders.delivery_table_id` → `dining_tables` are a MUTUAL FK between the two schema modules. To declare both in Drizzle, `dining-tables.ts` would import `orders.ts` AND `orders.ts` would import `dining-tables.ts`, and each `foreignKey({ foreignColumns: [...] })` eagerly reads the other table's column objects when `pgTable()` runs — a load-time import cycle in which one side's columns are still `undefined`. The existing `locations ↔ catalogue` cycle survives only because it uses lazy `.references(() => …)` THUNKS (single-column FKs), which composite FKs have no equivalent of. So both columns stay bare in the schema and both FKs are hand-written in the custom migration below — the same mechanism FORCE/policies/grants already use (drizzle-kit does not manage them, and the bare columns produce no schema/snapshot drift). This is a deliberate deviation from spec §2c's "db:generate emits them as two ALTER statements"; recorded in Plan notes.
 
-Add to the pg-core import (it already imports `check, foreignKey, index, integer, ..., unique, uuid`): add `uniqueIndex`.
-
-Columns (after `settledAt: timestamp(...)`):
+- [ ] **Step 1: Add the bare `delivery_table_id` column to `working_orders`.** In `packages/db/src/schema/orders.ts`, add the column after `settledAt` (do NOT add a `foreignKey` for it — the FK is hand-written below; do NOT import `dining-tables.ts`):
 
 ```typescript
-    // Set ⇒ this `open` order IS that table's running tab (design §2b). Nullable; the FK is the
-    // tenant-consistent COMPOSITE (tenant_id, table_id) → dining_tables(tenant_id, id) in extraConfig.
-    tableId: uuid("table_id"),
-    // Set ⇒ this (counter) order is DELIVERED TO that table, not a tab (design §2b). Nullable; same
-    // composite-FK shape. A CHECK below forbids both set at once — a tab is already at its table.
+    // Set ⇒ this (counter) order is DELIVERED TO that table, not a tab (design §2b). Nullable; a tab is
+    // the reverse link (`dining_tables.tab_id` points at the order), so `working_orders` carries NO
+    // tab-membership column — only this delivery link. BARE column: its tenant-consistent composite FK
+    // (tenant_id, delivery_table_id) → dining_tables(tenant_id, id) is hand-written in the mutual-FK
+    // migration (the schema-module import cycle a `foreignKey()` here would close — see dining-tables.ts).
     deliveryTableId: uuid("delivery_table_id"),
-```
-
-extraConfig additions (append to the `(t) => [ ... ]` array):
-
-```typescript
-    // Tenant-consistent composite FKs to the anchored table (design §2b): a working order cannot point
-    // at a table belonging to another tenant, independently of RLS. MATCH SIMPLE satisfies them while
-    // the column is NULL, so both stay nullable.
-    foreignKey({
-      columns: [t.tenantId, t.tableId],
-      foreignColumns: [diningTables.tenantId, diningTables.id],
-      name: "working_orders_table_fk",
-    }),
-    foreignKey({
-      columns: [t.tenantId, t.deliveryTableId],
-      foreignColumns: [diningTables.tenantId, diningTables.id],
-      name: "working_orders_delivery_table_fk",
-    }),
-    // A tab is already AT its table, so an order is never both a tab and a delivery. NOT NULL of both
-    // is fine (a walk-up); at most one may be set.
-    check(
-      "working_orders_table_delivery_ck",
-      sql`not (${t.tableId} is not null and ${t.deliveryTableId} is not null)`,
-    ),
-    // At most ONE open tab per table, venue-wide (design §2b) — the enforcement point for openTab; the
-    // verb also pre-checks so the common case is a clean tab.already_open, and this index backstops the
-    // race. Partial: only `open` rows with a table_id participate.
-    uniqueIndex("working_orders_one_open_tab")
-      .on(t.tenantId, t.tableId)
-      .where(sql`status = 'open' and table_id is not null`),
 ```
 
 - [ ] **Step 2: Typecheck.**
@@ -395,12 +382,37 @@ Expected: PASS.
 
 - [ ] **Step 3: Generate the auto migration and read it.**
 
-Run: `pnpm --filter @waitron/db db:generate --name working_orders_tab_columns`
-Expected: `packages/db/drizzle/00NN_working_orders_tab_columns.sql` with `ALTER TABLE "working_orders" ADD COLUMN "table_id" uuid;`, `... "delivery_table_id" uuid;`, both composite FK `ADD CONSTRAINT`s, the CHECK, and `CREATE UNIQUE INDEX "working_orders_one_open_tab" ON "working_orders" ("tenant_id","table_id") WHERE status = 'open' and table_id is not null;`. **Confirm the `WHERE` clause is present** (drizzle-orm 0.45.2's index builder supports `.where(condition: SQL)` — verified). If the emitted index has no `WHERE`, stop: a full unique on `(tenant_id, table_id)` would forbid a table's SECOND tab even after the first settles. Commit `meta/_journal.json` + snapshot.
+Run: `pnpm --filter @waitron/db db:generate --name tab_link`
+Expected: `packages/db/drizzle/00NN_tab_link.sql` with exactly `ALTER TABLE "working_orders" ADD COLUMN "delivery_table_id" uuid;` — and NO FK, NO CHECK, NO unique index (the FKs are hand-written next; the bare columns carry none). If the file also contains an FK/constraint, a stray `foreignKey()` slipped into the schema — remove it. Commit `meta/_journal.json` + snapshot.
 
-- [ ] **Step 4: Write the DDL-proof test (real Postgres, prove-by-deletion of CHECK and index; column visibility).** Mirror `order-prep.rls.test.ts`'s scaffolding.
+- [ ] **Step 4: Generate + hand-write the mutual-FK custom migration.**
 
-`packages/db/src/schema/orders.tab-columns.rls.test.ts`:
+Run: `pnpm --filter @waitron/db db:generate:custom --name tab_link_fks`
+Then write into the emitted `packages/db/drizzle/00NN_tab_link_fks.sql`:
+
+```sql
+-- Hand-written (--custom): the mutual composite FK between dining_tables and working_orders. Both are
+-- declared in Drizzle as BARE columns because a schema-level foreignKey() on each side would make the
+-- two schema modules import one another and eagerly reference each other's columns at load time — an
+-- import cycle (see packages/db/src/schema/dining-tables.ts). Both tables already exist and both columns
+-- are nullable, so the two ALTERs have no create/insert ordering problem (design §2c). No partial-unique
+-- and no CHECK: a single nullable tab_id gives one-open-tab-per-table structurally, and openTab's
+-- per-table FOR UPDATE lock is the concurrency guard (design §2b, §3a).
+--> statement-breakpoint
+ALTER TABLE "dining_tables"
+  ADD CONSTRAINT "dining_tables_tab_fk"
+  FOREIGN KEY ("tenant_id", "tab_id")
+  REFERENCES "working_orders" ("tenant_id", "id");--> statement-breakpoint
+
+ALTER TABLE "working_orders"
+  ADD CONSTRAINT "working_orders_delivery_table_fk"
+  FOREIGN KEY ("tenant_id", "delivery_table_id")
+  REFERENCES "dining_tables" ("tenant_id", "id");
+```
+
+- [ ] **Step 5: Write the DDL-proof test (real Postgres): column visibility + both FKs prove-by-deletion.** Mirror `order-prep.rls.test.ts`'s scaffolding.
+
+`packages/db/src/schema/tab-link.rls.test.ts`:
 
 ```typescript
 import { randomUUID } from "node:crypto";
@@ -431,21 +443,20 @@ async function rollBackAfter(admin: Database, tenant: string, fn: (tx: Transacti
   });
 }
 
-describe("working_orders tab columns (CHECK + one-open-tab partial unique)", () => {
+describe("table↔tab link columns (mutual composite FKs)", () => {
   const suite = useRealPostgres({
     start: () =>
       startMigratedPostgres({
         dockerRequired:
-          "The working_orders tab-columns suite requires Docker: PGlite runs every connection as a " +
-          "superuser (bypassing the app-role visibility check) and serialises queries; the CHECK and " +
-          "the partial unique are proven here by deletion within rolled-back transactions.",
+          "The tab-link suite requires Docker: PGlite runs every connection as a superuser (bypassing " +
+          "the app-role visibility check) and serialises queries; the two composite FKs are proven here " +
+          "by deletion within rolled-back transactions.",
         migrate: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
       }),
     timeoutMs: 120_000,
   });
 
   let nodeA = "";
-  let tableA = "";
   let orderSeq = 0;
 
   function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -461,103 +472,95 @@ describe("working_orders tab columns (CHECK + one-open-tab partial unique)", () 
     await admin.insert(locations).values({ id: LOCATION_A, tenantId: TENANT_A, name: "Loc A", invoiceLocales: ["es"], operationDescription: "Hostelería" });
     await admin.insert(tills).values({ id: TILL_A, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" });
     nodeA = await seedNode(admin, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
-    tableA = await asApp(async (tx) =>
-      tx
-        .execute<{ id: string }>(sql`insert into dining_tables (tenant_id, location_id, label) values (${TENANT_A}, ${LOCATION_A}, 'T1') returning id`)
-        .then((r) => r.rows[0]!.id),
-    );
   });
 
-  /** Insert one open working order as app_user; returns its id. `tableId`/`deliveryTableId` optional. */
-  async function openWo(tableId: string | null, deliveryTableId: string | null): Promise<string> {
-    orderSeq += 1;
+  /** Insert one active table as app_user; returns its id. */
+  async function openTable(label: string): Promise<string> {
     return asApp(async (tx) =>
       tx
-        .execute<{ id: string }>(sql`
-          insert into working_orders (tenant_id, till_id, node_id, order_number, status, table_id, delivery_table_id)
-          values (${TENANT_A}, ${TILL_A}, ${nodeA}, ${orderSeq}, 'open', ${tableId}, ${deliveryTableId})
-          returning id`)
+        .execute<{ id: string }>(sql`insert into dining_tables (tenant_id, location_id, label) values (${TENANT_A}, ${LOCATION_A}, ${label}) returning id`)
         .then((r) => r.rows[0]!.id),
     );
   }
 
-  it("the new columns are visible/writable to the non-owner app_user under the existing policy", async () => {
-    // Differential: a walk-up (both null), a tab (table_id set), a delivery (delivery_table_id set) all
-    // insert and read back as app_user. Fails if the table's existing grants did not already cover the
-    // added columns (they are table-wide, so they do — this is the confirmation §2b calls for).
-    const walkUp = await openWo(null, null);
-    const tab = await openWo(tableA, null);
-    const delivery = await openWo(null, tableA);
-    const rows = await asApp(async (tx) =>
+  /** Insert one open working order as app_user; returns its id. */
+  async function openWo(): Promise<string> {
+    orderSeq += 1;
+    return asApp(async (tx) =>
       tx
-        .execute<{ id: string; table_id: string | null; delivery_table_id: string | null }>(
-          sql`select id, table_id, delivery_table_id from working_orders where id in (${walkUp}, ${tab}, ${delivery})`,
-        )
-        .then((r) => r.rows),
+        .execute<{ id: string }>(sql`
+          insert into working_orders (tenant_id, till_id, node_id, order_number, status)
+          values (${TENANT_A}, ${TILL_A}, ${nodeA}, ${orderSeq}, 'open') returning id`)
+        .then((r) => r.rows[0]!.id),
     );
-    expect(rows).toHaveLength(3);
-    expect(rows.find((r) => r.id === tab)!.table_id).toBe(tableA);
-    expect(rows.find((r) => r.id === delivery)!.delivery_table_id).toBe(tableA);
+  }
+
+  it("the new columns are visible/writable to the non-owner app_user under the existing policies", async () => {
+    // Differential: setting the tab_id back-pointer AND a delivery_table_id as app_user both succeed and
+    // read back. Fails if the tables' existing grants did not already cover the added columns (they are
+    // table-wide, so they do — the confirmation §2b calls for). Also proves each FK RESOLVES a valid ref.
+    const tableId = await openTable("T-vis");
+    const woId = await openWo();
+    await asApp((tx) => tx.execute(sql`update dining_tables set tab_id = ${woId} where id = ${tableId}`));
+    await asApp((tx) => tx.execute(sql`update working_orders set delivery_table_id = ${tableId} where id = ${woId}`));
+    const back = await asApp((tx) =>
+      tx
+        .execute<{ tab_id: string | null; delivery_table_id: string | null }>(sql`
+          select dt.tab_id, wo.delivery_table_id
+          from dining_tables dt join working_orders wo on wo.id = ${woId}
+          where dt.id = ${tableId}`)
+        .then((r) => r.rows[0]!),
+    );
+    expect(back.tab_id).toBe(woId);
+    expect(back.delivery_table_id).toBe(tableId);
   });
 
-  it("rejects an order that is BOTH a tab and a delivery (the CHECK) — proven by deletion", async () => {
-    const e = await captureError(() => openWo(tableA, tableA));
-    expect(pgErrorCode(e)).toBe("23514"); // check_violation
+  it("dining_tables_tab_fk rejects a tab_id that points at no working order — proven by deletion", async () => {
+    const tableId = await openTable("T-tabfk");
+    const e = await captureError(() =>
+      asApp((tx) => tx.execute(sql`update dining_tables set tab_id = ${randomUUID()} where id = ${tableId}`)),
+    );
+    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
 
-    // Prove-by-deletion: drop the CHECK in a rolled-back tx, and the same both-set insert succeeds.
+    // Prove-by-deletion: drop the FK in a rolled-back tx, and the same dangling pointer is accepted.
     await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
-      await tx.execute(sql`alter table working_orders drop constraint working_orders_table_delivery_ck`);
+      await tx.execute(sql`alter table dining_tables drop constraint dining_tables_tab_fk`);
       await tx.execute(sql`set local role app_user`);
-      orderSeq += 1;
-      await tx.execute(sql`
-        insert into working_orders (tenant_id, till_id, node_id, order_number, status, table_id, delivery_table_id)
-        values (${TENANT_A}, ${TILL_A}, ${nodeA}, ${orderSeq}, 'open', ${tableA}, ${tableA})`);
-      // no throw — the CHECK was the guard.
+      await tx.execute(sql`update dining_tables set tab_id = ${randomUUID()} where id = ${tableId}`);
+      // no throw — the FK was the guard.
     });
   });
 
-  it("enforces at most one OPEN tab per table (partial unique) — proven by deletion", async () => {
-    const first = await openWo(tableA, null);
-    expect(first).toBeDefined();
-    // A second OPEN tab on the same table collides on the partial unique.
-    const e = await captureError(() => openWo(tableA, null));
-    expect(pgErrorCode(e)).toBe("23505"); // unique_violation
-
-    // But once the first tab SETTLES it no longer participates (WHERE status='open'), so a fresh tab is fine.
-    await asApp((tx) =>
-      tx.execute(sql`update working_orders set status = 'settled', settled_at = now() where id = ${first}`),
+  it("working_orders_delivery_table_fk rejects a delivery_table_id that points at no table — proven by deletion", async () => {
+    const woId = await openWo();
+    const e = await captureError(() =>
+      asApp((tx) => tx.execute(sql`update working_orders set delivery_table_id = ${randomUUID()} where id = ${woId}`)),
     );
-    const third = await openWo(tableA, null);
-    expect(third).toBeDefined();
+    expect(pgErrorCode(e)).toBe("23503");
 
-    // Prove-by-deletion: drop the index in a rolled-back tx, and a second concurrent-shaped open tab
-    // inserts without a collision — the index, not anything else, was the guard.
     await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
-      await tx.execute(sql`drop index working_orders_one_open_tab`);
+      await tx.execute(sql`alter table working_orders drop constraint working_orders_delivery_table_fk`);
       await tx.execute(sql`set local role app_user`);
-      orderSeq += 1;
-      await tx.execute(sql`
-        insert into working_orders (tenant_id, till_id, node_id, order_number, status, table_id)
-        values (${TENANT_A}, ${TILL_A}, ${nodeA}, ${orderSeq}, 'open', ${tableA})`);
-      // no throw — the partial unique index was the guard.
+      await tx.execute(sql`update working_orders set delivery_table_id = ${randomUUID()} where id = ${woId}`);
+      // no throw — the FK was the guard.
     });
   });
 });
 ```
 
-- [ ] **Step 5: Run the test, then the package.**
+- [ ] **Step 6: Run the test, then the package.**
 
-Run: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/db test orders.tab-columns.rls`
+Run: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/db test tab-link.rls`
 Expected: PASS (3 tests). Then `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/db test:coverage` → PASS at 98/98/98/95.
 
-- [ ] **Step 6: Re-run the inmutabilidad guard (the new columns must not disturb it) and commit.**
+- [ ] **Step 7: Re-run the inmutabilidad guard (the new column must not disturb it) and commit.**
 
 Run: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/fiscal-verifactu test inmutabilidad`
-Expected: PASS (`working_orders` still compliant; the columns are additive).
+Expected: PASS (`working_orders` still compliant; the column is additive).
 
 ```bash
-git add packages/db/src/schema/orders.ts packages/db/drizzle/ packages/db/src/schema/orders.tab-columns.rls.test.ts
-git commit -s -m "feat(db): working_orders table_id/delivery_table_id + CHECK + one-open-tab partial unique (TS-1)"
+git add packages/db/src/schema/orders.ts packages/db/drizzle/ packages/db/src/schema/tab-link.rls.test.ts
+git commit -s -m "feat(db): working_orders.delivery_table_id + mutual composite FKs (TS-1)"
 ```
 
 ---
@@ -578,17 +581,18 @@ git commit -s -m "feat(db): working_orders table_id/delivery_table_id + CHECK + 
   - `updateTable(tx: Transaction, cfg: TillConfig, id: string, input: { label?: string; zone?: string; capacity?: number }): Promise<void>` — throws `table.not_found`, `table.label_taken`
   - `deactivateTable(tx: Transaction, cfg: TillConfig, id: string): Promise<void>` — throws `table.not_found`
 
-- [ ] **Step 1: Declare the two CRUD error codes.** In `apps/server/src/errors.ts`, inside the `interface ErrorParams` block, add:
+- [ ] **Step 1: Declare the two CRUD error codes.** In `apps/server/src/errors.ts`, inside the `interface ErrorParams` block (beside the `working_order.*` codes), add:
 
 ```typescript
     /**
      * No such dining table for this tenant. `tableId` is a caller-supplied uuid the till already holds,
-     * not a secret — an id that matches nothing is unactionable if withheld (the rule
-     * `tenant.not_found`'s note gives). Qualified `tableId` to match the domain-record not_found family
+     * not a secret — an id that matches nothing is unactionable if withheld (the rule `tenant.not_found`'s
+     * note gives). Qualified `tableId` to match the domain-record not_found family
      * (`working_order.not_found`'s `workingOrderId`). `table.*` names the DOMAIN CONCEPT, never the
-     * throwing package (`tenant.not_found`'s note); destined for @waitron/tables if that package is
-     * ever extracted. An absent id, one already deactivated, or another tenant's table (RLS hides it)
-     * all report THIS one code.
+     * throwing package (`tenant.not_found`'s note); destined for @waitron/tables if that package is ever
+     * extracted. An absent id, or another tenant's table (RLS hides it), both report THIS one code.
+     * (A DEACTIVATED table is a different fact — `table.inactive` below — surfaced only where openTab
+     * needs it; CRUD operates on a deactivated row by id regardless.)
      */
     "table.not_found": { tableId: string };
     /**
@@ -693,7 +697,16 @@ describe("table CRUD", () => {
     ).rejects.toMatchObject({ code: "table.not_found", params: { tableId: missing } });
   });
 
-  it("deactivate hides the table from the active list, and is idempotent-safe on unknown id", async () => {
+  it("updateTable surfaces a label collision as table.label_taken", async () => {
+    const cfg = await setupVenue();
+    await asApp(cfg, (tx) => createTable(tx, cfg, { label: "1" }));
+    const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "2" }));
+    await expect(
+      asApp(cfg, (tx) => updateTable(tx, cfg, id, { label: "1" })),
+    ).rejects.toMatchObject({ code: "table.label_taken", params: { label: "1" } });
+  });
+
+  it("deactivate hides the table from the active list, and throws table.not_found on an unknown id", async () => {
     const cfg = await setupVenue();
     const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "9" }));
     await asApp(cfg, (tx) => deactivateTable(tx, cfg, id));
@@ -724,7 +737,8 @@ import { diningTables, isUniqueViolation } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TillConfig } from "./till-config.js";
 
-/** A dining table as the CRUD surface returns it. `createdAt` is an ISO string (numeric-free money-free). */
+/** A dining table as the CRUD surface returns it. `createdAt` is an ISO string. The `tab_id` back-pointer
+ *  is an INTERNAL link (design §2b), not part of the CRUD surface — occupancy exposes it, not this. */
 export interface DiningTable {
   id: string;
   label: string;
@@ -834,7 +848,7 @@ export async function deactivateTable(tx: Transaction, cfg: TillConfig, id: stri
 - [ ] **Step 5: Run — see it pass.**
 
 Run: `pnpm --filter @waitron/server test tables.test`
-Expected: PASS (5 tests).
+Expected: PASS (6 tests).
 
 - [ ] **Step 6: Prove `table.label_taken` by deletion.** Temporarily comment the `if (isUniqueViolation(error))` branch in `createTable` (re-throw raw), rerun the duplicate-label test → it FAILS (raw 23505, not the domain code). Restore.
 
@@ -847,16 +861,16 @@ git commit -s -m "feat(server): dining-table CRUD verbs + table.* error codes (T
 
 ---
 
-## Task 4: `openTab` (+ concurrent race)
+## Task 4: `openTab` — the per-table `FOR UPDATE` lock (+ concurrent race)
 
 **Files:**
 - Modify: `apps/server/src/working-order.ts`, `apps/server/src/errors.ts`
 - Test: `apps/server/src/tabs.test.ts` (PGlite), `apps/server/src/tabs.rls.test.ts` (real-PG)
 
 **Interfaces:**
-- Consumes: `createOpenOrder` (extended here), `diningTables`, `isUniqueViolation`, `allocateOrderNumber`.
+- Consumes: `createOpenOrder` (guarded here), `diningTables`, `workingOrders`, `allocateOrderNumber`.
 - Produces:
-  - `createOpenOrder(tx, cfg, id, lines, label, placement?: { tableId?: string | null; deliveryTableId?: string | null }): Promise<{ orderNumber: number; priced: PricedBasket }>` (signature extended, backward-compatible — existing callers omit `placement`).
+  - `createOpenOrder(tx, cfg, id, lines, label)` — line insert now guarded (`if (lineRows.length > 0)`) so an EMPTY tab has no lines to insert; signature UNCHANGED, behaviour-preserving (existing callers always pass ≥1 line).
   - `openTab(tx: Transaction, cfg: TillConfig, req: { tableId: string; lines?: { productId: string; quantity: string }[] }): Promise<{ tabId: string; orderNumber: number }>` — throws `table.not_found`, `table.inactive`, `tab.already_open`.
 
 - [ ] **Step 1: Declare the two new codes.** In `apps/server/src/errors.ts` add:
@@ -865,22 +879,48 @@ git commit -s -m "feat(server): dining-table CRUD verbs + table.* error codes (T
     /**
      * A dining table exists but is deactivated, so no tab may be opened on it. `tableId` is the
      * caller-supplied uuid (not a secret). `table.*`, not `server.*`, for the reason `tenant.not_found`'s
-     * note gives. Distinct from `table.not_found` (which also covers a foreign/absent table): this one
-     * says the table is real but closed for service. Mapped to 409 in the route layer.
+     * note gives. Distinct from `table.not_found` (which covers a foreign/absent table): this one says
+     * the table is real but closed for service. Mapped to 409 in the route layer.
      */
     "table.inactive": { tableId: string };
     /**
-     * A table already carries an OPEN tab, so a second may not be opened (at most one open tab per
-     * table, design §2b). `openTab` pre-checks so the common case is this clean code; the partial unique
-     * index `working_orders_one_open_tab` backstops a concurrent race and surfaces the SAME code. `tab.*`
-     * names the DOMAIN CONCEPT (the running tab), never the throwing package. `tableId` — the table that
-     * is occupied — is the caller-supplied uuid, not a secret. Mapped to 409 (the table's state forbids
-     * a new tab).
+     * A table's `tab_id` already points at an OPEN working order, so a second tab may not be opened (at
+     * most one open tab per table, design §2b). `openTab` takes the `dining_tables` row `FOR UPDATE` and
+     * checks its `tab_id`; that per-table lock — there is NO partial-unique now — is the concurrency
+     * guard, so two concurrent openTabs serialise and the second surfaces THIS code. A stale `tab_id`
+     * (pointing at a settled/abandoned order) reads as free and is overwritten, so it does NOT trigger
+     * this. `tab.*` names the DOMAIN CONCEPT (the running tab), never the throwing package. `tableId` —
+     * the occupied table — is caller-supplied, not a secret. Mapped to 409 (the table's state forbids a
+     * new tab).
      */
     "tab.already_open": { tableId: string };
 ```
 
-- [ ] **Step 2: Write the failing PGlite verb test.** Create `apps/server/src/tabs.test.ts` with a `setupVenue` that also seeds two products and one table (this same file is reused by Tasks 5, 6, 9). Only the `openTab` cases are added now.
+- [ ] **Step 2: Guard `createOpenOrder`'s line insert.** In `apps/server/src/working-order.ts`, change ONLY the line-insert of `createOpenOrder` so an empty basket inserts no lines (openTab may open an EMPTY tab; `tx.insert(...).values([])` is an error). Replace:
+
+```typescript
+  // The parent order was inserted just above, so the composite FK and the
+  // `require_open_parent`/`check_locales` triggers all resolve it.
+  await tx.insert(workingOrderLines).values(lineRows);
+
+  return { orderNumber, priced };
+```
+
+with:
+
+```typescript
+  // The parent order was inserted just above, so the composite FK and the
+  // `require_open_parent`/`check_locales` triggers all resolve it. Guarded: an EMPTY tab (openTab with
+  // no initial round) has no lines to insert, and `tx.insert(...).values([])` errors. Existing callers
+  // always pass ≥1 line (they guard empty baskets before calling), so this never changes their path.
+  if (lineRows.length > 0) {
+    await tx.insert(workingOrderLines).values(lineRows);
+  }
+
+  return { orderNumber, priced };
+```
+
+- [ ] **Step 3: Write the failing PGlite verb test scaffolding + `openTab` cases.** Create `apps/server/src/tabs.test.ts` with a `setupVenue` that seeds two products and one table (reused by Tasks 5, 6, 9).
 
 `apps/server/src/tabs.test.ts` (initial):
 
@@ -970,15 +1010,24 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
   });
 }
 
+/** The dining table's current tab_id — owner read (bypasses RLS). */
+async function tabIdOf(tableId: string): Promise<string | null> {
+  const { rows } = await db.execute<{ tab_id: string | null }>(
+    sql`select tab_id from dining_tables where id = ${tableId}`,
+  );
+  return rows[0]!.tab_id;
+}
+
 describe("openTab", () => {
-  it("opens a tab anchored to the table, with an initial round", async () => {
+  it("opens a tab, points the table's tab_id at it, with an initial round", async () => {
     const { cfg, cafeId, tableId } = await setupVenue();
     const { tabId, orderNumber } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
     );
     expect(orderNumber).toBe(1);
     const [wo] = await db.select().from(workingOrders).where(eq(workingOrders.id, tabId));
-    expect(wo).toMatchObject({ status: "open", tableId, deliveryTableId: null });
+    expect(wo).toMatchObject({ status: "open", deliveryTableId: null });
+    expect(await tabIdOf(tableId)).toBe(tabId);
     const lines = await db.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, tabId));
     expect(lines).toHaveLength(1);
   });
@@ -986,16 +1035,33 @@ describe("openTab", () => {
   it("opens a tab with NO initial round (empty tab)", async () => {
     const { cfg, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    expect(await tabIdOf(tableId)).toBe(tabId);
     const lines = await db.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, tabId));
     expect(lines).toHaveLength(0);
   });
 
-  it("refuses a second tab on a table that already has one (tab.already_open)", async () => {
+  it("refuses a second tab on a table that already has an OPEN one (tab.already_open)", async () => {
     const { cfg, cafeId, tableId } = await setupVenue();
     await asApp(cfg, (tx) => openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }));
     await expect(
       asApp(cfg, (tx) => openTab(tx, cfg, { tableId })),
     ).rejects.toMatchObject({ code: "tab.already_open", params: { tableId } });
+  });
+
+  it("treats a STALE tab_id (pointing at a settled order) as free and overwrites it", async () => {
+    const { cfg, cafeId, tableId } = await setupVenue();
+    const { tabId: firstTab } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+    );
+    // Settle the first tab (owner write — RLS bypassed, pure setup). tab_id STILL points at it (no
+    // settle-time write, design §2b), but it is now stale.
+    await db.execute(sql`update working_orders set status = 'settled', settled_at = now() where id = ${firstTab}`);
+    // A fresh tab is fine — the stale pointer reads free and is overwritten to the new order.
+    const { tabId: secondTab } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+    );
+    expect(secondTab).not.toBe(firstTab);
+    expect(await tabIdOf(tableId)).toBe(secondTab);
   });
 
   it("refuses an unknown table (table.not_found) and a deactivated one (table.inactive)", async () => {
@@ -1013,70 +1079,29 @@ describe("openTab", () => {
 });
 ```
 
-- [ ] **Step 3: Run — see it fail.**
+- [ ] **Step 4: Run — see it fail.**
 
 Run: `pnpm --filter @waitron/server test tabs.test`
 Expected: FAIL — `openTab is not a function`.
 
-- [ ] **Step 4: Extend `createOpenOrder` and add `openTab`.** In `apps/server/src/working-order.ts`:
-
-Add to the `@waitron/db` import block: `diningTables` (and confirm `isUniqueViolation` is already imported — it is). Add `import { randomUUID } from "node:crypto";` at the top if not present.
-
-Modify `createOpenOrder` (its signature gains `placement`, the insert writes the two columns, and the line insert is guarded so an empty tab has no lines to insert):
-
-```typescript
-export async function createOpenOrder(
-  tx: Transaction,
-  cfg: TillConfig,
-  id: string,
-  lines: { productId: string; quantity: string }[],
-  label: string | null,
-  // A tab sets `tableId`; a counter delivery sets `deliveryTableId` (design §2b). Both default null,
-  // so parkOrder / payWorkingOrder's walk-up path are unchanged (they omit it → a plain walk-up).
-  placement: { tableId?: string | null; deliveryTableId?: string | null } = {},
-): Promise<{ orderNumber: number; priced: PricedBasket }> {
-  const { lineRows, priced } = await priceOrderLines(tx, cfg, id, lines);
-  const orderNumber = await allocateOrderNumber(tx, cfg.tenantId, cfg.nodeId);
-
-  await tx.insert(workingOrders).values({
-    id,
-    tenantId: cfg.tenantId,
-    tillId: cfg.tillId,
-    nodeId: cfg.nodeId,
-    orderNumber,
-    label,
-    status: "open",
-    tableId: placement.tableId ?? null,
-    deliveryTableId: placement.deliveryTableId ?? null,
-  });
-
-  // Guarded: an empty tab (openTab with no initial round) has no lines to insert, and
-  // `tx.insert(...).values([])` is an error. Existing callers always pass ≥1 line (they guard empty
-  // baskets before calling), so this never changes their path.
-  if (lineRows.length > 0) {
-    await tx.insert(workingOrderLines).values(lineRows);
-  }
-
-  return { orderNumber, priced };
-}
-```
-
-Add `openTab` beside `parkOrder`:
+- [ ] **Step 5: Implement `openTab`.** In `apps/server/src/working-order.ts`: add `import { randomUUID } from "node:crypto";` at the top, add `diningTables` to the `@waitron/db` import block, and add `openTab` beside `parkOrder`:
 
 ```typescript
 /**
- * Open the running tab on a table (design §3b): validate the table is `active`, pre-check the
- * one-open-tab rule, then create an `open` working order with `table_id = tableId` (reusing
- * `createOpenOrder`, incl. the per-node order-number allocation). `lines?` opens the tab with an
- * initial round; absent, the tab opens empty. Runs on the CALLER's transaction under its
- * tenant/app_user scope.
+ * Open the running tab on a table (design §3a). Takes the `dining_tables` row `FOR UPDATE` — THIS
+ * per-table lock is the one-open-tab-per-table concurrency guard: there is NO partial-unique now (a
+ * single nullable `tab_id` gives one-tab-per-table structurally), so the lock is what serialises the
+ * check-then-set. A second concurrent openTab on the same table blocks on this lock until the first
+ * commits, then reads the now-set `tab_id`, finds it points at an OPEN order, and is refused
+ * `tab.already_open` (proven by deletion of the lock — §7). A STALE `tab_id` (pointing at a
+ * settled/abandoned order) reads as free and is OVERWRITTEN, so the fiscal pay path needs no settle-time
+ * write (design §2b).
  *
- * Two guards, one code each: an inactive/absent/foreign table → `table.inactive`/`table.not_found`; a
- * table that already has an open tab → `tab.already_open`. The pre-check makes the common (sequential)
- * case a clean `tab.already_open`; a concurrent race is caught by the `working_orders_one_open_tab`
- * partial unique as a 23505 and translated to the SAME code (a real-PG race test proves it). Because
- * this runs on a caller `tx`, the 23505 aborts that tx — which is correct: we translate and rethrow,
- * and the route's `withTenant` rolls back.
+ * Then creates an `open` working order (reusing `createOpenOrder`, incl. the per-node order-number
+ * allocation) and points the table's `tab_id` at it. The order carries NO tab column — the link is this
+ * back-pointer. `lines?` opens the tab with an initial round; absent, the tab opens empty. Runs on the
+ * CALLER's transaction under its tenant/app_user scope. `table.not_found`/`table.inactive` guard the
+ * table itself.
  */
 export async function openTab(
   tx: Transaction,
@@ -1084,9 +1109,10 @@ export async function openTab(
   req: { tableId: string; lines?: { productId: string; quantity: string }[] },
 ): Promise<{ tabId: string; orderNumber: number }> {
   const [table] = await tx
-    .select({ active: diningTables.active })
+    .select({ active: diningTables.active, tabId: diningTables.tabId })
     .from(diningTables)
-    .where(eq(diningTables.id, req.tableId));
+    .where(eq(diningTables.id, req.tableId))
+    .for("update");
   if (table === undefined) {
     throw new AppError("table.not_found", { tableId: req.tableId });
   }
@@ -1094,45 +1120,43 @@ export async function openTab(
     throw new AppError("table.inactive", { tableId: req.tableId });
   }
 
-  const [existing] = await tx
-    .select({ id: workingOrders.id })
-    .from(workingOrders)
-    .where(and(eq(workingOrders.tableId, req.tableId), eq(workingOrders.status, "open")));
-  if (existing !== undefined) {
-    throw new AppError("tab.already_open", { tableId: req.tableId });
+  // A set tab_id blocks a second tab ONLY while it points at a STILL-OPEN order; the WHERE clause does
+  // the filtering, so a stale pointer (at a settled order) simply returns no row and is overwritten below.
+  if (table.tabId !== null) {
+    const [openTabRow] = await tx
+      .select({ id: workingOrders.id })
+      .from(workingOrders)
+      .where(and(eq(workingOrders.id, table.tabId), eq(workingOrders.status, "open")));
+    if (openTabRow !== undefined) {
+      throw new AppError("tab.already_open", { tableId: req.tableId });
+    }
   }
 
   const tabId = randomUUID();
-  try {
-    const { orderNumber } = await createOpenOrder(tx, cfg, tabId, req.lines ?? [], null, {
-      tableId: req.tableId,
-    });
-    return { tabId, orderNumber };
-  } catch (error) {
-    if (isUniqueViolation(error)) {
-      throw new AppError("tab.already_open", { tableId: req.tableId });
-    }
-    throw error;
-  }
+  const { orderNumber } = await createOpenOrder(tx, cfg, tabId, req.lines ?? [], null);
+  await tx.update(diningTables).set({ tabId }).where(eq(diningTables.id, req.tableId));
+  return { tabId, orderNumber };
 }
 ```
 
-> The "deactivated one" test deactivates the real table with an owner `db.execute` (RLS bypassed — pure setup) rather than through a verb, since `deactivateTable` is Task 3's route-scoped path; here we only need the row's `active` flipped to exercise `openTab`'s `table.inactive` branch.
-
-- [ ] **Step 5: Run — see it pass.**
+- [ ] **Step 6: Run — see it pass.**
 
 Run: `pnpm --filter @waitron/server test tabs.test`
-Expected: PASS (4 tests). Also run `pnpm --filter @waitron/server test working-order.test till-sale` to confirm the `createOpenOrder` extension left `parkOrder`/`payWorkingOrder`'s existing suites green (behaviour-preserving).
+Expected: PASS (5 tests). Also run `pnpm --filter @waitron/server test working-order.test till-sale` to confirm the `createOpenOrder` line-insert guard left `parkOrder`/`payWorkingOrder`'s existing suites green (behaviour-preserving).
 
-- [ ] **Step 6: Write the concurrent-openTab race (real Postgres).** Create `apps/server/src/tabs.rls.test.ts` — reuse the `working-order.rls.test.ts` scaffolding (`useRealPostgres`, `applyVenue`/`planVenue`, `VerifactuBackend`, `tillConfigFromVenue`, `setupVenue`, `nextNif`). Add a table-seeding helper and the race.
+- [ ] **Step 7: Write the concurrent-openTab race (real Postgres).** Create `apps/server/src/tabs.rls.test.ts` — port the shared scaffolding from `working-order.rls.test.ts` (`useRealPostgres` `suite`, `systemClock`/`clock`, `backend` via `VerifactuBackend` in a `beforeAll`, `nextNif`, `tillConfigFromVenue`, `setupVenue` returning `{ cfg, cafe, agua }`, and the owner-read helpers `orderState`/`saleCount`/`registroCount` — copy them verbatim; the file is a sibling suite of the same shape). Add a table-seeding helper and the race.
 
-`apps/server/src/tabs.rls.test.ts` (the openTab race section — the file's shared scaffolding, copied from `working-order.rls.test.ts`, is added in this step and reused by Tasks 5/7/8):
+`apps/server/src/tabs.rls.test.ts` (the openTab-race section; the ported scaffolding is added in this step and reused by Tasks 5/7/8):
 
 ```typescript
-// ... shared scaffolding ported from working-order.rls.test.ts: `suite`, `systemClock`, `nextNif`,
-// `tillConfigFromVenue`, `setupVenue` (returns { cfg, cafe, agua }), `backend`/`clock` beforeAll, and
-// the owner-read helpers `orderState`/`saleCount`/`registroCount` (copy them verbatim — the file is a
-// sibling suite of the same shape). Then:
+// ... shared scaffolding ported verbatim from working-order.rls.test.ts: `suite` (useRealPostgres),
+// `clock`, `backend` (VerifactuBackend, set in beforeAll), `nextNif`, `tillConfigFromVenue`, `setupVenue`
+// (returns { cfg, cafe, agua }), and owner-read helpers `orderState`/`saleCount`/`registroCount`. The
+// ported scaffolding is verb-agnostic (owner-read SQL + venue setup), so each task adds only the verb
+// imports IT uses — this task imports `openTab` + `createTable`; Tasks 5/7/8 extend the imports. Then:
+
+import { createTable } from "./tables.js";
+import { openTab } from "./working-order.js";
 
 /** Seed one active dining table in the venue as the app role; returns its id. */
 async function seedTable(cfg: TillConfig, label: string): Promise<string> {
@@ -1143,15 +1167,17 @@ async function seedTable(cfg: TillConfig, label: string): Promise<string> {
   });
 }
 
-/** How many OPEN tabs (open working orders with this table_id) exist — owner read (bypasses RLS). */
-async function openTabCount(tableId: string): Promise<number> {
-  const { rows } = await suite.admin.execute<{ count: string }>(
-    sql`select count(*)::text as count from working_orders where table_id = ${tableId} and status = 'open'`,
+/** How many OPEN working orders exist for the tenant — owner read (bypasses RLS). With the per-table
+ *  FOR UPDATE lock, a race yields exactly ONE (the loser refuses BEFORE creating its order); without the
+ *  lock, both create one → 2, and the table's single tab_id points at only one, orphaning the other. */
+async function openOrderCount(cfg: TillConfig): Promise<number> {
+  const { rows } = await suite.admin.execute<{ n: string }>(
+    sql`select count(*)::text as n from working_orders where tenant_id = ${cfg.tenantId} and status = 'open'`,
   );
-  return Number(rows[0]!.count);
+  return Number(rows[0]!.n);
 }
 
-describe("openTab concurrency (one open tab per table)", () => {
+describe("openTab concurrency (one open tab per table; the per-table lock IS the guard)", () => {
   it("two backends racing to open a tab on the SAME table → exactly one wins, the other gets tab.already_open", async () => {
     const { cfg, cafe } = await setupVenue();
     const tableId = await seedTable(cfg, "Race-1");
@@ -1177,7 +1203,9 @@ describe("openTab concurrency (one open tab per table)", () => {
       expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({
         code: "tab.already_open", params: { tableId },
       });
-      expect(await openTabCount(tableId)).toBe(1); // the index backstopped the race — exactly one tab.
+      // The corruption observable: exactly ONE open working order exists. Without the lock both would be
+      // created (the loser reads a stale tab_id=null) → 2, one orphaned by the single tab_id column.
+      expect(await openOrderCount(cfg)).toBe(1);
     } finally {
       await Promise.all([connA.close(), connB.close()]);
     }
@@ -1185,16 +1213,16 @@ describe("openTab concurrency (one open tab per table)", () => {
 });
 ```
 
-- [ ] **Step 7: Run the race, and prove-by-deletion of the index.**
+- [ ] **Step 8: Run the race, and prove-by-deletion of the lock.**
 
 Run: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server test tabs.rls`
-Expected: PASS. To PROVE the index (not just the pre-check) is load-bearing: temporarily drop `working_orders_one_open_tab` from the schema/migration AND rebuild, or comment the pre-check SELECT in `openTab` and rerun — with the pre-check removed and the index present the race still yields exactly one winner (the index catches it); with BOTH removed, `openTabCount` becomes 2. Restore both.
+Expected: PASS. To PROVE the per-table `FOR UPDATE` lock is the guard (there is no partial-unique to fall back on): temporarily remove `.for("update")` from `openTab`'s `dining_tables` SELECT, rerun → the race now yields `fulfilled = 2` / `rejected = 0` and `openOrderCount = 2` (both created their order; the table's `tab_id` points at only one). Restore the lock.
 
-- [ ] **Step 8: Commit.**
+- [ ] **Step 9: Commit.**
 
 ```bash
 git add apps/server/src/working-order.ts apps/server/src/errors.ts apps/server/src/tabs.test.ts apps/server/src/tabs.rls.test.ts
-git commit -s -m "feat(server): openTab (+ concurrent one-open-tab race) (TS-1)"
+git commit -s -m "feat(server): openTab with per-table FOR UPDATE lock (+ concurrent race) (TS-1)"
 ```
 
 ---
@@ -1206,27 +1234,36 @@ git commit -s -m "feat(server): openTab (+ concurrent one-open-tab race) (TS-1)"
 - Test: `apps/server/src/tabs.test.ts` (append-without-reprice), `apps/server/src/tabs.rls.test.ts` (concurrent race)
 
 **Interfaces:**
-- Consumes: `priceOrderLines` (same-file private helper), `workingOrderLines`, `workingOrders`.
-- Produces: `addTabRound(tx: Transaction, cfg: TillConfig, tabId: string, lines: { productId: string; quantity: string }[]): Promise<void>` — throws `tab.not_open`, `sale.empty_basket`.
+- Consumes: `priceOrderLines` (same-file private helper), `workingOrderLines`, `workingOrders`, `diningTables`.
+- Produces:
+  - `lockOpenTab(tx: Transaction, tabId: string): Promise<void>` (private) — locks the tab row `FOR UPDATE`, confirms it is `open` AND a `dining_tables.tab_id` points at it, else throws `tab.not_open`. Shared with `voidTabLine` (Task 6).
+  - `addTabRound(tx: Transaction, cfg: TillConfig, tabId: string, lines: { productId: string; quantity: string }[]): Promise<void>` — throws `tab.not_open`, `sale.empty_basket`.
 
 - [ ] **Step 1: Declare `tab.not_open`.** In `apps/server/src/errors.ts`:
 
 ```typescript
     /**
      * A working order a tab verb (`addTabRound`, `voidTabLine`) tried to modify is not an OPEN tab — it
-     * is not `open` (already settled/abandoned), it is not a tab at all (`table_id` is NULL — a walk-up
-     * or a counter delivery), or it names none (absent, or another tenant's, RLS-hidden). All report
-     * THIS one code, the fail-closed shape `working_order.not_open` uses for the held-order modify side.
-     * `tabId` — the caller-supplied uuid — is echoed and qualified to match the tab-verb vocabulary
-     * (`openTab`/`addTabRound`/`voidTabLine` all speak of a `tabId`). `tab.*`, not `server.*`, for the
-     * reason `tenant.not_found`'s note gives. Mapped to 409 (the order's state forbids the tab edit).
+     * is not `open` (already settled/abandoned), no `dining_tables.tab_id` points at it (a walk-up or a
+     * counter delivery — a tab is an OPEN order a table points at, design §2b), or it names none (absent,
+     * or another tenant's, RLS-hidden). All report THIS one code, the fail-closed shape
+     * `working_order.not_open` uses for the held-order modify side. `tabId` — the caller-supplied uuid —
+     * is echoed and qualified to match the tab-verb vocabulary. `tab.*`, not `server.*`, for the reason
+     * `tenant.not_found`'s note gives. Mapped to 409 (the order's state forbids the tab edit).
      */
     "tab.not_open": { tabId: string };
 ```
 
-- [ ] **Step 2: Write the failing append-without-reprice test (PGlite).** Add to `apps/server/src/tabs.test.ts` (import `addTabRound`, and `priceBasket` is not needed — assert the stored `unit_price_gross`):
+- [ ] **Step 2: Write the failing append-without-reprice test (PGlite).** Add to `apps/server/src/tabs.test.ts` (extend the `./working-order.js` import with `addTabRound`, and add the `bareOpenOrder` helper below):
 
 ```typescript
+/** Insert a bare OPEN working order that NO table points at (a walk-up) — for the "not a tab" case. */
+async function bareOpenOrder(cfg: TillConfig, id: string): Promise<void> {
+  await db.execute(sql`
+    insert into working_orders (id, tenant_id, till_id, node_id, order_number, status)
+    values (${id}, ${cfg.tenantId}, ${cfg.tillId}, ${cfg.nodeId}, 999, 'open')`);
+}
+
 describe("addTabRound (append-only, no re-price)", () => {
   it("appends a round with the NEXT line_no, without deleting or re-pricing existing lines", async () => {
     const { cfg, cafeId, tableId } = await setupVenue();
@@ -1251,21 +1288,27 @@ describe("addTabRound (append-only, no re-price)", () => {
     ]);
   });
 
-  it("refuses a round on a non-open / non-tab order (tab.not_open)", async () => {
+  it("refuses a round on a settled tab, a walk-up (not a tab), and an absent id (tab.not_open)", async () => {
     const { cfg, cafeId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }));
-    // Settle it, then a round is refused.
+    // Settled tab → not open.
     await db.execute(sql`update working_orders set status = 'settled', settled_at = now() where id = ${tabId}`);
     await expect(
       asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ productId: cafeId, quantity: "1" }])),
     ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId } });
 
-    // A plain walk-up (no table_id) is not a tab, so a round on it is also tab.not_open.
+    // A bare open walk-up (no table points at it) is not a tab.
     const walkUp = randomUUID();
-    await asApp(cfg, (tx) => parkOrderRow(tx, cfg, walkUp)); // helper below (a bare open order, table_id null)
+    await bareOpenOrder(cfg, walkUp);
     await expect(
       asApp(cfg, (tx) => addTabRound(tx, cfg, walkUp, [{ productId: cafeId, quantity: "1" }])),
     ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId: walkUp } });
+
+    // An absent id names nothing.
+    const missing = randomUUID();
+    await expect(
+      asApp(cfg, (tx) => addTabRound(tx, cfg, missing, [{ productId: cafeId, quantity: "1" }])),
+    ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId: missing } });
   });
 
   it("refuses an empty round (sale.empty_basket)", async () => {
@@ -1278,40 +1321,53 @@ describe("addTabRound (append-only, no re-price)", () => {
 });
 ```
 
-Add the `parkOrderRow` helper near the top of `tabs.test.ts` (a bare open order with `table_id` NULL, for the "not a tab" case — `Transaction` is already imported):
-
-```typescript
-async function parkOrderRow(tx: Transaction, cfg: TillConfig, id: string): Promise<void> {
-  await tx.execute(sql`
-    insert into working_orders (id, tenant_id, till_id, node_id, order_number, status)
-    values (${id}, ${cfg.tenantId}, ${cfg.tillId}, ${cfg.nodeId}, 999, 'open')`);
-}
-```
-
-Add `addTabRound` to the existing `import { openTab } from "./working-order.js";` line in `tabs.test.ts`.
-
 - [ ] **Step 3: Run — see it fail.**
 
 Run: `pnpm --filter @waitron/server test tabs.test`
 Expected: FAIL — `addTabRound is not a function`.
 
-- [ ] **Step 4: Implement `addTabRound`.** In `apps/server/src/working-order.ts`, beside `openTab`:
+- [ ] **Step 4: Implement `lockOpenTab` + `addTabRound`.** In `apps/server/src/working-order.ts`, beside `openTab`:
 
 ```typescript
 /**
+ * Lock an OPEN tab's working-order row `FOR UPDATE` and confirm a dining table points at it — the shared
+ * guard `addTabRound` and `voidTabLine` open with. The lock is held on the caller's `tx` until commit,
+ * so a `line_no` allocation or a line delete that follows is serialised against a concurrent round/void
+ * (load-bearing for QR ordering — several guests appending to one tab at once). A tab is an OPEN working
+ * order some `dining_tables.tab_id` points at (design §2b): a non-open order, one no table points at (a
+ * walk-up / counter delivery), or an absent id (or another tenant's, RLS-hidden) all throw
+ * `tab.not_open` — the fail-closed shape `working_order.not_open` uses for the modify side.
+ */
+async function lockOpenTab(tx: Transaction, tabId: string): Promise<void> {
+  const [tab] = await tx
+    .select({ status: workingOrders.status })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, tabId))
+    .for("update");
+  if (tab === undefined || tab.status !== "open") {
+    throw new AppError("tab.not_open", { tabId });
+  }
+  const [pointer] = await tx
+    .select({ id: diningTables.id })
+    .from(diningTables)
+    .where(eq(diningTables.tabId, tabId));
+  if (pointer === undefined) {
+    throw new AppError("tab.not_open", { tabId });
+  }
+}
+
+/**
  * APPEND a priced round to an OPEN tab (design §3b) — the one genuinely new order primitive. It locks
- * each new line's `unit_price_gross` at add-time and assigns the NEXT `line_no`, WITHOUT deleting or
- * re-pricing existing lines. Contrast `updateHeldOrder`, which deletes and re-inserts the whole basket
- * (`:511-513`), re-locking every line at the current catalogue price — wrong for an incremental tab.
+ * each new line's `unit_price_gross` at add-time (via `priceOrderLines`) and assigns the NEXT `line_no`,
+ * WITHOUT deleting or re-pricing existing lines. Contrast `updateHeldOrder`, which deletes and re-inserts
+ * the whole basket (`:511-513`), re-locking every line at the current catalogue price — wrong for an
+ * incremental tab.
  *
- * Concurrency (load-bearing for QR ordering — multiple guests append to one shared tab at once): the
- * tab row is taken `for update`, so `line_no` allocation serialises on it (the locking shape the
- * per-node order-number allocator uses, `working-order.ts:263`). A naïve `max(line_no)+1` without the
- * lock races and collides on the `(working_order_id, line_no)` unique — a real-PG concurrent test proves
- * it by deletion of the lock.
- *
- * `tab.not_open` if the order is not `open` OR not a tab (`table_id` NULL); `sale.empty_basket` if the
- * round has no lines.
+ * Concurrency (load-bearing for QR ordering — multiple guests append to one shared tab at once): the tab
+ * row is taken `FOR UPDATE` by {@link lockOpenTab}, so `line_no` allocation serialises on it (the locking
+ * shape the per-node order-number allocator uses, `working-order.ts:263`). A naïve `max(line_no)+1`
+ * without the lock races and collides on the `(working_order_id, line_no)` unique (`orders.ts:186`) — a
+ * real-PG concurrent test proves it by deletion of the lock.
  */
 export async function addTabRound(
   tx: Transaction,
@@ -1319,29 +1375,19 @@ export async function addTabRound(
   tabId: string,
   lines: { productId: string; quantity: string }[],
 ): Promise<void> {
-  // Lock the tab row for the life of the tx; read status + whether it is a tab off the locked copy.
-  const [tab] = await tx
-    .select({ status: workingOrders.status, tableId: workingOrders.tableId })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, tabId))
-    .for("update");
-  if (tab === undefined || tab.status !== "open" || tab.tableId === null) {
-    throw new AppError("tab.not_open", { tabId });
-  }
+  await lockOpenTab(tx, tabId);
   if (lines.length === 0) {
     throw new AppError("sale.empty_basket", {});
   }
-
-  // The next line_no, allocated under the per-tab row lock — concurrent rounds serialise here, so no two
+  // The next line_no, allocated under the per-tab row lock — concurrent rounds serialise on it, so no two
   // reads see the same max.
   const [{ maxLineNo }] = await tx
     .select({ maxLineNo: sql<number>`coalesce(max(${workingOrderLines.lineNo}), 0)::int` })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, tabId));
-
-  // Price the round (locks each new gross unit at add-time via `priceOrderLines`), then APPEND: renumber
-  // from maxLineNo+1, never touching the existing lines. `priceOrderLines` numbers its rows 1..n in
-  // `lines` order, so row i maps to maxLineNo + i + 1.
+  // Price the round (locks each new gross unit at add-time), then APPEND: renumber from maxLineNo+1,
+  // never touching existing lines. `priceOrderLines` numbers its rows 1..n in `lines` order, so row i
+  // maps to maxLineNo + i + 1.
   const { lineRows } = await priceOrderLines(tx, cfg, tabId, lines);
   const appended = lineRows.map((row, i) => ({ ...row, lineNo: maxLineNo + i + 1 }));
   await tx.insert(workingOrderLines).values(appended);
@@ -1353,7 +1399,7 @@ export async function addTabRound(
 Run: `pnpm --filter @waitron/server test tabs.test`
 Expected: PASS (all `openTab` + `addTabRound` cases).
 
-- [ ] **Step 6: Write the concurrent-addTabRound race (real Postgres).** Add to `apps/server/src/tabs.rls.test.ts`:
+- [ ] **Step 6: Write the concurrent-addTabRound race (real Postgres).** Add to `apps/server/src/tabs.rls.test.ts` (extend the `./working-order.js` import to add `addTabRound` beside `openTab`):
 
 ```typescript
 describe("addTabRound concurrency (distinct line_no under load)", () => {
@@ -1397,7 +1443,7 @@ describe("addTabRound concurrency (distinct line_no under load)", () => {
 - [ ] **Step 7: Run the race, and prove-by-deletion of the per-tab lock.**
 
 Run: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server test tabs.rls`
-Expected: PASS. To PROVE the lock: temporarily remove `.for("update")` from `addTabRound`'s tab-row SELECT, rerun → the concurrent test FAILS with a `23505` on `working_order_lines_line_no_key` (two rounds computed the same `line_no`). Restore the lock.
+Expected: PASS. To PROVE the lock: temporarily remove `.for("update")` from `lockOpenTab`'s tab-row SELECT, rerun → the concurrent test FAILS with a `23505` on `working_order_lines_line_no_key` (two rounds computed the same `line_no`). Restore the lock.
 
 - [ ] **Step 8: Package green + commit.**
 
@@ -1417,6 +1463,7 @@ git commit -s -m "feat(server): addTabRound append-only + concurrency-safe line_
 - Test: `apps/server/src/tabs.test.ts`
 
 **Interfaces:**
+- Consumes: `lockOpenTab` (Task 5), `workingOrderLines`.
 - Produces: `voidTabLine(tx: Transaction, cfg: TillConfig, tabId: string, lineNo: number): Promise<void>` — throws `tab.not_open`, `tab.line_not_found`.
 
 - [ ] **Step 1: Declare `tab.line_not_found`.** In `apps/server/src/errors.ts`:
@@ -1432,7 +1479,7 @@ git commit -s -m "feat(server): addTabRound append-only + concurrency-safe line_
     "tab.line_not_found": { tabId: string; lineNo: number };
 ```
 
-- [ ] **Step 2: Write the failing test (PGlite).** Add to `apps/server/src/tabs.test.ts` (import `voidTabLine`):
+- [ ] **Step 2: Write the failing test (PGlite).** Add to `apps/server/src/tabs.test.ts` (extend the `./working-order.js` import with `voidTabLine`):
 
 ```typescript
 describe("voidTabLine", () => {
@@ -1486,9 +1533,11 @@ Expected: FAIL — `voidTabLine is not a function`.
 /**
  * Void ONE not-yet-paid line from an OPEN tab (design §3b) — pre-fiscal, so nothing is filed and there
  * is no fiscal record or amendment involved; it is a plain delete under the open parent (the
- * `require_open_parent` trigger is the DB backstop). The tab row is locked `for update` so a concurrent
- * round/pay cannot race the delete. `tab.not_open` if the order is not an open tab; `tab.line_not_found`
- * if the `line_no` matches nothing on it.
+ * `require_open_parent` trigger is the DB backstop). {@link lockOpenTab} locks the tab row `FOR UPDATE`
+ * so a concurrent round/pay cannot race the delete, and confirms it is an open tab. `tab.not_open` if the
+ * order is not an open tab; `tab.line_not_found` if the `line_no` matches nothing on it. `cfg` is unused
+ * (the delete is by tab id + line no, RLS-scoped) but kept for the tab-verb signature shape the route
+ * layer calls uniformly.
  */
 export async function voidTabLine(
   tx: Transaction,
@@ -1496,15 +1545,7 @@ export async function voidTabLine(
   tabId: string,
   lineNo: number,
 ): Promise<void> {
-  const [tab] = await tx
-    .select({ status: workingOrders.status, tableId: workingOrders.tableId })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, tabId))
-    .for("update");
-  if (tab === undefined || tab.status !== "open" || tab.tableId === null) {
-    throw new AppError("tab.not_open", { tabId });
-  }
-
+  await lockOpenTab(tx, tabId);
   const deleted = await tx
     .delete(workingOrderLines)
     .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, lineNo)))
@@ -1538,15 +1579,15 @@ git commit -s -m "feat(server): voidTabLine per-line void on an open tab (TS-1)"
 **Interfaces:**
 - Consumes: `openTab`, `addTabRound` (Tasks 4/5); `payWorkingOrder` (`till-sale.ts`, UNCHANGED); `VerifactuBackend`.
 
-- [ ] **Step 1: The H2 grep receipt.** Run and record (in the test file's header comment) that neither the fiscal core nor the alta builder reads the two columns:
+- [ ] **Step 1: The H2 grep receipt.** Run and record (in the test file's header comment) that neither the fiscal core nor the alta builder reads the delivery-table column (in the revised model, the ONLY table column on `working_orders` — the tab link is a back-pointer on the TABLE, so nothing about a tab reaches the filed order at all):
 
 Run:
 ```bash
 grep -nE "table_id|delivery_table_id|tableId|deliveryTableId" packages/core/src/record-sale.ts packages/fiscal-verifactu/src/backend.ts
 ```
-Expected: **zero matches** (verified 2026-08-17). `recordSale`'s input (`RecordSaleInput`) carries `workingOrderId` but no table column, and the huella hashes only `IDEmisorFactura`/`NumSerieFactura`/`FechaExpedicionFactura`/`TipoFactura`/`CuotaTotal`/`ImporteTotal`/prev-`Huella`/`FechaHoraHusoGenRegistro` (`packages/verifactu/src/huella.ts:47-56`) — none of which is `table_id`. Paste this command + its empty output into the huella-identity test's doc comment as the receipt.
+Expected: **zero matches** (verified 2026-08-17: the command exits non-zero with no output). `recordSale`'s input (`RecordSaleInput`) carries `workingOrderId` but no table column, and the huella hashes only the AEAT-mandated invoice fields (issuer NIF, series+number, expedition date, invoice type, tax + grand totals, the previous huella, the generation timestamp) — none of which is a table column. Paste this command + its empty output into the huella-identity test's doc comment as the receipt.
 
-- [ ] **Step 1b: Re-verify the "a tab lives in `open`" boundary (§5/§10).** The spec's fiscal-boundary claim is that a tab must stay `open` because `placed` under Mode I (`invoice_first`) already files a deferred invoice — so a tab never enters `placed`, it settles straight from `open` via `payWorkingOrder`. Confirm the only path that files at placing is `placeOrder`'s `invoice_first` branch, and that no tab verb calls it:
+- [ ] **Step 1b: Re-verify the "a tab lives in `open`" boundary (§5/§10).** The fiscal-boundary claim is that a tab must stay `open` because `placed` under Mode I (`invoice_first`) already files a deferred invoice — so a tab never enters `placed`; it settles straight from `open` via `payWorkingOrder`. Confirm no tab verb transitions to `placed` or calls `placeOrder`:
 
 Run:
 ```bash
@@ -1555,7 +1596,7 @@ grep -nE "placeOrder|status.*placed" apps/server/src/working-order.ts | grep -iE
 ```
 Expected: the first names `placeOrder` (the deferred-invoice branch); the second is **empty** — `openTab`/`addTabRound`/`voidTabLine` never transition to `placed` or call `placeOrder`. A tab is created `open` (`createOpenOrder` sets `status: "open"`) and pay settles it `open → settled` (`payWorkingOrder`), so it is never at `placed` and files nothing until pay. Record this in the test file's header comment.
 
-- [ ] **Step 2: Write the pay-closes-tab test (real Postgres).** Add to `apps/server/src/tabs.rls.test.ts`:
+- [ ] **Step 2: Write the pay-closes-tab test (real Postgres).** Add to `apps/server/src/tabs.rls.test.ts` (import `payWorkingOrder` from `./till-sale.js` in the ported scaffolding):
 
 ```typescript
 describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)", () => {
@@ -1581,22 +1622,24 @@ describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)",
     expect(await saleCount(tabId)).toBe(1);
     expect(await registroCount(tabId)).toBe(1);
 
-    // The table now reads free: no OPEN tab references it (occupancy derives from open tabs — Task 9).
-    const { rows } = await suite.admin.execute<{ n: string }>(
-      sql`select count(*)::text as n from working_orders where table_id = ${tableId} and status = 'open'`,
-    );
+    // The table now reads free: its tab_id STILL points at the order (no settle-time write), but the
+    // order is settled, so the "open tab" join finds nothing (occupancy — Task 9).
+    const { rows } = await suite.admin.execute<{ n: string }>(sql`
+      select count(*)::text as n
+      from dining_tables dt join working_orders wo on wo.id = dt.tab_id and wo.tenant_id = dt.tenant_id
+      where dt.id = ${tableId} and wo.status = 'open'`);
     expect(Number(rows[0]!.n)).toBe(0);
   });
 });
 ```
 
-- [ ] **Step 3: Write the huella-identity test (real Postgres).** Two nodes under ONE tenant (one NIF), each with its own series coded "A" (`invoice_series_node_code_key` is `(tenant, node, code)`, so both may be "A"), a FIXED clock so the timestamps match, then file the SAME basket as a walk-up (table_id null) on node 1 and as a tab (table_id set) on node 2 → each is `A/1` primer_registro under the same NIF, so the huellas are identical iff `table_id` is not hashed.
+- [ ] **Step 3: Write the huella-identity test (real Postgres).** Two nodes under ONE tenant (one NIF), each with its own series coded "A" (`invoice_series_node_code_key` is `(tenant, node, code)`, so both may be "A"), a FIXED clock so the timestamps match, then file the SAME basket as a walk-up (no table) on node 1 and as a TAB (a `dining_tables` row points at the order) on node 2 → each is `A/1` primer_registro under the same NIF, so the huellas are identical iff no table field is hashed (and in the revised model the filed order carries no tab field at all).
 
-Add to `apps/server/src/tabs.rls.test.ts` a fixed clock and a second-node/series seeder, then the test:
+Add to `apps/server/src/tabs.rls.test.ts` a fixed clock and a second-node/series seeder, then the test (import `TrustedClock` from `@waitron/fiscal`; `brandNodeId`/`brandSeriesId` are already in the ported scaffolding):
 
 ```typescript
 /** A trusted clock pinned to ONE instant, so two independent filings hash the same
- *  FechaHoraHusoGenRegistro / FechaExpedicionFactura — the control that isolates table_id. */
+ *  FechaHoraHusoGenRegistro / FechaExpedicionFactura — the control that isolates the tab-ness. */
 function fixedClock(instant: Date): TrustedClock {
   return {
     now: () => ({ instant, offsetMinutes: 60, confident: true, confidence: "anchored", anchorAgeSeconds: 0 }),
@@ -1606,7 +1649,7 @@ function fixedClock(instant: Date): TrustedClock {
 }
 
 /** Seed a SECOND node + a standard series coded "A" under the SAME tenant/location as `cfg`, returning a
- *  cfg pointed at them. Inserted as the owner under withTenant (an explicit tenant_id satisfies the WITH
+ *  cfg pointed at them. Inserted as the owner under withTenant (an explicit tenant_id satisfies WITH
  *  CHECK). The series↔node guard requires the series to belong to this node — hence a real seeded node. */
 async function secondNodeSeriesA(cfg: TillConfig): Promise<TillConfig> {
   const nodeId = randomUUID();
@@ -1630,16 +1673,17 @@ async function filedHuella(workingOrderId: string): Promise<string> {
   return rows[0]!.huella;
 }
 
-describe("H2: the huella is independent of table_id (table_id/delivery_table_id are not hashed)", () => {
+describe("H2: the huella is independent of whether the order was a tab", () => {
   // Receipt (Step 1): `grep -nE 'table_id|delivery_table_id|tableId|deliveryTableId'
-  // packages/core/src/record-sale.ts packages/fiscal-verifactu/src/backend.ts` → zero matches. The
-  // huella hashes only the eight fields in packages/verifactu/src/huella.ts; table_id is not among them.
-  it("the SAME basket filed walk-up (table_id null) and from a tab (table_id set) yields the identical huella", async () => {
+  // packages/core/src/record-sale.ts packages/fiscal-verifactu/src/backend.ts` → zero matches. The filed
+  // working_orders row carries NO tab-membership (the tab link is a back-pointer on dining_tables), and
+  // delivery_table_id is not read; the huella hashes only the AEAT invoice fields.
+  it("the SAME basket filed walk-up and from a tab yields the identical huella", async () => {
     const at = new Date("2026-08-17T19:20:30+01:00");
     const clockFixed = fixedClock(at);
     const deps = { db: suite.admin, backend, clock: clockFixed };
 
-    // Node 1 (from setupVenue) — walk-up, table_id NULL → A/1, primer_registro.
+    // Node 1 (from setupVenue) — walk-up, no table → A/1, primer_registro.
     const { cfg, cafe } = await setupVenue();
     const walkUpId = randomUUID();
     await payWorkingOrder(deps, cfg, {
@@ -1648,7 +1692,8 @@ describe("H2: the huella is independent of table_id (table_id/delivery_table_id 
       tender: { method: "cash", amount: "5.00" },
     });
 
-    // Node 2 (same tenant/NIF, series "A") — a TAB on a table, table_id SET → also A/1, primer_registro.
+    // Node 2 (same tenant/NIF, series "A") — a TAB on a table (dining_tables.tab_id → the order) →
+    // also A/1, primer_registro.
     const cfg2 = await secondNodeSeriesA(cfg);
     const tableId = await seedTable(cfg2, "H2-tab");
     const { tabId } = await withTenant(suite.admin, cfg2.tenantId, async (tx) => {
@@ -1658,18 +1703,16 @@ describe("H2: the huella is independent of table_id (table_id/delivery_table_id 
     await payWorkingOrder(deps, cfg2, { id: tabId, lines: [], tender: { method: "cash", amount: "5.00" } });
 
     // Same NIF + same "A/1" + same fixed timestamp + same amounts + both primer_registro ⇒ identical
-    // huella IFF table_id is not hashed. (If it ever fed computeHuella, these would differ.)
+    // huella (nothing about the tab reaches the filed record).
     expect(await filedHuella(tabId)).toBe(await filedHuella(walkUpId));
   });
 });
 ```
 
-> Import `TrustedClock` (`@waitron/fiscal`), `brandNodeId`/`brandSeriesId` (already imported in the ported scaffolding), and confirm the ported `setupVenue` returns a `cfg` whose series code is "A" (planVenue's `seriesCode: "A"` in the scaffolding — it is). If the first-filing walk-up somehow does not land `A/1` (e.g. the venue provisioned a prior sale), file into a fresh venue: each test's `setupVenue` mints its own tenant, so A/1 is the first sale.
-
 - [ ] **Step 4: Run — see it pass, then prove the huella-identity test bites.**
 
 Run: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server test tabs.rls`
-Expected: PASS. To confirm the identity assertion is not vacuously true (both huellas equal for the wrong reason), temporarily change one filing's basket (e.g. `quantity: "2"` on the tab) and rerun → the assertion FAILS (different `ImporteTotal` ⇒ different huella), proving it discriminates. Restore.
+Expected: PASS. To confirm the identity assertion is not vacuously true, temporarily change one filing's basket (e.g. `quantity: "2"` on the tab) and rerun → the assertion FAILS (different `ImporteTotal` ⇒ different huella), proving it discriminates. Restore.
 
 - [ ] **Step 5: Commit.**
 
@@ -1683,17 +1726,16 @@ git commit -s -m "test(server): pay-closes-tab + H2 huella-independence proof (T
 ## Task 8: Counter delivery — thread `deliveryTableId`
 
 **Files:**
-- Modify: `apps/server/src/till-sale.ts`
+- Modify: `apps/server/src/working-order.ts` (`createOpenOrder` gains `placement`), `apps/server/src/till-sale.ts`
 - Test: `apps/server/src/tabs.rls.test.ts`
 
 **Interfaces:**
-- Consumes: `createOpenOrder`'s `placement` param (Task 4).
-- Produces (signature extensions):
-  - `TillSaleRequest` gains `deliveryTableId?: string`.
-  - `PayWorkingOrderRequest` gains `deliveryTableId?: string`.
-  - `recordTillSale` / `payWorkingOrder` thread it to the WALK-UP create path only (a delivery is a fresh immediate/placed sale that records where to carry it — a retrieved order ignores it).
+- Produces:
+  - `createOpenOrder(tx, cfg, id, lines, label, placement?: { deliveryTableId?: string | null }): Promise<{ orderNumber: number; priced: PricedBasket }>` — signature gains an OPTIONAL trailing `placement` (existing callers omit it → a plain walk-up).
+  - `TillSaleRequest` gains `deliveryTableId?: string`; `PayWorkingOrderRequest` gains `deliveryTableId?: string`.
+  - `recordTillSale` / `payWorkingOrder` thread it to the WALK-UP create path only (a delivery is a fresh immediate sale that records where to carry it; a retrieved order ignores it).
 
-- [ ] **Step 1: Write the failing test (real Postgres).** Add to `apps/server/src/tabs.rls.test.ts`:
+- [ ] **Step 1: Write the failing test (real Postgres).** Add to `apps/server/src/tabs.rls.test.ts` (import `recordTillSale` from `./till-sale.js` beside `payWorkingOrder`):
 
 ```typescript
 /** The delivery_table_id stamped on a working order — owner read. */
@@ -1705,7 +1747,7 @@ async function deliveryTableOf(workingOrderId: string): Promise<string | null> {
 }
 
 describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
-  it("records delivery_table_id on the walk-up order, files one sale, sets no table_id (not a tab)", async () => {
+  it("records delivery_table_id on the walk-up order and files one sale (it is NOT a tab)", async () => {
     const { cfg, cafe } = await setupVenue();
     const tableId = await seedTable(cfg, "Del-1");
     const deps = { db: suite.admin, backend, clock };
@@ -1720,23 +1762,57 @@ describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
     expect(res.invoiceNumber).toBe("A/1");
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await deliveryTableOf(id)).toBe(tableId);
-    // A delivery is NOT a tab — table_id stays null (and the CHECK forbids both anyway).
-    const { rows } = await suite.admin.execute<{ t: string | null }>(
-      sql`select table_id as t from working_orders where id = ${id}`,
+    // A delivery is NOT a tab — no dining_tables row points at it.
+    const { rows } = await suite.admin.execute<{ n: string }>(
+      sql`select count(*)::text as n from dining_tables where tab_id = ${id}`,
     );
-    expect(rows[0]!.t).toBeNull();
+    expect(Number(rows[0]!.n)).toBe(0);
   });
 });
 ```
-
-Import `recordTillSale` in `tabs.rls.test.ts` (add to the `./till-sale.js` import beside `payWorkingOrder`).
 
 - [ ] **Step 2: Run — see it fail.**
 
 Run: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server test tabs.rls`
 Expected: FAIL — `deliveryTableId` is not a known property of `TillSaleRequest` (typecheck) / `deliveryTableOf` returns null.
 
-- [ ] **Step 3: Thread `deliveryTableId` through the pay chain.** In `apps/server/src/till-sale.ts`:
+- [ ] **Step 3: Add the `placement` param to `createOpenOrder`.** In `apps/server/src/working-order.ts`, extend the signature and the insert (the empty-lines guard from Task 4 stays):
+
+```typescript
+export async function createOpenOrder(
+  tx: Transaction,
+  cfg: TillConfig,
+  id: string,
+  lines: { productId: string; quantity: string }[],
+  label: string | null,
+  // A counter delivery sets `deliveryTableId` (design §2b/§3c). Defaults to {}, so parkOrder and
+  // payWorkingOrder's walk-up path are unchanged (they omit it → a plain walk-up). A TAB does NOT flow
+  // through here — its link is the `dining_tables.tab_id` back-pointer openTab sets, not an order column.
+  placement: { deliveryTableId?: string | null } = {},
+): Promise<{ orderNumber: number; priced: PricedBasket }> {
+  const { lineRows, priced } = await priceOrderLines(tx, cfg, id, lines);
+  const orderNumber = await allocateOrderNumber(tx, cfg.tenantId, cfg.nodeId);
+
+  await tx.insert(workingOrders).values({
+    id,
+    tenantId: cfg.tenantId,
+    tillId: cfg.tillId,
+    nodeId: cfg.nodeId,
+    orderNumber,
+    label,
+    status: "open",
+    deliveryTableId: placement.deliveryTableId ?? null,
+  });
+
+  if (lineRows.length > 0) {
+    await tx.insert(workingOrderLines).values(lineRows);
+  }
+
+  return { orderNumber, priced };
+}
+```
+
+- [ ] **Step 4: Thread `deliveryTableId` through the pay chain.** In `apps/server/src/till-sale.ts`:
 
 Add to `TillSaleRequest` (after `workingOrderId?: string;`):
 
@@ -1744,9 +1820,9 @@ Add to `TillSaleRequest` (after `workingOrderId?: string;`):
   /**
    * Deliver this counter sale to a dining table (design §3c) — written to
    * `working_orders.delivery_table_id`. Optional: a plain walk-up omits it. A counter delivery is a
-   * normal immediate/placed sale that simply records WHERE to carry it; it is NOT a tab (`table_id`
-   * stays null, and the CHECK forbids both). Only the WALK-UP create path writes it — a retrieved order
-   * ignores it (you do not "deliver" a parked order).
+   * normal immediate sale that simply records WHERE to carry it; it is NOT a tab (a tab is the reverse
+   * link, `dining_tables.tab_id`). Only the WALK-UP create path writes it — a retrieved order ignores it
+   * (you do not "deliver" a parked order).
    */
   deliveryTableId?: string;
 ```
@@ -1759,7 +1835,7 @@ Add the same field to `PayWorkingOrderRequest` (after `tender`):
   deliveryTableId?: string;
 ```
 
-In `payWorkingOrder`, the WALK-UP branch (`if (locked === undefined) { ... createOpenOrder(...) }`) passes the placement:
+In `payWorkingOrder`, the WALK-UP branch (`if (locked === undefined) { … createOpenOrder(…) }`) passes the placement — replace the `createOpenOrder` call there:
 
 ```typescript
           ({ priced } = await createOpenOrder(tx, cfg, req.id, req.lines, null, {
@@ -1783,15 +1859,17 @@ In `recordTillSale`, thread it into the `PayWorkingOrderRequest`:
   );
 ```
 
-- [ ] **Step 4: Run — see it pass.**
+- [ ] **Step 5: Run — see it pass.**
 
 Run: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server test tabs.rls`
-Expected: PASS. Confirm the existing `till-sale` suites are still green (`pnpm --filter @waitron/server test till-sale`), since `createOpenOrder`'s new optional `placement` defaults to a plain walk-up.
+Expected: PASS. Confirm the existing `till-sale`/`working-order` suites are still green (`pnpm --filter @waitron/server test till-sale working-order`), since `createOpenOrder`'s new optional `placement` defaults to a plain walk-up and the other two callers (`parkOrder`, `payWorkingOrderIntegrated`) omit it.
 
-- [ ] **Step 5: Commit.**
+- [ ] **Step 6: Package green + commit.**
+
+Run: `pnpm --filter @waitron/server test:coverage` (real-PG suites with `TESTCONTAINERS_RYUK_DISABLED=true`).
 
 ```bash
-git add apps/server/src/till-sale.ts apps/server/src/tabs.rls.test.ts
+git add apps/server/src/till-sale.ts apps/server/src/working-order.ts apps/server/src/tabs.rls.test.ts
 git commit -s -m "feat(server): counter delivery-to-table link (deliveryTableId) (TS-1)"
 ```
 
@@ -1808,7 +1886,7 @@ git commit -s -m "feat(server): counter delivery-to-table link (deliveryTableId)
   - `interface TableState { id: string; label: string; zone: string | null; capacity: number | null; state: "free" | "open-tab" | "delivery-pending"; hasOpenTab: boolean; tabId?: string; tabLineCount?: number; tabTotal?: string; pendingDeliveries: number }`
   - `listTablesWithState(tx: Transaction, cfg: TillConfig, locationId?: string): Promise<TableState[]>`
 
-- [ ] **Step 1: Write the failing occupancy test (PGlite).** Add to `apps/server/src/tabs.test.ts` (import `listTablesWithState`, `sendToPrep`, `advancePrep`, `recordTillSale`? — occupancy needs a delivery order + a prep row; use the existing `sendToPrep`/`advancePrep` on a settled delivery order). For a hermetic PGlite delivery, seed the settled delivery order + its prep row directly.
+- [ ] **Step 1: Write the failing occupancy test (PGlite).** Add to `apps/server/src/tabs.test.ts` (extend the `./working-order.js` import with `listTablesWithState`). For a hermetic PGlite delivery, seed the settled delivery order + its prep row directly.
 
 ```typescript
 describe("listTablesWithState (occupancy)", () => {
@@ -1826,14 +1904,14 @@ describe("listTablesWithState (occupancy)", () => {
       state: "open-tab", hasOpenTab: true, tabId, tabLineCount: 1, tabTotal: "3.00", pendingDeliveries: 0,
     });
 
-    // Settle the tab; the table frees.
+    // Settle the tab (tab_id still points at it, now stale); the table frees.
     await db.execute(sql`update working_orders set status = 'settled', settled_at = now() where id = ${tabId}`);
     const freed = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(freed[0]).toMatchObject({ state: "free", hasOpenTab: false });
   });
 
   it("shows delivery-pending while a delivery's prep is uncollected, and free once collected", async () => {
-    const { cfg, cafeId, tableId } = await setupVenue();
+    const { cfg, tableId } = await setupVenue();
     // A settled counter delivery to the table, with an uncollected prep row (queued).
     const orderId = randomUUID();
     await db.execute(sql`
@@ -1877,7 +1955,7 @@ describe("listTablesWithState (occupancy)", () => {
 Run: `pnpm --filter @waitron/server test tabs.test`
 Expected: FAIL — `listTablesWithState is not a function`.
 
-- [ ] **Step 3: Implement `listTablesWithState`.** In `apps/server/src/working-order.ts`, add the `diningTables` import (already added in Task 4) and:
+- [ ] **Step 3: Implement `listTablesWithState`.** In `apps/server/src/working-order.ts` (`diningTables` already imported in Task 4):
 
 ```typescript
 /** One row of the occupancy read-model (design §4). The raw signals (`hasOpenTab`, `pendingDeliveries`)
@@ -1898,15 +1976,15 @@ export interface TableState {
 
 /**
  * The venue's ACTIVE tables with their DERIVED occupancy (design §4). ONE location-scoped query: each
- * table LEFT JOINs its at-most-one OPEN tab (`working_orders.table_id`, with a line count + gross total)
- * and a count of pending deliveries — orders with `delivery_table_id` = this table whose `order_prep`
- * state is not yet `collected` and whose order is not `abandoned` (food still being made / carried). A
- * non-prepped instant handover (no prep row, or collected) leaves no lingering occupancy.
+ * table LEFT JOINs its at-most-one OPEN tab — the order its own `tab_id` back-pointer names, filtered to
+ * `status = 'open'` (a `tab_id` pointing at a settled/abandoned order finds nothing here and reads free,
+ * design §2b) — with a line count + gross total, plus a count of pending deliveries (orders with
+ * `delivery_table_id` = this table whose `order_prep` state is not yet `collected` and whose order is not
+ * `abandoned`). A non-prepped instant handover (no prep row, or collected) leaves no lingering occupancy.
  *
  * Precedence for the rolled-up `state`: open-tab dominates delivery-pending dominates free. Runs as the
- * app role under the caller's tenant scope (RLS), so it gathers orders across NODES by construction
- * (working orders are node-scoped, but this query does not filter by node) — a table lives at the venue,
- * not the register. `locationId` defaults to the till's own.
+ * app role under the caller's tenant scope (RLS), so it gathers orders across NODES by construction (a
+ * table lives at the venue, not the register). `locationId` defaults to the till's own.
  */
 export async function listTablesWithState(
   tx: Transaction,
@@ -1938,7 +2016,7 @@ export async function listTablesWithState(
       from working_orders wo
       left join working_order_lines wol
         on wol.working_order_id = wo.id and wol.tenant_id = wo.tenant_id
-      where wo.tenant_id = dt.tenant_id and wo.table_id = dt.id and wo.status = 'open'
+      where wo.tenant_id = dt.tenant_id and wo.id = dt.tab_id and wo.status = 'open'
       group by wo.id
     ) tab on true
     left join lateral (
@@ -1979,7 +2057,7 @@ export async function listTablesWithState(
 - [ ] **Step 4: Run — see it pass.**
 
 Run: `pnpm --filter @waitron/server test tabs.test`
-Expected: PASS (all occupancy cases). Prove the precedence/state derivation by deletion: temporarily force `state` to `"free"` unconditionally and rerun → the open-tab / delivery-pending cases FAIL. Restore.
+Expected: PASS (all occupancy cases). Prove the state derivation by deletion: temporarily force `state` to `"free"` unconditionally and rerun → the open-tab / delivery-pending cases FAIL. Restore.
 
 - [ ] **Step 5: Package coverage + commit.**
 
@@ -2001,16 +2079,16 @@ git commit -s -m "feat(server): listTablesWithState derived occupancy read-model
 
 **Interfaces:**
 - Consumes: `createTable`/`listTables`/`updateTable`/`deactivateTable` (`tables.ts`); `openTab`/`addTabRound`/`voidTabLine`/`listTablesWithState` (`working-order.ts`); `isUuid` (`till-session.ts`).
-- Produces: `POST/GET /api/tables`, `PATCH/DELETE /api/tables/:id`, `GET /api/tables/state`, `POST /api/tables/:id/tab`, `POST /api/working-orders/:id/round`, `DELETE /api/working-orders/:id/lines/:lineNo`; plus the `STATUS` map entries for the six new codes.
+- Produces: `POST/GET /api/tables`, `PATCH/DELETE /api/tables/:id`, `GET /api/tables/state`, `POST /api/tables/:id/tab`, `POST /api/working-orders/:id/round`, `DELETE /api/working-orders/:id/lines/:lineNo`; plus the six new `STATUS` map entries. (`deliveryTableId` on `POST /api/sales` flows through Task 8 with no route change — that handler already passes the whole `TillSaleRequest` body to `recordTillSale`.)
 
-- [ ] **Step 1: Write the failing route tests.** Mirror `apps/server/src/till-api.test.ts`'s app/harness shape (it stands up `mountTillApi` over a PGlite db + a fake session). Cover: create + list happy path, a duplicate label → 409, a malformed `:id` → the route's fail-closed code, open a tab via `POST /api/tables/:id/tab`, add a round, void a line, and `GET /api/tables/state`.
+- [ ] **Step 1: Write the failing route tests.** Mirror `apps/server/src/till-api.test.ts`'s app/harness shape (it stands up `mountTillApi` over a PGlite db + a fake logged-in session, with a seeded venue + catalogue product `PRODUCT_ID` and a `request(path, init)` helper). Cover: create + list, a duplicate label → 409, a malformed `:id` → the route's fail-closed code, open a tab, add a round, void a line, and `GET /api/tables/state`.
 
 `apps/server/src/till-api.tables.test.ts` (structure — reuse `till-api.test.ts`'s `buildApp`/session helpers verbatim; add the table/tab assertions):
 
 ```typescript
 // ... reuse till-api.test.ts's harness: a PGlite `mountTillApi` app with a logged-in session cookie,
-// a seeded venue (tenant/location/till/node) + catalogue product, and a `request(path, init)` helper.
-// Then:
+// a seeded venue (tenant/location/till/node) + catalogue product `PRODUCT_ID`, and a `request(path, init)`
+// helper (JSON body, cookie attached). Then:
 
 describe("table + tab routes", () => {
   it("POST /api/tables creates and GET /api/tables lists it", async () => {
@@ -2206,7 +2284,7 @@ Add the routes inside `mountTillApi` (all SESSION-GUARDED; each opens its own `w
   );
 ```
 
-> `deliveryTableId` on `POST /api/sales` (Task 8) needs NO route change: that handler already does `c.req.json<TillSaleRequest>()` and passes the whole `body` to `recordTillSale`, so once `TillSaleRequest` carries `deliveryTableId` (Task 8) the field flows through. Add one assertion to `till-api.tables.test.ts` posting `/api/sales` with `deliveryTableId` and reading the stamped column back, if the harness has a fiscal backend wired; otherwise leave that path to Task 8's real-PG test.
+> `deliveryTableId` on `POST /api/sales` (Task 8) needs NO route change: that handler already does `c.req.json<TillSaleRequest>()` and passes the whole `body` to `recordTillSale`, so once `TillSaleRequest` carries `deliveryTableId` the field flows through. Add one assertion to `till-api.tables.test.ts` posting `/api/sales` with `deliveryTableId` and reading the stamped column back, if the harness has a fiscal backend wired; otherwise leave that path to Task 8's real-PG test.
 
 - [ ] **Step 5: Run — see it pass.**
 
@@ -2235,12 +2313,16 @@ git commit -s -m "feat(server): HTTP routes for tables + tabs with isUuid guards
 
 ## Plan notes (gaps / decisions flagged, not invented scope)
 
-1. **`locations` may need a `(tenant_id, id)` unique for `dining_tables_location_fk` (Task 1, Step 1).** `locations` (`tenants.ts:69`) currently has only its single-column PK; the composite FK `(tenant_id, location_id) → locations(tenant_id, id)` requires a matching unique on `locations`, the way `nodes`/`tills` carry `nodes_tenant_id_key`/`tills_tenant_id_key`. The spec's DDL (§2a) assumes the composite target exists. If `db:generate` refuses the FK, add `unique("locations_tenant_id_key").on(t.tenantId, t.id)` to `locations` in the SAME task — a one-line, additive change consistent with the sibling tables. Flagged because it is a tiny schema addition the spec did not name explicitly.
+1. **`locations` needs a `(tenant_id, id)` unique for `dining_tables_location_fk` (Task 1).** Confirmed by reading `packages/db/src/schema/tenants.ts`: `locations` carries only its single-column PK (`id`) plus a plain `locations_tenant_id_idx` — it has NO composite `(tenant_id, id)` unique. The spec's DDL (§2a) says `dining_tables.location_id` is a composite FK `(tenant_id, location_id) → locations`, and Postgres requires a unique on the referenced columns, so Task 1 adds `unique("locations_tenant_id_key").on(t.tenantId, t.id)` to `locations` — a one-line additive change consistent with `tills_tenant_id_key`/`nodes_tenant_id_key`, which exist for exactly this reason. Flagged because it is a schema addition the spec's DDL implies but does not name.
 
-2. **`createOpenOrder` gains an optional `placement` param (Task 4), and its line-insert is guarded (`if (lineRows.length > 0)`).** The spec says `openTab` "reuses `createOpenOrder` … creates an open working_order with `table_id`". Reusing it faithfully requires (a) a way to pass `table_id`/`delivery_table_id`, and (b) tolerating an EMPTY tab (no initial round) — today `createOpenOrder` unconditionally inserts lines, and `tx.insert(...).values([])` errors. Both changes are additive and behaviour-preserving (existing callers omit `placement` → a plain walk-up, and always pass ≥1 line → the guard never fires). This keeps the concurrency race caught at the natural INSERT point. Flagged as the one signature change the spec implies but does not spell out.
+2. **Both mutual composite FKs are HAND-WRITTEN in the custom migration, not emitted by `db:generate` (Task 2).** Spec §2c says `db:generate` "emits them as two `ALTER TABLE … ADD CONSTRAINT` statements." That is unsafe here: `dining_tables.tab_id → working_orders` and `working_orders.delivery_table_id → dining_tables` are a mutual FK between two schema MODULES, and a Drizzle `foreignKey({ foreignColumns: [otherTable.col, …] })` reads the other table's column objects EAGERLY when `pgTable()` runs. Declaring both in the schemas makes `dining-tables.ts` and `orders.ts` import each other, and one side's columns are still `undefined` mid-cycle — the existing `locations ↔ catalogue` cycle survives only because it uses lazy `.references(() => …)` THUNKS (single-column), which composite FKs have no equivalent of. So both columns stay bare in the schema and both FKs are hand-written in the custom migration (drizzle-kit does not manage them, exactly as it does not manage FORCE/policies/grants; the bare columns produce no snapshot drift). This is the one deviation from the spec, and Task 2's real-PG test proves both FKs bite (prove-by-deletion). Note: this is a NEW pattern for the repo (existing FKs are all schema-declared) — the implementer should verify `db:generate` emits ONLY the `delivery_table_id` column ADD (no stray FK) and that the migration applies. If a future maintainer wants both FKs schema-declared, the only cycle-safe option is a one-way import (`dining-tables.ts → orders.ts` for `tab_fk`, `delivery_table_fk` still hand-written).
 
-3. **The H2 huella-identity test needs two nodes under one tenant, each with a series coded "A" (Task 7).** For two filings to yield the IDENTICAL huella they must share issuer (NIF), series string ("A/1"), timestamp, amounts, and both be `primer_registro`. Two separate tenants can't share a NIF (`tenants_country_tax_id_key`), so the test seeds a second node + a standard series "A" under the same tenant (`invoice_series_node_code_key` is `(tenant, node, code)`, so two "A"s on different nodes are legal) and files with a FIXED clock. This is a faithful, implementable realisation of the spec's "same basket filed once from a tab and once walk-up produces the identical huella" — flagged because the seeding is more involved than the spec's one-line framing, and paired with the grep receipt (the primary, unambiguous proof).
+3. **`createOpenOrder` changes twice, both additive and behaviour-preserving.** Task 4 adds the `if (lineRows.length > 0)` line-insert guard (so `openTab` can open an EMPTY tab — `tx.insert(...).values([])` errors); Task 8 adds the optional trailing `placement: { deliveryTableId? }` param (so a counter delivery can stamp `delivery_table_id`). Existing callers (`parkOrder`, `payWorkingOrder` walk-up, `payWorkingOrderIntegrated` walk-up) always pass ≥1 line and omit `placement` → a plain walk-up, unchanged. A TAB does NOT flow its link through `createOpenOrder` at all — the link is the `dining_tables.tab_id` back-pointer `openTab` sets separately. Flagged as the one signature change the spec implies but does not spell out.
 
-4. **`delivery-pending` "(and not abandoned)" (§4) is read as the ORDER's status, not a prep state.** `order_prep`'s enum is `queued→preparing→ready→collected` — there is no `abandoned` prep state. `listTablesWithState` therefore excludes a delivery whose order is `abandoned` (`working_orders.status <> 'abandoned'`) in addition to `op.state <> 'collected'`. Flagged as an interpretation of the spec's parenthetical; matches "food still being made / carried."
+4. **The H2 huella-identity test needs two nodes under one tenant, each with a series coded "A" (Task 7).** For two filings to yield the IDENTICAL huella they must share issuer (NIF), series string ("A/1"), timestamp, amounts, and both be `primer_registro` — and a single chain would make the second `A/2` with the first's huella as its prev (different by design). Two separate tenants can't share a NIF (`tenants_country_tax_id_key`), so the test seeds a second node + a standard series "A" under the same tenant (`invoice_series_node_code_key` is `(tenant, node, code)`, so two "A"s on different nodes are legal) and files with a FIXED clock. In the revised model the filed `working_orders` row carries no tab field at all (the tab link is on the table), so the identity is even more direct than the old model's. The grep receipt (Step 1) is the primary, unambiguous proof; the huella test is the behavioural confirmation. Verify the seeded `invoice_series` columns (`purpose`, `next_number`) against `packages/db/src/schema/series.ts` before relying on the insert.
 
-5. **Paying a tab uses the existing `/api/sales` (no new route/verb).** The spec (§3b) is explicit that pay reuses `payWorkingOrder` with the tab's id; the retrieved-order branch files the stored lines and settles `open → settled`. Task 7 proves this at the verb level (real-PG). Note the existing `recordTillSale` guards `lines.length === 0`, so a till paying a tab via `/api/sales` sends the tab's current basket (non-empty) — `payWorkingOrder` ignores it and files the stored lines. No change is needed here; flagged so an implementer does not add a redundant "pay tab" route.
+5. **`delivery-pending` "(and not abandoned)" (§4) is read as the ORDER's status, not a prep state.** `order_prep`'s enum is `queued→preparing→ready→collected` — there is no `abandoned` prep state. `listTablesWithState` therefore excludes a delivery whose ORDER is `abandoned` (`working_orders.status <> 'abandoned'`) in addition to `op.state <> 'collected'`. Flagged as an interpretation of the spec's parenthetical; matches "food still being made / carried."
+
+6. **Paying a tab uses the existing `/api/sales` (no new route/verb).** The spec (§3b) is explicit that pay reuses `payWorkingOrder` with the tab's id; the retrieved-order branch files the stored lines and settles `open → settled`, after which the table's `tab_id` (unchanged, now stale) reads free by the occupancy join. Task 7 proves this at the verb level (real-PG). Note the existing `recordTillSale` guards `lines.length === 0`, so a till paying a tab via `/api/sales` sends the tab's current basket (non-empty) — `payWorkingOrder` ignores it and files the stored lines. No change is needed; flagged so an implementer does not add a redundant "pay tab" route.
+
+7. **`voidTabLine`'s `cfg` param is unused** (the delete is by tab id + line no, RLS-scoped). It is kept for the uniform tab-verb signature the route layer calls, and lint's `no-unused-vars` `after-used` default does not flag an unused arg that precedes a used one (`tabId`/`lineNo`). Flagged so a reviewer does not "clean it up" and desync the call shape.
