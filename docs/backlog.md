@@ -358,18 +358,23 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   read extended with zone + `pendingToServe`, a till **live-floor screen** (occupancy-coloured cards
   grouped by zone) + a **table-ordering screen** (full-width grid + current-round bar + badged pull-out
   tab drawer), and a dashboard **Sala** config editor; the live floor renders as **cards, not a spatial
-  map**. **FP-2** (remains to spec) adds the **spatial canvas + drag-drop edit mode** (placement
-  `x/y/shape/rotation`, on-till + dashboard). All non-fiscal (pay path unchanged; `served_at` not in the
-  huella). Spec + plan in `docs/superpowers/{specs,plans}/2026-08-17-floor-plan-fp1*`. **Build-blocked on
-  TS-1 + TS-2** (it is their UI) — execute only after both land.
+  map**. **FP-2 DESIGNED + PLANNED 2026-08-17** adds the **spatial canvas + drag-drop edit mode** —
+  nullable placement columns on `dining_tables` (`pos_x/pos_y` per-mille, a `floor_table_shape` enum,
+  `rotation`; size derived from plazas), a shared `@waitron/ui` `wt-floor-canvas`, a till **map/list
+  toggle** + unplaced tray, and edit mode in **both** the dashboard and an on-till "Editar plano" toggle
+  — the latter **manager-on-till** (the operator's own `till.configure` role, the first till route to
+  call `authorize()`; supervisor-PIN override deferred). Both FP slices are non-fiscal (pay path
+  unchanged; neither `served_at` nor any placement field enters the huella). Specs + plans in
+  `docs/superpowers/{specs,plans}/2026-08-17-floor-plan-fp{1,2}*`. **Build-blocked on TS-1 + TS-2** (FP-1
+  is their UI; FP-2 builds on FP-1) — execute only after they land, FP-1 before FP-2.
 - **KDS (sub-project 12)** — **multi-station routing** (per-station displays, route each line to its
   station, course firing) — a station/routing model, not merely an extension of #63's prep surface.
 - **Bookings (sub-project 17)** — **staff-entered reservations** (date / time / party size / contact,
   optional table assignment) from the dashboard; **no** public/online surface in slice 1.
 
-Build order: the **table-service core (TS-1 → TS-5 above) is specced + planned** (2026-08-17), and
-**floor-plan FP-1 (the operable live-floor UI) is now specced + planned** too (2026-08-17), build-blocked
-on TS-1/TS-2. **Still to spec:** **floor-plan FP-2** (spatial canvas + editor), **KDS** (multi-station
+Build order: the **table-service core (TS-1 → TS-5) is specced + planned** (2026-08-17), and **the whole
+floor-plan surface (FP-1 operable live floor + FP-2 spatial canvas/editor) is now specced + planned**
+too (2026-08-17), build-blocked on TS-1/TS-2 (FP-1 before FP-2). **Still to spec:** **KDS** (multi-station
 routing) and **bookings** (staff reservations) — each its own brainstorm → spec → plan cycle. **Nothing
 in this track is built yet**; TS-1 is the first buildable slice (everything else depends on it). The
 owner **may be reachable by laptop** during the 2026-08-19 → 25 trip, so this track can also progress
