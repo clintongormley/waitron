@@ -461,10 +461,13 @@ device-identity) is **now specced + planned** too (2026-08-17;
 KDS displays. **Epson Server Direct Print** (the second cloud-poll vendor, mirroring the Star slice behind
 a `cloud_poll_vendor` discriminator + shared claim/ack) is **now specced + planned** too (2026-08-17;
 `docs/superpowers/{specs,plans}/2026-08-17-printing-epson-server-direct-print*`), completing cloud-poll
-vendor coverage. **Still to spec:** only the `cash.drawer` **permission gate** (establishes the first
-till-side `authorize()`-with-supervisor-override path — shared with on-till config; gates the manual
-drawer-open). **Everything else across the whole table-service + kitchen
-+ printing surface is now specced + planned.** **Nothing in this track is
+vendor coverage. The **`cash.drawer` authorization** slice is **now specced + planned** too (2026-08-17;
+`docs/superpowers/{specs,plans}/2026-08-17-cash-drawer-authorization*`) — a configurable per-location
+`drawer_open_policy` (`gated` default / `open`) and, crucially, the **first till-side
+`authorize()`-with-supervisor-override path** + a **reusable supervisor-override dialog** (which on-till
+config — device-identity manager-on-till, FP-2 "Editar plano" — and future till void/refund reuse). **So
+the ENTIRE table-service + kitchen + printing surface is now specced + planned, with nothing left to
+design.** **Nothing in this track is
 built yet**; TS-1 is the first buildable slice of the table-service track (the printing subsystem can build
 independently of it). The owner
 **may be reachable by laptop** during the 2026-08-19 → 25 trip, so this track can also progress remotely.
