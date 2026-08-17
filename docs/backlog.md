@@ -446,9 +446,14 @@ spin-off) specced + planned too, build-blocked on KDS-1. **KDS-2** (courses + fi
 track's design is complete** (KDS-1/2/3 + device identity). The **kitchen-printers** requirement grew into
 a **printing subsystem** (central printers + print agents + a transport-pluggable outbox) plus **KDS-4
 kitchen printing** (station→printer routing + print-on-fire) on top, **both now specced + planned**
-(2026-08-17); the subsystem is largely independent of the table-service track. **Still to spec:** only
-**follow-ons** now — the printing **cloud_poll** transport (fast-follow) and the printing
-**customer-receipt + cash-drawer** consumers; and the KDS **expo device kind**. **Nothing in this track is
+(2026-08-17); the subsystem is largely independent of the table-service track. Its **customer-receipt +
+cash-drawer** consumer is **now specced + planned** too (2026-08-17) — a per-till `receipt_printer_id`, a
+per-location `receipt_print_mode` (auto default), an ESC/POS `qr()` addition, a faithful `formatReceipt`
+(reproduces every art. 7.1 / arts. 20–21 element — the fiscal record is untouched; it re-renders the filed
+receipt), server-side print-on-sale + a cash-drawer kick + an audited manual open; spec + plan in
+`docs/superpowers/{specs,plans}/2026-08-17-counter-receipt-drawer-printing*`. **Still to spec:** the
+printing **cloud_poll** transport (fast-follow), a `cash.drawer` permission gate (needs the first
+till-side `authorize()` path), and the KDS **expo device kind**. **Nothing in this track is
 built yet**; TS-1 is the first buildable slice of the table-service track (the printing subsystem can build
 independently of it). The owner
 **may be reachable by laptop** during the 2026-08-19 → 25 trip, so this track can also progress remotely.
