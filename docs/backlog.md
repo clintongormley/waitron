@@ -400,8 +400,11 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   a job enqueued on **any node (local or cloud)** is delivered by the right agent. **Printing never blocks
   a fire/sale** (outbox). Largely independent of the table-service track; security review before build.
   Spec + plan in `docs/superpowers/{specs,plans}/2026-08-17-printing-subsystem*`. **KDS-4 — kitchen
-  printing (Slice B): TO SPEC** — station→printer many-to-many routing + print-on-fire + kitchen-ticket
-  formatting **on top of** the printing subsystem + KDS-1. The
+  printing (Slice B) DESIGNED + PLANNED 2026-08-17** — a `station_printers` many-to-many + **print-on-fire**
+  (extends KDS-1's `fireLines`/KDS-2's `fireCourse` to `enqueuePrintJob` — an outbox INSERT, never blocking)
+  + a kitchen-ticket ESC/POS formatter; a group printer (`ticket_scope='order'`) gets **one deduped
+  consolidated ticket per fire**. Thin layer on the printing subsystem + KDS-1; non-fiscal. Spec + plan in
+  `docs/superpowers/{specs,plans}/2026-08-17-kds-4-kitchen-printing*`. The
   **always-on device identity** is **now specced + planned** (see its own row below).
   Non-fiscal (pay/collect unchanged). Spec + plan in
   `docs/superpowers/{specs,plans}/2026-08-17-kds-1*`. **Reworks shipped #63** (`order_prep` + its
@@ -441,12 +444,13 @@ KDS, bookings — now have a first slice specced + planned**, plus the **always-
 spin-off) specced + planned too, build-blocked on KDS-1. **KDS-2** (courses + fire control) and **KDS-3**
 (expo/pass) are **now specced + planned** too (2026-08-17), build-blocked on KDS-1(/KDS-2). So **the KDS
 track's design is complete** (KDS-1/2/3 + device identity). The **kitchen-printers** requirement grew into
-a **printing subsystem** (central printers + print agents + a transport-pluggable outbox), **now specced +
-planned** (2026-08-17), largely independent of the table-service track. **Still to spec:** **KDS-4 —
-kitchen printing** (station→printer routing + print-on-fire on top of the printing subsystem + KDS-1), the
-printing **cloud_poll** transport (fast-follow), and the printing **customer-receipt + cash-drawer**
-consumers. **Nothing in this track is built yet**; TS-1 is the first buildable slice of the table-service
-track (the printing subsystem can build independently of it). The owner
+a **printing subsystem** (central printers + print agents + a transport-pluggable outbox) plus **KDS-4
+kitchen printing** (station→printer routing + print-on-fire) on top, **both now specced + planned**
+(2026-08-17); the subsystem is largely independent of the table-service track. **Still to spec:** only
+**follow-ons** now — the printing **cloud_poll** transport (fast-follow) and the printing
+**customer-receipt + cash-drawer** consumers; and the KDS **expo device kind**. **Nothing in this track is
+built yet**; TS-1 is the first buildable slice of the table-service track (the printing subsystem can build
+independently of it). The owner
 **may be reachable by laptop** during the 2026-08-19 → 25 trip, so this track can also progress remotely.
 
 ---
