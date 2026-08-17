@@ -1,0 +1,252 @@
+# Table service — TS-1: tables + tabs (the core)
+
+**Date:** 2026-08-17. **Status:** design (approved section-by-section with the owner); plan alongside.
+**Track:** the first slice of the **table-service track** (sub-project 10, *tabs*). **Runs SUPERVISED**
+(owner in the loop), NOT in the unattended campaign — see
+[docs/backlog.md](../../backlog.md) "Table-service track".
+
+The counter POS (#60–64) is walk-up only: a "table" today is just a free-text `label` on a working
+order (`packages/db/src/schema/orders.ts:86`; e.g. "Mesa 4" at `apps/server/src/working-order.ts:321`).
+This slice introduces the real **tables** primitive and the **running tab**, and is the foundation the
+rest of the track leans on (floor plan renders it, KDS routes it, bookings reserve it).
+
+## 0. Owner decisions this slice is built on (2026-08-17)
+
+- **Service model: hybrid.** The venue runs full table service (a waiter tab held open at a table) AND
+  counter-order-delivered-to-a-table, side by side.
+- **A table carries at most ONE open tab, plus counter deliveries.** Not multiple concurrent tabs.
+- **The track is decomposed into slices; this is TS-1 (core).** TS-2 configurable statuses, TS-3
+  move/merge, TS-4 transfer-items, TS-5 split-bill each get their own spec. All were requested; they are
+  sequenced, not dropped.
+
+## 1. Scope
+
+**In:** the `dining_tables` entity + CRUD (headless); a tab = an `open` working_order anchored to a
+table; an **append-only** add-a-round primitive; per-line void on an open tab; pay-closes-the-tab
+(reusing the existing fiscal path unchanged); a counter order's "deliver to table N" link; and a
+**derived** occupancy read-model.
+
+**Out (each to its slice):** table position / visual layout → floor plan; configurable service statuses
+→ TS-2; move & merge → TS-3; transfer items between tabs → TS-4; split the bill → TS-5. Also out: any
+waiter-handheld device or new auth (TS-1 reuses the existing till + `@waitron/identity` person session);
+kitchen firing of a tab's rounds — see §8.
+
+## 2. Data model
+
+### 2a. `dining_tables` (new, `packages/db/src/schema/`)
+
+Tenant + location scoped, long-lived. Anchored to **`location`** (venue-wide, tenant-scoped —
+`packages/db/src/schema/tenants.ts:69`), NOT to `node`: working orders, the held list, the
+order-number counter and the prep queue are all node-scoped today
+(`working-order.ts:382`, `working_order_counters` PK `(tenant,node)`), and one node == one venue for
+now, but a table must not fragment when a venue runs a second node (foreshadowed
+`packages/db/src/schema/nodes.ts:6-7`).
+
+```text
+dining_tables
+-------------
+id           uuid PK
+tenant_id    uuid  → tenants (restrict)
+location_id  uuid  composite FK (tenant_id, location_id) → locations
+label        text  the human id ("12", "Terraza 3")
+zone         text  NULL   ("terrace" / "bar" / "inside")
+capacity     int   NULL   (covers)
+active       bool  NOT NULL DEFAULT true   (deactivate, never hard-delete — it has order history)
+created_at   timestamptz NOT NULL DEFAULT now()
+
+UNIQUE (tenant_id, id)                          -- so working_orders can composite-FK it
+UNIQUE (tenant_id, location_id, label)          -- no duplicate labels in a venue
+```
+
+FORCE RLS + a `dining_tables_tenant_isolation` policy (`USING/WITH CHECK (tenant_id =
+current_tenant_id())`) + `GRANT SELECT, INSERT, UPDATE ON dining_tables TO app_user` (no DELETE —
+deactivate) in a **hand-written custom migration** (`.enableRLS()` alone is insufficient — CLAUDE.md §3).
+The `fiscal-verifactu` `inmutabilidad` guard scans every `tenant_id`-bearing table, so it will enumerate
+`dining_tables` and require FORCE RLS — run it after the migration.
+
+### 2b. Two new nullable columns on `working_orders` (`orders.ts:50`)
+
+```text
+table_id           uuid NULL  composite FK (tenant_id, table_id) → dining_tables (tenant_id, id)
+delivery_table_id  uuid NULL  composite FK (tenant_id, delivery_table_id) → dining_tables (tenant_id, id)
+```
+
+- **`table_id` set** ⇒ this `open` order **IS** that table's running tab. **`delivery_table_id` set** ⇒
+  this (counter) order is **delivered to** that table, not a tab. A tab: `table_id` set /
+  `delivery_table_id` null. A counter delivery: the reverse. A walk-up: both null. (A CHECK forbidding
+  both-set at once is included — a tab is already at its table.)
+- **Partial unique index** `(tenant_id, table_id) WHERE status = 'open' AND table_id IS NOT NULL` ⇒ **at
+  most one open tab per table**, venue-wide. This is the enforcement point for `openTab`; the verb also
+  pre-checks so the common case is a clean `tab.already_open`, and the index backstops the race.
+- Both are additive nullable columns on the existing FORCE-RLS `working_orders`; its existing tenant
+  policy + `app_user` grants already cover them with **no change** (grants are table-wide, RLS is
+  row-level — the same reason #78's `products.image` add needed no new grant; confirm by the RLS test in
+  §7). `working_orders.node_id` stays as-is (nullable, always written by `createOpenOrder` —
+  `working-order.ts:270`).
+
+### 2c. Migration
+
+One `packages/db` migration set (number assigned by `pnpm --filter @waitron/db db:generate` against the
+live tree — **do not hardcode**; the autonomous campaign may consume numbers first): the auto part
+(create `dining_tables`, add the two `working_orders` columns + FKs + the CHECK + the partial unique
+index) plus a **custom** part (FORCE RLS + policy + grant on `dining_tables`). Commit the generated
+`meta/_journal.json` + snapshot. No backfill (pre-production, CLAUDE.md §3).
+
+## 3. Behaviour
+
+The tab is an `open` working_order, so it reuses the existing order → pay → file machinery and **nothing
+fiscal changes** (§5). New domain code lives in `apps/server` — the **backend HTTP application** (the
+client–server "server"; NOT the domain `node`/`node_id` host identity, and NOT a waiter) — beside the
+existing order logic (`working-order.ts` / `till-sale.ts`), which is where order mutation already is; a
+`@waitron/tables` package extraction is a later refactor if it grows. Schema in `packages/db`. (Terminology:
+the `apps/server` process runs on a `node` and reads its `nodeId` from `TillConfig`; "node" is the host
+identity, "server" here is only the backend-app directory name.)
+
+### 3a. Table CRUD (`apps/server/src/tables.ts`)
+
+- `createTable(tx, cfg, { label, zone?, capacity? }) → { id }` — throws `table.label_taken` (catch the
+  `(tenant_id, location_id, label)` unique 23505 → the mapped code).
+- `listTables(tx, cfg) → DiningTable[]` — the location's `active` tables, by `label`.
+- `updateTable(tx, cfg, id, { label?, zone?, capacity? }) → void` — throws `table.not_found`,
+  `table.label_taken`.
+- `deactivateTable(tx, cfg, id) → void` — sets `active = false`; throws `table.not_found`. (Reactivate is
+  `updateTable`-shaped; kept trivial.)
+
+### 3b. Tab verbs (`apps/server/src/working-order.ts`, beside `createOpenOrder`/`parkOrder`)
+
+- `openTab(tx, cfg, { tableId, lines? }) → { tabId, orderNumber }` — validates the table is `active`
+  (`table.not_found` / `table.inactive`), then creates an `open` working_order with `table_id = tableId`
+  (reusing `createOpenOrder`, `working-order.ts:252`, incl. the per-node `order_number` allocation).
+  Pre-checks the one-open-tab rule → `tab.already_open`; a concurrent race is caught as the partial-unique
+  23505 → `tab.already_open`. `lines?` lets a tab open with an initial round.
+- `addTabRound(tx, cfg, tabId, lines) → void` — **APPENDS** priced lines to the open tab: locks each new
+  line's `unit_price_gross` at add-time and assigns the next `line_no`, **without deleting or re-pricing
+  existing lines**. This is the one genuinely new order primitive — today's `updateHeldOrder`
+  (`working-order.ts:474`) deletes and re-inserts the whole basket (`:511-513`), which re-locks every
+  line at the current catalogue price and is wrong for an incremental tab. Throws `tab.not_open` if the
+  order is not `open` (or not a tab).
+- `voidTabLine(tx, cfg, tabId, lineNo) → void` — deletes one not-yet-paid line from an `open` tab
+  (pre-fiscal — nothing is filed, so no fiscal record or amendment is involved). Throws `tab.not_open`,
+  `tab.line_not_found`.
+- **Pay closes the tab** — **no new verb**: `payWorkingOrder` (`till-sale.ts:253`) is called with the
+  tab's id; it settles `open → settled` and files one sale + `registro` the normal way. The table then
+  reads *free* (derived). Splitting into separate checks is TS-5.
+
+### 3c. Counter delivery
+
+The existing counter/walk-up path (`recordTillSale` / `POST /api/sales`, `till-sale.ts:1438`) gains an
+**optional** `deliveryTableId`, written to `working_orders.delivery_table_id`. Otherwise unchanged — a
+counter delivery is a normal immediate/placed sale that simply records where to carry it.
+
+### 3d. HTTP (`apps/server/src/till-api.ts`)
+
+`POST/GET /api/tables`, `PATCH/DELETE /api/tables/:id` (DELETE = deactivate); `GET /api/tables/state`
+(§4); `POST /api/tables/:id/tab` (openTab); `POST /api/working-orders/:id/round` (addTabRound);
+`DELETE /api/working-orders/:id/lines/:lineNo` (voidTabLine); and `deliveryTableId` threaded through the
+existing `POST /api/sales`. All UUID path params reuse the `isUuid()` guard (→ 4xx, not a 500 — the
+existing `till-session.ts` guard). Bodies validated the way the sibling till routes are.
+
+## 4. Occupancy read-model
+
+`listTablesWithState(tx, cfg, locationId?) → TableState[]`, where
+
+```text
+TableState = {
+  id, label, zone, capacity,
+  state: 'free' | 'open-tab' | 'delivery-pending',
+  hasOpenTab: boolean, tabId?: uuid, tabLineCount?: int, tabTotal?: decimal-string,
+  pendingDeliveries: int,
+}
+```
+
+- **open-tab** — an `open` working_order with `table_id` = this table (there is at most one — §2b).
+- **delivery-pending** — an order with `delivery_table_id` = this table whose `order_prep` state is not
+  yet `collected` (and not `abandoned`) — i.e. food still being made / carried. A non-prepped instant
+  handover (no `order_prep` row, or already `collected`) leaves **no** lingering occupancy. `order_prep`
+  is `packages/db/src/schema/order-prep.ts:36`, state machine `queued→preparing→ready→collected`.
+- **Precedence** for the rolled-up `state`: `open-tab` dominates `delivery-pending` dominates `free`. The
+  raw signals (`hasOpenTab`, `pendingDeliveries`) are exposed alongside so the floor plan (TS-2 +
+  floor-plan slice) can render a richer badge than the single enum.
+- One location-scoped query (`dining_tables` LEFT JOIN open tabs, LEFT JOIN pending deliveries via
+  `order_prep`). Location-scoped, so it gathers orders across nodes by construction.
+
+## 5. Fiscal safety (H2)
+
+**Commercial/pre-fiscal lane only — the immutable fiscal core is untouched.** To be grep-verified in the
+plan and cited:
+
+- TS-1 adds a **non-fiscal** table (`dining_tables`), two **nullable, pre-fiscal** columns on
+  `working_orders` (mutable until settled — `orders.ts:50`), append/void verbs on `open` orders, a
+  `delivery_table_id` link, and a read-model. Nothing writes a `registros_facturacion` row, a `huella`,
+  an invoice number, or a chain link.
+- **Pay reuses `payWorkingOrder` → `recordSale` (`packages/core/src/record-sale.ts`) UNCHANGED.** The two
+  new columns must NOT enter the sale or the huella: `recordSale` reads the working order's *lines* and
+  total, not `table_id`/`delivery_table_id` — the plan greps `record-sale.ts` + the alta builders
+  (`packages/fiscal-verifactu/src/backend.ts`) to prove neither column is read into the filed record, and
+  pins a test that the **huella is independent of `table_id`**: the same basket filed once from a tab
+  (`table_id` set) and once walk-up (`table_id` null) produces the identical huella (mirrors the
+  `entorno`-not-in-hash invariant, CLAUDE.md §5).
+- The safe long-lived tab state is **`open`** for all three `order_flow` modes: `open` files nothing;
+  `placed` under Mode I (`invoice_first`) already files a deferred invoice (`working-order.ts:646`), so a
+  tab never enters `placed` — it settles straight from `open` via `payWorkingOrder`.
+
+## 6. Conventions
+
+- **English identifiers** — `dining_tables`, `table_id`, `delivery_table_id`, `zone`, `capacity`,
+  `label`. `mesa`/`mesas` are in the english-only banned list (`packages/db/src/english-only.ts:209-210`);
+  the UI renders "Mesa" via i18n. No new `SPANISH_WORDS` tokens.
+- **Domain-named error codes** (never the package — CLAUDE.md §3): `table.not_found`, `table.label_taken`,
+  `table.inactive`, `tab.already_open`, `tab.not_open`, `tab.line_not_found`. Declared in **`apps/server`'s
+  error registry** (`apps/server/src/errors.ts`, which already declares domain codes thrown from the till
+  API such as `working_order.*` / `order_prep.*`) and imported by the throwing file (`import "./errors.js"`).
+  NB the root `errors-reachable` guard covers `packages/*` barrels, **not** `apps/*`, so this registry is
+  not auto-guarded — keep the import present. Never renamed once shipped.
+- No backwards-compat / data-migration code (pre-production).
+
+## 7. Testing
+
+- **Real Postgres (Testcontainers)** — `dining_tables` cross-tenant RLS isolation, proven by deletion of
+  the tenant predicate; the **one-open-tab-per-table** partial unique proven by deletion of the index
+  **and** by a concurrent-`openTab` race (two backends, same table → exactly one wins, the other gets
+  `tab.already_open`); the `working_orders` new columns visible to the non-superuser `app_user` under the
+  existing policy (differential — fails if `asAppUser` is dropped).
+- **PGlite** — the verb logic: `openTab` sets `table_id` and refuses a second tab; **`addTabRound`
+  appends without re-pricing** (open a tab, add a round, change the catalogue price, add a second round →
+  the first round's `unit_price_gross` is unchanged — the load-bearing test, contrasted against
+  `updateHeldOrder` which would re-price); `voidTabLine` removes one line and leaves the rest; pay still
+  files (settles + a `sales`/`registro` row appears); occupancy reflects free → open-tab → free and
+  delivery-pending clears on `collected`.
+- **Guards** — `pnpm --filter @waitron/fiscal-verifactu test inmutabilidad` green after the migration
+  (`dining_tables` reports `relforcerowsecurity = true`); the H2 hash-identity test (§5).
+- Coverage 98/98/98/95 for `packages/db` and `apps/server`.
+
+## 8. The KDS / kitchen-firing dependency (surfaced for the owner)
+
+A tab stays `open` (pre-fiscal) until paid, and today food only reaches the kitchen at `place`
+(`working-order.ts:704` enqueues `order_prep` at placing). `order_prep`'s PK is
+`(tenant_id, working_order_id)` — **one prep row per order** (`order-prep.ts:53`), so it cannot represent
+a tab firing successive rounds. **Therefore a tab's rounds do not reach the kitchen until the KDS slice**,
+which reworks `order_prep` to key on a *round/ticket* under the order. With the current order (floor plan
+before KDS), TS-1 gives tables + tabs + a live floor plan *before* the kitchen sees tab orders —
+front-of-house first, kitchen display later, a fine phased rollout. **Open sequencing call:** if the
+owner wants the kitchen to see tabs from the start, pull **KDS ahead of floor plan**. Recorded, not yet
+decided; it does not change TS-1.
+
+## 9. Owner-review / open questions
+
+- The **floor plan vs KDS ordering** above (§8).
+- `delivery-pending` occupancy is defined via `order_prep.collected`; confirm a non-prepped counter
+  handover leaving no table occupancy matches how the deli works (a customer sitting with a cold
+  sandwich they carried themselves is not "occupying" a table in the tab sense).
+- Whether `openTab` should also seed the table's future TS-2 status (out of scope here; noted so TS-2
+  wires it).
+
+## 10. Provenance
+
+Designed against the live tree on 2026-08-17 via a full read of the order model (cited inline:
+`apps/server/src/working-order.ts`, `till-sale.ts`, `packages/db/src/schema/orders.ts`,
+`order-prep.ts`, `tenants.ts`, `nodes.ts`, `packages/core/src/record-sale.ts`). The "no table concept
+today" claim: grep found `table`/`tab`/`seat`/`cover`/`party` only as prose / the free-text `label`
+(`working-order.ts:321`), and `mesa`/`mesas` in `english-only.ts:209-210`. The fiscal-boundary claim
+(a tab must live in `open`; `placed` under Mode I files) is read from `working-order.ts:646` and the
+mode wiring; the plan re-verifies it by grep before relying on it (CLAUDE.md §1).
