@@ -18,7 +18,7 @@ rest of the track leans on (floor plan renders it, KDS routes it, bookings reser
   (confirmed 2026-08-17 over two alternatives — "one tab per dining table + a multi-tab counter table"
   and "many tabs per table everywhere" — both rejected).
 - **The counter is NOT a table.** It stays the existing held-order queue (#61 — many concurrent open
-  counter orders, no `table_id`), because it is a *queue*, not an occupancy-bearing spot. Modelling it
+  counter orders, none anchored to a table), because it is a *queue*, not an occupancy-bearing spot. Modelling it
   as a multi-tab "table" was considered and rejected: it would force the clean one-tab-per-table DB
   constraint to become conditional, for little gain.
 - **QR-code ordering (a future feature) needs NO change to this model.** Order-and-pay-in-one-go is a
@@ -73,32 +73,43 @@ deactivate) in a **hand-written custom migration** (`.enableRLS()` alone is insu
 The `fiscal-verifactu` `inmutabilidad` guard scans every `tenant_id`-bearing table, so it will enumerate
 `dining_tables` and require FORCE RLS — run it after the migration.
 
-### 2b. Two new nullable columns on `working_orders` (`orders.ts:50`)
+### 2b. The table↔tab link — a **back-pointer** on `dining_tables`, plus `delivery_table_id` on `working_orders`
+
+**(Revised 2026-08-17.** The tab-covers-a-table link lives on the TABLE, not on the order, so one tab can
+cover **several** tables — a *join*, TS-3 — while a table still has at most one tab. This replaced an
+earlier `working_orders.table_id` + one-tab-per-table partial-unique, which was 1:1 and could not
+express a join. Nothing was built against the old shape.)
 
 ```text
-table_id           uuid NULL  composite FK (tenant_id, table_id) → dining_tables (tenant_id, id)
-delivery_table_id  uuid NULL  composite FK (tenant_id, delivery_table_id) → dining_tables (tenant_id, id)
+dining_tables.tab_id             uuid NULL  composite FK (tenant_id, tab_id) → working_orders (tenant_id, id)
+working_orders.delivery_table_id uuid NULL  composite FK (tenant_id, delivery_table_id) → dining_tables (tenant_id, id)
 ```
 
-- **`table_id` set** ⇒ this `open` order **IS** that table's running tab. **`delivery_table_id` set** ⇒
-  this (counter) order is **delivered to** that table, not a tab. A tab: `table_id` set /
-  `delivery_table_id` null. A counter delivery: the reverse. A walk-up: both null. (A CHECK forbidding
-  both-set at once is included — a tab is already at its table.)
-- **Partial unique index** `(tenant_id, table_id) WHERE status = 'open' AND table_id IS NOT NULL` ⇒ **at
-  most one open tab per table**, venue-wide. This is the enforcement point for `openTab`; the verb also
-  pre-checks so the common case is a clean `tab.already_open`, and the index backstops the race.
-- Both are additive nullable columns on the existing FORCE-RLS `working_orders`; its existing tenant
-  policy + `app_user` grants already cover them with **no change** (grants are table-wide, RLS is
-  row-level — the same reason #78's `products.image` add needed no new grant; confirm by the RLS test in
-  §7). `working_orders.node_id` stays as-is (nullable, always written by `createOpenOrder` —
-  `working-order.ts:270`).
+- **`dining_tables.tab_id` set** ⇒ this table is covered by that open working_order (its running tab). A
+  single nullable FK ⇒ **one open tab per table is automatic** — **no partial-unique, no CHECK**. Several
+  tables pointing at the SAME tab is exactly a *join* (built in TS-3); TS-1 only ever sets one table's
+  `tab_id` per tab.
+- **`working_orders.delivery_table_id` set** ⇒ this (counter) order is *delivered to* that table, not a
+  tab. So a tab is "the table's `tab_id` points at the order"; a counter delivery is "the order's
+  `delivery_table_id` points at the table"; a walk-up is neither.
+- **A settled/abandoned tab's `tab_id` is left as-is** (not nulled) — the occupancy read (§4) counts a
+  `tab_id` only while the pointed order is still `open`, and `openTab` overwrites a stale pointer. So the
+  fiscal pay path needs **no settle-time write** (§5).
+- `working_orders` no longer carries any tab-membership column (only `delivery_table_id`) — a point that
+  makes the H2 argument (§5) simpler: nothing about a tab's table reaches the order that is filed.
+- Both are additive nullable columns; `dining_tables`'s TS-1 policy + grants and `working_orders`'s
+  existing policy + grants cover them with **no change** (grants table-wide, RLS row-level — as #78's
+  `products.image` add; confirm by the RLS test in §7). `working_orders.node_id` unchanged.
 
 ### 2c. Migration
 
-One `packages/db` migration set (number assigned by `pnpm --filter @waitron/db db:generate` against the
-live tree — **do not hardcode**; the autonomous campaign may consume numbers first): the auto part
-(create `dining_tables`, add the two `working_orders` columns + FKs + the CHECK + the partial unique
-index) plus a **custom** part (FORCE RLS + policy + grant on `dining_tables`). Commit the generated
+One `packages/db` migration set (number via `pnpm --filter @waitron/db db:generate` against the live
+tree — **do not hardcode**; the campaign may consume numbers first): the auto part (create
+`dining_tables`, add `dining_tables.tab_id` + `working_orders.delivery_table_id` + their composite FKs)
+plus a **custom** part (FORCE RLS + policy + grant on `dining_tables`). `dining_tables.tab_id` → `working_orders`
+and `working_orders.delivery_table_id` → `dining_tables` form a **mutual FK between the two tables**, so
+`db:generate` emits them as two `ALTER TABLE … ADD CONSTRAINT` statements (both tables exist before either
+FK is added, and both columns are nullable, so there is no create/insert ordering problem). Commit the
 `meta/_journal.json` + snapshot. No backfill (pre-production, CLAUDE.md §3).
 
 ## 3. Behaviour
@@ -123,11 +134,15 @@ identity, "server" here is only the backend-app directory name.)
 
 ### 3b. Tab verbs (`apps/server/src/working-order.ts`, beside `createOpenOrder`/`parkOrder`)
 
-- `openTab(tx, cfg, { tableId, lines? }) → { tabId, orderNumber }` — validates the table is `active`
-  (`table.not_found` / `table.inactive`), then creates an `open` working_order with `table_id = tableId`
-  (reusing `createOpenOrder`, `working-order.ts:252`, incl. the per-node `order_number` allocation).
-  Pre-checks the one-open-tab rule → `tab.already_open`; a concurrent race is caught as the partial-unique
-  23505 → `tab.already_open`. `lines?` lets a tab open with an initial round.
+- `openTab(tx, cfg, { tableId, lines? }) → { tabId, orderNumber }` — takes the `dining_tables` row
+  `FOR UPDATE`, validates it is `active` (`table.not_found` / `table.inactive`) and that its `tab_id` does
+  not already point at an `open` order (else `tab.already_open`), then creates an `open` working_order
+  (reusing `createOpenOrder`, `working-order.ts:252`, incl. the per-node `order_number` allocation) and
+  sets the table's `tab_id` to the new order. The per-table `FOR UPDATE` lock **is** the concurrency
+  guard: two concurrent `openTab`s on one table serialise, the second seeing an open `tab_id` →
+  `tab.already_open` (there is no partial-unique now — the single `tab_id` column gives one-tab-per-table,
+  the lock gives the race). A stale `tab_id` pointing at a settled/abandoned order is treated as free and
+  overwritten. `lines?` opens the tab with an initial round.
 - `addTabRound(tx, cfg, tabId, lines) → void` — **APPENDS** priced lines to the open tab: locks each new
   line's `unit_price_gross` at add-time and assigns the next `line_no`, **without deleting or re-pricing
   existing lines**. This is the one genuinely new order primitive — today's `updateHeldOrder`
@@ -174,7 +189,9 @@ TableState = {
 }
 ```
 
-- **open-tab** — an `open` working_order with `table_id` = this table (there is at most one — §2b).
+- **open-tab** — the table's `tab_id` points at an `open` working_order (`dining_tables.tab_id` JOIN
+  `working_orders` ON `status = 'open'`); a `tab_id` pointing at a settled/abandoned order counts as
+  **free** (a stale pointer, §2b). Returns that order's `tabId`, line count and running total.
 - **delivery-pending** — an order with `delivery_table_id` = this table whose `order_prep` state is not
   yet `collected` (and not `abandoned`) — i.e. food still being made / carried. A non-prepped instant
   handover (no `order_prep` row, or already `collected`) leaves **no** lingering occupancy. `order_prep`
@@ -190,24 +207,24 @@ TableState = {
 **Commercial/pre-fiscal lane only — the immutable fiscal core is untouched.** To be grep-verified in the
 plan and cited:
 
-- TS-1 adds a **non-fiscal** table (`dining_tables`), two **nullable, pre-fiscal** columns on
-  `working_orders` (mutable until settled — `orders.ts:50`), append/void verbs on `open` orders, a
-  `delivery_table_id` link, and a read-model. Nothing writes a `registros_facturacion` row, a `huella`,
-  an invoice number, or a chain link.
-- **Pay reuses `payWorkingOrder` → `recordSale` (`packages/core/src/record-sale.ts`) UNCHANGED.** The two
-  new columns must NOT enter the sale or the huella: `recordSale` reads the working order's *lines* and
-  total, not `table_id`/`delivery_table_id` — the plan greps `record-sale.ts` + the alta builders
-  (`packages/fiscal-verifactu/src/backend.ts`) to prove neither column is read into the filed record, and
-  pins a test that the **huella is independent of `table_id`**: the same basket filed once from a tab
-  (`table_id` set) and once walk-up (`table_id` null) produces the identical huella (mirrors the
-  `entorno`-not-in-hash invariant, CLAUDE.md §5).
+- TS-1 adds a **non-fiscal** table (`dining_tables`, incl. its `tab_id` back-pointer), one **nullable,
+  pre-fiscal** column on `working_orders` (`delivery_table_id`), append/void verbs on `open` orders, and a
+  read-model. Nothing writes a `registros_facturacion` row, a `huella`, an invoice number, or a chain link.
+- **Pay reuses `payWorkingOrder` → `recordSale` (`packages/core/src/record-sale.ts`) UNCHANGED.** The
+  table↔tab link is a back-pointer ON THE TABLE (`dining_tables.tab_id`), so the `working_orders` row that
+  is filed carries **no** tab-membership at all (only `delivery_table_id`, which `recordSale` does not
+  read): the plan greps `record-sale.ts` + the alta builders (`packages/fiscal-verifactu/src/backend.ts`)
+  to prove `delivery_table_id` is not read into the filed record, and pins a test that the **huella is
+  independent of whether the order was a tab** — the same basket filed once from a tab (a `dining_tables`
+  row points at it) and once walk-up produces the identical huella (mirrors the `entorno`-not-in-hash
+  invariant, CLAUDE.md §5).
 - The safe long-lived tab state is **`open`** for all three `order_flow` modes: `open` files nothing;
   `placed` under Mode I (`invoice_first`) already files a deferred invoice (`working-order.ts:646`), so a
   tab never enters `placed` — it settles straight from `open` via `payWorkingOrder`.
 
 ## 6. Conventions
 
-- **English identifiers** — `dining_tables`, `table_id`, `delivery_table_id`, `zone`, `capacity`,
+- **English identifiers** — `dining_tables`, `tab_id`, `delivery_table_id`, `zone`, `capacity`,
   `label`. `mesa`/`mesas` are in the english-only banned list (`packages/db/src/english-only.ts:209-210`);
   the UI renders "Mesa" via i18n. No new `SPANISH_WORDS` tokens.
 - **Domain-named error codes** (never the package — CLAUDE.md §3): `table.not_found`, `table.label_taken`,
@@ -221,13 +238,15 @@ plan and cited:
 ## 7. Testing
 
 - **Real Postgres (Testcontainers)** — `dining_tables` cross-tenant RLS isolation, proven by deletion of
-  the tenant predicate; the **one-open-tab-per-table** partial unique proven by deletion of the index
-  **and** by a concurrent-`openTab` race (two backends, same table → exactly one wins, the other gets
-  `tab.already_open`); the `working_orders` new columns visible to the non-superuser `app_user` under the
-  existing policy (differential — fails if `asAppUser` is dropped); and a **concurrent-`addTabRound`**
-  race (two backends append to one tab at once → both rounds land with distinct `line_no`s, no
-  `(working_order_id, line_no)` collision — proven by deletion of the per-tab lock, which then collides).
-- **PGlite** — the verb logic: `openTab` sets `table_id` and refuses a second tab; **`addTabRound`
+  the tenant predicate; the **one-open-tab-per-table** guard proven by a concurrent-`openTab` race (two
+  backends, same table → exactly one wins, the other gets `tab.already_open`) **and by deletion of the
+  per-table `FOR UPDATE` lock** in `openTab` (both then succeed, two open tabs point-conflict on the
+  table) — the lock is the guard now, not a partial unique; the new columns (`dining_tables.tab_id`,
+  `working_orders.delivery_table_id`) visible to the non-superuser `app_user` under the existing policies
+  (differential — fails if `asAppUser` is dropped); and a **concurrent-`addTabRound`** race (two backends
+  append to one tab at once → both rounds land with distinct `line_no`s, no `(working_order_id, line_no)`
+  collision — proven by deletion of the per-tab lock, which then collides).
+- **PGlite** — the verb logic: `openTab` sets the table's `tab_id` and refuses a second tab; **`addTabRound`
   appends without re-pricing** (open a tab, add a round, change the catalogue price, add a second round →
   the first round's `unit_price_gross` is unchanged — the load-bearing test, contrasted against
   `updateHeldOrder` which would re-price); `voidTabLine` removes one line and leaves the rest; pay still

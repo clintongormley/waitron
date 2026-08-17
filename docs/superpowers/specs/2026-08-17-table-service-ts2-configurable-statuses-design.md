@@ -98,11 +98,14 @@ New code in `apps/server` beside TS-1's `tables.ts` / `working-order.ts`; the da
   `till.configure`.
 - **Reset on turnover — two non-fiscal resets, `payWorkingOrder` / `recordSale` UNCHANGED:**
   1. A hand-written **AFTER-UPDATE trigger** on `working_orders`
-     (`working_orders_clear_table_status`): when a row goes `open → settled|abandoned` with `table_id`
-     NOT NULL, `UPDATE dining_tables SET status_id = NULL WHERE (tenant_id, id) = (NEW.tenant_id,
-     NEW.table_id)`. So "bill-requested" clears the instant the tab settles. The trigger runs
-     SECURITY INVOKER as `app_user`, and the update is same-tenant (`tenant_id = NEW.tenant_id`), so the
-     `dining_tables` tenant policy + the TS-1 UPDATE grant permit it.
+     (`working_orders_clear_table_status`): when a row goes `open → settled|abandoned`,
+     `UPDATE dining_tables SET status_id = NULL WHERE tenant_id = NEW.tenant_id AND tab_id = NEW.id` —
+     clearing the status on **every** table the tab covered (one table normally; several if the tab was
+     joined across tables — TS-3 — since the link is the `dining_tables.tab_id` back-pointer). So
+     "bill-requested" clears the instant the tab settles. The trigger runs SECURITY INVOKER as `app_user`,
+     and the update is same-tenant (`tenant_id = NEW.tenant_id`), so the `dining_tables` tenant policy +
+     the TS-1 UPDATE grant permit it. It clears only `status_id`, **not** `tab_id` — TS-1 leaves a settled
+     tab's back-pointer stale (harmless: the occupancy read counts a `tab_id` only while its order is `open`).
   2. **`openTab`** clears `status_id` on the table as a **new** tab opens (a "needs-cleaning" set while
      the table was free clears as the next party sits). This is a pre-fiscal write on the open path.
 - **Fiscal boundary (H2):** the reset is a manual-UI-status cleanup on a non-fiscal table; it touches
