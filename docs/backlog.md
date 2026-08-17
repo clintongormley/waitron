@@ -376,8 +376,8 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   `ticket_items`** (`queued→preparing→ready`), so tab rounds and multi-station orders finally reach the
   kitchen; a **session-gated** till station-display (kanban ⇄ rail, per-line bump, whole-ticket
   configurable); and the **ready→floor** loop (a `ready` ticket → FP-1's "N listos", distinct from
-  `served_at`). **KDS-2** (courses + fire control) and **KDS-3** (expo/pass) + the **always-on device
-  identity** (net-new — no device auth exists today, so deferred to its own slice) **remain to spec**.
+  `served_at`). **KDS-2** (courses + fire control) and **KDS-3** (expo/pass) **remain to spec**; the
+  **always-on device identity** is **now specced + planned** (see its own row below).
   Non-fiscal (pay/collect unchanged). Spec + plan in
   `docs/superpowers/{specs,plans}/2026-08-17-kds-1*`. **Reworks shipped #63** (`order_prep` + its
   verbs/widget) and **build-blocked on TS-1 + FP-1** (tab firing + the floor read) — execute after both
@@ -393,6 +393,17 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   (no customer/CRM entity); no online/QR/availability/reminders (all future). Non-fiscal. Spec + plan in
   `docs/superpowers/{specs,plans}/2026-08-17-bookings-1*`. **Core is buildable independently**; the seat
   + floor features are **build-blocked on TS-1 + FP-1**.
+- **Device identity (KDS spin-off, sub-project 12)** — **DESIGNED + PLANNED 2026-08-17**. The **first**
+  client device-auth in the tree (today none exists — till boot is unauthenticated, the only wire-token is
+  the server-to-server sync Bearer). Lets an **always-on** kitchen screen enrol once (an admin-minted
+  **pairing code**, modelled on the WebAuthn-challenge single-use/TTL pattern) and authenticate itself via
+  an **httpOnly device cookie** (a scrypt-hashed token, reusing `hashSecret`/`verifySecret` — no new
+  crypto), scoped so a device may **only read + bump its bound `kitchen_station`** (no login, no selling).
+  A `devices` entity (general `kind`; only `kds_station` wired), a `requireDevice` guard, and a dashboard
+  **Devices** screen (generate code · revoke = instant). `device.manage`-gated; **security review before
+  build**. Non-fiscal. Spec + plan in `docs/superpowers/{specs,plans}/2026-08-17-device-identity-1*`.
+  **Build-blocked on KDS-1** (it binds to a station + drives its display). Other `device_kind`s (trusting
+  the till device), auto-rotation, remote wipe = future.
 
 Build order: the **table-service core (TS-1 → TS-5) is specced + planned** (2026-08-17), and **the whole
 floor-plan surface (FP-1 operable live floor + FP-2 spatial canvas/editor) is now specced + planned**
@@ -401,9 +412,10 @@ per-line ticket rework + station display + ready→floor) is **now specced + pla
 build-blocked on TS-1 + FP-1 and reworking shipped #63. **Bookings-1** (staff reservations + seat-opens-a-tab
 + reserved-on-floor) is **now specced + planned** too (2026-08-17); its core is independent, the seat/floor
 features build-blocked on TS-1 + FP-1. So **all three surfaces the owner set out to design — floor plan,
-KDS, bookings — now have a first slice specced + planned.** **Still to spec:** **KDS-2** (courses), **KDS-3**
-(expo/pass), and the **always-on device identity** — each its own brainstorm → spec → plan cycle. **Nothing
-in this track is built yet**; TS-1 is the first buildable slice (everything else depends on it). The owner
+KDS, bookings — now have a first slice specced + planned**, plus the **always-on device identity** (a KDS
+spin-off) specced + planned too, build-blocked on KDS-1. **Still to spec:** **KDS-2** (courses) and **KDS-3**
+(expo/pass) — each its own brainstorm → spec → plan cycle. **Nothing in this track is built yet**; TS-1 is
+the first buildable slice (everything else depends on it). The owner
 **may be reachable by laptop** during the 2026-08-19 → 25 trip, so this track can also progress remotely.
 
 ---
