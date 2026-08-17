@@ -342,9 +342,15 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
 2026-08-16):
 
 - **Table service (foundation, sub-project 10 — *tabs*)** — the *tables* primitive the other three
-  need: table identity + **live state** (free / seated / ordering) tied to orders. Confirmed needed once
-  floor plan chose live occupancy and KDS chose routing; the counter POS (#60–64) is walk-up only, so
-  this is a real ordering-model addition, not a UI.
+  need: table identity + live state tied to orders (the counter POS #60–64 is walk-up only, so this is a
+  real ordering-model addition, not a UI). **DESIGNED + PLANNED 2026-08-17** — decomposed into five core
+  slices, each with a committed spec + TDD plan on the `dining_tables.tab_id` **back-pointer** model
+  (build order, each depending on the prior): **TS-1** tables + tabs (append-only rounds; one-tab-per-table
+  via a per-table lock; pay reuses `recordSale` unchanged) → **TS-2** configurable service statuses
+  (venue-defined set + a reset trigger) → **TS-3** move / join / merge (a tab can cover several tables) →
+  **TS-4** transfer items (whole/partial, never re-priced) → **TS-5** split-bill (item-split — the one
+  fiscal slice; each check files its own sale + `registro`; dedicated fiscal review). In
+  `docs/superpowers/{specs,plans}/2026-08-17-table-service-ts*`. **Build-ready, not yet built.**
 - **Floor plan (sub-project 11)** — a layout editor **with live occupancy** (table state tied to
   orders), not a standalone layout.
 - **KDS (sub-project 12)** — **multi-station routing** (per-station displays, route each line to its
@@ -352,10 +358,10 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
 - **Bookings (sub-project 17)** — **staff-entered reservations** (date / time / party size / contact,
   optional table assignment) from the dashboard; **no** public/online surface in slice 1.
 
-Build order once specced: **table-service foundation → floor plan (occupancy) → KDS (routing) →
-bookings**. Each gets its own brainstorm → spec → plan cycle, starting 2026-08-17. The owner **may be
-reachable by laptop** during the 2026-08-19 → 25 trip, so this track can also progress remotely rather
-than waiting for the return.
+Build order: the **table-service core (TS-1 → TS-5 above) is specced + planned** (2026-08-17);
+**floor plan (occupancy), KDS (multi-station routing), and bookings (staff reservations) remain to
+spec** — each its own brainstorm → spec → plan cycle. The owner **may be reachable by laptop** during
+the 2026-08-19 → 25 trip, so this track can also progress remotely.
 
 ---
 
