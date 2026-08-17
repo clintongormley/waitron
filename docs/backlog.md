@@ -352,16 +352,28 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   fiscal slice; each check files its own sale + `registro`; dedicated fiscal review). In
   `docs/superpowers/{specs,plans}/2026-08-17-table-service-ts*`. **Build-ready, not yet built.**
 - **Floor plan (sub-project 11)** — a layout editor **with live occupancy** (table state tied to
-  orders), not a standalone layout.
+  orders), not a standalone layout. **FP-1 DESIGNED + PLANNED 2026-08-17** — brainstormed with the
+  owner (visual companion), decomposed **operable-first into two slices**: **FP-1** (this) makes table
+  service usable front-of-house — `floor_zones` config, a per-line `served_at` delivery ack, occupancy
+  read extended with zone + `pendingToServe`, a till **live-floor screen** (occupancy-coloured cards
+  grouped by zone) + a **table-ordering screen** (full-width grid + current-round bar + badged pull-out
+  tab drawer), and a dashboard **Sala** config editor; the live floor renders as **cards, not a spatial
+  map**. **FP-2** (remains to spec) adds the **spatial canvas + drag-drop edit mode** (placement
+  `x/y/shape/rotation`, on-till + dashboard). All non-fiscal (pay path unchanged; `served_at` not in the
+  huella). Spec + plan in `docs/superpowers/{specs,plans}/2026-08-17-floor-plan-fp1*`. **Build-blocked on
+  TS-1 + TS-2** (it is their UI) — execute only after both land.
 - **KDS (sub-project 12)** — **multi-station routing** (per-station displays, route each line to its
   station, course firing) — a station/routing model, not merely an extension of #63's prep surface.
 - **Bookings (sub-project 17)** — **staff-entered reservations** (date / time / party size / contact,
   optional table assignment) from the dashboard; **no** public/online surface in slice 1.
 
-Build order: the **table-service core (TS-1 → TS-5 above) is specced + planned** (2026-08-17);
-**floor plan (occupancy), KDS (multi-station routing), and bookings (staff reservations) remain to
-spec** — each its own brainstorm → spec → plan cycle. The owner **may be reachable by laptop** during
-the 2026-08-19 → 25 trip, so this track can also progress remotely.
+Build order: the **table-service core (TS-1 → TS-5 above) is specced + planned** (2026-08-17), and
+**floor-plan FP-1 (the operable live-floor UI) is now specced + planned** too (2026-08-17), build-blocked
+on TS-1/TS-2. **Still to spec:** **floor-plan FP-2** (spatial canvas + editor), **KDS** (multi-station
+routing) and **bookings** (staff reservations) — each its own brainstorm → spec → plan cycle. **Nothing
+in this track is built yet**; TS-1 is the first buildable slice (everything else depends on it). The
+owner **may be reachable by laptop** during the 2026-08-19 → 25 trip, so this track can also progress
+remotely.
 
 ---
 
