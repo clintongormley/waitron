@@ -376,7 +376,13 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   `ticket_items`** (`queued→preparing→ready`), so tab rounds and multi-station orders finally reach the
   kitchen; a **session-gated** till station-display (kanban ⇄ rail, per-line bump, whole-ticket
   configurable); and the **ready→floor** loop (a `ready` ticket → FP-1's "N listos", distinct from
-  `served_at`). **KDS-2** (courses + fire control) and **KDS-3** (expo/pass) **remain to spec**; the
+  `served_at`). **KDS-2 DESIGNED + PLANNED 2026-08-17** — venue-configured `kitchen_courses`, a
+  product-default course (`products.course_id`) + per-line override, and **hold-and-fire**: the first
+  course auto-fires, later courses hold (greyed on the station display) until fired; **`fire_control`**
+  is a venue setting (`waiter` default / `kitchen`, both built; `expo` reserved for KDS-3). `fired_at` +
+  `course_id` on `ticket_items`; held items can't advance (`ticket.item_held`). Non-fiscal; blocked on
+  KDS-1. Spec + plan in `docs/superpowers/{specs,plans}/2026-08-17-kds-2*`. **KDS-3** (expo/pass) **remains
+  to spec**; the
   **always-on device identity** is **now specced + planned** (see its own row below).
   Non-fiscal (pay/collect unchanged). Spec + plan in
   `docs/superpowers/{specs,plans}/2026-08-17-kds-1*`. **Reworks shipped #63** (`order_prep` + its
@@ -413,9 +419,10 @@ build-blocked on TS-1 + FP-1 and reworking shipped #63. **Bookings-1** (staff re
 + reserved-on-floor) is **now specced + planned** too (2026-08-17); its core is independent, the seat/floor
 features build-blocked on TS-1 + FP-1. So **all three surfaces the owner set out to design — floor plan,
 KDS, bookings — now have a first slice specced + planned**, plus the **always-on device identity** (a KDS
-spin-off) specced + planned too, build-blocked on KDS-1. **Still to spec:** **KDS-2** (courses) and **KDS-3**
-(expo/pass) — each its own brainstorm → spec → plan cycle. **Nothing in this track is built yet**; TS-1 is
-the first buildable slice (everything else depends on it). The owner
+spin-off) specced + planned too, build-blocked on KDS-1. **KDS-2** (courses + fire control) is **now
+specced + planned** too (2026-08-17), build-blocked on KDS-1. **Still to spec:** **KDS-3** (expo/pass) —
+its own brainstorm → spec → plan cycle. **Nothing in this track is built yet**; TS-1 is the first buildable
+slice (everything else depends on it). The owner
 **may be reachable by laptop** during the 2026-08-19 → 25 trip, so this track can also progress remotely.
 
 ---
