@@ -383,17 +383,28 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   verbs/widget) and **build-blocked on TS-1 + FP-1** (tab firing + the floor read) — execute after both
   land.
 - **Bookings (sub-project 17)** — **staff-entered reservations** (date / time / party size / contact,
-  optional table assignment) from the dashboard; **no** public/online surface in slice 1.
+  optional table assignment) from the dashboard; **no** public/online surface in slice 1. **Bookings-1
+  DESIGNED + PLANNED 2026-08-17** — a `bookings` entity (tenant+location, **local date+time** wall-clock
+  — a booking is an appointment, not an instant, so it sidesteps the #52 store-as-UTC bug), CRUD + a
+  `booked→seated→completed/no_show/cancelled` lifecycle, a `booking.manage`-gated `booking-api.ts`
+  (mirroring `purchase.manage` — **no front-of-house role exists**), and a dashboard **day-list** screen.
+  Two chosen integrations: **seat opens a TS-1 tab** on the assigned table (links booking↔tab), and
+  **reserved-on-floor** ("Reservada HH:MM" via an FP-1 floor-read extension). Contact is **free-text**
+  (no customer/CRM entity); no online/QR/availability/reminders (all future). Non-fiscal. Spec + plan in
+  `docs/superpowers/{specs,plans}/2026-08-17-bookings-1*`. **Core is buildable independently**; the seat
+  + floor features are **build-blocked on TS-1 + FP-1**.
 
 Build order: the **table-service core (TS-1 → TS-5) is specced + planned** (2026-08-17), and **the whole
 floor-plan surface (FP-1 operable live floor + FP-2 spatial canvas/editor) is now specced + planned**
 too (2026-08-17), build-blocked on TS-1/TS-2 (FP-1 before FP-2). **KDS-1** (stations + routing + the
 per-line ticket rework + station display + ready→floor) is **now specced + planned** too (2026-08-17),
-build-blocked on TS-1 + FP-1 and reworking shipped #63. **Still to spec:** **KDS-2** (courses), **KDS-3**
-(expo/pass), the **always-on device identity**, and **bookings** (staff reservations) — each its own
-brainstorm → spec → plan cycle. **Nothing in this track is built yet**; TS-1 is the first buildable slice
-(everything else depends on it). The owner **may be reachable by laptop** during the 2026-08-19 → 25 trip,
-so this track can also progress remotely.
+build-blocked on TS-1 + FP-1 and reworking shipped #63. **Bookings-1** (staff reservations + seat-opens-a-tab
++ reserved-on-floor) is **now specced + planned** too (2026-08-17); its core is independent, the seat/floor
+features build-blocked on TS-1 + FP-1. So **all three surfaces the owner set out to design — floor plan,
+KDS, bookings — now have a first slice specced + planned.** **Still to spec:** **KDS-2** (courses), **KDS-3**
+(expo/pass), and the **always-on device identity** — each its own brainstorm → spec → plan cycle. **Nothing
+in this track is built yet**; TS-1 is the first buildable slice (everything else depends on it). The owner
+**may be reachable by laptop** during the 2026-08-19 → 25 trip, so this track can also progress remotely.
 
 ---
 
