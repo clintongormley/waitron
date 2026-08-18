@@ -378,6 +378,16 @@ declare module "@waitron/shared" {
      */
     "tab.already_open": { tableId: string };
     /**
+     * A working order a tab verb (`addTabRound`, `voidTabLine`) tried to modify is not an OPEN tab — it
+     * is not `open` (already settled/abandoned), no `dining_tables.tab_id` points at it (a walk-up or a
+     * counter delivery — a tab is an OPEN order a table points at, design §2b), or it names none (absent,
+     * or another tenant's, RLS-hidden). All report THIS one code, the fail-closed shape
+     * `working_order.not_open` uses for the held-order modify side. `tabId` — the caller-supplied uuid —
+     * is echoed and qualified to match the tab-verb vocabulary. `tab.*`, not `server.*`, for the reason
+     * `tenant.not_found`'s note gives. Mapped to 409 (the order's state forbids the tab edit).
+     */
+    "tab.not_open": { tabId: string };
+    /**
      * A request to a gated server API surface carried a body/query whose SHAPE is wrong: a field
      * absent (where it is required) or present with the wrong declared type — a malformed date, a
      * non-string, a bad enum member. Originally the management-dashboard surface (the gated staff

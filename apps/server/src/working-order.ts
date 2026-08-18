@@ -371,6 +371,70 @@ export async function openTab(
   return { tabId, orderNumber };
 }
 
+/**
+ * Lock an OPEN tab's working-order row `FOR UPDATE` and confirm a dining table points at it — the shared
+ * guard `addTabRound` and `voidTabLine` open with. The lock is held on the caller's `tx` until commit,
+ * so a `line_no` allocation or a line delete that follows is serialised against a concurrent round/void
+ * (load-bearing for QR ordering — several guests appending to one tab at once). A tab is an OPEN working
+ * order some `dining_tables.tab_id` points at (design §2b): a non-open order, one no table points at (a
+ * walk-up / counter delivery), or an absent id (or another tenant's, RLS-hidden) all throw
+ * `tab.not_open` — the fail-closed shape `working_order.not_open` uses for the modify side.
+ */
+async function lockOpenTab(tx: Transaction, tabId: string): Promise<void> {
+  const [tab] = await tx
+    .select({ status: workingOrders.status })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, tabId))
+    .for("update");
+  if (tab === undefined || tab.status !== "open") {
+    throw new AppError("tab.not_open", { tabId });
+  }
+  const [pointer] = await tx
+    .select({ id: diningTables.id })
+    .from(diningTables)
+    .where(eq(diningTables.tabId, tabId));
+  if (pointer === undefined) {
+    throw new AppError("tab.not_open", { tabId });
+  }
+}
+
+/**
+ * APPEND a priced round to an OPEN tab (design §3b) — the one genuinely new order primitive. It locks
+ * each new line's `unit_price_gross` at add-time (via `priceOrderLines`) and assigns the NEXT `line_no`,
+ * WITHOUT deleting or re-pricing existing lines. Contrast `updateHeldOrder`, which deletes and re-inserts
+ * the whole basket (`:511-513`), re-locking every line at the current catalogue price — wrong for an
+ * incremental tab.
+ *
+ * Concurrency (load-bearing for QR ordering — multiple guests append to one shared tab at once): the tab
+ * row is taken `FOR UPDATE` by {@link lockOpenTab}, so `line_no` allocation serialises on it (the locking
+ * shape the per-node order-number allocator uses, `working-order.ts:263`). A naïve `max(line_no)+1`
+ * without the lock races and collides on the `(working_order_id, line_no)` unique (`orders.ts:186`) — a
+ * real-PG concurrent test proves it by deletion of the lock.
+ */
+export async function addTabRound(
+  tx: Transaction,
+  cfg: TillConfig,
+  tabId: string,
+  lines: { productId: string; quantity: string }[],
+): Promise<void> {
+  await lockOpenTab(tx, tabId);
+  if (lines.length === 0) {
+    throw new AppError("sale.empty_basket", {});
+  }
+  // The next line_no, allocated under the per-tab row lock — concurrent rounds serialise on it, so no two
+  // reads see the same max.
+  const [{ maxLineNo }] = await tx
+    .select({ maxLineNo: sql<number>`coalesce(max(${workingOrderLines.lineNo}), 0)::int` })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, tabId));
+  // Price the round (locks each new gross unit at add-time), then APPEND: renumber from maxLineNo+1,
+  // never touching existing lines. `priceOrderLines` numbers its rows 1..n in `lines` order, so row i
+  // maps to maxLineNo + i + 1.
+  const { lineRows } = await priceOrderLines(tx, cfg, tabId, lines);
+  const appended = lineRows.map((row, i) => ({ ...row, lineNo: maxLineNo + i + 1 }));
+  await tx.insert(workingOrderLines).values(appended);
+}
+
 /** One row of the held-orders list the counter shows to retrieve a parked order. */
 export interface HeldOrderSummary {
   id: string;

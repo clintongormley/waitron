@@ -25,7 +25,7 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { openTab } from "./working-order.js";
+import { addTabRound, openTab } from "./working-order.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -174,6 +174,79 @@ describe("openTab", () => {
     await expect(asApp(cfg, (tx) => openTab(tx, cfg, { tableId }))).rejects.toMatchObject({
       code: "table.inactive",
       params: { tableId },
+    });
+  });
+});
+
+/** Insert a bare OPEN working order that NO table points at (a walk-up) — for the "not a tab" case. */
+async function bareOpenOrder(cfg: TillConfig, id: string): Promise<void> {
+  await db.execute(sql`
+    insert into working_orders (id, tenant_id, till_id, node_id, order_number, status)
+    values (${id}, ${cfg.tenantId}, ${cfg.tillId}, ${cfg.nodeId}, 999, 'open')`);
+}
+
+describe("addTabRound (append-only, no re-price)", () => {
+  it("appends a round with the NEXT line_no, without deleting or re-pricing existing lines", async () => {
+    const { cfg, cafeId, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+    );
+    // Round 2 at the current 1.50.
+    await asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ productId: cafeId, quantity: "1" }]));
+    // Change the catalogue price AFTER two rounds are locked.
+    await asApp(cfg, (tx) =>
+      tx.execute(sql`update products set unit_price = '9.99' where id = ${cafeId}`),
+    );
+    // Round 3 prices at the NEW 9.99 — but rounds 1 & 2 are UNTOUCHED (the load-bearing behaviour; a
+    // full-basket replace like updateHeldOrder would re-price ALL to 9.99).
+    await asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ productId: cafeId, quantity: "1" }]));
+
+    const lines = await db
+      .select({ lineNo: workingOrderLines.lineNo, gross: workingOrderLines.unitPriceGross })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId))
+      .orderBy(workingOrderLines.lineNo);
+    expect(lines).toEqual([
+      { lineNo: 1, gross: "1.50" },
+      { lineNo: 2, gross: "1.50" },
+      { lineNo: 3, gross: "9.99" },
+    ]);
+  });
+
+  it("refuses a round on a settled tab, a walk-up (not a tab), and an absent id (tab.not_open)", async () => {
+    const { cfg, cafeId, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+    );
+    // Settled tab → not open.
+    await db.execute(
+      sql`update working_orders set status = 'settled', settled_at = now() where id = ${tabId}`,
+    );
+    await expect(
+      asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ productId: cafeId, quantity: "1" }])),
+    ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId } });
+
+    // A bare open walk-up (no table points at it) is not a tab.
+    const walkUp = randomUUID();
+    await bareOpenOrder(cfg, walkUp);
+    await expect(
+      asApp(cfg, (tx) => addTabRound(tx, cfg, walkUp, [{ productId: cafeId, quantity: "1" }])),
+    ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId: walkUp } });
+
+    // An absent id names nothing.
+    const missing = randomUUID();
+    await expect(
+      asApp(cfg, (tx) => addTabRound(tx, cfg, missing, [{ productId: cafeId, quantity: "1" }])),
+    ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId: missing } });
+  });
+
+  it("refuses an empty round (sale.empty_basket)", async () => {
+    const { cfg, cafeId, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+    );
+    await expect(asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, []))).rejects.toMatchObject({
+      code: "sale.empty_basket",
     });
   });
 });

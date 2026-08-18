@@ -23,7 +23,7 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { openTab } from "./working-order.js";
+import { addTabRound, openTab } from "./working-order.js";
 import { startRealPostgres } from "./testing/postgres.js";
 import "./errors.js";
 
@@ -195,6 +195,47 @@ describe("openTab concurrency (one open tab per table; the per-table lock IS the
       expect(await openOrderCount(cfg)).toBe(1);
     } finally {
       await Promise.all([connA.close(), connB.close()]);
+    }
+  });
+});
+
+describe("addTabRound concurrency (distinct line_no under load)", () => {
+  const ROUNDS = 10;
+  it("N backends appending one line each to ONE tab all land with distinct contiguous line_nos", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const tableId = await seedTable(cfg, "Race-2");
+    // Open the tab EMPTY (no initial round) so the appended line_nos are exactly 1..N.
+    const { tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return openTab(tx, cfg, { tableId });
+    });
+
+    const dbs = await Promise.all(Array.from({ length: ROUNDS }, () => suite.pg.connect()));
+    try {
+      const pids = await Promise.all(
+        dbs.map((d) =>
+          d
+            .execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)
+            .then((r) => r.rows[0]!.pid),
+        ),
+      );
+      expect(new Set(pids).size).toBe(ROUNDS); // distinct backends — the race is real.
+
+      await Promise.all(
+        dbs.map((d) =>
+          withTenant(d, cfg.tenantId, async (tx) => {
+            await asAppUser(tx);
+            return addTabRound(tx, cfg, tabId, [{ productId: cafe.id, quantity: "1" }]);
+          }),
+        ),
+      );
+
+      const { rows } = await suite.admin.execute<{ line_no: number }>(
+        sql`select line_no from working_order_lines where working_order_id = ${tabId} order by line_no`,
+      );
+      expect(rows.map((r) => r.line_no)).toEqual(Array.from({ length: ROUNDS }, (_, i) => i + 1));
+    } finally {
+      await Promise.all(dbs.map((d) => d.close()));
     }
   });
 });
