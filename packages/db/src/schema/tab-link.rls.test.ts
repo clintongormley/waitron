@@ -17,7 +17,11 @@ const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A = "aaaaaaaa-1111-4000-8000-000000000001";
 
 class RollbackSignal extends Error {}
-async function rollBackAfter(admin: Database, tenant: string, fn: (tx: Transaction) => Promise<void>): Promise<void> {
+async function rollBackAfter(
+  admin: Database,
+  tenant: string,
+  fn: (tx: Transaction) => Promise<void>,
+): Promise<void> {
   await withTenant(admin, tenant, async (tx) => {
     await fn(tx);
     throw new RollbackSignal();
@@ -51,9 +55,19 @@ describe("table↔tab link columns (mutual composite FKs)", () => {
 
   beforeAll(async () => {
     const admin = suite.admin;
-    await admin.insert(tenants).values({ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "T A" });
-    await admin.insert(locations).values({ id: LOCATION_A, tenantId: TENANT_A, name: "Loc A", invoiceLocales: ["es"], operationDescription: "Hostelería" });
-    await admin.insert(tills).values({ id: TILL_A, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" });
+    await admin
+      .insert(tenants)
+      .values({ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "T A" });
+    await admin.insert(locations).values({
+      id: LOCATION_A,
+      tenantId: TENANT_A,
+      name: "Loc A",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
+    await admin
+      .insert(tills)
+      .values({ id: TILL_A, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" });
     nodeA = await seedNode(admin, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
   });
 
@@ -61,7 +75,9 @@ describe("table↔tab link columns (mutual composite FKs)", () => {
   async function openTable(label: string): Promise<string> {
     return asApp(async (tx) =>
       tx
-        .execute<{ id: string }>(sql`insert into dining_tables (tenant_id, location_id, label) values (${TENANT_A}, ${LOCATION_A}, ${label}) returning id`)
+        .execute<{ id: string }>(
+          sql`insert into dining_tables (tenant_id, location_id, label) values (${TENANT_A}, ${LOCATION_A}, ${label}) returning id`,
+        )
         .then((r) => r.rows[0]!.id),
     );
   }
@@ -71,9 +87,11 @@ describe("table↔tab link columns (mutual composite FKs)", () => {
     orderSeq += 1;
     return asApp(async (tx) =>
       tx
-        .execute<{ id: string }>(sql`
+        .execute<{ id: string }>(
+          sql`
           insert into working_orders (tenant_id, till_id, node_id, order_number, status)
-          values (${TENANT_A}, ${TILL_A}, ${nodeA}, ${orderSeq}, 'open') returning id`)
+          values (${TENANT_A}, ${TILL_A}, ${nodeA}, ${orderSeq}, 'open') returning id`,
+        )
         .then((r) => r.rows[0]!.id),
     );
   }
@@ -84,14 +102,20 @@ describe("table↔tab link columns (mutual composite FKs)", () => {
     // table-wide, so they do — the confirmation §2b calls for). Also proves each FK RESOLVES a valid ref.
     const tableId = await openTable("T-vis");
     const woId = await openWo();
-    await asApp((tx) => tx.execute(sql`update dining_tables set tab_id = ${woId} where id = ${tableId}`));
-    await asApp((tx) => tx.execute(sql`update working_orders set delivery_table_id = ${tableId} where id = ${woId}`));
+    await asApp((tx) =>
+      tx.execute(sql`update dining_tables set tab_id = ${woId} where id = ${tableId}`),
+    );
+    await asApp((tx) =>
+      tx.execute(sql`update working_orders set delivery_table_id = ${tableId} where id = ${woId}`),
+    );
     const back = await asApp((tx) =>
       tx
-        .execute<{ tab_id: string | null; delivery_table_id: string | null }>(sql`
+        .execute<{ tab_id: string | null; delivery_table_id: string | null }>(
+          sql`
           select dt.tab_id, wo.delivery_table_id
           from dining_tables dt join working_orders wo on wo.id = ${woId}
-          where dt.id = ${tableId}`)
+          where dt.id = ${tableId}`,
+        )
         .then((r) => r.rows[0]!),
     );
     expect(back.tab_id).toBe(woId);
@@ -101,7 +125,9 @@ describe("table↔tab link columns (mutual composite FKs)", () => {
   it("dining_tables_tab_fk rejects a tab_id that points at no working order — proven by deletion", async () => {
     const tableId = await openTable("T-tabfk");
     const e = await captureError(() =>
-      asApp((tx) => tx.execute(sql`update dining_tables set tab_id = ${randomUUID()} where id = ${tableId}`)),
+      asApp((tx) =>
+        tx.execute(sql`update dining_tables set tab_id = ${randomUUID()} where id = ${tableId}`),
+      ),
     );
     expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
 
@@ -109,7 +135,9 @@ describe("table↔tab link columns (mutual composite FKs)", () => {
     await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
       await tx.execute(sql`alter table dining_tables drop constraint dining_tables_tab_fk`);
       await tx.execute(sql`set local role app_user`);
-      await tx.execute(sql`update dining_tables set tab_id = ${randomUUID()} where id = ${tableId}`);
+      await tx.execute(
+        sql`update dining_tables set tab_id = ${randomUUID()} where id = ${tableId}`,
+      );
       // no throw — the FK was the guard.
     });
   });
@@ -117,14 +145,22 @@ describe("table↔tab link columns (mutual composite FKs)", () => {
   it("working_orders_delivery_table_fk rejects a delivery_table_id that points at no table — proven by deletion", async () => {
     const woId = await openWo();
     const e = await captureError(() =>
-      asApp((tx) => tx.execute(sql`update working_orders set delivery_table_id = ${randomUUID()} where id = ${woId}`)),
+      asApp((tx) =>
+        tx.execute(
+          sql`update working_orders set delivery_table_id = ${randomUUID()} where id = ${woId}`,
+        ),
+      ),
     );
     expect(pgErrorCode(e)).toBe("23503");
 
     await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
-      await tx.execute(sql`alter table working_orders drop constraint working_orders_delivery_table_fk`);
+      await tx.execute(
+        sql`alter table working_orders drop constraint working_orders_delivery_table_fk`,
+      );
       await tx.execute(sql`set local role app_user`);
-      await tx.execute(sql`update working_orders set delivery_table_id = ${randomUUID()} where id = ${woId}`);
+      await tx.execute(
+        sql`update working_orders set delivery_table_id = ${randomUUID()} where id = ${woId}`,
+      );
       // no throw — the FK was the guard.
     });
   });
