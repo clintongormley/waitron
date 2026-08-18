@@ -109,6 +109,11 @@ export const en = {
   // Product list
   "product.active_badge": "Active",
   "product.inactive_badge": "Inactive",
+  // Ingredient form / list
+  "ingredient.new": "New ingredient",
+  "ingredient.edit": "Edit ingredient",
+  "ingredient.name": "Name",
+  "ingredient.active": "Active",
   // Roster — shift dialog
   "roster.new_shift": "New shift",
   "roster.edit_shift": "Edit shift",
@@ -281,6 +286,10 @@ export const es: Record<StringKey, string> = {
   "product.active": "Activo",
   "product.active_badge": "Activo",
   "product.inactive_badge": "Inactivo",
+  "ingredient.new": "Nuevo ingrediente",
+  "ingredient.edit": "Editar ingrediente",
+  "ingredient.name": "Nombre",
+  "ingredient.active": "Activo",
   "roster.new_shift": "Nuevo turno",
   "roster.edit_shift": "Editar turno",
   "roster.shift_start": "Inicio",
