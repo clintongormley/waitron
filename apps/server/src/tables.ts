@@ -1,7 +1,7 @@
 // Side-effect only: keeps this host's `table.*` codes (errors.ts) reachable from the file that throws
 // them — the reachability convention `till-config.ts`/`till-sale.ts` follow. See errors.ts.
 import "./errors.js";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { authorizeManager } from "@waitron/identity";
 import { diningTables, isUniqueViolation, tableServiceStatuses } from "@waitron/db";
@@ -146,6 +146,15 @@ function validateStatusColor(color: string): string {
 }
 
 /**
+ * The `till.configure` gate the four status config-CRUD verbs share (design §3a): manager/admin only
+ * (the #81 venue-config permission — reused, not renamed), run BEFORE any DB write, proven by-deletion
+ * in the suite. Extracted so the one gate is stated once across create/list/update/deactivate.
+ */
+async function requireConfigure(tx: Transaction, managementSessionId: string): Promise<void> {
+  await authorizeManager(tx, { managementSessionId, permission: "till.configure" });
+}
+
+/**
  * Create a service status in the tenant's configured set. Manager/admin only (`till.configure`, the
  * #81 venue-config permission — reused, not renamed): the authorize gate runs BEFORE any DB write,
  * proven by-deletion in the suite. A duplicate `(tenant, label)` collides on
@@ -161,10 +170,7 @@ export async function createStatus(
     displayOrder?: number;
   },
 ): Promise<{ id: string }> {
-  await authorizeManager(tx, {
-    managementSessionId: input.managementSessionId,
-    permission: "till.configure",
-  });
+  await requireConfigure(tx, input.managementSessionId);
   const color = validateStatusColor(input.color);
   try {
     const [row] = await tx
@@ -194,10 +200,7 @@ export async function listStatuses(
   tx: Transaction,
   input: { managementSessionId: string; tenantId: string },
 ): Promise<ServiceStatus[]> {
-  await authorizeManager(tx, {
-    managementSessionId: input.managementSessionId,
-    permission: "till.configure",
-  });
+  await requireConfigure(tx, input.managementSessionId);
   return tx
     .select({
       id: tableServiceStatuses.id,
@@ -229,10 +232,7 @@ export async function updateStatus(
     active?: boolean;
   },
 ): Promise<void> {
-  await authorizeManager(tx, {
-    managementSessionId: input.managementSessionId,
-    permission: "till.configure",
-  });
+  await requireConfigure(tx, input.managementSessionId);
   const patch: { label?: string; color?: string; displayOrder?: number; active?: boolean } = {};
   if (input.label !== undefined) patch.label = input.label;
   if (input.color !== undefined) patch.color = validateStatusColor(input.color);
@@ -264,10 +264,7 @@ export async function deactivateStatus(
   tx: Transaction,
   input: { managementSessionId: string; tenantId: string; id: string },
 ): Promise<void> {
-  await authorizeManager(tx, {
-    managementSessionId: input.managementSessionId,
-    permission: "till.configure",
-  });
+  await requireConfigure(tx, input.managementSessionId);
   const updated = await tx
     .update(tableServiceStatuses)
     .set({ active: false })
@@ -295,23 +292,30 @@ export async function setTableStatus(
   tableId: string,
   statusId: string | null,
 ): Promise<void> {
-  const [table] = await tx
-    .select({ active: diningTables.active })
-    .from(diningTables)
-    .where(eq(diningTables.id, tableId));
-  if (table === undefined || !table.active) {
+  // Both existence/active reads are independent, so fold them into ONE round trip via two scalar
+  // subqueries (2 round trips total instead of 3). Each subquery returns the row's `active` flag, or
+  // NULL when no row matches — so a missing row (NULL) stays distinguishable from an inactive one
+  // (false), preserving the three domain errors byte-for-byte: table NULL-or-false → `table.not_found`;
+  // status NULL → `status.not_found`; status false → `status.inactive`. The status subquery is added
+  // only when `statusId` is set — a CLEAR (null) skips the status check entirely, as before.
+  const { rows } = await tx.execute<{
+    table_active: boolean | null;
+    status_active: boolean | null;
+  }>(
+    statusId === null
+      ? sql`select (select ${diningTables.active} from ${diningTables} where ${diningTables.id} = ${tableId}) as table_active`
+      : sql`select (select ${diningTables.active} from ${diningTables} where ${diningTables.id} = ${tableId}) as table_active, (select ${tableServiceStatuses.active} from ${tableServiceStatuses} where ${tableServiceStatuses.id} = ${statusId}) as status_active`,
+  );
+  const row = rows[0]!;
+  if (!row.table_active) {
     throw new AppError("table.not_found", { tableId });
   }
 
   if (statusId !== null) {
-    const [status] = await tx
-      .select({ active: tableServiceStatuses.active })
-      .from(tableServiceStatuses)
-      .where(eq(tableServiceStatuses.id, statusId));
-    if (status === undefined) {
+    if (row.status_active === null) {
       throw new AppError("status.not_found", { statusId });
     }
-    if (!status.active) {
+    if (!row.status_active) {
       throw new AppError("status.inactive", { statusId });
     }
   }

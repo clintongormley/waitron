@@ -167,6 +167,33 @@ function requirePersonId(id: string): string {
 }
 
 /**
+ * Screen a `/management-api/service-statuses/:id` path param as a UUID before it reaches a query,
+ * returning it. Mirrors `requirePersonId` for the status routes: a malformed id passed into a `uuid`
+ * column would `22P02` → an opaque 500, so refusing it here as `status.not_found` (a caller-supplied
+ * uuid, safe to echo) turns that 500 into a clean 404. Proven by deletion in `management-api.status.test.ts`.
+ * Shared by the PATCH and DELETE `:id` routes below.
+ */
+function requireStatusId(id: string): string {
+  if (!isUuid(id)) throw new AppError("status.not_found", { statusId: id });
+  return id;
+}
+
+/**
+ * Parse and validate a `displayOrder` request field, shared by the status POST and PATCH routes. An
+ * absent field stays `undefined` (a legitimate no-op — POST then defaults it, PATCH leaves it
+ * untouched); a present value is coerced with `Number` and refused as `management.request_invalid`
+ * naming the FIELD (never the value) unless it is an integer. The same `Number` + `Number.isInteger`
+ * check both routes had inline.
+ */
+function parseDisplayOrder(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  const n = Number(value);
+  if (!Number.isInteger(n))
+    throw new AppError("management.request_invalid", { field: "displayOrder" });
+  return n;
+}
+
+/**
  * Parse and screen a passkey VERIFY route's body, returning the narrowed `{ challengeHandle, response }`
  * pair both `register/verify` and `auth/verify` need — the shared shape those two routes had inline.
  * The body is coerced to `{}` (`?? {}`, see the login route for why a `null`/non-object body must not
@@ -545,10 +572,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw new AppError("management.request_invalid", { field: "label" });
       if (typeof body.color !== "string")
         throw new AppError("management.request_invalid", { field: "color" });
-      const displayOrder = body.displayOrder === undefined ? undefined : Number(body.displayOrder);
-      if (displayOrder !== undefined && !Number.isInteger(displayOrder)) {
-        throw new AppError("management.request_invalid", { field: "displayOrder" });
-      }
+      const displayOrder = parseDisplayOrder(body.displayOrder);
       // Bind the validated fields to locals: the `typeof` guards narrow `body.label`/`body.color` to
       // `string` HERE, but that narrowing does not survive into the `withTenant` closure (TS resets a
       // captured property to its declared type), so the closure reads these — the login/create-person
@@ -585,8 +609,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.patch("/management-api/service-statuses/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const id = c.req.param("id");
-      if (!isUuid(id)) throw new AppError("status.not_found", { statusId: id });
+      const id = requireStatusId(c.req.param("id"));
       const body =
         (await c.req.json<{
           label?: unknown;
@@ -621,10 +644,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         patch.color = body.color;
       }
       if (body.displayOrder !== undefined) {
-        const d = Number(body.displayOrder);
-        if (!Number.isInteger(d))
-          throw new AppError("management.request_invalid", { field: "displayOrder" });
-        patch.displayOrder = d;
+        patch.displayOrder = parseDisplayOrder(body.displayOrder);
       }
       if (body.active !== undefined) {
         if (typeof body.active !== "boolean")
@@ -659,8 +679,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   app.delete("/management-api/service-statuses/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const id = c.req.param("id");
-      if (!isUuid(id)) throw new AppError("status.not_found", { statusId: id });
+      const id = requireStatusId(c.req.param("id"));
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await deactivateStatus(tx, {
