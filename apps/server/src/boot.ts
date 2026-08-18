@@ -41,6 +41,7 @@ import { mountTillApi } from "./till-api.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
+import { mountReportApi } from "./report-api.js";
 import { mountRecipeApi } from "./recipe-api.js";
 import { mountWorkforceApi } from "./workforce-api.js";
 import { mountScheduleApi } from "./schedule-api.js";
@@ -346,6 +347,13 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // boot; the `purchase.manage` gate runs per request. This is the #91 fast-follow's capture surface,
   // feeding the headless modelo 303 IVA-deducible reporting.
   mountPurchasingApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
+  // The dashboard's gated modelo 303 DR303 export on the SAME app, the identical convention. Reuses
+  // the EXACT `db` and tenant (`till.tenantId`, this venue's one tenant) `mountPurchasingApi` above
+  // receives so the two cannot drift. No `nodeId` (a modelo 303 aggregates ALL of the obligado's
+  // nodes), no fiscal backend, clock, card provider or media store — a READ-ONLY route over the filed
+  // commercial record. Routes only — no database work at boot; the `report.export` gate runs per
+  // request, and the reporting pipeline SELECTs only (tenant row + sales/purchase reads).
+  mountReportApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
   // The dashboard's gated recipe-authoring surface (ingredient CRUD + product-recipe get/set) on the
   // SAME app, the identical convention. Reuses the EXACT `db`, tenant and `nodeId` `mountCatalogueApi`
   // above receives (`till.tenantId`/`till.nodeId`, this venue's one tenant + this node) — a recipe write
