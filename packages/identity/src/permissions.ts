@@ -32,6 +32,11 @@ export const PERMISSIONS = [
   // admin (person.manage); granted to manager + admin, the same roles as the other write gates
   // (purchase-invoice authoring UI, 2026-08-16).
   "purchase.manage",
+  // Authoring ingredients + a product's recipe (allergen inheritance) from the management dashboard
+  // (@waitron/recipes). A domain-named AUTHORING permission on the commercial lane, distinct from staff
+  // admin (person.manage); granted to manager + admin, the same roles as the other write gates
+  // (recipe-authoring UI, 2026-08-16).
+  "recipe.manage",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -53,6 +58,7 @@ const MANAGER: ReadonlySet<Permission> = new Set([
   "swap.approve",
   "absence.decide",
   "purchase.manage",
+  "recipe.manage",
 ]);
 const ALL: ReadonlySet<Permission> = new Set(PERMISSIONS);
 
