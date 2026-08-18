@@ -13,7 +13,7 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createTable, setTableStatus } from "./tables.js";
-import { openTab } from "./working-order.js";
+import { listTablesWithState, openTab } from "./working-order.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -132,6 +132,40 @@ describe("setTableStatus", () => {
     ).rejects.toMatchObject({
       code: "table.not_found",
       params: { tableId },
+    });
+  });
+});
+
+describe("listTablesWithState folds in the manual status", () => {
+  it("returns status: { id, label, color } for a table with a status set, null otherwise", async () => {
+    const { cfg, tableId, activeStatusId } = await setupVenue();
+
+    const before = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    expect(before.find((t) => t.id === tableId)).toMatchObject({ state: "free", status: null });
+
+    await asApp(cfg, (tx) => setTableStatus(tx, cfg, tableId, activeStatusId));
+    const after = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    // A FREE table still shows its manual status — occupancy and status are independent (design §4).
+    expect(after.find((t) => t.id === tableId)).toMatchObject({
+      state: "free",
+      status: { id: activeStatusId, label: "Bill requested", color: "#ef4444" },
+    });
+  });
+
+  it("still shows a status deactivated AFTER it was set (the LEFT JOIN keys on id, not `active`)", async () => {
+    const { cfg, tableId, activeStatusId } = await setupVenue();
+    // Set the status while it is active — setTableStatus refuses an inactive one — then deactivate it.
+    await asApp(cfg, (tx) => setTableStatus(tx, cfg, tableId, activeStatusId));
+    await db.execute(
+      sql`update table_service_statuses set active = false where id = ${activeStatusId}`,
+    );
+    // Nothing clears `status_id` on deactivation (the editor can reactivate a deactivated status), so the
+    // table still carries it and the read reflects the STORED status regardless of its current `active`
+    // flag — the join keys on id only (brief Step 3), it has no `active` predicate.
+    const rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    expect(rows.find((t) => t.id === tableId)).toMatchObject({
+      state: "free",
+      status: { id: activeStatusId, label: "Bill requested", color: "#ef4444" },
     });
   });
 });

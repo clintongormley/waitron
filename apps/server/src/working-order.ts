@@ -1260,6 +1260,9 @@ export interface TableState {
   /** The open tab's gross draft total (sum of `line_total`), numeric(12,2) as text — present iff a tab. */
   tabTotal?: string;
   pendingDeliveries: number;
+  /** The table's MANUAL service status (design §4), or null. Independent of occupancy — a `free` table
+   *  may carry one. Joined from `table_service_statuses` on `dining_tables.status_id`. */
+  status: { id: string; label: string; color: string } | null;
 }
 
 /**
@@ -1289,13 +1292,17 @@ export async function listTablesWithState(
     tab_line_count: number;
     tab_total: string | null;
     pending_deliveries: number;
+    status_id: string | null;
+    status_label: string | null;
+    status_color: string | null;
   }>(sql`
     select
       dt.id, dt.label, dt.zone, dt.capacity,
       tab.id as tab_id,
       coalesce(tab.line_count, 0)::int as tab_line_count,
       tab.tab_total,
-      coalesce(del.pending, 0)::int as pending_deliveries
+      coalesce(del.pending, 0)::int as pending_deliveries,
+      tss.id as status_id, tss.label as status_label, tss.color as status_color
     from dining_tables dt
     left join lateral (
       select wo.id,
@@ -1314,6 +1321,8 @@ export async function listTablesWithState(
       where d.tenant_id = dt.tenant_id and d.delivery_table_id = dt.id
         and d.status <> 'abandoned' and op.state <> 'collected'
     ) del on true
+    left join table_service_statuses tss
+      on tss.tenant_id = dt.tenant_id and tss.id = dt.status_id
     where dt.location_id = ${loc} and dt.active = true
     order by dt.label
   `);
@@ -1334,6 +1343,10 @@ export async function listTablesWithState(
       state,
       hasOpenTab,
       pendingDeliveries,
+      status:
+        r.status_id !== null
+          ? { id: r.status_id, label: r.status_label!, color: r.status_color! }
+          : null,
       ...(hasOpenTab
         ? { tabId: r.tab_id!, tabLineCount: Number(r.tab_line_count), tabTotal: r.tab_total! }
         : {}),
