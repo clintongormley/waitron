@@ -239,12 +239,15 @@ function monthlyPeriod(month: number): string {
  * (an absent box is a zero importe, as on the form). Returns a Buffer already encoded in ISO-8859-1.
  *
  * The envelope's ejercicio/período (from `options`) is guarded against the liquidation period the
- * aggregate's amounts are FOR (`modelo303.year`/`modelo303.month`): a caller passing the wrong
- * year/period would emit an internally inconsistent tax file (envelope period ≠ casilla amounts). The
- * year is always cross-checked; the período only when it is MONTHLY ("01".."12"), which maps 1:1 to a
- * month. A trimestral período ("1T".."4T") spans three months, so a single-month aggregate cannot be
- * pinned to one quarter unambiguously and is left unchecked. A mismatch throws a plain Error, matching
- * the writer's other guards.
+ * aggregate's amounts are FOR (`modelo303.year`/`modelo303.period`): a caller passing the wrong
+ * year/período would emit an internally inconsistent tax file (envelope período ≠ casilla amounts).
+ * The year is always cross-checked. The período check is now period-typed off `modelo303.period`:
+ *  - ANNUAL ({kind:"year"}) is REFUSED — there is no modelo 303 annual período (the annual VAT resumen
+ *    is a SEPARATE form, modelo 390), so any período would be fabricated;
+ *  - MONTHLY ({kind:"month"}) is cross-checked against its month ("01".."12", which maps 1:1 to a month);
+ *  - QUARTERLY ({kind:"quarter"}) is EXEMPT — the download route derives options.period from the SAME
+ *    LiquidationPeriod it computed the aggregate for, so the trimestre cannot disagree at the caller.
+ * A mismatch throws a plain Error, matching the writer's other guards.
  */
 export function toDr303Record(modelo303: Modelo303, options: Dr303Options): Buffer {
   const year = formatYear(options.year);
@@ -257,11 +260,22 @@ export function toDr303Record(modelo303: Modelo303, options: Dr303Options): Buff
       `dr303: envelope year ${options.year} does not match the aggregate's liquidation year ${modelo303.year}`,
     );
   }
-  if (/^\d{2}$/.test(period) && period !== monthlyPeriod(modelo303.month)) {
+  const p = modelo303.period;
+  if (p.kind === "year") {
+    // There is no annual modelo 303 file — the annual VAT resumen is a SEPARATE form (modelo 390).
+    // Refuse rather than emit a file with a fabricated período (spec D3; dr303-layout.ts:310 names 390).
     throw new Error(
-      `dr303: envelope period ${period} does not match the aggregate's liquidation month ${monthlyPeriod(modelo303.month)}`,
+      "dr303: an annual aggregate has no modelo 303 period (the annual return is modelo 390); no file is emitted",
     );
   }
+  if (p.kind === "month" && /^\d{2}$/.test(period) && period !== monthlyPeriod(p.month)) {
+    throw new Error(
+      `dr303: envelope period ${period} does not match the aggregate's liquidation month ${monthlyPeriod(p.month)}`,
+    );
+  }
+  // A quarterly aggregate's período ("1T".."4T") is NOT cross-checked here: the download route derives
+  // options.period from the SAME LiquidationPeriod it computed the aggregate for, so the two cannot
+  // disagree at the caller (spec D4). (The year cross-check above still applies to every kind.)
 
   // A computed box that this writer does not place would be silently dropped from the filing — refuse
   // rather than emit an incomplete return (e.g. a future map that populates a página-2 box).
