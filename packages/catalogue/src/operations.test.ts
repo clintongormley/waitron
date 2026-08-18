@@ -365,6 +365,36 @@ describe("catalogue operations", () => {
     expect(seen).toEqual({ eggs: { presence: "contains" }, nuts: { presence: "may_contain" } });
   });
 
+  // The read exposes the MANUAL overlay distinctly from the published union, so a later dashboard
+  // can seed the allergen picker from `manualAllergens` without double-counting the recipe floor.
+  it("exposes manual_allergens distinctly from the published union", async () => {
+    const seen = await withTenant(fx.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cat = await createCatalogue(tx, { name: "C" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "sandwich" },
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+        allergens: { gluten: { presence: "contains" } }, // → manual_allergens
+      });
+      // A recipe contributes a derived floor of eggs; published becomes eggs ∪ gluten.
+      await applyRecipeDerivation(tx, p.id, {
+        allergens: { eggs: { presence: "contains" } },
+        pending: false,
+      });
+      const [row] = await listProducts(tx, cat.id);
+      return row!;
+    });
+    expect(seen.allergens).toEqual({
+      eggs: { presence: "contains" },
+      gluten: { presence: "contains" },
+    });
+    expect(seen.manualAllergens).toEqual({ gluten: { presence: "contains" } });
+  });
+
   // A pending derivation forces PENDING (null), even with a manual overlay present.
   it("applyRecipeDerivation with pending=true publishes PENDING (null)", async () => {
     const seen = await withTenant(fx.db, tenantId, async (tx) => {
