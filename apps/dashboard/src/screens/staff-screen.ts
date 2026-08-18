@@ -45,12 +45,15 @@ import type { DashboardApi, PersonRole, PersonSummary } from "../api/client.js";
  *   `server.internal`); the raw code stays in state and `codeMessage` maps it to localised copy at
  *   the render edge, so the `role="alert"` banner shows a sentence and never the raw wire code.
  * - a rejected `createPerson()` sets the same `errorKey` and DOES NOT reload or close the form, so
- *   the entered values survive and the operator can retry.
+ *   the entered values survive and the operator can retry. While the create form is open the
+ *   `errorKey` is passed DOWN into it (`.error`), so it renders in the modal's own top layer, and the
+ *   page-level banner is suppressed (`errorKey && !editOpen && !formOpen`).
  * - a rejected edit action (`#runEditAction`) sets the same `errorKey` and leaves the edit dialog
  *   open for a retry. While the edit dialog is open the `errorKey` is passed DOWN into it
  *   (`.error`), so it renders in the modal's own top layer, and the page-level banner is suppressed
- *   (`errorKey && !editOpen`) — the create form's banner sits behind its backdrop, a known
- *   limitation this dialog does not repeat.
+ *   (`errorKey && !editOpen && !formOpen`) — both dialogs carry their own `error` for the same
+ *   reason: the page-level banner sits behind an open dialog's backdrop, where a sighted operator
+ *   could not see it.
  */
 @customElement("dashboard-staff-screen")
 export class StaffScreen extends LitElement {
@@ -310,7 +313,7 @@ export class StaffScreen extends LitElement {
         @edit-person=${(e: CustomEvent<{ personId: string }>) => this.#onEditPerson(e)}
       ></dashboard-staff-list>
       ${
-        this.errorKey && !this.editOpen
+        this.errorKey && !this.editOpen && !this.formOpen
           ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
           : nothing
       }
@@ -321,6 +324,7 @@ export class StaffScreen extends LitElement {
       }
       <dashboard-person-form
         .open=${this.formOpen}
+        .error=${this.formOpen ? this.errorKey : null}
         @create-person=${(e: CustomEvent<{ displayName: string; role: PersonRole; pin: string }>) =>
           void this.#onCreatePerson(e)}
         @wt-close=${() => (this.formOpen = false)}
