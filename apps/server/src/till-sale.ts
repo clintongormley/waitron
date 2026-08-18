@@ -82,6 +82,14 @@ export interface TillSaleRequest {
    */
   tender: TillTender;
   workingOrderId?: string;
+  /**
+   * Deliver this counter sale to a dining table (design §3c) — written to
+   * `working_orders.delivery_table_id`. Optional: a plain walk-up omits it. A counter delivery is a
+   * normal immediate sale that simply records WHERE to carry it; it is NOT a tab (a tab is the reverse
+   * link, `dining_tables.tab_id`). Only the WALK-UP create path writes it — a retrieved order ignores it
+   * (you do not "deliver" a parked order). An id that names no table is refused `table.not_found`.
+   */
+  deliveryTableId?: string;
 }
 
 /**
@@ -176,6 +184,10 @@ export interface PayWorkingOrderRequest {
   /** The tender, same shape and rules as `TillSaleRequest.tender` (see there): `cash` or a manual
    *  `card`, with `externalRef` the optional acquirer / terminal operation number for a card. */
   tender: TillTender;
+  /** Deliver a WALK-UP sale to a dining table (design §3c) — passed to `createOpenOrder` as the order's
+   *  `delivery_table_id`. Ignored for a retrieved order (a delivery is always a fresh walk-up). An id
+   *  that names no table is refused `table.not_found`. */
+  deliveryTableId?: string;
 }
 
 /**
@@ -317,7 +329,12 @@ export async function payWorkingOrder(
           if (req.lines.length === 0) {
             throw new AppError("sale.empty_basket", {});
           }
-          ({ priced } = await createOpenOrder(tx, cfg, req.id, req.lines, null));
+          // A WALK-UP may be a counter delivery: thread `deliveryTableId` to the create path (a bad id
+          // is refused `table.not_found` there). A retrieved order takes the `else` branch and ignores
+          // it — you do not "deliver" a parked order.
+          ({ priced } = await createOpenOrder(tx, cfg, req.id, req.lines, null, {
+            deliveryTableId: req.deliveryTableId,
+          }));
         } else {
           // Retrieved order: file from the STORED locked lines via the shared `priceStoredOrder` reader,
           // never a re-price of a client basket (`req.lines` is IGNORED). It runs the SAME
@@ -1457,7 +1474,13 @@ export async function recordTillSale(
   return payWorkingOrder(
     deps,
     cfg,
-    { id: req.workingOrderId ?? randomUUID(), lines: req.lines, tender: req.tender },
+    {
+      id: req.workingOrderId ?? randomUUID(),
+      lines: req.lines,
+      tender: req.tender,
+      // A counter delivery: threaded to the walk-up create path (design §3c). Absent → a plain walk-up.
+      deliveryTableId: req.deliveryTableId,
+    },
     operatorId,
   );
 }

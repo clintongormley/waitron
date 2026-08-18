@@ -257,7 +257,32 @@ export async function createOpenOrder(
   id: string,
   lines: { productId: string; quantity: string }[],
   label: string | null,
+  // A counter delivery sets `deliveryTableId` (design §2b/§3c). Defaults to {}, so parkOrder, openTab
+  // and payWorkingOrder's walk-up path are unchanged (they omit it → a plain walk-up, column NULL). A
+  // TAB does NOT flow through here — its link is the `dining_tables.tab_id` back-pointer openTab sets,
+  // not an order column, so openTab passes no placement and this never stamps a delivery table on it.
+  placement: { deliveryTableId?: string | null } = {},
 ): Promise<{ orderNumber: number; priced: PricedBasket }> {
+  // A counter delivery names the dining table it is carried to. Verify it exists FIRST — the SELECT
+  // runs as `app_user` under the caller's tenant scope, so an absent id AND another tenant's table (RLS
+  // hides it) both read as absent — so a bad id surfaces the domain `table.not_found` (a 4xx) rather
+  // than the raw `working_orders_delivery_table_fk` violation (23503) the insert would otherwise raise,
+  // which `payWorkingOrder`'s `isUniqueViolation`-only catch re-throws to an opaque `server.internal`
+  // 500. The FK stays the DB backstop; this is the actionable app check, exactly as `openTab` guards
+  // its own tableId with the same code. A walk-up/park/tab passes no `deliveryTableId`, so this never
+  // fires for them. Tables are deactivated, never deleted (`deactivateTable`), so this cannot race a
+  // delete between the check and the insert below.
+  const deliveryTableId = placement.deliveryTableId ?? null;
+  if (deliveryTableId !== null) {
+    const [table] = await tx
+      .select({ id: diningTables.id })
+      .from(diningTables)
+      .where(eq(diningTables.id, deliveryTableId));
+    if (table === undefined) {
+      throw new AppError("table.not_found", { tableId: deliveryTableId });
+    }
+  }
+
   // Resolve + price the basket authoritatively (refusing an unknown product) into the line rows,
   // keeping the raw price so the caller need not re-derive it — `priceOrderLines`'s own doc-comment
   // explains the zip and why `priced` is threaded back out.
@@ -272,6 +297,10 @@ export async function createOpenOrder(
     orderNumber,
     label,
     status: "open",
+    // Set ⇒ this counter order is DELIVERED to that table (metadata on the commercial row, NOT a
+    // fiscal field — the alta path never reads it, proven by the H2 huella-identity test). NULL for a
+    // walk-up/park/tab. The FK is enforced above by the app pre-check and by the DB as the backstop.
+    deliveryTableId,
   });
 
   // The parent order was inserted just above, so the composite FK and the

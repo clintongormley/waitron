@@ -28,7 +28,7 @@ import { deploymentEnvironment } from "./config.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
 import { addTabRound, openTab } from "./working-order.js";
-import { payWorkingOrder } from "./till-sale.js";
+import { payWorkingOrder, recordTillSale } from "./till-sale.js";
 import { startRealPostgres } from "./testing/postgres.js";
 import "./errors.js";
 
@@ -512,5 +512,111 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
     // (i) the UNTOUCHED fiscal core — this whole diff is test-only (`git diff --stat`) — and (ii) the
     // Step-1 grep-proof that `recordSale`/`computeHuella`/the alta builder never reference the column.
     expect(await filedHuella(tabId)).toBe(await filedHuella(walkUpId));
+  });
+});
+
+/** The delivery_table_id stamped on a working order — owner read. */
+async function deliveryTableOf(workingOrderId: string): Promise<string | null> {
+  const { rows } = await suite.admin.execute<{ d: string | null }>(
+    sql`select delivery_table_id as d from working_orders where id = ${workingOrderId}`,
+  );
+  return rows[0]!.d;
+}
+
+describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
+  it("records delivery_table_id on the walk-up order and files one sale (it is NOT a tab)", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const tableId = await seedTable(cfg, "Del-1");
+    const deps = { db: suite.admin, backend, clock };
+
+    const id = randomUUID();
+    const res = await recordTillSale(deps, cfg, {
+      workingOrderId: id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+      tender: { method: "cash", amount: "5.00" },
+      deliveryTableId: tableId,
+    });
+    expect(res.invoiceNumber).toBe("A/1");
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await deliveryTableOf(id)).toBe(tableId);
+    // A delivery is NOT a tab — no dining_tables row points at it.
+    const { rows } = await suite.admin.execute<{ n: string }>(
+      sql`select count(*)::text as n from dining_tables where tab_id = ${id}`,
+    );
+    expect(Number(rows[0]!.n)).toBe(0);
+  });
+
+  it("a deliveryTableId naming no table is refused table.not_found (a domain 4xx, not a raw 500)", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const deps = { db: suite.admin, backend, clock };
+    const orderId = randomUUID();
+    const missingTableId = randomUUID(); // a well-formed uuid that names no dining table
+
+    // The FK `working_orders_delivery_table_fk` (23503) is the DB backstop; the app pre-check surfaces
+    // the actionable domain code instead of the opaque `server.internal` 500 a raw 23503 would become.
+    await expect(
+      recordTillSale(deps, cfg, {
+        workingOrderId: orderId,
+        lines: [{ productId: cafe.id, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+        deliveryTableId: missingTableId,
+      }),
+    ).rejects.toMatchObject({ code: "table.not_found", params: { tableId: missingTableId } });
+
+    // Nothing was filed and no order was created — the guard fires before any write (the tx rolls back).
+    expect(await saleCount(orderId)).toBe(0);
+    const { rows } = await suite.admin.execute<{ n: string }>(
+      sql`select count(*)::text as n from working_orders where id = ${orderId}`,
+    );
+    expect(Number(rows[0]!.n)).toBe(0);
+  });
+});
+
+describe("H2 (column): the huella is independent of delivery_table_id", () => {
+  // Task 7 could prove delivery_table_id-COLUMN independence only by grep + untouched-core, because
+  // nothing could SET the column. Task 8 makes it settable, so this proves it EMPIRICALLY: two counter
+  // sales that differ ONLY in delivery_table_id (one carries a real table, the other NULL) file the
+  // IDENTICAL huella. The non-vacuity control below asserts the two orders genuinely differ in that one
+  // column, so the equality is not vacuously true (a regression that stopped writing the column would
+  // leave both NULL and pass a weaker test).
+  it("two counter sales differing ONLY in delivery_table_id yield the identical huella", async () => {
+    const at = new Date("2026-08-17T19:20:30+01:00");
+    const clockFixed = fixedClock(at);
+    const deps = { db: suite.admin, backend, clock: clockFixed };
+
+    // Tenant A — a counter sale DELIVERED to a table → A/1, primer_registro, filed under A's own NIF.
+    const { cfg: cfgA, cafe: cafeA } = await setupVenue();
+    const nifA = await nifOf(cfgA);
+    const tableA = await seedTable(cfgA, "H2col-A");
+    const deliveredId = randomUUID();
+    await recordTillSale(deps, cfgA, {
+      workingOrderId: deliveredId,
+      lines: [{ productId: cafeA.id, quantity: "1" }],
+      tender: { method: "cash", amount: "5.00" },
+      deliveryTableId: tableA,
+    });
+
+    // Tenant B (a SEPARATE tenant SHARING A's NIF, series "A") — a plain walk-up, NO delivery table →
+    // also A/1, primer_registro. The shared NIF makes IDEmisorFactura — hence the huella input —
+    // identical; a distinct tenant_id lets both `A/1` rows coexist under the node-agnostic
+    // `registros_identidad_uq` (the same trick `secondVenueSharingNif` documents for the tab H2 test).
+    const { cfg: cfgB, cafe: cafeB } = await secondVenueSharingNif(nifA);
+    const walkUpId = randomUUID();
+    await recordTillSale(deps, cfgB, {
+      workingOrderId: walkUpId,
+      lines: [{ productId: cafeB.id, quantity: "1" }],
+      tender: { method: "cash", amount: "5.00" },
+    });
+
+    // Non-vacuity control: the two orders GENUINELY differ in the one column under test — A carries the
+    // real table, B carries NULL. Owner reads (bypass RLS; the uuids are globally unique).
+    expect(await deliveryTableOf(deliveredId)).toBe(tableA);
+    expect(await deliveryTableOf(walkUpId)).toBe(null);
+
+    // Same NIF + same "A/1" + same fixed timestamp + same amount + both primer_registro, differing ONLY
+    // in delivery_table_id ⇒ identical huella. This is the EMPIRICAL proof — possible for the first time
+    // now the column is settable — that the newly-threaded delivery_table_id does NOT leak into the hash:
+    // two rows differing solely in it hash alike (the fiscal core never reads it, per the Step-1 grep).
+    expect(await filedHuella(deliveredId)).toBe(await filedHuella(walkUpId));
   });
 });
