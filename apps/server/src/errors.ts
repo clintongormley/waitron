@@ -388,6 +388,14 @@ declare module "@waitron/shared" {
      */
     "tab.not_open": { tabId: string };
     /**
+     * A per-line void named no line on the OPEN tab — the `line_no` matches nothing on it (already
+     * voided, or never existed). Pre-fiscal: nothing is filed for an open tab, so a void is a plain
+     * delete with no fiscal record or amendment. `tabId` + `lineNo` are caller-supplied and echoed
+     * (neither a secret). `tab.*`, not `server.*`, for the reason `tenant.not_found`'s note gives.
+     * Mapped to 404 (the line named does not exist).
+     */
+    "tab.line_not_found": { tabId: string; lineNo: number };
+    /**
      * A request to a gated server API surface carried a body/query whose SHAPE is wrong: a field
      * absent (where it is required) or present with the wrong declared type — a malformed date, a
      * non-string, a bad enum member. Originally the management-dashboard surface (the gated staff

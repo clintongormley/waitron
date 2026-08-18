@@ -435,6 +435,32 @@ export async function addTabRound(
   await tx.insert(workingOrderLines).values(appended);
 }
 
+/**
+ * Void ONE not-yet-paid line from an OPEN tab (design §3b) — pre-fiscal, so nothing is filed and there
+ * is no fiscal record or amendment involved; it is a plain delete under the open parent (the
+ * `require_open_parent` trigger is the DB backstop). {@link lockOpenTab} locks the tab row `FOR UPDATE`
+ * so a concurrent round/pay cannot race the delete, and confirms it is an open tab. `tab.not_open` if the
+ * order is not an open tab; `tab.line_not_found` if the `line_no` matches nothing on it. `_cfg` is unused
+ * (the delete is by tab id + line no, RLS-scoped) but kept for the tab-verb signature shape the route
+ * layer calls uniformly — underscore-prefixed so `noUnusedParameters` leaves it, the repo's convention
+ * for an interface-shape parameter (`report-source.ts`'s `_tenantId`, `provider.ts`'s `_now`).
+ */
+export async function voidTabLine(
+  tx: Transaction,
+  _cfg: TillConfig,
+  tabId: string,
+  lineNo: number,
+): Promise<void> {
+  await lockOpenTab(tx, tabId);
+  const deleted = await tx
+    .delete(workingOrderLines)
+    .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, lineNo)))
+    .returning({ lineNo: workingOrderLines.lineNo });
+  if (deleted.length === 0) {
+    throw new AppError("tab.line_not_found", { tabId, lineNo });
+  }
+}
+
 /** One row of the held-orders list the counter shows to retrieve a parked order. */
 export interface HeldOrderSummary {
   id: string;

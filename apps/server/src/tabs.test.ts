@@ -25,7 +25,7 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { addTabRound, openTab } from "./working-order.js";
+import { addTabRound, openTab, voidTabLine } from "./working-order.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -247,6 +247,49 @@ describe("addTabRound (append-only, no re-price)", () => {
     );
     await expect(asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, []))).rejects.toMatchObject({
       code: "sale.empty_basket",
+    });
+  });
+});
+
+describe("voidTabLine", () => {
+  it("deletes one line from an open tab and leaves the rest", async () => {
+    const { cfg, cafeId, aguaId, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+    );
+    await asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ productId: aguaId, quantity: "1" }])); // line 2
+    await asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1));
+
+    const lines = await db
+      .select({ lineNo: workingOrderLines.lineNo })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId))
+      .orderBy(workingOrderLines.lineNo);
+    expect(lines).toEqual([{ lineNo: 2 }]);
+  });
+
+  it("throws tab.line_not_found for a line_no that matches nothing", async () => {
+    const { cfg, cafeId, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+    );
+    await expect(asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 99))).rejects.toMatchObject({
+      code: "tab.line_not_found",
+      params: { tabId, lineNo: 99 },
+    });
+  });
+
+  it("throws tab.not_open for a settled order", async () => {
+    const { cfg, cafeId, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+    );
+    await db.execute(
+      sql`update working_orders set status = 'settled', settled_at = now() where id = ${tabId}`,
+    );
+    await expect(asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1))).rejects.toMatchObject({
+      code: "tab.not_open",
+      params: { tabId },
     });
   });
 });
