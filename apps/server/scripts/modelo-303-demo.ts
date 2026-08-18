@@ -47,7 +47,14 @@ import {
   mapModelo303,
   toDr303Record,
 } from "@waitron/reporting";
-import type { Dr303Options, Modelo303, VatRateLine, VatSummary } from "@waitron/reporting";
+import type {
+  Dr303Options,
+  LiquidationPeriod,
+  Modelo303,
+  VatRateLine,
+  VatReturn,
+  VatSummary,
+} from "@waitron/reporting";
 import { recordCorrection, recordSale } from "@waitron/core";
 import type { RecordCorrectionInput, RecordSaleInput } from "@waitron/core";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
@@ -592,8 +599,33 @@ async function main(): Promise<void> {
           vatReturn: await computeVatReturn(tx, {
             tenantId: venue.tenantId,
             year: YEAR,
-            month: MONTH,
+            period: { kind: "month", month: MONTH },
           }),
+        };
+      },
+    );
+
+    // The fiscal periods beyond the single month: the quarter (trimestre) that CONTAINS `MONTH`, its
+    // three constituent civil months, and the whole civil year — read as the application role, exactly
+    // as a report consumer would. Only August carries trade in this demo, so the quarter/year equal the
+    // month; the reconciliation below still exercises the wider civil-date bounds.
+    const quarter = qOf(MONTH);
+    const [qm1, qm2, qm3] = monthsOfQuarter(quarter);
+    const { monthlyReturns, quarterReturn, annualReturn } = await withTenant(
+      db,
+      venue.tenantId,
+      async (tx) => {
+        await asAppUser(tx);
+        const forPeriod = (period: LiquidationPeriod): Promise<VatReturn> =>
+          computeVatReturn(tx, { tenantId: venue.tenantId, year: YEAR, period });
+        return {
+          monthlyReturns: [
+            await forPeriod({ kind: "month", month: qm1 }),
+            await forPeriod({ kind: "month", month: qm2 }),
+            await forPeriod({ kind: "month", month: qm3 }),
+          ],
+          quarterReturn: await forPeriod({ kind: "quarter", quarter }),
+          annualReturn: await forPeriod({ kind: "year" }),
         };
       },
     );
@@ -663,6 +695,35 @@ async function main(): Promise<void> {
     );
     console.log("");
 
+    // ── Beyond the month: the quarter (trimestre) is the exact addDecimal-sum of its three constituent
+    //    months — devengado per-rate, deducible cuota, and the net resultado — because it is a WIDER
+    //    civil-date range over the SAME filed rows and decimal addition is associative. Never a
+    //    re-rounded round(Σ base × rate) (exactness inherited from the monthly aggregates). The annual
+    //    aggregate is printed too; there is NO modelo 303 annual FILE (that is modelo 390 — see below).
+    reconcileQuarterEqualsMonths(
+      `modelo 303 quarter ${quarter}T equals the sum of months ${qm1}/${qm2}/${qm3}`,
+      quarterReturn,
+      monthlyReturns,
+    );
+    console.log(
+      `computeVatReturn — quarterly & annual roll-ups (${quarter}T and año ${YEAR}, same filed rows):`,
+    );
+    console.log(
+      `  ${quarter}T ${YEAR}: IVA devengado ${quarterReturn.taxTotal}, deducible ${quarterReturn.deductible.taxTotal}, resultado ${quarterReturn.result}`,
+    );
+    console.log(
+      `    (= the addDecimal sum of months ${qm1}/${qm2}/${qm3}; only ${MONTH} carries trade in this demo)`,
+    );
+    console.log(`  año ${YEAR}: IVA devengado — régimen general, corrections netted:`);
+    printRateTable(annualReturn.byRate);
+    console.log(
+      `    ${"totales".padEnd(8)}  ${annualReturn.baseTotal.padStart(12)}  ${annualReturn.taxTotal.padStart(12)}   (deducible ${annualReturn.deductible.taxTotal}, resultado ${annualReturn.result})`,
+    );
+    console.log(
+      `OK — ${quarter}T reconciled against the addDecimal sum of its three months; annual aggregate printed (no modelo 303 annual file — that is modelo 390).`,
+    );
+    console.log("");
+
     // ── The submittable output: the DR303 fixed-layout file the sede "por fichero" path uploads. Map
     //    the reconciled aggregate onto the modelo 303 casillas, serialize to the AEAT record, and
     //    SELF-VALIDATE the produced bytes (this month's resultado is a NET CREDIT, so box 46/71 must
@@ -689,6 +750,31 @@ async function main(): Promise<void> {
     );
     console.log(
       `OK — DR303 file self-validated: length 2944, box 27 (${modelo.boxes["27"]}) at its documented offset, negative resultado rendered with the N prefix.`,
+    );
+    console.log("");
+
+    // ── The QUARTERLY DR303 file: the SAME serializer, driven off the quarter's aggregate and its
+    //    "{n}T" período token. A deli files monthly, but AEAT accepts trimestral, and the writer threads
+    //    the trimestre through the envelope; self-validate the produced bytes carry it (común field 5)
+    //    at the fixed 2944-byte length. An ANNUAL aggregate has NO modelo 303 file — `toDr303Record`
+    //    refuses {kind:"year"} (the annual VAT resumen is a separate form, modelo 390), so none is made.
+    const quarterToken = `${quarter}T`;
+    const quarterModelo = mapModelo303(quarterReturn);
+    const quarterRecord = toDr303Record(quarterModelo, {
+      taxId: "50000000K",
+      name: "Deli Demo SL",
+      year: YEAR,
+      period: quarterToken,
+      declarationType: "C",
+    });
+    validateDr303QuarterPeriod(quarterRecord, quarterModelo, quarterToken);
+    const env = periodAt(quarterRecord);
+    console.log("DR303 — quarterly modelo 303 file (envelope período = trimestre)");
+    console.log(
+      `  ${quarterRecord.length} bytes; envelope período at byte offset ${env.offset}: ${JSON.stringify(env.bytes)}  ← the trimestre ${quarterToken}`,
+    );
+    console.log(
+      `OK — quarterly DR303 file self-validated: length 2944, envelope período ${quarterToken} at its documented offset.`,
     );
   } finally {
     await db.close();
@@ -765,6 +851,41 @@ function validateDr303Record(record: Buffer, modelo: Modelo303): void {
   }
 }
 
+// 0-based byte offset of the envelope período (común field 5, "PP"): pos 11 1-based → offset 10, len 2
+// (dr303-layout.ts's DR303_COMUN field n=5; dr303-layout.test.ts pins the layout contiguous, so a shift
+// turns it red). The envelope open reads "<T3030" + EEEE + PP + "0000>", so PP starts at byte 10.
+const DR303_ENVELOPE_PERIOD = { offset: 10, len: 2 } as const;
+
+/** Reads the envelope período back out of a produced record at its FIXED offset (see above). */
+function periodAt(record: Buffer): { offset: number; len: number; bytes: string } {
+  const { offset, len } = DR303_ENVELOPE_PERIOD;
+  return { offset, len, bytes: record.toString("latin1", offset, offset + len) };
+}
+
+/** Throws unless the quarterly DR303 file self-validates: total length 2944, its aggregate carries a
+ * quarter period, and the envelope período (común field 5) is the expected trimestre token "{n}T" — a
+ * second witness that the writer threaded the quarter's OWN período, not a fabricated one. */
+function validateDr303QuarterPeriod(record: Buffer, modelo: Modelo303, token: string): void {
+  const problems: string[] = [];
+  if (record.length !== 2944) {
+    problems.push(`record is ${record.length} bytes, expected 2944`);
+  }
+  if (modelo.period.kind !== "quarter") {
+    problems.push(`aggregate period kind is ${modelo.period.kind}, expected "quarter"`);
+  }
+  const env = periodAt(record);
+  if (env.bytes !== token) {
+    problems.push(
+      `envelope período at offset ${env.offset}: ${JSON.stringify(env.bytes)} != expected ${JSON.stringify(token)}`,
+    );
+  }
+  if (problems.length > 0) {
+    throw new Error(
+      `modelo-303-demo: quarterly DR303 file did not self-validate:\n  ${problems.join("\n  ")}`,
+    );
+  }
+}
+
 /** Throws with a diff if `actual`'s per-rate figures and cuota/base totals differ from `expected`. */
 function reconcile(
   label: string,
@@ -799,6 +920,61 @@ function reconcile(
   }
   if (problems.length > 0) {
     throw new Error(`modelo-303-demo: ${label} did not reconcile:\n  ${problems.join("\n  ")}`);
+  }
+}
+
+/** The quarter (1..4) that contains a 1..12 civil month: Q1 = Jan–Mar … Q4 = Oct–Dec. */
+function qOf(month: number): number {
+  return Math.ceil(month / 3);
+}
+
+/** The three civil months (1..12) of a trimestre 1..4, ascending — Q1 → [1,2,3] … Q4 → [10,11,12]. */
+function monthsOfQuarter(quarter: number): [number, number, number] {
+  const first = 3 * (quarter - 1) + 1;
+  return [first, first + 1, first + 2];
+}
+
+/** Merges the devengado `byRate` of several VatReturns into one rate-sorted `VatRateLine[]` — the
+ * addDecimal sum per rate (matching the roll-ups' `byRate` order). This is the check's left-hand side
+ * for the quarter reconciliation: pure addDecimal over the monthly aggregates, never re-rounded. */
+function mergeDevengado(returns: readonly VatReturn[]): VatRateLine[] {
+  const byRate = new Map<Decimal, { base: Decimal; tax: Decimal }>();
+  for (const r of returns) {
+    for (const l of r.byRate) {
+      const cur = byRate.get(l.rate) ?? { base: decimal("0.00"), tax: decimal("0.00") };
+      byRate.set(l.rate, { base: addDecimal(cur.base, l.base), tax: addDecimal(cur.tax, l.tax) });
+    }
+  }
+  return [...byRate.entries()]
+    .map(([rate, v]) => ({ rate, base: v.base, tax: v.tax }))
+    .sort((a, b) => compareDecimal(a.rate, b.rate));
+}
+
+/** Asserts a quarter's `VatReturn` equals the exact addDecimal-sum of its three monthly `VatReturn`s —
+ * devengado per-rate (through the shared `reconcile`), the deducible cuota total, and the net
+ * resultado. Never re-rounds; a single mis-summed month throws with a diff (exactness inherited). */
+function reconcileQuarterEqualsMonths(
+  label: string,
+  quarter: VatReturn,
+  months: readonly VatReturn[],
+): void {
+  reconcile(label, quarter, mergeDevengado(months));
+  const sumDeducible = months.reduce(
+    (a, r) => addDecimal(a, r.deductible.taxTotal),
+    decimal("0.00"),
+  );
+  const sumResult = months.reduce((a, r) => addDecimal(a, r.result), decimal("0.00"));
+  const problems: string[] = [];
+  if (compareDecimal(quarter.deductible.taxTotal, sumDeducible) !== 0) {
+    problems.push(`deducible cuota ${quarter.deductible.taxTotal} != Σ months ${sumDeducible}`);
+  }
+  if (compareDecimal(quarter.result, sumResult) !== 0) {
+    problems.push(`resultado ${quarter.result} != Σ months ${sumResult}`);
+  }
+  if (problems.length > 0) {
+    throw new Error(
+      `modelo-303-demo: ${label} — deducible/resultado did not reconcile:\n  ${problems.join("\n  ")}`,
+    );
   }
 }
 
