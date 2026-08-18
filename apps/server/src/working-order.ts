@@ -402,14 +402,14 @@ async function lockOpenTab(tx: Transaction, tabId: string): Promise<void> {
  * APPEND a priced round to an OPEN tab (design §3b) — the one genuinely new order primitive. It locks
  * each new line's `unit_price_gross` at add-time (via `priceOrderLines`) and assigns the NEXT `line_no`,
  * WITHOUT deleting or re-pricing existing lines. Contrast `updateHeldOrder`, which deletes and re-inserts
- * the whole basket (`:511-513`), re-locking every line at the current catalogue price — wrong for an
+ * the whole basket (`:633-634`), re-locking every line at the current catalogue price — wrong for an
  * incremental tab.
  *
  * Concurrency (load-bearing for QR ordering — multiple guests append to one shared tab at once): the tab
- * row is taken `FOR UPDATE` by {@link lockOpenTab}, so `line_no` allocation serialises on it (the locking
- * shape the per-node order-number allocator uses, `working-order.ts:263`). A naïve `max(line_no)+1`
- * without the lock races and collides on the `(working_order_id, line_no)` unique (`orders.ts:186`) — a
- * real-PG concurrent test proves it by deletion of the lock.
+ * row is taken `FOR UPDATE` by {@link lockOpenTab}, which serialises concurrent writers to this tab on
+ * the `working_orders` row lock, so the `max(line_no)+1` read-then-insert below cannot interleave. A
+ * naïve `max(line_no)+1` without the lock races and collides on the `(working_order_id, line_no)` unique
+ * (`orders.ts:192`) — a real-PG concurrent test proves it by deletion of the lock.
  */
 export async function addTabRound(
   tx: Transaction,
