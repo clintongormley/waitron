@@ -138,6 +138,14 @@ const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
   WAITRON_MEDIA_DIR: MEDIA_ROOT,
+  // The passkey Relying Party ID + origin, now REQUIRED by `loadConfig` in production — every
+  // real-host boot in this suite that sets `WAITRON_ENV: "production"` would otherwise throw
+  // `server.config_missing` before reaching the behaviour it tests. Folded into `KEY_ENV` for the
+  // same reason as the credentials key and till identity above: it is boot config every production
+  // host must carry. The two bottom config-guard tests spread `TILL_ENV` (preproduction), where these
+  // stay optional, so they are unaffected.
+  WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
+  WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com",
   ...TILL_ENV,
 };
 
