@@ -2,12 +2,14 @@
 // them — the reachability convention `till-sale.ts`/`till-config.ts` follow (a bare import, no value
 // used here). See the note atop `errors.ts`.
 import "./errors.js";
+import { randomUUID } from "node:crypto";
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { AppError, type SaleId, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import {
   allocateOrderNumber,
   appendOrderAmendment,
   asAppUser,
+  diningTables,
   invoiceSeries,
   isUniqueViolation,
   orderPrep,
@@ -273,8 +275,12 @@ export async function createOpenOrder(
   });
 
   // The parent order was inserted just above, so the composite FK and the
-  // `require_open_parent`/`check_locales` triggers all resolve it.
-  await tx.insert(workingOrderLines).values(lineRows);
+  // `require_open_parent`/`check_locales` triggers all resolve it. Guarded: an EMPTY tab (openTab with
+  // no initial round) has no lines to insert, and `tx.insert(...).values([])` errors. Existing callers
+  // always pass ≥1 line (they guard empty baskets before calling), so this never changes their path.
+  if (lineRows.length > 0) {
+    await tx.insert(workingOrderLines).values(lineRows);
+  }
 
   return { orderNumber, priced };
 }
@@ -312,6 +318,57 @@ export async function parkOrder(
     },
     { nodeId: cfg.nodeId },
   );
+}
+
+/**
+ * Open the running tab on a table (design §3a). Takes the `dining_tables` row `FOR UPDATE` — THIS
+ * per-table lock is the one-open-tab-per-table concurrency guard: there is NO partial-unique now (a
+ * single nullable `tab_id` gives one-tab-per-table structurally), so the lock is what serialises the
+ * check-then-set. A second concurrent openTab on the same table blocks on this lock until the first
+ * commits, then reads the now-set `tab_id`, finds it points at an OPEN order, and is refused
+ * `tab.already_open` (proven by deletion of the lock — §7). A STALE `tab_id` (pointing at a
+ * settled/abandoned order) reads as free and is OVERWRITTEN, so the fiscal pay path needs no settle-time
+ * write (design §2b).
+ *
+ * Then creates an `open` working order (reusing `createOpenOrder`, incl. the per-node order-number
+ * allocation) and points the table's `tab_id` at it. The order carries NO tab column — the link is this
+ * back-pointer. `lines?` opens the tab with an initial round; absent, the tab opens empty. Runs on the
+ * CALLER's transaction under its tenant/app_user scope. `table.not_found`/`table.inactive` guard the
+ * table itself.
+ */
+export async function openTab(
+  tx: Transaction,
+  cfg: TillConfig,
+  req: { tableId: string; lines?: { productId: string; quantity: string }[] },
+): Promise<{ tabId: string; orderNumber: number }> {
+  const [table] = await tx
+    .select({ active: diningTables.active, tabId: diningTables.tabId })
+    .from(diningTables)
+    .where(eq(diningTables.id, req.tableId))
+    .for("update");
+  if (table === undefined) {
+    throw new AppError("table.not_found", { tableId: req.tableId });
+  }
+  if (!table.active) {
+    throw new AppError("table.inactive", { tableId: req.tableId });
+  }
+
+  // A set tab_id blocks a second tab ONLY while it points at a STILL-OPEN order; the WHERE clause does
+  // the filtering, so a stale pointer (at a settled order) simply returns no row and is overwritten below.
+  if (table.tabId !== null) {
+    const [openTabRow] = await tx
+      .select({ id: workingOrders.id })
+      .from(workingOrders)
+      .where(and(eq(workingOrders.id, table.tabId), eq(workingOrders.status, "open")));
+    if (openTabRow !== undefined) {
+      throw new AppError("tab.already_open", { tableId: req.tableId });
+    }
+  }
+
+  const tabId = randomUUID();
+  const { orderNumber } = await createOpenOrder(tx, cfg, tabId, req.lines ?? [], null);
+  await tx.update(diningTables).set({ tabId }).where(eq(diningTables.id, req.tableId));
+  return { tabId, orderNumber };
 }
 
 /** One row of the held-orders list the counter shows to retrieve a parked order. */

@@ -360,6 +360,24 @@ declare module "@waitron/shared" {
      */
     "table.label_taken": { label: string };
     /**
+     * A dining table exists but is deactivated, so no tab may be opened on it. `tableId` is the
+     * caller-supplied uuid (not a secret). `table.*`, not `server.*`, for the reason `tenant.not_found`'s
+     * note gives. Distinct from `table.not_found` (which covers a foreign/absent table): this one says
+     * the table is real but closed for service. Mapped to 409 in the route layer.
+     */
+    "table.inactive": { tableId: string };
+    /**
+     * A table's `tab_id` already points at an OPEN working order, so a second tab may not be opened (at
+     * most one open tab per table, design §2b). `openTab` takes the `dining_tables` row `FOR UPDATE` and
+     * checks its `tab_id`; that per-table lock — there is NO partial-unique now — is the concurrency
+     * guard, so two concurrent openTabs serialise and the second surfaces THIS code. A stale `tab_id`
+     * (pointing at a settled/abandoned order) reads as free and is overwritten, so it does NOT trigger
+     * this. `tab.*` names the DOMAIN CONCEPT (the running tab), never the throwing package. `tableId` —
+     * the occupied table — is caller-supplied, not a secret. Mapped to 409 (the table's state forbids a
+     * new tab).
+     */
+    "tab.already_open": { tableId: string };
+    /**
      * A request to a gated server API surface carried a body/query whose SHAPE is wrong: a field
      * absent (where it is required) or present with the wrong declared type — a malformed date, a
      * non-string, a bad enum member. Originally the management-dashboard surface (the gated staff
