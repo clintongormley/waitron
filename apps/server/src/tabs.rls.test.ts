@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import {
   assignCatalogueToLocation,
@@ -9,6 +10,8 @@ import {
   listAvailableProducts,
 } from "@waitron/catalogue";
 import type { AvailableProduct } from "@waitron/catalogue";
+import { registerSif, VerifactuBackend } from "@waitron/fiscal-verifactu";
+import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
@@ -21,12 +24,42 @@ import {
   tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
+import { deploymentEnvironment } from "./config.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
 import { addTabRound, openTab } from "./working-order.js";
+import { payWorkingOrder } from "./till-sale.js";
 import { startRealPostgres } from "./testing/postgres.js";
 import "./errors.js";
 
+// ── H2: the huella is independent of table/tab membership — the grep receipts (Task 7, TS-1) ──
+// The fiscal core is UNTOUCHED by table-service: pay reuses `payWorkingOrder`/`recordSale` verbatim,
+// and no table/tab column reaches the hash. Two static receipts, both re-run and verified 2026-08-18:
+//
+// Step 1 — neither the fiscal core (`recordSale`) nor the alta builder (`VerifactuBackend`) reads any
+//   table column. In the revised model the tab link is a back-pointer on `dining_tables.tab_id`, so
+//   the filed `working_orders` row carries no tab field at all; `delivery_table_id` is the ONLY table
+//   column on `working_orders` and nothing on this path reads it.
+//     $ grep -nE "table_id|delivery_table_id|tableId|deliveryTableId" \
+//         packages/core/src/record-sale.ts packages/fiscal-verifactu/src/backend.ts
+//     → (no output; exit 1)
+//   `RecordSaleInput` carries `workingOrderId` but no table column, and `computeHuella`
+//   (packages/verifactu/src/huella.ts:45-58) hashes ONLY the eight AEAT alta fields — IDEmisorFactura
+//   (issuer NIF), NumSerieFactura, FechaExpedicionFactura, TipoFactura, CuotaTotal, ImporteTotal, the
+//   previous Huella, and FechaHoraHusoGenRegistro — none of which is a table column.
+//
+// Step 1b — a tab lives in `open` and settles straight to `settled`; it never enters `placed`, so it
+//   files nothing until pay (design §5/§10). `placed` under Mode I (`invoice_first`) would file a
+//   DEFERRED invoice, which a tab must never do.
+//     $ grep -n "invoice_first" apps/server/src/working-order.ts
+//     → 739: * ... `invoice_first` (Mode I): file `recordSale` DEFERRED here ...
+//     → 793:       if (cfg.orderFlow === "invoice_first") {
+//     $ grep -nE "placeOrder|status.*placed" apps/server/src/working-order.ts \
+//         | grep -iE "openTab|addTabRound|voidTabLine"
+//     → (no output; exit 1)   ← no tab verb transitions to `placed` or calls `placeOrder`
+//   A tab is created `open` (`createOpenOrder` sets `status: "open"`) and pay settles it open → settled
+//   via `payWorkingOrder`, so it is never at `placed`.
+//
 // Real Postgres, not PGlite — mandatory for THIS suite (CLAUDE.md §4). The per-table `FOR UPDATE`
 // concurrency guard is exactly what PGlite CANNOT show: it runs every connection as a superuser and
 // serialises every query onto ONE backend, so a "two concurrent openTabs" test there is a FALSE pass,
@@ -159,6 +192,71 @@ async function openOrderCount(cfg: TillConfig): Promise<number> {
   return Number(rows[0]!.n);
 }
 
+// The fiscal backend + clock the pay path files through — ported from `working-order.rls.test.ts`'s
+// own scaffolding (the pay-closes-tab and huella tests file real chained records, so the suite needs a
+// real `VerifactuBackend`). `resolveClient` REJECTS: `recordSale` must never contact AEAT (spec §4).
+let backend: FiscalBackend;
+let clock: TrustedClock;
+
+/** The system wall clock, reported confident/anchored — the identical stub the sibling suites use. */
+function systemClock(): TrustedClock {
+  return {
+    now: () => {
+      const instant = new Date();
+      return {
+        instant,
+        offsetMinutes: -instant.getTimezoneOffset(),
+        confident: true,
+        confidence: "anchored",
+        anchorAgeSeconds: 0,
+      };
+    },
+    anchor: () => {
+      throw new Error("tabs.rls.test: anchor() is not used by recordSale");
+    },
+    currentAnchor: () => null,
+  };
+}
+
+beforeAll(() => {
+  clock = systemClock();
+  backend = new VerifactuBackend({
+    clock,
+    db: suite.admin,
+    environment: deploymentEnvironment(process.env),
+    deploymentEnvironment: deploymentEnvironment(process.env),
+    resolveClient: () =>
+      Promise.reject(new Error("tabs.rls.test: resolveClient must never be called by recordSale")),
+  });
+});
+
+/** The working order's own state — status + whether settled_at is set (the biconditional's witness). */
+async function orderState(id: string): Promise<{ status: string; settledAtSet: boolean }> {
+  const { rows } = await suite.admin.execute<{ status: string; settled: boolean }>(sql`
+    select status, (settled_at is not null) as settled from working_orders where id = ${id}
+  `);
+  return { status: rows[0]!.status, settledAtSet: rows[0]!.settled };
+}
+
+/** How many `sales` rows reference this working order — read as the owner (bypasses RLS). */
+async function saleCount(workingOrderId: string): Promise<number> {
+  const { rows } = await suite.admin.execute<{ count: string }>(sql`
+    select count(*)::text as count from sales where working_order_id = ${workingOrderId}
+  `);
+  return Number(rows[0]!.count);
+}
+
+/** How many chained `registros_facturacion` rows exist for this working order's sale (owner read). */
+async function registroCount(workingOrderId: string): Promise<number> {
+  const { rows } = await suite.admin.execute<{ count: string }>(sql`
+    select count(*)::text as count
+    from registros_facturacion r
+    join sales s on s.id = r.sale_id
+    where s.working_order_id = ${workingOrderId}
+  `);
+  return Number(rows[0]!.count);
+}
+
 describe("openTab concurrency (one open tab per table; the per-table lock IS the guard)", () => {
   it("two backends racing to open a tab on the SAME table → exactly one wins, the other gets tab.already_open", async () => {
     const { cfg, cafe } = await setupVenue();
@@ -237,5 +335,182 @@ describe("addTabRound concurrency (distinct line_no under load)", () => {
     } finally {
       await Promise.all(dbs.map((d) => d.close()));
     }
+  });
+});
+
+describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)", () => {
+  it("openTab + addTabRound → payWorkingOrder settles it, files one sale + registro, table reads free", async () => {
+    const { cfg, cafe, agua } = await setupVenue();
+    const tableId = await seedTable(cfg, "Pay-1");
+    const deps = { db: suite.admin, backend, clock };
+
+    const { tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return openTab(tx, cfg, { tableId, lines: [{ productId: cafe.id, quantity: "1" }] });
+    });
+    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return addTabRound(tx, cfg, tabId, [{ productId: agua.id, quantity: "1" }]);
+    });
+
+    // Pay the tab by its id — the retrieved-order path (files the STORED lines; req.lines ignored).
+    const res = await payWorkingOrder(deps, cfg, {
+      id: tabId,
+      lines: [],
+      tender: { method: "cash", amount: "5.00" },
+    });
+    expect(res.total).toBe("3.50"); // 1.50 café + 2.00 agua
+    expect(res.invoiceNumber).toBe("A/1");
+    expect(await orderState(tabId)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(tabId)).toBe(1);
+    expect(await registroCount(tabId)).toBe(1);
+
+    // The table now reads free: its tab_id STILL points at the order (no settle-time write), but the
+    // order is settled, so the "open tab" join finds nothing (occupancy — Task 9).
+    const { rows } = await suite.admin.execute<{ n: string }>(sql`
+      select count(*)::text as n
+      from dining_tables dt join working_orders wo on wo.id = dt.tab_id and wo.tenant_id = dt.tenant_id
+      where dt.id = ${tableId} and wo.status = 'open'`);
+    expect(Number(rows[0]!.n)).toBe(0);
+  });
+});
+
+/** A trusted clock pinned to ONE instant, so two independent filings hash the same
+ *  FechaHoraHusoGenRegistro / FechaExpedicionFactura — the control that isolates the tab-ness. */
+function fixedClock(instant: Date): TrustedClock {
+  return {
+    now: () => ({
+      instant,
+      offsetMinutes: 60,
+      confident: true,
+      confidence: "anchored",
+      anchorAgeSeconds: 0,
+    }),
+    anchor: () => {
+      throw new Error("tabs.rls.test: anchor() unused");
+    },
+    currentAnchor: () => null,
+  };
+}
+
+/** Tenant A's NIF — its `tenants.tax_id` (for a Spanish tenant, tax_id IS the NIF). This is the issuer
+ *  identifier (`IDEmisorFactura`) `recordSale` files under, and the field the two filings must SHARE for
+ *  their huellas to match. Owner read (bypasses RLS). */
+async function nifOf(cfg: TillConfig): Promise<string> {
+  const { rows } = await suite.admin.execute<{ tax_id: string }>(
+    sql`select tax_id from tenants where id = ${cfg.tenantId}`,
+  );
+  return rows[0]!.tax_id;
+}
+
+/**
+ * A SECOND, wholly separate venue (its own tenant) whose node files under `nif` — tenant A's NIF —
+ * rather than its own. This is the crux of the H2 proof, and it MUST be a second TENANT, not a second
+ * node under one tenant: `registros_identidad_uq`
+ * (packages/fiscal-verifactu/src/schema/registros.ts:177) is keyed
+ * (tenant_id, id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_registro) — NODE-
+ * AGNOSTIC, because AEAT record identity is per-obligado NIF (a duplicate is AEAT error 3000). Two
+ * filings with the IDENTICAL huella necessarily share (NIF, "A/1", date), which under ONE tenant
+ * violates that unique — verified by receipt: the same basket on a second node of ONE tenant fails
+ * `chain.append_contention` (the retried identity-unique violation). A DIFFERENT tenant_id lets both
+ * `A/1` rows coexist, while re-registering this venue's node SIF under tenant A's `nif` makes
+ * `IDEmisorFactura` — hence the huella input — identical. This mirrors `fiscal-verifactu`'s own
+ * `entorno is not part of the huella` proof, which files two same-huella records from two fresh tenants
+ * sharing a FIXED `IDEmisorFactura` (verify.test.ts + testing/seed.ts's `TEST_NIF` / `altaFor`).
+ *
+ * `setupVenue` provisions tenant B fully (tenant, node, series "A" at next_number 1, catalogue, till,
+ * and its OWN SIF under its OWN nif); `registerSif` then RE-registers node B under `nif`, which also
+ * resets node B's chain head so its first sale is a primer_registro. It mints a fresh installation
+ * number under (`nif`, "W1") — "W1" is `WAITRON_ID_SISTEMA` (the id provisioning uses; not exported
+ * from `@waitron/provisioning`, so inlined), and NONE of the SIF identity (IdSistemaInformatico /
+ * NumeroInstalacion) enters `computeHuella` (huella.ts:45-58 hashes eight invoice fields only), so the
+ * distinct installation numbers do not move the huella. The re-registration is LOAD-BEARING and proven
+ * by deletion: remove it and tenant B keeps `setupVenue`'s own-nif SIF, so its filing carries a
+ * DIFFERENT `IDEmisorFactura` and the two huellas diverge (verified: `D251…` vs the walk-up's `1E79…`)
+ * — it is the shared NIF, not tenant identity, that the matching huella depends on.
+ */
+async function secondVenueSharingNif(nif: string): Promise<SeededVenue> {
+  const venue = await setupVenue();
+  await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    await registerSif(tx, {
+      tenantId: venue.cfg.tenantId,
+      nodeId: venue.cfg.nodeId,
+      nif,
+      idSistemaInformatico: "W1",
+    });
+  });
+  return venue;
+}
+
+/** The filed huella for a working order's sale — owner read (bypasses RLS). */
+async function filedHuella(workingOrderId: string): Promise<string> {
+  const { rows } = await suite.admin.execute<{ huella: string }>(sql`
+    select r.huella from registros_facturacion r
+    join sales s on s.id = r.sale_id
+    where s.working_order_id = ${workingOrderId}`);
+  return rows[0]!.huella;
+}
+
+describe("H2: the huella is independent of whether the order was a tab", () => {
+  // Receipt (Step 1): `grep -nE 'table_id|delivery_table_id|tableId|deliveryTableId'
+  // packages/core/src/record-sale.ts packages/fiscal-verifactu/src/backend.ts` → zero matches. The filed
+  // working_orders row carries NO tab-membership (the tab link is a back-pointer on dining_tables), and
+  // delivery_table_id is not read; the huella hashes only the AEAT invoice fields.
+  it("the SAME basket filed walk-up and from a tab yields the identical huella", async () => {
+    const at = new Date("2026-08-17T19:20:30+01:00");
+    const clockFixed = fixedClock(at);
+    const deps = { db: suite.admin, backend, clock: clockFixed };
+
+    // Tenant A — a WALK-UP, no table → A/1, primer_registro, filed under A's own NIF.
+    const { cfg: cfgA, cafe: cafeA } = await setupVenue();
+    const nifA = await nifOf(cfgA);
+    const walkUpId = randomUUID();
+    await payWorkingOrder(deps, cfgA, {
+      id: walkUpId,
+      lines: [{ productId: cafeA.id, quantity: "1" }],
+      tender: { method: "cash", amount: "5.00" },
+    });
+
+    // Tenant B (a SEPARATE tenant SHARING A's NIF, series "A") — a TAB on a table (dining_tables.tab_id
+    // → the order) → also A/1, primer_registro. A distinct tenant_id lets both `A/1` rows coexist under
+    // the node-agnostic `registros_identidad_uq`; the shared NIF makes IDEmisorFactura — hence the
+    // huella input — identical. (A second NODE of ONE tenant cannot: it collides on that unique, which
+    // is the receipt `secondVenueSharingNif` documents.)
+    const { cfg: cfgB, cafe: cafeB } = await secondVenueSharingNif(nifA);
+    const tableId = await seedTable(cfgB, "H2-tab");
+    const { tabId } = await withTenant(suite.admin, cfgB.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return openTab(tx, cfgB, { tableId, lines: [{ productId: cafeB.id, quantity: "1" }] });
+    });
+    await payWorkingOrder(deps, cfgB, {
+      id: tabId,
+      lines: [],
+      tender: { method: "cash", amount: "5.00" },
+    });
+
+    // Non-vacuity control (mirrors the `entorno is not part of the huella` precedent's read-back): the
+    // two orders GENUINELY differ in table-ness — the TAB order is pointed at by a `dining_tables` row,
+    // the WALK-UP order by none. Owner reads (bypass RLS; the uuids are globally unique, so the
+    // cross-tenant count is exact). Without this, a regression where `openTab` stopped setting `tab_id`
+    // would leave both filings table-less and make the equality below vacuously true.
+    const tabPointers = await suite.admin.execute<{ n: string }>(
+      sql`select count(*)::text as n from dining_tables where tab_id = ${tabId}`,
+    );
+    const walkUpPointers = await suite.admin.execute<{ n: string }>(
+      sql`select count(*)::text as n from dining_tables where tab_id = ${walkUpId}`,
+    );
+    expect(Number(tabPointers.rows[0]!.n)).toBe(1); // the tab IS a table's running tab
+    expect(Number(walkUpPointers.rows[0]!.n)).toBe(0); // the walk-up is anchored to no table
+
+    // Same NIF + same "A/1" + same fixed timestamp + same amounts + both primer_registro ⇒ identical
+    // huella. What this EMPIRICAL test proves is precisely that the huella is independent of the
+    // `dining_tables.tab_id` BACK-POINTER — the one thing that actually differs between the two filings
+    // (asserted just above). It does NOT, on its own, prove `delivery_table_id`-COLUMN independence:
+    // `openTab`→`createOpenOrder` never sets `working_orders.delivery_table_id`, so BOTH orders carry
+    // NULL there, and a hypothetical `computeHuella` reading that column would see NULL for both and this
+    // equality would STILL hold. Column-independence is established SEPARATELY and dispositively by
+    // (i) the UNTOUCHED fiscal core — this whole diff is test-only (`git diff --stat`) — and (ii) the
+    // Step-1 grep-proof that `recordSale`/`computeHuella`/the alta builder never reference the column.
+    expect(await filedHuella(tabId)).toBe(await filedHuella(walkUpId));
   });
 });
