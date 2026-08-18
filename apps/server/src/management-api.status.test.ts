@@ -144,14 +144,15 @@ async function request(path: string, init: RequestInit, cookie?: string): Promis
 }
 
 describe("/management-api/service-statuses", () => {
-  it("POST creates (200 { id }) + GET lists it (manager)", async () => {
+  it("POST creates (201 { id }) + GET lists it (manager)", async () => {
     const label = uniqueLabel("Bill requested");
     const create = await request(
       "",
       { method: "POST", body: JSON.stringify({ label, color: "#ef4444", displayOrder: 0 }) },
       managerCookie,
     );
-    expect(create.status).toBe(200);
+    // 201 Created, matching every other management-surface create (createPerson/staff, catalogues).
+    expect(create.status).toBe(201);
     const { id } = (await create.json()) as { id: string };
     expect(id).toBeDefined();
 
@@ -170,7 +171,7 @@ describe("/management-api/service-statuses", () => {
       { method: "POST", body: JSON.stringify({ label, color: "amber-500" }) },
       managerCookie,
     );
-    expect(create.status).toBe(200);
+    expect(create.status).toBe(201);
     const { id } = (await create.json()) as { id: string };
     const list = (await (await request("", { method: "GET" }, managerCookie)).json()) as {
       id: string;

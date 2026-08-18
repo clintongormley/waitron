@@ -154,14 +154,33 @@ describe("table_service_statuses schema (RLS + grants)", () => {
     );
     expect(row!.status_id).toBe(statusId);
 
-    // The composite FK rejects a status_id that is not this tenant's (a random uuid) — 23503.
-    const e = await captureError(() =>
+    // The FK rejects a status_id that names no row at all (a random uuid) — 23503. This case proves FK
+    // EXISTENCE; a plain single-column FK would reject it identically, so it does not on its own
+    // distinguish the composite (tenant_id, status_id) FK from a single-column one.
+    const eRandom = await captureError(() =>
       asApp(TENANT_A, (tx) =>
         tx.execute(
           sql`update dining_tables set status_id = '99999999-9999-4999-8999-999999999999' where id = ${tableId}`,
         ),
       ),
     );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
+    expect(pgErrorCode(eRandom)).toBe("23503"); // foreign_key_violation
+
+    // The case a SINGLE-COLUMN FK would let through: a status that genuinely EXISTS, but belongs to
+    // another tenant. B seeds a real status (committed — `asApp` does not roll back), then A points its
+    // dining_table at B's status id. A single-column FK on status_id alone would find B's row and PASS;
+    // the composite FK requires a `table_service_statuses` row with (tenant_id = TENANT_A, id = B's id),
+    // which does not exist (B's row carries tenant_id = TENANT_B), so it is a 23503. The FK check fires
+    // on the raw id at write time regardless of A's RLS read-visibility of B's row. This is what makes
+    // the test title ("tenant-consistent FK") honest — it now distinguishes composite from single-column.
+    const foreignStatusId = await seedStatus(TENANT_B, "B's status");
+    const eForeign = await captureError(() =>
+      asApp(TENANT_A, (tx) =>
+        tx.execute(
+          sql`update dining_tables set status_id = ${foreignStatusId} where id = ${tableId}`,
+        ),
+      ),
+    );
+    expect(pgErrorCode(eForeign)).toBe("23503"); // foreign_key_violation — (TENANT_A, B's id) has no match
   });
 });

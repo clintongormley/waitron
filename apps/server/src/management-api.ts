@@ -564,7 +564,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           displayOrder,
         });
       });
-      return c.json(result);
+      return c.json(result, 201);
     }),
   );
 
