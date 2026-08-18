@@ -191,7 +191,15 @@ function requireStatusId(id: string): string {
  */
 function parseDisplayOrder(value: unknown): number | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== "number" || !Number.isInteger(value))
+  // typeof + integer + int4 RANGE: `display_order` is a Postgres `integer`, so a value outside int4's
+  // range clears `Number.isInteger` but would reach the column and raise `22003` (an opaque 500) rather
+  // than a clean 400 — the same opaque-500-on-int4-overflow class the `capacity` / `line_no` guards close.
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < -2_147_483_648 ||
+    value > 2_147_483_647
+  )
     throw new AppError("management.request_invalid", { field: "displayOrder" });
   return value;
 }

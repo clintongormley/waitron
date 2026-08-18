@@ -273,6 +273,27 @@ describe("/management-api/service-statuses", () => {
     expect(await nullOrder.json()).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "displayOrder" } },
     });
+
+    // An integer OUTSIDE int4 range clears `Number.isInteger` but would overflow the Postgres `integer`
+    // column and raise 22003 — an opaque 500 — without the range bound. The screen refuses it with a
+    // clean 400 (prove-by-behaviour for the int4-range half of `parseDisplayOrder`; delete the range
+    // check and this reverts to a 500).
+    const hugeOrder = await request(
+      "",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          label: uniqueLabel("W"),
+          color: "#000",
+          displayOrder: 2_147_483_648,
+        }),
+      },
+      managerCookie,
+    );
+    expect(hugeOrder.status).toBe(400);
+    expect(await hugeOrder.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "displayOrder" } },
+    });
   });
 
   it("PATCH edits label/color/displayOrder/active (204), then GET reflects it", async () => {
