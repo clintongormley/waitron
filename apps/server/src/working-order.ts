@@ -2,12 +2,14 @@
 // them — the reachability convention `till-sale.ts`/`till-config.ts` follow (a bare import, no value
 // used here). See the note atop `errors.ts`.
 import "./errors.js";
+import { randomUUID } from "node:crypto";
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { AppError, type SaleId, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import {
   allocateOrderNumber,
   appendOrderAmendment,
   asAppUser,
+  diningTables,
   invoiceSeries,
   isUniqueViolation,
   orderPrep,
@@ -130,10 +132,16 @@ async function priceOrderLines(
  * order from the SAME locked composition and a catalogue price change after add never moves the filed
  * total (line-add snapshot, 7c).
  *
- * Throws on a lineless order: a persisted `open`/`placed` order always has ≥1 line (park refuses an
- * empty basket, `updateHeldOrder` never leaves it lineless, and placing freezes the composition), so
- * an empty result is corruption rather than a reachable flow — the same guard `payWorkingOrder` used
- * inline before this was extracted.
+ * Refuses a LINELESS order with `sale.empty_basket` (a domain 4xx → 400), never a raw Error. A
+ * lineless persisted order IS a reachable state: `openTab` opens an EMPTY tab — a lineless `open`
+ * working order (design §3a; tabs.test.ts "opens a tab with NO initial round") — so paying it
+ * (`payWorkingOrder`), placing it (Mode-I `placeOrder`), or card-paying it
+ * (`payWorkingOrderIntegrated`) all reach here through `priceStoredOrder`. A sale needs ≥1 line to
+ * price and file, so an empty one is refused BEFORE any fiscal write (and before any card charge) —
+ * the SAME `sale.empty_basket` guard the walk-up/park/round paths make at their own layer, surfaced
+ * here as the actionable domain code the error boundary maps to 400, rather than the opaque
+ * `server.internal` 500 a raw Error would become through `run`. This is the last line for the
+ * empty-tab pay/place flow, which those earlier per-layer guards do not cover.
  */
 export async function readLockedLines(
   tx: Transaction,
@@ -150,11 +158,9 @@ export async function readLockedLines(
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))
     .orderBy(workingOrderLines.lineNo);
-  /* v8 ignore start */
   if (stored.length === 0) {
-    throw new Error(`readLockedLines: working order ${workingOrderId} has no lines to file`);
+    throw new AppError("sale.empty_basket", {});
   }
-  /* v8 ignore stop */
   return stored;
 }
 
@@ -164,7 +170,7 @@ export async function readLockedLines(
  * and the settled-ticket read-back). `priceLockedLines` runs the SAME difference-method arithmetic over
  * the ADD-TIME locked gross (`unit_price_gross`) that `priceBasket` runs over a live catalogue, so a
  * catalogue price change after add never moves the filed total (line-add snapshot, 7c). Pure over
- * `readLockedLines`'s read; throws on a lineless order (see there).
+ * `readLockedLines`'s read; refuses a lineless order with `sale.empty_basket` (see there).
  */
 export async function priceStoredOrder(
   tx: Transaction,
@@ -255,7 +261,34 @@ export async function createOpenOrder(
   id: string,
   lines: { productId: string; quantity: string }[],
   label: string | null,
+  // A counter delivery sets `deliveryTableId` (design §2b/§3c). Defaults to {}, so parkOrder, openTab
+  // and payWorkingOrder's walk-up path are unchanged (they omit it → a plain walk-up, column NULL). A
+  // TAB does NOT flow through here — its link is the `dining_tables.tab_id` back-pointer openTab sets,
+  // not an order column, so openTab passes no placement and this never stamps a delivery table on it.
+  placement: { deliveryTableId?: string | null } = {},
 ): Promise<{ orderNumber: number; priced: PricedBasket }> {
+  // A counter delivery names the dining table it is carried to. Verify it exists FIRST — the SELECT
+  // runs as `app_user` under the caller's tenant scope, so an absent id AND another tenant's table (RLS
+  // hides it) both read as absent — so a bad id surfaces the domain `table.not_found` (a 4xx) rather
+  // than the raw `working_orders_delivery_table_fk` violation (23503) the insert would otherwise raise,
+  // which `payWorkingOrder`'s `isUniqueViolation`-only catch re-throws to an opaque `server.internal`
+  // 500. The FK stays the DB backstop; this is the actionable app check, mirroring `openTab`'s own
+  // existence check (the same `table.not_found` code). It is EXISTENCE-ONLY, though — no `active` gate
+  // and no `FOR UPDATE`, unlike `openTab` — so a counter delivery MAY name a DEACTIVATED table (whether
+  // to block that is the owner's product call, deferred); the parity is the code, not the full guard. A
+  // walk-up/park/tab passes no `deliveryTableId`, so this never fires for them. Tables are deactivated,
+  // never deleted (`deactivateTable`), so this cannot race a delete between the check and the insert below.
+  const deliveryTableId = placement.deliveryTableId ?? null;
+  if (deliveryTableId !== null) {
+    const [table] = await tx
+      .select({ id: diningTables.id })
+      .from(diningTables)
+      .where(eq(diningTables.id, deliveryTableId));
+    if (table === undefined) {
+      throw new AppError("table.not_found", { tableId: deliveryTableId });
+    }
+  }
+
   // Resolve + price the basket authoritatively (refusing an unknown product) into the line rows,
   // keeping the raw price so the caller need not re-derive it — `priceOrderLines`'s own doc-comment
   // explains the zip and why `priced` is threaded back out.
@@ -270,11 +303,19 @@ export async function createOpenOrder(
     orderNumber,
     label,
     status: "open",
+    // Set ⇒ this counter order is DELIVERED to that table (metadata on the commercial row, NOT a
+    // fiscal field — the alta path never reads it, proven by the H2 huella-identity test). NULL for a
+    // walk-up/park/tab. The FK is enforced above by the app pre-check and by the DB as the backstop.
+    deliveryTableId,
   });
 
   // The parent order was inserted just above, so the composite FK and the
-  // `require_open_parent`/`check_locales` triggers all resolve it.
-  await tx.insert(workingOrderLines).values(lineRows);
+  // `require_open_parent`/`check_locales` triggers all resolve it. Guarded: an EMPTY tab (openTab with
+  // no initial round) has no lines to insert, and `tx.insert(...).values([])` errors. Existing callers
+  // always pass ≥1 line (they guard empty baskets before calling), so this never changes their path.
+  if (lineRows.length > 0) {
+    await tx.insert(workingOrderLines).values(lineRows);
+  }
 
   return { orderNumber, priced };
 }
@@ -312,6 +353,147 @@ export async function parkOrder(
     },
     { nodeId: cfg.nodeId },
   );
+}
+
+/**
+ * Open the running tab on a table (design §3a). Takes the `dining_tables` row `FOR UPDATE` — THIS
+ * per-table lock is the one-open-tab-per-table concurrency guard: there is NO partial-unique now (a
+ * single nullable `tab_id` gives one-tab-per-table structurally), so the lock is what serialises the
+ * check-then-set. A second concurrent openTab on the same table blocks on this lock until the first
+ * commits, then reads the now-set `tab_id`, finds it points at an OPEN order, and is refused
+ * `tab.already_open` (proven by deletion of the lock — §7). A STALE `tab_id` (pointing at a
+ * settled/abandoned order) reads as free and is OVERWRITTEN, so the fiscal pay path needs no settle-time
+ * write (design §2b).
+ *
+ * Then creates an `open` working order (reusing `createOpenOrder`, incl. the per-node order-number
+ * allocation) and points the table's `tab_id` at it. The order carries NO tab column — the link is this
+ * back-pointer. `lines?` opens the tab with an initial round; absent, the tab opens empty. Runs on the
+ * CALLER's transaction under its tenant/app_user scope. `table.not_found`/`table.inactive` guard the
+ * table itself.
+ */
+export async function openTab(
+  tx: Transaction,
+  cfg: TillConfig,
+  req: { tableId: string; lines?: { productId: string; quantity: string }[] },
+): Promise<{ tabId: string; orderNumber: number }> {
+  const [table] = await tx
+    .select({ active: diningTables.active, tabId: diningTables.tabId })
+    .from(diningTables)
+    .where(eq(diningTables.id, req.tableId))
+    .for("update");
+  if (table === undefined) {
+    throw new AppError("table.not_found", { tableId: req.tableId });
+  }
+  if (!table.active) {
+    throw new AppError("table.inactive", { tableId: req.tableId });
+  }
+
+  // A set tab_id blocks a second tab ONLY while it points at a STILL-OPEN order; the WHERE clause does
+  // the filtering, so a stale pointer (at a settled order) simply returns no row and is overwritten below.
+  if (table.tabId !== null) {
+    const [openTabRow] = await tx
+      .select({ id: workingOrders.id })
+      .from(workingOrders)
+      .where(and(eq(workingOrders.id, table.tabId), eq(workingOrders.status, "open")));
+    if (openTabRow !== undefined) {
+      throw new AppError("tab.already_open", { tableId: req.tableId });
+    }
+  }
+
+  const tabId = randomUUID();
+  const { orderNumber } = await createOpenOrder(tx, cfg, tabId, req.lines ?? [], null);
+  await tx.update(diningTables).set({ tabId }).where(eq(diningTables.id, req.tableId));
+  return { tabId, orderNumber };
+}
+
+/**
+ * Lock an OPEN tab's working-order row `FOR UPDATE` and confirm a dining table points at it — the shared
+ * guard `addTabRound` and `voidTabLine` open with. The lock is held on the caller's `tx` until commit,
+ * so a `line_no` allocation or a line delete that follows is serialised against a concurrent round/void
+ * (load-bearing for QR ordering — several guests appending to one tab at once). A tab is an OPEN working
+ * order some `dining_tables.tab_id` points at (design §2b): a non-open order, one no table points at (a
+ * walk-up / counter delivery), or an absent id (or another tenant's, RLS-hidden) all throw
+ * `tab.not_open` — the fail-closed shape `working_order.not_open` uses for the modify side.
+ */
+async function lockOpenTab(tx: Transaction, tabId: string): Promise<void> {
+  const [tab] = await tx
+    .select({ status: workingOrders.status })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, tabId))
+    .for("update");
+  if (tab === undefined || tab.status !== "open") {
+    throw new AppError("tab.not_open", { tabId });
+  }
+  const [pointer] = await tx
+    .select({ id: diningTables.id })
+    .from(diningTables)
+    .where(eq(diningTables.tabId, tabId));
+  if (pointer === undefined) {
+    throw new AppError("tab.not_open", { tabId });
+  }
+}
+
+/**
+ * APPEND a priced round to an OPEN tab (design §3b) — the one genuinely new order primitive. It locks
+ * each new line's `unit_price_gross` at add-time (via `priceOrderLines`) and assigns the NEXT `line_no`,
+ * WITHOUT deleting or re-pricing existing lines. Contrast `updateHeldOrder`, which deletes and re-inserts
+ * the whole basket (`:633-634`), re-locking every line at the current catalogue price — wrong for an
+ * incremental tab.
+ *
+ * Concurrency (load-bearing for QR ordering — multiple guests append to one shared tab at once): the tab
+ * row is taken `FOR UPDATE` by {@link lockOpenTab}, which serialises concurrent writers to this tab on
+ * the `working_orders` row lock, so the `max(line_no)+1` read-then-insert below cannot interleave. A
+ * naïve `max(line_no)+1` without the lock races and collides on the `(working_order_id, line_no)` unique
+ * (`orders.ts:192`) — a real-PG concurrent test proves it by deletion of the lock.
+ */
+export async function addTabRound(
+  tx: Transaction,
+  cfg: TillConfig,
+  tabId: string,
+  lines: { productId: string; quantity: string }[],
+): Promise<void> {
+  await lockOpenTab(tx, tabId);
+  if (lines.length === 0) {
+    throw new AppError("sale.empty_basket", {});
+  }
+  // The next line_no, allocated under the per-tab row lock — concurrent rounds serialise on it, so no two
+  // reads see the same max.
+  const [{ maxLineNo }] = await tx
+    .select({ maxLineNo: sql<number>`coalesce(max(${workingOrderLines.lineNo}), 0)::int` })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, tabId));
+  // Price the round (locks each new gross unit at add-time), then APPEND: renumber from maxLineNo+1,
+  // never touching existing lines. `priceOrderLines` numbers its rows 1..n in `lines` order, so row i
+  // maps to maxLineNo + i + 1.
+  const { lineRows } = await priceOrderLines(tx, cfg, tabId, lines);
+  const appended = lineRows.map((row, i) => ({ ...row, lineNo: maxLineNo + i + 1 }));
+  await tx.insert(workingOrderLines).values(appended);
+}
+
+/**
+ * Void ONE not-yet-paid line from an OPEN tab (design §3b) — pre-fiscal, so nothing is filed and there
+ * is no fiscal record or amendment involved; it is a plain delete under the open parent (the
+ * `require_open_parent` trigger is the DB backstop). {@link lockOpenTab} locks the tab row `FOR UPDATE`
+ * so a concurrent round/pay cannot race the delete, and confirms it is an open tab. `tab.not_open` if the
+ * order is not an open tab; `tab.line_not_found` if the `line_no` matches nothing on it. `_cfg` is unused
+ * (the delete is by tab id + line no, RLS-scoped) but kept for the tab-verb signature shape the route
+ * layer calls uniformly — underscore-prefixed so `noUnusedParameters` leaves it, the repo's convention
+ * for an interface-shape parameter (`report-source.ts`'s `_tenantId`, `provider.ts`'s `_now`).
+ */
+export async function voidTabLine(
+  tx: Transaction,
+  _cfg: TillConfig,
+  tabId: string,
+  lineNo: number,
+): Promise<void> {
+  await lockOpenTab(tx, tabId);
+  const deleted = await tx
+    .delete(workingOrderLines)
+    .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, lineNo)))
+    .returning({ lineNo: workingOrderLines.lineNo });
+  if (deleted.length === 0) {
+    throw new AppError("tab.line_not_found", { tabId, lineNo });
+  }
 }
 
 /** One row of the held-orders list the counter shows to retrieve a parked order. */
@@ -997,5 +1179,100 @@ export async function listPrepQueue(
         )
         .orderBy(orderPrep.queuedAt)
     );
+  });
+}
+
+/** One row of the occupancy read-model (design §4). The raw signals (`hasOpenTab`, `pendingDeliveries`)
+ *  are exposed alongside the rolled-up `state` so the floor plan can render a richer badge. */
+export interface TableState {
+  id: string;
+  label: string;
+  zone: string | null;
+  capacity: number | null;
+  state: "free" | "open-tab" | "delivery-pending";
+  hasOpenTab: boolean;
+  tabId?: string;
+  tabLineCount?: number;
+  /** The open tab's gross draft total (sum of `line_total`), numeric(12,2) as text — present iff a tab. */
+  tabTotal?: string;
+  pendingDeliveries: number;
+}
+
+/**
+ * The venue's ACTIVE tables with their DERIVED occupancy (design §4). ONE location-scoped query: each
+ * table LEFT JOINs its at-most-one OPEN tab — the order its own `tab_id` back-pointer names, filtered to
+ * `status = 'open'` (a `tab_id` pointing at a settled/abandoned order finds nothing here and reads free,
+ * design §2b) — with a line count + gross total, plus a count of pending deliveries (orders with
+ * `delivery_table_id` = this table whose `order_prep` state is not yet `collected` and whose order is not
+ * `abandoned`). A non-prepped instant handover (no prep row, or collected) leaves no lingering occupancy.
+ *
+ * Precedence for the rolled-up `state`: open-tab dominates delivery-pending dominates free. Runs as the
+ * app role under the caller's tenant scope (RLS), so it gathers orders across NODES by construction (a
+ * table lives at the venue, not the register). `locationId` defaults to the till's own.
+ */
+export async function listTablesWithState(
+  tx: Transaction,
+  cfg: TillConfig,
+  locationId?: string,
+): Promise<TableState[]> {
+  const loc = locationId ?? cfg.locationId;
+  const result = await tx.execute<{
+    id: string;
+    label: string;
+    zone: string | null;
+    capacity: number | null;
+    tab_id: string | null;
+    tab_line_count: number;
+    tab_total: string | null;
+    pending_deliveries: number;
+  }>(sql`
+    select
+      dt.id, dt.label, dt.zone, dt.capacity,
+      tab.id as tab_id,
+      coalesce(tab.line_count, 0)::int as tab_line_count,
+      tab.tab_total,
+      coalesce(del.pending, 0)::int as pending_deliveries
+    from dining_tables dt
+    left join lateral (
+      select wo.id,
+             count(wol.id)::int as line_count,
+             coalesce(sum(wol.line_total), 0)::numeric(12, 2)::text as tab_total
+      from working_orders wo
+      left join working_order_lines wol
+        on wol.working_order_id = wo.id and wol.tenant_id = wo.tenant_id
+      where wo.tenant_id = dt.tenant_id and wo.id = dt.tab_id and wo.status = 'open'
+      group by wo.id
+    ) tab on true
+    left join lateral (
+      select count(*)::int as pending
+      from working_orders d
+      join order_prep op on op.tenant_id = d.tenant_id and op.working_order_id = d.id
+      where d.tenant_id = dt.tenant_id and d.delivery_table_id = dt.id
+        and d.status <> 'abandoned' and op.state <> 'collected'
+    ) del on true
+    where dt.location_id = ${loc} and dt.active = true
+    order by dt.label
+  `);
+
+  return result.rows.map((r) => {
+    const hasOpenTab = r.tab_id !== null;
+    const pendingDeliveries = Number(r.pending_deliveries);
+    const state: TableState["state"] = hasOpenTab
+      ? "open-tab"
+      : pendingDeliveries > 0
+        ? "delivery-pending"
+        : "free";
+    return {
+      id: r.id,
+      label: r.label,
+      zone: r.zone,
+      capacity: r.capacity,
+      state,
+      hasOpenTab,
+      pendingDeliveries,
+      ...(hasOpenTab
+        ? { tabId: r.tab_id!, tabLineCount: Number(r.tab_line_count), tabTotal: r.tab_total! }
+        : {}),
+    };
   });
 }

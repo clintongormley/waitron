@@ -37,7 +37,10 @@ describe("applyStatementFor emits the exact static statement per mode", () => {
       "insert into working_orders select * from jsonb_populate_record(null::working_orders, $1) " +
         "on conflict (id) do update set tenant_id = excluded.tenant_id, till_id = excluded.till_id, " +
         "node_id = excluded.node_id, order_number = excluded.order_number, label = excluded.label, " +
-        "status = excluded.status, opened_at = excluded.opened_at, settled_at = excluded.settled_at",
+        "status = excluded.status, opened_at = excluded.opened_at, settled_at = excluded.settled_at, " +
+        // delivery_table_id added to working_orders by table-service TS-1 (counter delivery-to-table);
+        // sync's generator derives the SET list from the schema's columns, so it replicates automatically.
+        "delivery_table_id = excluded.delivery_table_id",
     );
   });
 

@@ -342,6 +342,60 @@ declare module "@waitron/shared" {
      */
     "order_prep.invalid_transition": { workingOrderId: string };
     /**
+     * No such dining table for this tenant. `tableId` is a caller-supplied uuid the till already holds,
+     * not a secret — an id that matches nothing is unactionable if withheld (the rule `tenant.not_found`'s
+     * note gives). Qualified `tableId` to match the domain-record not_found family
+     * (`working_order.not_found`'s `workingOrderId`). `table.*` names the DOMAIN CONCEPT, never the
+     * throwing package (`tenant.not_found`'s note); destined for @waitron/tables if that package is ever
+     * extracted. An absent id, or another tenant's table (RLS hides it), both report THIS one code.
+     * (A DEACTIVATED table is a different fact — `table.inactive` below — surfaced only where openTab
+     * needs it; CRUD operates on a deactivated row by id regardless.)
+     */
+    "table.not_found": { tableId: string };
+    /**
+     * A dining table label already exists in this venue — the `(tenant_id, location_id, label)` unique
+     * (`dining_tables_location_label_key`) rejected the insert/update. `label` is the operator-supplied
+     * human id ("12", "Terraza 3"), not a secret, so echoing it is what makes the error actionable.
+     * `table.*`, not `server.*`, for the reason `tenant.not_found`'s note gives.
+     */
+    "table.label_taken": { label: string };
+    /**
+     * A dining table exists but is deactivated, so no tab may be opened on it. `tableId` is the
+     * caller-supplied uuid (not a secret). `table.*`, not `server.*`, for the reason `tenant.not_found`'s
+     * note gives. Distinct from `table.not_found` (which covers a foreign/absent table): this one says
+     * the table is real but closed for service. Mapped to 409 in the route layer.
+     */
+    "table.inactive": { tableId: string };
+    /**
+     * A table's `tab_id` already points at an OPEN working order, so a second tab may not be opened (at
+     * most one open tab per table, design §2b). `openTab` takes the `dining_tables` row `FOR UPDATE` and
+     * checks its `tab_id`; that per-table lock — there is NO partial-unique now — is the concurrency
+     * guard, so two concurrent openTabs serialise and the second surfaces THIS code. A stale `tab_id`
+     * (pointing at a settled/abandoned order) reads as free and is overwritten, so it does NOT trigger
+     * this. `tab.*` names the DOMAIN CONCEPT (the running tab), never the throwing package. `tableId` —
+     * the occupied table — is caller-supplied, not a secret. Mapped to 409 (the table's state forbids a
+     * new tab).
+     */
+    "tab.already_open": { tableId: string };
+    /**
+     * A working order a tab verb (`addTabRound`, `voidTabLine`) tried to modify is not an OPEN tab — it
+     * is not `open` (already settled/abandoned), no `dining_tables.tab_id` points at it (a walk-up or a
+     * counter delivery — a tab is an OPEN order a table points at, design §2b), or it names none (absent,
+     * or another tenant's, RLS-hidden). All report THIS one code, the fail-closed shape
+     * `working_order.not_open` uses for the held-order modify side. `tabId` — the caller-supplied uuid —
+     * is echoed and qualified to match the tab-verb vocabulary. `tab.*`, not `server.*`, for the reason
+     * `tenant.not_found`'s note gives. Mapped to 409 (the order's state forbids the tab edit).
+     */
+    "tab.not_open": { tabId: string };
+    /**
+     * A per-line void named no line on the OPEN tab — the `line_no` matches nothing on it (already
+     * voided, or never existed). Pre-fiscal: nothing is filed for an open tab, so a void is a plain
+     * delete with no fiscal record or amendment. `tabId` + `lineNo` are caller-supplied and echoed
+     * (neither a secret). `tab.*`, not `server.*`, for the reason `tenant.not_found`'s note gives.
+     * Mapped to 404 (the line named does not exist).
+     */
+    "tab.line_not_found": { tabId: string; lineNo: number };
+    /**
      * A request to a gated server API surface carried a body/query whose SHAPE is wrong: a field
      * absent (where it is required) or present with the wrong declared type — a malformed date, a
      * non-string, a bad enum member. Originally the management-dashboard surface (the gated staff
