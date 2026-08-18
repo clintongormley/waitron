@@ -380,13 +380,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   // Park a working order to pay later (park & retrieve, sub-project 7b). SESSION-GUARDED like the
   // sale routes: `requireSession` runs FIRST, and the guard — not the browser — supplies the
-  // attribution, so `operatorId` is `session.personId`. The client mints `body.id`, so a re-sent park
-  // collides on the primary key and rolls back rather than creating a second order — but that is NOT
-  // an idempotent replay: `parkOrder` does a plain INSERT, so the retry surfaces as a 23505 error, not
-  // the original result. (Idempotent replay applies to pay, `payWorkingOrder`, not park.) `parkOrder`
-  // re-reads the catalogue and prices authoritatively (the request carries no price), opening its OWN
-  // `withTenant`/`asAppUser` transaction, so it is called OUTSIDE any transaction here. Returns the
-  // persisted `{ id, orderNumber }`.
+  // attribution, so `operatorId` is `session.personId`. The client mints `body.id` and holds it stable
+  // across a retry, which makes park IDEMPOTENT: a re-sent park (a lost-response retry) PK-collides on
+  // the primary key, and `parkOrder` catches that 23505 and REPLAYS the existing open order's
+  // `{ id, orderNumber }` — the same idempotent-replay shape pay uses (`payWorkingOrder`) — so at most
+  // one order is ever parked for the id and the retry sees the original result (a colliding id whose row
+  // is no longer open re-throws the raw 23505). `parkOrder` re-reads the catalogue and prices
+  // authoritatively (the request carries no price), opening its OWN `withTenant`/`asAppUser` transaction,
+  // so it is called OUTSIDE any transaction here. Returns the persisted `{ id, orderNumber }`.
   app.post("/api/working-orders", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
@@ -397,8 +398,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }>();
       // The client MINTS `body.id` — it becomes the `working_orders.id` PK `createOpenOrder` INSERTs
       // (a `uuid` column), so un-screened a malformed one `22P02`s → an opaque 500, the same 7b exposure
-      // as the sale/pay bodies. (Distinct from the 23505 re-park idempotency follow-up: that is a
-      // VALID id colliding with an existing row; this is a malformed one refused before any INSERT.)
+      // as the sale/pay bodies. (Distinct from the 23505 re-park idempotency `parkOrder` now handles: that
+      // is a VALID id colliding with an existing open row, which REPLAYS; this is a malformed one refused
+      // before any INSERT.)
       requireUuidParam(body.id, "WorkingOrderId");
       const result = await parkOrder({ db: deps.db }, deps.cfg, {
         id: body.id,
