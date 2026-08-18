@@ -21,6 +21,11 @@ import "./errors.js";
 // show because it connects as a superuser (CLAUDE.md §4).
 const noopLog: Logger = () => {};
 
+// This node's origin id — threaded into every recipe write's withTenant (a recipe write UPDATEs the
+// sync-enrolled `products` table). This PGlite suite carries no sync triggers (CORE + IDENTITY
+// migrations only), so it is never read here; any valid uuid serves, kept for parity with production.
+const NODE_ID = "11111111-1111-4111-8111-111111111111";
+
 let tenantId: string;
 let managerCookie: string;
 let staffCookie: string;
@@ -70,7 +75,7 @@ const suite = usePgliteDb({
 
 function mountApp(): Hono {
   const app = new Hono();
-  mountRecipeApi(app, { db: suite.db, cfg: { tenantId } }, noopLog);
+  mountRecipeApi(app, { db: suite.db, cfg: { tenantId, nodeId: NODE_ID } }, noopLog);
   return app;
 }
 
@@ -237,6 +242,20 @@ describe("mountRecipeApi", () => {
   it("rejects a PUT recipe with non-array ingredientIds → 400 { field: ingredientIds }", async () => {
     const res = await send(mountApp(), "PUT", `/management-api/products/${productId}/recipe`, {
       body: { ingredientIds: "i1" },
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "ingredientIds" } },
+    });
+  });
+
+  it("rejects a PUT recipe with a malformed (non-uuid) ingredientId element → 400, not an opaque 500", async () => {
+    // A well-formed array of strings passed the shape check but reached `recipe_lines.ingredient_id`
+    // (a uuid column) as a bound param → 22P02 → a non-AppError → an opaque `server.internal` 500.
+    // Screening each element as a UUID up front makes it the clean 400 the boundary convention mandates.
+    const res = await send(mountApp(), "PUT", `/management-api/products/${productId}/recipe`, {
+      body: { ingredientIds: ["not-a-uuid"] },
       cookie: managerCookie,
     });
     expect(res.status).toBe(400);

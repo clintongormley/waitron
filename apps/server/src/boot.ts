@@ -347,12 +347,12 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // feeding the headless modelo 303 IVA-deducible reporting.
   mountPurchasingApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
   // The dashboard's gated recipe-authoring surface (ingredient CRUD + product-recipe get/set) on the
-  // SAME app, the identical convention. Reuses the EXACT `db` and tenant `mountCatalogueApi` above
-  // receives (`till.tenantId`, this venue's one tenant); no fiscal backend, clock, card provider or
-  // media store — these routes touch only the ingredient + recipe tables via the headless
-  // `@waitron/recipes` ops. Routes only — no database work at boot; the `recipe.manage` gate runs per
-  // request.
-  mountRecipeApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
+  // SAME app, the identical convention. Reuses the EXACT `db`, tenant and `nodeId` `mountCatalogueApi`
+  // above receives (`till.tenantId`/`till.nodeId`, this venue's one tenant + this node) — a recipe write
+  // UPDATEs the sync-enrolled `products` table (via applyRecipeDerivation), so it threads `nodeId` for
+  // the same origin-attribution reason catalogue does. No fiscal backend, clock, card provider or media
+  // store. Routes only — no database work at boot; the `recipe.manage` gate runs per request.
+  mountRecipeApi(app, { db, cfg: { tenantId: till.tenantId, nodeId: till.nodeId } }, log);
   // The dashboard's gated shift-planning surface (roster authoring + publish) on the SAME app, the
   // identical convention. Reuses the EXACT db + tenant (till.tenantId, this venue's one tenant); no
   // fiscal backend, clock, card provider or media store — these routes touch only roster_versions /

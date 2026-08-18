@@ -29,6 +29,12 @@ const suite = useRealPostgres({
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
+// This node's origin id — threaded into every recipe write's withTenant (a recipe write UPDATEs the
+// sync-enrolled `products` table). This suite proves RLS isolation + the gate, not origin attribution
+// (that is `sync-origin.rls.test.ts`), so any valid uuid serves; it must be a uuid for the products
+// capture's app.node_id cast under the real sync triggers.
+const NODE_ID = "11111111-1111-4111-8111-111111111111";
+
 // Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
 // so each provisioned venue needs its own NIF — the same per-suite counter the sibling RLS suites use.
 let nifCounter = 0;
@@ -131,7 +137,7 @@ async function setupVenue(): Promise<Venue> {
  * routes need their own app (mirrors `purchasing-api.rls.test.ts`). */
 function mountApp(tenantId: string): Hono {
   const app = new Hono();
-  mountRecipeApi(app, { db: suite.admin, cfg: { tenantId } }, noopLog);
+  mountRecipeApi(app, { db: suite.admin, cfg: { tenantId, nodeId: NODE_ID } }, noopLog);
   return app;
 }
 

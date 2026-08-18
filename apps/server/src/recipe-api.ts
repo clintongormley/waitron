@@ -22,20 +22,25 @@ import type { ProductAllergens } from "@waitron/catalogue";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "./error-boundary.js";
 import { requireManagementSession } from "./management-session.js";
-import { requireUuidParam } from "./request-screens.js";
+import { requireBodyUuid, requireUuidParam } from "./request-screens.js";
 import type { Logger } from "./logger.js";
 
 /**
  * Everything the dashboard's recipe-authoring routes need: `db` + this venue's own `cfg.tenantId`
- * scope every `withTenant` below, so RLS confines each read/write to this server's one tenant. No
- * `nodeId` (unlike `CatalogueApiDeps`): the ingredient/recipe tables carry no sync-capture trigger
- * wiring in this surface, so there is no `sync_log.origin_id` to attribute here. No card provider,
- * clock or media store either — these routes touch only the ingredient + recipe tables via the
- * headless `@waitron/recipes` ops.
+ * scope every `withTenant` below, so RLS confines each read/write to this server's one tenant.
+ * `cfg.nodeId` is this node's origin id, threaded into every write's `withTenant` exactly as
+ * `CatalogueApiDeps` does. The `ingredients`/`recipe_lines` tables themselves carry no sync-capture
+ * trigger, but a recipe write UPDATEs `products` — `setProductRecipe` → `recomputeProductAllergens` →
+ * `applyRecipeDerivation`, and a PATCH's allergen change fans out the same recompute over every product
+ * that uses the ingredient — and `products` IS sync-enrolled (`products_capture`,
+ * packages/sync/drizzle/0000_sync_outbox.sql:196). Without `nodeId`, that capture would record the
+ * all-zero sentinel instead of this node (guarded by `sync-origin.rls.test.ts`). No card provider,
+ * clock or media store either — these routes touch only the ingredient + recipe + product tables via
+ * the headless `@waitron/recipes` ops.
  */
 export interface RecipeApiDeps {
   db: Database;
-  cfg: { tenantId: string };
+  cfg: { tenantId: string; nodeId: string };
 }
 
 /**
@@ -82,14 +87,19 @@ export function mountRecipeApi(app: Hono, deps: RecipeApiDeps, log: Logger): voi
   // RECIPE_WRITE_PERMISSION, then run `fn`. Every route funnels its DB work through here so the gate is
   // applied identically and in exactly one place — the catalogue §3 seam.
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
-      await asAppUser(tx);
-      await authorizeManager(tx, {
-        managementSessionId: sessionId,
-        permission: RECIPE_WRITE_PERMISSION,
-      });
-      return fn(tx);
-    });
+    withTenant(
+      deps.db,
+      deps.cfg.tenantId,
+      async (tx) => {
+        await asAppUser(tx);
+        await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: RECIPE_WRITE_PERMISSION,
+        });
+        return fn(tx);
+      },
+      { nodeId: deps.cfg.nodeId },
+    );
 
   // ── List ingredients ───────────────────────────────────────────────────────────────────────────
   app.get("/management-api/ingredients", (c) =>
@@ -170,13 +180,14 @@ export function mountRecipeApi(app: Hono, deps: RecipeApiDeps, log: Logger): voi
       const sessionId = requireManagementSession(c);
       const productId = requireUuidParam(c.req.param("id"), "ProductId");
       const body = (await c.req.json<{ ingredientIds?: unknown }>()) ?? {};
-      if (
-        !Array.isArray(body.ingredientIds) ||
-        !body.ingredientIds.every((x) => typeof x === "string")
-      ) {
+      if (!Array.isArray(body.ingredientIds)) {
         throw new AppError("management.request_invalid", { field: "ingredientIds" });
       }
-      const ingredientIds = body.ingredientIds as string[];
+      // Screen each element as a UUID up front: a well-formed array of arbitrary strings would otherwise
+      // reach `recipe_lines.ingredient_id` (a uuid column) as a bound param → 22P02 → an opaque 500.
+      // `requireBodyUuid` maps a malformed element to `management.request_invalid { field }` (a valid but
+      // nonexistent id is the separate FK case — `recipe.*_not_found` is deferred by the spec §8).
+      const ingredientIds = body.ingredientIds.map((x) => requireBodyUuid(x, "ingredientIds"));
       await gated(sessionId, (tx) => setProductRecipe(tx, productId, ingredientIds));
       return c.body(null, 204);
     }),

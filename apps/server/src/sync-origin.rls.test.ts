@@ -9,6 +9,8 @@ import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { recordIncidentOnce } from "@waitron/core";
+import { createCatalogue, createProduct } from "@waitron/catalogue";
+import { createIngredient } from "@waitron/recipes";
 import { decimal, tenantId as brandTenantId } from "@waitron/shared";
 import {
   DEFAULT_SETTLEMENT_LAG_MS,
@@ -19,6 +21,7 @@ import {
 } from "@waitron/payments";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
+import { mountRecipeApi } from "./recipe-api.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
 import { startRealPostgres } from "./testing/postgres.js";
 
@@ -168,6 +171,65 @@ async function paymentUpdateOrigin(tenantId: string): Promise<string | null> {
   return r.rows[0]?.v ?? null;
 }
 
+/** The origin_id captured for this tenant's most recent `products` UPDATE — a recipe write UPDATEs
+ * `products` (the enrolled table) via applyRecipeDerivation, so op=update, not the seed's op=insert. */
+async function productUpdateOrigin(tenantId: string): Promise<string | null> {
+  const r = await suite.admin.execute<{ v: string | null }>(
+    sql`select origin_id::text as v from sync_log
+        where table_name = 'products' and op = 'update' and tenant_id = ${tenantId}
+        order by seq desc limit 1`,
+  );
+  return r.rows[0]?.v ?? null;
+}
+
+/** Mounts the recipe API for one tenant under a given producing node id. */
+function mountRecipeApp(tenantId: string, nodeId: string): Hono {
+  const app = new Hono();
+  mountRecipeApi(app, { db: suite.admin, cfg: { tenantId, nodeId } }, noopLog);
+  return app;
+}
+
+/** Seed a catalogue + product + ingredient on a tenant (as the app role) so a recipe PUT has something
+ * to compose. The seed's own INSERTs capture op=insert (origin all-zero, no node id supplied) — the
+ * test reads the recipe write's products op=update. */
+async function seedProductAndIngredient(
+  tenantId: string,
+): Promise<{ productId: string; ingredientId: string }> {
+  return withTenant(suite.admin, tenantId, async (tx) => {
+    await asAppUser(tx);
+    const cat = await createCatalogue(tx, { name: "Carta" });
+    const product = await createProduct(tx, {
+      catalogueId: cat.id,
+      categoryId: null,
+      descriptions: { es: "plato" },
+      pricingUnit: "each",
+      unitPrice: "3.00",
+      vatClass: "general",
+    });
+    const ingredient = await createIngredient(tx, {
+      name: "harina",
+      allergens: { gluten: { presence: "contains" } },
+    });
+    return { productId: product.id, ingredientId: ingredient.id };
+  });
+}
+
+/** PUT a product's recipe via the manager cookie, asserting 204 — the products UPDATE it drives is read
+ * back separately. */
+async function putRecipe(
+  app: Hono,
+  cookie: string,
+  productId: string,
+  ingredientIds: string[],
+): Promise<void> {
+  const res = await app.request(`/management-api/products/${productId}/recipe`, {
+    method: "PUT",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ ingredientIds }),
+  });
+  expect(res.status).toBe(204);
+}
+
 /** Seed the auto-reversible-orphan fixture on a fresh venue: an abandoned working order carrying one
  * captured payment with no sale. The insert itself captures a `payments` op=insert (origin all-zero,
  * no node id supplied) — the test reads op=update only. Returns the tenant id. */
@@ -259,5 +321,26 @@ describe("sync origin attribution through the real API call sites (fix B)", () =
     );
     expect(zeroResult.remediated).toBe(1);
     expect(await paymentUpdateOrigin(zeroTenant)).toBe(ZERO);
+  });
+
+  it("a recipe write captures sync_log.origin_id = cfg.nodeId on the products UPDATE (all-zero without the fix)", async () => {
+    // The recipe surface writes no enrolled table DIRECTLY (ingredients / recipe_lines carry no capture
+    // trigger), but setProductRecipe → recomputeProductAllergens → applyRecipeDerivation UPDATEs
+    // `products`, which IS enrolled (products_capture, sync/drizzle/0000_sync_outbox.sql:196). Guard-by-
+    // deletion: with the fix, recipe-api's `gated` threads { nodeId: cfg.nodeId } into withTenant, so that
+    // UPDATE captures NODE_C. Drop the 4th arg and app.node_id is unset → capture falls back to all-zero.
+    const venue = await setupVenue();
+    const seed = await seedProductAndIngredient(venue.tenantId);
+    const app = mountRecipeApp(venue.tenantId, NODE_C);
+    await putRecipe(app, venue.managerCookie, seed.productId, [seed.ingredientId]);
+    expect(await productUpdateOrigin(venue.tenantId)).toBe(NODE_C);
+
+    // Control (the two directions visibly differ, CLAUDE.md §1): the SAME path under the all-zero node
+    // id captures the all-zero origin — so the captured origin tracks cfg.nodeId, not a constant.
+    const zeroVenue = await setupVenue();
+    const zeroSeed = await seedProductAndIngredient(zeroVenue.tenantId);
+    const zeroApp = mountRecipeApp(zeroVenue.tenantId, ZERO);
+    await putRecipe(zeroApp, zeroVenue.managerCookie, zeroSeed.productId, [zeroSeed.ingredientId]);
+    expect(await productUpdateOrigin(zeroVenue.tenantId)).toBe(ZERO);
   });
 });
