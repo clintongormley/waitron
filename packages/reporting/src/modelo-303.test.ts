@@ -15,7 +15,7 @@ function vatReturn(over: Partial<VatReturn> = {}): VatReturn {
   return {
     tenantId: TENANT,
     year: 2026,
-    month: 8,
+    period: { kind: "month", month: 8 },
     byRate: [],
     baseTotal: d("0.00"),
     taxTotal: d("0.00"),

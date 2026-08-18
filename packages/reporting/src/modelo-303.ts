@@ -139,5 +139,18 @@ export function mapModelo303(vatReturn: VatReturn): Modelo303 {
   // simplificado, DP30302) and the DID/domiciliación sheet were NOT, so "any página" would overstate
   // the evidence. It is therefore deliberately NOT emitted — no longer a TODO.
 
-  return { tenantId: vatReturn.tenantId, year: vatReturn.year, month: vatReturn.month, boxes };
+  // Task 1b bridge: `Modelo303` still carries a monthly `month: number` until Task 1f threads the
+  // `LiquidationPeriod` through it (and Task 1g makes the DR303 writer period-aware). Every caller of
+  // `mapModelo303` today hands it a monthly `VatReturn` — the quarterly/annual callers and the
+  // download route arrive in later slices — so narrow to the month here and fail loud otherwise. Task
+  // 1f replaces this whole block with `period: vatReturn.period`.
+  const { period } = vatReturn;
+  /* v8 ignore start -- unreachable today: no caller passes a non-monthly period; removed in Task 1f */
+  if (period.kind !== "month") {
+    throw new Error(
+      `reporting: mapModelo303 currently maps only a monthly liquidation period (got ${period.kind}); quarterly/annual arrive in a later slice`,
+    );
+  }
+  /* v8 ignore stop */
+  return { tenantId: vatReturn.tenantId, year: vatReturn.year, month: period.month, boxes };
 }

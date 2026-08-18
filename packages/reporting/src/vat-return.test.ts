@@ -30,7 +30,11 @@ function run(opts: { year: number; month: number; tenantId?: TenantId }): Promis
   const tenantId = opts.tenantId ?? venue.tenantId;
   return withTenant(suite.db, tenantId, async (tx) => {
     await asAppUser(tx);
-    return computeVatReturn(tx, { tenantId, year: opts.year, month: opts.month });
+    return computeVatReturn(tx, {
+      tenantId,
+      year: opts.year,
+      period: { kind: "month", month: opts.month },
+    });
   });
 }
 
@@ -73,7 +77,7 @@ describe("computeVatReturn", () => {
     expect(ret).toMatchObject({
       tenantId: venue.tenantId,
       year: 2026,
-      month: 8,
+      period: { kind: "month", month: 8 },
       baseTotal: "250.00",
       taxTotal: "46.99",
     });
@@ -240,7 +244,7 @@ describe("computeVatReturn", () => {
     expect(await run({ year: 2026, month: 3 })).toEqual({
       tenantId: venue.tenantId,
       year: 2026,
-      month: 3,
+      period: { kind: "month", month: 3 },
       byRate: [],
       baseTotal: "0.00",
       taxTotal: "0.00",

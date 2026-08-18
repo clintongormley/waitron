@@ -1,4 +1,5 @@
 import type { Decimal, NodeId, TenantId, TillId } from "@waitron/shared";
+import type { LiquidationPeriod } from "./period.js";
 
 /** A tender method, mirroring `tender_method` in packages/db/src/schema/sales.ts. */
 export type TenderMethod = "cash" | "card" | "voucher" | "transfer" | "other";
@@ -33,8 +34,8 @@ export interface VatReturnInput {
   tenantId: TenantId;
   /** Civil calendar year of the liquidation period, e.g. 2026 (must be an integer). */
   year: number;
-  /** Civil calendar month of the liquidation period, 1..12. */
-  month: number;
+  /** The liquidation period (month/quarter/year). */
+  period: LiquidationPeriod;
 }
 
 /** What an input-VAT line was spent on (mirrors the `purchase_vat_kind` enum): `ordinary` =
@@ -63,13 +64,15 @@ export interface InputVatSummary {
 export interface InputVatReturn extends InputVatSummary {
   tenantId: TenantId;
   year: number;
-  month: number;
+  /** The liquidation period (month/quarter/year). */
+  period: LiquidationPeriod;
 }
 
 export interface VatReturn {
   tenantId: TenantId;
   year: number;
-  month: number;
+  /** The liquidation period (month/quarter/year). */
+  period: LiquidationPeriod;
   /** Régimen-general IVA devengado per rate {rate, base, tax}, corrections netted (the output side). */
   byRate: VatRateLine[];
   /** Σ base imponible devengada. */
