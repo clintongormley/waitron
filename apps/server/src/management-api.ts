@@ -30,6 +30,7 @@ import {
   type PersonRoleValue,
 } from "@waitron/identity";
 import { getLayout, putLayout, putReceipt } from "@waitron/layouts";
+import { createStatus, deactivateStatus, listStatuses, updateStatus } from "./tables.js";
 import { createErrorBoundary } from "./error-boundary.js";
 import {
   clearManagementCookie,
@@ -131,6 +132,13 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "layout.invalid": 400,
   "receipt.invalid": 400,
   "shared.invalid_id": 400,
+  // Service-status config CRUD (TS-2). An unknown status id (or a malformed one screened to it at the
+  // PATCH/DELETE routes) names no status → 404 (`status.not_found`); a duplicate label collides on the
+  // `(tenant, label)` unique → 409 (`status.label_taken`), the same conflict shape a taken table label
+  // has on the till surface. (`status.inactive` is a till-surface set-time fault, not reachable on this
+  // config surface, so it is deliberately absent here.)
+  "status.not_found": 404,
+  "status.label_taken": 409,
 };
 
 // The one error boundary every management route wraps its handler in — the shared
@@ -512,6 +520,153 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           managementSessionId: sessionId,
           tenantId: deps.cfg.tenantId,
           receipt,
+        });
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  // ── Service-status configuration (TS-2) ──────────────────────────────────────────────────────────
+  // The dashboard's service-status editor surface (design §3a), mirroring the layout/receipt routes
+  // above. All four are gated (`requireManagementSession` first, 401 before any DB work); each verb's
+  // own `authorizeManager(..., "till.configure")` enforces the write gate under RLS.
+
+  // Create a status. Body { label, color, displayOrder? }; a bad shape → management.request_invalid
+  // naming the FIELD; a duplicate label → status.label_taken (409); a bad color → request_invalid.
+  app.post("/management-api/service-statuses", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body =
+        (await c.req.json<{ label?: unknown; color?: unknown; displayOrder?: unknown }>()) ?? {};
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        throw new AppError("management.request_invalid", { field: "body" });
+      }
+      if (typeof body.label !== "string")
+        throw new AppError("management.request_invalid", { field: "label" });
+      if (typeof body.color !== "string")
+        throw new AppError("management.request_invalid", { field: "color" });
+      const displayOrder = body.displayOrder === undefined ? undefined : Number(body.displayOrder);
+      if (displayOrder !== undefined && !Number.isInteger(displayOrder)) {
+        throw new AppError("management.request_invalid", { field: "displayOrder" });
+      }
+      // Bind the validated fields to locals: the `typeof` guards narrow `body.label`/`body.color` to
+      // `string` HERE, but that narrowing does not survive into the `withTenant` closure (TS resets a
+      // captured property to its declared type), so the closure reads these — the login/create-person
+      // pattern above.
+      const { label, color } = body;
+      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return createStatus(tx, {
+          managementSessionId: sessionId,
+          tenantId: deps.cfg.tenantId,
+          label,
+          color,
+          displayOrder,
+        });
+      });
+      return c.json(result);
+    }),
+  );
+
+  // The whole status set (active + inactive), for the editor. Gated on till.configure via listStatuses.
+  app.get("/management-api/service-statuses", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const statuses = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return listStatuses(tx, { managementSessionId: sessionId, tenantId: deps.cfg.tenantId });
+      });
+      return c.json(statuses);
+    }),
+  );
+
+  // Edit a status (label/color/displayOrder/active — any subset). Malformed :id → status.not_found (a
+  // bad id names no status), not a 500. A present field with the wrong type → management.request_invalid.
+  app.patch("/management-api/service-statuses/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("status.not_found", { statusId: id });
+      const body =
+        (await c.req.json<{
+          label?: unknown;
+          color?: unknown;
+          displayOrder?: unknown;
+          active?: unknown;
+        }>()) ?? {};
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        throw new AppError("management.request_invalid", { field: "body" });
+      }
+      const patch: {
+        managementSessionId: string;
+        tenantId: string;
+        id: string;
+        label?: string;
+        color?: string;
+        displayOrder?: number;
+        active?: boolean;
+      } = {
+        managementSessionId: sessionId,
+        tenantId: deps.cfg.tenantId,
+        id,
+      };
+      if (body.label !== undefined) {
+        if (typeof body.label !== "string")
+          throw new AppError("management.request_invalid", { field: "label" });
+        patch.label = body.label;
+      }
+      if (body.color !== undefined) {
+        if (typeof body.color !== "string")
+          throw new AppError("management.request_invalid", { field: "color" });
+        patch.color = body.color;
+      }
+      if (body.displayOrder !== undefined) {
+        const d = Number(body.displayOrder);
+        if (!Number.isInteger(d))
+          throw new AppError("management.request_invalid", { field: "displayOrder" });
+        patch.displayOrder = d;
+      }
+      if (body.active !== undefined) {
+        if (typeof body.active !== "boolean")
+          throw new AppError("management.request_invalid", { field: "active" });
+        patch.active = body.active;
+      }
+      // A patch carrying no mutable field is a no-op — the SAME shape the staff PATCH route treats an
+      // empty/`null` body as (`PATCH /management-api/staff/:id` → 204, no write). Return 204 WITHOUT
+      // touching the DB rather than reaching `updateStatus`'s `.set()` with an empty object, which
+      // Drizzle rejects ("No values to set") — a non-AppError the boundary would turn into an opaque
+      // 500. A `null`/`{}` body coerces to `{}` above (`?? {}`), so this is where a degenerate PATCH
+      // body maps to a clean 204 rather than a 500, the same null-body discipline the sibling
+      // layout/receipt PUT routes follow.
+      if (
+        patch.label === undefined &&
+        patch.color === undefined &&
+        patch.displayOrder === undefined &&
+        patch.active === undefined
+      ) {
+        return c.body(null, 204);
+      }
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await updateStatus(tx, patch);
+      });
+      return c.body(null, 204);
+    }),
+  );
+
+  // Deactivate a status (DELETE = deactivate; app_user holds no hard DELETE). Malformed :id →
+  // status.not_found.
+  app.delete("/management-api/service-statuses/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("status.not_found", { statusId: id });
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await deactivateStatus(tx, {
+          managementSessionId: sessionId,
+          tenantId: deps.cfg.tenantId,
+          id,
         });
       });
       return c.body(null, 204);
