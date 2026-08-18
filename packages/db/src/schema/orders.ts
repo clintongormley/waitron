@@ -87,6 +87,12 @@ export const workingOrders = pgTable(
     status: workingOrderStatus("status").notNull().default("open"),
     openedAt: timestamp("opened_at", { withTimezone: true, mode: "string" }).notNull().defaultNow(),
     settledAt: timestamp("settled_at", { withTimezone: true, mode: "string" }),
+    // Set ⇒ this (counter) order is DELIVERED TO that table, not a tab (design §2b). Nullable; a tab is
+    // the reverse link (`dining_tables.tab_id` points at the order), so `working_orders` carries NO
+    // tab-membership column — only this delivery link. BARE column: its tenant-consistent composite FK
+    // (tenant_id, delivery_table_id) → dining_tables(tenant_id, id) is hand-written in the mutual-FK
+    // migration (the schema-module import cycle a `foreignKey()` here would close — see dining-tables.ts).
+    deliveryTableId: uuid("delivery_table_id"),
   },
   (t) => [
     unique("working_orders_tenant_id_key").on(t.tenantId, t.id),
