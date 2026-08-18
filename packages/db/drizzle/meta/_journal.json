@@ -302,6 +302,20 @@
       "when": 1786882378586,
       "tag": "0042_purchase_invoices_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1787038023943,
+      "tag": "0043_dining_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1787038049363,
+      "tag": "0044_dining_tables_rls",
+      "breakpoints": true
     }
   ]
 }

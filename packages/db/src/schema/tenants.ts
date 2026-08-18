@@ -110,6 +110,10 @@ export const locations = pgTable(
     // therefore be accepted — verified on PostgreSQL 18.4. cardinality('{}')
     // is 0 and the constraint bites.
     check("locations_invoice_locales_len", sql`cardinality(${t.invoiceLocales}) between 1 and 2`),
+    // Composite (tenant_id, id) UNIQUE — the target for dining_tables_location_fk's tenant-consistent
+    // (tenant_id, location_id) FK (dining-tables.ts), the same role tills_tenant_id_key plays for
+    // order_amendments_till_fk. A single-column-PK table takes the extra unique the way tills/nodes do.
+    unique("locations_tenant_id_key").on(t.tenantId, t.id),
     index("locations_tenant_id_idx").on(t.tenantId),
   ],
 ).enableRLS();

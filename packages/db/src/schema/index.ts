@@ -9,6 +9,7 @@ export * from "./series.js";
 export * from "./orders.js";
 export * from "./order-amendments.js";
 export * from "./order-prep.js";
+export * from "./dining-tables.js";
 export * from "./catalogue.js";
 export * from "./recipes.js";
 export * from "./purchase-invoices.js";
