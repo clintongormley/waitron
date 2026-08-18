@@ -314,3 +314,73 @@ describe("computeVatReturn — quarterly", () => {
     expect(q1.result).toBe("51.20");
   });
 });
+
+describe("computeVatReturn — annual + period boundaries", () => {
+  it("the annual period sums the whole civil year and excludes adjacent years", async () => {
+    // Four 21% sales at the civil-year edges: the two 2026 ones are in, the 2025/2027 ones out. The
+    // year filter is the half-open [2026-01-01, 2027-01-01) in periodDateFilter. Offset 0 → filed date
+    // is the UTC calendar date.
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-01-01T12:00:00Z",
+      total: "121.00",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+      vatBreakdown: [{ rate: "21.00", base: "100.00", tax: "21.00" }],
+    });
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: "2026-12-31T12:00:00Z",
+      total: "121.00",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+      vatBreakdown: [{ rate: "21.00", base: "100.00", tax: "21.00" }],
+    });
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 3,
+      issuedAt: "2027-01-01T12:00:00Z", // next year — excluded
+      total: "1208.79",
+      lines: [{ vatRate: "21.00", lineTotal: "999.00" }],
+      vatBreakdown: [{ rate: "21.00", base: "999.00", tax: "209.79" }],
+    });
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 4,
+      issuedAt: "2025-12-31T12:00:00Z", // prior year — excluded
+      total: "1208.79",
+      lines: [{ vatRate: "21.00", lineTotal: "999.00" }],
+      vatBreakdown: [{ rate: "21.00", base: "999.00", tax: "209.79" }],
+    });
+    const y = await runPeriod({ kind: "year" });
+    expect(y.period).toEqual({ kind: "year" });
+    expect(y.taxTotal).toBe("42.00"); // only the two 2026 sales; 2025/2027 excluded
+  });
+
+  // Proven by deletion of periodDateFilter's quarter UPPER bound (`interval '3 months'`). Widening it
+  // to `interval '4 months'` makes Q1 = [2026-01-01, 2026-05-01), so 2026-04-01 leaks into Q1 and the
+  // assertion below (q1.taxTotal) goes RED at 42.00; restoring '3 months' returns it to GREEN.
+  //   RED (mutated to '4 months'), `pnpm --filter @waitron/reporting test vat-return`:
+  //     FAIL  src/vat-return.test.ts > computeVatReturn — annual + period boundaries >
+  //       the Q1/Q2 boundary buckets 31 Mar into Q1 and 1 Apr into Q2
+  //     AssertionError: expected '42.00' to be '21.00' // Object.is equality
+  //       - Expected "21.00"  + Received "42.00"
+  //     Test Files  1 failed | 1 passed (2) ; Tests  1 failed | 15 passed (16)
+  //   GREEN (restored to '3 months'): Test Files  2 passed (2) ; Tests  16 passed (16)
+  it("the Q1/Q2 boundary buckets 31 Mar into Q1 and 1 Apr into Q2", async () => {
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-03-31T12:00:00Z",
+      total: "121.00",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+      vatBreakdown: [{ rate: "21.00", base: "100.00", tax: "21.00" }],
+    });
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: "2026-04-01T12:00:00Z",
+      total: "121.00",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+      vatBreakdown: [{ rate: "21.00", base: "100.00", tax: "21.00" }],
+    });
+    const q1 = await runPeriod({ kind: "quarter", quarter: 1 });
+    const q2 = await runPeriod({ kind: "quarter", quarter: 2 });
+    expect(q1.taxTotal).toBe("21.00"); // 31 Mar only — 1 Apr belongs to Q2
+    expect(q2.taxTotal).toBe("21.00"); // 1 Apr only — 31 Mar belongs to Q1
+  });
+});
