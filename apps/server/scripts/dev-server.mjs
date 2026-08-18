@@ -26,14 +26,20 @@ if (!existsSync(join(pkgRoot, ".env"))) {
   process.exit(1);
 }
 
-// Assemble the migration sets the from-source boot migration needs (see the header).
-const copy = spawnSync(process.execPath, [join(here, "copy-migrations.mjs")], { stdio: "inherit" });
-if (copy.status !== 0) process.exit(copy.status ?? 1);
+// Respect a WAITRON_MIGRATIONS_DIR a developer already exported (they own the migrations root then);
+// otherwise assemble the sets the from-source boot migration needs (see the header) and point at them.
+let migrationsDir = process.env.WAITRON_MIGRATIONS_DIR;
+if (!migrationsDir) {
+  const copy = spawnSync(process.execPath, [join(here, "copy-migrations.mjs")], {
+    stdio: "inherit",
+  });
+  if (copy.status !== 0) process.exit(copy.status ?? 1);
+  migrationsDir = join(pkgRoot, "dist", "drizzle");
+}
 
-const server = spawn("tsx watch --env-file=.env src/bin.ts", {
+const server = spawn("tsx", ["watch", "--env-file=.env", "src/bin.ts"], {
   cwd: pkgRoot,
   stdio: "inherit",
-  shell: true,
-  env: { ...process.env, WAITRON_MIGRATIONS_DIR: join(pkgRoot, "dist", "drizzle") },
+  env: { ...process.env, WAITRON_MIGRATIONS_DIR: migrationsDir },
 });
 server.on("exit", (code) => process.exit(code ?? 0));

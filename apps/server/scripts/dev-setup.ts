@@ -102,17 +102,12 @@ export interface DevSetupOptions {
   /** `--reset`: delete the `.env` first, forcing a fresh provision (volume wipe is the real reset). */
   reset?: boolean;
   log?: (line: string) => void;
-  /** Readiness-poll knobs (defaults sized for `docker compose up -d db`). */
-  waitAttempts?: number;
-  waitDelayMs?: number;
 }
 
 export interface DevSetupResult {
   /** True when an already-provisioned venue was reused (no new fiscal chain). */
   reused: boolean;
   env: DevEnv;
-  cashierPin: string;
-  adminPin: string;
 }
 
 /** True once every env-contract key is present and non-empty in a parsed `.env`. */
@@ -123,13 +118,13 @@ function isCompleteDevEnv(rec: Record<string, string>): rec is Record<string, st
   });
 }
 
-/** Poll until Postgres accepts a connection — `docker compose up -d db` returns before it is ready. */
-async function waitForPostgres(
-  uri: string,
-  attempts: number,
-  delayMs: number,
-  log: (line: string) => void,
-): Promise<void> {
+/** Poll until Postgres accepts a connection. The root `dev:setup`/`dev:reset` scripts already pass
+ * `docker compose up -d --wait db` (so Docker blocks on the healthcheck), but a direct
+ * `pnpm --filter @waitron/server dev:setup` skips that gate, so this is the readiness net for the
+ * standalone path — one immediate connect on the warm path. */
+async function waitForPostgres(uri: string, log: (line: string) => void): Promise<void> {
+  const attempts = 60;
+  const delayMs = 1000;
   for (let i = 1; i <= attempts; i++) {
     const client = new pg.Client({ connectionString: uri });
     try {
@@ -152,18 +147,30 @@ async function waitForPostgres(
 }
 
 /**
- * Whether the database `uri` names already holds a venue (a `tenants` row). A missing `tenants`
- * table (an unmigrated database beside a stale `.env`) is NOT a venue — the query throws and this
- * returns false, so the caller provisions fresh rather than treating the stale `.env` as live.
+ * Whether the database `uri` names still holds the SPECIFIC tenant the `.env` was written for — not
+ * merely "some tenant" — so a `.env` whose ids have gone stale against the database is re-provisioned
+ * rather than handed to boot as ids that will not resolve.
+ *
+ * A missing `tenants` table (an unmigrated database beside a stale `.env` — e.g. a wiped volume) is
+ * "no venue to reuse", so `42P01 undefined_table` returns false and the caller provisions fresh. Any
+ * OTHER failure (a permission error, a connection blip after `waitForPostgres` already succeeded)
+ * must NOT be read as "no venue": that would route a database already holding a chain into a spurious
+ * re-provision — a second SIF, a second hash chain (CLAUDE.md §5). Those fail loud.
  */
-async function hasVenue(uri: string): Promise<boolean> {
+async function venueExists(uri: string, tenantId: string): Promise<boolean> {
   const client = new pg.Client({ connectionString: uri });
   try {
     await client.connect();
-    const { rows } = await client.query<{ n: number }>("select count(*)::int as n from tenants");
-    return (rows[0]?.n ?? 0) > 0;
-  } catch {
-    return false;
+    const { rows } = await client.query<{ present: boolean }>(
+      "select exists(select 1 from tenants where id = $1) as present",
+      [tenantId],
+    );
+    return rows[0]?.present ?? false;
+  } catch (error) {
+    if (error !== null && typeof error === "object" && "code" in error && error.code === "42P01") {
+      return false;
+    }
+    throw error;
   } finally {
     await client.end().catch(() => {});
   }
@@ -257,14 +264,7 @@ async function provisionVenue(db: Database): Promise<{
  * manifest, provisions one preproduction venue, seeds it, and writes the `.env`.
  */
 export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
-  const {
-    databaseUrl,
-    envPath,
-    reset = false,
-    log = () => {},
-    waitAttempts = 60,
-    waitDelayMs = 1000,
-  } = opts;
+  const { databaseUrl, envPath, reset = false, log = () => {} } = opts;
 
   // `--reset`: drop the `.env` first so the reuse guard can't match. The real data reset is the
   // caller's `docker compose down -v` (throwaway preproduction volume); this only clears the ids.
@@ -273,14 +273,17 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
     log("dev-setup: removed existing .env (--reset)");
   }
 
-  await waitForPostgres(databaseUrl, waitAttempts, waitDelayMs, log);
+  await waitForPostgres(databaseUrl, log);
 
-  // Reuse guard (fiscal): an existing, complete `.env` whose database still holds a venue.
+  // Reuse guard (fiscal): an existing, complete `.env` whose database still holds the tenant it names.
   if (existsSync(envPath)) {
     const existing = parseEnvFile(readFileSync(envPath, "utf8"));
-    if (isCompleteDevEnv(existing) && (await hasVenue(existing.DATABASE_URL))) {
+    if (
+      isCompleteDevEnv(existing) &&
+      (await venueExists(existing.DATABASE_URL, existing.WAITRON_TILL_TENANT_ID))
+    ) {
       log("dev-setup: reusing the already-provisioned venue (no new fiscal chain)");
-      return { reused: true, env: existing, cashierPin: CASHIER_PIN, adminPin: ADMIN_PIN };
+      return { reused: true, env: existing };
     }
   }
 
@@ -313,7 +316,7 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
   };
   writeFileSync(envPath, renderEnvFile(env));
   log(`dev-setup: wrote ${envPath}`);
-  return { reused: false, env, cashierPin: CASHIER_PIN, adminPin: ADMIN_PIN };
+  return { reused: false, env };
 }
 
 /** The CLI entrypoint: resolve `apps/server/.env`, run `devSetup`, print a human summary. */
@@ -343,8 +346,8 @@ async function main(): Promise<void> {
   console.log("  dashboard  http://localhost:5191");
   console.log("  server     http://localhost:8080");
   console.log("");
-  console.log(`  cashier PIN (till login): ${result.cashierPin}`);
-  console.log(`  admin PIN (dashboard):    ${result.adminPin}`);
+  console.log(`  cashier PIN (till login): ${CASHIER_PIN}`);
+  console.log(`  admin PIN (dashboard):    ${ADMIN_PIN}`);
   console.log("");
   console.log("Next: `pnpm dev` (or `wa-wt <worktree>`) to start all three processes.");
 }
