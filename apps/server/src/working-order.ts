@@ -215,13 +215,14 @@ export function toVatBreakdown(
  * authoritatively (`priceBasket`), so a browser cannot influence the snapshot the draft carries.
  *
  * `id` is client-supplied: the till mints the working-order uuid and holds it stable across a retry.
- * That prevents a SECOND parked order — a re-sent park PK-COLLIDES on `working_orders.id` and the
- * whole transaction rolls back (a raw 23505 that `till-api.ts`'s `run` catch turns into an opaque
- * 500, since park adds no `onConflict`), so at most one order is ever parked for the id. It is NOT an
- * idempotent replay: park does not recognise the existing row and return it, it simply fails on the
- * collision. Idempotent REPLAY belongs to PAY (`payWorkingOrder`), which recognises an already-settled
- * order and re-returns its result rather than filing a second chained record. `quantity` is a count
- * for an `each` product and a measured kg weight for a `weight` product.
+ * That id is what makes park IDEMPOTENT — a re-sent park (a lost-response retry) PK-collides on
+ * `working_orders.id`, and `parkOrder` catches that 23505 and REPLAYS the existing OPEN order's
+ * `{ id, orderNumber }` rather than surfacing the collision, so at most one order is ever parked for the
+ * id and the retry sees the original result. This mirrors PAY's own replay (`payWorkingOrder`, which
+ * re-returns an already-settled order's ticket rather than filing a second chained record). The ONE
+ * exception is a colliding id whose committed row is no longer `open` (abandoned/settled/placed) — a
+ * pathological id reuse, not a held-order retry — which is re-thrown as the raw 23505 unchanged.
+ * `quantity` is a count for an `each` product and a measured kg weight for a `weight` product.
  *
  * `operatorId` is the person who parked the order, for later attribution. It is accepted here for the
  * caller's convenience and forward-compatibility with the session wiring (Task 5) but is NOT persisted
@@ -342,17 +343,55 @@ export async function parkOrder(
     throw new AppError("sale.empty_basket", {});
   }
 
-  return withTenant(
-    deps.db,
-    cfg.tenantId,
-    async (tx) => {
-      await asAppUser(tx);
-      // Park needs only the allocated number; `priced` is `payWorkingOrder`'s walk-up shortcut, unused here.
-      const { orderNumber } = await createOpenOrder(tx, cfg, req.id, req.lines, req.label ?? null);
-      return { id: req.id, orderNumber };
-    },
-    { nodeId: cfg.nodeId },
-  );
+  try {
+    return await withTenant(
+      deps.db,
+      cfg.tenantId,
+      async (tx) => {
+        await asAppUser(tx);
+        // Park needs only the allocated number; `priced` is `payWorkingOrder`'s walk-up shortcut, unused here.
+        const { orderNumber } = await createOpenOrder(
+          tx,
+          cfg,
+          req.id,
+          req.lines,
+          req.label ?? null,
+        );
+        return { id: req.id, orderNumber };
+      },
+      { nodeId: cfg.nodeId },
+    );
+  } catch (error) {
+    // Anything but a unique violation is a real failure and surfaces unchanged — the transaction above
+    // already rolled back, so nothing half-parked persists.
+    if (!isUniqueViolation(error)) {
+      throw error;
+    }
+    // A 23505 on `working_orders_pkey`: a re-sent park (see `ParkOrderRequest` for the stable client id)
+    // collides on the id an EARLIER park already committed. That row is READABLE now in a fresh
+    // transaction — the unique violation fires only against a COMMITTED conflicting row (an UNCOMMITTED
+    // concurrent insert of the same key would BLOCK on the index until its writer commits or aborts, not
+    // error), which is exactly why `payWorkingOrder`'s 23505 backstop (`till-sale.ts`) replays in a fresh
+    // tx too. Replay the committed OPEN order's number, filing and inserting nothing.
+    return withTenant(
+      deps.db,
+      cfg.tenantId,
+      async (tx) => {
+        await asAppUser(tx);
+        const [existing] = await tx
+          .select({ orderNumber: workingOrders.orderNumber })
+          .from(workingOrders)
+          .where(and(eq(workingOrders.id, req.id), eq(workingOrders.status, "open")));
+        // Not `open` (abandoned/settled/placed) — a pathological id reuse, not a replayable held order —
+        // so re-throw the raw 23505 unchanged per the docstring's exception, never fabricating a result.
+        if (existing === undefined) {
+          throw error;
+        }
+        return { id: req.id, orderNumber: existing.orderNumber };
+      },
+      { nodeId: cfg.nodeId },
+    );
+  }
 }
 
 /**

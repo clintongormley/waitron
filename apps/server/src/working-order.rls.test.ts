@@ -774,6 +774,52 @@ describe("payWorkingOrder", () => {
   });
 });
 
+describe("parkOrder concurrent replay", () => {
+  it("concurrent double-park of the same id parks ONE order — the 23505 replay backstop (two connections)", async () => {
+    const { cfg, cafe } = await setupVenue();
+    // A fresh id with NO prior row: two DISTINCT backends both `parkOrder` it. One wins the PK, the other
+    // blocks on the uncommitted index tuple, then gets 23505, catches it, and REPLAYS the winner's
+    // committed `{ id, orderNumber }`. This is the park backstop the sequential PGlite test cannot prove —
+    // one backend never races itself. Load-bearing: DISTINCT backend PROCESSES; on PGlite they collapse
+    // onto one and the race never happens (a false pass), exactly as the concurrent double-pay tests note.
+    const id = randomUUID();
+    const lines = [{ productId: cafe.id, quantity: "1" }];
+
+    const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
+    try {
+      const pids = await Promise.all(
+        [connA, connB].map(async (db) => {
+          const { rows } = await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
+          return rows[0]!.pid;
+        }),
+      );
+      expect(new Set(pids).size).toBe(2);
+
+      // Both race past `parkOrder`. The loser's INSERT collides on `working_orders_pkey`, catches the
+      // 23505, and replays the committed OPEN order's number — so both return the SAME result, neither errors.
+      const [resA, resB] = await Promise.all([
+        parkOrder({ db: connA }, cfg, { id, lines }),
+        parkOrder({ db: connB }, cfg, { id, lines }),
+      ]);
+      expect(resA).toEqual(resB);
+      expect(resA.id).toBe(id);
+
+      // Exactly ONE order and ONE line — the loser replayed, allocating no second number (its counter
+      // increment rolled back with the aborted tx) and inserting nothing.
+      const { rows: orderRows } = await suite.admin.execute<{ count: number }>(
+        sql`select count(*)::int as count from working_orders where id = ${id}`,
+      );
+      expect(orderRows[0]!.count).toBe(1);
+      const { rows: lineRows } = await suite.admin.execute<{ count: number }>(
+        sql`select count(*)::int as count from working_order_lines where working_order_id = ${id}`,
+      );
+      expect(lineRows[0]!.count).toBe(1);
+    } finally {
+      await Promise.all([connA.close(), connB.close()]);
+    }
+  });
+});
+
 // The manual (unintegrated) card tender — the "datáfono" case: the operator runs the card on a
 // SEPARATE bank terminal, taps Card, and the till files the same legal Veri*Factu ticket with a
 // `card` tender AND a captured `payments` row, all in the ONE sale transaction (no network call,

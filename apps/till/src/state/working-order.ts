@@ -73,9 +73,11 @@ export class WorkingOrderStore {
    * Whether {@link id} already names an OPEN row server-side (7c place/collect). A fresh store starts
    * `false` — nothing has synced it yet; {@link loadFrom} sets it `true` (a RETRIEVED order already
    * exists); {@link clear} resets it `false` (a fresh id is a fresh, unsynced basket); the app calls
-   * {@link markPersisted} after a successful `parkOrder`. Placing a basket (Task 11's `#onPlaceOrder`)
-   * reads this to decide whether it must park FIRST or can sync-then-place an already-parked one — a
-   * retrieved order re-parked with the same id would 23505 on the server's plain INSERT.
+   * {@link markPersisted} after a successful `parkOrder`. Both the place path (`#onPlaceOrder`) and the
+   * Hold path (`#onParkOrder`) read this to decide whether they must park/create FIRST or can sync an
+   * already-parked one — a retrieved order re-parked with the same id would SILENTLY REPLAY the existing
+   * open order server-side (park is idempotent: it inserts nothing and discards the re-sent basket),
+   * discarding any edit, so a persisted order is synced with `updateWorkingOrder`, never re-parked.
    */
   #persisted = false;
   /**

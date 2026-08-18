@@ -4,6 +4,8 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   asAppUser,
+  captureError,
+  pgErrorCode,
   withTenant,
   workingOrderLines,
   workingOrders,
@@ -235,6 +237,93 @@ describe("parkOrder", () => {
       return tx.select().from(workingOrders).where(eq(workingOrders.tenantId, cfg.tenantId));
     });
     expect(parked).toHaveLength(0);
+  });
+
+  it("replays the existing order on a re-sent park, creating no second order", async () => {
+    // PGlite (a single backend) is correct here: this is a SEQUENTIAL lost-response retry — the first
+    // park commits, then the re-sent park with the SAME client-minted id collides against that already-
+    // committed row on the SAME backend. It is NOT concurrency (two backends racing, which would need a
+    // real non-superuser role to serialise): one connection replaying its own committed write is exactly
+    // what a single backend proves. The CONCURRENT park backstop — two backends racing the same id — is
+    // proven separately against real Postgres in `working-order.rls.test.ts` ("parkOrder concurrent replay").
+    const { cfg, cafeId } = await setupVenue();
+    const id = randomUUID();
+    const lines = [{ productId: cafeId, quantity: "2" }];
+
+    const first = await parkOrder({ db }, cfg, { id, lines, label: "John" });
+    expect(first.orderNumber).toBe(1);
+
+    // The re-sent park (a lost-response retry) REPLAYS the committed order rather than PK-colliding into
+    // an opaque 500 — same id, same allocated number, nothing new filed.
+    const replay = await parkOrder({ db }, cfg, { id, lines, label: "John" });
+    expect(replay).toEqual({ id, orderNumber: 1 });
+
+    // Exactly ONE order and ONE line survive: the replay re-inserted neither the order nor its lines.
+    const orders = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
+    expect(orders).toHaveLength(1);
+    const woLines = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    expect(woLines).toHaveLength(1);
+  });
+
+  it("replays the ORIGINAL order when a re-sent park carries a DIFFERENT basket (id is the idempotency key)", async () => {
+    // The replay is keyed on the id ALONE and files nothing, so a re-park whose lines DIFFER from the
+    // committed order does NOT update it — the original composition survives and the differing basket is
+    // discarded. This is deliberate idempotency (the id is the key, exactly like pay's replay), and it is
+    // WHY the till must route a retrieved-and-EDITED order's re-hold through `updateWorkingOrder`, not a
+    // re-park: re-parking an edit would silently drop it (see `#onParkOrder` / `#syncIfDirty` in apps/till).
+    const { cfg, cafeId, aguaId } = await setupVenue();
+    const id = randomUUID();
+
+    const first = await parkOrder({ db }, cfg, {
+      id,
+      lines: [{ productId: cafeId, quantity: "1" }],
+    });
+    expect(first.orderNumber).toBe(1);
+
+    // Re-park the SAME id with a different product and quantity. It replays the original, unchanged.
+    const replay = await parkOrder({ db }, cfg, {
+      id,
+      lines: [{ productId: aguaId, quantity: "5" }],
+    });
+    expect(replay).toEqual({ id, orderNumber: 1 });
+
+    // The one surviving line is the ORIGINAL Café line — the re-park's Agua line was never inserted.
+    const woLines = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    expect(woLines).toHaveLength(1);
+    expect(woLines[0]).toMatchObject({ productId: cafeId, quantity: "1.000" });
+  });
+
+  it("re-throws when the colliding id is no longer an open order", async () => {
+    // A CHARACTERIZATION test: its external behaviour (a rejection) is UNCHANGED by this fix, so it is
+    // not RED. It is proven to guard the new not-open branch BY DELETION (CLAUDE.md §4): replacing that
+    // branch's `throw error` with a fabricated `return { id: req.id, orderNumber: -1 }` makes this test
+    // FAIL (done, then restored) — confirming the assertion exercises the branch, not something else.
+    const { cfg, cafeId } = await setupVenue();
+    const id = randomUUID();
+    const lines = [{ productId: cafeId, quantity: "1" }];
+
+    await parkOrder({ db }, cfg, { id, lines });
+    // Abandon it: `abandonHeldOrder` is a conditional open→abandoned UPDATE, so the row PERSISTS (status
+    // 'abandoned'), not a delete — a re-park's id still PK-collides, but the committed row is no longer open.
+    await abandonHeldOrder({ db }, cfg, id);
+
+    // The re-park collides on the committed (now abandoned) row. Not being `open`, it is NOT a replayable
+    // held order, so the ORIGINAL raw 23505 is re-thrown rather than a result fabricated. The SQLSTATE is
+    // read via `pgErrorCode` (not `.rejects.toMatchObject({ code })`) because Drizzle wraps the pg error in
+    // a `DrizzleQueryError` whose own `.code` is undefined and PGlite nests the real code under `.cause` —
+    // the same normalisation `record-void.test.ts` makes for this identical assertion shape.
+    const error = await captureError(() => parkOrder({ db }, cfg, { id, lines }));
+    expect(pgErrorCode(error)).toBe("23505");
+
+    // The failed re-park did not resurrect the abandoned row.
+    const [wo] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
+    expect(wo!.status).toBe("abandoned");
   });
 });
 
