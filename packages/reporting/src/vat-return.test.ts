@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import { addDecimal, subtractDecimal } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
 import {
   seedNodeAndSeries,
@@ -12,6 +13,7 @@ import {
 } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { computeVatReturn } from "./vat-return.js";
+import type { LiquidationPeriod } from "./period.js";
 import type { VatReturn } from "./types.js";
 
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
@@ -35,6 +37,20 @@ function run(opts: { year: number; month: number; tenantId?: TenantId }): Promis
       year: opts.year,
       period: { kind: "month", month: opts.month },
     });
+  });
+}
+
+// Sibling of `run` for the quarter/year (and month) periods — the period-threaded read the
+// quarterly/annual suites need, `run` being month-only. Defaults to year 2026, the year every
+// period suite below seeds into.
+function runPeriod(
+  period: LiquidationPeriod,
+  opts: { year?: number; tenantId?: TenantId } = {},
+): Promise<VatReturn> {
+  const tenantId = opts.tenantId ?? venue.tenantId;
+  return withTenant(suite.db, tenantId, async (tx) => {
+    await asAppUser(tx);
+    return computeVatReturn(tx, { tenantId, year: opts.year ?? 2026, period });
   });
 }
 
@@ -251,5 +267,50 @@ describe("computeVatReturn", () => {
       deductible: { byRate: [], baseTotal: "0.00", taxTotal: "0.00" },
       result: "0.00",
     });
+  });
+});
+
+describe("computeVatReturn — quarterly", () => {
+  it("Q1 sums January, February and March (byRate + totals + result)", async () => {
+    // Three sales spread across Q1's civil months (Jan/Feb/Mar) and one general 21% purchase received
+    // 2026-02-20, all inside Q1. The quarter must aggregate the three months — 1b's generalization
+    // already does, so this is the regression LOCK for the quarter bound (which 1d proves by deletion).
+    // Offset 0 → the filed fecha de expedición is the UTC calendar date; noon keeps it unambiguous.
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-01-15T12:00:00Z",
+      total: "121.00",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+      vatBreakdown: [{ rate: "21.00", base: "100.00", tax: "21.00" }],
+    });
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: "2026-02-15T12:00:00Z",
+      total: "55.00",
+      lines: [{ vatRate: "10.00", lineTotal: "50.00" }],
+      vatBreakdown: [{ rate: "10.00", base: "50.00", tax: "5.00" }],
+    });
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 3,
+      issuedAt: "2026-03-31T12:00:00Z",
+      total: "242.00",
+      lines: [{ vatRate: "21.00", lineTotal: "200.00" }],
+      vatBreakdown: [{ rate: "21.00", base: "200.00", tax: "42.00" }],
+    });
+    await seedPurchaseInvoice(suite.db, venue, {
+      supplierInvoiceNumber: "P1",
+      issuedOn: "2026-02-19",
+      receivedOn: "2026-02-20",
+      total: "96.80",
+      lines: [{ rate: "21.00", base: "80.00", tax: "16.80", kind: "ordinary" }],
+    });
+    const q1 = await runPeriod({ kind: "quarter", quarter: 1 });
+    expect(q1.period).toEqual({ kind: "quarter", quarter: 1 });
+    // devengado: 21% base 300.00 cuota 63.00 ; 10% base 50.00 cuota 5.00 ; total cuota 68.00
+    expect(q1.taxTotal).toBe("68.00");
+    expect(q1.baseTotal).toBe("350.00");
+    // deducible: 21% ordinary cuota 16.80 ; result = 68.00 − 16.80 = 51.20
+    expect(q1.deductible.taxTotal).toBe("16.80");
+    expect(q1.result).toBe("51.20");
   });
 });
