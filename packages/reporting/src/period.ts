@@ -55,6 +55,15 @@ export function validatePeriod(year: number, period: LiquidationPeriod): void {
       return;
     case "year":
       return;
+    /* v8 ignore start -- unreachable: LiquidationPeriod is a closed union and its sole runtime
+       constructor (parsePeriodToken) yields only month/quarter/year. A malformed object reaching here
+       fails LOUD rather than validating as a plausible-but-EMPTY period — the quiet, worse direction
+       for a fiscal filing that this function's year bound already guards against. */
+    default: {
+      const exhaustive: never = period;
+      throw new Error(`reporting: unhandled liquidation period ${JSON.stringify(exhaustive)}`);
+    }
+    /* v8 ignore stop */
   }
 }
 
@@ -81,5 +90,13 @@ export function periodDateFilter(dateExpr: SQL, year: number, period: Liquidatio
       const firstDay = sql`make_date(${year}, 1, 1)`;
       return sql`${dateExpr} >= ${firstDay} and ${dateExpr} < (${firstDay} + interval '1 year')`;
     }
+    /* v8 ignore start -- unreachable: closed union; a malformed kind fails LOUD rather than returning
+       an undefined SQL bound that would silently widen or empty the fiscal aggregate (mirrors
+       validatePeriod's guard above). */
+    default: {
+      const exhaustive: never = period;
+      throw new Error(`reporting: unhandled liquidation period ${JSON.stringify(exhaustive)}`);
+    }
+    /* v8 ignore stop */
   }
 }

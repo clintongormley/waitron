@@ -18,6 +18,17 @@ export const BOX_27 = { offset: 1023, len: 17 } as const;
  * mask itself.
  */
 export function packAeatNumeric(value: Decimal, width: number): string {
+  // `Decimal` permits any scale ("1.5" vs "1.50"), but this packer maps a 2-dp money amount to cents
+  // by dropping the point — so it MUST be fed a 2-dp value or it packs the wrong magnitude ("1.5"→"15"
+  // not "150"). Every caller derives the value with `addDecimal` over 2-dp seeded figures, so a non-2-dp
+  // input is a test-authoring bug; refuse it loudly rather than silently pack a wrong witness.
+  /* v8 ignore start -- unreachable: callers always pass a 2-dp addDecimal result; the throw guards a misuse */
+  if (!/^-?\d+\.\d{2}$/.test(value)) {
+    throw new Error(
+      `packAeatNumeric: expected a 2-decimal money value, got ${JSON.stringify(value)}`,
+    );
+  }
+  /* v8 ignore stop */
   const negative = value.startsWith("-");
   const magnitude = (negative ? value.slice(1) : value).replace(".", "");
   return negative ? "N" + magnitude.padStart(width - 1, "0") : magnitude.padStart(width, "0");
