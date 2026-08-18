@@ -4,7 +4,7 @@ import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import { startMigratedPostgres } from "@waitron/db/testing/postgres.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { mkdtemp, rm } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../src/config.js";
@@ -51,6 +51,13 @@ describe("renderEnvFile", () => {
   it("round-trips exactly through parseEnvFile", () => {
     // toEqual, not toMatchObject: a stray or dropped key must fail (CLAUDE.md §4).
     expect(parseEnvFile(renderEnvFile(sampleEnv))).toEqual({ ...sampleEnv });
+    // A real 32-byte credentials key ends in base64 `=` padding, so the value itself contains `=` —
+    // exercise the parser's "split on the FIRST `=`" branch, not just `=`-free values.
+    const withPadding: DevEnv = {
+      ...sampleEnv,
+      WAITRON_CREDENTIALS_KEY: "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY=",
+    };
+    expect(parseEnvFile(renderEnvFile(withPadding))).toEqual({ ...withPadding });
   });
 });
 
@@ -147,5 +154,18 @@ describe("devSetup against real Postgres", () => {
     expect(second.env.WAITRON_TILL_NODE_ID).toBe(first.env.WAITRON_TILL_NODE_ID);
     expect(second.env.WAITRON_TILL_SERIES_ID).toBe(first.env.WAITRON_TILL_SERIES_ID);
     expect(second.env.WAITRON_TILL_LOCATION_ID).toBe(first.env.WAITRON_TILL_LOCATION_ID);
+  });
+
+  it("refuses to provision a second venue when the .env no longer names the DB's venue", async () => {
+    // The dangerous case: a `.env` lost/deleted (or its ids gone stale) against a live volume that
+    // still holds a venue. Provisioning fresh here would mint a SECOND SIF and a second hash chain
+    // (CLAUDE.md §5), so devSetup must REFUSE rather than provision — the volume wipe (dev:reset) is
+    // the only sanctioned way to start over.
+    rmSync(envPath);
+    await expect(devSetup({ databaseUrl: suite.pg.uri, envPath, log: () => {} })).rejects.toThrow(
+      /already holds a venue/i,
+    );
+    // The load-bearing fiscal assertion: still exactly one till, no second chain.
+    expect(await tillsCount()).toBe(1);
   });
 });

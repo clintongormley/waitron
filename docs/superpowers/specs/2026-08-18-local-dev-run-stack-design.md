@@ -48,12 +48,16 @@ sellable out of the box (a small catalogue + a cashier with a known PIN).
 1. **`docker-compose.yml`** (committed): `postgres:18-alpine`, `POSTGRES_PASSWORD=pg`, `5432:5432`, a
    named volume `waitron-dev-db` so data — and therefore the provisioned venue — survives restarts,
    and a healthcheck so `dev:setup` can wait for readiness.
-2. **`scripts/dev-setup.mjs`** — the idempotent bootstrap (details below). Run via `pnpm dev:setup`.
-   Written to be tsx/node-run and to reuse the same `@waitron/*` building blocks as `till-demo.ts`.
-3. **`apps/server` `dev` script**: `tsx watch --env-file=.env src/bin.ts` (Node's `--env-file`, passed
-   through by tsx; pnpm runs the script with cwd = `apps/server`, so `.env` resolves there). A
-   preflight prints "run `pnpm dev:setup` first" and exits non-zero if the `.env` is absent, rather
-   than surfacing a raw `server.config_missing`.
+2. **`apps/server/scripts/dev-setup.ts`** — the idempotent bootstrap (details below). Run via
+   `pnpm dev:setup`. tsx-run, reusing the same `@waitron/*` building blocks as `till-demo.ts`.
+3. **`apps/server` `dev` script**: `node scripts/dev-server.mjs` — a small launcher that (a) prints
+   "run `pnpm dev:setup` first" and exits non-zero if the `.env` is absent (clearer than a raw
+   `server.config_missing`); (b) runs `copy-migrations.mjs` to assemble `dist/drizzle` and points
+   `WAITRON_MIGRATIONS_DIR` at it, because run from source `boot.ts`'s default migrations root is a
+   nonexistent `apps/server/src/drizzle` (`WAITRON_MIGRATIONS_DIR` is config.ts's supported
+   from-source override); (c) spawns `tsx watch --env-file=.env src/bin.ts`. (A native from-source
+   migration root in `boot.ts`/`config.ts` — `migrationOptionsFor` already accepts a `null` root — is
+   a worthwhile follow-up that would shrink this launcher; out of scope here.)
 4. **root `dev` script**: runs the server + both Vite servers in parallel — so `pnpm dev` (and
    therefore `wa-wt`) brings up everything.
 5. **`apps/server/.env.example`** (committed) documenting every variable; the real `.env` is
@@ -66,15 +70,22 @@ sellable out of the box (a small catalogue + a cashier with a known PIN).
 
 `pnpm dev:setup`:
 
-1. `docker compose up -d db`; poll until Postgres accepts connections.
-2. **Already set up?** If `apps/server/.env` exists AND its `DATABASE_URL` reaches a database that
-   already holds a venue (a `tenants` row), **reuse it**: print the ids/URLs and exit. It must never
-   re-provision a live dev database — **re-registering a till starts a new hash chain**
-   (CLAUDE.md §5). This is the guard the tests prove by deletion.
-3. **Otherwise bootstrap:**
-   a. Ensure a dedicated `waitron_dev` database exists (create if absent), so `reset` can drop it
-      without touching the container's default `postgres` database.
-   b. Apply the full migration manifest as the superuser — the same sets the server runs at boot.
+1. `docker compose up -d --wait db` (the healthcheck gates readiness); `dev-setup` also polls the
+   connection itself as the readiness net for a direct, non-root invocation.
+2. **Reuse?** In one connection, ask the database whether it holds the tenant `apps/server/.env`
+   names and whether it holds any tenant at all. If the `.env` names a tenant the database still
+   holds, **reuse it**: print the ids/URLs and exit — it must never re-provision a live dev database
+   (**re-registering a till starts a new hash chain**, CLAUDE.md §5). The reuse test proves this by
+   deletion.
+3. **Refuse?** If the database already holds a venue the `.env` does NOT name (a lost/stale/mismatched
+   `.env` against a live volume), **throw** and direct the operator to `pnpm dev:reset` — provisioning
+   would mint a second SIF / second chain. A dedicated test proves this refusal (still exactly one
+   `tills` row).
+4. **Otherwise bootstrap** (the database holds no venue — first run, or a freshly wiped volume):
+   a. Provision into the container's default `postgres` database (`DEV_DATABASE_URL`), as the
+      container superuser — the same target every demo uses. No separate database is created.
+   b. Apply the full migration manifest from source (`migrationOptionsFor(manifestSets(), null)`) —
+      the same sets the server runs at boot.
    c. `applyVenue(planVenue({ country: "ES", taxId: "50000000K", legalName: "Waitron Dev SL",
       location: { …Madrid, Europe/Madrid, 05:00 cutover… }, tillName: "Caja 1", seriesCode: "A",
       rectificativeSeriesCode: "R", admin: { pinHash: hashPin("1234"), passwordHash: hashPassword(…) }
@@ -85,12 +96,15 @@ sellable out of the box (a small catalogue + a cashier with a known PIN).
       `withTenant`. This is what makes the running stack immediately usable rather than an empty till.
    f. Write `apps/server/.env` (gitignored): `DATABASE_URL`, `WAITRON_ENV=preproduction`,
       `WAITRON_HTTP_PORT=8080`, the credentials key + version, and the five `WAITRON_TILL_*` ids.
-4. Print the URLs, the seeded cashier's PIN, and the admin PIN.
+5. Print the URLs, the seeded cashier's PIN, and the admin PIN.
 
-`pnpm dev:reset` (`dev-setup --force`): drop & recreate `waitron_dev`, delete `.env`, then bootstrap
-fresh. The sanctioned "start over" — safe because this is throwaway **preproduction** data (the
-no-new-chain rule protects a *live* chain within one database's life; a deliberately reset dev
-database is fine, and pre-production holes are expected — CLAUDE.md §5).
+`pnpm dev:reset` is the sanctioned "start over": `docker compose down -v && docker compose up -d
+--wait db && pnpm --filter @waitron/server dev:setup`. The **volume wipe** is the whole reset — it
+leaves an empty database, so the follow-on `dev:setup` sees no venue and provisions fresh (its refuse
+guard is what makes this the ONLY safe reset; `dev-setup` never deletes data itself, and there is no
+`--reset`/`--force` flag). Safe because this is throwaway **preproduction** data — the no-new-chain
+rule protects a *live* chain within one database's life; a deliberately wiped dev volume is fine, and
+pre-production holes are expected (CLAUDE.md §5).
 
 ## Data flow
 

@@ -4,16 +4,17 @@
 // writes the ids down, plus a reuse guard that never re-provisions a live dev database.
 //
 // FISCAL NOTE (CLAUDE.md §5): re-registering a till starts a NEW hash chain and mints a fresh
-// installation number. So the normal path REUSES an already-provisioned venue (an existing `.env`
-// whose DATABASE_URL reaches a database that already holds a tenant) and provisions only when there
-// is nothing to reuse. The sanctioned "start over" is `pnpm dev:reset`, which wipes the Docker
-// volume (throwaway preproduction data) BEFORE this runs with `--reset`.
+// installation number. So this REUSES an already-provisioned venue (an existing `.env` naming a
+// tenant the database still holds) and REFUSES to provision when the database already holds a venue
+// this `.env` cannot account for — it never mints a second one into a live database. The only
+// sanctioned "start over" is `pnpm dev:reset`, which wipes the Docker volume (throwaway
+// preproduction data); this script never deletes data itself.
 //
 // Run from the repo root via `pnpm dev:setup` (which brings the container up first); this script
 // only polls the connection and provisions. Never against a production database — it creates a
 // tenant and chains real fiscal records under `preproduction`.
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import pg from "pg";
@@ -99,8 +100,6 @@ export interface DevSetupOptions {
   databaseUrl: string;
   /** Where to read/write the `.env`. */
   envPath: string;
-  /** `--reset`: delete the `.env` first, forcing a fresh provision (volume wipe is the real reset). */
-  reset?: boolean;
   log?: (line: string) => void;
 }
 
@@ -147,28 +146,33 @@ async function waitForPostgres(uri: string, log: (line: string) => void): Promis
 }
 
 /**
- * Whether the database `uri` names still holds the SPECIFIC tenant the `.env` was written for — not
- * merely "some tenant" — so a `.env` whose ids have gone stale against the database is re-provisioned
- * rather than handed to boot as ids that will not resolve.
+ * Two facts about a database's venues, read in one connection: whether it holds the SPECIFIC tenant
+ * the `.env` names (`hasExpected` — reuse this venue), and whether it holds ANY tenant at all
+ * (`hasAny` — refuse to provision a second one). `expectedTenantId` is `null` when there is no usable
+ * `.env` to match, in which case `hasExpected` is trivially false.
  *
- * A missing `tenants` table (an unmigrated database beside a stale `.env` — e.g. a wiped volume) is
- * "no venue to reuse", so `42P01 undefined_table` returns false and the caller provisions fresh. Any
- * OTHER failure (a permission error, a connection blip after `waitForPostgres` already succeeded)
- * must NOT be read as "no venue": that would route a database already holding a chain into a spurious
- * re-provision — a second SIF, a second hash chain (CLAUDE.md §5). Those fail loud.
+ * A missing `tenants` table (an unmigrated database — e.g. a freshly wiped volume) is "no venue at
+ * all", so `42P01 undefined_table` returns both-false and the caller provisions fresh. Any OTHER
+ * failure (a permission error, a malformed id → `22P02`, a connection blip after `waitForPostgres`
+ * already succeeded) must NOT be read as "no venue": that would route a database already holding a
+ * chain into a spurious re-provision — a second SIF, a second hash chain (CLAUDE.md §5). Those fail
+ * loud.
  */
-async function venueExists(uri: string, tenantId: string): Promise<boolean> {
+async function inspectVenues(
+  uri: string,
+  expectedTenantId: string | null,
+): Promise<{ hasExpected: boolean; hasAny: boolean }> {
   const client = new pg.Client({ connectionString: uri });
   try {
     await client.connect();
-    const { rows } = await client.query<{ present: boolean }>(
-      "select exists(select 1 from tenants where id = $1) as present",
-      [tenantId],
+    const { rows } = await client.query<{ has_expected: boolean; has_any: boolean }>(
+      "select exists(select 1 from tenants where id = $1) as has_expected, exists(select 1 from tenants) as has_any",
+      [expectedTenantId],
     );
-    return rows[0]?.present ?? false;
+    return { hasExpected: rows[0]?.has_expected ?? false, hasAny: rows[0]?.has_any ?? false };
   } catch (error) {
     if (error !== null && typeof error === "object" && "code" in error && error.code === "42P01") {
-      return false;
+      return { hasExpected: false, hasAny: false };
     }
     throw error;
   } finally {
@@ -258,33 +262,45 @@ async function provisionVenue(db: Database): Promise<{
 }
 
 /**
- * The idempotent bootstrap. Reuses an already-provisioned venue (a `.env` whose DATABASE_URL reaches
- * a database that still holds a `tenants` row) — never re-provisions a live dev database, because a
- * second venue is a second SIF and a second hash chain (CLAUDE.md §5). Otherwise migrates the full
- * manifest, provisions one preproduction venue, seeds it, and writes the `.env`.
+ * The idempotent bootstrap, with a fiscal safety property: it provisions a venue ONLY into a database
+ * that holds none. Three cases (CLAUDE.md §5 — a second venue is a second SIF and a second hash
+ * chain):
+ *
+ *  - the `.env` names a tenant the database still holds → REUSE it, provision nothing;
+ *  - the database already holds a venue the `.env` does NOT name (a lost/stale/mismatched `.env`
+ *    against a live volume) → REFUSE, directing the operator to `pnpm dev:reset`;
+ *  - the database holds no venue (first run, or a freshly wiped volume) → migrate, provision one
+ *    preproduction venue, seed it, and write the `.env`.
+ *
+ * The only sanctioned "start over" is `pnpm dev:reset`, which wipes the Docker volume (throwaway
+ * preproduction data); this function never deletes data itself.
  */
 export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
-  const { databaseUrl, envPath, reset = false, log = () => {} } = opts;
-
-  // `--reset`: drop the `.env` first so the reuse guard can't match. The real data reset is the
-  // caller's `docker compose down -v` (throwaway preproduction volume); this only clears the ids.
-  if (reset && existsSync(envPath)) {
-    rmSync(envPath);
-    log("dev-setup: removed existing .env (--reset)");
-  }
+  const { databaseUrl, envPath, log = () => {} } = opts;
 
   await waitForPostgres(databaseUrl, log);
 
-  // Reuse guard (fiscal): an existing, complete `.env` whose database still holds the tenant it names.
-  if (existsSync(envPath)) {
-    const existing = parseEnvFile(readFileSync(envPath, "utf8"));
-    if (
-      isCompleteDevEnv(existing) &&
-      (await venueExists(existing.DATABASE_URL, existing.WAITRON_TILL_TENANT_ID))
-    ) {
-      log("dev-setup: reusing the already-provisioned venue (no new fiscal chain)");
-      return { reused: true, env: existing };
-    }
+  // Read the existing `.env` (if any) and ask the database, in one connection, whether it holds the
+  // tenant that `.env` names and whether it holds any tenant at all.
+  const existing = existsSync(envPath) ? parseEnvFile(readFileSync(envPath, "utf8")) : undefined;
+  const expectedTenantId =
+    existing !== undefined && isCompleteDevEnv(existing) ? existing.WAITRON_TILL_TENANT_ID : null;
+  const { hasExpected, hasAny } = await inspectVenues(databaseUrl, expectedTenantId);
+
+  // Reuse: the `.env` names a venue the database still holds.
+  if (existing !== undefined && isCompleteDevEnv(existing) && hasExpected) {
+    log("dev-setup: reusing the already-provisioned venue (no new fiscal chain)");
+    return { reused: true, env: existing };
+  }
+
+  // Refuse: the database already holds a venue this `.env` cannot account for. Provisioning would
+  // start a second fiscal chain, so fail loud rather than do it (CLAUDE.md §5).
+  if (hasAny) {
+    throw new Error(
+      "dev-setup: the database already holds a venue, but this apps/server/.env does not name it " +
+        "(missing, stale, or mismatched). Refusing to provision a second venue — it would start a new " +
+        "fiscal chain. Run `pnpm dev:reset` to wipe the dev volume and re-provision from scratch.",
+    );
   }
 
   // Fresh provision: migrate the full manifest from source (the same sets the server migrates at
@@ -321,7 +337,6 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
 
 /** The CLI entrypoint: resolve `apps/server/.env`, run `devSetup`, print a human summary. */
 async function main(): Promise<void> {
-  const reset = process.argv.slice(2).includes("--reset");
   const envPath = fileURLToPath(new URL("../.env", import.meta.url));
   const databaseUrl =
     process.env.DATABASE_URL !== undefined && process.env.DATABASE_URL !== ""
@@ -331,7 +346,6 @@ async function main(): Promise<void> {
   const result = await devSetup({
     databaseUrl,
     envPath,
-    reset,
     log: (line) => void console.log(line),
   });
 

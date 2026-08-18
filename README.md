@@ -85,8 +85,9 @@ starts all three processes in parallel:
 | Dashboard | http://localhost:5191 |
 | Server    | http://localhost:8080 |
 
-The till and dashboard proxy `/api` to the server. Log in at the till with the **cashier PIN 5555**;
-the dashboard admin PIN is **1234** (`pnpm dev:setup` prints both).
+Each front-end proxies its API to the server (the till's `/api`, the dashboard's `/management-api`).
+Log in at the till with the **cashier PIN 5555**; the dashboard admin PIN is **1234**
+(`pnpm dev:setup` prints both).
 
 To start over from a clean database (throwaway preproduction data), `pnpm dev:reset` wipes the Docker
 volume and re-provisions.
