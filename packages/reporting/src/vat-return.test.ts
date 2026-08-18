@@ -384,3 +384,100 @@ describe("computeVatReturn — annual + period boundaries", () => {
     expect(q2.taxTotal).toBe("21.00"); // 1 Apr only — 31 Mar belongs to Q1
   });
 });
+
+describe("computeVatReturn — quarter equals the sum of its months", () => {
+  it("Q2 equals the merged sum of April, May and June (exactness inherited)", async () => {
+    // A spread across Q2's three civil months at mixed rates, deliberately including cuotas the DIFFERENCE
+    // method lands a céntimo off round(base × rate): two difference-method sales (20.99 / 21.01 on a 21%
+    // base 100.00) and a difference-method purchase (41.99, not 42.00, on a 21% base 200.00). The quarter
+    // aggregate must equal the byte-for-byte addDecimal sum of the three monthly aggregates — because
+    // both sum the FILED per-invoice cuotas over the same rows (decimal addition is associative), never
+    // re-rounding round(Σ base × rate). This is the receipt for "a quarter = Σ its three months" AND for a
+    // difference-method cuota being carried verbatim across the quarter. Offset 0 → filed date = UTC date.
+    // April sales.
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-04-10T12:00:00Z",
+      total: "120.99",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+      vatBreakdown: [{ rate: "21.00", base: "100.00", tax: "20.99" }], // difference-method: not 21.00
+    });
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: "2026-04-20T12:00:00Z",
+      total: "55.00",
+      lines: [{ vatRate: "10.00", lineTotal: "50.00" }],
+      vatBreakdown: [{ rate: "10.00", base: "50.00", tax: "5.00" }],
+    });
+    // May sales.
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 3,
+      issuedAt: "2026-05-15T12:00:00Z",
+      total: "242.00",
+      lines: [{ vatRate: "21.00", lineTotal: "200.00" }],
+      vatBreakdown: [{ rate: "21.00", base: "200.00", tax: "42.00" }],
+    });
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 4,
+      issuedAt: "2026-05-25T12:00:00Z",
+      total: "33.00",
+      lines: [{ vatRate: "10.00", lineTotal: "30.00" }],
+      vatBreakdown: [{ rate: "10.00", base: "30.00", tax: "3.00" }],
+    });
+    // June sales.
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 5,
+      issuedAt: "2026-06-05T12:00:00Z",
+      total: "26.00",
+      lines: [{ vatRate: "4.00", lineTotal: "25.00" }],
+      vatBreakdown: [{ rate: "4.00", base: "25.00", tax: "1.00" }],
+    });
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 6,
+      issuedAt: "2026-06-30T12:00:00Z",
+      total: "121.02",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+      // Difference-method, rounded UP (Apr's went down to 20.99): the two 21% base-100.00 filed cuotas
+      // sum to 42.01, so the quarter's 21% cuota is 84.01 ≠ round(400.00 × 21%) = 84.00 — a
+      // re-rounding on the quarter base would break the taxTotal assertion below, not just pass it.
+      vatBreakdown: [{ rate: "21.00", base: "100.00", tax: "21.02" }],
+    });
+    // Purchases (all general → deductible), one per month, incl. the difference-method 41.99.
+    await seedPurchaseInvoice(suite.db, venue, {
+      supplierInvoiceNumber: "P-APR",
+      issuedOn: "2026-04-11",
+      receivedOn: "2026-04-12",
+      total: "241.99",
+      lines: [{ rate: "21.00", base: "200.00", tax: "41.99", kind: "ordinary" }], // not 42.00
+    });
+    await seedPurchaseInvoice(suite.db, venue, {
+      supplierInvoiceNumber: "P-MAY",
+      issuedOn: "2026-05-17",
+      receivedOn: "2026-05-18",
+      total: "110.00",
+      lines: [{ rate: "10.00", base: "100.00", tax: "10.00", kind: "capital" }],
+    });
+    await seedPurchaseInvoice(suite.db, venue, {
+      supplierInvoiceNumber: "P-JUN",
+      issuedOn: "2026-06-19",
+      receivedOn: "2026-06-20",
+      total: "60.50",
+      lines: [{ rate: "21.00", base: "50.00", tax: "10.50", kind: "ordinary" }],
+    });
+
+    const apr = await runPeriod({ kind: "month", month: 4 });
+    const may = await runPeriod({ kind: "month", month: 5 });
+    const jun = await runPeriod({ kind: "month", month: 6 });
+    const q2 = await runPeriod({ kind: "quarter", quarter: 2 });
+
+    // Σ of the three months' cuota totals (addDecimal, exact) == the quarter's cuota total, byte-for-byte.
+    const sumTax = addDecimal(addDecimal(apr.taxTotal, may.taxTotal), jun.taxTotal);
+    expect(q2.taxTotal).toBe(sumTax);
+    const sumDed = addDecimal(
+      addDecimal(apr.deductible.taxTotal, may.deductible.taxTotal),
+      jun.deductible.taxTotal,
+    );
+    expect(q2.deductible.taxTotal).toBe(sumDed);
+    expect(q2.result).toBe(subtractDecimal(sumTax, sumDed));
+  });
+});
