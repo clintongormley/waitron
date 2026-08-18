@@ -93,7 +93,7 @@ beforeAll(async () => {
 function run(tenantId: TenantId, year: number, month: number): Promise<VatReturn> {
   return withTenant(suite.admin, tenantId, async (tx) => {
     await asAppUser(tx);
-    return computeVatReturn(tx, { tenantId, year, month });
+    return computeVatReturn(tx, { tenantId, year, period: { kind: "month", month } });
   });
 }
 
@@ -127,7 +127,7 @@ describe("computeVatReturn cross-tenant isolation under real RLS", () => {
     expect(ret).toMatchObject({
       tenantId: venueA.tenantId,
       year: 2026,
-      month: 8,
+      period: { kind: "month", month: 8 },
       baseTotal: "350.00",
       taxTotal: "68.00",
     });
@@ -144,7 +144,7 @@ describe("computeVatReturn cross-tenant isolation under real RLS", () => {
     expect(ret).toMatchObject({
       tenantId: venueB.tenantId,
       year: 2026,
-      month: 8,
+      period: { kind: "month", month: 8 },
       baseTotal: "1500.00",
       taxTotal: "145.00",
     });

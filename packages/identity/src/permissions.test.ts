@@ -70,4 +70,14 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("staff", "recipe.manage")).toBe(false);
     expect(roleHasPermission("supervisor", "recipe.manage")).toBe(false);
   });
+  it("grants report.export to manager and admin only (modelo 303 DR303 export)", () => {
+    // A domain-named reporting permission (exporting the modelo 303 fiscal file), granted to exactly
+    // the roles that hold the other manager write gates — manager and admin — and NEVER to staff or
+    // supervisor. A distinct seam from purchase.manage: exporting the tax return is not authoring
+    // supplier invoices (spec D7).
+    expect(roleHasPermission("manager", "report.export")).toBe(true);
+    expect(roleHasPermission("admin", "report.export")).toBe(true);
+    expect(roleHasPermission("staff", "report.export")).toBe(false);
+    expect(roleHasPermission("supervisor", "report.export")).toBe(false);
+  });
 });

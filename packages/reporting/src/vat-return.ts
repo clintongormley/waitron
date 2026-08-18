@@ -3,12 +3,12 @@ import type { Transaction } from "@waitron/db";
 import { subtractDecimal } from "@waitron/shared";
 import { aggregateVatByRate } from "./vat-summary.js";
 import { computeInputVat } from "./input-vat.js";
-import { calendarMonthFilter, validateLiquidationPeriod } from "./period.js";
+import { periodDateFilter, validatePeriod } from "./period.js";
 import type { VatReturn, VatReturnInput } from "./types.js";
 
 /**
- * The modelo 303 aggregate over one calendar month, for one obligado (tenant), across ALL nodes of
- * the legal entity — now BOTH sides of the return:
+ * The modelo 303 aggregate over one liquidation period (month/quarter/year), for one obligado
+ * (tenant), across ALL nodes of the legal entity — now BOTH sides of the return:
  *
  *   - *IVA devengado* (output): the régimen-general per-rate `Σ` over the filed `sales.vat_breakdown`
  *     (`byRate`/`baseTotal`/`taxTotal`), bucketed by the filed *fecha de expedición*, corrections
@@ -30,28 +30,28 @@ import type { VatReturn, VatReturnInput } from "./types.js";
  * the civil `received_on` (the deduction period, spec §D3).
  */
 export async function computeVatReturn(tx: Transaction, input: VatReturnInput): Promise<VatReturn> {
-  // Caller preconditions — a bad year/month is a plain Error, thrown BEFORE any query (shared with
+  // Caller preconditions — a bad year/period is a plain Error, thrown BEFORE any query (shared with
   // computeInputVat; see period.ts for the four-digit-year rationale).
-  validateLiquidationPeriod(input.year, input.month);
+  validatePeriod(input.year, input.period);
 
   // The filed fecha de expedición = shift(issued_at, issued_offset_minutes) then read the civil date —
   // byte-identical to verifactu/format.ts's formatDate (spec §4). `at time zone 'UTC'` yields the UTC
   // wall-clock timestamp of the stored timestamptz; adding the snapshot offset reproduces the filed
   // local calendar date without re-deriving any zone.
   const filedDate = sql`((s.issued_at at time zone 'UTC') + make_interval(mins => s.issued_offset_minutes))::date`;
-  const dateFilter = calendarMonthFilter(filedDate, input.year, input.month);
+  const dateFilter = periodDateFilter(filedDate, input.year, input.period);
 
   const summary = await aggregateVatByRate(tx, { tenantId: input.tenantId, dateFilter });
   const deducible = await computeInputVat(tx, {
     tenantId: input.tenantId,
     year: input.year,
-    month: input.month,
+    period: input.period,
   });
 
   return {
     tenantId: input.tenantId,
     year: input.year,
-    month: input.month,
+    period: input.period,
     byRate: summary.byRate,
     baseTotal: summary.baseTotal,
     taxTotal: summary.taxTotal,

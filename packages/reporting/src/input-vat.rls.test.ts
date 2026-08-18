@@ -61,7 +61,7 @@ beforeAll(async () => {
 function run(tenantId: TenantId): Promise<InputVatReturn> {
   return withTenant(suite.admin, tenantId, async (tx) => {
     await asAppUser(tx);
-    return computeInputVat(tx, { tenantId, year: 2026, month: 8 });
+    return computeInputVat(tx, { tenantId, year: 2026, period: { kind: "month", month: 8 } });
   });
 }
 

@@ -15,7 +15,7 @@ function vatReturn(over: Partial<VatReturn> = {}): VatReturn {
   return {
     tenantId: TENANT,
     year: 2026,
-    month: 8,
+    period: { kind: "month", month: 8 },
     byRate: [],
     baseTotal: d("0.00"),
     taxTotal: d("0.00"),
@@ -46,7 +46,7 @@ describe("mapModelo303", () => {
     });
 
     const m = mapModelo303(ret);
-    expect(m).toMatchObject({ tenantId: TENANT, year: 2026, month: 8 });
+    expect(m).toMatchObject({ tenantId: TENANT, year: 2026, period: { kind: "month", month: 8 } });
     expect(m.boxes).toEqual({
       // IVA devengado — 10% → 04/05/06, 21% → 07/08/09 (rate box holds the tipo)
       "04": "160.00",
@@ -70,6 +70,34 @@ describe("mapModelo303", () => {
       "69": "-175.64",
       "71": "-175.64",
     });
+  });
+
+  it("threads the liquidation period through and keeps the boxes period-agnostic (monthly ≡ quarterly)", () => {
+    // Identical figures under a MONTH and under a QUARTER: the boxes carry no period, so they must be
+    // byte-identical; only `period` differs. (Box exactness over a wider range is inherited upstream.)
+    const figures = {
+      byRate: [
+        { rate: d("10.00"), base: d("160.00"), tax: d("16.00") },
+        { rate: d("21.00"), base: d("335.00"), tax: d("70.35") },
+      ],
+      taxTotal: d("86.35"),
+      deductible: {
+        byRate: [
+          { rate: d("10.00"), base: d("100.00"), tax: d("10.00"), kind: "ordinary" as const },
+          { rate: d("21.00"), base: d("200.00"), tax: d("41.99"), kind: "ordinary" as const },
+          { rate: d("21.00"), base: d("1000.00"), tax: d("210.00"), kind: "capital" as const },
+        ],
+        baseTotal: d("1300.00"),
+        taxTotal: d("261.99"),
+      },
+      result: d("-175.64"),
+    };
+    const monthly = mapModelo303(vatReturn({ ...figures, period: { kind: "month", month: 8 } }));
+    const quarterly = mapModelo303(
+      vatReturn({ ...figures, period: { kind: "quarter", quarter: 1 } }),
+    );
+    expect(quarterly.boxes).toEqual(monthly.boxes);
+    expect(quarterly.period).toEqual({ kind: "quarter", quarter: 1 });
   });
 
   it("keeps casilla 46 = 27 − 45 (verified arithmetic)", () => {

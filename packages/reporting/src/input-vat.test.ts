@@ -25,7 +25,11 @@ function run(opts: { year: number; month: number; tenantId?: TenantId }): Promis
   const tenantId = opts.tenantId ?? venue.tenantId;
   return withTenant(suite.db, tenantId, async (tx) => {
     await asAppUser(tx);
-    return computeInputVat(tx, { tenantId, year: opts.year, month: opts.month });
+    return computeInputVat(tx, {
+      tenantId,
+      year: opts.year,
+      period: { kind: "month", month: opts.month },
+    });
   });
 }
 
@@ -54,7 +58,7 @@ describe("computeInputVat", () => {
     expect(ret).toMatchObject({
       tenantId: venue.tenantId,
       year: 2026,
-      month: 8,
+      period: { kind: "month", month: 8 },
       baseTotal: "200.00",
       taxTotal: "41.98",
     });
@@ -146,7 +150,7 @@ describe("computeInputVat", () => {
     expect(await run({ year: 2026, month: 3 })).toEqual({
       tenantId: venue.tenantId,
       year: 2026,
-      month: 3,
+      period: { kind: "month", month: 3 },
       byRate: [],
       baseTotal: "0.00",
       taxTotal: "0.00",
@@ -175,7 +179,11 @@ describe("computeInputVat", () => {
       lines: [{ rate: "21.00", base: "100.00", tax: "21.00" }],
     });
     const ret = await withTenant(suite.db, venue.tenantId, (tx) =>
-      computeInputVat(tx, { tenantId: venue.tenantId, year: 2026, month: 8 }),
+      computeInputVat(tx, {
+        tenantId: venue.tenantId,
+        year: 2026,
+        period: { kind: "month", month: 8 },
+      }),
     );
     expect(ret.byRate).toEqual([{ rate: "21.00", base: "100.00", tax: "21.00", kind: "ordinary" }]);
   });

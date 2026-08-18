@@ -97,7 +97,7 @@ function deliMonth(): Modelo303 {
   return {
     tenantId: TENANT,
     year: 2026,
-    month: 8,
+    period: { kind: "month", month: 8 },
     boxes: {
       "04": d("160.00"),
       "05": d("10.00"),
@@ -256,9 +256,9 @@ describe("toDr303Record — deli-month fixture", () => {
 });
 
 // ── Envelope-period consistency: the ejercicio/período stamped from `options` must match the
-//    liquidation period the aggregate's amounts are FOR (`modelo303.year`/`modelo303.month`). Passing a
+//    liquidation period the aggregate's amounts are FOR (`modelo303.year`/`modelo303.period`). Passing a
 //    wrong year/period would emit an internally inconsistent tax file — envelope period ≠ casilla
-//    amounts. deliMonth() is the aggregate for month 8 of 2026 (its `year`/`month` say so). ──
+//    amounts. deliMonth() is the aggregate for month 8 of 2026 (its `year`/`period` say so). ──
 describe("toDr303Record — envelope period must match the aggregate's liquidation period", () => {
   it("throws when the option period's month disagrees with the aggregate's liquidation month", () => {
     // deliMonth() aggregates month 8; filing it under período "07" stamps a month the amounts are not
@@ -279,9 +279,35 @@ describe("toDr303Record — envelope period must match the aggregate's liquidati
     expect(() => toDr303Record(deliMonth(), OPTIONS)).not.toThrow();
   });
 
-  it("does not cross-check a trimestral (quarterly) period token against a single-month aggregate", () => {
-    // A "1T".."4T" período spans three months, so a single-month aggregate cannot be pinned to one
-    // quarter; only the monthly case is enforced (documented in toDr303Record). "4t" must not throw.
+  it("does not cross-check a quarterly period token against a MONTHLY aggregate", () => {
+    // deliMonth() is a {kind:"month"} aggregate. The monthly cross-check only fires for a 2-digit
+    // ("01".."12") token; a "1T".."4T" token skips it (the quarterly path is caller-consistent, not
+    // cross-checked here — see toDr303Record's doc comment). So "4t" must not throw.
     expect(() => toDr303Record(deliMonth(), { ...OPTIONS, period: "4t" })).not.toThrow();
+  });
+});
+
+// ── Period-aware envelope: the aggregate's LiquidationPeriod (`modelo303.period`) governs whether the
+//    envelope período is cross-checked. Monthly → cross-checked against its month; quarterly → exempt
+//    (the download route derives período from the SAME period, so they cannot disagree at the caller);
+//    annual → REFUSED, because there is no modelo 303 annual período (the annual return is modelo 390). ──
+describe("toDr303Record — period-aware envelope (annual refused, quarterly threaded)", () => {
+  // PROOF BY DELETION (CLAUDE.md §4 "prove a guard by deletion"). Deleting the `p.kind === "year"`
+  // throw block in dr303.ts and running this file makes ONLY the annual test below go RED (the
+  // quarterly test still passes):
+  //   × … > refuses an annual aggregate …
+  //     → AssertionError: expected [Function] to throw an error
+  // i.e. a {kind:"year"} aggregate + período "01" no longer refuses — it emits a misleading
+  // January-stamped 2944-byte file. Restoring the throw makes the file GREEN again (27 passed).
+  // Recorded 2026-08-18.
+  it("refuses an annual aggregate — there is no modelo 303 annual period (annual is modelo 390)", () => {
+    const annual = { ...deliMonth(), period: { kind: "year" as const } };
+    expect(() => toDr303Record(annual, { ...OPTIONS, period: "01" })).toThrow(/annual|390/);
+  });
+  it("emits a quarterly file for a quarterly aggregate (envelope carries the trimestre)", () => {
+    const q1 = { ...deliMonth(), period: { kind: "quarter" as const, quarter: 1 } };
+    const file = toDr303Record(q1, { ...OPTIONS, period: "1T" });
+    expect(file.length).toBe(2944);
+    expect(at(file, 0, 17)).toBe("<T303020261T0000>"); // <T 3030 2026 1T 0000>
   });
 });

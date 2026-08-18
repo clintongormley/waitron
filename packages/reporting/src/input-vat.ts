@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import type { TenantId } from "@waitron/shared";
 import { addDecimal, compareDecimal, decimal } from "@waitron/shared";
-import { calendarMonthFilter, validateLiquidationPeriod } from "./period.js";
+import { periodDateFilter, validatePeriod, type LiquidationPeriod } from "./period.js";
 import type { InputVatRateLine, InputVatReturn, PurchaseVatKind } from "./types.js";
 
 export interface InputVatInput {
@@ -10,8 +10,8 @@ export interface InputVatInput {
   tenantId: TenantId;
   /** Civil calendar year of the liquidation period. */
   year: number;
-  /** Civil calendar month of the liquidation period, 1..12. */
-  month: number;
+  /** The liquidation period (month/quarter/year); the deduction window over `received_on`. */
+  period: LiquidationPeriod;
 }
 
 // ordinary (corrientes, casilla 28/29) before capital (bienes de inversión, casilla 30/31) — the
@@ -19,11 +19,12 @@ export interface InputVatInput {
 const KIND_ORDER: Record<PurchaseVatKind, number> = { ordinary: 0, capital: 1 };
 
 /**
- * The modelo 303 input-VAT (*IVA deducible/soportado*) aggregate over one calendar month, for one
- * obligado (tenant), across ALL nodes — the input-side counterpart to `computeVatReturn`. Reads
- * `purchase_invoice_vat` joined to its `purchase_invoices` header, filtered to `regime = 'general'`
- * (recargo de equivalencia is non-deductible and off the 303, spec §D4), bucketed by `received_on`
- * civil date in the calendar month (the deduction period, spec §D3), grouped by (rate, kind).
+ * The modelo 303 input-VAT (*IVA deducible/soportado*) aggregate over one liquidation period
+ * (month/quarter/year), for one obligado (tenant), across ALL nodes — the input-side counterpart to
+ * `computeVatReturn`. Reads `purchase_invoice_vat` joined to its `purchase_invoices` header, filtered
+ * to `regime = 'general'` (recargo de equivalencia is non-deductible and off the 303, spec §D4),
+ * bucketed by `received_on` civil date in the period (the deduction period, spec §D3), grouped by
+ * (rate, kind).
  *
  * `base` is summed in full; the deductible `tax` (cuota) is `Σ round(filed cuota ×
  * deductible_proportion/100)` — rounded PER invoice line, then summed, never re-rounded on the monthly
@@ -41,9 +42,9 @@ export async function computeInputVat(
   input: InputVatInput,
 ): Promise<InputVatReturn> {
   // Caller preconditions validated BEFORE any query (plain Error, shared with computeVatReturn).
-  validateLiquidationPeriod(input.year, input.month);
+  validatePeriod(input.year, input.period);
 
-  const dateFilter = calendarMonthFilter(sql`p.received_on`, input.year, input.month);
+  const dateFilter = periodDateFilter(sql`p.received_on`, input.year, input.period);
 
   // The deductible cuota is rounded (half away from zero, Postgres `round(numeric, 2)`) PER invoice
   // line before summing — matching `@waitron/shared`'s `percentOf` rounding and the per-invoice
@@ -91,7 +92,7 @@ export async function computeInputVat(
   return {
     tenantId: input.tenantId,
     year: input.year,
-    month: input.month,
+    period: input.period,
     byRate: lines,
     baseTotal,
     taxTotal,

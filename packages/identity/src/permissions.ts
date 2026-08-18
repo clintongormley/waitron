@@ -37,6 +37,12 @@ export const PERMISSIONS = [
   // admin (person.manage); granted to manager + admin, the same roles as the other write gates
   // (recipe-authoring UI, 2026-08-16).
   "recipe.manage",
+  // Exporting the modelo 303 fiscal autoliquidación as the AEAT DR303 fixed-layout file from the
+  // management dashboard / API (@waitron/reporting toDr303Record). A domain-named REPORTING permission
+  // — exporting the tax return is a distinct capability from authoring supplier invoices
+  // (purchase.manage) or staff admin (person.manage); granted to manager + admin, the dashboard's
+  // audience (spec D7). Codes/permissions are never renamed once shipped.
+  "report.export",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -59,6 +65,7 @@ const MANAGER: ReadonlySet<Permission> = new Set([
   "absence.decide",
   "purchase.manage",
   "recipe.manage",
+  "report.export",
 ]);
 const ALL: ReadonlySet<Permission> = new Set(PERMISSIONS);
 
