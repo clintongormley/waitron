@@ -211,7 +211,7 @@ describe("/management-api/service-statuses", () => {
     });
   });
 
-  it("POST body screens: a null body, a missing/non-string label/color, a non-integer displayOrder → 400", async () => {
+  it("POST body screens: a null body, a missing/non-string label/color, a non-integer OR non-number displayOrder → 400", async () => {
     // null body → coerced to {} then the label screen fires (field "body" only fires for a non-object
     // truthy body such as an array).
     const nullBody = await request("", { method: "POST", body: "null" }, managerCookie);
@@ -255,6 +255,22 @@ describe("/management-api/service-statuses", () => {
     );
     expect(badOrder.status).toBe(400);
     expect(await badOrder.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "displayOrder" } },
+    });
+
+    // A NON-NUMBER displayOrder (here `null`) is rejected, not coerced: a bare `Number(null)` is 0, so
+    // the pre-fix `Number` + `Number.isInteger` check silently accepted it (→ displayOrder 0). The
+    // typeof-first screen refuses it — the prove-by-behaviour for the `parseDisplayOrder` type check.
+    const nullOrder = await request(
+      "",
+      {
+        method: "POST",
+        body: JSON.stringify({ label: uniqueLabel("Z"), color: "#000", displayOrder: null }),
+      },
+      managerCookie,
+    );
+    expect(nullOrder.status).toBe(400);
+    expect(await nullOrder.json()).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "displayOrder" } },
     });
   });
@@ -318,7 +334,7 @@ describe("/management-api/service-statuses", () => {
     expect(await malformed.json()).toMatchObject({ error: { code: "status.not_found" } });
   });
 
-  it("PATCH body screens: an array body → 400 (field body); non-string label/color, non-integer displayOrder, non-boolean active → 400", async () => {
+  it("PATCH body screens: an array body → 400 (field body); non-string label/color, non-integer OR non-number displayOrder, non-boolean active → 400", async () => {
     const id = randomUUID(); // a well-formed uuid, so the isUuid screen passes and the body screens fire
 
     // A JSON array is a non-object body → field "body".
@@ -355,6 +371,18 @@ describe("/management-api/service-statuses", () => {
     );
     expect(badOrder.status).toBe(400);
     expect(await badOrder.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "displayOrder" } },
+    });
+
+    // A NON-NUMBER displayOrder (here `null`) is rejected, not coerced — an explicit `null` on PATCH
+    // would otherwise have reset displayOrder to 0 (`Number(null)` → 0). See the POST screen above.
+    const nullOrder = await request(
+      `/${id}`,
+      { method: "PATCH", body: JSON.stringify({ displayOrder: null }) },
+      managerCookie,
+    );
+    expect(nullOrder.status).toBe(400);
+    expect(await nullOrder.json()).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "displayOrder" } },
     });
 

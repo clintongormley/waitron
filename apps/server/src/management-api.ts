@@ -181,16 +181,19 @@ function requireStatusId(id: string): string {
 /**
  * Parse and validate a `displayOrder` request field, shared by the status POST and PATCH routes. An
  * absent field stays `undefined` (a legitimate no-op — POST then defaults it, PATCH leaves it
- * untouched); a present value is coerced with `Number` and refused as `management.request_invalid`
- * naming the FIELD (never the value) unless it is an integer. The same `Number` + `Number.isInteger`
- * check both routes had inline.
+ * untouched); a PRESENT value must be an integer NUMBER, else it is refused as
+ * `management.request_invalid` naming the FIELD (never the value). The `typeof value !== "number"`
+ * screen comes FIRST and is deliberate — matching the typeof checks the sibling label/color/active
+ * fields use — so a non-number is REJECTED rather than coerced. An earlier `Number(value)` +
+ * `Number.isInteger` check silently ACCEPTED `null`/`true`/`""`/`[]` (they coerce to 0/1/0/0), which
+ * let an explicit `null` on PATCH reset displayOrder to 0. The dashboard sends `Number(...) || 0`
+ * (already a number), so it is unaffected.
  */
 function parseDisplayOrder(value: unknown): number | undefined {
   if (value === undefined) return undefined;
-  const n = Number(value);
-  if (!Number.isInteger(n))
+  if (typeof value !== "number" || !Number.isInteger(value))
     throw new AppError("management.request_invalid", { field: "displayOrder" });
-  return n;
+  return value;
 }
 
 /**
