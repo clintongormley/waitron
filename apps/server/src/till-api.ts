@@ -39,9 +39,11 @@ import {
   requireSession,
   setSessionCookie,
 } from "./till-session.js";
+import { requireUuidParam } from "./request-screens.js";
 // Side-effect only: loads errors.ts's augmentation for the host codes this file THROWS — the
 // `working_order.*` / `order_prep.*` it constructs via `requireUuidId` — under the "every file that
-// throws one of these imports ./errors.js" convention errors.ts states. The shared
+// throws one of these imports ./errors.js" convention errors.ts states. (The sale/pay body id screens
+// throw `shared.invalid_id` via `requireUuidParam`, whose own file loads that shared code.) The shared
 // `error-boundary.ts` these routes wrap through is what answers with `server.internal` now, and it
 // emits that as a bare literal, so it needs no such import of its own. See errors.ts.
 import "./errors.js";
@@ -71,8 +73,9 @@ export interface TillApiDeps {
 
 /**
  * Every AppError CODE the till API answers, and the HTTP status it maps to. CLIENT faults only: the
- * identity credential codes (`pin.invalid`/`person.*`/`session.*`), the `sale.*` request codes and
- * the `working_order.*` park-and-retrieve codes are all 4xx. A genuine SERVER fault never appears
+ * identity credential codes (`pin.invalid`/`person.*`/`session.*`), the `sale.*` request codes, the
+ * shared `shared.invalid_id` branded-id code (a malformed working-order id in a sale/pay/park body,
+ * 400) and the `working_order.*` park-and-retrieve codes are all 4xx. A genuine SERVER fault never appears
  * here — it reaches `run` as a NON-AppError and becomes an opaque 500. A registered code absent from
  * this table defaults to 400 (a client fault not yet given a more specific status), which is why
  * `run` needs the `?? 400`.
@@ -96,6 +99,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "sale.unknown_product": 400,
   "sale.unsupported_tender": 400,
   "sale.tender_shortfall": 400,
+  // A malformed working-order id in a `POST /api/sales` / `POST /api/pay` / `POST /api/working-orders`
+  // body — the shared branded-id code (`@waitron/shared`), screened by `requireUuidParam` so it is a
+  // clean 400, not a `22P02` → 500.
+  "shared.invalid_id": 400,
   "authorization.not_permitted": 403,
   "working_order.not_found": 404,
   "working_order.not_open": 409,
@@ -131,13 +138,18 @@ export const run = createErrorBoundary(STATUS, "till.failed");
  * malformed id passed straight into `eq(workingOrders.id, id)` would `22P02` in the DB → an opaque 500;
  * screening it here refuses it with the SAME domain `code` an absent/wrong-state id gets on that route
  * — the fail-closed shape each route documents. `code` is the caller's deliberate per-route choice
- * (`working_order.not_open` for place, `working_order.not_placed` for collect/cancel,
- * `order_prep.invalid_transition` for prep); all three carry `{ workingOrderId }`. The four
- * place/prep/collect/cancel routes share this one guard.
+ * (`working_order.not_found` for retrieve → 404 — the retrieve route's absent-order code;
+ * `working_order.not_open` for edit/abandon/place → 409; `working_order.not_placed` for collect/cancel
+ * → 409; `order_prep.invalid_transition` for prep → 409); every code carries `{ workingOrderId }`. The
+ * seven retrieve/edit/abandon/place/prep/collect/cancel routes share this one guard.
  */
 function requireUuidId(
   id: string,
-  code: "working_order.not_open" | "working_order.not_placed" | "order_prep.invalid_transition",
+  code:
+    | "working_order.not_found"
+    | "working_order.not_open"
+    | "working_order.not_placed"
+    | "order_prep.invalid_transition",
 ): string {
   if (!isUuid(id)) {
     throw new AppError(code, { workingOrderId: id });
@@ -310,6 +322,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
       const body = await c.req.json<TillSaleRequest>();
+      // `workingOrderId` is OPTIONAL: absent (a walk-up `recordTillSale` mints a fresh id for) and a
+      // well-formed-but-unknown one are both valid; only a MALFORMED one is an error. Un-screened it
+      // becomes `payWorkingOrder`'s `req.id` and `22P02`s at its `eq(workingOrders.id, req.id)` lock read
+      // (till-sale.ts) → an opaque 500 (the 7b follow-up). `requireUuidParam` refuses it 400 first.
+      if (body.workingOrderId !== undefined) {
+        requireUuidParam(body.workingOrderId, "WorkingOrderId");
+      }
       const result = await recordTillSale(
         { db: deps.db, backend: deps.backend, clock: deps.clock },
         deps.cfg,
@@ -333,6 +352,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
       const body = await c.req.json<IntegratedPayRequest>();
+      // The pay-body `id` is REQUIRED (it names the order to charge), and un-screened it `22P02`s at
+      // `payWorkingOrderIntegrated`'s `eq(workingOrders.id, req.id)` lock read (till-sale.ts) → an opaque
+      // 500 — the identical exposure to `/api/sales`'s `workingOrderId`. Screened here (before the
+      // provider guard, so a malformed body is a 400 whatever the till's card config) as the 7b sibling.
+      requireUuidParam(body.id, "WorkingOrderId");
       // `deps.cardProvider` is `undefined` on a till booted with `WAITRON_TILL_CARD_PROVIDER=none`
       // (`boot.ts`'s `buildCardProvider`). `mountTillApi` mounts this route on EVERY till regardless of
       // `cardProvider` (`boot.ts` calls it unconditionally), so this branch stays reachable at the HTTP
@@ -371,6 +395,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         lines: { productId: string; quantity: string }[];
         label?: string;
       }>();
+      // The client MINTS `body.id` — it becomes the `working_orders.id` PK `createOpenOrder` INSERTs
+      // (a `uuid` column), so un-screened a malformed one `22P02`s → an opaque 500, the same 7b exposure
+      // as the sale/pay bodies. (Distinct from the 23505 re-park idempotency follow-up: that is a
+      // VALID id colliding with an existing row; this is a malformed one refused before any INSERT.)
+      requireUuidParam(body.id, "WorkingOrderId");
       const result = await parkOrder({ db: deps.db }, deps.cfg, {
         id: body.id,
         lines: body.lines,
@@ -395,11 +424,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // Retrieve one parked order to rebuild its basket. SESSION-GUARDED. An id naming no OPEN order (an
   // absent, settled/abandoned, or another tenant's order — RLS hides it) surfaces `working_order.not_found`,
   // which `STATUS` maps to 404. Returns `{ id, orderNumber, label, lines }` — the pricing INPUTS only,
-  // never a stored price, so the till re-prices on retrieve.
+  // never a stored price, so the till re-prices on retrieve. The id is `isUuid`-screened before the
+  // query: a malformed one passed straight into `eq(workingOrders.id, id)` would `22P02` → an opaque
+  // 500 (the 7b follow-up), so it is refused as `working_order.not_found` — the SAME 404 an absent open
+  // order gets.
   app.get("/api/working-orders/:id", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const order = await getHeldOrder({ db: deps.db }, deps.cfg, c.req.param("id"));
+      const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+      const order = await getHeldOrder({ db: deps.db }, deps.cfg, id);
       return c.json(order);
     }),
   );
@@ -407,15 +440,18 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // Edit a parked order — the whole new basket plus an optional new label, a full REPLACEMENT.
   // SESSION-GUARDED. Only an `open` order may change; a non-open or unknown id surfaces
   // `working_order.not_open` → 409. `updateHeldOrder` re-prices authoritatively (the request carries
-  // no price) and returns nothing, so this answers 200 with an empty body.
+  // no price) and returns nothing, so this answers 200 with an empty body. The id is `isUuid`-screened
+  // before the query, refused as `working_order.not_open` → 409 — the SAME code a non-open/absent id
+  // gets — rather than the `22P02`-driven opaque 500 the raw value would raise (the 7b follow-up).
   app.put("/api/working-orders/:id", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       const body = await c.req.json<{
         lines: { productId: string; quantity: string }[];
         label?: string;
       }>();
-      await updateHeldOrder({ db: deps.db }, deps.cfg, c.req.param("id"), {
+      await updateHeldOrder({ db: deps.db }, deps.cfg, id, {
         lines: body.lines,
         label: body.label,
       });
@@ -425,11 +461,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   // Discard a parked order (`open → abandoned`). SESSION-GUARDED. A non-open or unknown id surfaces
   // `working_order.not_open` → 409, the same open-only guard `updateHeldOrder` makes. Returns 200 with
-  // an empty body.
+  // an empty body. The id is `isUuid`-screened before the query, refused as `working_order.not_open`
+  // → 409 — the SAME code — rather than the `22P02`-driven opaque 500 the raw value would raise (the
+  // 7b follow-up).
   app.delete("/api/working-orders/:id", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      await abandonHeldOrder({ db: deps.db }, deps.cfg, c.req.param("id"));
+      const id = requireUuidId(c.req.param("id"), "working_order.not_open");
+      await abandonHeldOrder({ db: deps.db }, deps.cfg, id);
       return c.body(null, 200);
     }),
   );
