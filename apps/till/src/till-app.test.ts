@@ -646,6 +646,135 @@ describe("till-app", () => {
     expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
   });
 
+  it("retrieve → edit → Hold re-syncs the edit via updateWorkingOrder instead of re-parking (P6)", async () => {
+    // P6 "Re-hold of a retrieved-and-edited order is not wired": now that the server made park
+    // IDEMPOTENT (a re-sent park with the same id REPLAYS the existing OPEN order and inserts nothing —
+    // the re-sent basket is DISCARDED), re-parking a RETRIEVED, EDITED order would SILENTLY DISCARD the
+    // edit yet show success. So Hold must mirror the pay/place paths: route a PERSISTED order through
+    // `#syncIfDirty` (`updateWorkingOrder`), never `parkOrder`. Retrieve wo-1 (café×2), add a second
+    // café, tap Hold: `updateWorkingOrder` must carry the EDITED composition + label and `parkOrder`
+    // must NOT be called; the basket clears (success). Before the fix `#onParkOrder` calls `parkOrder`
+    // unconditionally — the edit is replayed away — so this fails (parkOrder called, updateWorkingOrder
+    // not).
+    const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+    const parkOrder = vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 });
+    const { el } = await mountApp({ updateWorkingOrder, parkOrder });
+    const c = await toCounter(el);
+    const store = c.store;
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    expect(store.persisted).toBe(true); // a retrieved order is persisted server-side
+
+    store.addProduct(cafe, "1"); // the edit AFTER retrieve → the basket is dirty
+    await el.updateComplete;
+
+    emit(c, "park-order", { label: "Mesa 4" });
+    await flush(el);
+
+    // The edit is re-locked via updateWorkingOrder (café×2 retrieved + café×1 edit), under the order's
+    // id and label — NOT re-parked (a re-park would idempotently replay and discard the edit).
+    expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
+      lines: [
+        { productId: "cafe", quantity: "2" },
+        { productId: "cafe", quantity: "1" },
+      ],
+      label: "Mesa 4",
+    });
+    expect(parkOrder).not.toHaveBeenCalled();
+    // Success path: the basket empties and stays on the counter (a hold is not a completed sale).
+    expect(store.lines).toHaveLength(0);
+    expect(counter(el)).not.toBeNull();
+    expect(ticket(el)).toBeNull();
+  });
+
+  it("retrieve → (no edit) → Hold does not re-park an unedited retrieved order (P6)", async () => {
+    // The unedited half of P6: a retrieved order tapped straight to Hold has nothing to save — and must
+    // STILL not re-park, because an idempotent re-park is a needless round trip that only replays the
+    // already-stored order. `#syncIfDirty` no-ops on a clean basket (`persisted && !dirty`), so neither
+    // `updateWorkingOrder` nor `parkOrder` fires; the basket clears so the operator can move on. Before
+    // the fix `parkOrder` IS called, so this fails.
+    const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+    const parkOrder = vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 });
+    const { el } = await mountApp({ updateWorkingOrder, parkOrder });
+    const c = await toCounter(el);
+    const store = c.store;
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    expect(store.persisted).toBe(true);
+    expect(store.dirty).toBe(false); // retrieved but never edited
+
+    emit(c, "park-order", { label: "Mesa 4" });
+    await flush(el);
+
+    expect(parkOrder).not.toHaveBeenCalled(); // an idempotent re-park is not a save — skip it
+    expect(updateWorkingOrder).not.toHaveBeenCalled(); // #syncIfDirty no-ops on a clean basket
+    // Success path: the basket empties and stays on the counter.
+    expect(store.lines).toHaveLength(0);
+    expect(counter(el)).not.toBeNull();
+  });
+
+  it("retrieve → edit → Hold with a BLANK label keeps the retrieved order's name, does not wipe it (P6)", async () => {
+    // The Hold field opens BLANK, so `park-order` carries `label: undefined`. `updateWorkingOrder` writes
+    // `label ?? null`, so forwarding that undefined would WIPE the retrieved order's name ("Mesa 4" → NULL)
+    // — anonymising it in the cross-till held list. The persisted branch falls back to the STORED label,
+    // so a blank re-hold preserves the name. Proven by deletion: dropping `?? this.#store.label` sends
+    // label undefined here and fails this assertion. (A typed label still renames — the case above.)
+    const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+    const parkOrder = vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 });
+    const { el } = await mountApp({ updateWorkingOrder, parkOrder });
+    const c = await toCounter(el);
+    const store = c.store;
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    expect(store.label).toBe("Mesa 4"); // loadFrom adopted the retrieved order's name
+
+    store.addProduct(cafe, "1"); // edit AFTER retrieve → dirty
+    await el.updateComplete;
+
+    emit(c, "park-order", { label: undefined }); // the blank Hold field
+    await flush(el);
+
+    // The stored "Mesa 4" is preserved, NOT wiped — updateWorkingOrder carries the name, not undefined.
+    expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
+      lines: [
+        { productId: "cafe", quantity: "2" },
+        { productId: "cafe", quantity: "1" },
+      ],
+      label: "Mesa 4",
+    });
+    expect(parkOrder).not.toHaveBeenCalled();
+  });
+
+  it("retrieve → edit → Hold surfaces held.park_error and keeps the basket when the update fails (P6)", async () => {
+    // The persisted Hold path's error handling: a REAL `updateWorkingOrder` failure (not the
+    // `working_order.not_open` that `#syncIfDirty` swallows) must surface the same non-fatal
+    // `held.park_error` banner and leave the basket intact — the exact guarantee the fresh-walk-up park
+    // has (see "a failed parkOrder keeps the counter and the basket"), now proven for the persisted path.
+    const updateWorkingOrder = vi.fn().mockRejectedValue({ code: "working_order.rejected" });
+    const parkOrder = vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 });
+    const { el } = await mountApp({ updateWorkingOrder, parkOrder });
+    const c = await toCounter(el);
+    const store = c.store;
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    store.addProduct(cafe, "1"); // edit → dirty, so #syncIfDirty attempts the update
+    await el.updateComplete;
+
+    emit(c, "park-order", { label: "Mesa 4" });
+    await flush(el);
+
+    expect(updateWorkingOrder).toHaveBeenCalledOnce();
+    expect(parkOrder).not.toHaveBeenCalled();
+    expect(store.lines).toHaveLength(2); // basket intact (not cleared) so the operator can retry
+    expect(counter(el)).not.toBeNull();
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("held.park_error"));
+  });
+
   it("retrieve-order: fetches, maps productId→OrderLine via products, loads it under the order's id", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
@@ -1426,9 +1555,10 @@ describe("till-app", () => {
       // id and marks it persisted+clean (loadFrom). An UNEDITED retrieved order must NOT re-sync before
       // placing — `updateWorkingOrder` re-prices with the LIVE catalogue and would replace the add-time
       // lock, filing at the place-time price and defeating the line-add snapshot (design §3: placing does
-      // not re-lock price). It must never re-park either (a re-park of the same id would 23505 on the
-      // server's plain INSERT). `placeOrder` files the STORED composition straight. Removing the `dirty`
-      // gate in `#syncIfDirty` makes this fail (the unedited order re-syncs).
+      // not re-lock price). It must never re-park either (a re-park of the same id would idempotently
+      // REPLAY the existing open order server-side and discard the edit). `placeOrder` files the STORED
+      // composition straight. Removing the `dirty` gate in `#syncIfDirty` makes this fail (the unedited
+      // order re-syncs).
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
       });

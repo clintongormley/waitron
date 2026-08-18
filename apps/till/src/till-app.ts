@@ -248,10 +248,10 @@ export class TillApp extends LitElement {
   @state() private submitting = false;
   /**
    * REENTRY GUARD for parking — the same shape as {@link submitting}, one flag per in-flight request.
-   * Set synchronously at the top of {@link TillApp.#onParkOrder} before the first `await parkOrder` and
-   * cleared in its `finally`, so a re-fired `park-order` (double-tap, a laggy link) is a no-op while the
-   * first is pending. Parking twice is idempotent server-side (the id is the primary key), so this is
-   * hygiene rather than a fiscal safety — but a duplicate `POST` is still avoided.
+   * Set synchronously at the top of {@link TillApp.#onParkOrder} before its first await and cleared in
+   * its `finally`, so a re-fired `park-order` (double-tap, a laggy link) is a no-op while the first is
+   * pending. A re-park is idempotent server-side (it REPLAYS the existing open order and inserts
+   * nothing), so this is hygiene rather than a fiscal safety — but a duplicate `POST` is still avoided.
    */
   @state() private parking = false;
   /**
@@ -505,11 +505,11 @@ export class TillApp extends LitElement {
    * `placeOrder` requires the order to ALREADY exist as an `open` row, so this readies it first: a
    * basket never yet persisted (a fresh walk-up) is PARKED (`parkOrder`, then `store.markPersisted()`);
    * a basket already persisted (a RETRIEVED held order) is re-synced with `updateWorkingOrder` ONLY when
-   * it was EDITED since retrieve (`#syncIfDirty`) — re-parking it would collide on the primary key
-   * (`parkOrder` is a plain INSERT, not an idempotent replace), and re-syncing an UNEDITED order would
-   * re-price it at place-time and defeat the add-time lock (design §3: placing does not re-lock price),
-   * exactly as `#onConfirmPayment`'s pay-path re-sync guards. Either way the server places the intended
-   * composition — the edit, or the stored lock — never a stale one.
+   * it was EDITED since retrieve (`#syncIfDirty`) — re-parking it would SILENTLY REPLAY the existing open
+   * order server-side and discard the edit (park is idempotent: the re-sent basket is dropped), and
+   * re-syncing an UNEDITED order would re-price it at place-time and defeat the add-time lock (design §3:
+   * placing does not re-lock price), exactly as `#onConfirmPayment`'s pay-path re-sync guards. Either way
+   * the server places the intended composition — the edit, or the stored lock — never a stale one.
    *
    * On success this widget instance moves to the `"collect"` stage for the SAME order (`store.id` is
    * unchanged — only `#onNewSale` re-mints it) and refreshes the prep queue, since Modes I/T enqueue
@@ -525,7 +525,8 @@ export class TillApp extends LitElement {
     try {
       if (this.#store.persisted) {
         // A RETRIEVED order already exists server-side — sync it (only if EDITED, via `#syncIfDirty`)
-        // rather than re-park: a re-park of the same id would 23505 on the server's plain INSERT, and
+        // rather than re-park: a re-park of the same id would SILENTLY REPLAY the existing open order
+        // server-side and discard the edit (park is idempotent — the re-sent basket is dropped), and
         // re-syncing an UNEDITED order would re-price it at place-time and defeat the add-time lock
         // (design §3). Symmetric with `#onConfirmPayment`'s pre-pay re-sync.
         await this.#syncIfDirty(id, lines, label);
@@ -590,28 +591,49 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * Park the current basket to pay later, then empty it for the next customer — staying on the counter
-   * (a parked order is NOT a completed sale, so there is no ticket). The store's stable `id` is sent as
-   * the park-idempotency key; on success `store.clear()` empties the basket AND re-mints that id, so the
-   * next park/pay keys a fresh working order rather than colliding with the parked one — `cardOutcome`
-   * is cleared alongside it, so a declined card on THIS basket never carries over into the next
-   * customer's unrelated sale (fix round 1). A rejected park must not lose the order: like
-   * `#onConfirmPayment`, it surfaces a non-fatal error and leaves the basket intact (no `clear`) so the
-   * operator can retry — `cardOutcome` is left untouched on that path too, since the same basket (and
-   * any decline it carries) is still the one on the counter.
+   * Park (Hold) the current basket to pay later, then empty it for the next customer — staying on the
+   * counter (a parked order is NOT a completed sale, so there is no ticket). Mirrors the ready-the-order
+   * shape of {@link TillApp.#onPlaceOrder}, branching on whether the basket already exists server-side:
+   *  - a FRESH walk-up (not persisted) is PARKED (`parkOrder`) under the store's stable `id`, the
+   *    park-idempotency key;
+   *  - a RETRIEVED order (already an `open` row server-side) is re-synced with `updateWorkingOrder` ONLY
+   *    when it was EDITED since retrieve (`#syncIfDirty`), and NEVER re-parked. A re-park of the same id
+   *    is now IDEMPOTENT server-side — it catches the unique violation and REPLAYS the existing open
+   *    order, inserting nothing (the re-sent basket is DISCARDED; the id is the idempotency key) — so
+   *    re-parking a retrieved order would SILENTLY discard the edit while showing success. Routing
+   *    through `#syncIfDirty` saves the edit and no-ops an unedited retrieve, exactly as the pay path
+   *    (`#onConfirmPayment`) and place path (`#onPlaceOrder`) do.
+   *
+   * On success `store.clear()` empties the basket AND re-mints its id (a cleared basket is a new working
+   * order, ready to key a fresh park/pay), and `cardOutcome` is cleared alongside it so a declined card
+   * on THIS basket never carries over into the next customer's unrelated sale (fix round 1). A rejected
+   * park/sync must not lose the order: like `#onConfirmPayment`, it surfaces a non-fatal error and leaves
+   * the basket intact (no `clear`) so the operator can retry — `cardOutcome` is left untouched on that
+   * path too, since the same basket (and any decline it carries) is still the one on the counter.
    */
   async #onParkOrder(event: Event): Promise<void> {
     // Reentry guard: a second park-order fired before the first settles is a no-op (see `parking`).
     if (this.parking) return;
     this.parking = true;
     const { label } = (event as CustomEvent<ParkOrderDetail>).detail;
-    // Read the id (and map the lines) BEFORE the await: a successful clear() re-mints the id, so the
-    // values sent must be captured against the basket as it stands now. `#currentSaleLines()` maps the
-    // basket synchronously here, before the await.
+    // Read the id and map the lines BEFORE the await: a successful clear() re-mints the id, so the
+    // values sent must be captured against the basket as it stands now.
     const id = this.#store.id;
+    const lines = this.#currentSaleLines();
     this.errorKey = undefined;
     try {
-      await this.api.parkOrder({ id, lines: this.#currentSaleLines(), label });
+      if (this.#store.persisted) {
+        // A RETRIEVED order already exists server-side — sync it (only if EDITED, via `#syncIfDirty`)
+        // rather than re-park: a re-park of the same id would SILENTLY REPLAY the existing open order
+        // server-side and DISCARD the edit (park is idempotent — the re-sent basket is dropped).
+        // Symmetric with `#onPlaceOrder`'s and `#onConfirmPayment`'s ready-the-order re-sync. The Hold
+        // field opens BLANK (`event.detail.label` is undefined unless the operator types one), and
+        // `updateWorkingOrder` writes `label ?? null`, so fall back to the STORED label — a blank re-hold
+        // must keep the retrieved order's name (e.g. "Mesa 4"), not wipe it; a typed value renames.
+        await this.#syncIfDirty(id, lines, label ?? this.#store.label);
+      } else {
+        await this.api.parkOrder({ id, lines, label });
+      }
       this.#store.clear();
       this.cardOutcome = undefined;
       await this.#refreshHeldOrders();
