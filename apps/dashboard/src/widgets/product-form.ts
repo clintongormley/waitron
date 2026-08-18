@@ -148,8 +148,12 @@ export class ProductForm extends LitElement {
   /**
    * Reseed every field from `product` on an open or a product change. Runs before render, so the
    * pre-filled values are in place for the first paint. A create (`product` null) resets to blanks +
-   * defaults; an edit fills from the loaded product. `allergens` is seeded into BOTH the live value and
-   * the picker's `declaration` (the picker does not emit on seed, so the form must seed its own copy).
+   * defaults; an edit fills from the loaded product. Allergens are seeded from the MANUAL overlay
+   * (`manualAllergens`), NOT the published `allergens` union: the published value folds in any
+   * recipe-derived floor, so seeding — and re-saving — from it would double-count the derived
+   * allergens into the manual overlay. Seeded into BOTH the live value (`allergens`, what a save
+   * emits) and the picker's `declaration` seed (`seedAllergens`); the picker does not emit on seed,
+   * so the form must seed its own live copy too, or an untouched edit would re-save the wrong value.
    */
   override willUpdate(changed: PropertyValues): void {
     if (!changed.has("product") && !(changed.has("open") && this.open)) return;
@@ -160,8 +164,8 @@ export class ProductForm extends LitElement {
     this.pricingUnit = p?.pricingUnit ?? "each";
     this.categoryId = p?.categoryId ?? null;
     this.active = p?.active ?? true;
-    this.allergens = p?.allergens ?? null;
-    this.seedAllergens = p?.allergens ?? null;
+    this.allergens = p?.manualAllergens ?? null;
+    this.seedAllergens = p?.manualAllergens ?? null;
     this.image = p?.image ?? null;
     this.validationError = null;
   }

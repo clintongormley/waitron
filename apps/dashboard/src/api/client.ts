@@ -128,6 +128,10 @@ export interface Product {
   vatClass: VatClass;
   active: boolean;
   allergens: AllergenDeclaration;
+  /** The staff-authored allergen overlay — what a human explicitly declared, SEPARATE from the published
+   * `allergens` (which is the computed union of this overlay and any recipe-derived floor). The product
+   * editor seeds its allergen picker from THIS, so recipe-derived allergens are never re-saved as manual. */
+  manualAllergens: AllergenDeclaration;
   image: string | null;
 }
 
