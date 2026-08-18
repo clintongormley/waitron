@@ -88,6 +88,13 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Add a description in at least one language",
     es: "Añade una descripción en al menos un idioma",
   },
+  // The ingredient form's own client-side validation message: a non-empty name is required (the column
+  // is NOT NULL and a nameless ingredient is a UI error), surfaced via `codeMessage` from the form's
+  // `validationError`. Client-only — the server stays authoritative.
+  "ingredient.name_required": {
+    en: "Enter a name",
+    es: "Introduce un nombre",
+  },
   "media.missing": {
     en: "No image was provided",
     es: "No se ha proporcionado ninguna imagen",
