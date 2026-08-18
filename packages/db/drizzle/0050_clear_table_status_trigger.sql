@@ -5,10 +5,19 @@
 -- clears the instant the tab settles, without payWorkingOrder / recordSale changing at all (H2).
 --
 -- AFTER UPDATE, not BEFORE: the transition is already validated by working_orders_enforce_transition
--- (0030, a BEFORE UPDATE trigger permitting open → settled|abandoned) by the time this fires. WHEN
--- (OLD.status = 'open' AND NEW.status IN ('settled','abandoned')) so it fires ONLY on the open→terminal
--- turnover — never on an open→open label edit, nor a placed→settled counter collect (a counter order
--- carries no tab_id anyway, so even if it fired the UPDATE would match zero rows).
+-- (0030, a BEFORE UPDATE trigger permitting open → {open,placed,settled,abandoned} and
+-- placed → {settled,abandoned}) by the time this fires. WHEN
+-- (OLD.status IN ('open','placed') AND NEW.status IN ('settled','abandoned')) so it fires on EITHER
+-- turnover path to a terminal state: the walk-up open → settled|abandoned, AND the placed → settled|
+-- abandoned collect/cancel — because open → placed → settled is STRUCTURALLY REACHABLE for a tab
+-- (placeOrder(tabId) carries no guard that the order is not a tab; hardening that guard is a separate
+-- follow-up), so a WHEN gated on open→terminal alone would leave a stale service status ("Bill
+-- requested") lingering past turnover on that path. Broadening the WHEN to cover placed→terminal is
+-- PURE HARDENING, changing no existing behaviour: the body clears WHERE tab_id = NEW.id, and a placed
+-- order that is NOT a tab (a counter order) has no dining_tables row pointing back at it, so the
+-- UPDATE matches zero rows and is a no-op. The status is therefore cleared regardless of HOW the tab
+-- reached a terminal state. It still never fires on an open → open label edit (NEW.status is not
+-- terminal there).
 --
 -- SECURITY INVOKER (the plpgsql default; not stated): it runs as the CALLER (app_user), and the UPDATE
 -- is same-tenant (tenant_id = NEW.tenant_id), so the dining_tables tenant-isolation policy + the TS-1
@@ -39,5 +48,5 @@ $$;--> statement-breakpoint
 CREATE TRIGGER working_orders_clear_table_status
   AFTER UPDATE ON working_orders
   FOR EACH ROW
-  WHEN (OLD.status = 'open' AND NEW.status IN ('settled', 'abandoned'))
+  WHEN (OLD.status IN ('open', 'placed') AND NEW.status IN ('settled', 'abandoned'))
   EXECUTE FUNCTION working_orders_clear_table_status();

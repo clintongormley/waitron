@@ -100,6 +100,29 @@ describe("working_orders_clear_table_status (reset-on-turnover)", () => {
     expect(await statusOf(tableIds[1]!)).toBeNull();
   });
 
+  it("a tab that goes open→placed→settled ALSO has its table's status_id cleared (WHEN covers placed→terminal)", async () => {
+    // placeOrder(tabId) → pay walks a tab open → placed → settled (placeOrder carries no guard that
+    // the order is not a tab — a separate follow-up), so the reset-on-turnover WHEN must fire on
+    // placed→terminal too, not only open→terminal. enforce_transition (0030) permits open→placed and
+    // placed→settled, and the AFTER trigger's broadened WHEN clears the table on the settle.
+    const { orderId, tableIds } = await seedJoinedTab(1);
+    expect(await statusOf(tableIds[0]!)).not.toBeNull();
+
+    // open → placed is NOT terminal, so the status is not cleared here (NEW.status not settled/abandoned).
+    await asApp(tenantId, (tx) =>
+      tx.execute(sql`update working_orders set status = 'placed' where id = ${orderId}`),
+    );
+    expect(await statusOf(tableIds[0]!)).not.toBeNull();
+
+    // placed → settled IS terminal → the broadened WHEN fires and clears the table.
+    await asApp(tenantId, (tx) =>
+      tx.execute(
+        sql`update working_orders set status = 'settled', settled_at = now() where id = ${orderId}`,
+      ),
+    );
+    expect(await statusOf(tableIds[0]!)).toBeNull();
+  });
+
   it("abandoning a tab clears its table's status too", async () => {
     const { orderId, tableIds } = await seedJoinedTab(1);
     await asApp(tenantId, (tx) =>
