@@ -8,6 +8,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import { tableServiceStatuses } from "./table-service-statuses.js";
 import { locations, tenants } from "./tenants.js";
 
 /**
@@ -53,6 +54,11 @@ export const diningTables = pgTable(
     // `open` working order. BARE column — its (tenant_id, tab_id) → working_orders(tenant_id, id) FK is
     // hand-written in Task 2's custom migration (the mutual-FK cycle note above).
     tabId: uuid("tab_id"),
+    // The table's single current MANUAL status (design §2b), or NULL for none. Shown ALWAYS — a
+    // just-vacated `free` table may still carry a "needs-cleaning" status. Additive nullable column;
+    // dining_tables' TS-1 FORCE-RLS policy + app_user grants already cover it (grants table-wide, RLS
+    // row-level). The FK is the tenant-consistent COMPOSITE in extraConfig below.
+    statusId: uuid("status_id"),
   },
   (t) => [
     // Composite (tenant_id, id) UNIQUE — the target for working_orders' tenant-consistent
@@ -67,6 +73,15 @@ export const diningTables = pgTable(
       columns: [t.tenantId, t.locationId],
       foreignColumns: [locations.tenantId, locations.id],
       name: "dining_tables_location_fk",
+    }),
+    // Tenant-consistent composite FK to the venue's configured status set (design §2b): a table cannot
+    // point at a status of another tenant, independently of RLS. MATCH SIMPLE satisfies it while the
+    // column is NULL, so it stays nullable. `table_service_statuses` deactivates rather than deletes,
+    // so this FK never dangles (no ON DELETE path is exercised).
+    foreignKey({
+      columns: [t.tenantId, t.statusId],
+      foreignColumns: [tableServiceStatuses.tenantId, tableServiceStatuses.id],
+      name: "dining_tables_status_fk",
     }),
   ],
 ).enableRLS();

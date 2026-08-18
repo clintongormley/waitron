@@ -126,4 +126,42 @@ describe("table_service_statuses schema (RLS + grants)", () => {
       expect(foreign).toBeGreaterThan(0); // A's rows now leak to B — the predicate was the guard.
     });
   });
+
+  it("dining_tables.status_id is writable/readable by the non-owner app_user and enforces the tenant-consistent FK", async () => {
+    // Seed a location + a dining table (TS-1) as the owner, then set + read status_id as app_user.
+    const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
+    await suite.admin.execute(sql`
+      insert into locations (id, tenant_id, name, invoice_locales, operation_description)
+      values (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería')
+      on conflict (id) do nothing`);
+    const tableId = await asApp(TENANT_A, async (tx) =>
+      tx
+        .execute<{ id: string }>(
+          sql`insert into dining_tables (tenant_id, location_id, label) values (${TENANT_A}, ${LOCATION_A}, 'T-status') returning id`,
+        )
+        .then((r) => r.rows[0]!.id),
+    );
+    const statusId = await seedStatus(TENANT_A, "Bill requested TS2");
+    await asApp(TENANT_A, (tx) =>
+      tx.execute(sql`update dining_tables set status_id = ${statusId} where id = ${tableId}`),
+    );
+    const [row] = await asApp(TENANT_A, (tx) =>
+      tx
+        .execute<{ status_id: string | null }>(
+          sql`select status_id from dining_tables where id = ${tableId}`,
+        )
+        .then((r) => r.rows),
+    );
+    expect(row!.status_id).toBe(statusId);
+
+    // The composite FK rejects a status_id that is not this tenant's (a random uuid) — 23503.
+    const e = await captureError(() =>
+      asApp(TENANT_A, (tx) =>
+        tx.execute(
+          sql`update dining_tables set status_id = '99999999-9999-4999-8999-999999999999' where id = ${tableId}`,
+        ),
+      ),
+    );
+    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
+  });
 });
