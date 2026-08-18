@@ -342,6 +342,24 @@ declare module "@waitron/shared" {
      */
     "order_prep.invalid_transition": { workingOrderId: string };
     /**
+     * No such dining table for this tenant. `tableId` is a caller-supplied uuid the till already holds,
+     * not a secret — an id that matches nothing is unactionable if withheld (the rule `tenant.not_found`'s
+     * note gives). Qualified `tableId` to match the domain-record not_found family
+     * (`working_order.not_found`'s `workingOrderId`). `table.*` names the DOMAIN CONCEPT, never the
+     * throwing package (`tenant.not_found`'s note); destined for @waitron/tables if that package is ever
+     * extracted. An absent id, or another tenant's table (RLS hides it), both report THIS one code.
+     * (A DEACTIVATED table is a different fact — `table.inactive` below — surfaced only where openTab
+     * needs it; CRUD operates on a deactivated row by id regardless.)
+     */
+    "table.not_found": { tableId: string };
+    /**
+     * A dining table label already exists in this venue — the `(tenant_id, location_id, label)` unique
+     * (`dining_tables_location_label_key`) rejected the insert/update. `label` is the operator-supplied
+     * human id ("12", "Terraza 3"), not a secret, so echoing it is what makes the error actionable.
+     * `table.*`, not `server.*`, for the reason `tenant.not_found`'s note gives.
+     */
+    "table.label_taken": { label: string };
+    /**
      * A request to a gated server API surface carried a body/query whose SHAPE is wrong: a field
      * absent (where it is required) or present with the wrong declared type — a malformed date, a
      * non-string, a bad enum member. Originally the management-dashboard surface (the gated staff
