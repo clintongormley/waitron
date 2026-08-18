@@ -122,6 +122,17 @@ describe("dining_tables schema (RLS + grants)", () => {
     // deletion: FORCE RLS with no policy denies ALL rows, so B would see zero for the opposite reason.
     const id = await seedTable(TENANT_A, LOCATION_A, "T-leak");
     expect(id).toBeDefined();
+    // Control in the other direction (§4): under the REAL policy tenant B sees ZERO of A's rows. This
+    // is what makes the `> 0` after weakening attributable to the weakening — without it, a mutation
+    // that left B able to read A's rows all along would still satisfy the leak assertion below.
+    const foreignUnderRealPolicy = await asApp(TENANT_B, (tx) =>
+      tx
+        .execute<{ n: number }>(
+          sql`select (count(*) filter (where tenant_id = ${TENANT_A}))::int as n from dining_tables`,
+        )
+        .then((r) => r.rows[0]!.n),
+    );
+    expect(foreignUnderRealPolicy).toBe(0);
     await rollBackAfter(suite.admin, TENANT_B, async (tx) => {
       await tx.execute(
         sql`alter policy dining_tables_tenant_isolation on dining_tables using (true) with check (true)`,

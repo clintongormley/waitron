@@ -103,6 +103,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "working_order.not_settled": 409,
   "working_order.reason_required": 400,
   "order_prep.invalid_transition": 409,
+  // The generic request-shape 400 the sibling gated surfaces (`workforce-api.ts`,
+  // `catalogue-api.ts`) use for a malformed body field — here, an out-of-range `capacity` on the
+  // table create/patch routes (see `requireCapacity`). Listed explicitly though 400 is the table's
+  // default, matching those siblings.
+  "management.request_invalid": 400,
   // Table + tab (TS-1). A bad/absent/foreign table id is a 404 (`table.not_found`); a label
   // collision or an already-open tab / non-open tab / deactivated table is a 409 (the id may be
   // valid but the table's or tab's STATE forbids the operation); a `line_no` naming no line is a 404
@@ -138,6 +143,25 @@ function requireUuidId(
     throw new AppError(code, { workingOrderId: id });
   }
   return id;
+}
+
+/**
+ * Screen a body `capacity` as a non-negative int4 before it reaches the `dining_tables.capacity`
+ * column (int4) on the create/patch table routes. Optional, so an ABSENT capacity (`undefined`)
+ * passes through untouched — the column stays NULL / unchanged; a value present but not a
+ * non-negative integer within int4's range (`< 0`, `> 2_147_483_647`, fractional, or not a number)
+ * would otherwise reach the insert/update and raise `22003`/`22P02` — a non-AppError the boundary
+ * turns into an opaque `server.internal` 500, the same class the `:lineNo` range screen prevents.
+ * Refused here as `management.request_invalid` naming the FIELD, the generic request-shape 400 the
+ * sibling surfaces (`workforce-api.ts`'s `requireOffsetMinutes`) use for an out-of-range numeric body
+ * field. Only the field NAME travels, matching that code's no-value discipline (a headcount is not a
+ * secret, but the convention is uniform).
+ */
+function requireCapacity(capacity: number | undefined): void {
+  if (capacity === undefined) return;
+  if (!Number.isInteger(capacity) || capacity < 0 || capacity > 2_147_483_647) {
+    throw new AppError("management.request_invalid", { field: "capacity" });
+  }
 }
 
 /**
@@ -515,6 +539,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const body = await c.req.json<{ label: string; zone?: string; capacity?: number }>();
+      requireCapacity(body.capacity);
       const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return createTable(tx, deps.cfg, body);
@@ -555,6 +580,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
       const body = await c.req.json<{ label?: string; zone?: string; capacity?: number }>();
+      requireCapacity(body.capacity);
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await updateTable(tx, deps.cfg, id, body);

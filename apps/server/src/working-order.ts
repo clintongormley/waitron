@@ -132,10 +132,16 @@ async function priceOrderLines(
  * order from the SAME locked composition and a catalogue price change after add never moves the filed
  * total (line-add snapshot, 7c).
  *
- * Throws on a lineless order: a persisted `open`/`placed` order always has ≥1 line (park refuses an
- * empty basket, `updateHeldOrder` never leaves it lineless, and placing freezes the composition), so
- * an empty result is corruption rather than a reachable flow — the same guard `payWorkingOrder` used
- * inline before this was extracted.
+ * Refuses a LINELESS order with `sale.empty_basket` (a domain 4xx → 400), never a raw Error. A
+ * lineless persisted order IS a reachable state: `openTab` opens an EMPTY tab — a lineless `open`
+ * working order (design §3a; tabs.test.ts "opens a tab with NO initial round") — so paying it
+ * (`payWorkingOrder`), placing it (Mode-I `placeOrder`), or card-paying it
+ * (`payWorkingOrderIntegrated`) all reach here through `priceStoredOrder`. A sale needs ≥1 line to
+ * price and file, so an empty one is refused BEFORE any fiscal write (and before any card charge) —
+ * the SAME `sale.empty_basket` guard the walk-up/park/round paths make at their own layer, surfaced
+ * here as the actionable domain code the error boundary maps to 400, rather than the opaque
+ * `server.internal` 500 a raw Error would become through `run`. This is the last line for the
+ * empty-tab pay/place flow, which those earlier per-layer guards do not cover.
  */
 export async function readLockedLines(
   tx: Transaction,
@@ -152,11 +158,9 @@ export async function readLockedLines(
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))
     .orderBy(workingOrderLines.lineNo);
-  /* v8 ignore start */
   if (stored.length === 0) {
-    throw new Error(`readLockedLines: working order ${workingOrderId} has no lines to file`);
+    throw new AppError("sale.empty_basket", {});
   }
-  /* v8 ignore stop */
   return stored;
 }
 
@@ -166,7 +170,7 @@ export async function readLockedLines(
  * and the settled-ticket read-back). `priceLockedLines` runs the SAME difference-method arithmetic over
  * the ADD-TIME locked gross (`unit_price_gross`) that `priceBasket` runs over a live catalogue, so a
  * catalogue price change after add never moves the filed total (line-add snapshot, 7c). Pure over
- * `readLockedLines`'s read; throws on a lineless order (see there).
+ * `readLockedLines`'s read; refuses a lineless order with `sale.empty_basket` (see there).
  */
 export async function priceStoredOrder(
   tx: Transaction,
@@ -268,10 +272,12 @@ export async function createOpenOrder(
   // hides it) both read as absent — so a bad id surfaces the domain `table.not_found` (a 4xx) rather
   // than the raw `working_orders_delivery_table_fk` violation (23503) the insert would otherwise raise,
   // which `payWorkingOrder`'s `isUniqueViolation`-only catch re-throws to an opaque `server.internal`
-  // 500. The FK stays the DB backstop; this is the actionable app check, exactly as `openTab` guards
-  // its own tableId with the same code. A walk-up/park/tab passes no `deliveryTableId`, so this never
-  // fires for them. Tables are deactivated, never deleted (`deactivateTable`), so this cannot race a
-  // delete between the check and the insert below.
+  // 500. The FK stays the DB backstop; this is the actionable app check, mirroring `openTab`'s own
+  // existence check (the same `table.not_found` code). It is EXISTENCE-ONLY, though — no `active` gate
+  // and no `FOR UPDATE`, unlike `openTab` — so a counter delivery MAY name a DEACTIVATED table (whether
+  // to block that is the owner's product call, deferred); the parity is the code, not the full guard. A
+  // walk-up/park/tab passes no `deliveryTableId`, so this never fires for them. Tables are deactivated,
+  // never deleted (`deactivateTable`), so this cannot race a delete between the check and the insert below.
   const deliveryTableId = placement.deliveryTableId ?? null;
   if (deliveryTableId !== null) {
     const [table] = await tx

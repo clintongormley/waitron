@@ -209,6 +209,37 @@ describe("table + tab routes", () => {
     expect(await dup.json()).toMatchObject({ error: { code: "table.label_taken" } });
   });
 
+  it("POST /api/tables with an OUT-OF-int4-RANGE capacity → 400 management.request_invalid (not an opaque 22003 500)", async () => {
+    // `dining_tables.capacity` is int4. `9999999999` is a valid JS number, so a bare type check would
+    // let it through; it would then bind into the insert on the int4 column and PostgreSQL would raise
+    // `22003 (numeric_value_out_of_range)` — a non-AppError the boundary turns into an opaque
+    // `server.internal` 500 (the same class the table verb's own `tables.test.ts` "rethrows raw"
+    // asserts below the route). The route's `requireCapacity` range guard refuses it as a domain 400
+    // BEFORE any DB work. Dropping the `> 2_147_483_647` bound makes this a 500 — the prove-by-deletion.
+    const res = await request("/api/tables", {
+      method: "POST",
+      body: JSON.stringify({ label: "over-cap", capacity: 9_999_999_999 }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "capacity" } },
+    });
+  });
+
+  it("PATCH /api/tables/:id with a NEGATIVE capacity → 400 management.request_invalid (not a 500)", async () => {
+    const { id } = (await (
+      await request("/api/tables", { method: "POST", body: JSON.stringify({ label: "neg-cap" }) })
+    ).json()) as { id: string };
+    const res = await request(`/api/tables/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ capacity: -1 }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "capacity" } },
+    });
+  });
+
   it("PATCH /api/tables/:id with a malformed id → 404 table.not_found (isUuid guard, not a 500)", async () => {
     const res = await request("/api/tables/not-a-uuid", {
       method: "PATCH",

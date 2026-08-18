@@ -373,6 +373,38 @@ describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)",
       where dt.id = ${tableId} and wo.status = 'open'`);
     expect(Number(rows[0]!.n)).toBe(0);
   });
+
+  it("paying an EMPTY tab is refused sale.empty_basket (a domain 4xx), files nothing — not an opaque 500", async () => {
+    const { cfg } = await setupVenue();
+    const tableId = await seedTable(cfg, "Empty-pay");
+    const deps = { db: suite.admin, backend, clock };
+
+    // openTab with NO initial round → a lineless `open` working order (a first-class supported state,
+    // tabs.test.ts "opens a tab with NO initial round"). Closing it before ordering routes
+    // payWorkingOrder → priceStoredOrder → readLockedLines on a zero-line order — the exact
+    // empty-tab-pay flow that used to throw a RAW Error → opaque `server.internal` 500.
+    const { tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return openTab(tx, cfg, { tableId });
+    });
+
+    // The domain code the boundary maps to 400, NOT the opaque 500 a raw Error becomes through `run`.
+    // Prove by deletion: reverting readLockedLines to `throw new Error(...)` makes this reject with a
+    // plain Error carrying no `code`, so this `toMatchObject({ code })` fails (a 500 at the HTTP edge).
+    await expect(
+      payWorkingOrder(deps, cfg, {
+        id: tabId,
+        lines: [],
+        tender: { method: "cash", amount: "5.00" },
+      }),
+    ).rejects.toMatchObject({ code: "sale.empty_basket" });
+
+    // The refusal is BEFORE recordSale (the tx rolled back): NOTHING filed, the tab stays open. This is
+    // the fiscal-safety check — no sale, no chained registro, no half-written record (CLAUDE.md §5).
+    expect(await orderState(tabId)).toEqual({ status: "open", settledAtSet: false });
+    expect(await saleCount(tabId)).toBe(0);
+    expect(await registroCount(tabId)).toBe(0);
+  });
 });
 
 /** A trusted clock pinned to ONE instant, so two independent filings hash the same
