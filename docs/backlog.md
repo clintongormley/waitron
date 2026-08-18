@@ -353,7 +353,33 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   (venue-defined set + a reset trigger) → **TS-3** move / join / merge (a tab can cover several tables) →
   **TS-4** transfer items (whole/partial, never re-priced) → **TS-5** split-bill (item-split — the one
   fiscal slice; each check files its own sale + `registro`; dedicated fiscal review). In
-  `docs/superpowers/{specs,plans}/2026-08-17-table-service-ts*`. **Build-ready, not yet built.**
+  `docs/superpowers/{specs,plans}/2026-08-17-table-service-ts*`. **TS-1 LANDED (#97, 2026-08-18)** —
+  `dining_tables` (FORCE RLS, migrations 0043–0046) + `openTab` (per-table `FOR UPDATE` lock) + `addTabRound`
+  (per-tab `line_no` lock) + `voidTabLine` + pay-closes-tab + counter delivery-to-table (`delivery_table_id`) +
+  `listTablesWithState` occupancy read-model + till routes with `isUuid`/range guards; both concurrency races +
+  RLS proven by deletion on real Postgres; **fiscal core untouched** (`recordSale` byte-unchanged; an empirical
+  huella-independence proof that neither the `tab_id` back-pointer nor the `delivery_table_id` column enters the
+  huella). Built subagent-driven TDD (10 tasks + whole-branch review + fix wave). **TS-2 is now the next
+  buildable slice** (TS-3→TS-5, FP-1, KDS-1, bookings-integration all unblock behind it). **#97 follow-ups:**
+  - **Sync — HARD GATE for the sync-enrollment slice.** `delivery_table_id` replicates (its table
+    `working_orders` is sync-enrolled) but FK-references `dining_tables`, which is **not** enrolled.
+    `sync/apply` parks a `23503` **and holds the cursor below it** (`apply.ts:93-96`), so once a
+    counter-delivery order (non-null `delivery_table_id`) is applied on a subscriber it can **stall the ordered
+    lane indefinitely**. Latent today (cloud-mirror *apply* is deferred; the counter-delivery write path is not
+    UI-wired). The sync-enrollment slice **must enroll `dining_tables`** (correct `fkRank`) before activating
+    the `working_orders` subscriber, or exclude the column. Copilot corroborated on #97.
+  - **Location-scope the by-id verb family (Copilot #97).** `updateTable`/`deactivateTable`/`openTab` address
+    by (tenant-via-RLS) + id, matching the established held-order by-id family (`getHeldOrder`/`updateHeldOrder`/
+    `abandonHeldOrder`); only *list* verbs scope by location. **Unreachable today** (single-location tenants).
+    When multi-location (sub-project 6) lands, location-scope the **whole by-id family together** (per
+    `updateHeldOrder`'s own note that it should move as one), not just the table verbs.
+  - **TS-2 caveat.** The `status='open'` stale-pointer / occupancy predicate (openTab overwrite, `addTabRound`,
+    `voidTabLine`, `listTablesWithState`) assumes a tab never reaches `placed`. If TS-2 (configurable statuses)
+    lets a tab reach a non-`open` live state, revisit it — else a live placed tab reads as *free* and could be
+    overwritten / shown free on the floor.
+  - Minor: `listTablesWithState` cross-tenant read is PGlite-only (rests on explicit tenant predicates + RLS,
+    not a two-tenant test); the counter-delivery bad-id pre-check is existence-only (a sale can be tagged for a
+    *deactivated* table — benign, non-fiscal); a `"W1"` (`WAITRON_ID_SISTEMA`) literal is inlined in a test.
 - **Floor plan (sub-project 11)** — a layout editor **with live occupancy** (table state tied to
   orders), not a standalone layout. **FP-1 DESIGNED + PLANNED 2026-08-17** — brainstormed with the
   owner (visual companion), decomposed **operable-first into two slices**: **FP-1** (this) makes table
@@ -470,10 +496,11 @@ vendor coverage. The **`cash.drawer` authorization** slice is **now specced + pl
 `authorize()`-with-supervisor-override path** + a **reusable supervisor-override dialog** (which on-till
 config — device-identity manager-on-till, FP-2 "Editar plano" — and future till void/refund reuse). **So
 the ENTIRE table-service + kitchen + printing surface is now specced + planned, with nothing left to
-design.** **Nothing in this track is
-built yet**; TS-1 is the first buildable slice of the table-service track (the printing subsystem can build
-independently of it). The owner
-**may be reachable by laptop** during the 2026-08-19 → 25 trip, so this track can also progress remotely.
+design.** **TS-1 LANDED (#97, 2026-08-18)** — the table-service track's foundation (tables + tabs) is built;
+**TS-2 is the next buildable slice**, and FP-1 / KDS-1 / the booking integrations unblock behind TS-1/TS-2 (see
+the TS-1 row above for the #97 follow-ups). The printing subsystem can still build independently of the TS
+chain. The owner **may be reachable by laptop** during the 2026-08-19 → 25 trip, so this track can also
+progress remotely.
 
 ---
 
