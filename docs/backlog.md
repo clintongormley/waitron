@@ -567,8 +567,8 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     bug **#73's edit picker avoided** via an `updated()` `.value` reconcile; the login/create pickers
     still carry it); no top-level `<main>` landmark in the shell (consistent with `apps/till`; axe
     passes); `staff-list`'s `people` prop-doc still says "the app owns" (harmless imprecision); and
-    `apps/dashboard` declares `@waitron/shared` but still doesn't import it — **1d/#73 did not use it
-    either (confirmed 2026-08-08), so drop the dep.**
+    `apps/dashboard` declared an unused `@waitron/shared` dependency (browser-local by design, never
+    imported) — **dropped in #95 (2026-08-18).**
 - **Dashboard slice 1d follow-ups (#71, passkeys). None blocking; each deferred with a reason during
   the SDD build / simplify / finish-branch / Copilot review chain.**
   - **Real-ceremony integration test — the biggest gap.** Unit/route tests MOCK `@simplewebauthn`'s
