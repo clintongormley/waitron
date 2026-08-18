@@ -1,10 +1,11 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import { roleName } from "../i18n/domain.js";
 import type { PersonRole } from "../api/client.js";
 import { selectStyles } from "../select-styles.js";
@@ -47,11 +48,26 @@ export class PersonForm extends LitElement {
         display: block;
         margin-bottom: var(--wt-space-4);
       }
+      /* The in-dialog error banner — rendered in the modal's own top layer, unlike the screen's
+         page-level banner which the backdrop would occlude. */
+      .create-error {
+        color: var(--wt-color-danger);
+        margin: 0 0 var(--wt-space-3);
+      }
     `,
   ];
 
   /** Whether the dialog is showing. The app sets this to open the form; the form clears it on close. */
   @property({ type: Boolean, reflect: true }) open = false;
+
+  /**
+   * An error to show INSIDE the open dialog. The staff screen passes a rejected `createPerson`
+   * failure here as a RAW code (e.g. `pin.too_short`), which `codeMessage` maps to localised copy at
+   * the render edge — the code stays raw in this property, never shown verbatim. It renders in the
+   * modal's own top layer; the screen's page-level banner sits BEHIND the modal backdrop, where a
+   * sighted operator could not see it — the same reason the edit dialog carries its own `error`.
+   */
+  @property() error: string | null = null;
 
   @state() private displayName = "";
   // Named `selectedRole`, not `role`: `HTMLElement` already carries a public `role` ARIA property
@@ -125,6 +141,11 @@ export class PersonForm extends LitElement {
   override render() {
     return html`
       <wt-dialog heading=${t("person.new")} .open=${this.open} @wt-close=${() => this.#onClose()}>
+        ${
+          this.error
+            ? html`<p class="create-error" role="alert">${codeMessage(this.error)}</p>`
+            : nothing
+        }
         <wt-input
           class="field"
           data-test="display-name"

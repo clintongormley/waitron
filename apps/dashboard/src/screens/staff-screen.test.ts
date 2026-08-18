@@ -214,6 +214,36 @@ describe("staff-screen", () => {
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("pin.too_short");
   });
 
+  // The create error must surface INSIDE the create modal (its own top layer), not in the screen's
+  // page-level banner behind the backdrop where a sighted operator could not see it. While the create
+  // form is open the screen passes errorKey DOWN as `.error` and suppresses its own banner. Prove by
+  // deletion: drop the `!this.formOpen` guard and the occluded page banner reappears.
+  it("routes a rejected create's error into the dialog and suppresses the page banner", async () => {
+    const api = stubApi({ createPerson: vi.fn().mockRejectedValue({ code: "pin.too_short" }) });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
+    await el.updateComplete;
+
+    const detail = { displayName: "Cy", role: "staff" as const, pin: "12" };
+    form(el).dispatchEvent(
+      new CustomEvent("create-person", { detail, bubbles: true, composed: true }),
+    );
+    await flush(el);
+
+    // Passed down and rendered inside the create dialog as LOCALISED copy, never the raw wire code.
+    expect(form(el).error).toBe("pin.too_short");
+    expect(form(el).shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+      codeMessage("pin.too_short", "es-ES"),
+    );
+    expect(form(el).shadowRoot!.querySelector("[role=alert]")?.textContent).not.toContain(
+      "pin.too_short",
+    );
+    // The screen's own page-level banner is suppressed while the create dialog is open.
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+  });
+
   it("falls back to server.internal when a rejected create carries no code", async () => {
     const api = stubApi({ createPerson: vi.fn().mockRejectedValue({}) });
     const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });

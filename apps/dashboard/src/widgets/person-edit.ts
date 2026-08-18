@@ -104,8 +104,8 @@ export class PersonEdit extends LitElement {
    * RAW code (e.g. `authorization.not_permitted` or `pin.too_short`), which `codeMessage` maps to
    * localised copy at the render edge — the code stays raw in this property, never shown verbatim. It
    * renders in the modal's own top layer; the screen's page-level banner sits BEHIND the modal
-   * backdrop, where a sighted operator could not see it — the create dialog's known limitation, not
-   * repeated for edit.
+   * backdrop, where a sighted operator could not see it — the create dialog carries the same `error`
+   * for the same reason.
    */
   @property() error: string | null = null;
 

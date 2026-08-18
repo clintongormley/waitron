@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { codeMessage } from "../i18n/codes.js";
 import { roleName } from "../i18n/domain.js";
 // Value import (not `import type`): pulls in the module for its `@customElement` side effect, which
 // registers `dashboard-person-form` so `mountWidget` can create it.
@@ -137,5 +138,18 @@ describe("person-form", () => {
     expect(displayName.value).toBe("");
     expect(pin.value).toBe("");
     expect(el.shadowRoot!.querySelector("select")!.value).toBe("staff");
+  });
+
+  // The screen passes a rejected create's failure down as `error`; it renders in the dialog's own top
+  // layer (role="alert"), where the page-level banner behind the backdrop could not be seen.
+  it("renders the error inside the dialog when one is set", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", {
+      open: true,
+      error: "pin.too_short",
+    });
+    const alert = el.shadowRoot!.querySelector("[role=alert]");
+    // The banner shows LOCALISED copy for the code, never the raw wire code (the code stays in `error`).
+    expect(alert?.textContent).toContain(codeMessage("pin.too_short", "es-ES"));
+    expect(alert?.textContent).not.toContain("pin.too_short");
   });
 });
