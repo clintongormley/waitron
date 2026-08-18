@@ -25,7 +25,7 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { addTabRound, openTab, voidTabLine } from "./working-order.js";
+import { addTabRound, listTablesWithState, openTab, voidTabLine } from "./working-order.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -291,5 +291,87 @@ describe("voidTabLine", () => {
       code: "tab.not_open",
       params: { tabId },
     });
+  });
+});
+
+describe("listTablesWithState (occupancy)", () => {
+  it("reflects free → open-tab → free as a tab opens and pays", async () => {
+    const { cfg, cafeId, tableId } = await setupVenue();
+
+    const free = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    expect(free).toEqual([
+      expect.objectContaining({
+        id: tableId,
+        state: "free",
+        hasOpenTab: false,
+        pendingDeliveries: 0,
+      }),
+    ]);
+
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "2" }] }),
+    );
+    const busy = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    expect(busy[0]).toMatchObject({
+      state: "open-tab",
+      hasOpenTab: true,
+      tabId,
+      tabLineCount: 1,
+      tabTotal: "3.00",
+      pendingDeliveries: 0,
+    });
+
+    // Settle the tab (tab_id still points at it, now stale); the table frees.
+    await db.execute(
+      sql`update working_orders set status = 'settled', settled_at = now() where id = ${tabId}`,
+    );
+    const freed = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    expect(freed[0]).toMatchObject({ state: "free", hasOpenTab: false });
+  });
+
+  it("shows delivery-pending while a delivery's prep is uncollected, and free once collected", async () => {
+    const { cfg, tableId } = await setupVenue();
+    // A settled counter delivery to the table, with an uncollected prep row (queued).
+    const orderId = randomUUID();
+    await db.execute(sql`
+      insert into working_orders (id, tenant_id, till_id, node_id, order_number, status, settled_at, delivery_table_id)
+      values (${orderId}, ${cfg.tenantId}, ${cfg.tillId}, ${cfg.nodeId}, 500, 'settled', now(), ${tableId})`);
+    await asApp(cfg, (tx) =>
+      tx.execute(sql`insert into order_prep (tenant_id, working_order_id, node_id, state)
+        values (${cfg.tenantId}, ${orderId}, ${cfg.nodeId}, 'queued')`),
+    );
+
+    const pending = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    expect(pending[0]).toMatchObject({
+      state: "delivery-pending",
+      hasOpenTab: false,
+      pendingDeliveries: 1,
+    });
+
+    // Collected → no lingering occupancy.
+    await asApp(cfg, (tx) =>
+      tx.execute(
+        sql`update order_prep set state = 'collected', collected_at = now() where working_order_id = ${orderId}`,
+      ),
+    );
+    const cleared = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    expect(cleared[0]).toMatchObject({ state: "free", pendingDeliveries: 0 });
+  });
+
+  it("open-tab dominates delivery-pending in the rolled-up state", async () => {
+    const { cfg, cafeId, tableId } = await setupVenue();
+    await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+    );
+    const orderId = randomUUID();
+    await db.execute(sql`
+      insert into working_orders (id, tenant_id, till_id, node_id, order_number, status, settled_at, delivery_table_id)
+      values (${orderId}, ${cfg.tenantId}, ${cfg.tillId}, ${cfg.nodeId}, 501, 'settled', now(), ${tableId})`);
+    await asApp(cfg, (tx) =>
+      tx.execute(sql`insert into order_prep (tenant_id, working_order_id, node_id, state)
+        values (${cfg.tenantId}, ${orderId}, ${cfg.nodeId}, 'preparing')`),
+    );
+    const rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    expect(rows[0]).toMatchObject({ state: "open-tab", hasOpenTab: true, pendingDeliveries: 1 });
   });
 });

@@ -1175,3 +1175,98 @@ export async function listPrepQueue(
     );
   });
 }
+
+/** One row of the occupancy read-model (design §4). The raw signals (`hasOpenTab`, `pendingDeliveries`)
+ *  are exposed alongside the rolled-up `state` so the floor plan can render a richer badge. */
+export interface TableState {
+  id: string;
+  label: string;
+  zone: string | null;
+  capacity: number | null;
+  state: "free" | "open-tab" | "delivery-pending";
+  hasOpenTab: boolean;
+  tabId?: string;
+  tabLineCount?: number;
+  /** The open tab's gross draft total (sum of `line_total`), numeric(12,2) as text — present iff a tab. */
+  tabTotal?: string;
+  pendingDeliveries: number;
+}
+
+/**
+ * The venue's ACTIVE tables with their DERIVED occupancy (design §4). ONE location-scoped query: each
+ * table LEFT JOINs its at-most-one OPEN tab — the order its own `tab_id` back-pointer names, filtered to
+ * `status = 'open'` (a `tab_id` pointing at a settled/abandoned order finds nothing here and reads free,
+ * design §2b) — with a line count + gross total, plus a count of pending deliveries (orders with
+ * `delivery_table_id` = this table whose `order_prep` state is not yet `collected` and whose order is not
+ * `abandoned`). A non-prepped instant handover (no prep row, or collected) leaves no lingering occupancy.
+ *
+ * Precedence for the rolled-up `state`: open-tab dominates delivery-pending dominates free. Runs as the
+ * app role under the caller's tenant scope (RLS), so it gathers orders across NODES by construction (a
+ * table lives at the venue, not the register). `locationId` defaults to the till's own.
+ */
+export async function listTablesWithState(
+  tx: Transaction,
+  cfg: TillConfig,
+  locationId?: string,
+): Promise<TableState[]> {
+  const loc = locationId ?? cfg.locationId;
+  const result = await tx.execute<{
+    id: string;
+    label: string;
+    zone: string | null;
+    capacity: number | null;
+    tab_id: string | null;
+    tab_line_count: number;
+    tab_total: string | null;
+    pending_deliveries: number;
+  }>(sql`
+    select
+      dt.id, dt.label, dt.zone, dt.capacity,
+      tab.id as tab_id,
+      coalesce(tab.line_count, 0)::int as tab_line_count,
+      tab.tab_total,
+      coalesce(del.pending, 0)::int as pending_deliveries
+    from dining_tables dt
+    left join lateral (
+      select wo.id,
+             count(wol.id)::int as line_count,
+             coalesce(sum(wol.line_total), 0)::numeric(12, 2)::text as tab_total
+      from working_orders wo
+      left join working_order_lines wol
+        on wol.working_order_id = wo.id and wol.tenant_id = wo.tenant_id
+      where wo.tenant_id = dt.tenant_id and wo.id = dt.tab_id and wo.status = 'open'
+      group by wo.id
+    ) tab on true
+    left join lateral (
+      select count(*)::int as pending
+      from working_orders d
+      join order_prep op on op.tenant_id = d.tenant_id and op.working_order_id = d.id
+      where d.tenant_id = dt.tenant_id and d.delivery_table_id = dt.id
+        and d.status <> 'abandoned' and op.state <> 'collected'
+    ) del on true
+    where dt.location_id = ${loc} and dt.active = true
+    order by dt.label
+  `);
+
+  return result.rows.map((r) => {
+    const hasOpenTab = r.tab_id !== null;
+    const pendingDeliveries = Number(r.pending_deliveries);
+    const state: TableState["state"] = hasOpenTab
+      ? "open-tab"
+      : pendingDeliveries > 0
+        ? "delivery-pending"
+        : "free";
+    return {
+      id: r.id,
+      label: r.label,
+      zone: r.zone,
+      capacity: r.capacity,
+      state,
+      hasOpenTab,
+      pendingDeliveries,
+      ...(hasOpenTab
+        ? { tabId: r.tab_id!, tabLineCount: Number(r.tab_line_count), tabTotal: r.tab_total! }
+        : {}),
+    };
+  });
+}
