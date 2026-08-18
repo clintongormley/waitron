@@ -40,6 +40,24 @@ describe("person-form", () => {
     expect(options.find((o) => o.value === "manager")?.textContent).not.toContain("manager");
   });
 
+  // The role picker must DISPLAY `selectedRole` even when it is not the first option. Today the create
+  // form only ever presets "staff" (the first option), so a `.value` bound in the template renders
+  // right by luck; this seeds a non-first role BEFORE the first render (as a future "duplicate person"
+  // flow would) to prove the live <select> value tracks state regardless of option order. `manager` is
+  // the third of the four options, so this fails if the picker is driven by a `.value` property bound
+  // before its <option> children exist. Reconciling `.value` in `updated()` (after the options render)
+  // is the fix, mirroring the edit dialog. Prove-by-deletion: remove the `updated()` reconcile and the
+  // picker shows "staff".
+  it("presets the role picker to a non-first role, not the first option", async () => {
+    // mountWidget assigns props before the first render; `selectedRole` is private @state, so cast to
+    // reach it — the same escape hatch the login-screen suite uses for `selected`/`roster`.
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", {
+      open: true,
+      selectedRole: "manager",
+    } as unknown as Partial<PersonForm>);
+    expect(el.shadowRoot!.querySelector("select")!.value).toBe("manager");
+  });
+
   // Drives all three field handlers through the DOM (the wt-inputs' composed `wt-change`, the native
   // `<select>`'s `change`) and asserts the confirm control emits their captured values.
   it("emits create-person with the entered values on confirm", async () => {
