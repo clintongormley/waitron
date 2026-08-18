@@ -5,7 +5,7 @@ import type { PublicKeyCredentialCreationOptionsJSON } from "@simplewebauthn/bro
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { t } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 // Value imports (not `import type`): pull in the widget modules for their `@customElement` side
 // effects, so `<dashboard-staff-list>` and `<dashboard-person-form>` are registered before this
 // screen renders them.
@@ -127,7 +127,7 @@ export class StaffScreen extends LitElement {
     try {
       this.people = await this.api.listStaff();
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.errorKey = codeOf(error);
     }
   }
 
@@ -192,7 +192,7 @@ export class StaffScreen extends LitElement {
         this.editingPerson = this.people.find((p) => p.personId === id) ?? this.editingPerson;
       }
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.errorKey = codeOf(error);
     } finally {
       this.#editing = false;
     }
@@ -261,7 +261,7 @@ export class StaffScreen extends LitElement {
       await this.api.passkeyRegisterVerify({ challengeHandle, response });
       this.passkeyStatus = "passkey.registered";
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "passkey.verification_failed";
+      this.errorKey = codeOf(error, "passkey.verification_failed");
     }
   }
 
@@ -283,7 +283,7 @@ export class StaffScreen extends LitElement {
       this.formOpen = false;
       await this.#load();
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.errorKey = codeOf(error);
     } finally {
       this.#creating = false;
     }

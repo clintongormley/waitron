@@ -6,7 +6,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { DashboardApi, RosterEntry } from "../api/client.js";
 import { selectStyles } from "../select-styles.js";
 
@@ -63,7 +63,7 @@ export class LoginScreen extends LitElement {
       this.roster = await this.api.getStaffRoster();
       if (this.roster[0]) this.selected = this.roster[0].personId;
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.errorKey = codeOf(error);
     }
   }
 
@@ -105,7 +105,7 @@ export class LoginScreen extends LitElement {
         new CustomEvent("logged-in", { detail: out, bubbles: true, composed: true }),
       );
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.errorKey = codeOf(error);
     }
   }
 
@@ -143,7 +143,7 @@ export class LoginScreen extends LitElement {
         new CustomEvent("logged-in", { detail: out, bubbles: true, composed: true }),
       );
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "passkey.verification_failed";
+      this.errorKey = codeOf(error, "passkey.verification_failed");
     }
   }
 

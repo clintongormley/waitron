@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 
 /**
  * The `uploadImage` seam this control needs — the whole `DashboardApi` satisfies it structurally, and
@@ -106,7 +106,7 @@ export class ImageUpload extends LitElement {
         }),
       );
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.errorKey = codeOf(error);
     } finally {
       this.#uploading = false;
     }

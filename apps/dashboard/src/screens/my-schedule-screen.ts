@@ -4,7 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 import {
   absenceKindName,
   absenceStatusName,
@@ -226,7 +226,7 @@ export class MyScheduleScreen extends LitElement {
       await fn();
       await this.#loadLists();
     } catch (error) {
-      this.noticeCode = (error as { code?: string }).code ?? "server.internal";
+      this.noticeCode = codeOf(error);
     } finally {
       this.busy = false;
     }

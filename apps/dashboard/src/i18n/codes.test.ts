@@ -1,5 +1,5 @@
-import { afterEach, expect, it } from "vitest";
-import { codeMessage } from "./codes.js";
+import { afterEach, describe, expect, it } from "vitest";
+import { codeMessage, codeOf } from "./codes.js";
 import { setLocale } from "./t.js";
 
 afterEach(() => {
@@ -76,6 +76,33 @@ it("has a sentence for each roster/shift/convenio code (shift-planning slice 1)"
     expect(codeMessage(code, "es")).not.toBe(code);
     expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
   }
+});
+
+describe("codeOf", () => {
+  // codeOf is the companion to codeMessage: it pulls the wire CODE out of a rejected value (the
+  // dashboard API client rejects with a bare `{ code }`, see api/client.ts), so the same body that
+  // was hand-copied across the screens now lives once beside the code→message seam. Behaviour it
+  // must preserve exactly: `.code` when present, else `fallback` (default `server.internal`).
+  it("returns the code when the rejection carries one", () => {
+    expect(codeOf({ code: "x" })).toBe("x");
+  });
+
+  it("falls back to server.internal when the rejection carries no code", () => {
+    expect(codeOf({})).toBe("server.internal");
+  });
+
+  it("falls back to server.internal for a plain Error (no code)", () => {
+    expect(codeOf(new Error("boom"))).toBe("server.internal");
+  });
+
+  it("prefers the code over a supplied fallback", () => {
+    expect(codeOf({ code: "z" }, "f")).toBe("z");
+  });
+
+  it("uses the supplied fallback when the rejection carries no code", () => {
+    // The passkey flows pass this fallback so a code-less rejection reads as a verification failure.
+    expect(codeOf({}, "passkey.verification_failed")).toBe("passkey.verification_failed");
+  });
 });
 
 it("has a sentence for each staff self-service code (my-schedule portal)", () => {

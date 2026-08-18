@@ -7,7 +7,7 @@ import "@waitron/ui/src/components/wt-button.js";
 // pattern the catalogue screen follows).
 import "../widgets/shift-dialog.js";
 import { t } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 import { breachKindName } from "../i18n/domain.js";
 import type { AddShiftDetail, UpdateShiftDetail } from "../widgets/shift-dialog.js";
 import type {
@@ -184,7 +184,7 @@ export class RosterScreen extends LitElement {
       }
       await this.#loadRoster();
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.errorKey = codeOf(error);
     }
   }
 
@@ -205,7 +205,7 @@ export class RosterScreen extends LitElement {
     try {
       await this.#loadRoster();
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.errorKey = codeOf(error);
     }
   }
 
@@ -225,7 +225,7 @@ export class RosterScreen extends LitElement {
     try {
       await this.#loadRoster();
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.errorKey = codeOf(error);
     }
   }
 
@@ -266,7 +266,7 @@ export class RosterScreen extends LitElement {
       this.dialogOpen = false;
       await this.#loadRoster();
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.errorKey = codeOf(error);
     } finally {
       this.busy = false;
     }
@@ -283,7 +283,7 @@ export class RosterScreen extends LitElement {
       this.dialogOpen = false;
       await this.#loadRoster();
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.errorKey = codeOf(error);
     } finally {
       this.busy = false;
     }
@@ -300,7 +300,7 @@ export class RosterScreen extends LitElement {
       this.dialogOpen = false;
       await this.#loadRoster();
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.errorKey = codeOf(error);
     } finally {
       this.busy = false;
     }
@@ -317,7 +317,7 @@ export class RosterScreen extends LitElement {
       this.breaches = (await this.api.publishRoster(versionId)).breaches;
       await this.#loadRoster();
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.errorKey = codeOf(error);
     } finally {
       this.busy = false;
     }

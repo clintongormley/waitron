@@ -5,7 +5,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import type { DashboardApi, LayoutDef, WidgetInstance, WidgetType } from "../api/client.js";
 import { selectStyles } from "../select-styles.js";
@@ -443,11 +443,6 @@ export class LayoutScreen extends LitElement {
 /** Clone a widget instance with a fresh `config` object so editor edits never mutate a shared bag. */
 function cloneInstance(w: WidgetInstance): WidgetInstance {
   return { type: w.type, region: w.region, config: { ...w.config } };
-}
-
-/** The thrown `{ code }`, falling back to `server.internal` when a rejection names none. */
-function codeOf(error: unknown): string {
-  return (error as { code?: string }).code ?? "server.internal";
 }
 
 declare global {
