@@ -3,6 +3,7 @@ export { computeVatSummaryForPeriod } from "./vat-summary.js";
 export { computeVatReturn } from "./vat-return.js";
 export { computeInputVat } from "./input-vat.js";
 export type { InputVatInput } from "./input-vat.js";
+export { parsePeriodToken } from "./period.js";
 export type { LiquidationPeriod } from "./period.js";
 export { mapModelo303 } from "./modelo-303.js";
 export type { Modelo303 } from "./modelo-303.js";

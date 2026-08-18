@@ -14,10 +14,10 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
 import { addDecimal, decimal } from "@waitron/shared";
-import type { Decimal } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
+import { BOX_27, packAeatNumeric } from "./testing/dr303.js";
 import "./errors.js";
 
 // PGlite, not real Postgres: this suite proves the modelo 303 export ROUTE — the request/response
@@ -69,27 +69,19 @@ const Q1_SALE = {
 
 type SeededSale = (typeof AUGUST_SALES)[number];
 
-/** Box 27's fixed 0-based byte offset + length on página 1 (the same the demo/serializer test pin:
- * `dr303.test.ts`'s OFFSET table places box 27 at 1023, len 17). A layout shift turns those red. */
-const BOX_27 = { offset: 1023, len: 17 } as const;
-
-/**
- * Independently packs a Decimal into an AEAT fixed-width numeric field — the demo's OWN witness
- * (`modelo-303-demo.ts`'s `packAeatNumeric`), NOT the serializer's `formatNumericField`: magnitude in
- * cents, right-aligned and zero-filled, a negative value taking an 'N' in position 1. Used here only
- * to DERIVE the expected box-27 bytes from the seeded figures, so a bug in the serializer's own
- * formatter cannot mask itself.
- */
-function packAeatNumeric(value: Decimal, width: number): string {
-  const negative = value.startsWith("-");
-  const magnitude = (negative ? value.slice(1) : value).replace(".", "");
-  return negative ? "N" + magnitude.padStart(width - 1, "0") : magnitude.padStart(width, "0");
-}
-
 // Box 27 = Σ cuota devengada for the seeded month (mapModelo303 sets box 27 = vatReturn.taxTotal).
 // Summed with addDecimal (exact), then packed — 42.00 + 21.00 = 63.00 → "00000000000006300".
 const expectedBox27 = packAeatNumeric(
   AUGUST_SALES.reduce((acc, s) => addDecimal(acc, decimal(s.tax)), decimal("0.00")),
+  BOX_27.len,
+);
+
+// Q1's box 27 = Σ cuota devengada over the Q1 seed — only Q1_SALE (February) falls in the quarter, so
+// 21.00 → "00000000000002100". Derived with addDecimal + the shared packer (never hardcoded), and it
+// is DISTINCT from August's 63.00 and the whole-year 84.00, so a route that aggregated the wrong
+// período would fail this assertion.
+const expectedBox27Q1 = packAeatNumeric(
+  addDecimal(decimal("0.00"), decimal(Q1_SALE.tax)),
   BOX_27.len,
 );
 
@@ -244,8 +236,13 @@ describe("mountReportApi — modelo 303 DR303 export", () => {
     expect(res.headers.get("content-disposition")).toBe(
       'attachment; filename="modelo-303-2026-1T.txt"',
     );
-    const env = Buffer.from(new Uint8Array(await res.arrayBuffer())).toString("latin1", 0, 17);
-    expect(env).toBe("<T303020261T0000>");
+    const bytes = Buffer.from(new Uint8Array(await res.arrayBuffer()));
+    expect(bytes.toString("latin1", 0, 17)).toBe("<T303020261T0000>");
+    // Box 27 (Σ cuota devengada for Q1) at its documented offset == the Q1 seed's OWN cuota, DERIVED
+    // from the seed — so the route's QUARTERLY aggregation amount is verified end-to-end, not just its
+    // status/filename/envelope. A route that summed August (63.00) or the year (84.00) fails here.
+    const box27 = bytes.toString("latin1", BOX_27.offset, BOX_27.offset + BOX_27.len);
+    expect(box27).toBe(expectedBox27Q1);
   });
 
   it("produces a valid all-zeros nil return for an empty period → 200, 2944 bytes", async () => {

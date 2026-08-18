@@ -6,11 +6,11 @@ import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { addDecimal, decimal } from "@waitron/shared";
-import type { Decimal } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
 import { startRealPostgres } from "./testing/postgres.js";
+import { BOX_27, packAeatNumeric } from "./testing/dr303.js";
 import "./errors.js";
 
 // Real Postgres, not PGlite: this suite proves the modelo 303 export ROUTE's tenant isolation and its
@@ -45,23 +45,6 @@ let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
   return `${String(72_000_000 + nifCounter).padStart(8, "0")}K`;
-}
-
-/** Box 27's fixed 0-based byte offset + length on página 1 — the SAME the demo/serializer pin
- * (`dr303.test.ts`'s OFFSET table places box 27 at 1023, len 17). A layout shift turns these red. */
-const BOX_27 = { offset: 1023, len: 17 } as const;
-
-/**
- * Independently packs a Decimal into an AEAT fixed-width numeric field — the demo's OWN witness
- * (`modelo-303-demo.ts`'s `packAeatNumeric`), NOT the serializer's `formatNumericField`: magnitude in
- * cents, right-aligned and zero-filled, a negative value taking an 'N' in position 1. Used here only
- * to DERIVE the expected box-27 bytes from the seeded figures, so a bug in the serializer's own
- * formatter cannot mask itself.
- */
-function packAeatNumeric(value: Decimal, width: number): string {
-  const negative = value.startsWith("-");
-  const magnitude = (negative ? value.slice(1) : value).replace(".", "");
-  return negative ? "N" + magnitude.padStart(width - 1, "0") : magnitude.padStart(width, "0");
 }
 
 /** One seeded sale — its filed per-rate desglose lands on `sales.vat_breakdown` (the only column the

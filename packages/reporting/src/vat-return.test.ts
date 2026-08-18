@@ -28,21 +28,17 @@ beforeEach(async () => {
   venue = await seedVenue(suite.db);
 });
 
+// Month-only wrapper over `runPeriod` (below): the great majority of suites here file a single month,
+// so this keeps their call sites terse. Only the period construction differs from `runPeriod`.
 function run(opts: { year: number; month: number; tenantId?: TenantId }): Promise<VatReturn> {
-  const tenantId = opts.tenantId ?? venue.tenantId;
-  return withTenant(suite.db, tenantId, async (tx) => {
-    await asAppUser(tx);
-    return computeVatReturn(tx, {
-      tenantId,
-      year: opts.year,
-      period: { kind: "month", month: opts.month },
-    });
-  });
+  return runPeriod(
+    { kind: "month", month: opts.month },
+    { year: opts.year, tenantId: opts.tenantId },
+  );
 }
 
-// Sibling of `run` for the quarter/year (and month) periods — the period-threaded read the
-// quarterly/annual suites need, `run` being month-only. Defaults to year 2026, the year every
-// period suite below seeds into.
+// The period-threaded read the quarterly/annual suites need (`run` being month-only). Defaults to
+// year 2026, the year every period suite below seeds into.
 function runPeriod(
   period: LiquidationPeriod,
   opts: { year?: number; tenantId?: TenantId } = {},

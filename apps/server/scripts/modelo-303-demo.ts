@@ -67,6 +67,7 @@ import {
   compareDecimal,
   decimal,
   subtractDecimal,
+  sumDecimals,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
@@ -768,7 +769,7 @@ async function main(): Promise<void> {
       declarationType: "C",
     });
     validateDr303QuarterPeriod(quarterRecord, quarterModelo, quarterToken);
-    const env = periodAt(quarterRecord);
+    const env = boxAt(quarterRecord, "período");
     console.log("DR303 — quarterly modelo 303 file (envelope período = trimestre)");
     console.log(
       `  ${quarterRecord.length} bytes; envelope período at byte offset ${env.offset}: ${JSON.stringify(env.bytes)}  ← the trimestre ${quarterToken}`,
@@ -781,18 +782,23 @@ async function main(): Promise<void> {
   }
 }
 
-// Fixed 0-based byte offsets of the two casillas this demo reads back out of the produced record;
-// both are 17-char money boxes on página 1. These are the SAME offsets the serializer's own test
-// pins (packages/reporting/src/dr303.test.ts's OFFSET table: box 27 at 1023, box 46 at 1346), where
-// they are derived from the layout and asserted to match — a layout shift turns that test red.
-// Hardcoding them keeps the demo on the public @waitron/reporting barrel, with no deep import into
-// the internal dr303-layout.ts.
+// Fixed 0-based byte offsets of the fields this demo reads back out of the produced record: the two
+// 17-char money casillas (27/46) on página 1, plus the envelope período (común field 5, "PP"). These
+// are the SAME offsets the serializer's own test pins (packages/reporting/src/dr303.test.ts's OFFSET
+// table: box 27 at 1023, box 46 at 1346), where they are derived from the layout and asserted to
+// match — a layout shift turns that test red. Hardcoding them keeps the demo on the public
+// @waitron/reporting barrel, with no deep import into the internal dr303-layout.ts.
 const DR303_BOX_OFFSETS: Readonly<Record<string, { offset: number; len: number }>> = {
   "27": { offset: 1023, len: 17 },
   "46": { offset: 1346, len: 17 },
+  // The envelope open reads "<T3030" + EEEE + PP + "0000>", so PP (pos 11 1-based → offset 10, len 2)
+  // starts at byte 10 (dr303-layout.ts's DR303_COMUN field n=5; dr303-layout.test.ts pins the layout
+  // contiguous, so a shift turns it red). Not a casilla, but read back the same fixed way.
+  período: { offset: 10, len: 2 },
 };
 
-/** Reads a casilla's raw bytes back out of the record at its FIXED offset (see DR303_BOX_OFFSETS). */
+/** Reads a field's raw bytes back out of the record at its FIXED offset (see DR303_BOX_OFFSETS) — a
+ * casilla ("27"/"46") or the envelope período. */
 function boxAt(record: Buffer, casilla: string): { offset: number; len: number; bytes: string } {
   const box = DR303_BOX_OFFSETS[casilla];
   if (box === undefined) {
@@ -851,17 +857,6 @@ function validateDr303Record(record: Buffer, modelo: Modelo303): void {
   }
 }
 
-// 0-based byte offset of the envelope período (común field 5, "PP"): pos 11 1-based → offset 10, len 2
-// (dr303-layout.ts's DR303_COMUN field n=5; dr303-layout.test.ts pins the layout contiguous, so a shift
-// turns it red). The envelope open reads "<T3030" + EEEE + PP + "0000>", so PP starts at byte 10.
-const DR303_ENVELOPE_PERIOD = { offset: 10, len: 2 } as const;
-
-/** Reads the envelope período back out of a produced record at its FIXED offset (see above). */
-function periodAt(record: Buffer): { offset: number; len: number; bytes: string } {
-  const { offset, len } = DR303_ENVELOPE_PERIOD;
-  return { offset, len, bytes: record.toString("latin1", offset, offset + len) };
-}
-
 /** Throws unless the quarterly DR303 file self-validates: total length 2944, its aggregate carries a
  * quarter period, and the envelope período (común field 5) is the expected trimestre token "{n}T" — a
  * second witness that the writer threaded the quarter's OWN período, not a fabricated one. */
@@ -873,7 +868,7 @@ function validateDr303QuarterPeriod(record: Buffer, modelo: Modelo303, token: st
   if (modelo.period.kind !== "quarter") {
     problems.push(`aggregate period kind is ${modelo.period.kind}, expected "quarter"`);
   }
-  const env = periodAt(record);
+  const env = boxAt(record, "período");
   if (env.bytes !== token) {
     problems.push(
       `envelope período at offset ${env.offset}: ${JSON.stringify(env.bytes)} != expected ${JSON.stringify(token)}`,
@@ -959,11 +954,8 @@ function reconcileQuarterEqualsMonths(
   months: readonly VatReturn[],
 ): void {
   reconcile(label, quarter, mergeDevengado(months));
-  const sumDeducible = months.reduce(
-    (a, r) => addDecimal(a, r.deductible.taxTotal),
-    decimal("0.00"),
-  );
-  const sumResult = months.reduce((a, r) => addDecimal(a, r.result), decimal("0.00"));
+  const sumDeducible = sumDecimals(months.map((r) => r.deductible.taxTotal));
+  const sumResult = sumDecimals(months.map((r) => r.result));
   const problems: string[] = [];
   if (compareDecimal(quarter.deductible.taxTotal, sumDeducible) !== 0) {
     problems.push(`deducible cuota ${quarter.deductible.taxTotal} != Σ months ${sumDeducible}`);

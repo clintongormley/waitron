@@ -2,6 +2,7 @@ import { decimal, toScale } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { DR303_ENVELOPE_CLOSE_TEMPLATE, DR303_LAYOUT, type Dr303Segment } from "./dr303-layout.js";
 import type { Modelo303 } from "./modelo-303.js";
+import { parsePeriodToken } from "./period.js";
 
 /**
  * Serializes a {@link Modelo303} casilla map into the official AEAT modelo 303 fixed-layout file — the
@@ -129,10 +130,12 @@ function formatYear(year: number): string {
   return String(year);
 }
 
-/** Formats the 2-char período (PP): "01".."12" monthly or "1T".."4T" quarterly. */
+/** Formats the 2-char período (PP): "01".."12" monthly or "1T".."4T" quarterly. Validation is
+ * delegated to `parsePeriodToken` (period.ts) so the accepted token grammar is defined ONCE, shared
+ * with the export route's request screen; the writer still emits the trimmed/uppercased token. */
 function formatPeriod(period: string): string {
   const p = period.trim().toUpperCase();
-  if (!/^(?:0[1-9]|1[0-2]|[1-4]T)$/.test(p)) {
+  if (parsePeriodToken(p) === undefined) {
     throw new Error(
       `dr303: period must be "01".."12" or "1T".."4T", got ${JSON.stringify(period)}`,
     );

@@ -13,6 +13,22 @@ export type LiquidationPeriod =
   | { readonly kind: "year" };
 
 /**
+ * The single source of the modelo 303 month/quarter token grammar: "01".."12" → a monthly period,
+ * "1T".."4T" → a quarterly one, anything else → `undefined`. The token is trimmed and uppercased
+ * first, so " 1t " parses as "1T". ANNUAL is deliberately NOT a token — there is no annual modelo 303
+ * file (the annual resumen is modelo 390), so it is never derived from a período string. Both the
+ * export route's request screen and the DR303 writer's `formatPeriod` validate through this one
+ * function so the accepted set cannot drift between them.
+ */
+export function parsePeriodToken(token: string): LiquidationPeriod | undefined {
+  const t = token.trim().toUpperCase();
+  if (/^(?:0[1-9]|1[0-2])$/.test(t)) return { kind: "month", month: Number(t) };
+  const quarter = /^([1-4])T$/.exec(t);
+  if (quarter) return { kind: "quarter", quarter: Number(quarter[1]) };
+  return undefined;
+}
+
+/**
  * A bad year/period is a caller precondition — a plain Error (matching business-day.ts's validators,
  * no registered code), thrown BEFORE any query. The year is bounded to four digits for the reason
  * the monthly note recorded: a typo year make_date still accepts (226 AD) matches no rows and returns

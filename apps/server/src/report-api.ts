@@ -11,6 +11,7 @@ import { asAppUser, tenants, withTenant, type Database, type Transaction } from 
 import {
   computeVatReturn,
   mapModelo303,
+  parsePeriodToken,
   toDr303Record,
   type LiquidationPeriod,
 } from "@waitron/reporting";
@@ -55,17 +56,20 @@ function requireYear(raw: string | undefined): number {
 }
 
 /** Screen the `period` query param into a LiquidationPeriod. Accepts "01".."12" (month) and
- * "1T".."4T" (quarter). ANNUAL is deliberately NOT accepted here: there is no annual modelo 303 file
- * (the annual resumen is modelo 390, out of scope — spec D3). Anything else →
- * `management.request_invalid` {field:"period"}. Returns both the union and the normalized string the
- * envelope must carry (they are derived from ONE source, so they cannot disagree — spec D4). */
-function requirePeriod(raw: string | undefined): { period: LiquidationPeriod; token: string } {
+ * "1T".."4T" (quarter) via `parsePeriodToken` — the ONE token grammar shared with the DR303 writer's
+ * `formatPeriod`, so the route's accepted set cannot drift from the writer's. ANNUAL is deliberately
+ * NOT accepted: there is no annual modelo 303 file (the annual resumen is modelo 390, out of scope —
+ * spec D3). Anything else → `management.request_invalid` {field:"period"}. Returns both the union and
+ * the normalized string the envelope must carry (derived from ONE source, so they cannot disagree —
+ * spec D4). The name distinguishes it from `request-screens.ts`'s date-screening `requirePeriod`. */
+function requireLiquidationPeriod(raw: string | undefined): {
+  period: LiquidationPeriod;
+  token: string;
+} {
   if (raw !== undefined) {
-    const p = raw.trim().toUpperCase();
-    const month = /^(0[1-9]|1[0-2])$/.exec(p);
-    if (month) return { period: { kind: "month", month: Number(p) }, token: p };
-    const quarter = /^([1-4])T$/.exec(p);
-    if (quarter) return { period: { kind: "quarter", quarter: Number(quarter[1]) }, token: p };
+    const token = raw.trim().toUpperCase();
+    const period = parsePeriodToken(token);
+    if (period !== undefined) return { period, token };
   }
   throw new AppError("management.request_invalid", { field: "period" });
 }
@@ -106,7 +110,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const year = requireYear(c.req.query("year"));
-      const { period, token } = requirePeriod(c.req.query("period"));
+      const { period, token } = requireLiquidationPeriod(c.req.query("period"));
       const declarationType = requireDeclarationType(c.req.query("declarationType"));
 
       const record = await gated(sessionId, async (tx) => {
