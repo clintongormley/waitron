@@ -7,6 +7,7 @@ import {
 } from "@simplewebauthn/server";
 import type {
   AuthenticationResponseJSON,
+  AuthenticatorTransportFuture,
   PublicKeyCredentialCreationOptionsJSON,
   PublicKeyCredentialRequestOptionsJSON,
   RegistrationResponseJSON,
@@ -63,6 +64,31 @@ function b64url(bytes: Uint8Array): string {
 }
 
 /**
+ * The authenticator's `transports` hint (an optional array like `["internal", "usb"]`) is stored as a
+ * JSON array string in the nullable `transports` column and read back to seed a later ceremony's
+ * `excludeCredentials`, so the authenticator can match an already-registered credential across its
+ * transports. `verifyRegistrationResponse` copies `transports` VERBATIM from the client-supplied
+ * response (`verifyRegistrationResponse.js:202`), so at runtime the value is whatever the client sent
+ * and may not be the `AuthenticatorTransportFuture[]` its type claims — store only a genuine array,
+ * coercing any other runtime shape to null.
+ */
+function serializeTransports(
+  transports: AuthenticatorTransportFuture[] | undefined,
+): string | null {
+  return Array.isArray(transports) ? JSON.stringify(transports) : null;
+}
+
+/**
+ * Parse a `transports` column back to the array `generateRegistrationOptions` expects on an
+ * `excludeCredentials` descriptor. null — the authenticator reported none, or the row predates this
+ * population — yields undefined; every non-null value was written by `serializeTransports`, so it is a
+ * JSON array.
+ */
+function parseTransports(stored: string | null): AuthenticatorTransportFuture[] | undefined {
+  return stored === null ? undefined : (JSON.parse(stored) as AuthenticatorTransportFuture[]);
+}
+
+/**
  * CONSUME a stored challenge by its handle: DELETE it and RETURN its challenge string in one
  * statement, enforcing single-use — under concurrency, not just sequentially. Returns the challenge
  * STRING both finish ceremonies pass to the verifier as `expectedChallenge`.
@@ -108,9 +134,13 @@ export async function beginPasskeyRegistration(
     .select({ displayName: persons.displayName })
     .from(persons)
     .where(eq(persons.id, personId));
-  // Exclude the person's existing passkeys so the authenticator refuses to enroll a duplicate.
+  // Exclude the person's existing passkeys so the authenticator refuses to enroll a duplicate, each
+  // carrying its stored transports (see `serializeTransports`) so the match holds across any transport.
   const existing = await tx
-    .select({ credentialId: webauthnCredentials.credentialId })
+    .select({
+      credentialId: webauthnCredentials.credentialId,
+      transports: webauthnCredentials.transports,
+    })
     .from(webauthnCredentials)
     .where(eq(webauthnCredentials.personId, personId));
   const options = await generateRegistrationOptions({
@@ -118,7 +148,10 @@ export async function beginPasskeyRegistration(
     rpName: input.rpName,
     userID: textToBytes(personId), // Uint8Array (v10+)
     userName: person!.displayName,
-    excludeCredentials: existing.map((c) => ({ id: c.credentialId })),
+    excludeCredentials: existing.map((c) => ({
+      id: c.credentialId,
+      transports: parseTransports(c.transports),
+    })),
   });
   const [row] = await tx
     .insert(webauthnChallenges)
@@ -174,14 +207,16 @@ export async function finishPasskeyRegistration(
     throw new AppError("passkey.verification_failed", {});
   }
   if (!verification.verified) throw new AppError("passkey.verification_failed", {});
-  const cred = verification.registrationInfo.credential; // { id, publicKey, counter } — v13 WebAuthnCredential
-  // The challenge was already consumed above (consumeChallenge); the insert commits alongside it.
+  const cred = verification.registrationInfo.credential; // { id, publicKey, counter, transports? } — v13 WebAuthnCredential
+  // The challenge was already consumed above (consumeChallenge); the insert commits alongside it. The
+  // authenticator's transports are stored here (see `serializeTransports`) for a later ceremony.
   await tx.insert(webauthnCredentials).values({
     tenantId: input.tenantId,
     personId,
     credentialId: cred.id,
     publicKey: b64url(cred.publicKey),
     counter: cred.counter,
+    transports: serializeTransports(cred.transports),
   });
   return { credentialId: cred.id };
 }

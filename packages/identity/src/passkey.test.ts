@@ -26,6 +26,7 @@ vi.mock("@simplewebauthn/server", async (orig) => ({
 }));
 
 import { verifyAuthenticationResponse, verifyRegistrationResponse } from "@simplewebauthn/server";
+import type { AuthenticatorTransportFuture } from "@simplewebauthn/server";
 import {
   beginPasskeyAuthentication,
   beginPasskeyRegistration,
@@ -38,14 +39,19 @@ const mockVerify = vi.mocked(verifyRegistrationResponse);
 const mockVerifyAuth = vi.mocked(verifyAuthenticationResponse);
 
 /** A fully-typed `verified: true` result — our code reads only `credential`, but the discriminated
- * union requires the rest, so building it in full keeps the mock honest against v13's shape. */
-function verified(id: string): Awaited<ReturnType<typeof verifyRegistrationResponse>> {
+ * union requires the rest, so building it in full keeps the mock honest against v13's shape. The
+ * authenticator's `transports` hint is optional (an authenticator may omit it), so it is a parameter:
+ * `undefined` mirrors an authenticator that reports none. */
+function verified(
+  id: string,
+  transports?: AuthenticatorTransportFuture[],
+): Awaited<ReturnType<typeof verifyRegistrationResponse>> {
   return {
     verified: true,
     registrationInfo: {
       fmt: "none",
       aaguid: "00000000-0000-0000-0000-000000000000",
-      credential: { id, publicKey: new Uint8Array([1, 2, 3]), counter: 0 },
+      credential: { id, publicKey: new Uint8Array([1, 2, 3]), counter: 0, transports },
       credentialType: "public-key",
       attestationObject: new Uint8Array(),
       userVerified: true,
@@ -166,6 +172,9 @@ describe("passkey registration", () => {
       credentialId: "cred-abc",
       publicKey: "AQID", // base64url of Uint8Array([1, 2, 3])
       counter: 0,
+      // This ceremony's authenticator reported no transports (verified() with none), so the column
+      // stays null rather than storing "[]" — the false branch of the transports population.
+      transports: null,
     });
 
     // The challenge was single-use: finish deleted it.
@@ -184,6 +193,54 @@ describe("passkey registration", () => {
 
     const second = await begin(sessionId);
     expect(second.options.excludeCredentials?.map((c) => c.id)).toContain("cred-existing");
+  });
+
+  it("persists the authenticator's transports as a JSON array string", async () => {
+    const { personId, sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    // The authenticator reports its transports on registration; they are stored so a later ceremony
+    // can hand them back as an excludeCredentials/allowCredentials hint (schema: webauthn.ts).
+    mockVerify.mockResolvedValue(verified("cred-abc", ["internal", "usb"]));
+
+    const begun = await begin(sessionId);
+    await finish(sessionId, begun.challengeHandle);
+
+    const [cred] = await run((tx) =>
+      tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.personId, personId)),
+    );
+    expect(cred!.transports).toBe(JSON.stringify(["internal", "usb"]));
+  });
+
+  it("stores null for a non-array transports value the untrusted client could forge", async () => {
+    const { personId, sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    // `verifyRegistrationResponse` copies transports verbatim from the client, so at runtime it may be
+    // a non-array despite its declared type. serializeTransports coerces anything but an array to null
+    // (Array.isArray guard); drop that guard and this value would be stored as the string '"usb"'.
+    mockVerify.mockResolvedValue(
+      verified("cred-forged", "usb" as unknown as AuthenticatorTransportFuture[]),
+    );
+
+    const begun = await begin(sessionId);
+    await finish(sessionId, begun.challengeHandle);
+
+    const [cred] = await run((tx) =>
+      tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.personId, personId)),
+    );
+    expect(cred!.transports).toBeNull();
+  });
+
+  it("hands an excluded credential's stored transports back as an excludeCredentials hint", async () => {
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    mockVerify.mockResolvedValue(verified("cred-hybrid", ["hybrid", "internal"]));
+
+    // Register a credential whose transports are recorded, then begin a second ceremony: the stored
+    // transports ride along on the excludeCredentials descriptor so the authenticator can match the
+    // already-registered credential across its transports and refuse the duplicate.
+    const first = await begin(sessionId);
+    await finish(sessionId, first.challengeHandle);
+
+    const second = await begin(sessionId);
+    const descriptor = second.options.excludeCredentials?.find((c) => c.id === "cred-hybrid");
+    expect(descriptor?.transports).toEqual(["hybrid", "internal"]);
   });
 
   it("throws passkey.verification_failed when the ceremony does not verify", async () => {
