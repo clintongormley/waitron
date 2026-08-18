@@ -164,10 +164,11 @@ async function openSession(db: Database): Promise<string> {
   return session.id;
 }
 
-// One app + one logged-in session shared across the table/tab tests (the suite's PGlite db persists,
-// so tables accumulate — the first test's exact-list assertion relies on running before any other
-// table-creating test, which vitest's in-order execution guarantees). `request` attaches the JSON
-// content-type and the session cookie, so each test drives the real session-guarded surface.
+// One app + one logged-in session shared across the table/tab tests. The suite's PGlite db persists,
+// so tables accumulate across tests — which is why every list assertion below is a membership check
+// (`.toContainEqual` / `.find`), never an exact-list assertion that would depend on execution order (§4).
+// `request` attaches the JSON content-type and the session cookie, so each test drives the real
+// session-guarded surface.
 let app: Hono;
 let cookie: string;
 
