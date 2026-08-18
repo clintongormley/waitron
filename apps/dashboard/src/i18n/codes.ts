@@ -76,6 +76,20 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The receipt settings aren't valid",
     es: "Los ajustes del recibo no son válidos",
   },
+  // Service-status configuration (apps/server/src/tables.ts). The editor's per-item mutations reject
+  // with these when a label collides, a status has been removed, or one has been deactivated.
+  "status.label_taken": {
+    en: "A status with that name already exists",
+    es: "Ya existe un estado con ese nombre",
+  },
+  "status.not_found": {
+    en: "That status no longer exists",
+    es: "Ese estado ya no existe",
+  },
+  "status.inactive": {
+    en: "That status is deactivated",
+    es: "Ese estado está desactivado",
+  },
   "shared.invalid_id": {
     en: "That identifier isn't valid",
     es: "Ese identificador no es válido",

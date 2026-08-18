@@ -406,6 +406,87 @@ describe("DashboardApi", () => {
     });
   });
 
+  it("listStatuses GETs /management-api/service-statuses with credentials", async () => {
+    const rows = [
+      {
+        id: "s1",
+        label: "Bill requested",
+        color: "#ef4444",
+        displayOrder: 0,
+        active: true,
+        createdAt: "2026-08-17T00:00:00Z",
+      },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listStatuses()).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/service-statuses", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("createStatus POSTs the body and returns the id", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "s1" }, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    const res = await api.createStatus({
+      label: "Bill requested",
+      color: "#ef4444",
+      displayOrder: 0,
+    });
+    expect(res).toEqual({ id: "s1" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/service-statuses", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ label: "Bill requested", color: "#ef4444", displayOrder: 0 }),
+    });
+  });
+
+  it("updateStatus PATCHes the addressed status's mutable slice (empty 204 body)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(
+      api.updateStatus("s1", {
+        label: "Bill please",
+        color: "#22c55e",
+        displayOrder: 2,
+        active: false,
+      }),
+    ).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/service-statuses/s1", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        label: "Bill please",
+        color: "#22c55e",
+        displayOrder: 2,
+        active: false,
+      }),
+    });
+  });
+
+  it("deactivateStatus DELETEs the status and resolves undefined on an empty 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.deactivateStatus("s1")).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/service-statuses/s1", {
+      method: "DELETE",
+      credentials: "include",
+    });
+  });
+
+  it("createStatus rejects with { code } on a non-2xx (label already taken)", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "status.label_taken" } }, false, 409));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.createStatus({ label: "x", color: "#000" })).rejects.toMatchObject({
+      code: "status.label_taken",
+    });
+  });
+
   it("falls back to server.internal when the error body carries no code", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({}, false, 500));
     const api = new DashboardApi("", fetchImpl);

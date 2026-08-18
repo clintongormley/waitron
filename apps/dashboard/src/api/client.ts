@@ -243,6 +243,24 @@ export interface ReceiptConfig {
   footerMessage?: string;
 }
 
+// ── Table service-status configuration types ──────────────────────────────────────────────────────
+// A LOCAL copy of apps/server's `ServiceStatus` JSON shape (the `/management-api/service-statuses`
+// routes wrapping `apps/server/src/tables.ts`'s config CRUD), deliberately NOT imported from any
+// `@waitron/*` — a runtime import would drag its barrel + Node builtins into the browser bundle (the
+// #70 rule, as every shape above does). This is the CONTRACT the service-status editor builds on; if
+// the server shape changes this follows, and a mismatch surfaces as a runtime shape error a view test
+// catches, not a compile break.
+
+/** A configured service status (mirrors apps/server's ServiceStatus; browser-local copy). */
+export interface ServiceStatus {
+  id: string;
+  label: string;
+  color: string;
+  displayOrder: number;
+  active: boolean;
+  createdAt: string;
+}
+
 // ── Shift-planning types ──────────────────────────────────────────────────────────────────────────
 // LOCAL copies of the server's roster/shift JSON shapes (the `workforce-api.ts` routes wrapping
 // `@waitron/workforce`'s verbs), deliberately NOT imported from `@waitron/workforce`/`@waitron/db` — a
@@ -738,6 +756,42 @@ export class DashboardApi {
    */
   putReceipt(receipt: ReceiptConfig): Promise<void> {
     return this.#request<void>("/management-api/receipt", "PUT", { receipt });
+  }
+
+  // ── Table service-status configuration ──────────────────────────────────────────────────────────
+  // The per-item CRUD the service-status editor drives (Task 8's `/management-api/service-statuses`
+  // routes wrapping `apps/server/src/tables.ts`, `till.configure`-gated). The editor calls one endpoint
+  // per mutation and reloads (`listStatuses`) after each — the routes are per-item POST/PATCH/DELETE,
+  // not a single bulk PUT like the layout/receipt config.
+
+  /** `GET /management-api/service-statuses` — the tenant's configured statuses (active + inactive). */
+  listStatuses(): Promise<ServiceStatus[]> {
+    return this.#request<ServiceStatus[]>("/management-api/service-statuses", "GET");
+  }
+
+  /** `POST /management-api/service-statuses` — create a status (label + colour, optional order);
+   * returns its id. */
+  createStatus(input: {
+    label: string;
+    color: string;
+    displayOrder?: number;
+  }): Promise<{ id: string }> {
+    return this.#request<{ id: string }>("/management-api/service-statuses", "POST", input);
+  }
+
+  /** `PATCH /management-api/service-statuses/:id` — patch a status's mutable slice (label, colour,
+   * order, active). Answers an empty 204. */
+  updateStatus(
+    id: string,
+    patch: { label?: string; color?: string; displayOrder?: number; active?: boolean },
+  ): Promise<void> {
+    return this.#request<void>(`/management-api/service-statuses/${id}`, "PATCH", patch);
+  }
+
+  /** `DELETE /management-api/service-statuses/:id` — soft-delete (deactivate) a status. Answers an
+   * empty 204. */
+  deactivateStatus(id: string): Promise<void> {
+    return this.#request<void>(`/management-api/service-statuses/${id}`, "DELETE");
   }
 
   // ── Shift planning (roster authoring) ──────────────────────────────────────────────────────────
