@@ -46,10 +46,13 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 
 const run = createErrorBoundary(STATUS, "report.failed");
 
-/** Screen the `year` query param: a 4-digit integer, else `management.request_invalid` {field:"year"}
- * (never a downstream make_date error). */
+/** Screen the `year` query param: a 4-digit integer in 1000..9999 — the SAME bound `validatePeriod`
+ * (`@waitron/reporting`, period.ts) enforces, so a screened year never reaches its plain-`Error` throw.
+ * `/^\d{4}$/` would admit the leading-zero range "0000".."0999" (`Number("0999") === 999`), which
+ * validatePeriod then rejects downstream as a plain `Error` → opaque `server.internal` 500; `/^[1-9]\d{3}$/`
+ * refuses it here as `management.request_invalid` {field:"year"} (never a downstream error). */
 function requireYear(raw: string | undefined): number {
-  if (raw === undefined || !/^\d{4}$/.test(raw)) {
+  if (raw === undefined || !/^[1-9]\d{3}$/.test(raw)) {
     throw new AppError("management.request_invalid", { field: "year" });
   }
   return Number(raw);

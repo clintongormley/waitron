@@ -260,6 +260,9 @@ describe("mountReportApi — request screens + auth", () => {
   it.each([
     ["missing year", "?period=08&declarationType=I", "year"],
     ["bad year", "?year=20&period=08&declarationType=I", "year"],
+    // A leading-zero 4-digit year below 1000 must be REFUSED at the screen (400), not passed to
+    // computeVatReturn where validatePeriod's 1000..9999 bound throws a plain Error → opaque 500.
+    ["out-of-range year (leading zeros)", "?year=0999&period=08&declarationType=I", "year"],
     ["bad period", "?year=2026&period=13&declarationType=I", "period"],
     [
       "annual period (no modelo 303 annual file)",
