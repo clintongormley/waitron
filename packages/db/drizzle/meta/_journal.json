@@ -330,6 +330,20 @@
       "when": 1787039000576,
       "tag": "0046_tab_link_fks",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1787069709283,
+      "tag": "0047_table_service_statuses",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1787069717639,
+      "tag": "0048_table_service_statuses_rls",
+      "breakpoints": true
     }
   ]
 }
