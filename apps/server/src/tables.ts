@@ -277,3 +277,44 @@ export async function deactivateStatus(
     throw new AppError("status.not_found", { statusId: input.id });
   }
 }
+
+/**
+ * Set (or clear, with `null`) a table's single manual status (design §3b) — an OPERATIONAL verb a
+ * logged-in operator uses the way they ring a sale, so it is gated by the operator SESSION at the route
+ * (`requireSession`, Task 8), NOT by `till.configure`. Validates the table is active (an absent,
+ * deactivated, or foreign/RLS-hidden table → `table.not_found`, design §3b) and, when `statusId` is
+ * non-null, that the status is real (`status.not_found`) and `active` (`status.inactive`). Runs on the
+ * CALLER's transaction under its tenant/app_user scope. The status is occupancy-INDEPENDENT: a `free`
+ * table may carry one, so this never consults the tab state.
+ */
+export async function setTableStatus(
+  tx: Transaction,
+  // Unused here for the same reason as `updateTable`/`deactivateTable` — this by-id verb relies on RLS
+  // for the tenant scope, so the config is kept only for the uniform `(tx, cfg, …)` verb surface.
+  _cfg: TillConfig,
+  tableId: string,
+  statusId: string | null,
+): Promise<void> {
+  const [table] = await tx
+    .select({ active: diningTables.active })
+    .from(diningTables)
+    .where(eq(diningTables.id, tableId));
+  if (table === undefined || !table.active) {
+    throw new AppError("table.not_found", { tableId });
+  }
+
+  if (statusId !== null) {
+    const [status] = await tx
+      .select({ active: tableServiceStatuses.active })
+      .from(tableServiceStatuses)
+      .where(eq(tableServiceStatuses.id, statusId));
+    if (status === undefined) {
+      throw new AppError("status.not_found", { statusId });
+    }
+    if (!status.active) {
+      throw new AppError("status.inactive", { statusId });
+    }
+  }
+
+  await tx.update(diningTables).set({ statusId }).where(eq(diningTables.id, tableId));
+}
