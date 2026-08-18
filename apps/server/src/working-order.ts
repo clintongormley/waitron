@@ -441,7 +441,11 @@ export async function openTab(
 
   const tabId = randomUUID();
   const { orderNumber } = await createOpenOrder(tx, cfg, tabId, req.lines ?? [], null);
-  await tx.update(diningTables).set({ tabId }).where(eq(diningTables.id, req.tableId));
+  // TS-1 sets the back-pointer; TS-2 also clears any stale manual status as the new tab opens (§3b(2)).
+  await tx
+    .update(diningTables)
+    .set({ tabId, statusId: null })
+    .where(eq(diningTables.id, req.tableId));
   return { tabId, orderNumber };
 }
 

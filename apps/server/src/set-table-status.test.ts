@@ -13,6 +13,7 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createTable, setTableStatus } from "./tables.js";
+import { openTab } from "./working-order.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -132,5 +133,17 @@ describe("setTableStatus", () => {
       code: "table.not_found",
       params: { tableId },
     });
+  });
+});
+
+describe("openTab clears a stale status (design §3b(2))", () => {
+  it("a status set while the table is free is cleared when the next party opens a tab", async () => {
+    const { cfg, tableId, activeStatusId } = await setupVenue();
+    await asApp(cfg, (tx) => setTableStatus(tx, cfg, tableId, activeStatusId));
+    expect(await statusOf(tableId)).toBe(activeStatusId);
+    // Opening an EMPTY tab (no initial round) needs no product — it just anchors the tab to the table
+    // and (TS-2's Step 3 edit) clears any stale manual status.
+    await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    expect(await statusOf(tableId)).toBeNull();
   });
 });
