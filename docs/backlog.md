@@ -586,12 +586,16 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     roster on a logged-in cold load (the probe discards its result). Thread the probed list down (an
     initial-people property, or lift `people` into the shell) to drop one `/management-api/staff` round
     trip. Real but low-cost for a small admin app.
-  - **Create-error renders behind the modal (create ONLY now).** A rejected `createPerson` keeps the
-    dialog open (for retry — correct) but the `role="alert"` banner sits behind the backdrop, so a
-    sighted operator may not see WHY it failed (screen readers still announce it). **#73 fixed this for
-    the EDIT dialog** (errorKey passed down as `.error`, rendered in the modal's own top layer, page
-    banner suppressed while it's open) — do the same for the create form. `wt-dialog` has no backdrop
-    light-dismiss, confirmed while wiring #73.
+  - **Create-error renders behind the modal — DONE (#105, 2026-08-19; campaign queue P1).** Mirrored
+    #73's edit-dialog fix onto the create form: `person-form` gains a parent-owned `error` property
+    rendered in the dialog's own top layer via `codeMessage`, the staff screen passes
+    `.error=${formOpen ? errorKey : null}` down, and the page-banner suppression guard tightened from
+    `errorKey && !editOpen` to `errorKey && !editOpen && !formOpen`. The stale "known limitation"
+    receipts in `staff-screen.ts` and `person-edit.ts` were retired in the same change (§1). TDD, both
+    new tests proven by deletion; no migration, non-fiscal (H2 clean); dashboard `test:coverage` green
+    (`person-form.ts` & `staff-screen.ts` 100% stmt/line/func). Both finish-branch reviewers + Copilot:
+    no findings. The `<select>.value`-before-options picker minor (next bullet) is a SEPARATE item
+    (pool P2), untouched here.
   - **Minors:** the `<select>.value` is bound before its `<option>` children in `login-screen`/`person-form`
     (renders right today only because the default equals the first option — the latent EDIT-a-non-default
     bug **#73's edit picker avoided** via an `updated()` `.value` reconcile; the login/create pickers
