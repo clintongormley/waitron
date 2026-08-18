@@ -803,9 +803,10 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     (`LAYOUT_A` vs `DEFAULT_LAYOUT` must stay byte-identical). Deeper form (if the editor grows): have the
     server send an explicit `authored: boolean` on the till boot payload so the till stops re-deriving it by
     value — a `/api/till` wire-contract change, deferred out of slice 1.
-  - **Quality defers from the 4-lens simplify (cosmetic, non-blocking):** hoist a single `codeOf(error)`
-    helper (now inline-duplicated across ~8 dashboard screens/widgets — a home for it also single-sources the
-    deferred code→i18n mapping); make the `WIDGET_CONFIG` entry a *descriptor* (`{kind, min, max, label}`) so
+  - **Quality defers from the 4-lens simplify (cosmetic, non-blocking):** ~~hoist a single `codeOf(error)`
+    helper~~ **DONE (#96, 2026-08-18)** — `codeOf(error, fallback?)` now lives in `i18n/codes.ts` beside
+    `codeMessage` (single-sourcing the code→i18n seam), replacing 4 local copies + 21 inline sites; make the
+    `WIDGET_CONFIG` entry a *descriptor* (`{kind, min, max, label}`) so
     the dashboard editor is driven from the registry instead of hardcoding `columns` in ~4 parallel spots —
     right-altitude only once a **second** config key exists (today it's one key); drop the derivable `region`
     field from the layout editor's in-memory rows (it is re-stamped from the column on save) once an
