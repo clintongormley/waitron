@@ -23,6 +23,7 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import type { PaymentProvider } from "@waitron/payments";
 import type { TenantId } from "@waitron/shared";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi, run } from "./till-api.js";
@@ -575,6 +576,31 @@ describe("POST /api/sales (session-guarded sale)", () => {
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
   });
+
+  it("POST with a malformed workingOrderId is 400 shared.invalid_id, not an opaque 500", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const id = await openSession(suite.db);
+
+    // The 7b malformed-id follow-up for the OPTIONAL `workingOrderId` (only a malformed one is an error;
+    // absent / well-formed-unknown are valid walk-ups). The non-empty basket + cash tender clear
+    // `recordTillSale`'s early-outs, so in the RED state the id reaches `payWorkingOrder`'s
+    // `eq(workingOrders.id, req.id)` lock read and `22P02`s → 500; the screen refuses it 400 first
+    // (PGlite adequate — the screen fires at the HTTP boundary before any query, CLAUDE.md §4).
+    const res = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
+      body: JSON.stringify({
+        lines: [{ productId: aguaProduct.id, quantity: "1" }],
+        tender: { method: "cash", amount: "10.00" },
+        workingOrderId: "not-a-uuid",
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "shared.invalid_id", params: { kind: "WorkingOrderId", value: "not-a-uuid" } },
+    });
+  });
 });
 
 describe("POST /api/pay (session-guarded integrated card pay)", () => {
@@ -615,6 +641,29 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
     });
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: { code: "server.internal" } });
+  });
+
+  it("POST with a malformed id is 400 shared.invalid_id, not an opaque 500 (the 7b /api/pay sibling)", async () => {
+    const id = await openSession(suite.db);
+    const app = new Hono();
+    // A non-undefined stub provider clears the route's `cardProvider === undefined` guard, so in the RED
+    // state a malformed `id` genuinely reaches `payWorkingOrderIntegrated`'s `eq(workingOrders.id, req.id)`
+    // lock read — a `uuid` column — and `22P02`s → an opaque 500, the same exposure `/api/sales` has. The
+    // route screen refuses it 400 first, so the stub is never invoked (PGlite adequate, CLAUDE.md §4).
+    mountTillApi(app, { ...deps(suite.db), cardProvider: {} as PaymentProvider }, collect([]));
+
+    const res = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${id}` },
+      body: JSON.stringify({
+        id: "not-a-uuid",
+        lines: [{ productId: aguaProduct.id, quantity: "1" }],
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "shared.invalid_id", params: { kind: "WorkingOrderId", value: "not-a-uuid" } },
+    });
   });
 });
 
@@ -706,6 +755,25 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       sql`select status, till_id from working_orders where id = ${id}`,
     );
     expect(rows.rows[0]).toMatchObject({ status: "open", till_id: cfg.tillId });
+  });
+
+  it("POST with a malformed id is 400 shared.invalid_id, not an opaque 500 (the 7b park sibling)", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+
+    // Park is the one route where the client MINTS the working-order id that becomes the PK:
+    // `createOpenOrder` INSERTs `body.id` into the `working_orders.id` `uuid` column (working-order.ts),
+    // so un-screened a malformed one `22P02`s → an opaque 500. The non-empty basket clears parkOrder's
+    // empty-basket early-out so the INSERT is reached in the RED state; the route screen refuses it 400.
+    const res = await park(app, cookie, {
+      id: "not-a-uuid",
+      lines: [{ productId: aguaProduct.id, quantity: "1" }],
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "shared.invalid_id", params: { kind: "WorkingOrderId", value: "not-a-uuid" } },
+    });
   });
 
   it("GET lists it, GET/:id retrieves its lines, PUT edits it, DELETE abandons it", async () => {
@@ -811,6 +879,57 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     });
     expect(put.status).toBe(409);
     expect(await put.json()).toMatchObject({ error: { code: "working_order.not_open" } });
+  });
+
+  // The 7b malformed-id follow-up for the retrieve/edit/abandon routes — the counterparts of the
+  // place/prep/collect/cancel malformed-id tests below. An un-screened `:id` reaches
+  // `getHeldOrder`/`updateHeldOrder`/`abandonHeldOrder`'s `eq(workingOrders.id, id)` (a `uuid` column)
+  // and `22P02`s → an opaque 500; the `requireUuidId` screen refuses it FIRST with the same domain code
+  // an absent/non-open id gets on that route. PGlite adequate — the screen fires before any query runs
+  // (CLAUDE.md §4).
+  it("GET /:id with a malformed id is 404 working_order.not_found, not an opaque 500", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+
+    const res = await app.request("/api/working-orders/not-a-uuid", { headers: { cookie } });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({
+      error: { code: "working_order.not_found", params: { workingOrderId: "not-a-uuid" } },
+    });
+  });
+
+  it("PUT /:id with a malformed id is 409 working_order.not_open, not an opaque 500", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+
+    // A well-formed body, so the route parses it and reaches the (un-screened) `updateHeldOrder` query
+    // in the RED state — this 409, not a 500, is the witness the screen refuses before that query.
+    const res = await app.request("/api/working-orders/not-a-uuid", {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ lines: [{ productId: aguaProduct.id, quantity: "1" }] }),
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "working_order.not_open", params: { workingOrderId: "not-a-uuid" } },
+    });
+  });
+
+  it("DELETE /:id with a malformed id is 409 working_order.not_open, not an opaque 500", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+
+    const res = await app.request("/api/working-orders/not-a-uuid", {
+      method: "DELETE",
+      headers: { cookie },
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "working_order.not_open", params: { workingOrderId: "not-a-uuid" } },
+    });
   });
 });
 

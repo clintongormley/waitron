@@ -7,25 +7,30 @@ import { AppError } from "@waitron/shared";
 import { isUuid } from "./till-session.js";
 
 /**
- * The request-shape SCREENS shared by the gated server API surfaces — `workforce-api.ts` (the
- * management-dashboard roster/swap/absence routes) and `schedule-api.ts` (the till-session-gated staff
- * schedule routes). Extracted here so BOTH surfaces validate identically rather than re-implementing a
- * screen "subtly differently": a malformed date, uuid or nullable field is refused BEFORE it reaches a
- * `::date`/`::timestamptz`/`uuid` column (where it would raise a 22xxx/22P02 → an opaque `server.internal`
- * 500) with a structured 400 naming the FIELD, never its value.
+ * The request-shape SCREENS shared across the gated server API surfaces — e.g. `workforce-api.ts` /
+ * `schedule-api.ts` (the management-dashboard and staff-schedule routes) and `till-api.ts` (the
+ * sale/pay/park body working-order ids). Extracted here so the surfaces that import them validate
+ * identically rather than each re-implementing a screen "subtly differently" (`catalogue-api.ts` keeps
+ * its own local `requireUuidParam`): a malformed date, uuid or nullable field is refused BEFORE it
+ * reaches a `::date`/`::timestamptz`/`uuid` column (where it would raise a 22xxx/22P02 → an opaque
+ * `server.internal` 500) with a structured 400.
  *
- * Two codes, by position: a malformed PATH `:id` segment is `shared.invalid_id` (the branded-id family,
- * `requireUuidParam`); a malformed BODY/QUERY field is `management.request_invalid` naming the field —
- * the generic request-shape code the management dashboard already uses, reused here as the shared screen
- * for every gated API surface including the till schedule routes (see its doc in `errors.ts`).
+ * Two codes, chosen by WHAT the field is (not by its position): a BRANDED id — a path `:id`, OR a
+ * body/query id such as a `locationId` query or the till's sale/pay `workingOrderId` — is
+ * `shared.invalid_id` via `requireUuidParam`, naming the `kind` and echoing the (non-secret) value; a
+ * generic request-shape field (a date, enum, nullable, or plain body uuid) is
+ * `management.request_invalid` via `requireBodyUuid`/`requirePeriod`/`requireEnum`, naming the FIELD.
  */
 
 const YYYY_MM_DD = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
- * Screen a path `:id` param as a UUID before it reaches a query, returning it. A malformed id passed
- * straight into `eq(...)`/`= ${id}` would `22P02` in the DB → an opaque 500; refused here as
- * `shared.invalid_id` naming the `kind` and echoing the (non-secret) value.
+ * Screen a UUID value — a path `:id` segment, or a branded BODY id that must reach a `uuid` column
+ * well-formed (e.g. the till's sale/pay `workingOrderId`) — before it reaches a query, returning it. A
+ * malformed one passed straight into `eq(...)`/`= ${id}` would `22P02` in the DB → an opaque 500;
+ * refused here as `shared.invalid_id` naming the `kind` and echoing the (non-secret) value. (A body
+ * field whose malformed shape should read as the generic request-shape fault uses `requireBodyUuid`
+ * instead — that throws `management.request_invalid`; this one is for the branded-id `shared.invalid_id`.)
  */
 export function requireUuidParam(id: string, kind: string): string {
   if (!isUuid(id)) throw new AppError("shared.invalid_id", { kind, value: id });
