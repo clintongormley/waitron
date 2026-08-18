@@ -117,6 +117,10 @@ export class RecipeScreen extends LitElement {
   // both render off it; set synchronously at handler entry so a double-fired event files at most one
   // mutation.
   @state() private busy = false;
+  // True while the chosen product's recipe is loading. Passed DOWN to the editor as part of `.busy` so
+  // its Save is disabled until the recipe resolves — otherwise the loading window (recipe momentarily
+  // []) would let an operator Save an empty set and wipe the product's existing recipe.
+  @state() private recipeLoading = false;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -205,6 +209,7 @@ export class RecipeScreen extends LitElement {
     this.selectedCatalogueId = (event.target as HTMLSelectElement).value;
     this.selectedProductId = "";
     this.recipe = [];
+    this.recipeLoading = false;
     this.products = [];
     if (this.selectedCatalogueId === "") return;
     void this.#loadProducts();
@@ -225,16 +230,26 @@ export class RecipeScreen extends LitElement {
     event.stopPropagation();
     this.selectedProductId = (event.target as HTMLSelectElement).value;
     this.recipe = [];
+    this.recipeLoading = this.selectedProductId !== "";
     if (this.selectedProductId === "") return;
     void this.#loadRecipe();
   }
 
+  /** Load the chosen product's recipe. The selection is captured up front and the result is applied only
+   * if it is still current, so a slow earlier load cannot overwrite a newer product the operator picked
+   * meanwhile. `recipeLoading` gates the editor's Save until it resolves. */
   async #loadRecipe(): Promise<void> {
+    const productId = this.selectedProductId;
     this.errorKey = null;
     try {
-      this.recipe = await this.api.getProductRecipe(this.selectedProductId);
+      const recipe = await this.api.getProductRecipe(productId);
+      if (this.selectedProductId !== productId) return; // superseded by a newer selection
+      this.recipe = recipe;
     } catch (error) {
+      if (this.selectedProductId !== productId) return; // superseded — its error is not ours to show
       this.errorKey = codeOf(error);
+    } finally {
+      if (this.selectedProductId === productId) this.recipeLoading = false;
     }
   }
 
@@ -242,7 +257,7 @@ export class RecipeScreen extends LitElement {
    * the editor stays with the toggles the operator left. Single-flight. */
   async #onSaveRecipe(event: CustomEvent<SaveRecipeDetail>): Promise<void> {
     event.stopPropagation();
-    if (this.busy) return; // single-flight
+    if (this.busy || this.recipeLoading) return; // single-flight; never save over a not-yet-loaded recipe
     this.busy = true;
     this.errorKey = null;
     try {
@@ -259,6 +274,7 @@ export class RecipeScreen extends LitElement {
   #closeEditor(): void {
     this.selectedProductId = "";
     this.recipe = [];
+    this.recipeLoading = false;
   }
 
   /** The chosen product (or null), resolved against the loaded list. Drives the editor's visibility. */
@@ -341,7 +357,7 @@ export class RecipeScreen extends LitElement {
           .product=${this.#selectedProduct()}
           .ingredients=${this.ingredients}
           .recipe=${this.recipe}
-          .busy=${this.busy}
+          .busy=${this.busy || this.recipeLoading}
           @save-recipe=${(e: CustomEvent<SaveRecipeDetail>) => void this.#onSaveRecipe(e)}
           @wt-close=${() => this.#closeEditor()}
         ></dashboard-recipe-editor>

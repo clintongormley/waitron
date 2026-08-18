@@ -492,6 +492,108 @@ describe("recipe-screen", () => {
     expect(editor(el).busy).toBe(false);
   });
 
+  it("disables the editor and drops a save while the chosen product's recipe is still loading", async () => {
+    // The data-loss window: choosing a product clears `recipe` to [] and shows the editor immediately,
+    // so until getProductRecipe resolves every switch reads unchecked. A Save in that window would call
+    // setProductRecipe(productId, []) and wipe the product's existing recipe. The editor must be busy
+    // (Save disabled) and the screen must drop a save until the load settles.
+    let resolveRecipe!: (r: RecipeLine[]) => void;
+    const getProductRecipe = vi
+      .fn()
+      .mockImplementation(() => new Promise<RecipeLine[]>((r) => (resolveRecipe = r)));
+    const api = stubApi({ getProductRecipe });
+    const { el } = await mountWidget<RecipeScreen>("dashboard-recipe-screen", { api });
+    await flush(el);
+    selectValue(el, "recipe-catalogue-select", "cat-a");
+    await flush(el);
+    selectValue(el, "recipe-product-select", "p1");
+    await el.updateComplete; // the recipe load is IN FLIGHT (not settled)
+
+    expect(editor(el).busy).toBe(true);
+    emit(editor(el), "save-recipe", { productId: "p1", ingredientIds: [] });
+    await el.updateComplete;
+    expect(api.setProductRecipe).not.toHaveBeenCalled();
+
+    resolveRecipe(recipe);
+    await flush(el);
+    expect(editor(el).busy).toBe(false);
+    expect(editor(el).recipe).toEqual(recipe);
+  });
+
+  it("ignores a slow recipe load for a product the operator already switched away from", async () => {
+    // A stale-response race: load(A) is slow, the operator picks B (load(B) resolves first), then A's
+    // load resolves LAST and must not overwrite the recipe now shown for B.
+    const recipeA: RecipeLine[] = [ingredients[0]!];
+    const recipeB: RecipeLine[] = [ingredients[1]!];
+    const deferreds: Record<string, (r: RecipeLine[]) => void> = {};
+    const twoProducts: Product[] = [
+      { ...products[0]!, id: "pA" },
+      { ...products[0]!, id: "pB" },
+    ];
+    const api = stubApi({
+      listProducts: vi.fn().mockResolvedValue(twoProducts),
+      getProductRecipe: vi
+        .fn()
+        .mockImplementation((id: string) => new Promise<RecipeLine[]>((r) => (deferreds[id] = r))),
+    });
+    const { el } = await mountWidget<RecipeScreen>("dashboard-recipe-screen", { api });
+    await flush(el);
+    selectValue(el, "recipe-catalogue-select", "cat-a");
+    await flush(el);
+
+    selectValue(el, "recipe-product-select", "pA"); // load(A) starts, pending
+    await el.updateComplete;
+    selectValue(el, "recipe-product-select", "pB"); // switch to B; load(B) starts, pending
+    await el.updateComplete;
+
+    deferreds["pB"]!(recipeB); // B resolves first
+    await flush(el);
+    expect(editor(el).recipe).toEqual(recipeB);
+
+    deferreds["pA"]!(recipeA); // A's slow load resolves LAST — must NOT overwrite B
+    await flush(el);
+    expect(editor(el).recipe).toEqual(recipeB);
+  });
+
+  it("suppresses the error from a superseded product's recipe load", async () => {
+    // The catch-side of the same stale-response race: a superseded load that REJECTS must not raise its
+    // error over the newer selection the operator is now looking at.
+    const recipeB: RecipeLine[] = [ingredients[1]!];
+    const resolvers: Record<string, (r: RecipeLine[]) => void> = {};
+    const rejecters: Record<string, (e: unknown) => void> = {};
+    const twoProducts: Product[] = [
+      { ...products[0]!, id: "pA" },
+      { ...products[0]!, id: "pB" },
+    ];
+    const api = stubApi({
+      listProducts: vi.fn().mockResolvedValue(twoProducts),
+      getProductRecipe: vi.fn().mockImplementation(
+        (id: string) =>
+          new Promise<RecipeLine[]>((res, rej) => {
+            resolvers[id] = res;
+            rejecters[id] = rej;
+          }),
+      ),
+    });
+    const { el } = await mountWidget<RecipeScreen>("dashboard-recipe-screen", { api });
+    await flush(el);
+    selectValue(el, "recipe-catalogue-select", "cat-a");
+    await flush(el);
+
+    selectValue(el, "recipe-product-select", "pA"); // load(A) pending
+    await el.updateComplete;
+    selectValue(el, "recipe-product-select", "pB"); // switch to B; load(B) pending
+    await el.updateComplete;
+
+    resolvers["pB"]!(recipeB);
+    await flush(el);
+    rejecters["pA"]!({ code: "server.internal" }); // A fails LAST but is superseded
+    await flush(el);
+
+    expect(errorKey(el)).toBeNull(); // A's error is not ours to show — B is current
+    expect(editor(el).recipe).toEqual(recipeB);
+  });
+
   it("labels each product option by its description, falling back to a bare id", async () => {
     const richProducts: Product[] = [
       { ...products[0]!, id: "p-es", descriptions: { es: "Bizcocho" } },
