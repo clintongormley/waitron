@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { createRef, ref } from "lit/directives/ref.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -75,6 +76,25 @@ export class PersonForm extends LitElement {
   // `ha-*`/`wt-*` components hit with `ariaLabel`. The emitted event's detail key is still `role`.
   @state() private selectedRole: PersonRole = "staff";
   @state() private pin = "";
+
+  // A handle to the native role <select>, reconciled to `selectedRole` in `updated()` (see that
+  // method for why a template binding cannot do this on a native select).
+  #roleSelect = createRef<HTMLSelectElement>();
+
+  /**
+   * Reconcile the native role <select>'s live value to `selectedRole` after every render, once its
+   * <option> children are in the DOM. A `.value` bound in the template commits BEFORE the options
+   * exist, so a preset that is not the first option would fall back to the first (the latent picker
+   * bug #73 fixed in the edit dialog). Today `selectedRole` starts at "staff" — the first option — so
+   * a template binding renders right only by luck; setting `.value` here keeps the picker correct for
+   * any preset. The <select> is rendered unconditionally (unlike the edit dialog's, which is gated on
+   * `person?`), so the ref is always populated by the time `updated()` runs — assert it, as
+   * `recipe-editor.ts` does with `this.product!.id`. Setting `.value` imperatively does not trigger a
+   * reactive update, so this does not loop.
+   */
+  override updated(): void {
+    this.#roleSelect.value!.value = this.selectedRole;
+  }
 
   /**
    * Capture the display-name field's new value. `wt-change` is dispatched `bubbles`+`composed`, so
@@ -155,7 +175,7 @@ export class PersonForm extends LitElement {
         ></wt-input>
         <label class="field"
           >${t("person.role")}
-          <select .value=${this.selectedRole} @change=${(e: Event) => this.#onRoleChange(e)}>
+          <select ${ref(this.#roleSelect)} @change=${(e: Event) => this.#onRoleChange(e)}>
             ${ROLES.map((role) => html`<option value=${role}>${roleName(role)}</option>`)}
           </select>
         </label>

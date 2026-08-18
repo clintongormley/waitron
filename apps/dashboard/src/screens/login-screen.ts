@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { createRef, ref } from "lit/directives/ref.js";
 import { startAuthentication } from "@simplewebauthn/browser";
 import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
 import { baseStyles } from "@waitron/ui";
@@ -46,9 +47,27 @@ export class LoginScreen extends LitElement {
   @state() private totp = "";
   @state() private errorKey: string | null = null;
 
+  // A handle to the native roster <select>, reconciled to `selected` in `updated()` (see that method
+  // for why a template binding cannot do this on a native select).
+  #rosterSelect = createRef<HTMLSelectElement>();
+
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#loadRoster();
+  }
+
+  /**
+   * Reconcile the native roster <select>'s live value to `selected` after every render, once its
+   * <option> children are in the DOM. A `.value` bound in the template commits BEFORE the options
+   * exist, so a selection that is not the first roster entry would fall back to the first (the latent
+   * picker bug #73 fixed in the edit dialog; the create form mirrors it). Today `#loadRoster` always
+   * selects roster[0] — the first option — so a template binding renders right only by luck; setting
+   * `.value` here keeps the picker correct even if the initial-selection policy ever changes. The
+   * <select> is rendered unconditionally, so the ref is always populated by the time `updated()` runs.
+   * Setting `.value` imperatively does not trigger a reactive update, so this does not loop.
+   */
+  override updated(): void {
+    this.#rosterSelect.value!.value = this.selected;
   }
 
   /**
@@ -151,7 +170,7 @@ export class LoginScreen extends LitElement {
     return html`
       <label class="field"
         >${t("login.roster")}
-        <select .value=${this.selected} @change=${(e: Event) => this.#onRosterChange(e)}>
+        <select ${ref(this.#rosterSelect)} @change=${(e: Event) => this.#onRosterChange(e)}>
           ${this.roster.map((p) => html`<option value=${p.personId}>${p.displayName}</option>`)}
         </select>
       </label>

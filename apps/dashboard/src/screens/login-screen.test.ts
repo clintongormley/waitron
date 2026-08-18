@@ -129,6 +129,32 @@ describe("login-screen", () => {
     expect((el as unknown as { selected: string }).selected).toBe("");
   });
 
+  // The roster picker must DISPLAY `selected` even when it is not the first option. Today `#loadRoster`
+  // always selects roster[0] (the first option), so a `.value` bound in the template renders right by
+  // luck; this drives a NON-first selection through the fresh options-creating render (the []→populated
+  // transition #loadRoster performs) to prove the live <select> value tracks `selected` regardless of
+  // option order — the case a future initial-selection policy could produce. The stub roster fetch
+  // never resolves, so `#loadRoster` cannot overwrite the injected state. Reconciling `.value` in
+  // `updated()` (after the options render) is the fix, mirroring the edit dialog. Prove-by-deletion:
+  // remove the `updated()` reconcile and the picker falls back to the first roster entry (p1).
+  it("keeps the roster picker on the selected person even when it is not the first option", async () => {
+    const api = stubApi({ getStaffRoster: vi.fn(() => new Promise<never>(() => {})) });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await el.updateComplete; // first render: empty roster, no <option>s yet
+    // Simulate a roster load that selects a non-first entry, in one render so the <option>s are
+    // created fresh with `selected` already pointing past the first — the ordering the bug hinges on.
+    Object.assign(el as unknown as { roster: unknown; selected: string }, {
+      roster: [
+        { personId: "p1", displayName: "Ada" },
+        { personId: "p2", displayName: "Ben" },
+        { personId: "p3", displayName: "Cid" },
+      ],
+      selected: "p3",
+    });
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("select")!.value).toBe("p3");
+  });
+
   it("falls back to server.internal when the rejection carries no code", async () => {
     const api = stubApi({ login: vi.fn().mockRejectedValue({}) });
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
