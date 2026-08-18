@@ -619,9 +619,17 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     default to `localhost` / `http://localhost:5191` for dev+tests; a wrong origin now surfaces as a
     clean 401 (was a 500), but the real fix is to make both **required at boot** in production so a
     misconfig fails loudly at startup, not as a mystery 401 per login.
-  - **`userVerification` policy not pinned.** `generate*Options` default to `"preferred"` while the
-    `verify*` calls require UV (the safe direction — fails closed). For a phishing-resistant PRIMARY
-    login, pin both generate and verify to `"required"` explicitly.
+  - **`userVerification` policy pinned — DONE (#104, 2026-08-18; campaign queue #12).** `generate*Options`
+    now pin `userVerification: "required"` (registration inside `authenticatorSelection`, keeping the
+    library's `residentKey: "preferred"` default — which supplying `authenticatorSelection` at all otherwise
+    drops, verified at runtime; authentication via the top-level option), and both `verify*` calls pin
+    `requireUserVerification: true` explicitly. So UV is mandatory and signalled up front on a
+    phishing-resistant PRIMARY login, not merely the fail-closed verify default
+    (@simplewebauthn/server@13.3.2: generate defaults `"preferred"` per generateRegistrationOptions.js:39-40 /
+    generateAuthenticationOptions.js:16; verify defaults `true` per verify*.js). Four deletion-proven tests —
+    the registration-options one also asserts the `residentKey` re-spec, guarding the discoverable-credential
+    regression the finish-branch wide-lens review surfaced. No migration, no fiscal-core touch; the dashboard
+    login/staff screens forward the options JSON opaquely, so no client contract change.
   - **Duplicate `credential_id` on the gated register route → opaque 500.** A second registration of the
     same `(tenant_id, credential_id)` raises `23505` → `server.internal` 500, breaking the "every
     surfaced code is a 4xx" invariant. Near-unreachable (route is gated + `excludeCredentials` makes a
