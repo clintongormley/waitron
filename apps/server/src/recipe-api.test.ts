@@ -77,7 +77,7 @@ function mountApp(): Hono {
 /** JSON GET/POST/PUT helper with the manager cookie unless overridden. */
 async function send(
   app: Hono,
-  method: "GET" | "POST" | "PUT",
+  method: "GET" | "POST" | "PUT" | "PATCH",
   path: string,
   opts: { body?: unknown; cookie?: string | null } = {},
 ): Promise<Response> {
@@ -155,5 +155,123 @@ describe("mountRecipeApi", () => {
     expect(((await staff.json()) as { error: { code: string } }).error.code).toBe(
       "authorization.not_permitted",
     );
+  });
+
+  // Helper: create one ingredient and return its id (the PATCH tests below each edit a fresh row).
+  async function createIngredient(app: Hono, name: string): Promise<string> {
+    const created = await send(app, "POST", "/management-api/ingredients", {
+      body: { name },
+      cookie: managerCookie,
+    });
+    expect(created.status).toBe(201);
+    return ((await created.json()) as { id: string }).id;
+  }
+
+  it("patches an ingredient's name and reflects it in the list", async () => {
+    const app = mountApp();
+    const id = await createIngredient(app, "harina");
+    const patched = await send(app, "PATCH", `/management-api/ingredients/${id}`, {
+      body: { name: "harina de trigo" },
+      cookie: managerCookie,
+    });
+    expect(patched.status).toBe(204);
+    const list = (await (
+      await send(app, "GET", "/management-api/ingredients", { cookie: managerCookie })
+    ).json()) as { id: string; name: string }[];
+    expect(list.find((i) => i.id === id)?.name).toBe("harina de trigo");
+  });
+
+  it("patches an ingredient's active flag and allergen declaration", async () => {
+    const app = mountApp();
+    const id = await createIngredient(app, "leche");
+    const patched = await send(app, "PATCH", `/management-api/ingredients/${id}`, {
+      body: { active: false, allergens: { milk: { presence: "contains" } } },
+      cookie: managerCookie,
+    });
+    expect(patched.status).toBe(204);
+    const list = (await (
+      await send(app, "GET", "/management-api/ingredients", { cookie: managerCookie })
+    ).json()) as { id: string; active: boolean; allergens: unknown }[];
+    const row = list.find((i) => i.id === id);
+    expect(row?.active).toBe(false);
+    expect(row?.allergens).toEqual({ milk: { presence: "contains" } });
+  });
+
+  it("rejects a non-uuid ingredient id on PATCH → shared.invalid_id 400", async () => {
+    const res = await send(mountApp(), "PATCH", "/management-api/ingredients/not-a-uuid", {
+      body: { name: "x" },
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "shared.invalid_id" },
+    });
+  });
+
+  it("rejects a PATCH with a non-string name → 400 management.request_invalid { field: name }", async () => {
+    const app = mountApp();
+    const id = await createIngredient(app, "sal");
+    const res = await send(app, "PATCH", `/management-api/ingredients/${id}`, {
+      body: { name: 123 },
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "name" } },
+    });
+  });
+
+  it("rejects a PATCH with a non-boolean active → 400 management.request_invalid { field: active }", async () => {
+    const app = mountApp();
+    const id = await createIngredient(app, "azúcar");
+    const res = await send(app, "PATCH", `/management-api/ingredients/${id}`, {
+      body: { active: "yes" },
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "active" } },
+    });
+  });
+
+  it("rejects a PUT recipe with non-array ingredientIds → 400 { field: ingredientIds }", async () => {
+    const res = await send(mountApp(), "PUT", `/management-api/products/${productId}/recipe`, {
+      body: { ingredientIds: "i1" },
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "ingredientIds" } },
+    });
+  });
+
+  // A literal `null` JSON body parses to `null`, which the `?? {}` coalescing in each write route turns
+  // into an empty object so the field screens answer with a 400 rather than TypeErroring into an opaque
+  // 500 (the catalogue null-body convention). One representative case per write route.
+  it("coerces a null body on POST/PATCH/PUT to the field-screen 400 (not a 500)", async () => {
+    const app = mountApp();
+    const id = await createIngredient(app, "pimentón");
+    const post = await send(app, "POST", "/management-api/ingredients", {
+      body: null,
+      cookie: managerCookie,
+    });
+    expect(post.status).toBe(400);
+    expect((await post.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "name" } },
+    });
+    const patch = await send(app, "PATCH", `/management-api/ingredients/${id}`, {
+      body: null,
+      cookie: managerCookie,
+    });
+    // A null (→ empty) PATCH body carries no field to change, so it is a well-formed no-op → 204.
+    expect(patch.status).toBe(204);
+    const put = await send(app, "PUT", `/management-api/products/${productId}/recipe`, {
+      body: null,
+      cookie: managerCookie,
+    });
+    expect(put.status).toBe(400);
+    expect((await put.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "ingredientIds" } },
+    });
   });
 });
