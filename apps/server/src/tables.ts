@@ -3,7 +3,8 @@
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { diningTables, isUniqueViolation } from "@waitron/db";
+import { authorizeManager } from "@waitron/identity";
+import { diningTables, isUniqueViolation, tableServiceStatuses } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TillConfig } from "./till-config.js";
 
@@ -118,5 +119,161 @@ export async function deactivateTable(
     .returning({ id: diningTables.id });
   if (updated.length === 0) {
     throw new AppError("table.not_found", { tableId: id });
+  }
+}
+
+/** A configured service status as the CRUD surface returns it. `createdAt` is an ISO string. */
+export interface ServiceStatus {
+  id: string;
+  label: string;
+  color: string;
+  displayOrder: number;
+  active: boolean;
+  createdAt: string;
+}
+
+// A floor-plan swatch is a hex ("#ef4444") or a short token ("amber", "amber-500"): a bounded,
+// charset-restricted string. Validated app-side (design §2a) — the DB stores opaque text. A malformed
+// value is a request-payload fault surfaced as `management.request_invalid` naming the FIELD (never the
+// value — the no-leak discipline errors.ts states), the same shape the layout PUT route uses; the spec
+// enumerates only status.not_found/inactive/label_taken, so no new status.* code is minted (Plan note 3).
+const STATUS_COLOR_RE = /^[#A-Za-z0-9_-]{1,32}$/;
+function validateStatusColor(color: string): string {
+  if (typeof color !== "string" || !STATUS_COLOR_RE.test(color)) {
+    throw new AppError("management.request_invalid", { field: "color" });
+  }
+  return color;
+}
+
+/**
+ * Create a service status in the tenant's configured set. Manager/admin only (`till.configure`, the
+ * #81 venue-config permission — reused, not renamed): the authorize gate runs BEFORE any DB write,
+ * proven by-deletion in the suite. A duplicate `(tenant, label)` collides on
+ * `table_service_statuses_tenant_label_key` and is surfaced as `status.label_taken`.
+ */
+export async function createStatus(
+  tx: Transaction,
+  input: {
+    managementSessionId: string;
+    tenantId: string;
+    label: string;
+    color: string;
+    displayOrder?: number;
+  },
+): Promise<{ id: string }> {
+  await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "till.configure",
+  });
+  const color = validateStatusColor(input.color);
+  try {
+    const [row] = await tx
+      .insert(tableServiceStatuses)
+      .values({
+        tenantId: input.tenantId,
+        label: input.label,
+        color,
+        displayOrder: input.displayOrder ?? 0,
+      })
+      .returning({ id: tableServiceStatuses.id });
+    return { id: row!.id };
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new AppError("status.label_taken", { label: input.label });
+    }
+    throw error;
+  }
+}
+
+/**
+ * The tenant's WHOLE status set — active AND inactive, ordered by `display_order` then `label` — so the
+ * editor can reactivate a deactivated one. Manager/admin only (`till.configure`), gated here rather than
+ * at the route so the verb is safe from any caller. RLS confines the read to the tenant.
+ */
+export async function listStatuses(
+  tx: Transaction,
+  input: { managementSessionId: string; tenantId: string },
+): Promise<ServiceStatus[]> {
+  await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "till.configure",
+  });
+  return tx
+    .select({
+      id: tableServiceStatuses.id,
+      label: tableServiceStatuses.label,
+      color: tableServiceStatuses.color,
+      displayOrder: tableServiceStatuses.displayOrder,
+      active: tableServiceStatuses.active,
+      createdAt: tableServiceStatuses.createdAt,
+    })
+    .from(tableServiceStatuses)
+    .orderBy(tableServiceStatuses.displayOrder, tableServiceStatuses.label);
+}
+
+/**
+ * Edit a status's `label`/`color`/`displayOrder`/`active` (any subset). Manager/admin only
+ * (`till.configure`). An absent id (or another tenant's, RLS-hidden) throws `status.not_found`; a label
+ * collision throws `status.label_taken`; a malformed color throws `management.request_invalid`.
+ * Reactivation is `updateStatus({ active: true })`.
+ */
+export async function updateStatus(
+  tx: Transaction,
+  input: {
+    managementSessionId: string;
+    tenantId: string;
+    id: string;
+    label?: string;
+    color?: string;
+    displayOrder?: number;
+    active?: boolean;
+  },
+): Promise<void> {
+  await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "till.configure",
+  });
+  const patch: { label?: string; color?: string; displayOrder?: number; active?: boolean } = {};
+  if (input.label !== undefined) patch.label = input.label;
+  if (input.color !== undefined) patch.color = validateStatusColor(input.color);
+  if (input.displayOrder !== undefined) patch.displayOrder = input.displayOrder;
+  if (input.active !== undefined) patch.active = input.active;
+
+  let updated: { id: string }[];
+  try {
+    updated = await tx
+      .update(tableServiceStatuses)
+      .set(patch)
+      .where(eq(tableServiceStatuses.id, input.id))
+      .returning({ id: tableServiceStatuses.id });
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      // Only `label` participates in the unique, so it was necessarily supplied when this fires.
+      throw new AppError("status.label_taken", { label: input.label! });
+    }
+    throw error;
+  }
+  if (updated.length === 0) {
+    throw new AppError("status.not_found", { statusId: input.id });
+  }
+}
+
+/** Deactivate a status (`active = false`) — never a hard delete (a table may reference it; app_user
+ *  holds no DELETE on `table_service_statuses`). Manager/admin only. Absent id → `status.not_found`. */
+export async function deactivateStatus(
+  tx: Transaction,
+  input: { managementSessionId: string; tenantId: string; id: string },
+): Promise<void> {
+  await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "till.configure",
+  });
+  const updated = await tx
+    .update(tableServiceStatuses)
+    .set({ active: false })
+    .where(eq(tableServiceStatuses.id, input.id))
+    .returning({ id: tableServiceStatuses.id });
+  if (updated.length === 0) {
+    throw new AppError("status.not_found", { statusId: input.id });
   }
 }
