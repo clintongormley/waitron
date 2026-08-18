@@ -43,8 +43,13 @@ export interface Product {
   unitPrice: string;
   vatClass: VatClass;
   active: boolean;
-  /** EU 1169/2011 Annex II declaration, or null when not yet reviewed (a compliance gap). */
+  /** EU 1169/2011 Annex II declaration, or null when not yet reviewed (a compliance gap). This is the
+   * PUBLISHED union: the manual overlay merged with any recipe-derived floor (`republish`). */
   allergens: ProductAllergens | null;
+  /** The staff-authored overlay ALONE, before the recipe floor is unioned in — null when unreviewed.
+   * Exposed distinctly from `allergens` so an editor seeds its picker from the manual value without
+   * double-counting recipe-derived allergens. */
+  manualAllergens: ProductAllergens | null;
   /** Content-addressed photo filename served at `/media/<image>`, or null when there is no picture. */
   image: string | null;
 }
@@ -118,6 +123,7 @@ const PRODUCT_COLUMNS = {
   vatClass: products.vatClass,
   active: products.active,
   allergens: products.allergens,
+  manualAllergens: products.manualAllergens,
   image: products.image,
 };
 
@@ -133,6 +139,7 @@ interface RawProduct {
   vatClass: string;
   active: boolean;
   allergens: ProductAllergens | null;
+  manualAllergens: ProductAllergens | null;
   image: string | null;
 }
 

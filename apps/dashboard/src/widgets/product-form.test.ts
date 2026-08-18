@@ -263,6 +263,8 @@ describe("product-form", () => {
     vatClass: "super_reduced",
     active: false,
     allergens: { gluten: { presence: "contains" } },
+    // No recipe floor, so the manual overlay equals the published union — the picker seeds from this.
+    manualAllergens: { gluten: { presence: "contains" } },
     image: "img123.png",
   };
 
@@ -342,6 +344,38 @@ describe("product-form", () => {
     const patch = (await updated).detail.patch;
     expect("allergens" in patch).toBe(true);
     expect(patch.allergens).toBe(null);
+  });
+
+  it("seeds the allergen picker from manualAllergens, not the published union", async () => {
+    // Published `allergens` carries the computed union (manual gluten ∪ derived eggs); the manual overlay is
+    // gluten only. The picker MUST show the manual overlay — seeding from the published union would double-count
+    // the derived eggs into the manual overlay on the next save.
+    const product = {
+      id: "11111111-1111-1111-1111-111111111111",
+      catalogueId: "c",
+      categoryId: null,
+      descriptions: { es: "bocadillo" },
+      pricingUnit: "each" as const,
+      unitPrice: "3.00",
+      vatClass: "general" as const,
+      active: true,
+      image: null,
+      allergens: {
+        eggs: { presence: "contains" as const },
+        gluten: { presence: "contains" as const },
+      },
+      manualAllergens: { gluten: { presence: "contains" as const } },
+    };
+    const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
+      ...baseProps(),
+      product,
+      open: true,
+    });
+    await el.updateComplete;
+    const picker = el.shadowRoot!.querySelector("[data-test=allergens]") as HTMLElement & {
+      declaration: unknown;
+    };
+    expect(picker.declaration).toEqual({ gluten: { presence: "contains" } });
   });
 
   // ── Dialog dismissal + single-flight ──────────────────────────────────────────────────────────

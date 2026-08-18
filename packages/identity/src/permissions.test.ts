@@ -61,4 +61,13 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("staff", "purchase.manage")).toBe(false);
     expect(roleHasPermission("supervisor", "purchase.manage")).toBe(false);
   });
+  it("grants recipe.manage to manager and admin only (recipe authoring)", () => {
+    // A domain-named authoring permission (ingredient + product-recipe authoring on the commercial lane),
+    // granted to exactly the roles that hold person.manage — manager and admin — and NEVER to staff or
+    // supervisor, so the recipe write gate matches the other management-dashboard write gates.
+    expect(roleHasPermission("manager", "recipe.manage")).toBe(true);
+    expect(roleHasPermission("admin", "recipe.manage")).toBe(true);
+    expect(roleHasPermission("staff", "recipe.manage")).toBe(false);
+    expect(roleHasPermission("supervisor", "recipe.manage")).toBe(false);
+  });
 });

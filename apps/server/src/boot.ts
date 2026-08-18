@@ -41,6 +41,7 @@ import { mountTillApi } from "./till-api.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
+import { mountRecipeApi } from "./recipe-api.js";
 import { mountWorkforceApi } from "./workforce-api.js";
 import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
@@ -345,6 +346,13 @@ export async function startServer(env: Record<string, string | undefined>): Prom
   // boot; the `purchase.manage` gate runs per request. This is the #91 fast-follow's capture surface,
   // feeding the headless modelo 303 IVA-deducible reporting.
   mountPurchasingApi(app, { db, cfg: { tenantId: till.tenantId } }, log);
+  // The dashboard's gated recipe-authoring surface (ingredient CRUD + product-recipe get/set) on the
+  // SAME app, the identical convention. Reuses the EXACT `db`, tenant and `nodeId` `mountCatalogueApi`
+  // above receives (`till.tenantId`/`till.nodeId`, this venue's one tenant + this node) — a recipe write
+  // UPDATEs the sync-enrolled `products` table (via applyRecipeDerivation), so it threads `nodeId` for
+  // the same origin-attribution reason catalogue does. No fiscal backend, clock, card provider or media
+  // store. Routes only — no database work at boot; the `recipe.manage` gate runs per request.
+  mountRecipeApi(app, { db, cfg: { tenantId: till.tenantId, nodeId: till.nodeId } }, log);
   // The dashboard's gated shift-planning surface (roster authoring + publish) on the SAME app, the
   // identical convention. Reuses the EXACT db + tenant (till.tenantId, this venue's one tenant); no
   // fiscal backend, clock, card provider or media store — these routes touch only roster_versions /

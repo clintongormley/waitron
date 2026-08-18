@@ -1,4 +1,5 @@
 import { currentLocale, pickLocale } from "./t.js";
+import type { AllergenDeclaration } from "../api/client.js";
 
 // Localised DISPLAY NAMES for the enum tokens the server hands the dashboard — roles, statuses,
 // VAT classes, sale units, allergen-declaration states, and the 14 EU allergen codes. The dashboard
@@ -191,6 +192,23 @@ export function vatClassName(value: string, locale: string = currentLocale()): s
 /** A product's sale unit (each / weight) → its display name. */
 export function unitName(value: string, locale: string = currentLocale()): string {
   return resolve(UNIT_NAMES, value, locale);
+}
+
+/** The three allergen-declaration states a pill renders, keyed off the §7 / §1 invariant. */
+export type AllergenState = "pending" | "none" | "declared";
+
+/**
+ * The three-state read of an allergen declaration (design §7, the till's null/{}/{…} distinction —
+ * `apps/till/src/screens/till-allergen-screen.ts`): `null` is PENDING (not yet reviewed — a compliance
+ * gap, NEVER "allergen-free"), `{}` is reviewed-with-none, a non-empty map is declared. `null` and `{}`
+ * MUST stay distinct — collapsing them is the exact defect the invariant exists to prevent, so it is a
+ * `=== null` test, not a falsy/length-only one. Shared by every widget that renders an allergen pill
+ * (`product-list`, `ingredient-list`) so the compliance invariant has ONE definition, beside the
+ * `allergenStateName` that localises its output.
+ */
+export function allergenState(allergens: AllergenDeclaration): AllergenState {
+  if (allergens === null) return "pending";
+  return Object.keys(allergens).length === 0 ? "none" : "declared";
 }
 
 /** An allergen-declaration state (pending / none / declared) → its display name. */

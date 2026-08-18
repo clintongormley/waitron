@@ -24,6 +24,7 @@ const products: Product[] = [
     vatClass: "reduced",
     active: true,
     allergens: null,
+    manualAllergens: null,
     image: "abc123.webp",
   },
   {
@@ -36,6 +37,7 @@ const products: Product[] = [
     vatClass: "general",
     active: false,
     allergens: {},
+    manualAllergens: {},
     image: null,
   },
   {
@@ -48,6 +50,10 @@ const products: Product[] = [
     vatClass: "super_reduced",
     active: true,
     allergens: {
+      gluten: { presence: "contains", source: "trigo" },
+      milk: { presence: "contains" },
+    },
+    manualAllergens: {
       gluten: { presence: "contains", source: "trigo" },
       milk: { presence: "contains" },
     },

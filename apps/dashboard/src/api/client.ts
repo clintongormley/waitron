@@ -128,6 +128,10 @@ export interface Product {
   vatClass: VatClass;
   active: boolean;
   allergens: AllergenDeclaration;
+  /** The staff-authored allergen overlay — what a human explicitly declared, SEPARATE from the published
+   * `allergens` (which is the computed union of this overlay and any recipe-derived floor). The product
+   * editor seeds its allergen picker from THIS, so recipe-derived allergens are never re-saved as manual. */
+  manualAllergens: AllergenDeclaration;
   image: string | null;
 }
 
@@ -168,6 +172,44 @@ export interface ProductPatch {
   image?: string | null;
   active?: boolean;
 }
+
+// ── Ingredient & product-recipe types ─────────────────────────────────────────────────────────────
+// LOCAL copies of the server's recipe-authoring JSON shapes (the `recipe-api.ts` routes wrapping
+// `@waitron/recipes`' ops), deliberately NOT imported from `@waitron/recipes`/`@waitron/catalogue`/
+// `@waitron/db` — a runtime import would drag their barrels + Node builtins into the browser bundle
+// (the #70 rule, as the catalogue/layout/shift shapes above do). They REUSE the local
+// `AllergenDeclaration`/`AllergenEntry` types (same three-state `null` = PENDING semantics). These are
+// the CONTRACT the ingredient list/form + product recipe editor build on; if the server shapes change
+// these follow, and a mismatch surfaces as a runtime shape error a view test catches, not a compile break.
+
+/** One `GET/POST /management-api/ingredients` row — mirrors recipes' `Ingredient`. A raw material /
+ * prep item; `allergens` null means not yet reviewed (PENDING). */
+export interface Ingredient {
+  id: string;
+  name: string;
+  allergens: AllergenDeclaration;
+  active: boolean;
+}
+
+/** The `POST /management-api/ingredients` body — mirrors recipes' `CreateIngredientInput`. `allergens`
+ * omitted leaves the ingredient unreviewed (null); a supplied map is validated server-side. */
+export interface IngredientInput {
+  name: string;
+  allergens?: Record<string, AllergenEntry>;
+}
+
+/** The `PATCH /management-api/ingredients/:id` body — mirrors recipes' `UpdateIngredientInput`. Every
+ * key is optional; `allergens: null` clears the declaration back to unreviewed, `active` toggles it. */
+export interface IngredientPatch {
+  name?: string;
+  allergens?: AllergenDeclaration;
+  active?: boolean;
+}
+
+/** One line of `GET /management-api/products/:id/recipe` — the ingredient rows composing a product's
+ * recipe. `recipes`' `getProductRecipe` returns full `Ingredient` rows, so a recipe line IS an
+ * `Ingredient`; aliased (not re-declared) so the two shapes cannot drift. */
+export type RecipeLine = Ingredient;
 
 // ── Till layout & receipt (configurable-till) types ──────────────────────────────────────────────
 // LOCAL copies of `@waitron/layouts`' JSON shapes (the `/management-api/layout` + `/management-api/receipt`
@@ -630,6 +672,41 @@ export class DashboardApi {
     const form = new FormData();
     form.append("file", file);
     return this.#request<{ image: string }>("/management-api/product-images", "POST", form);
+  }
+
+  // ── Ingredients & product recipes ──────────────────────────────────────────────────────────────
+
+  /** `GET /management-api/ingredients` — every ingredient (id, name, allergens, active). */
+  listIngredients(): Promise<Ingredient[]> {
+    return this.#request<Ingredient[]>("/management-api/ingredients", "GET");
+  }
+
+  /** `POST /management-api/ingredients` — create an ingredient; returns the created `Ingredient` (201). */
+  createIngredient(input: IngredientInput): Promise<Ingredient> {
+    return this.#request<Ingredient>("/management-api/ingredients", "POST", input);
+  }
+
+  /**
+   * `PATCH /management-api/ingredients/:id` — patch an ingredient's mutable slice (name, allergens,
+   * active). Answers an empty 204.
+   */
+  updateIngredient(id: string, patch: IngredientPatch): Promise<void> {
+    return this.#request<void>(`/management-api/ingredients/${id}`, "PATCH", patch);
+  }
+
+  /** `GET /management-api/products/:id/recipe` — the ingredient lines composing a product's recipe. */
+  getProductRecipe(productId: string): Promise<RecipeLine[]> {
+    return this.#request<RecipeLine[]>(`/management-api/products/${productId}/recipe`, "GET");
+  }
+
+  /**
+   * `PUT /management-api/products/:id/recipe` — replace the WHOLE recipe (full-replace) with the given
+   * ordered `ingredientIds`. Answers an empty 204.
+   */
+  setProductRecipe(productId: string, ingredientIds: string[]): Promise<void> {
+    return this.#request<void>(`/management-api/products/${productId}/recipe`, "PUT", {
+      ingredientIds,
+    });
   }
 
   // ── Till layout & receipt configuration ──────────────────────────────────────────────────────

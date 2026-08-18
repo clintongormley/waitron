@@ -30,6 +30,7 @@ const products: Product[] = [
     vatClass: "reduced",
     active: true,
     allergens: null,
+    manualAllergens: null,
     image: null,
   },
 ];
