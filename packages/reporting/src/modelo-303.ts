@@ -1,5 +1,6 @@
 import { addDecimal, decimal, percentOf } from "@waitron/shared";
 import type { Decimal, TenantId } from "@waitron/shared";
+import type { LiquidationPeriod } from "./period.js";
 import type { VatReturn } from "./types.js";
 
 /**
@@ -29,7 +30,8 @@ import type { VatReturn } from "./types.js";
 export interface Modelo303 {
   tenantId: TenantId;
   year: number;
-  month: number;
+  /** The liquidation period the boxes are FOR (month/quarter/year). */
+  period: LiquidationPeriod;
   /**
    * Every populated box, keyed by its official casilla number (as a string, zero-free e.g. "07",
    * "150"), value as a `Decimal` string. The serializer-facing surface: DR303 (Slice D) positions each
@@ -139,18 +141,8 @@ export function mapModelo303(vatReturn: VatReturn): Modelo303 {
   // simplificado, DP30302) and the DID/domiciliación sheet were NOT, so "any página" would overstate
   // the evidence. It is therefore deliberately NOT emitted — no longer a TODO.
 
-  // Task 1b bridge: `Modelo303` still carries a monthly `month: number` until Task 1f threads the
-  // `LiquidationPeriod` through it (and Task 1g makes the DR303 writer period-aware). Every caller of
-  // `mapModelo303` today hands it a monthly `VatReturn` — the quarterly/annual callers and the
-  // download route arrive in later slices — so narrow to the month here and fail loud otherwise. Task
-  // 1f replaces this whole block with `period: vatReturn.period`.
-  const { period } = vatReturn;
-  /* v8 ignore start -- unreachable today: no caller passes a non-monthly period; removed in Task 1f */
-  if (period.kind !== "month") {
-    throw new Error(
-      `reporting: mapModelo303 currently maps only a monthly liquidation period (got ${period.kind}); quarterly/annual arrive in a later slice`,
-    );
-  }
-  /* v8 ignore stop */
-  return { tenantId: vatReturn.tenantId, year: vatReturn.year, month: period.month, boxes };
+  // The boxes above are period-agnostic (the box arithmetic never looks at month/quarter/year); the
+  // liquidation period the aggregate is FOR is threaded through verbatim, so a quarterly or annual
+  // VatReturn maps to the same boxes a monthly one with identical figures would, tagged with its period.
+  return { tenantId: vatReturn.tenantId, year: vatReturn.year, period: vatReturn.period, boxes };
 }
