@@ -192,8 +192,11 @@ describe("table + tab routes", () => {
     });
     expect(create.status).toBe(200);
     const { id } = (await create.json()) as { id: string };
-    const list = await request("/api/tables");
-    expect(await list.json()).toEqual([expect.objectContaining({ id, label: "12", active: true })]);
+    const list = (await (await request("/api/tables")).json()) as unknown[];
+    // Membership, not an exact one-element array: the suite's PGlite db persists across tests, so an
+    // exact-list assertion would be order-reliant (§4). `.toContainEqual` holds no matter what other
+    // table-creating tests have run.
+    expect(list).toContainEqual(expect.objectContaining({ id, label: "12", active: true }));
   });
 
   it("POST /api/tables with a duplicate label → 409 table.label_taken", async () => {
@@ -337,6 +340,32 @@ describe("table + tab routes", () => {
     // `Number("abc")` is `NaN`, refused as `tab.line_not_found` BEFORE any DB read (a raw `abc` would
     // never reach the integer `line_no` column anyway).
     const res = await request(`/api/working-orders/${randomUUID()}/lines/abc`, {
+      method: "DELETE",
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "tab.line_not_found" } });
+  });
+
+  it("an OUT-OF-int4-RANGE :lineNo on the void route → 404 tab.line_not_found (not an opaque 22003 500)", async () => {
+    // Open a REAL tab so `voidTabLine`'s `lockOpenTab` passes and the delete query is actually reached
+    // — a random uuid would be shielded by `lockOpenTab` (tab.not_open, 409) before the query. With a
+    // real open tab: `9999999999` IS a `Number.isInteger`, so the bare integer check let it through; it
+    // would then bind as `$n` into `where line_no = $n` on the int4 `line_no` column and PostgreSQL
+    // would raise `22003 (out of range for integer)`, a non-AppError the boundary turns into an opaque
+    // 500. The route's range bound refuses it as `tab.line_not_found` (a line number that cannot exist
+    // names no line) BEFORE any query. Dropping the `> 2_147_483_647` bound makes this a 500 — the
+    // prove-by-deletion this fix is for.
+    const { id } = (await (
+      await request("/api/tables", { method: "POST", body: JSON.stringify({ label: "88" }) })
+    ).json()) as { id: string };
+    const { tabId } = (await (
+      await request(`/api/tables/${id}/tab`, {
+        method: "POST",
+        body: JSON.stringify({ lines: [{ productId, quantity: "1" }] }),
+      })
+    ).json()) as { tabId: string };
+
+    const res = await request(`/api/working-orders/${tabId}/lines/9999999999`, {
       method: "DELETE",
     });
     expect(res.status).toBe(404);

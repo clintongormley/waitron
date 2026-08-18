@@ -609,15 +609,25 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Void one line from an open tab. SESSION-GUARDED. Malformed :id → tab.not_open; a non-integer
-  // :lineNo → tab.line_not_found (it names no line). `voidTabLine` throws tab.not_open / tab.line_not_found.
+  // Void one line from an open tab. SESSION-GUARDED. Malformed :id → tab.not_open; a :lineNo that is
+  // not a valid int4 line number → tab.line_not_found (it names no line). The upper bound is not
+  // cosmetic: `line_no` is int4 (orders.ts) and `voidTabLine` binds it parameterised, so an integer
+  // ABOVE int4's max (`9999999999`) — one that clears `Number.isInteger` — would reach the
+  // `where line_no = $n` delete (once `voidTabLine`'s `lockOpenTab` confirms an open tab) and PostgreSQL
+  // would raise `22003` (out of range for integer), a non-AppError the boundary turns into an opaque
+  // `server.internal` 500, the exact class the `:id` screen above exists to prevent. (A non-numeric
+  // :lineNo becomes `NaN` here and is caught by `Number.isInteger` before any query, so `22P02` is not
+  // reachable on this param.) Screening the whole out-of-range set here refuses it as
+  // `tab.line_not_found` (404): a line number that cannot exist names no line, the same shape `abc`/
+  // `1.5` already resolve to. `voidTabLine` still throws tab.not_open / tab.line_not_found for the
+  // in-range cases it reaches.
   app.delete("/api/working-orders/:id/lines/:lineNo", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("tab.not_open", { tabId: id });
       const lineNo = Number(c.req.param("lineNo"));
-      if (!Number.isInteger(lineNo))
+      if (!Number.isInteger(lineNo) || lineNo < 1 || lineNo > 2_147_483_647)
         throw new AppError("tab.line_not_found", { tabId: id, lineNo });
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
