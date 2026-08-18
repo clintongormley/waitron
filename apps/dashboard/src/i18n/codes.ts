@@ -216,6 +216,19 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
 const GENERIC = CODE_MESSAGES["server.internal"];
 
 /**
+ * Extract the wire error CODE from a rejected value.
+ *
+ * The dashboard's API client rejects with a bare `{ code }` (see api/client.ts); this pulls that code
+ * out, falling back to `fallback` (default `server.internal`) when the rejection carries none — the
+ * companion to `codeMessage`, which turns the code into localised copy. The body is byte-identical to
+ * the `(error as { code?: string }).code ?? …` expression the screens used to hand-copy, so hoisting it
+ * here cannot change what any call site computes.
+ */
+export function codeOf(error: unknown, fallback = "server.internal"): string {
+  return (error as { code?: string }).code ?? fallback;
+}
+
+/**
  * Resolve an error/status `code` to localised copy for `locale` (default: the active locale).
  *
  * `locale` may be a full BCP-47 tag ("es-ES"): the region subtag is stripped before the lookup, so

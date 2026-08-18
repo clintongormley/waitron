@@ -2,7 +2,7 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { DashboardApi, LocationSummary, PlannedVsActualRow } from "../api/client.js";
 import { selectStyles } from "../select-styles.js";
 import { MS_PER_DAY, mondayOf, today } from "../date-utils.js";
@@ -125,7 +125,7 @@ export class PlannedActualScreen extends LitElement {
   /** Surface a rejection as the `errorKey` banner — the thrown domain `{ code }`, or `server.internal`
    * when the value carries none (a bare Error / network fault). The one place the fallback lives. */
   #fail(error: unknown): void {
-    this.errorKey = (error as { code?: string }).code ?? "server.internal";
+    this.errorKey = codeOf(error);
   }
 
   async #onSelectLocation(event: Event): Promise<void> {

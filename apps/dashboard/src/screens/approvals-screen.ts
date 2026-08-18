@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { t } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 import { absenceKindName } from "../i18n/domain.js";
 import type { DashboardApi, PendingAbsence, PendingSwap } from "../api/client.js";
 import { personNameMap, resolvePersonName } from "../person-utils.js";
@@ -111,7 +111,7 @@ export class ApprovalsScreen extends LitElement {
   /** Surface a rejection as the `errorKey` banner — the thrown domain `{ code }`, or `server.internal`
    * when the value carries none (a bare Error / network fault). The one place the fallback lives. */
   #fail(error: unknown): void {
-    this.errorKey = (error as { code?: string }).code ?? "server.internal";
+    this.errorKey = codeOf(error);
   }
 
   /** A person's display name, or the raw id when it is not in the loaded staff list. Backed by the

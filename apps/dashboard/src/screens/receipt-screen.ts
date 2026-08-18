@@ -4,7 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { DashboardApi, ReceiptConfig } from "../api/client.js";
 
 /**
@@ -174,11 +174,6 @@ export class ReceiptScreen extends LitElement {
       ${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
     `;
   }
-}
-
-/** The thrown `{ code }`, falling back to `server.internal` when a rejection names none. */
-function codeOf(error: unknown): string {
-  return (error as { code?: string }).code ?? "server.internal";
 }
 
 declare global {

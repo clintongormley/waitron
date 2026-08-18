@@ -4,7 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 // Value imports (not `import type`): pull in the widget modules for their `@customElement` side
 // effects, so `<dashboard-product-list>`, `<dashboard-product-form>` and
 // `<dashboard-category-manager>` are registered before this screen renders them (the
@@ -158,7 +158,7 @@ export class CatalogueScreen extends LitElement {
       }
       this.products = await this.api.listProducts(this.selectedCatalogueId);
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.errorKey = codeOf(error);
     }
   }
 
@@ -181,7 +181,7 @@ export class CatalogueScreen extends LitElement {
     try {
       await this.#reloadProducts();
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.errorKey = codeOf(error);
     }
   }
 
@@ -235,7 +235,7 @@ export class CatalogueScreen extends LitElement {
       this.formOpen = false;
       await this.#reloadProducts();
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.errorKey = codeOf(error);
     } finally {
       this.busy = false;
     }
@@ -255,7 +255,7 @@ export class CatalogueScreen extends LitElement {
       this.formOpen = false;
       await this.#reloadProducts();
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.errorKey = codeOf(error);
     } finally {
       this.busy = false;
     }
@@ -271,7 +271,7 @@ export class CatalogueScreen extends LitElement {
       await this.api.createCategory(event.detail.name);
       this.categories = await this.api.listCategories();
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.errorKey = codeOf(error);
     } finally {
       this.#savingCategory = false;
     }
@@ -298,7 +298,7 @@ export class CatalogueScreen extends LitElement {
       this.selectedCatalogueId = created.id;
       await this.#load();
     } catch (error) {
-      this.errorKey = (error as { code?: string }).code ?? "server.internal";
+      this.errorKey = codeOf(error);
     } finally {
       this.#savingCatalogue = false;
     }

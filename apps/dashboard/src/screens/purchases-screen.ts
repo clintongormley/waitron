@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { t } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 // Value imports (not `import type`): pull in the widget modules for their `@customElement` side
 // effects, so `<dashboard-purchase-list>` and `<dashboard-purchase-form>` are registered before this
 // screen renders them (the catalogue-screen widget-registration pattern).
@@ -196,11 +196,6 @@ export class PurchasesScreen extends LitElement {
       ></dashboard-purchase-form>
     `;
   }
-}
-
-/** The thrown `{ code }`, falling back to `server.internal` when a rejection names none. */
-function codeOf(error: unknown): string {
-  return (error as { code?: string }).code ?? "server.internal";
 }
 
 declare global {
