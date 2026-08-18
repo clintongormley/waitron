@@ -152,6 +152,14 @@ export async function beginPasskeyRegistration(
       id: c.credentialId,
       transports: parseTransports(c.transports),
     })),
+    // A management passkey is a PHISHING-RESISTANT PRIMARY login, so user verification is MANDATORY, not
+    // merely encouraged. The library default is `{ residentKey: 'preferred', userVerification:
+    // 'preferred' }` (generateRegistrationOptions.js:39-40, @simplewebauthn/server@13.3.2); 'preferred'
+    // lets a device skip UV yet the verify side rejects a response without the UV flag
+    // (requireUserVerification defaults true), so the two must agree. `residentKey` is kept at the
+    // library default 'preferred' — supplying `authenticatorSelection` at all drops that default
+    // (it applies only when the whole object is absent), and this login is discoverable.
+    authenticatorSelection: { residentKey: "preferred", userVerification: "required" },
   });
   const [row] = await tx
     .insert(webauthnChallenges)
@@ -202,6 +210,10 @@ export async function finishPasskeyRegistration(
       expectedChallenge,
       expectedOrigin: input.origin,
       expectedRPID: input.rpId,
+      // Pin UV explicitly rather than lean on the library default (true, verifyRegistrationResponse.js:35),
+      // so a future default flip cannot silently weaken this primary-login enrollment. Matches the
+      // `userVerification: "required"` asked of the authenticator in beginPasskeyRegistration.
+      requireUserVerification: true,
     });
   } catch {
     throw new AppError("passkey.verification_failed", {});
@@ -233,7 +245,14 @@ export async function beginPasskeyAuthentication(
   tx: Transaction,
   input: { tenantId: string; rpId: string },
 ): Promise<{ challengeHandle: string; options: PublicKeyCredentialRequestOptionsJSON }> {
-  const options = await generateAuthenticationOptions({ rpID: input.rpId }); // discoverable: no allowCredentials
+  // Discoverable (no allowCredentials) AND user-verifying: 'required' makes the authenticator perform UV
+  // on this primary login, matching the verify side (requireUserVerification true). The library default
+  // is 'preferred' (generateAuthenticationOptions.js:16, @simplewebauthn/server@13.3.2), which would let
+  // a device assert without UV and then fail verify — so it is pinned here.
+  const options = await generateAuthenticationOptions({
+    rpID: input.rpId,
+    userVerification: "required",
+  });
   const [row] = await tx
     .insert(webauthnChallenges)
     .values({ tenantId: input.tenantId, challenge: options.challenge }) // personId null: person unknown until finish
@@ -319,6 +338,9 @@ export async function finishPasskeyAuthentication(
       expectedChallenge,
       expectedOrigin: input.origin,
       expectedRPID: input.rpId,
+      // Pin UV explicitly rather than lean on the library default (true, verifyAuthenticationResponse.js:24),
+      // matching the `userVerification: "required"` asked of the authenticator in beginPasskeyAuthentication.
+      requireUserVerification: true,
       // WebAuthnCredential: the stored public key is base64url text, decoded back to bytes here.
       credential: {
         id: cred.credentialId,

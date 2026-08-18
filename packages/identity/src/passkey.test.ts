@@ -184,6 +184,33 @@ describe("passkey registration", () => {
     expect(chal).toHaveLength(0);
   });
 
+  it("pins userVerification to 'required' in the registration options (phishing-resistant primary login)", async () => {
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const begun = await begin(sessionId);
+    // Tell the authenticator user verification is MANDATORY up front, matching the verify side which
+    // rejects a response lacking the UV flag. The library default is 'preferred'
+    // (generateRegistrationOptions.js:39-40 in @simplewebauthn/server@13.3.2), which lets a device skip
+    // UV and yet still fail verify — so it is pinned explicitly. Drop the userVerification pin and this
+    // reads 'preferred'. residentKey is asserted alongside because supplying `authenticatorSelection` at
+    // all drops the library's `residentKey: 'preferred'` default (it merges nothing) — so dropping the
+    // explicit re-spec would silently lose the discoverable-credential hint that the usernameless login
+    // depends on, and without this assertion the suite would stay green through that regression.
+    expect(begun.options.authenticatorSelection).toMatchObject({
+      residentKey: "preferred",
+      userVerification: "required",
+    });
+  });
+
+  it("requires user verification on the registration verify (requireUserVerification: true)", async () => {
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    mockVerify.mockResolvedValue(verified("cred-abc"));
+    const begun = await begin(sessionId);
+    await finish(sessionId, begun.challengeHandle);
+    // Pinned explicitly rather than leaning on the library default (true, verifyRegistrationResponse.js:35),
+    // so a future default flip cannot silently drop the UV requirement on a primary login.
+    expect(mockVerify.mock.calls[0]![0]).toMatchObject({ requireUserVerification: true });
+  });
+
   it("excludes already-registered credentials from a second ceremony", async () => {
     const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
     mockVerify.mockResolvedValue(verified("cred-existing"));
@@ -372,6 +399,24 @@ describe("passkey authentication", () => {
       expectedRPID: "localhost",
       credential: { id: "cred-abc", counter: 0 },
     });
+  });
+
+  it("pins userVerification to 'required' in the authentication options", async () => {
+    const begun = await beginAuth();
+    // Default is 'preferred' (generateAuthenticationOptions.js:16 in @simplewebauthn/server@13.3.2);
+    // pinned to 'required' so the authenticator performs UV on the primary login, matching the verify
+    // side. Drop the pin and this reads 'preferred'.
+    expect(begun.options.userVerification).toBe("required");
+  });
+
+  it("requires user verification on the authentication verify (requireUserVerification: true)", async () => {
+    const personId = await seedPerson(suite.db, tenantId, "admin");
+    await seedCredential(personId, "cred-abc", 0);
+    mockVerifyAuth.mockResolvedValue(authVerified(1));
+    const begun = await beginAuth();
+    await authenticate(begun.challengeHandle, "cred-abc");
+    // Pinned explicitly rather than leaning on the library default (true, verifyAuthenticationResponse.js:24).
+    expect(mockVerifyAuth.mock.calls[0]![0]).toMatchObject({ requireUserVerification: true });
   });
 
   it("never lowers the stored counter — a lower newCounter cannot regress it (concurrency clone-defence)", async () => {
