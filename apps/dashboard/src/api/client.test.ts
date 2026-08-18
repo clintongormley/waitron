@@ -838,3 +838,101 @@ describe("DashboardApi — purchase invoices", () => {
     ).rejects.toMatchObject({ code: "purchase.duplicate" });
   });
 });
+
+describe("DashboardApi — ingredients + product recipe", () => {
+  it("listIngredients GETs /management-api/ingredients with credentials", async () => {
+    const rows = [
+      { id: "i1", name: "alioli", allergens: { egg: { presence: "contains" } }, active: true },
+      { id: "i2", name: "pan", allergens: null, active: true },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listIngredients()).toEqual(rows);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/ingredients", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("createIngredient POSTs /management-api/ingredients and returns the created ingredient (201)", async () => {
+    const created = { id: "i1", name: "alioli", allergens: null, active: true };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(created, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    const out = await api.createIngredient({ name: "alioli" });
+    expect(out).toEqual(created);
+    expect(out.name).toBe("alioli");
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/ingredients", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "alioli" }),
+    });
+  });
+
+  it("createIngredient carries an allergens map when supplied", async () => {
+    const input = { name: "mahonesa", allergens: { egg: { presence: "contains" as const } } };
+    const created = { id: "i3", ...input, active: true };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(created, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.createIngredient(input)).toEqual(created);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/ingredients", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  });
+
+  it("updateIngredient PATCHes /management-api/ingredients/:id (empty 204 body)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(
+      api.updateIngredient("i1", { name: "alioli casero", allergens: null, active: false }),
+    ).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/ingredients/i1", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "alioli casero", allergens: null, active: false }),
+    });
+  });
+
+  it("getProductRecipe GETs /management-api/products/:id/recipe with credentials", async () => {
+    const lines = [
+      { id: "i1", name: "alioli", allergens: { egg: { presence: "contains" } }, active: true },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(lines));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getProductRecipe("p1")).toEqual(lines);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/products/p1/recipe", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("setProductRecipe PUTs /management-api/products/:id/recipe with ingredientIds (empty 204 body)", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.setProductRecipe("p1", ["i1", "i2"])).resolves.toBeUndefined();
+    const call = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(call[0]).toBe("/management-api/products/p1/recipe");
+    expect(call[1].method).toBe("PUT");
+    expect(JSON.parse(call[1].body as string)).toEqual({ ingredientIds: ["i1", "i2"] });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/products/p1/recipe", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ingredientIds: ["i1", "i2"] }),
+    });
+  });
+
+  it("createIngredient throws the envelope code on a non-2xx", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "allergen.invalid_code" } }, false, 400));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.createIngredient({ name: "x" })).rejects.toMatchObject({
+      code: "allergen.invalid_code",
+    });
+  });
+});
