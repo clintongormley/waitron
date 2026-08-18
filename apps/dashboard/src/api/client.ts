@@ -207,13 +207,9 @@ export interface IngredientPatch {
 }
 
 /** One line of `GET /management-api/products/:id/recipe` — the ingredient rows composing a product's
- * recipe (recipes' `getProductRecipe` returns full `Ingredient` rows), same shape as {@link Ingredient}. */
-export interface RecipeLine {
-  id: string;
-  name: string;
-  allergens: AllergenDeclaration;
-  active: boolean;
-}
+ * recipe. `recipes`' `getProductRecipe` returns full `Ingredient` rows, so a recipe line IS an
+ * `Ingredient`; aliased (not re-declared) so the two shapes cannot drift. */
+export type RecipeLine = Ingredient;
 
 // ── Till layout & receipt (configurable-till) types ──────────────────────────────────────────────
 // LOCAL copies of `@waitron/layouts`' JSON shapes (the `/management-api/layout` + `/management-api/receipt`

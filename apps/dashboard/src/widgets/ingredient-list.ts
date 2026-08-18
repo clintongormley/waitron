@@ -4,24 +4,8 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
 import { t } from "../i18n/t.js";
-import { allergenStateName } from "../i18n/domain.js";
-import type { AllergenDeclaration, Ingredient } from "../api/client.js";
-
-/** The three allergen-declaration states the pill renders, keyed off the §7 / §1 invariant. */
-type AllergenState = "pending" | "none" | "declared";
-
-/**
- * The three-state read of an ingredient's allergen declaration (design §7, the till's null/{}/{…}
- * distinction): `null` is PENDING (not yet reviewed — a compliance gap, NEVER "allergen-free"), `{}`
- * is reviewed-with-none, a non-empty map is declared. `null` and `{}` MUST stay distinct — collapsing
- * them is the exact defect the invariant exists to prevent, so it is a `=== null` test, not a
- * falsy/length-only one. (Same helper as `product-list`, redefined locally rather than shared — an
- * ingredient carries a single `allergens` field, no manual/published split.)
- */
-function allergenState(allergens: AllergenDeclaration): AllergenState {
-  if (allergens === null) return "pending";
-  return Object.keys(allergens).length === 0 ? "none" : "declared";
-}
+import { allergenState, allergenStateName } from "../i18n/domain.js";
+import type { Ingredient } from "../api/client.js";
 
 /**
  * The recipe-authoring dashboard's INGREDIENT LIST: one `wt-card` row per ingredient showing its
