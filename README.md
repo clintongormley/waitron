@@ -51,3 +51,42 @@ Copyright © 2026 Clinton Gormley.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Contributions require a Developer Certificate of Origin
 sign-off and grant the project the right to relicense.
+
+## Running it locally
+
+Run the whole app — the two browser front-ends and the API server — against a locally-provisioned
+**preproduction** venue.
+
+**Prerequisites:** [Docker](https://www.docker.com/) (for the dev Postgres), Node ≥ 24, and
+dependencies installed (`pnpm install`; a worktree made with `worktree.py` already does this).
+
+**First-time setup** (once per checkout):
+
+```bash
+pnpm dev:setup
+```
+
+This brings up a throwaway Postgres in Docker (`docker-compose.yml`), migrates it, provisions one
+venue (tenant, location, till, fiscal series), seeds a small catalogue and a cashier, and writes the
+ids to a gitignored `apps/server/.env`. It is idempotent: run it again and it reuses the same venue
+rather than minting a new fiscal chain.
+
+**Run it:**
+
+```bash
+pnpm dev
+```
+
+starts all three processes in parallel:
+
+| Process   | URL                   |
+| --------- | --------------------- |
+| Till      | http://localhost:5190 |
+| Dashboard | http://localhost:5191 |
+| Server    | http://localhost:8080 |
+
+The till and dashboard proxy `/api` to the server. Log in at the till with the **cashier PIN 5555**;
+the dashboard admin PIN is **1234** (`pnpm dev:setup` prints both).
+
+To start over from a clean database (throwaway preproduction data), `pnpm dev:reset` wipes the Docker
+volume and re-provisions.
