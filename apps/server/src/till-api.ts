@@ -14,17 +14,22 @@ import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
 import { collectOrder, payWorkingOrderIntegrated, recordTillSale } from "./till-sale.js";
 import type { IntegratedPayRequest, TillSaleRequest, TillTender } from "./till-sale.js";
+import { createTable, deactivateTable, listTables, updateTable } from "./tables.js";
 import {
   abandonHeldOrder,
+  addTabRound,
   advancePrep,
   cancelPlacedOrder,
   getHeldOrder,
   listHeldOrders,
   listPrepQueue,
+  listTablesWithState,
+  openTab,
   parkOrder,
   placeOrder,
   sendToPrep,
   updateHeldOrder,
+  voidTabLine,
 } from "./working-order.js";
 import type { PrepState } from "./working-order.js";
 import {
@@ -98,6 +103,16 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "working_order.not_settled": 409,
   "working_order.reason_required": 400,
   "order_prep.invalid_transition": 409,
+  // Table + tab (TS-1). A bad/absent/foreign table id is a 404 (`table.not_found`); a label
+  // collision or an already-open tab / non-open tab / deactivated table is a 409 (the id may be
+  // valid but the table's or tab's STATE forbids the operation); a `line_no` naming no line is a 404
+  // (`tab.line_not_found`) — the same shape `working_order.not_found` uses for the retrieve side.
+  "table.not_found": 404,
+  "table.label_taken": 409,
+  "table.inactive": 409,
+  "tab.already_open": 409,
+  "tab.not_open": 409,
+  "tab.line_not_found": 404,
 };
 
 // The one error boundary every till route wraps its handler in — the shared `createErrorBoundary`
@@ -490,6 +505,124 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         body.reason,
         personId,
       );
+      return c.body(null, 200);
+    }),
+  );
+
+  // Create a dining table. SESSION-GUARDED. `createTable` throws table.label_taken (→ 409) on a
+  // duplicate label. The client sends { label, zone?, capacity? }.
+  app.post("/api/tables", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const body = await c.req.json<{ label: string; zone?: string; capacity?: number }>();
+      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return createTable(tx, deps.cfg, body);
+      });
+      return c.json(result);
+    }),
+  );
+
+  // The venue's active tables. SESSION-GUARDED; RLS + the location filter scope it.
+  app.get("/api/tables", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const tables = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return listTables(tx, deps.cfg);
+      });
+      return c.json(tables);
+    }),
+  );
+
+  // The occupancy read-model (design §4). SESSION-GUARDED.
+  app.get("/api/tables/state", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const state = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return listTablesWithState(tx, deps.cfg);
+      });
+      return c.json(state);
+    }),
+  );
+
+  // Edit a table (label/zone/capacity). SESSION-GUARDED. A malformed :id is screened to
+  // table.not_found (→ 404) rather than a 500; `updateTable` throws table.not_found / table.label_taken.
+  app.patch("/api/tables/:id", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
+      const body = await c.req.json<{ label?: string; zone?: string; capacity?: number }>();
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await updateTable(tx, deps.cfg, id, body);
+      });
+      return c.body(null, 200);
+    }),
+  );
+
+  // Deactivate a table (DELETE = deactivate; app_user holds no hard DELETE). SESSION-GUARDED.
+  app.delete("/api/tables/:id", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await deactivateTable(tx, deps.cfg, id);
+      });
+      return c.body(null, 200);
+    }),
+  );
+
+  // Open the table's running tab. SESSION-GUARDED. Malformed :id → table.not_found (a bad table id names
+  // no table). `openTab` throws table.not_found / table.inactive / tab.already_open.
+  app.post("/api/tables/:id/tab", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
+      const body = await c.req.json<{ lines?: { productId: string; quantity: string }[] }>();
+      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return openTab(tx, deps.cfg, { tableId: id, lines: body.lines });
+      });
+      return c.json(result);
+    }),
+  );
+
+  // Append a round to an open tab. SESSION-GUARDED. Malformed :id → tab.not_open (a bad id names no open
+  // tab). `addTabRound` throws tab.not_open / sale.empty_basket.
+  app.post("/api/working-orders/:id/round", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("tab.not_open", { tabId: id });
+      const body = await c.req.json<{ lines: { productId: string; quantity: string }[] }>();
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await addTabRound(tx, deps.cfg, id, body.lines);
+      });
+      return c.body(null, 200);
+    }),
+  );
+
+  // Void one line from an open tab. SESSION-GUARDED. Malformed :id → tab.not_open; a non-integer
+  // :lineNo → tab.line_not_found (it names no line). `voidTabLine` throws tab.not_open / tab.line_not_found.
+  app.delete("/api/working-orders/:id/lines/:lineNo", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("tab.not_open", { tabId: id });
+      const lineNo = Number(c.req.param("lineNo"));
+      if (!Number.isInteger(lineNo))
+        throw new AppError("tab.line_not_found", { tabId: id, lineNo });
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await voidTabLine(tx, deps.cfg, id, lineNo);
+      });
       return c.body(null, 200);
     }),
   );
