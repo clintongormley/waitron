@@ -606,9 +606,15 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     crypto. The true end-to-end proof is a Playwright **virtual authenticator** (CDP
     `addVirtualAuthenticator`) driving `@simplewebauthn/browser` against the real
     `@simplewebauthn/server` verify — belongs with the dashboard's browser shard (`test-dashboard`).
-  - **`transports` column is declared but never written.** `webauthn_credentials.transports` is in the
-    schema but nothing populates it. Either write it at registration (`credential.transports`, useful as
-    an `excludeCredentials`/`allowCredentials` hint) or drop the column. Populate-or-drop.
+  - **`transports` column populated — DONE (#102, 2026-08-18; campaign queue #11).** `finishPasskeyRegistration`
+    now stores `credential.transports` (JSON array string via `serializeTransports`, `Array.isArray`-guarded so a
+    non-array from the untrusted client → null, proven by deletion), and `beginPasskeyRegistration` feeds it back
+    into each `excludeCredentials` descriptor (`parseTransports`) — populate resolved toward populate + consume.
+    Auth side left discoverable (no `allowCredentials`). **Deferred follow-up:** the column is `text` + a hand-rolled
+    JSON codec; the repo convention for a structured array is `jsonb().$type<T>()` (e.g. `sales.vatBreakdown`), which
+    would delete both helpers. Not taken in #102 because it changes the column type → a **new migration** (a
+    migration-free Drizzle `customType`-over-`text` variant exists too, cf. `credentials`' `bytea` customType). Do it
+    in a slice that can add/regenerate a migration cleanly.
   - **RP-ID / origin misconfig is undiagnosable in production.** `WAITRON_MANAGEMENT_RP_ID`/`_ORIGIN`
     default to `localhost` / `http://localhost:5191` for dev+tests; a wrong origin now surfaces as a
     clean 401 (was a 500), but the real fix is to make both **required at boot** in production so a
