@@ -360,7 +360,10 @@ describe("product-form", () => {
       vatClass: "general" as const,
       active: true,
       image: null,
-      allergens: { eggs: { presence: "contains" as const }, gluten: { presence: "contains" as const } },
+      allergens: {
+        eggs: { presence: "contains" as const },
+        gluten: { presence: "contains" as const },
+      },
       manualAllergens: { gluten: { presence: "contains" as const } },
     };
     const { el } = await mountWidget<ProductForm>("dashboard-product-form", {
