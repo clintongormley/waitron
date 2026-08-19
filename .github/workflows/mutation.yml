@@ -48,7 +48,14 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
-      - run: pnpm --filter @waitron/ui exec playwright install --with-deps chromium
+      # No `--with-deps`: the ubuntu-latest image already ships Chromium's shared libraries, so the
+      # apt step it would run is wasted wall-clock — same change and rationale as ci.yml's test-ui
+      # shard, where the full receipt lives. This job's own real-Chromium mutation run below is the
+      # proof for THIS workflow: if a library were missing, Stryker's first mutant would fail to launch
+      # the browser. Proven on dispatch run 32304224136, where this step took 1s and the `mutation` job
+      # then ran the real-Chromium suite green. Restore `--with-deps` (here and in ci.yml) if a
+      # runner-image or Playwright bump ever drops one.
+      - run: pnpm --filter @waitron/ui exec playwright install chromium
 
       # No thresholds.break is configured in stryker.config.json, so this does
       # not fail the job on a low score — there's no agreed-on floor yet (see

@@ -565,12 +565,25 @@ jobs:
       # (where playwright is a devDependency) resolves it correctly without needing a
       # working-directory override.
       #
-      # Always run, cache hit or not: Playwright's own install logic detects a matching browser
-      # binary already present under the cached ~/.cache/ms-playwright and skips re-downloading it,
-      # but the `--with-deps` OS package install still needs to happen every run — GitHub-hosted
-      # runners start from a clean VM each time, so apt state is never part of what actions/cache
-      # restored above.
-      - run: pnpm --filter @waitron/ui exec playwright install --with-deps chromium
+      # No `--with-deps`: the ubuntu-latest image already ships every shared library Chromium needs to
+      # launch, so the apt-get that `--with-deps` runs on every job buys nothing but wall-clock. That
+      # apt step is NOT covered by the browser cache above — GitHub boots a clean VM per run, so apt
+      # state is never part of what actions/cache restored — and it was the step's long pole: 12-17s on
+      # a cache-warm run, and minutes on a slow one (run 32277880914's three browser shards spent
+      # 94s / 261s / 601s here). Dropping it leaves a plain `playwright install chromium`, which the
+      # cache turns into a near-instant binary check on a hit and a browser download on a miss. The
+      # receipt for "the image already has the libraries" is a real passing run, not an assertion: on
+      # run 32304169675 (a `.github/` change → global scope, so all three browser shards ran) each
+      # launched Chromium and passed with `--with-deps` gone, and this step fell to 1s from the 12-17s
+      # it took cache-warm with the flag (run 32282128111: 12s / 13s / 12s for ui / till / dashboard).
+      #
+      # Kept simple deliberately. Running `--with-deps` on cache-miss only would NOT be a safer
+      # variant: the browser cache and the VM's apt state are independent (a fresh VM every run, hit or
+      # miss), so a library missing from the image would still break every cache-HIT run — passing on
+      # the version-bump PR that misses the cache, then failing everything after it. If a future image
+      # or Playwright bump does drop a library Chromium needs, these shards fail to launch it and go red
+      # loudly; the fix is to restore `--with-deps` here, or apt-get the one missing library.
+      - run: pnpm --filter @waitron/ui exec playwright install chromium
 
       # The guard first, for the same reason as the other two shards: pnpm answers "nothing to do"
       # with exit 0 and a line on stdout, so a shard whose filter selects nothing reports success
@@ -623,9 +636,9 @@ jobs:
 
       # Same as test-ui: scope the exec to the @waitron/till workspace (where playwright is a
       # devDependency) — plain `pnpm exec` at the repo root does not resolve a member-scoped bin —
-      # and always run it, cache hit or not, because the `--with-deps` OS package install still has
-      # to happen on GitHub's clean-VM-per-run.
-      - run: pnpm --filter @waitron/till exec playwright install --with-deps chromium
+      # and no `--with-deps`, because the ubuntu-latest image already ships Chromium's shared
+      # libraries; see the test-ui step above for the full rationale and the receipt.
+      - run: pnpm --filter @waitron/till exec playwright install chromium
 
       # The guard first, for the same reason as the other shards: pnpm answers "nothing to do" with
       # exit 0 and a line on stdout, so a shard whose filter selects nothing reports success having
@@ -678,9 +691,9 @@ jobs:
 
       # Same as test-ui and test-till: scope the exec to the @waitron/dashboard workspace (where
       # playwright is a devDependency) — plain `pnpm exec` at the repo root does not resolve a
-      # member-scoped bin — and always run it, cache hit or not, because the `--with-deps` OS package
-      # install still has to happen on GitHub's clean-VM-per-run.
-      - run: pnpm --filter @waitron/dashboard exec playwright install --with-deps chromium
+      # member-scoped bin — and no `--with-deps`, because the ubuntu-latest image already ships
+      # Chromium's shared libraries; see the test-ui step above for the full rationale and the receipt.
+      - run: pnpm --filter @waitron/dashboard exec playwright install chromium
 
       # The guard first, for the same reason as the other shards: pnpm answers "nothing to do" with
       # exit 0 and a line on stdout, so a shard whose filter selects nothing reports success having
