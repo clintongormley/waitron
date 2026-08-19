@@ -386,6 +386,22 @@ async function setStatus(id: string, status: "settled" | "abandoned"): Promise<v
 // `setStatus` needs the tenant of the venue it is acting on; each test assigns this before using it.
 let testTenant: string;
 
+/**
+ * Insert a lineless OPEN order on a SECOND node under the SAME tenant + location, and return its id.
+ * RLS is tenant-scoped, so it does NOT hide this row from `cfg`'s node — only `node_id = cfg.nodeId`
+ * does. The by-id held-order lookups must fail closed on it, exactly as `listHeldOrders` omits it
+ * (its `node scope, not just RLS` sibling). Inserted directly as superuser: the row only has to EXIST
+ * to be wrongly returned/edited/abandoned when the node filter is missing (prove-by-deletion target).
+ */
+async function seedForeignNodeOrder(cfg: TillConfig): Promise<string> {
+  const id = randomUUID();
+  const otherNode = await seedNode(db, cfg.tenantId, cfg.locationId);
+  await db.execute(sql`
+    insert into working_orders (id, tenant_id, till_id, node_id, order_number, status)
+    values (${id}, ${cfg.tenantId}, ${cfg.tillId}, ${otherNode}, 1, 'open')`);
+  return id;
+}
+
 describe("listHeldOrders", () => {
   it("lists the node's open orders with itemCount, GROSS total and label, ordered by number", async () => {
     const { cfg, cafeId, aguaId } = await setupVenue();
@@ -514,6 +530,19 @@ describe("getHeldOrder", () => {
     await expect(getHeldOrder({ db }, cfg, id)).rejects.toMatchObject({
       code: "working_order.not_found",
       params: { workingOrderId: id },
+    });
+  });
+
+  it("throws working_order.not_found for an open order on ANOTHER node of the same tenant — node scope, not just RLS", async () => {
+    const { cfg } = await setupVenue();
+    const foreign = await seedForeignNodeOrder(cfg);
+
+    // RLS (tenant-scoped) does NOT hide a same-tenant order parked on another node; only
+    // `node_id = cfg.nodeId` does. Without that filter `getHeldOrder` returns the foreign order instead
+    // of throwing (prove the guard by deletion, CLAUDE.md §4).
+    await expect(getHeldOrder({ db }, cfg, foreign)).rejects.toMatchObject({
+      code: "working_order.not_found",
+      params: { workingOrderId: foreign },
     });
   });
 });
@@ -648,6 +677,20 @@ describe("updateHeldOrder", () => {
       params: { workingOrderId: missing },
     });
   });
+
+  it("throws working_order.not_open for an open order on ANOTHER node of the same tenant — node scope, not just RLS", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const foreign = await seedForeignNodeOrder(cfg);
+
+    // Without the node filter the foreign order is found open and its lines are rewritten — a cross-node
+    // misattribution. The node filter fails it closed BEFORE any line is touched (prove by deletion, §4).
+    await expect(
+      updateHeldOrder({ db }, cfg, foreign, { lines: [{ productId: cafeId, quantity: "1" }] }),
+    ).rejects.toMatchObject({
+      code: "working_order.not_open",
+      params: { workingOrderId: foreign },
+    });
+  });
 });
 
 describe("abandonHeldOrder", () => {
@@ -694,6 +737,18 @@ describe("abandonHeldOrder", () => {
     await expect(abandonHeldOrder({ db }, cfg, missing)).rejects.toMatchObject({
       code: "working_order.not_open",
       params: { workingOrderId: missing },
+    });
+  });
+
+  it("throws working_order.not_open for an open order on ANOTHER node of the same tenant — node scope, not just RLS", async () => {
+    const { cfg } = await setupVenue();
+    const foreign = await seedForeignNodeOrder(cfg);
+
+    // Without the node filter the conditional UPDATE matches the foreign open order and abandons it — a
+    // cross-node discard. The node filter makes it match no row and fail closed (prove by deletion, §4).
+    await expect(abandonHeldOrder({ db }, cfg, foreign)).rejects.toMatchObject({
+      code: "working_order.not_open",
+      params: { workingOrderId: foreign },
     });
   });
 });
