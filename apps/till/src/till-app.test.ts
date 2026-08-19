@@ -236,6 +236,49 @@ describe("till-app", () => {
     }
   });
 
+  // Both boot-failure shapes reach the same bare `catch`: a network rejection (server unreachable) and a
+  // non-2xx `{ code }` the client throws (e.g. `server.internal`). Parametrised so the comment's "either
+  // way boot cannot complete" claim is a tested receipt, not just prose.
+  it.each([
+    { label: "server unreachable", reason: new Error("server down") },
+    { label: "non-2xx { code }", reason: { code: "server.internal" } },
+  ])(
+    "a failing getTill ($label) surfaces the boot error, never an unhandled rejection",
+    async ({ reason }) => {
+      // `firstUpdated` fires `void this.#boot()`, and `#boot` awaits `getTill()` to load the till's setup
+      // (locale, issuer, order flow, card wiring). A failing boot must be a HANDLED state, not an UNHANDLED
+      // promise rejection: it surfaces the `boot.error` banner and stays on the lock screen. The two
+      // load-bearing assertions are the visible banner (removing `#boot`'s try/catch drops the errorKey) AND
+      // `rejections === []` (removing it lets getTill's rejection escape as an unhandled rejection) —
+      // together the deletion proof.
+      const rejections: unknown[] = [];
+      const onRejection = (event: PromiseRejectionEvent): void => {
+        rejections.push(event.reason);
+        event.preventDefault(); // mark handled so it doesn't pollute sibling tests
+      };
+      window.addEventListener("unhandledrejection", onRejection);
+      try {
+        const { el } = await mountApp({
+          getTill: vi.fn().mockRejectedValue(reason),
+        });
+        // Give any pending unhandled-rejection notification a couple of macrotasks to surface.
+        await flush(el);
+        await flush(el);
+
+        // A boot failure never crashes the app into a blank screen — the lock screen still renders.
+        expect(lock(el)).not.toBeNull();
+        // The failure is surfaced, not swallowed: the operator sees why the till is unusable.
+        const banner = el.shadowRoot!.querySelector('[role="alert"]');
+        expect(banner).not.toBeNull();
+        expect(banner!.textContent).toContain(t("boot.error"));
+        // The rejection was caught, not left unhandled.
+        expect(rejections).toEqual([]);
+      } finally {
+        window.removeEventListener("unhandledrejection", onRejection);
+      }
+    },
+  );
+
   it("confirm-payment: records the sale with the mapped lines + tender, then shows the ticket", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);

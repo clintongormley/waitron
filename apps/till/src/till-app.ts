@@ -274,24 +274,37 @@ export class TillApp extends LitElement {
    * take the SAME server `locale`, but they drive different things and are threaded separately — the
    * receipt uses its `invoiceLocale` PROP and must never follow the operator UI (see
    * `till-ticket-view`'s INVOICE LOCALE note).
+   *
+   * A FAILED `getTill` at start-up — the server unreachable, OR a non-2xx answer the client surfaces as a
+   * rejected `{ code }` such as `server.internal` (see `api/client.ts`'s `!res.ok` branch) — must be a
+   * HANDLED state, not an unhandled rejection: `firstUpdated` fires `void this.#boot()`, so an uncaught
+   * throw escapes the microtask. The bare `catch` covers both, surfacing the `boot.error` banner; the lock
+   * screen still renders beneath it and recovery is a page reload (this runs once, with no in-UI retry).
    */
   async #boot(): Promise<void> {
-    const till = await this.api.getTill();
-    // Guard the ONE post-await external effect: setLocale mutates module-global state, so a boot that
-    // resolves after the app was torn down must not repaint a live sibling's locale. The state writes
-    // below need no such guard — Lit never paints a detached element.
-    if (!this.isConnected) return;
-    setLocale(till.locale);
-    this.invoiceLocale = till.locale;
-    this.issuer = { venueName: till.venueName, nif: till.nif };
-    this.orderFlow = till.orderFlow;
-    this.cardProvider = till.cardProvider;
-    this.tipsEnabled = till.tipsEnabled;
-    // The authored (or default) layout + receipt trim (layout & receipt editors). `layout` drives
-    // `#layoutFor()` (authored → verbatim, default/absent → the Mode-P fallback); `receipt` is threaded
-    // to the ticket. `?? {}` handles an older server that omits `receipt` (the field is typed present).
-    this.receivedLayout = till.layout;
-    this.receipt = till.receipt ?? {};
+    try {
+      const till = await this.api.getTill();
+      // Guard the ONE post-await external effect: setLocale mutates module-global state, so a boot that
+      // resolves after the app was torn down must not repaint a live sibling's locale. The state writes
+      // below need no such guard — Lit never paints a detached element.
+      if (!this.isConnected) return;
+      setLocale(till.locale);
+      this.invoiceLocale = till.locale;
+      this.issuer = { venueName: till.venueName, nif: till.nif };
+      this.orderFlow = till.orderFlow;
+      this.cardProvider = till.cardProvider;
+      this.tipsEnabled = till.tipsEnabled;
+      // The authored (or default) layout + receipt trim (layout & receipt editors). `layout` drives
+      // `#layoutFor()` (authored → verbatim, default/absent → the Mode-P fallback); `receipt` is threaded
+      // to the ticket. `?? {}` handles an older server that omits `receipt` (the field is typed present).
+      this.receivedLayout = till.layout;
+      this.receipt = till.receipt ?? {};
+    } catch {
+      // Any boot failure — server unreachable, or a non-2xx `{ code }` — surfaces the non-fatal `boot.error`
+      // banner rather than let the rejection escape unhandled. Needs no isConnected guard — Lit never paints
+      // a detached element (see above).
+      this.errorKey = "boot.error";
+    }
   }
 
   /** A confirmed login: load the catalogue, remember the operator, show the counter, list held orders

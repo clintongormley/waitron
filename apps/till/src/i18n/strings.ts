@@ -126,6 +126,11 @@ export const en = {
   "held.stale": "That order is no longer available",
   "place.error": "Could not place the order, try again",
   "prep.advance_error": "Could not update the order's status, try again",
+  // Boot: `getTill` failed — the server unreachable, or a non-2xx `{ code }` (e.g. `server.internal`).
+  // Unlike the retryable errors above, the only recovery is a page reload — `#boot` runs once from
+  // `firstUpdated` with no in-UI retry — so the copy says "reload", not "try again", and stays neutral
+  // about the cause ("could not load") rather than naming only the unreachable case.
+  "boot.error": "Could not load the till, reload to try again",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -229,6 +234,7 @@ export const es: Record<StringKey, string> = {
   "held.stale": "Ese pedido ya no está disponible",
   "place.error": "No se pudo enviar el pedido, inténtalo de nuevo",
   "prep.advance_error": "No se pudo actualizar el estado del pedido, inténtalo de nuevo",
+  "boot.error": "No se pudo cargar la caja, recarga para reintentar",
 };
 
 // Locale → catalogue. `en` is included as its own catalogue so an explicit
