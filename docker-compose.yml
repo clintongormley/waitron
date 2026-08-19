@@ -1,0 +1,27 @@
+# Local development Postgres for `pnpm dev:setup` / `pnpm dev`.
+#
+# Throwaway PREPRODUCTION data only — never point real/production data at this container. The named
+# volume persists the provisioned venue across restarts (so `dev:setup` reuses it rather than minting
+# a new fiscal chain); `docker compose down -v` wipes it, which is the sanctioned "start over" that
+# `pnpm dev:reset` runs.
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_PASSWORD: pg
+    ports:
+      - "5432:5432"
+    # Postgres 18+ places its data in a SUBDIRECTORY of /var/lib/postgresql (not directly in
+    # /var/lib/postgresql/data as ≤17 did) — mounting the volume at the old /data path makes the
+    # container detect "data in an unused mount" and exit(1). Mount the parent, per the image's own
+    # 18+ guidance (docker-library/postgres#37).
+    volumes:
+      - waitron-dev-db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  waitron-dev-db:
