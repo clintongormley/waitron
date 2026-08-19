@@ -8,7 +8,8 @@
     ".": "./src/index.ts",
     "./testing/lifecycle.js": "./src/testing/lifecycle.ts",
     "./testing/postgres.js": "./src/testing/postgres.ts",
-    "./testing/seed.js": "./src/testing/seed.ts"
+    "./testing/seed.js": "./src/testing/seed.ts",
+    "./testing/shared-container.js": "./src/testing/shared-container.ts"
   },
   "scripts": {
     "test": "vitest run",

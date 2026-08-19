@@ -4,6 +4,7 @@ import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { dockerAvailable } from "./harness.js";
 import {
+  databaseUrl,
   roleUrl,
   runMigrationSets,
   startMigratedPostgres,
@@ -24,6 +25,16 @@ describe("roleUrl", () => {
     expect(swapped.password).toBe("pw");
     expect(swapped.host).toBe("127.0.0.1:5432");
     expect(swapped.pathname).toBe("/waitron");
+  });
+});
+
+describe("databaseUrl", () => {
+  it("swaps the database and leaves credentials, host and port alone", () => {
+    const swapped = new URL(databaseUrl(FAKE_URI, "clone_7"));
+    expect(swapped.pathname).toBe("/clone_7");
+    expect(swapped.username).toBe("owner");
+    expect(swapped.password).toBe("secret");
+    expect(swapped.host).toBe("127.0.0.1:5432");
   });
 });
 
