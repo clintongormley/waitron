@@ -11,6 +11,7 @@ import "./screens/staff-screen.js";
 import "./screens/catalogue-screen.js";
 import "./screens/layout-screen.js";
 import "./screens/receipt-screen.js";
+import "./screens/service-status-screen.js";
 import "./screens/roster-screen.js";
 import "./screens/approvals-screen.js";
 import "./screens/planned-actual-screen.js";
@@ -20,12 +21,13 @@ import type { DashboardApi, PersonRole } from "./api/client.js";
 
 /**
  * The faces of the management dashboard: sign in, view your own self-service schedule, manage staff,
- * author the catalogue, arrange the till layout, edit the receipt trim, author the roster, work the
- * approvals queues, review planned vs actual worked time, record received purchase invoices, or author
- * ingredients and product recipes. Exactly one shows at a time. `staff`, `catalogue`, `layout`,
- * `receipt`, `roster`, `approvals`, `planned-actual`, `purchases` and `recipe` are the nine MANAGER
- * faces the nav switches between; `my-schedule` is the sole face of a `staff`-role session and carries
- * no nav. All logged-in faces share the same chrome (logout, plus the nav for a non-staff session).
+ * author the catalogue, arrange the till layout, edit the receipt trim, configure the table service
+ * statuses, author the roster, work the approvals queues, review planned vs actual worked time, record
+ * received purchase invoices, or author ingredients and product recipes. Exactly one shows at a time.
+ * `staff`, `catalogue`, `layout`, `receipt`, `statuses`, `roster`, `approvals`, `planned-actual`,
+ * `purchases` and `recipe` are the ten MANAGER faces the nav switches between; `my-schedule` is the
+ * sole face of a `staff`-role session and carries no nav. All logged-in faces share the same chrome
+ * (logout, plus the nav for a non-staff session).
  */
 type Screen =
   | "login"
@@ -34,6 +36,7 @@ type Screen =
   | "catalogue"
   | "layout"
   | "receipt"
+  | "statuses"
   | "roster"
   | "approvals"
   | "planned-actual"
@@ -44,9 +47,9 @@ type Screen =
  * The management dashboard's ROOT element — the shell that turns the screens into a working app.
  *
  * It owns one thing the whole flow shares: the injected {@link DashboardApi}. It runs a screen
- * machine (`login` | `my-schedule` | `staff` | `catalogue` | `layout` | `receipt` | `roster` |
- * `approvals` | `planned-actual` | `purchases` | `recipe`) and does the event wiring the screens
- * deliberately do not:
+ * machine (`login` | `my-schedule` | `staff` | `catalogue` | `layout` | `receipt` | `statuses` |
+ * `roster` | `approvals` | `planned-actual` | `purchases` | `recipe`) and does the event wiring the
+ * screens deliberately do not:
  *
  *  - boot → a SESSION PROBE ({@link DashboardApp.#probeSession}) calls `api.getMe()` (WHOAMI); a
  *    success means a live management session, so it applies the resolved role — a `staff` person
@@ -58,9 +61,9 @@ type Screen =
  *  - `logged-in` (from the login screen, on a successful `api.login`) → re-probe `getMe()` to learn
  *    the freshly-authenticated person's role, then land on `my-schedule` or `staff` the same way;
  *  - the NAV (the shell's own control, shown only for a NON-staff logged-in session) switches between
- *    the nine manager faces `staff`, `catalogue`, `layout`, `receipt`, `roster`, `approvals`,
- *    `planned-actual`, `purchases` and `recipe` — a plain local state change, no server call. A
- *    `staff` session has no nav (the self-service view is its only face);
+ *    the ten manager faces `staff`, `catalogue`, `layout`, `receipt`, `statuses`, `roster`,
+ *    `approvals`, `planned-actual`, `purchases` and `recipe` — a plain local state change, no server
+ *    call. A `staff` session has no nav (the self-service view is its only face);
  *  - `logout` (the shell's own control, logged-in only) → end the server session, back to `login`.
  *
  * The default screen is `login`: before the probe resolves the shell shows the sign-in screen, and
@@ -71,7 +74,8 @@ type Screen =
  * sole `<h1>Mi horario</h1>`, `dashboard-staff-screen` the sole
  * `<h1>Usuarios</h1>`, `dashboard-catalogue-screen` the sole `<h1>Carta</h1>`,
  * `dashboard-layout-screen` the sole `<h1>Disposición</h1>`, `dashboard-receipt-screen` the sole
- * `<h1>Recibo</h1>`, `dashboard-roster-screen` the sole `<h1>Turnos</h1>`,
+ * `<h1>Recibo</h1>`, `dashboard-service-status-screen` the sole `<h1>Estados de servicio</h1>`,
+ * `dashboard-roster-screen` the sole `<h1>Turnos</h1>`,
  * `dashboard-approvals-screen` the sole `<h1>Aprobaciones</h1>`, `dashboard-planned-actual-screen`
  * the sole `<h1>Previsto vs real</h1>`, `dashboard-purchases-screen` the sole `<h1>Compras</h1>`,
  * `dashboard-recipe-screen` the sole `<h1>Recetas</h1>`, and `dashboard-login-screen`
@@ -205,7 +209,7 @@ export class DashboardApp extends LitElement {
     `;
   }
 
-  /** The manager nav — the eight-face switcher, shown only for a NON-staff session (a `staff` person
+  /** The manager nav — the ten-face switcher, shown only for a NON-staff session (a `staff` person
    * has just the self-service view, so no nav). Extracted so the `render` chrome reads as
    * "nav-or-nothing, then logout". */
   #nav(): TemplateResult {
@@ -234,6 +238,12 @@ export class DashboardApp extends LitElement {
           data-test="nav-receipt"
           @click=${() => (this.screen = "receipt")}
           >${t("nav.receipt")}</wt-button
+        >
+        <wt-button
+          variant=${this.screen === "statuses" ? "primary" : "secondary"}
+          data-test="nav-statuses"
+          @click=${() => (this.screen = "statuses")}
+          >${t("nav.statuses")}</wt-button
         >
         <wt-button
           variant=${this.screen === "roster" ? "primary" : "secondary"}
@@ -288,6 +298,10 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-layout-screen .api=${this.api}></dashboard-layout-screen>`;
       case "receipt":
         return html`<dashboard-receipt-screen .api=${this.api}></dashboard-receipt-screen>`;
+      case "statuses":
+        return html`<dashboard-service-status-screen
+          .api=${this.api}
+        ></dashboard-service-status-screen>`;
       case "roster":
         return html`<dashboard-roster-screen .api=${this.api}></dashboard-roster-screen>`;
       case "approvals":

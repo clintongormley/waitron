@@ -398,6 +398,30 @@ declare module "@waitron/shared" {
      */
     "tab.line_not_found": { tabId: string; lineNo: number };
     /**
+     * No such service status for this tenant. `statusId` is a caller-supplied uuid the dashboard/till
+     * already holds, not a secret — an id that matches nothing is unactionable if withheld (the rule
+     * `tenant.not_found`'s note gives). `status.*` names the DOMAIN CONCEPT (a table's manual service
+     * status), never the throwing package; destined for @waitron/tables if that package is extracted.
+     * An absent id, or another tenant's status (RLS hides it), both report THIS one code. Mapped to 404.
+     */
+    "status.not_found": { statusId: string };
+    /**
+     * A service status exists but is deactivated (`active = false`), so a table may not be set to it —
+     * `setTableStatus` refuses it. `statusId` is the caller-supplied uuid (not a secret). Distinct from
+     * `status.not_found` (absent/foreign): this says the status is real but retired from service.
+     * `status.*`, not `server.*`, for the reason `tenant.not_found`'s note gives. Mapped to 409 (the
+     * status's state forbids the assignment).
+     */
+    "status.inactive": { statusId: string };
+    /**
+     * A service-status label already exists in this venue — the `(tenant_id, label)` unique
+     * (`table_service_statuses_tenant_label_key`) rejected the insert/update. `label` is the
+     * operator-supplied human name ("Bill requested"), not a secret, so echoing it is what makes the
+     * error actionable. `status.*`, not `server.*`, for the reason `tenant.not_found`'s note gives.
+     * Mapped to 409.
+     */
+    "status.label_taken": { label: string };
+    /**
      * A request to a gated server API surface carried a body/query whose SHAPE is wrong: a field
      * absent (where it is required) or present with the wrong declared type — a malformed date, a
      * non-string, a bad enum member. Originally the management-dashboard surface (the gated staff

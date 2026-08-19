@@ -27,6 +27,7 @@ export {
   purchaseVatKind,
 } from "./schema/purchase-invoices.js";
 export { tillLayouts } from "./schema/layouts.js";
+export { tableServiceStatuses } from "./schema/table-service-statuses.js";
 export { workingOrderCounters } from "./schema/working-order-counters.js";
 export {
   fiscalState,

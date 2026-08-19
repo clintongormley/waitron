@@ -14,7 +14,7 @@ import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
 import { collectOrder, payWorkingOrderIntegrated, recordTillSale } from "./till-sale.js";
 import type { IntegratedPayRequest, TillSaleRequest, TillTender } from "./till-sale.js";
-import { createTable, deactivateTable, listTables, updateTable } from "./tables.js";
+import { createTable, deactivateTable, listTables, setTableStatus, updateTable } from "./tables.js";
 import {
   abandonHeldOrder,
   addTabRound,
@@ -125,6 +125,13 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "tab.already_open": 409,
   "tab.not_open": 409,
   "tab.line_not_found": 404,
+  // Manual service status (TS-2). Setting a table's status can fail two ways: an unknown status id
+  // (or a malformed one screened at the route) names no status → 404 (`status.not_found`); a
+  // deactivated status may not be set → 409 (`status.inactive`) — the id is valid but the status's
+  // STATE forbids it, the same 409 shape `table.inactive`/`tab.not_open` use. (A bad TABLE id on this
+  // route is `table.not_found`, already mapped above.)
+  "status.not_found": 404,
+  "status.inactive": 409,
 };
 
 // The one error boundary every till route wraps its handler in — the shared `createErrorBoundary`
@@ -700,6 +707,27 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await voidTabLine(tx, deps.cfg, id, lineNo);
+      });
+      return c.body(null, 200);
+    }),
+  );
+
+  // Set (or clear) a table's manual service status (design §3b). SESSION-GUARDED. A malformed :id →
+  // table.not_found (a bad table id names no table). `setTableStatus` throws table.not_found /
+  // status.not_found / status.inactive. Body: { statusId: string | null }.
+  app.post("/api/tables/:id/status", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
+      const body = await c.req.json<{ statusId: string | null }>();
+      const statusId = body.statusId ?? null;
+      // A present-but-malformed statusId is screened to status.not_found (it names no status), not a 500.
+      if (statusId !== null && !isUuid(statusId))
+        throw new AppError("status.not_found", { statusId });
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await setTableStatus(tx, deps.cfg, id, statusId);
       });
       return c.body(null, 200);
     }),
