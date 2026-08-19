@@ -275,10 +275,11 @@ export class TillApp extends LitElement {
    * receipt uses its `invoiceLocale` PROP and must never follow the operator UI (see
    * `till-ticket-view`'s INVOICE LOCALE note).
    *
-   * A FAILED `getTill` (the server was unreachable at start-up) must be a HANDLED state, not an unhandled
-   * rejection — `firstUpdated` fires `void this.#boot()`, so an uncaught throw escapes the microtask. The
-   * `catch` surfaces the `boot.error` banner; the lock screen still renders beneath it and recovery is a
-   * page reload (this runs once, with no in-UI retry).
+   * A FAILED `getTill` at start-up — the server unreachable, OR a non-2xx answer the client surfaces as a
+   * rejected `{ code }` such as `server.internal` (see `api/client.ts`'s `!res.ok` branch) — must be a
+   * HANDLED state, not an unhandled rejection: `firstUpdated` fires `void this.#boot()`, so an uncaught
+   * throw escapes the microtask. The bare `catch` covers both, surfacing the `boot.error` banner; the lock
+   * screen still renders beneath it and recovery is a page reload (this runs once, with no in-UI retry).
    */
   async #boot(): Promise<void> {
     try {
@@ -299,8 +300,9 @@ export class TillApp extends LitElement {
       this.receivedLayout = till.layout;
       this.receipt = till.receipt ?? {};
     } catch {
-      // Server unreachable at boot: surface the non-fatal `boot.error` banner rather than let the rejection
-      // escape unhandled. Needs no isConnected guard — Lit never paints a detached element (see above).
+      // Any boot failure — server unreachable, or a non-2xx `{ code }` — surfaces the non-fatal `boot.error`
+      // banner rather than let the rejection escape unhandled. Needs no isConnected guard — Lit never paints
+      // a detached element (see above).
       this.errorKey = "boot.error";
     }
   }
