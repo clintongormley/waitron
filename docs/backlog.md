@@ -654,11 +654,19 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     the registration-options one also asserts the `residentKey` re-spec, guarding the discoverable-credential
     regression the finish-branch wide-lens review surfaced. No migration, no fiscal-core touch; the dashboard
     login/staff screens forward the options JSON opaquely, so no client contract change.
-  - **Duplicate `credential_id` on the gated register route → opaque 500.** A second registration of the
-    same `(tenant_id, credential_id)` raises `23505` → `server.internal` 500, breaking the "every
-    surfaced code is a 4xx" invariant. Near-unreachable (route is gated + `excludeCredentials` makes a
-    compliant authenticator refuse), but catch `23505` → a mapped `passkey.*`/`management.request_invalid`
-    to close it.
+  - **Duplicate `credential_id` on the gated register route → 409 — DONE (#108, 2026-08-19; campaign
+    small-item-pool P4).** A second registration of the same `(tenant_id, credential_id)` raised `23505`
+    → `server.internal` 500. `finishPasskeyRegistration` now catches `isUniqueViolation` (`@waitron/db`)
+    on the insert and throws the new `passkey.already_registered` code (domain concept, not the column
+    — §3; sibling to `passkey.not_registered`), which `management-api.ts`'s STATUS maps to **409** (the
+    house convention for an "already exists" collision — `table.label_taken`, `tab.already_open`,
+    `roster.already_published`, `purchase.duplicate` all → 409). The `try/catch` is scoped to the insert;
+    the only unique key it can violate is the composite one (`id` is a random-uuid PK), so a bare
+    `isUniqueViolation` suffices (no constraint-name check), matching `tables.ts`/`settle-sale.ts`.
+    Near-unreachable (route session-gated + `excludeCredentials`), but a non-compliant client can still
+    POST one. TDD: PGlite duplicate test + a `23503`-FK negative control (rethrow untranslated) + a
+    real-PG RLS route test asserting 409, all proven by deletion. Non-migration, non-fiscal (H2 clean);
+    identity 100% cov. Both finish-branch reviewers + Copilot: no findings.
   - **Residual harmless double-session (out of scope, documented).** Two DISTINCT concurrent auth
     ceremonies (different challenge handles) for the same person can each mint a session — both belong to
     the legitimately-authenticated owner, the same race as `loginManager`, no trust boundary crossed. The
