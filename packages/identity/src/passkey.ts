@@ -13,6 +13,7 @@ import type {
   RegistrationResponseJSON,
 } from "@simplewebauthn/server";
 import { AppError } from "@waitron/shared";
+import { isUniqueViolation } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { and, eq, lt } from "drizzle-orm";
 import { persons } from "./schema/persons.js";
@@ -222,14 +223,25 @@ export async function finishPasskeyRegistration(
   const cred = verification.registrationInfo.credential; // { id, publicKey, counter, transports? } — v13 WebAuthnCredential
   // The challenge was already consumed above (consumeChallenge); the insert commits alongside it. The
   // authenticator's transports are stored here (see `serializeTransports`) for a later ceremony.
-  await tx.insert(webauthnCredentials).values({
-    tenantId: input.tenantId,
-    personId,
-    credentialId: cred.id,
-    publicKey: b64url(cred.publicKey),
-    counter: cred.counter,
-    transports: serializeTransports(cred.transports),
-  });
+  try {
+    await tx.insert(webauthnCredentials).values({
+      tenantId: input.tenantId,
+      personId,
+      credentialId: cred.id,
+      publicKey: b64url(cred.publicKey),
+      counter: cred.counter,
+      transports: serializeTransports(cred.transports),
+    });
+  } catch (error) {
+    // This credential is already enrolled for the tenant: the `(tenant_id, credential_id)` unique
+    // constraint raises 23505. The only unique key this INSERT can violate is that composite one —
+    // `id` is a random-uuid PK — so `isUniqueViolation` alone identifies it without a constraint-name
+    // check. Translate it into a domain code (the register route maps → 409); a raw driver error would
+    // otherwise reach `run` as an opaque `server.internal` 500. Anything else is a genuine failure:
+    // rethrow so it is not masked.
+    if (isUniqueViolation(error)) throw new AppError("passkey.already_registered", {});
+    throw error;
+  }
   return { credentialId: cred.id };
 }
 

@@ -95,6 +95,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "passkey.not_registered": 401,
   "passkey.verification_failed": 401,
   "passkey.challenge_expired": 400,
+  // A duplicate credential on register/verify: `finishPasskeyRegistration` translated a
+  // `(tenant_id, credential_id)` 23505 into this code. 409 Conflict, the house convention for a
+  // "already exists" collision (`table.label_taken`, `tab.already_open`, `roster.already_published`,
+  // `purchase.duplicate` all → 409) — not the `?? 400` default, which would still be a 4xx but the
+  // wrong one.
+  "passkey.already_registered": 409,
   // Login-enumeration trade-off, ACCEPTED and recorded here (not changed). This map is SHARED with the
   // authenticated staff routes, where 404/403 are the CORRECT semantics: the write routes
   // (PATCH/reset-pin/password `/management-api/staff/:id`) screen `:id` with `isUuid` and refuse a

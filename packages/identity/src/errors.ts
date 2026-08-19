@@ -46,5 +46,12 @@ declare module "@waitron/shared" {
      * deleted on this path: finish consumes it with a DELETE, then the TTL check throws and the
      * transaction rolls back, restoring the row to lapse by its TTL rather than being swept.) */
     "passkey.challenge_expired": Record<string, never>;
+    /** This credential is already enrolled for this tenant — `finishPasskeyRegistration`'s insert hit
+     * the `(tenant_id, credential_id)` unique constraint (`isUniqueViolation`). The domain concept is
+     * "already registered", not the column that collided (§3). Near-unreachable in practice — the
+     * register route is session-gated and `beginPasskeyRegistration` feeds `excludeCredentials` so a
+     * compliant authenticator refuses a duplicate — but a non-compliant client can still POST one, and
+     * a raw 23505 would surface as an opaque `server.internal` 500; this maps it to a clean 409. */
+    "passkey.already_registered": Record<string, never>;
   }
 }

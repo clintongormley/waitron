@@ -275,6 +275,43 @@ describe("Management API passkey routes over real Postgres (RLS end-to-end, mock
     expect(creds[0]).toMatchObject({ credential_id: "cred-abc", person_id: managerId });
   });
 
+  it("register/verify surfaces a duplicate credential as 409, not an opaque 500", async () => {
+    const { tenantId, managerId } = await setupTenant();
+    const app = mountApp(tenantId);
+    const cookie = await login(app, managerId);
+
+    // First registration of `cred-dup` succeeds.
+    await registerPasskey(app, cookie, "cred-dup");
+
+    // A SECOND ceremony returning the SAME credential id collides on the (tenant_id, credential_id)
+    // unique constraint. `finishPasskeyRegistration` translates the 23505 into
+    // `passkey.already_registered`, which STATUS maps to 409 — a raw driver error would instead reach
+    // `run` as an opaque `server.internal` 500, the "every surfaced code is a 4xx" invariant this fix
+    // restores.
+    const options = await app.request("/management-api/passkey/register/options", {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(options.status).toBe(200);
+    const { challengeHandle } = (await options.json()) as { challengeHandle: string };
+
+    mockVerifyReg.mockResolvedValue(regVerified("cred-dup"));
+    const dup = await app.request("/management-api/passkey/register/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ challengeHandle, response: {} }),
+    });
+    expect(dup.status).toBe(409);
+    expect((await dup.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "passkey.already_registered" },
+    });
+
+    // Under RLS still exactly one credential — the collision landed no second row.
+    const creds = await readCredentials(tenantId);
+    expect(creds).toHaveLength(1);
+    expect(creds[0]).toMatchObject({ credential_id: "cred-dup", person_id: managerId });
+  });
+
   it("auth/options is ungated: 200 with a challenge handle and no cookie", async () => {
     const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
