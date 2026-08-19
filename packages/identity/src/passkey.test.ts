@@ -1,4 +1,4 @@
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { captureError, CORE_MIGRATIONS, pgErrorCode, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -338,6 +338,58 @@ describe("passkey registration", () => {
       tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
     );
     expect(chal).toHaveLength(1);
+  });
+
+  it("rejects re-registering a credential already on file as passkey.already_registered (not an opaque 500)", async () => {
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    mockVerify.mockResolvedValue(verified("cred-dup"));
+
+    // First ceremony persists the credential.
+    const first = await begin(sessionId);
+    expect((await finish(sessionId, first.challengeHandle)).credentialId).toBe("cred-dup");
+
+    // A SECOND ceremony returning the SAME credential id collides on the
+    // (tenant_id, credential_id) unique constraint: the insert raises 23505. Unwrapped it reaches
+    // `run` as a non-AppError → opaque server.internal 500; finishPasskeyRegistration must translate
+    // it into a clean passkey.already_registered (the register route maps that → 409).
+    const second = await begin(sessionId);
+    expect(await codeOf(() => finish(sessionId, second.challengeHandle))).toBe(
+      "passkey.already_registered",
+    );
+
+    // The collision rolled the second finish's transaction back: still exactly one credential row —
+    // the original survives and no partial second row landed.
+    const creds = await run((tx) => tx.select().from(webauthnCredentials));
+    expect(creds).toHaveLength(1);
+    expect(creds[0]!.credentialId).toBe("cred-dup");
+  });
+
+  it("rethrows a non-unique insert failure untranslated, never masked as passkey.already_registered", async () => {
+    // The negative control for the isUniqueViolation catch: a NON-unique insert failure must propagate
+    // untranslated. finishPasskeyRegistration inserts with `input.tenantId`; a tenant id with no
+    // `tenants` row makes `webauthn_credentials_tenant_fk` raise 23503 (foreign_key_violation), not
+    // 23505 — so `isUniqueViolation` is false and the raw error is rethrown, never masked as
+    // passkey.already_registered. (PGlite is superuser, so the WITH CHECK tenant policy does not
+    // pre-empt the FK; app-role tenant isolation is proven in webauthn.rls.test.ts.)
+    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    mockVerify.mockResolvedValue(verified("cred-fk"));
+    const begun = await begin(sessionId);
+
+    const error = await captureError(() =>
+      run((tx) =>
+        finishPasskeyRegistration(tx, {
+          managementSessionId: sessionId,
+          tenantId: "99999999-9999-4999-8999-999999999999",
+          challengeHandle: begun.challengeHandle,
+          response: {} as never,
+          rpId: "localhost",
+          origin: "http://localhost",
+        }),
+      ),
+    );
+    // pgErrorCode reads the SQLSTATE off the raw driver error; an AppError would carry none, so this
+    // both proves the error is the 23503 FK violation AND that it was not translated into any AppError.
+    expect(pgErrorCode(error)).toBe("23503");
   });
 });
 
