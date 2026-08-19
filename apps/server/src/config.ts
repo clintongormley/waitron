@@ -74,14 +74,15 @@ export interface ServerConfig {
    * domain the browser scopes credentials to (e.g. `dashboard.example.com`, no scheme or port). A
    * passkey is bound to its RP ID at registration and only offered back on that same RP ID, so this
    * is deployment config, never a hardcoded constant in `@waitron/identity` (spec §4c). Threaded
-   * through `boot.ts` into `ManagementApiDeps.rpId`. Defaults to `localhost` for loopback dev/tests. */
+   * through `boot.ts` into `ManagementApiDeps.rpId`. Defaults to `localhost` for loopback dev/tests;
+   * REQUIRED in production (`loadConfig` throws `server.config_missing` if unset). */
   managementRpId: string;
   /** The exact origin the dashboard is served from (scheme + host + optional port, e.g.
    * `https://dashboard.example.com`) — what `@simplewebauthn/server` verifies each ceremony's
    * `response` against as `expectedOrigin`. Distinct from `managementRpId`: the RP ID is the bare
    * domain, the origin carries scheme and port and must match the served URL byte-for-byte or
    * verification fails. Threaded into `ManagementApiDeps.origin`. Defaults to the Vite dev server's
-   * `http://localhost:5191` for dev/tests. */
+   * `http://localhost:5191` for dev/tests; REQUIRED in production (same guard as `managementRpId`). */
   managementOrigin: string;
   scheduler: SchedulerConfig;
 }
@@ -113,10 +114,13 @@ const DEFAULT_HTTP_HOST = "127.0.0.1";
  * `apps/server/README.md`'s "every value is validated once, at boot" line claims either. */
 const MAX_HTTP_PORT = 65_535;
 /** Loopback defaults for the passkey Relying Party, so dev and every test resolve a working RP ID +
- * origin without setting either variable. A real deployment overrides both with its served domain
- * (`WAITRON_MANAGEMENT_RP_ID`) and URL (`WAITRON_MANAGEMENT_ORIGIN`) — see the `ServerConfig` fields.
- * The origin default is the dashboard Vite dev server's port (slice 1c), so a browser served from it
- * verifies against the same value this host hands the ceremonies. */
+ * origin without setting either variable. These apply in preproduction/dev ONLY: in production both
+ * are REQUIRED (`requiredInProduction` below throws `server.config_missing` if either is unset), so a
+ * real deployment can never silently ship the loopback default and bind passkeys to `localhost`. A
+ * production deployment sets both to its served domain (`WAITRON_MANAGEMENT_RP_ID`) and URL
+ * (`WAITRON_MANAGEMENT_ORIGIN`) — see the `ServerConfig` fields. The origin default is the dashboard
+ * Vite dev server's port (slice 1c), so a browser served from it verifies against the same value this
+ * host hands the ceremonies. */
 const DEFAULT_MANAGEMENT_RP_ID = "localhost";
 const DEFAULT_MANAGEMENT_ORIGIN = "http://localhost:5191";
 
@@ -143,6 +147,26 @@ function required(env: Env, variable: string): string {
     throw new AppError("server.config_missing", { variable });
   }
   return value;
+}
+
+/**
+ * A variable that is OPTIONAL in preproduction/dev — falling back to `devDefault`, a loopback value
+ * safe only on localhost — but REQUIRED in production. Shipping the loopback default to a real
+ * deployment is a silent misconfiguration that surfaces far downstream: a passkey RP ID / origin left
+ * at `localhost` makes every login ceremony fail its origin check with an opaque 401, not a loud boot
+ * error. So in production an unset OR empty value (`required`'s own `isUnset` rule) is
+ * `server.config_missing`, naming the variable the operator must supply; everywhere else `devDefault`
+ * applies via the same `isUnset` fallback the inline defaults in `loadConfig` use.
+ */
+function requiredInProduction(
+  env: Env,
+  variable: string,
+  environment: DeploymentEnvironment,
+  devDefault: string,
+): string {
+  if (environment === "production") return required(env, variable);
+  const raw = env[variable];
+  return isUnset(raw) ? devDefault : raw;
 }
 
 export interface SyncPeer {
@@ -329,8 +353,6 @@ export function loadConfig(
   }
   const migrationsDir = env.WAITRON_MIGRATIONS_DIR;
   const mediaDir = env.WAITRON_MEDIA_DIR;
-  const managementRpId = env.WAITRON_MANAGEMENT_RP_ID;
-  const managementOrigin = env.WAITRON_MANAGEMENT_ORIGIN;
   const databaseUrl = required(env, "DATABASE_URL");
   const migrationsDatabaseUrl = env.WAITRON_MIGRATIONS_DATABASE_URL;
   const httpHost = env.WAITRON_HTTP_HOST;
@@ -351,10 +373,16 @@ export function loadConfig(
       reason: "tls_requires_cert_and_key",
     });
   }
+  // Resolved once here so the return object and the production-required RP guard below read the same
+  // value (rather than calling `deploymentEnvironment` three times inline). Placed AFTER the
+  // DATABASE_URL and TLS checks so the boot faults still surface in this file's existing order — a bad
+  // WAITRON_ENV throws `server.config_invalid` only once those two have passed, exactly as it did when
+  // this was `environment: deploymentEnvironment(env)` inline in the return below.
+  const environment = deploymentEnvironment(env);
   return {
     databaseUrl,
     migrationsDatabaseUrl: isUnset(migrationsDatabaseUrl) ? databaseUrl : migrationsDatabaseUrl,
-    environment: deploymentEnvironment(env),
+    environment,
     httpPort,
     httpHost: isUnset(httpHost) ? DEFAULT_HTTP_HOST : httpHost,
     minTickMs,
@@ -374,10 +402,22 @@ export function loadConfig(
     // `till-config.ts`. Loaded AFTER `required(env, "DATABASE_URL")` above so a host missing both
     // still reports the DATABASE_URL fault first, matching this file's existing ordering.
     till: loadTillConfig(env),
-    // The dashboard's passkey RP ID + origin, each defaulted to loopback for dev/tests via the same
-    // `isUnset` (empty string == absent) rule `httpHost` above follows.
-    managementRpId: isUnset(managementRpId) ? DEFAULT_MANAGEMENT_RP_ID : managementRpId,
-    managementOrigin: isUnset(managementOrigin) ? DEFAULT_MANAGEMENT_ORIGIN : managementOrigin,
+    // The dashboard's passkey RP ID + origin: loopback defaults in preproduction/dev, but REQUIRED in
+    // production so a real deployment can never silently bind passkeys to `localhost` (see
+    // `requiredInProduction` and the `DEFAULT_MANAGEMENT_*` note). Same `isUnset` empty-string rule
+    // `httpHost` above follows, applied inside the helper.
+    managementRpId: requiredInProduction(
+      env,
+      "WAITRON_MANAGEMENT_RP_ID",
+      environment,
+      DEFAULT_MANAGEMENT_RP_ID,
+    ),
+    managementOrigin: requiredInProduction(
+      env,
+      "WAITRON_MANAGEMENT_ORIGIN",
+      environment,
+      DEFAULT_MANAGEMENT_ORIGIN,
+    ),
     scheduler: {
       horizonDays: positiveInt(env, "WAITRON_SCHEDULER_HORIZON_DAYS", DEFAULTS.horizonDays),
       maxPeriodsPerTick: positiveInt(

@@ -118,11 +118,13 @@ describe("loadConfig", () => {
   // (no certificate) is equally unusable — a half-configured pair is a boot-time refusal, not a
   // silent fall back to plain HTTP that an operator who set one variable would never expect.
   it.each([
-    // Cert set, key missing -> the error names the MISSING variable, the one the operator must add.
-    [{ WAITRON_TLS_CERT_FILE: "/etc/waitron/tls/cert.pem" }, "WAITRON_TLS_KEY_FILE"],
+    // [missing var, the other var supplied]. Cert set, key missing -> the error names the MISSING
+    // variable, the one the operator must add. `missing` is first so the `%s` title prints it, not the
+    // override object.
+    ["WAITRON_TLS_KEY_FILE", { WAITRON_TLS_CERT_FILE: "/etc/waitron/tls/cert.pem" }],
     // Key set, cert missing -> symmetric.
-    [{ WAITRON_TLS_KEY_FILE: "/etc/waitron/tls/key.pem" }, "WAITRON_TLS_CERT_FILE"],
-  ])("rejects a half-configured TLS pair, naming the missing %o", async (extra, missing) => {
+    ["WAITRON_TLS_CERT_FILE", { WAITRON_TLS_KEY_FILE: "/etc/waitron/tls/key.pem" }],
+  ])("rejects a half-configured TLS pair, naming the missing %s", async (missing, extra) => {
     const error = await captureError(() =>
       Promise.resolve(loadConfig({ ...MIN_ENV, ...extra }, ROOT, MEDIA_ROOT)),
     );
@@ -205,6 +207,73 @@ describe("loadConfig", () => {
       backoffBaseMs: 1000,
       staleAfterMs: 2000,
     });
+  });
+
+  // In PRODUCTION the passkey Relying Party ID and origin are REQUIRED, not defaulted: shipping the
+  // loopback defaults to a real deployment binds every passkey ceremony to `localhost`, so a browser
+  // served from the real domain fails its origin check with an opaque 401 at LOGIN time rather than a
+  // loud boot failure. `loadConfig` throws `server.config_missing` naming the unset variable — the
+  // same require-at-boot posture DATABASE_URL takes (the TLS pair is both-or-neither, a distinct shape
+  // that throws `config_invalid`, so it is not the analogy here).
+  it.each([
+    // [missing var, the other var supplied]. RP ID omitted (origin supplied) -> the error names the
+    // RP ID, the variable still to be set. `missing` is first so the `%s` title prints it, not the
+    // override object.
+    ["WAITRON_MANAGEMENT_RP_ID", { WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com" }],
+    // Origin omitted (RP ID supplied) -> symmetric.
+    ["WAITRON_MANAGEMENT_ORIGIN", { WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com" }],
+  ])(
+    "requires the passkey RP config in production, naming the missing %s",
+    async (missing, extra) => {
+      const error = await captureError(() =>
+        Promise.resolve(
+          loadConfig({ ...MIN_ENV, WAITRON_ENV: "production", ...extra }, ROOT, MEDIA_ROOT),
+        ),
+      );
+      expect(codeOf(error)).toBe("server.config_missing");
+      expect(isAppError(error) && error.params).toEqual({ variable: missing });
+    },
+  );
+
+  // Empty string is unset (config.ts's `isUnset`), so `WAITRON_MANAGEMENT_RP_ID=` in a production env
+  // file is missing, not a blank RP ID that silently reaches the ceremonies — the same
+  // `VAR=`-means-unset rule DATABASE_URL and the TLS pair follow.
+  it("treats an empty production WAITRON_MANAGEMENT_RP_ID as missing", async () => {
+    const error = await captureError(() =>
+      Promise.resolve(
+        loadConfig(
+          {
+            ...MIN_ENV,
+            WAITRON_ENV: "production",
+            WAITRON_MANAGEMENT_RP_ID: "",
+            WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com",
+          },
+          ROOT,
+          MEDIA_ROOT,
+        ),
+      ),
+    );
+    expect(codeOf(error)).toBe("server.config_missing");
+    expect(isAppError(error) && error.params).toEqual({ variable: "WAITRON_MANAGEMENT_RP_ID" });
+  });
+
+  // OUTSIDE production the two stay OPTIONAL: preproduction/dev keeps the loopback defaults when they
+  // are unset (the `defaults every optional value` case above), and honours them when they ARE set —
+  // this case, so a preproduction operator can still point the RP config at a non-loopback value
+  // without it being required, rejected, or ignored.
+  it("honours WAITRON_MANAGEMENT_RP_ID/ORIGIN in preproduction when they are set", () => {
+    const config = loadConfig(
+      {
+        ...MIN_ENV,
+        WAITRON_MANAGEMENT_RP_ID: "staging.example.com",
+        WAITRON_MANAGEMENT_ORIGIN: "https://staging.example.com",
+      },
+      ROOT,
+      MEDIA_ROOT,
+    );
+    expect(config.environment).toBe("preproduction");
+    expect(config.managementRpId).toBe("staging.example.com");
+    expect(config.managementOrigin).toBe("https://staging.example.com");
   });
 
   it("falls back to DATABASE_URL when WAITRON_MIGRATIONS_DATABASE_URL is set but empty", () => {
