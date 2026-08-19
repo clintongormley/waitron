@@ -423,8 +423,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Retrieve one parked order to rebuild its basket. SESSION-GUARDED. An id naming no OPEN order (an
-  // absent, settled/abandoned, or another tenant's order — RLS hides it) surfaces `working_order.not_found`,
+  // Retrieve one parked order to rebuild its basket. SESSION-GUARDED. An id naming no OPEN order THIS
+  // node may reach (an absent, settled/abandoned, another tenant's — RLS hides it — or a same-tenant
+  // order on ANOTHER node, the by-id lookups being node-scoped) surfaces `working_order.not_found`,
   // which `STATUS` maps to 404. Returns `{ id, orderNumber, label, lines }` — the pricing INPUTS only,
   // never a stored price, so the till re-prices on retrieve. The id is `isUuid`-screened before the
   // query: a malformed one passed straight into `eq(workingOrders.id, id)` would `22P02` → an opaque
@@ -440,8 +441,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   // Edit a parked order — the whole new basket plus an optional new label, a full REPLACEMENT.
-  // SESSION-GUARDED. Only an `open` order may change; a non-open or unknown id surfaces
-  // `working_order.not_open` → 409. `updateHeldOrder` re-prices authoritatively (the request carries
+  // SESSION-GUARDED. Only an `open` order on THIS node may change; a non-open, unknown, or foreign-node
+  // id surfaces `working_order.not_open` → 409. `updateHeldOrder` re-prices authoritatively (the request carries
   // no price) and returns nothing, so this answers 200 with an empty body. The id is `isUuid`-screened
   // before the query, refused as `working_order.not_open` → 409 — the SAME code a non-open/absent id
   // gets — rather than the `22P02`-driven opaque 500 the raw value would raise (the 7b follow-up).
@@ -461,8 +462,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Discard a parked order (`open → abandoned`). SESSION-GUARDED. A non-open or unknown id surfaces
-  // `working_order.not_open` → 409, the same open-only guard `updateHeldOrder` makes. Returns 200 with
+  // Discard a parked order (`open → abandoned`). SESSION-GUARDED. A non-open, unknown, or foreign-node
+  // id surfaces `working_order.not_open` → 409, the same open-only guard `updateHeldOrder` makes. Returns 200 with
   // an empty body. The id is `isUuid`-screened before the query, refused as `working_order.not_open`
   // → 409 — the SAME code — rather than the `22P02`-driven opaque 500 the raw value would raise (the
   // 7b follow-up).

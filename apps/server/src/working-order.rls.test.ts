@@ -29,6 +29,7 @@ import { deploymentEnvironment } from "./config.js";
 import { readOrderFlow } from "./till-config.js";
 import type { OrderFlow, TillConfig } from "./till-config.js";
 import {
+  abandonHeldOrder,
   advancePrep,
   cancelPlacedOrder,
   getHeldOrder,
@@ -1040,6 +1041,46 @@ describe("cross-till end-to-end", () => {
 
     expect((await listHeldOrders({ db: suite.admin }, nodeA)).map((o) => o.id)).toContain(orderId);
     expect(await listHeldOrders({ db: suite.admin }, nodeB)).toEqual([]);
+  });
+
+  it("node scope: the by-id family (get/update/abandon) fails closed on a foreign-node order under RLS", async () => {
+    const { cfg: nodeA, cafe } = await setupVenue();
+    // A second register under the SAME tenant + location, differing only in node_id. RLS is
+    // tenant-scoped, so it does NOT hide node A's order from node B — only the `node_id = cfg.nodeId`
+    // filter now in each by-id lookup does. Same state, opposite answers: node A reaches it, node B is
+    // refused by all three (getHeldOrder/updateHeldOrder/abandonHeldOrder — the whole by-id family, 7b).
+    const nodeB = await addNode(nodeA, "Servidor 2");
+
+    const orderId = randomUUID();
+    await parkOrder({ db: suite.admin }, nodeA, {
+      id: orderId,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+    });
+
+    // The owning node reaches it — the order is perfectly usable, so node B's refusals below are the
+    // node filter, not a broken order.
+    expect((await getHeldOrder({ db: suite.admin }, nodeA, orderId)).id).toBe(orderId);
+
+    // Node B is refused by every by-id lookup, each with its own fail-closed code.
+    await expect(getHeldOrder({ db: suite.admin }, nodeB, orderId)).rejects.toMatchObject({
+      code: "working_order.not_found",
+      params: { workingOrderId: orderId },
+    });
+    await expect(
+      updateHeldOrder({ db: suite.admin }, nodeB, orderId, {
+        lines: [{ productId: cafe.id, quantity: "2" }],
+      }),
+    ).rejects.toMatchObject({
+      code: "working_order.not_open",
+      params: { workingOrderId: orderId },
+    });
+    await expect(abandonHeldOrder({ db: suite.admin }, nodeB, orderId)).rejects.toMatchObject({
+      code: "working_order.not_open",
+      params: { workingOrderId: orderId },
+    });
+
+    // Node B's refused attempts had NO side effect: node A's order is still open and still retrievable.
+    expect((await getHeldOrder({ db: suite.admin }, nodeA, orderId)).id).toBe(orderId);
   });
 });
 

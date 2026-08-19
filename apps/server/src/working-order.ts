@@ -617,10 +617,13 @@ export async function listHeldOrders(
  * and `quantity` (the pricing INPUTS) in `line_no` order — the till re-reads the catalogue and
  * re-prices, never trusting a stored price, so the snapshot columns are deliberately not returned.
  *
- * Scoped to `status = 'open'` (RLS confines it to the tenant): an absent id, a `settled`/`abandoned`
- * order, or another tenant's order all surface the one `working_order.not_found` — see that code's
- * note. Deliberately NOT node-scoped, unlike `listHeldOrders`: a retrieve follows the node-scoped
- * list and addresses the order by its primary key, and RLS still holds it within the tenant.
+ * Scoped to `status = 'open'` AND `node_id = cfg.nodeId` (RLS additionally confines it to the tenant):
+ * an absent id, a `settled`/`abandoned` order, another tenant's order, or a same-tenant order parked
+ * on ANOTHER node all surface the one `working_order.not_found` — see that code's note. Node-scoped to
+ * match `listHeldOrders` and the rest of the by-id family (`updateHeldOrder`/`abandonHeldOrder`): a
+ * retrieve follows the node-scoped list, so a foreign-node id names nothing this register should
+ * reach, and failing it closed here is the fail-closed posture the whole by-id family now shares (7b).
+ * RLS is tenant-scoped and would NOT hide a same-tenant order on another node — only this filter does.
  */
 export async function getHeldOrder(
   deps: WorkingOrderDeps,
@@ -637,7 +640,13 @@ export async function getHeldOrder(
         label: workingOrders.label,
       })
       .from(workingOrders)
-      .where(and(eq(workingOrders.id, id), eq(workingOrders.status, "open")));
+      .where(
+        and(
+          eq(workingOrders.id, id),
+          eq(workingOrders.status, "open"),
+          eq(workingOrders.nodeId, cfg.nodeId),
+        ),
+      );
 
     if (order === undefined) {
       throw new AppError("working_order.not_found", { workingOrderId: id });
@@ -672,20 +681,22 @@ export interface UpdateHeldOrderRequest {
  * Edit a parked order (park & retrieve, sub-project 7b): re-price `req.lines` authoritatively, REPLACE
  * the order's `working_order_lines` with the result, and update its `label` — all in ONE
  * `withTenant`/`asAppUser` transaction, so the delete + re-insert commit as a unit (or roll back
- * together, leaving the parked order exactly as it was). Only an `open` order may change; a
- * `settled`/`abandoned` order, an absent id, or another tenant's order (RLS hides it) all throw
- * `working_order.not_open`.
+ * together, leaving the parked order exactly as it was). Only an `open` order on THIS node may
+ * change; a `settled`/`abandoned` order, an absent id, another tenant's order (RLS hides it), or a
+ * same-tenant order parked on ANOTHER node all throw `working_order.not_open`.
  *
  * The row is taken `for update` so a concurrent update/abandon/pay cannot race this read-modify-write
  * of its lines; the `status` is read off THAT locked row rather than added to the `WHERE`, so an
  * order that exists but is closed is told apart from one that never existed only inside the tx — both
  * still surface the one `working_order.not_open`, the fail-closed shape that code's note describes.
- * `order_number` and `node_id` are deliberately untouched.
+ * The UPDATE writes neither `order_number` nor `node_id` (they are fixed at park); `node_id` is only
+ * READ, in the lock predicate below.
  *
- * NOT node-scoped (`where id` alone), consistent with `getHeldOrder`: an edit follows a retrieve
- * which follows the node-scoped `listHeldOrders`, and RLS still confines the row to the tenant. If a
- * foreign-node id should ever fail closed, add `node_id = cfg.nodeId` here AND in `getHeldOrder`
- * together — the whole by-id family moves as one.
+ * Node-scoped (`node_id = cfg.nodeId` in the lock predicate), consistent with `getHeldOrder` and
+ * `abandonHeldOrder`: an edit follows a retrieve which follows the node-scoped `listHeldOrders`, so a
+ * same-tenant order parked on ANOTHER node is refused `working_order.not_open` (fail-closed) rather
+ * than found and rewritten. RLS still confines the row to the tenant on top of that. The whole by-id
+ * family moved to this fail-closed posture together (7b).
  *
  * PGlite is enough for THIS behaviour — the state machine (open-only), the FK/`require_open_parent`/
  * `check_locales` triggers on the replaced lines, and the `enforce_transition` trigger the label
@@ -704,13 +715,15 @@ export async function updateHeldOrder(
     async (tx) => {
       await asAppUser(tx);
 
-      // Lock the order row for the life of the tx, then read its status off the locked copy. Absent or
-      // not-open → `working_order.not_open`; the DB triggers (enforce_transition on the label update,
-      // require_open_parent on the line delete/insert) are the backstop if this app check is ever wrong.
+      // Lock the order row for the life of the tx, then read its status off the locked copy. Absent,
+      // on another node, or not-open → `working_order.not_open`; the DB triggers (enforce_transition on
+      // the label update, require_open_parent on the line delete/insert) are the backstop if this app
+      // check is ever wrong. `node_id` joins `id` in the lock predicate (node scope, the by-id family);
+      // `status` stays off the WHERE so a closed order is told from an absent one only inside the tx.
       const [order] = await tx
         .select({ status: workingOrders.status })
         .from(workingOrders)
-        .where(eq(workingOrders.id, id))
+        .where(and(eq(workingOrders.id, id), eq(workingOrders.nodeId, cfg.nodeId)))
         .for("update");
 
       if (order === undefined || order.status !== "open") {
@@ -747,13 +760,15 @@ export async function updateHeldOrder(
 /**
  * Discard a parked order (park & retrieve, sub-project 7b): `open → abandoned`, a terminal transition
  * the `working_orders_enforce_transition` trigger (0004) validates. A single conditional UPDATE —
- * `set status = 'abandoned' where id = … and status = 'open'` — so the open-only guard IS the write:
- * a `settled`/`abandoned` order, an absent id, or another tenant's order (RLS hides it) match no row,
- * and the empty `returning` throws `working_order.not_open`. No `settled_at` is set — abandoned is not
- * settled, and the `settled_at` biconditional (0004) requires it stay NULL.
+ * `set status = 'abandoned' where id = … and status = 'open' and node_id = …` — so the open-and-on-this-
+ * node guard IS the write: a `settled`/`abandoned` order, an absent id, another tenant's order (RLS
+ * hides it), or a same-tenant order on another node all match no row, and the empty `returning` throws
+ * `working_order.not_open`. No `settled_at` is set — abandoned is not settled, and the `settled_at`
+ * biconditional (0004) requires it stay NULL.
  *
- * NOT node-scoped, for the reason `updateHeldOrder`/`getHeldOrder` give. PGlite proves this state
- * machine (the conditional update and the trigger); RLS isolation is Task 7's real-Postgres suite.
+ * Node-scoped (`node_id = cfg.nodeId`), matching `updateHeldOrder`/`getHeldOrder` — the whole by-id
+ * family fails closed on a foreign-node id. PGlite proves this state machine (the conditional update
+ * and the trigger); RLS cross-tenant isolation is Task 7's real-Postgres suite.
  */
 export async function abandonHeldOrder(
   deps: WorkingOrderDeps,
@@ -769,7 +784,13 @@ export async function abandonHeldOrder(
       const updated = await tx
         .update(workingOrders)
         .set({ status: "abandoned" })
-        .where(and(eq(workingOrders.id, id), eq(workingOrders.status, "open")))
+        .where(
+          and(
+            eq(workingOrders.id, id),
+            eq(workingOrders.status, "open"),
+            eq(workingOrders.nodeId, cfg.nodeId),
+          ),
+        )
         .returning({ id: workingOrders.id });
 
       if (updated.length === 0) {

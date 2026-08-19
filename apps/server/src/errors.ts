@@ -239,9 +239,10 @@ declare module "@waitron/shared" {
      */
     "session.required": Record<string, never>;
     /**
-     * No OPEN working order with this id that the caller may retrieve. The id names none, or it
-     * names one already `settled`/`abandoned`, or it belongs to another tenant (RLS hides it) — all
-     * three report THIS one code. To a till that only wants to rebuild a parked basket the three are
+     * No OPEN working order with this id that the caller may retrieve HERE. The id names none, or it
+     * names one already `settled`/`abandoned`, or it belongs to another tenant (RLS hides it), or it
+     * is a same-tenant order parked on ANOTHER node (the by-id lookups are node-scoped, like the held
+     * list) — all report THIS one code. To a till that only wants to rebuild a parked basket they are
      * the same fact ("nothing to retrieve here"), and a distinct "it exists but is closed" code
      * would confirm a closed or foreign order exists — the same fail-closed reasoning
      * `node.not_found` and `sale.series_not_found` use.
@@ -260,9 +261,10 @@ declare module "@waitron/shared" {
      */
     "working_order.not_found": { workingOrderId: string };
     /**
-     * A working order this caller tried to MODIFY is not `open` — it names one already
-     * `settled`/`abandoned`, or it names none at all (an absent id, or another tenant's order that
-     * RLS hides). All of those report THIS one code: to a till trying to edit or abandon a draft the
+     * A working order this caller tried to MODIFY is not `open` HERE — it names one already
+     * `settled`/`abandoned`, or it names none this node may reach (an absent id, another tenant's
+     * order that RLS hides, or a same-tenant order parked on ANOTHER node — the by-id lookups are
+     * node-scoped). All of those report THIS one code: to a till trying to edit or abandon a draft the
      * distinction between "closed" and "never existed" is the same fact ("there is no open draft here
      * to change"), and a distinct "it exists but is closed" code would confirm a closed or foreign
      * order exists — the same fail-closed reasoning `working_order.not_found` uses for the RETRIEVE
