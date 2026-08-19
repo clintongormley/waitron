@@ -630,10 +630,19 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     would delete both helpers. Not taken in #102 because it changes the column type → a **new migration** (a
     migration-free Drizzle `customType`-over-`text` variant exists too, cf. `credentials`' `bytea` customType). Do it
     in a slice that can add/regenerate a migration cleanly.
-  - **RP-ID / origin misconfig is undiagnosable in production.** `WAITRON_MANAGEMENT_RP_ID`/`_ORIGIN`
-    default to `localhost` / `http://localhost:5191` for dev+tests; a wrong origin now surfaces as a
-    clean 401 (was a 500), but the real fix is to make both **required at boot** in production so a
-    misconfig fails loudly at startup, not as a mystery 401 per login.
+  - **RP-ID / origin required at boot in production — DONE (#107, 2026-08-19; campaign small-item-pool P3).**
+    `WAITRON_MANAGEMENT_RP_ID`/`_ORIGIN` defaulted to `localhost` / `http://localhost:5191`
+    UNCONDITIONALLY — even in production — so a deploy that forgot them silently bound every passkey
+    ceremony to loopback → an opaque 401 at login rather than a loud boot failure. New
+    `requiredInProduction(env, variable, environment, devDefault)` helper in `apps/server/src/config.ts`:
+    in production an unset OR empty value throws `server.config_missing` (reusing `required`/`isUnset`,
+    no new error code); preproduction/dev keeps the loopback default. `environment` resolved once (after
+    the DATABASE_URL + TLS checks, so this file's prior boot-fault ordering is preserved). TDD, guard
+    proven by deletion; `boot.test.ts`'s 5 production boots carry the vars via `KEY_ENV` (same home as
+    the credentials key + till identity). Both finish-branch reviewers clean (2 minors applied:
+    ordering-preservation + a §1 comment vocabulary fix); Copilot's one finding (the `it.each` `%o`
+    title printed the override object, not the missing var) fixed on both the new and the sibling TLS
+    `it.each`, thread resolved. Non-migration, non-fiscal (H2 clean); config.ts 100% cov.
   - **`userVerification` policy pinned — DONE (#104, 2026-08-18; campaign queue #12).** `generate*Options`
     now pin `userVerification: "required"` (registration inside `authenticatorSelection`, keeping the
     library's `residentKey: "preferred"` default — which supplying `authenticatorSelection` at all otherwise
