@@ -236,6 +236,40 @@ describe("till-app", () => {
     }
   });
 
+  it("a failing getTill surfaces the boot error and never leaves an unhandled rejection", async () => {
+    // `firstUpdated` fires `void this.#boot()`, and `#boot` awaits `getTill()` to load the till's setup
+    // (locale, issuer, order flow, card wiring). A server-unreachable boot must be a HANDLED state, not an
+    // UNHANDLED promise rejection: it surfaces the `boot.error` banner and stays on the lock screen. The
+    // two load-bearing assertions are the visible banner (removing `#boot`'s try/catch drops the errorKey)
+    // AND `rejections === []` (removing it lets getTill's rejection escape as an unhandled rejection) —
+    // together the deletion proof.
+    const rejections: unknown[] = [];
+    const onRejection = (event: PromiseRejectionEvent): void => {
+      rejections.push(event.reason);
+      event.preventDefault(); // mark handled so it doesn't pollute sibling tests
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    try {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockRejectedValue(new Error("server down")),
+      });
+      // Give any pending unhandled-rejection notification a couple of macrotasks to surface.
+      await flush(el);
+      await flush(el);
+
+      // A boot failure never crashes the app into a blank screen — the lock screen still renders.
+      expect(lock(el)).not.toBeNull();
+      // The failure is surfaced, not swallowed: the operator sees why the till is unusable.
+      const banner = el.shadowRoot!.querySelector('[role="alert"]');
+      expect(banner).not.toBeNull();
+      expect(banner!.textContent).toContain(t("boot.error"));
+      // The rejection was caught, not left unhandled.
+      expect(rejections).toEqual([]);
+    } finally {
+      window.removeEventListener("unhandledrejection", onRejection);
+    }
+  });
+
   it("confirm-payment: records the sale with the mapped lines + tender, then shows the ticket", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
