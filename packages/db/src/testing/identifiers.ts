@@ -14,7 +14,12 @@
 export interface ProbeRole {
   name: string;
   password: string;
-  inRole?: string;
+  /**
+   * One membership, or several. `["app_user", "sync_tailer"]` emits `in role app_user, sync_tailer`
+   * (valid PostgreSQL — see `provisioner-role.rls.test.ts`), which is how a role that must belong to
+   * more than one group is expressed without an out-of-band grant.
+   */
+  inRole?: string | readonly string[];
 }
 
 /** Conservative, and deliberately narrower than SQL allows: what a test fixture actually uses. */
@@ -35,16 +40,26 @@ const SAFE_TOKEN = /^[A-Za-z_][A-Za-z0-9_]*$/;
  * interface, so "callers only pass safe values" was a property of the callers, not of the code.
  */
 export function probeRoleStatement(probe: ProbeRole): string {
+  const inRoles =
+    probe.inRole === undefined
+      ? []
+      : typeof probe.inRole === "string"
+        ? [probe.inRole]
+        : probe.inRole;
   for (const [field, value] of [
     ["name", probe.name],
     ["password", probe.password],
-    ["inRole", probe.inRole],
   ] as const) {
-    if (value !== undefined && !SAFE_TOKEN.test(value)) {
+    if (!SAFE_TOKEN.test(value)) {
       throw new Error(`probeRoleStatement: unsafe ${field} ${JSON.stringify(value)}`);
     }
   }
-  const inRole = probe.inRole === undefined ? "" : ` in role ${probe.inRole}`;
+  for (const role of inRoles) {
+    if (!SAFE_TOKEN.test(role)) {
+      throw new Error(`probeRoleStatement: unsafe inRole ${JSON.stringify(role)}`);
+    }
+  }
+  const inRole = inRoles.length === 0 ? "" : ` in role ${inRoles.join(", ")}`;
   return `create role ${probe.name} login password '${probe.password}'${inRole}`;
 }
 

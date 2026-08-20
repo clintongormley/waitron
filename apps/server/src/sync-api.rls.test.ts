@@ -2,27 +2,20 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTenant, type Database } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { decodeBatch } from "@waitron/sync";
 import type { Logger } from "./logger.js";
 import { mountSyncApi } from "./sync-api.js";
-import { startRealPostgres } from "./testing/postgres.js";
 
 const log: Logger = () => {};
 const NODE_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
-// Real Postgres (full manifest, `sync` last) for the /log read as a non-superuser sync_tailer member;
-// the auth + /hello tests are hermetic and never touch the DB, but the container is needed for /log.
-const postgres = useRealPostgres({
-  start: startRealPostgres,
-  setup: async ({ admin }) => {
-    await admin.execute(sql.raw(`create role app_login login password 'app_pw' in role app_user`));
-    await admin.execute(sql.raw(`create role sync_reader login password 'rp'`));
-    await admin.execute(sql.raw(`grant sync_tailer to sync_reader`));
-  },
-  timeoutMs: 180_000,
-});
+// A clone of the full-manifest template (`sync` last) for the /log read as a non-superuser
+// sync_tailer member; the auth + /hello tests are hermetic and never touch the DB. `app_login` and
+// `sync_reader` (a sync_tailer member) are created cluster-wide by the package globalSetup, in place
+// of this suite's former per-file `setup` role creation.
+const postgres = useTemplateDb({ template: "manifest" });
 
 // A db whose every method throws: the auth guard must answer 401 BEFORE any DB work, so if a 401 path
 // ever touched the db this would surface it (the catalogue-api "401 before any DB work" convention).

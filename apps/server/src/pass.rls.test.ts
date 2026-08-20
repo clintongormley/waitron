@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { credentialTenants, loadKeyRing, putCredential } from "@waitron/credentials";
 import { DEFAULTS, runDue } from "@waitron/scheduler";
 import { StripeReconciler } from "@waitron/payments-stripe";
@@ -11,7 +11,6 @@ import { createLogger } from "./logger.js";
 import { reconcilerAsDuty } from "./reconcile-duty.js";
 import { runPass, RECONCILE_DUTY } from "./pass.js";
 import { stripeAccountResolver } from "./stripe-account.js";
-import { startRealPostgres } from "./testing/postgres.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
 // A non-superuser LOGIN role inheriting app_user's grants — being non-superuser is what makes RLS
@@ -24,11 +23,10 @@ const KEY_ENV = {
 };
 const NOW = new Date("2026-07-26T09:00:00Z");
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-  timeoutMs: 180_000,
-});
+// A clone of the full-manifest template; the probe connections below authenticate as the
+// cluster-wide `server_pass_probe` role the package globalSetup creates (in place of the per-file
+// `probeRole` this suite used before the shared container).
+const suite = useTemplateDb({ template: "manifest" });
 const ring = loadKeyRing(KEY_ENV);
 
 /** A settlement report that finds nothing — the audit's clean case. The point of this suite is the

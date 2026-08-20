@@ -9,7 +9,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Agent } from "undici";
 import { captureError, stampDeployment, withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { isAppError } from "@waitron/shared";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 // The exact test-only entry point `packages/fiscal-verifactu`'s OWN tests use to seed a due
@@ -27,7 +27,7 @@ import {
 } from "./boot.js";
 import { DUTY_BUDGET_MS } from "./health.js";
 import { DRAIN_DUTY } from "./pass.js";
-import { roleUrl, startRealPostgres } from "./testing/postgres.js";
+import { roleUrl } from "./testing/postgres.js";
 import { mintMtlsMaterial } from "./testing/tls.js";
 
 /**
@@ -149,11 +149,12 @@ const KEY_ENV = {
   ...TILL_ENV,
 };
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-  timeoutMs: 180_000,
-});
+// A clone of the full-manifest template. `PROBE_ROLE` (server_boot_probe) and `RUNTIME_ROLE`
+// (server_boot_runtime_probe) are created cluster-wide by the package globalSetup, in place of the
+// per-file `probeRole` + `beforeAll` role creation this suite used before the shared container; the
+// per-DATABASE grants `PROBE_ROLE` needs to re-run migrations are applied to this clone in the
+// `beforeAll` below (they cannot be cluster-wide — they name this database).
+const suite = useTemplateDb({ template: "manifest" });
 
 let migrationsRoot: string;
 let databaseUrl: string;
@@ -166,23 +167,23 @@ beforeAll(async () => {
   // (schema-level `CREATE`) before it ever checks whether either already exists.
   await suite.admin.execute(sql.raw(`grant create on database ${dbName} to ${PROBE_ROLE}`));
   await suite.admin.execute(sql.raw(`grant create on schema public to ${PROBE_ROLE}`));
-  // `SELECT` on every table in `public`, not just the five journal tables by name: `startRealPostgres`
-  // already applied every migration as the container's superuser, so the deployment role does not
-  // OWN the journal tables it must read back from to decide nothing new needs applying.
+  // `SELECT` on every table in `public`, not just the five journal tables by name: the `manifest`
+  // template was migrated as the container's superuser (in the package globalSetup), so the
+  // deployment role does not OWN the journal tables it must read back from to decide nothing new
+  // needs applying.
   await suite.admin.execute(
     sql.raw(`grant select on all tables in schema public to ${PROBE_ROLE}`),
   );
 
   databaseUrl = roleUrl(suite.pg.uri, PROBE_ROLE, PROBE_PASSWORD);
 
-  // No `CREATE`, no `SELECT` on the journal tables — `app_user` membership and nothing else, the
-  // role spec §10 actually means by "the non-superuser deployment role". It can do the duty work
-  // (drain/reconcile read and write through `app_user`'s own table grants, applied by the migrations
-  // themselves) but cannot run a migration against an already-migrated database, for the identical
-  // permission-denied-before-`IF NOT EXISTS` reason `PROBE_ROLE`'s own comment above explains.
-  await suite.admin.execute(
-    sql.raw(`create role ${RUNTIME_ROLE} login password '${RUNTIME_PASSWORD}' in role app_user`),
-  );
+  // `RUNTIME_ROLE` — `app_user` membership and nothing else, the role spec §10 actually means by
+  // "the non-superuser deployment role" — is created cluster-wide by the package globalSetup (with no
+  // `CREATE`/`SELECT` beyond `app_user`'s). It can do the duty work (drain/reconcile read and write
+  // through `app_user`'s own table grants, applied by the migrations themselves) but cannot run a
+  // migration against an already-migrated database, for the identical permission-denied-before-`IF NOT
+  // EXISTS` reason `PROBE_ROLE`'s own comment above explains. Only its clone-scoped connection URL is
+  // built here; no per-DATABASE grant is added, which is exactly what makes it least-privileged.
   runtimeDatabaseUrl = roleUrl(suite.pg.uri, RUNTIME_ROLE, RUNTIME_PASSWORD);
 
   // The till's own tenant + location, seeded once as the container superuser (RLS bypassed, exactly as
@@ -213,8 +214,8 @@ beforeAll(async () => {
   }
 }, 180_000);
 
-// The temporary migrations root is this suite's own; the container and `suite.admin` are
-// `useRealPostgres`'s. Guarded the same way: a `beforeAll` that threw before `mkdtemp` returned
+// The temporary migrations root is this suite's own; the clone and `suite.admin` are
+// `useTemplateDb`'s. Guarded the same way: a `beforeAll` that threw before `mkdtemp` returned
 // must not be followed by an `rm(undefined)` reported as a second failure beside the real one.
 afterAll(async () => {
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });

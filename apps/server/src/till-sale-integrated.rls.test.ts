@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import type { Database } from "@waitron/db";
 import {
   assignCatalogueToLocation,
@@ -39,7 +39,6 @@ import type { OrderFlow, TillConfig } from "./till-config.js";
 import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
 import { collectOrder, payWorkingOrder, payWorkingOrderIntegrated } from "./till-sale.js";
 import type { IntegratedPayDeps } from "./till-sale.js";
-import { startRealPostgres } from "./testing/postgres.js";
 import "./errors.js";
 
 // Real Postgres, not PGlite (CLAUDE.md §4). The split flow's P3 writes (recordSale + associate +
@@ -59,11 +58,10 @@ const LOCALE = "es-ES";
 // the session's `personId` (no FK on `order_amendments.actor_id`), the shape `working-order.rls.test.ts` uses.
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-  timeoutMs: 180_000,
-});
+// A clone of the full-manifest template; the app connections below authenticate as the cluster-wide
+// `rls_probe` role the package globalSetup creates (shared with till-api), in place of the per-file
+// `probeRole` this suite used before the shared container.
+const suite = useTemplateDb({ template: "manifest" });
 
 let backend: FiscalBackend;
 let clock: TrustedClock;

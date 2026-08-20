@@ -1,10 +1,8 @@
 import { asAppUser, captureError, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { CORE_MIGRATIONS } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
-import { runMigrationSets, startMigratedPostgres } from "@waitron/db/testing/postgres.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import type { PersonRoleValue } from "@waitron/identity";
 import { isAppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
@@ -12,17 +10,11 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { createStatus, deactivateStatus, listStatuses, updateStatus } from "./tables.js";
 import "./errors.js";
 
-const suite = useRealPostgres({
-  start: () =>
-    startMigratedPostgres({
-      dockerRequired:
-        "The service-statuses CRUD suite requires Docker: the CRUD both AUTHORIZES (authorizeManager " +
-        "reads persons + management_sessions under the app role's RLS) and upserts table_service_" +
-        "statuses under FORCE ROW LEVEL SECURITY — both are false passes on PGlite (superuser).",
-      migrate: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS, IDENTITY_MIGRATIONS]),
-    }),
-  timeoutMs: 120_000,
-});
+// A clone of the CORE+IDENTITY template. The CRUD both AUTHORIZES (authorizeManager reads persons +
+// management_sessions under the app role's RLS) and upserts table_service_statuses under FORCE ROW
+// LEVEL SECURITY — both false passes on PGlite (superuser) — so it needs the real cluster the shared
+// container provides; a Docker-absent run fails at the package globalSetup, not here.
+const suite = useTemplateDb({ template: "core_identity" });
 
 function asApp<T>(tenantId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTenant(suite.admin, tenantId, async (tx) => {

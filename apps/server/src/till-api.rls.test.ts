@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { asAppUser, sales, withTenant, workingOrders } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -32,7 +32,6 @@ import type { Logger } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
-import { startRealPostgres } from "./testing/postgres.js";
 
 // Real Postgres, not PGlite: this drives `POST /api/sales` and the `/api/working-orders` routes
 // through the HTTP surface to a GENUINE chained fiscal record written by the app role under RLS.
@@ -55,11 +54,10 @@ const LOCALE = "es-ES";
 const PROBE_ROLE = "rls_probe";
 const PROBE_PASSWORD = "probe";
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-  timeoutMs: 180_000,
-});
+// A clone of the full-manifest template; the provider connections below authenticate as the
+// cluster-wide `rls_probe` role the package globalSetup creates (shared with till-sale-integrated),
+// in place of the per-file `probeRole` this suite used before the shared container.
+const suite = useTemplateDb({ template: "manifest" });
 
 let backend: FiscalBackend;
 let clock: TrustedClock;

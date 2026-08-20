@@ -97,12 +97,19 @@ describe("probeRoleStatement", () => {
     );
   });
 
+  it("grants several memberships when inRole is an array", () => {
+    expect(
+      probeRoleStatement({ name: "probe", password: "pw", inRole: ["app_user", "sync_tailer"] }),
+    ).toBe("create role probe login password 'pw' in role app_user, sync_tailer");
+  });
+
   // The fields are plain `string` on an exported interface, so safety cannot rest on callers being
   // careful. A quote in the password would otherwise close the literal and change the statement.
   it.each([
     ["name", { name: "probe; drop role app_user --", password: "pw" }],
     ["password", { name: "probe", password: "pw'; drop role app_user --" }],
     ["inRole", { name: "probe", password: "pw", inRole: 'app_user"' }],
+    ["inRole", { name: "probe", password: "pw", inRole: ["app_user", 'sync_tailer"'] }],
   ])("refuses an unsafe %s", (field, probe) => {
     expect(() => probeRoleStatement(probe)).toThrowError(new RegExp(`unsafe ${field}`));
   });
