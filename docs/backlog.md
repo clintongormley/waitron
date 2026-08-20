@@ -1208,38 +1208,45 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   hangs in `test-ui` too, the cause is inside the suite and the next move is a per-test timeout + a
   Playwright trace. Guarded by `scripts/ci-workflow.test.mjs` (the three shards cover every
   `test:coverage` member exactly once).
-- **`mutation-db` weekly job is red — diagnosed 2026-08-20, deferred to the #112 db-suite speedup.**
-  **Update 2026-08-20: unblocked — #114 (phase 2) landed the fast db suite AND both config keys below
-  (`ignoreStatic` + `dryRunTimeoutMinutes`) in `packages/db/stryker.config.json`.** A mechanism-preview
-  `mutation.yml` dispatch ran against the pre-merge branch (checks: dry-run fits the 20-min budget, the
-  globalSetup↔Stryker seam doesn't boot N containers, it completes + publishes a score); the
-  **authoritative** close is a run against `main` now that #114 is in, owned by the session that
-  diagnosed this. Remaining below is that session's to verify + close.
-  `.github/workflows/mutation.yml`'s `mutation-db` job (Stryker over `@waitron/db`) has **never**
-  completed — every run died at the 5-min mark: 30788893341 (08-03), 31358752142 (08-10), 31997079174
-  (08-17), dispatch 32304224136 (08-19) — while the sibling `@waitron/ui` `mutation` job passes.
-  Publishes a score rather than gating (no `thresholds.break`), weekly / `workflow_dispatch` only,
-  **not** in the `ci` aggregate → blocks nothing. Three confirmed causes; the config half is a
-  two-line fix, but the run stays too slow for CI's 6h limit until the db suite is faster, so the fix
-  is **deferred to the #112 shared-container rollout** (user call 2026-08-20):
-  - **(1) Dry-run timeout.** Stryker runs the whole db suite once (perTest coverage) before mutating;
-    32 of 39 files boot real Postgres (`describeEachTarget` = PGlite + Testcontainers), so a single
-    run is ~4m40s local / >5min CI, past Stryker's default `dryRunTimeoutMinutes: 5` — CI log reads
-    `Initial test run timed out!` at 5:01. **Fix:** add `dryRunTimeoutMinutes: 20` to
-    `packages/db/stryker.config.json` (`timeoutMS: 60000` is already set there for the same slowness;
-    the *separate* dry-run timeout was overlooked).
-  - **(2) Static mutants.** Stryker's own warning: `Detected 1157 static mutants (77% of total)
-    estimated to take 99% of the time`. db is mostly import-time Drizzle schema; Stryker reruns the
-    whole suite per static mutant → ~5-8h ETA. **Fix:** add `ignoreStatic: true` (Stryker's own
-    recommendation) → drops to ~709 behavioural mutants.
-  - **(3) The blocker — suite speed.** Even with (1)+(2) applied and measured locally, the ~709
-    non-static mutants take **~1h+ locally**, dominated by *surviving* mutants that rerun their full
-    real-PG covering tests (container boot each) → very likely >6h on CI's slower runners. The lever
-    is db-test speed: once #112's shared-container / template-clone harness (~26ms clone vs ~1-2s
-    container boot) reaches `packages/db`'s own suite, apply (1)+(2) and the run should complete.
-    Declined alternatives (2026-08-20 user call): a PGlite-only mutation target (loses RLS /
-    tenant-isolation mutation coverage — fiscal-critical) and a narrowed `mutate` scope (drops
-    meaningful mutants). Non-blocking.
+- **`mutation-db` weekly job is red — sharding fix in flight (`feat/mutation-db-shard`), pending CI.**
+  `.github/workflows/mutation.yml`'s `mutation-db` (Stryker over `@waitron/db`) has **never** completed
+  — every run hit a wall: 30788893341 (08-03), 31358752142 (08-10), 31997079174 (08-17), 32304224136
+  (08-19) all at the 5-min dry-run timeout, then 32374126111 (08-20, on #114's fast suite) at the
+  6-**hour** job limit. Publishes a score, weekly / `workflow_dispatch` only, **not** in the `ci`
+  aggregate → blocks nothing. Two config causes were fixed in #114 and confirmed working on run
+  32374126111; a **third, structural** cause remained, which this branch fixes:
+  - **(1) Dry-run timeout** — fixed (#114). Stryker runs the whole db suite once (perTest coverage)
+    before mutating; on run 32374126111 that dry run took **6m48s**, past Stryker's default
+    `dryRunTimeoutMinutes: 5`. Fix: `dryRunTimeoutMinutes: 20` in `packages/db/stryker.config.json`
+    (`timeoutMS: 60000` was already there for the same slowness; the *separate* dry-run timeout was
+    overlooked).
+  - **(2) Static mutants** — fixed (#114). Stryker warned `Detected 1157 static mutants (77% of total)
+    estimated to take 99% of the time` (db is import-time Drizzle schema). Fix: `ignoreStatic: true`
+    (Stryker's own recommendation) → **1545 → 749** behavioural mutants (confirmed on run 32374126111).
+  - **(3) The real blocker — mutant volume ÷ concurrency** — this branch. Even with (1)+(2) and #114's
+    fast suite, the 749 mutants took **~10h** on one 2-vCPU runner (measured on run 32374126111, then
+    cancelled at 6h). A faster *suite* cannot fix this: mutation cost is mutants ÷ concurrency, so the
+    lever is parallelism. **Fix: shard across a matrix** — `scripts/mutation-shard.mjs` bin-packs the
+    41 source files by size into N `--mutate` slices (`strategy.job-total` feeds the count, defined
+    once in the matrix list), each job on its own runner. **N=10**, chosen from data not guesswork:
+    an N=6 dispatch (run 32380395996) ran **53min → 4h50** because the per-mutant cost is wildly
+    uneven — a *surviving* mutant in a widely-covered file (core-table schema `orders`/`tenants`/
+    `sales`/`daily-closes`/`incidents`, and `testing/global-setup`, run by ~every test) reruns a huge
+    covering set, while a leaf-file mutant is cheap; byte size unluckily clustered `orders`+`tenants`
+    into the 4h50 shard. At N=10 the bin-packing isolates each expensive file in its own shard, so a
+    shard is bounded by its single priciest FILE. **Confirmed on run 32384997149**: all 10 shards
+    green, nine ≤90min — but `schema/sales.ts` alone ran **186min** (the most-covered fiscal table).
+    Since a whole file can't be split by adding shards, `sales.ts` is split with Stryker's
+    **mutation-range** syntax (`file.ts:startLine-endLine`) into 3 ranges that `mutation-shard.mjs`
+    spreads across 3 distinct shards (`HEAVY_FILES` names it; a guard fails if it's renamed), dropping
+    the max to ~90min — well under 6h. Splitting only lowers the max, so the run 32384997149 fits-6h
+    receipt still holds. Each shard re-pays the ~7min dry run (per-test coverage can't be shared across
+    jobs — cheap for a weekly job); ten per-shard report artifacts, a merged score a deliberate
+    non-goal. Declined (2026-08-20 user call): a PGlite-only target (loses fiscal-critical
+    RLS/tenant-isolation mutation coverage) and a narrowed `mutate` scope (drops meaningful mutants).
+    The split is verified locally — the 3 ranges land in 3 distinct shards and Stryker accepts the
+    range syntax (`sales.ts:1-120` → 39 mutants) — and its ~90min max (186min ÷ 3) is projected from
+    run 32384997149; a dispatched split run confirms it on the weekly job.
 - **`test-light` reports `success` without naming what it ran.** The skip-empty-scope half is done;
   what remains is the *reporting* — a shard that ran two packages and one that ran the whole workspace
   both report `success`, and only the step log tells them apart. Make the job name the packages it

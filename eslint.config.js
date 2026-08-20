@@ -7,7 +7,17 @@ import eslintConfigPrettier from "eslint-config-prettier";
 
 export default tseslint.config(
   {
-    ignores: ["**/dist/**", "**/node_modules/**", "**/__screenshots__/**", "**/coverage/**"],
+    // `.stryker-tmp` holds mutated `@ts-nocheck`d copies of the source that a KILLED mutation run
+    // leaves behind (Stryker cleans it up only on a clean exit). Without this ignore, one interrupted
+    // `pnpm --filter @waitron/db mutation` makes `pnpm lint` fail with thousands of errors from the
+    // sandbox — the same reason packages/db/vitest.config.ts excludes it from test discovery.
+    ignores: [
+      "**/dist/**",
+      "**/node_modules/**",
+      "**/__screenshots__/**",
+      "**/coverage/**",
+      "**/.stryker-tmp/**",
+    ],
   },
 
   js.configs.recommended,

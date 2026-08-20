@@ -71,17 +71,40 @@ jobs:
           path: packages/ui/reports/mutation/
           retention-days: 30
 
-  # packages/db. Weekly rather than per-PR for the same reason packages/ui is
-  # weekly, reached by a different route: every test here boots a WASM
-  # PostgreSQL and applies a schema before it asserts anything, so Stryker pays
-  # that cost once per mutant per covering test. The handoff's "pure-Node
-  # packages can afford the per-PR gate" rule was a proxy for per-test setup
-  # cost, and this package has the setup cost without the browser.
+  # packages/db, SHARDED across a matrix. Stryker over @waitron/db mutates ~750 database-backed
+  # mutants (every test here boots a Postgres and applies a schema), which on ONE 2-vCPU runner is
+  # ~10h — past GitHub's 6h job limit, so the job never once completed. Measured on run 32374126111:
+  # `ignoreStatic` dropped 1545 → 749 mutants and the dry run finished in 6m48s (both stryker keys
+  # working), but the mutation phase's own ETA was ~10h and it was cancelled at the wall.
   #
-  # No thresholds.break is configured, so this publishes a score rather than
-  # failing. Docker is present on ubuntu-latest, so the real-Postgres target
-  # runs here too.
+  # The fix is parallelism, not a faster suite: mutation cost is mutants ÷ concurrency, and a matrix
+  # gives each shard its OWN 2-vCPU runner. scripts/mutation-shard.mjs bin-packs the 41 source files
+  # by size into one `--mutate` slice per shard; `strategy.job-total` feeds the COUNT to the script,
+  # so N is defined once — here in the matrix list — and the two cannot drift.
+  #
+  # TEN shards, not fewer, because the per-mutant cost is WILDLY uneven and clusters. Measured on run
+  # 32380395996 (an N=6 attempt): shards ran 53min → 4h50. A surviving mutant in a widely-covered
+  # file — the core-table schema (orders/tenants/sales/daily-closes/incidents) and
+  # testing/global-setup, exercised by nearly every test — reruns a huge covering set, while a
+  # leaf-file mutant is cheap. Byte size is a rough proxy that at N=6 unluckily put orders+tenants in
+  # one shard (the 4h50 one). At N=10 the bin-packing isolates each expensive file in its OWN shard
+  # (verified: sales/orders/tenants/daily-closes/incidents/global-setup each land alone), so the
+  # slowest shard is bounded by the single priciest FILE. More shards past that don't lower the floor
+  # (a file isn't split), which is why 10 is the knee rather than an arbitrary bump.
+  #
+  # Each shard re-pays the ~7min dry run: Stryker maps per-test coverage over the WHOLE suite before
+  # it mutates anything, and that map cannot be shared across independent jobs. Cheap for a weekly,
+  # non-gating job. `fail-fast: false` so one shard's failure does not cancel the rest.
+  #
+  # No thresholds.break is configured, so each shard publishes its slice's score rather than failing;
+  # the ten per-shard report artifacts are what a human reads. A single merged score is a deliberate
+  # non-goal for now (see docs/backlog.md). Docker is present on ubuntu-latest, so the real-Postgres
+  # target runs here too.
   mutation-db:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     runs-on: ubuntu-latest
     env:
       REQUIRE_DOCKER: "1"
@@ -99,12 +122,27 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm --filter @waitron/db mutation
+      - name: Run mutation shard ${{ matrix.shard }} of ${{ strategy.job-total }}
+        env:
+          SHARD: ${{ matrix.shard }}
+          TOTAL: ${{ strategy.job-total }}
+        run: |
+          set -euo pipefail
+          FILES=$(node scripts/mutation-shard.mjs "$SHARD" "$TOTAL")
+          # Defence in depth: the script already exits non-zero on an empty selection (so `set -e`
+          # fails the step), but never hand stryker an empty `--mutate ""` — it would be a confusing
+          # no-op rather than a loud failure. Raised by Copilot on PR #115.
+          if [ -z "$FILES" ]; then
+            echo "shard $SHARD/$TOTAL selected no files — refusing to run stryker with an empty --mutate" >&2
+            exit 1
+          fi
+          echo "Shard $SHARD/$TOTAL mutates: $FILES"
+          pnpm --filter @waitron/db exec stryker run --mutate "$FILES"
 
       - name: Upload mutation report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mutation-report-db
+          name: mutation-report-db-shard-${{ matrix.shard }}
           path: packages/db/reports/mutation/
           retention-days: 30
