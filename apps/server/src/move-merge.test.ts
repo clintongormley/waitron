@@ -212,6 +212,26 @@ describe("moveTabLines", () => {
       params: { tabId: to },
     });
   });
+
+  it("refuses a self-transfer (fromTabId === toTabId) with tab.merge_self and leaves the lines intact", async () => {
+    const { cfg, cafeId, aguaId } = await setupVenue();
+    const t = await seedTable(cfg, "ST");
+    const tab = await openTabOn(cfg, t, [
+      { productId: cafeId, quantity: "1" },
+      { productId: aguaId, quantity: "1" },
+    ]);
+    // The exported primitive TS-4 (transfer) calls directly; mergeTabs guards this at its own top, but
+    // moveTabLines must self-guard. Without it, the "move all" shape (no lineNos) appends both lines as
+    // duplicates then deletes BOTH copies (the trailing delete matches workingOrderId = fromTabId, now
+    // also toTabId), wiping the tab.
+    await expect(asApp(cfg, (tx) => moveTabLines(tx, tab, tab))).rejects.toMatchObject({
+      code: "tab.merge_self",
+      params: { tabId: tab },
+    });
+    // The guard fires BEFORE any read/write, so the tab still holds both original lines — the data-loss
+    // footgun did not fire. Proven by deletion (guard removed → this drops to 0; see the finish-fix report).
+    expect(await linesOf(tab)).toHaveLength(2);
+  });
 });
 
 describe("moveTab", () => {

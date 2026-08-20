@@ -375,6 +375,40 @@ describe("mergeTabs join → one bill covering both tables", () => {
   });
 });
 
+describe("mergeTabs cross-tenant isolation (FORCE RLS hides the foreign tab)", () => {
+  it("a merge under tenant A naming tenant B's fromTab is refused tab.not_open; B's tab is untouched", async () => {
+    // Why the spec §7 "delete the tenant predicate" deletion-proof is INAPPLICABLE on this path:
+    // mergeTabs carries NO explicit `tenant_id` predicate on its working_orders read to delete —
+    // isolation here is STRUCTURAL. FORCE RLS on `working_orders` hides tenant B's row from tenant A's
+    // `app_user` scope, so the locked read returns it as undefined and the merge is refused. Removing a
+    // predicate that does not exist would prove nothing; the receipt is this real-PG cross-tenant refusal
+    // (a foreign, RLS-hidden id → `tab.not_open`), which PGlite (superuser, RLS-bypassing) cannot show.
+    const a = await setupVenue();
+    const b = await setupVenue();
+    const tA = await seedTable(a.cfg, "XT-A");
+    const tB = await seedTable(b.cfg, "XT-B");
+    const intoTabA = await openTabOn(a.cfg, tA, [{ productId: a.cafe.id, quantity: "1" }]);
+    const fromTabB = await openTabOn(b.cfg, tB, [{ productId: b.cafe.id, quantity: "1" }]);
+
+    // Under tenant A's scope, name tenant B's tab as the source. RLS hides B's working_orders row, so
+    // mergeTabs' locked read finds `from` undefined → tab.not_open, naming the foreign id.
+    await expect(
+      withTenant(suite.admin, a.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await mergeTabs(tx, a.cfg, intoTabA, fromTabB, { freeSourceTable: true });
+      }),
+    ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId: fromTabB } });
+
+    // Tenant B's tab is entirely untouched: still open, still holding its line, its table still points at it.
+    expect(await orderState(fromTabB)).toMatchObject({ status: "open" });
+    expect(await saleCount(fromTabB)).toBe(0);
+    expect(await tabIdOf(tB)).toBe(fromTabB);
+    // ...and tenant A's own tab is unchanged too — the merge threw before any write.
+    expect(await orderState(intoTabA)).toMatchObject({ status: "open" });
+    expect(await tabIdOf(tA)).toBe(intoTabA);
+  });
+});
+
 /** True if `e` (or its cause) is a PostgreSQL deadlock (40P01). */
 function isDeadlock(e: unknown): boolean {
   const code =
@@ -383,7 +417,73 @@ function isDeadlock(e: unknown): boolean {
   return code === "40P01";
 }
 
-describe("concurrent merge/move deadlock-safety (ascending-id FOR UPDATE lock order)", () => {
+describe("concurrent merge deadlock-safety (working_orders-first lock order matches the sale path)", () => {
+  it("mergeTabs(into=X) racing payWorkingOrder settling X → NO 40P01; pay is never the deadlock victim", async () => {
+    // The MATERIAL deadlock the reorder fixes (finish-branch Finding 1). mergeTabs(into=X, from=Y) and
+    // payWorkingOrder(X) both touch X's working_orders row AND X's dining_tables row — pay via the 0050
+    // settle trigger (UPDATE dining_tables WHERE tab_id = X). Pay locks working_orders(X) then
+    // dining_tables(X's table); mergeTabs now locks working_orders FIRST then dining_tables — the SAME
+    // order — so the two cannot cross-lock and 40P01. The OLD dining_tables-first order crossed the sale
+    // path and deadlocked; that RED result is proven by deletion in the finish-fix report. Here we ship
+    // the fixed order and assert it is clean, on two DISTINCT backends (PGlite would collapse them).
+    const { cfg, cafe, agua } = await setupVenue();
+    const tInto = await seedTable(cfg, "MP-into");
+    const tFrom = await seedTable(cfg, "MP-from");
+    const intoTab = await openTabOn(cfg, tInto, [{ productId: cafe.id, quantity: "1" }]);
+    const fromTab = await openTabOn(cfg, tFrom, [{ productId: agua.id, quantity: "1" }]);
+
+    const [connMerge, connPay] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
+    try {
+      const pids = await Promise.all(
+        [connMerge, connPay].map((d) =>
+          d
+            .execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)
+            .then((r) => r.rows[0]!.pid),
+        ),
+      );
+      expect(new Set(pids).size).toBe(2); // distinct backends — on PGlite these collapse (false pass).
+
+      const doMerge = withTenant(connMerge, cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true });
+      });
+      const doPay = payWorkingOrder({ db: connPay, backend, clock }, cfg, {
+        id: intoTab,
+        lines: [],
+        tender: { method: "cash", amount: "5.00" },
+      });
+      const [mergeRes, payRes] = await Promise.allSettled([doMerge, doPay]);
+
+      // No 40P01 in either outcome — the fixed lock order prevents the cross-lock entirely.
+      for (const r of [mergeRes, payRes]) {
+        if (r.status === "rejected") expect(isDeadlock(r.reason)).toBe(false);
+      }
+      // Pay is NEVER aborted: mergeTabs abandons only its OWN `from` tab (Y), never intoTab (X), so X
+      // stays open whether pay wins or loses the working_orders(X) lock — pay always settles it exactly
+      // once (CLAUDE.md §5: nothing may transiently abort a sale).
+      expect(payRes.status).toBe("fulfilled");
+      expect(await orderState(intoTab)).toMatchObject({ status: "settled" });
+      expect(await saleCount(intoTab)).toBe(1);
+
+      // Exactly one of {merge, pay} saw the other's committed state — both orderings are correct and
+      // deadlock-free; which one wins the working_orders(X) lock is non-deterministic:
+      //  - merge won: it moved agua onto X and abandoned Y BEFORE pay acquired X, so pay settled the
+      //    MERGED bill (café 1.50 + agua 2.00 = 3.50) and Y is abandoned/unfiled.
+      //  - pay won:   X was already settled when merge acquired working_orders(X), so merge is refused
+      //    tab.not_open (naming intoTab), Y stays open, and the filed sale is café-only (1.50).
+      if (mergeRes.status === "fulfilled") {
+        expect(await filedSaleTotal(intoTab)).toBe("3.50");
+        expect(await orderState(fromTab)).toMatchObject({ status: "abandoned" });
+      } else {
+        expect(mergeRes.reason).toMatchObject({ code: "tab.not_open", params: { tabId: intoTab } });
+        expect(await filedSaleTotal(intoTab)).toBe("1.50");
+        expect(await orderState(fromTab)).toMatchObject({ status: "open" });
+      }
+    } finally {
+      await Promise.all([connMerge.close(), connPay.close()]);
+    }
+  });
+
   it("two reverse merges over the same two tabs serialise with NO 40P01 — one wins, the other gets tab.not_open", async () => {
     const { cfg, cafe } = await setupVenue();
     const tA = await seedTable(cfg, "DL-A");
@@ -399,15 +499,18 @@ describe("concurrent merge/move deadlock-safety (ascending-id FOR UPDATE lock or
           await mergeTabs(tx, cfg, into, from, { freeSourceTable: true });
         });
 
-      // Reverse orientations: A←B on one backend, B←A on the other. Both touch the SAME two dining_tables
-      // rows and the SAME two working_orders rows. What this proves TODAY: the two same-verb merges
+      // Reverse orientations: A←B on one backend, B←A on the other. Both touch the SAME two working_orders
+      // rows and the SAME two dining_tables rows. What this proves TODAY: the two same-verb merges
       // serialise cleanly — one wins, the other finds its DESTINATION (`into`) tab already abandoned and is
       // refused `tab.not_open`, with no 40P01. (mergeTabs abandons its OWN `from` tab; under reverse
       // orientation the winner's `from` IS the loser's `into`, so the loser trips on its `into` open-status
-      // check — error `tabId = intoTabId` — while its own source stays open.) They serialise because
-      // `dining_tables.tab_id` is UNINDEXED, so both backends seq-scan the two rows in identical heap order
-      // and contend on the first — NOT because of the `.orderBy`, which a same-verb race like this cannot
-      // prove load-bearing (the hazard control below covers that hazard).
+      // check — error `tabId = intoTabId` — while its own source stays open.) mergeTabs now locks
+      // working_orders FIRST (ascending id, its PRIMARY KEY), so both backends contend on the lowest-id
+      // working_orders row and serialise there; the second (dining_tables) leg would serialise anyway
+      // because `dining_tables.tab_id` is UNINDEXED and both seq-scan the two rows in identical heap order.
+      // Neither leg's `.orderBy` is proven load-bearing by a same-verb race like this — the hazard control
+      // below covers the general inconsistent-order hazard, and the merge/pay race above covers the
+      // working_orders-before-dining_tables ordering that IS load-bearing.
       const results = await Promise.allSettled([
         merge(connA, tabA, tabB),
         merge(connB, tabB, tabA),

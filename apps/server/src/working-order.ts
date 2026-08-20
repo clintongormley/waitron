@@ -486,8 +486,8 @@ async function lockOpenTab(tx: Transaction, tabId: string): Promise<void> {
  * Concurrency (load-bearing for QR ordering — multiple guests append to one shared tab at once): the tab
  * row is taken `FOR UPDATE` by {@link lockOpenTab}, which serialises concurrent writers to this tab on
  * the `working_orders` row lock, so the `max(line_no)+1` read-then-insert below cannot interleave. A
- * naïve `max(line_no)+1` without the lock races and collides on the `(working_order_id, line_no)` unique
- * (`orders.ts:192`) — a real-PG concurrent test proves it by deletion of the lock.
+ * naïve `max(line_no)+1` without the lock races and collides on the `working_order_lines`
+ * `(working_order_id, line_no)` unique — a real-PG concurrent test proves it by deletion of the lock.
  */
 export async function addTabRound(
   tx: Transaction,
@@ -544,20 +544,29 @@ export async function voidTabLine(
  * calls with ALL lines and TS-4 (transfer) will call with a subset, so it is written general now to
  * avoid a TS-4 refactor. Reads the named lines (default all), APPENDS them onto `toTab` at the next
  * `line_no`s with every locked price column carried across UNCHANGED (a move NEVER re-prices — the
- * add-time `unit_price_gross` is what the filed sale is later rebuilt from, orders.ts:153), then deletes
- * them from `fromTab`.
+ * add-time `working_order_lines.unit_price_gross` column is what the filed sale is later rebuilt from),
+ * then deletes them from `fromTab`.
+ *
+ * Refuses a self-transfer (`fromTabId === toTabId`) with `tab.merge_self` BEFORE any read or write. In
+ * the "move all" shape (no `lineNos`) a self-transfer would append every line as a duplicate and then
+ * the trailing delete — keyed on `workingOrderId = fromTabId`, which is now ALSO `toTabId` — would match
+ * BOTH the originals and the just-inserted duplicates, emptying the tab. `mergeTabs` already guards this
+ * at its own top, but `moveTabLines` is the exported primitive TS-4 (transfer) calls directly, so the
+ * guard lives here too, reusing the `tab.merge_self` code (one tab named as both ends — the same concept).
  *
  * Both tabs are locked `FOR UPDATE` in ASCENDING `id` order — a DEFENSIVE, plan-independent lock-order
- * discipline, NOT a deadlock-safety property any concurrent test at this level exercises: this primitive's
- * only caller today (`mergeTabs`) has already serialised the racing backends on its `dining_tables` lock
- * before `moveTabLines` runs, so no `moveTabLines`-level race ever reaches this ordering (do not reuse
- * `mergeTabs`'s unindexed-`tab_id` seq-scan argument here — this locks `working_orders`, whose `id` is
- * its PRIMARY KEY, orders.ts:53, not the unindexed column that argument turns on).
- * Their status is read off the locked copies: a non-`open` parent is refused `tab.not_open`
- * (moving lines under a settled/abandoned order would violate `working_order_lines_require_open_parent`
- * anyway). The lock on `toTab` also serialises `line_no` allocation the way `addTabRound`'s per-tab lock
- * does, so a concurrent append/move cannot collide on the `(working_order_id, line_no)` unique
- * (orders.ts:186). Runs on the CALLER's transaction under its tenant/app_user scope.
+ * discipline, NOT a deadlock-safety property any concurrent test at THIS level exercises: this primitive's
+ * only caller today (`mergeTabs`) has already taken both `working_orders` row locks (in this same
+ * ascending-id order) before `moveTabLines` runs, so the re-lock here is a deliberate no-op and no
+ * `moveTabLines`-level race reaches this ordering. (mergeTabs's OWN lock order — `working_orders` before
+ * `dining_tables` — is what carries the merge-vs-pay deadlock safety; see there.) These locks are on
+ * `working_orders`, whose `id` is its PRIMARY KEY, so `mergeTabs`'s unindexed-`tab_id` seq-scan argument
+ * does not apply to this leg. Their status is read off the locked copies: a non-`open` parent is refused
+ * `tab.not_open` (moving lines under a settled/abandoned order would violate
+ * `working_order_lines_require_open_parent` anyway). The lock on `toTab` also serialises `line_no`
+ * allocation the way `addTabRound`'s per-tab lock does, so a concurrent append/move cannot collide on the
+ * `working_order_lines` `(working_order_id, line_no)` unique. Runs on the CALLER's transaction under its
+ * tenant/app_user scope.
  */
 export async function moveTabLines(
   tx: Transaction,
@@ -565,6 +574,12 @@ export async function moveTabLines(
   toTabId: string,
   lineNos?: number[],
 ): Promise<void> {
+  // Refuse a self-transfer before any read/write (see the docstring): the "move all" shape would append
+  // every line as a duplicate and then delete BOTH copies, emptying the tab. mergeTabs guards this too,
+  // but this primitive is called directly by TS-4. Reuses tab.merge_self — one tab named as both ends.
+  if (fromTabId === toTabId) {
+    throw new AppError("tab.merge_self", { tabId: fromTabId });
+  }
   const locked = await tx
     .select({ id: workingOrders.id, status: workingOrders.status })
     .from(workingOrders)
@@ -786,13 +801,26 @@ export async function joinTable(
  * case, the source turns over); `false` re-points it at `intoTab` (both tables now covered by the one
  * bill — the 4+4 JOIN case, and the joined table KEEPS its status, design §4).
  *
- * Locks the involved `dining_tables` rows (those covered by either tab) `FOR UPDATE` ASCENDING id, then
- * both `working_orders` rows `FOR UPDATE` ASCENDING id — a DEFENSIVE, plan-independent lock-order
- * discipline. On the current UNINDEXED `dining_tables.tab_id` both backends seq-scan in identical heap
- * order, so concurrent same-table ops serialise without deadlock and this order is NOT provable
- * load-bearing by deletion (a §1 "both answers look alike" measurement); the discipline future-proofs
- * against a schema/plan change that lets lock orders diverge. The deterministic hazard control (§7)
- * proves the general inconsistent-order 40P01 hazard is real.
+ * Lock order — both `working_orders` rows `FOR UPDATE` ASCENDING id FIRST, THEN the involved
+ * `dining_tables` rows (those covered by either tab) `FOR UPDATE` ASCENDING id. This MATCHES the
+ * sale/settle/abandon path: `payWorkingOrder` (till-sale.ts) locks the `working_orders` row `FOR UPDATE`,
+ * then its settle UPDATE fires the 0050 `working_orders_clear_table_status` trigger, which UPDATEs
+ * `dining_tables WHERE tab_id = NEW.id` — i.e. `working_orders` then `dining_tables`; `collectOrder`
+ * (settle) and `abandonHeldOrder` (abandon) reach the two classes in that same order (their
+ * abandon/settle UPDATE takes the `working_orders` row, then the trigger takes the `dining_tables`
+ * rows). Acquiring in that identical order is what PREVENTS a mergeTabs-vs-pay/settle/abandon DEADLOCK:
+ * a concurrent merge and pay both take `working_orders` before `dining_tables`, so they cannot
+ * cross-lock and trip a 40P01. THIS leg's order is load-bearing and proven — the concurrent merge/pay
+ * race test (move-merge.rls.test.ts) asserts no 40P01, and by deletion the previous
+ * `dining_tables`-first order reproduces the 40P01 against the real trigger.
+ *
+ * The `dining_tables` leg's OWN ascending-id order is, by contrast, DEFENSIVE not proven load-bearing:
+ * for a merge-vs-merge (same-verb) race the `dining_tables` lock is on the UNINDEXED `tab_id`, so both
+ * backends seq-scan the two rows in identical heap order and serialise on the first regardless of the
+ * `.orderBy`. The ascending-id discipline on that leg only future-proofs against a schema/plan change
+ * that lets scan orders diverge; a same-verb race cannot prove it load-bearing (a §1 "both answers look
+ * alike" measurement). The deterministic hazard control (move-merge.rls.test.ts) proves the general
+ * inconsistent-order 40P01 hazard is real.
  *
  * ORDER MATTERS (Plan note 2): the re-point (step 2) precedes the abandon (step 3). The TS-2
  * `working_orders_clear_table_status` trigger fires on the `open → abandoned` transition and clears
@@ -811,13 +839,11 @@ export async function mergeTabs(
     throw new AppError("tab.merge_self", { tabId: intoTabId });
   }
 
-  // Lock order: involved dining_tables rows (ascending id), then both working_orders rows (ascending id).
-  await tx
-    .select({ id: diningTables.id })
-    .from(diningTables)
-    .where(or(eq(diningTables.tabId, intoTabId), eq(diningTables.tabId, fromTabId)))
-    .orderBy(diningTables.id)
-    .for("update");
+  // Lock order (see the docstring): both working_orders rows FIRST (ascending id), THEN the involved
+  // dining_tables rows (ascending id) — the SAME order the sale/settle/abandon path acquires them in
+  // (payWorkingOrder locks working_orders, then the 0050 settle trigger updates dining_tables), so a
+  // concurrent merge and pay cannot cross-lock into a 40P01. The status check throws before the
+  // dining_tables lock, so a non-open (or RLS-hidden foreign) tab is refused holding only working_orders.
   const tabs = await tx
     .select({ id: workingOrders.id, status: workingOrders.status })
     .from(workingOrders)
@@ -832,6 +858,12 @@ export async function mergeTabs(
   if (from === undefined || from.status !== "open") {
     throw new AppError("tab.not_open", { tabId: fromTabId });
   }
+  await tx
+    .select({ id: diningTables.id })
+    .from(diningTables)
+    .where(or(eq(diningTables.tabId, intoTabId), eq(diningTables.tabId, fromTabId)))
+    .orderBy(diningTables.id)
+    .for("update");
 
   // 1. Move ALL of fromTab's lines onto intoTab (locked prices preserved), both still open.
   //    moveTabLines re-locks + re-validates these two rows as open — a deliberate no-op re-lock here
@@ -849,7 +881,8 @@ export async function mergeTabs(
       .where(and(eq(diningTables.tenantId, cfg.tenantId), eq(diningTables.tabId, fromTabId)));
   }
 
-  // 3. Abandon the now-empty fromTab (open → abandoned; the transition trigger permits it, orders.ts:36-48).
+  // 3. Abandon the now-empty fromTab (open → abandoned; the working_orders_enforce_transition state
+  //    machine permits it).
   await tx
     .update(workingOrders)
     .set({ status: "abandoned" })
