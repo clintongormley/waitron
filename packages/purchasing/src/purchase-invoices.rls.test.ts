@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { asAppUser, captureError, pgErrorCode, withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { Decimal, TenantId } from "@waitron/shared";
 import {
@@ -10,7 +10,6 @@ import {
   getPurchaseInvoice,
   listPurchaseInvoices,
 } from "./operations.js";
-import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 
 // A non-superuser LOGIN role that inherits app_user's grants, so it is a genuine RLS subject: the
 // container's default user is a superuser and bypasses FORCE ROW LEVEL SECURITY, so a policy/grant
@@ -20,15 +19,13 @@ import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgre
 // the "app_user may delete" test proves. current_tenant_id() reads `app.tenant_id`, so a query under
 // tenant B's GUC matches none of tenant A's rows. This suite runs on REAL Postgres because PGlite
 // connects as a superuser and bypasses FORCE ROW LEVEL SECURITY, which would make an RLS/grant
-// assertion a false pass (CLAUDE.md §4). Mirrors packages/recipes/src/ingredients.rls.test.ts.
+// assertion a false pass (CLAUDE.md §4). Mirrors packages/recipes/src/ingredients.rls.test.ts. The
+// role is created once, cluster-wide, in the package's globalSetup (`src/testing/global-setup.ts`) —
+// not per file, because a shared container is one cluster; see that file's header.
 const PROBE_ROLE = "rls_probe";
 const PROBE_PASSWORD = "probe";
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-  timeoutMs: CONTAINER_SETUP_TIMEOUT_MS,
-});
+const suite = useTemplateDb({ template: "core" });
 
 const d = (s: string): Decimal => s as Decimal;
 

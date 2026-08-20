@@ -1,22 +1,21 @@
 import { pgErrorCode, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { startRealPostgres } from "./testing/postgres.js";
 import { seedLocation } from "../test/fixtures.js";
 
-// A non-superuser LOGIN role inheriting app_user's grants. Being non-superuser is what makes RLS
-// apply at all — a superuser bypasses FORCE ROW LEVEL SECURITY, which is why PGlite cannot prove any
-// of this. convenio_config grants SELECT, INSERT, UPDATE (drizzle/0001_convenio_config_rls.sql).
+// A non-superuser LOGIN role inheriting app_user's grants, which this suite connects AS
+// (`pg.connectAs`). Being non-superuser is what makes RLS apply at all — a superuser bypasses FORCE
+// ROW LEVEL SECURITY, which is why PGlite cannot prove any of this. convenio_config grants SELECT,
+// INSERT, UPDATE (drizzle/0001_convenio_config_rls.sql). The role is created once, cluster-wide, in
+// the package's globalSetup (`src/testing/global-setup.ts`) — not per file, because a shared container
+// is one cluster; see that file's header.
 const PROBE_ROLE = "convenio_es_rls_probe";
 const PROBE_PASSWORD = "probe";
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-});
+const suite = useTemplateDb({ template: "core_identity_workforce_es" });
 
 /** Inserts a convenio_config row for (tenant, location) via SQL, under whatever tx it is handed. */
 function insertConfig(tx: Transaction, tenantId: string, locationId: string) {
