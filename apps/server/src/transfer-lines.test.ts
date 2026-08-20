@@ -352,6 +352,27 @@ describe("transferLines — guards", () => {
     expect(await linesOf(tabB)).toHaveLength(1);
   });
 
+  // The presence check as the SOLE gate: every other tab.line_not_found test in this file pairs the
+  // unknown lineNo with a `quantity`, so the quantity guard ALSO fires if the presence check is
+  // deleted (`decimal(line.quantity)` on `undefined` throws, caught, reported as
+  // tab.transfer_quantity_invalid — a wrong shape, not silence). A WHOLE-line transfer (`quantity`
+  // omitted) takes a different path: it never reaches `decimal()` at all, so `t.lineNo` is pushed
+  // straight onto `wholeLineNos` with no check on `line`. Without the presence check, `moveTabLines`
+  // then runs with `lineNos: [99]`, matches ZERO rows on `fromTab`, inserts nothing (guarded on
+  // `source.length > 0`) and deletes nothing — the whole call RESOLVES, moving nothing, silently.
+  // This is the ONLY case in the suite where deleting the presence check produces a silent no-op
+  // rather than a differently-shaped throw (see the deletion-proof in the task report).
+  it("throws tab.line_not_found for a WHOLE-line transfer (quantity omitted) naming an unknown line_no", async () => {
+    const { cfg, cafeId, aguaId, tableAId, tableBId } = await setupVenue();
+    const tabA = await openTabWith(cfg, tableAId, [{ productId: cafeId, quantity: "2" }]);
+    const tabB = await openTabWith(cfg, tableBId, [{ productId: aguaId, quantity: "1" }]);
+    await expect(
+      asApp(cfg, (tx) => transferLines(tx, cfg, tabA, tabB, [{ lineNo: 99 }])),
+    ).rejects.toMatchObject({ code: "tab.line_not_found", params: { tabId: tabA, lineNo: 99 } });
+    expect(await linesOf(tabA)).toHaveLength(1);
+    expect(await linesOf(tabB)).toHaveLength(1);
+  });
+
   it("throws tab.transfer_quantity_invalid for zero, negative, over-quantity, or malformed", async () => {
     const { cfg, cafeId, aguaId, tableAId, tableBId } = await setupVenue();
     const tabA = await openTabWith(cfg, tableAId, [{ productId: cafeId, quantity: "3" }]);
@@ -366,6 +387,25 @@ describe("transferLines — guards", () => {
     }
     // Nothing moved on any of the rejections.
     expect((await linesOf(tabA))[0]).toMatchObject({ quantity: "3.000" });
+    expect(await linesOf(tabB)).toHaveLength(1);
+  });
+
+  // Over-quantity at DECIMAL scale, not just whole numbers: pins `compareDecimal`'s value-wise
+  // comparison against the recurring string-vs-decimal defect class this codebase guards against
+  // elsewhere (a naive string/lexical compare of "0.600" vs "0.500" would still happen to order
+  // correctly here, but this fixture exists so a future rewrite that compares scale-mismatched
+  // strings, e.g. "0.60" vs "0.500", is caught).
+  it("throws tab.transfer_quantity_invalid for a decimal-scale over-quantity on a WEIGHED line", async () => {
+    const { cfg, jamonId, aguaId, tableAId, tableBId } = await setupVenue();
+    const tabA = await openTabWith(cfg, tableAId, [{ productId: jamonId, quantity: "0.500" }]);
+    const tabB = await openTabWith(cfg, tableBId, [{ productId: aguaId, quantity: "1" }]);
+    await expect(
+      asApp(cfg, (tx) => transferLines(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: "0.600" }])),
+    ).rejects.toMatchObject({
+      code: "tab.transfer_quantity_invalid",
+      params: { tabId: tabA, lineNo: 1, quantity: "0.600" },
+    });
+    expect((await linesOf(tabA))[0]).toMatchObject({ productId: jamonId, quantity: "0.500" });
     expect(await linesOf(tabB)).toHaveLength(1);
   });
 
