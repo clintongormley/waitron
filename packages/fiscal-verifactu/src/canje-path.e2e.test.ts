@@ -6,9 +6,8 @@ import type { Cabecera, EnvioRegistro, RegistroAlta } from "@waitron/verifactu";
 import { fromRegistroRow, toRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
 import { registrosFacturacion } from "./schema/registros.js";
-import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 import { seedSale, seedTill, TEST_NIF, TEST_SISTEMA, type SeededTill } from "./testing/seed.js";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 
 /**
  * The end-to-end proof that an F3 canje's recipient and substitution blocks survive the EXACT path
@@ -28,7 +27,8 @@ import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
  * this record from a sale) is Slice 3, not built here; this slice isolates the storage round-trip
  * and drain serialisation by building the F3 record directly via `buildAltaRecord` → `toRegistroRow`.
  */
-const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: CONTAINER_SETUP_TIMEOUT_MS });
+// A clone of the shared container's `core_fiscal` template (CORE + FISCAL).
+const suite = useTemplateDb({ template: "core_fiscal" });
 
 let till: SeededTill;
 

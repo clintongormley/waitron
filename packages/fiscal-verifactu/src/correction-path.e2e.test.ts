@@ -9,10 +9,9 @@ import { fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
-import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 import { seedSale, seedTill, type SeededTill } from "./testing/seed.js";
 import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 
 /**
  * The end-to-end counterpart to `./write-path.e2e.test.ts`/`./void-path.e2e.test.ts`, for
@@ -31,7 +30,8 @@ import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
  * the ORIGINAL registro's exact stored identity, and it advances the same chain the original sits
  * on with its own `pendiente` sidecar — none of which a refusal-only test exercises.
  */
-const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: CONTAINER_SETUP_TIMEOUT_MS });
+// A clone of the shared container's `core_fiscal` template (CORE + FISCAL).
+const suite = useTemplateDb({ template: "core_fiscal" });
 
 let backend: VerifactuBackend;
 let till: SeededTill;

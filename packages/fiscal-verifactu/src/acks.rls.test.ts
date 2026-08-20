@@ -1,9 +1,8 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { markDelivered, pendingAcks, writeAck } from "./acks.js";
-import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 
 // A non-superuser LOGIN role that inherits app_user's grants — the same probe shape
@@ -15,11 +14,10 @@ const PROBE_ROLE = "acks_rls_probe";
 const PROBE_PASSWORD = "probe";
 const NOW = new Date("2026-07-21T00:01:00Z");
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-  timeoutMs: CONTAINER_SETUP_TIMEOUT_MS,
-});
+// A clone of the `core_fiscal` template (CORE + FISCAL); the probe connection below authenticates as
+// `acks_rls_probe`, a cluster-wide role the package globalSetup creates in place of the per-file
+// `probeRole` this suite passed before the shared container.
+const suite = useTemplateDb({ template: "core_fiscal" });
 
 /**
  * The acks read/write path under real row-level security. PGlite's default connection is a
