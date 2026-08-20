@@ -3,7 +3,7 @@
 // used here). See the note atop `errors.ts`.
 import "./errors.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { AppError, type SaleId, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import {
   allocateOrderNumber,
@@ -537,6 +537,96 @@ export async function voidTabLine(
   if (deleted.length === 0) {
     throw new AppError("tab.line_not_found", { tabId, lineNo });
   }
+}
+
+/**
+ * Move working-order lines from one OPEN tab to another (design §3) — the shared primitive `mergeTabs`
+ * calls with ALL lines and TS-4 (transfer) will call with a subset, so it is written general now to
+ * avoid a TS-4 refactor. Reads the named lines (default all), APPENDS them onto `toTab` at the next
+ * `line_no`s with every locked price column carried across UNCHANGED (a move NEVER re-prices — the
+ * add-time `unit_price_gross` is what the filed sale is later rebuilt from, orders.ts:153), then deletes
+ * them from `fromTab`.
+ *
+ * Both tabs are locked `FOR UPDATE` in ASCENDING id order — deadlock-safe with every other table-service
+ * verb — and their status read off the locked copies: a non-`open` parent is refused `tab.not_open`
+ * (moving lines under a settled/abandoned order would violate `working_order_lines_require_open_parent`
+ * anyway). The lock on `toTab` also serialises `line_no` allocation the way `addTabRound`'s per-tab lock
+ * does, so a concurrent append/move cannot collide on the `(working_order_id, line_no)` unique
+ * (orders.ts:186). Runs on the CALLER's transaction under its tenant/app_user scope.
+ */
+export async function moveTabLines(
+  tx: Transaction,
+  fromTabId: string,
+  toTabId: string,
+  lineNos?: number[],
+): Promise<void> {
+  const locked = await tx
+    .select({ id: workingOrders.id, status: workingOrders.status })
+    .from(workingOrders)
+    .where(or(eq(workingOrders.id, fromTabId), eq(workingOrders.id, toTabId)))
+    .orderBy(workingOrders.id)
+    .for("update");
+  const from = locked.find((r) => r.id === fromTabId);
+  const to = locked.find((r) => r.id === toTabId);
+  if (from === undefined || from.status !== "open") {
+    throw new AppError("tab.not_open", { tabId: fromTabId });
+  }
+  if (to === undefined || to.status !== "open") {
+    throw new AppError("tab.not_open", { tabId: toTabId });
+  }
+
+  const sourceWhere =
+    lineNos === undefined
+      ? eq(workingOrderLines.workingOrderId, fromTabId)
+      : and(
+          eq(workingOrderLines.workingOrderId, fromTabId),
+          inArray(workingOrderLines.lineNo, lineNos),
+        );
+
+  // Read the lines to move (locked price columns kept verbatim), in line_no order.
+  const source = await tx
+    .select({
+      tenantId: workingOrderLines.tenantId,
+      productId: workingOrderLines.productId,
+      descriptions: workingOrderLines.descriptions,
+      quantity: workingOrderLines.quantity,
+      unitPrice: workingOrderLines.unitPrice,
+      unitPriceGross: workingOrderLines.unitPriceGross,
+      vatRate: workingOrderLines.vatRate,
+      lineTotal: workingOrderLines.lineTotal,
+      category: workingOrderLines.category,
+    })
+    .from(workingOrderLines)
+    .where(sourceWhere)
+    .orderBy(workingOrderLines.lineNo);
+
+  // The next free line_no on the destination, allocated under the toTab lock above (no race).
+  const [agg] = await tx
+    .select({ next: sql<number>`coalesce(max(${workingOrderLines.lineNo}), 0)::int` })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, toTabId));
+  const base = agg!.next;
+
+  // Append onto the destination, then delete from the source. Guarded: an EMPTY source (or empty subset)
+  // has nothing to insert and `tx.insert(...).values([])` errors — the same guard createOpenOrder uses.
+  if (source.length > 0) {
+    await tx.insert(workingOrderLines).values(
+      source.map((line, i) => ({
+        tenantId: line.tenantId,
+        workingOrderId: toTabId,
+        lineNo: base + i + 1,
+        productId: line.productId,
+        descriptions: line.descriptions,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        unitPriceGross: line.unitPriceGross,
+        vatRate: line.vatRate,
+        lineTotal: line.lineTotal,
+        category: line.category,
+      })),
+    );
+  }
+  await tx.delete(workingOrderLines).where(sourceWhere);
 }
 
 /** One row of the held-orders list the counter shows to retrieve a parked order. */
