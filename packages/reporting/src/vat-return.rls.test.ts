@@ -1,16 +1,16 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import type { TenantId } from "@waitron/shared";
 import { seedSale, seedVenue } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { computeVatReturn } from "./vat-return.js";
 import type { VatReturn } from "./types.js";
-import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 
-// Real PostgreSQL via Testcontainers — deliberately NOT skipped when Docker is unavailable
-// (`startRealPostgres` throws rather than degrading to a skip). The modelo 303 aggregate
+// Real PostgreSQL via Testcontainers — deliberately NOT skipped when Docker is unavailable (the
+// package's vitest `globalSetup` throws when Docker is absent rather than degrading to a skip). The
+// modelo 303 aggregate
 // (`computeVatReturn`) is tenant-wide: it drops the node predicate (spec §4/D5), so RLS and the
 // explicit `s.tenant_id` predicate inside `aggregateVatByRate` are the ONLY scoping across nodes.
 // PGlite runs every connection as a superuser and serialises onto ONE backend (CLAUDE.md §4), so it
@@ -31,7 +31,7 @@ import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgre
 // So both layers are load-bearing, each in the environment the other cannot cover; this suite pins
 // the RLS half, the PGlite suites pin the predicate half.
 
-const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: CONTAINER_SETUP_TIMEOUT_MS });
+const suite = useTemplateDb({ template: "core" });
 
 // Two FRESH tenants (seedVenue mints a new tenant/node/series each call), each with a month of
 // August 2026 sales at DELIBERATELY disjoint rates so any cross-tenant leak is loud: only B files a

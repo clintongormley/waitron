@@ -1,31 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { decimal, tenantId as brandTenantId } from "@waitron/shared";
 import { insertCapturedPayment } from "@waitron/payments";
 import { seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { StripeReconciler } from "./reconciler.js";
 import { FakeStripeReport } from "./testing/fake-stripe-report.js";
 import { FakeStripe } from "./testing/fake-stripe.js";
-import { startRealPostgres } from "./testing/postgres.js";
 
 // A non-superuser LOGIN role that inherits app_user's grants — the same shape as
-// stripe.rls.test.ts/device.rls.test.ts/hosted.rls.test.ts's own probe roles. Named uniquely to this
-// suite (rather than reusing one generic name across all four) for grep-ability — a permission error
-// naming `rls_probe_reconcile` says which suite it came from without opening the file — and as a
-// safety margin should a future change ever make these suites share one container; today each suite's
-// own `startRealPostgres()` call starts a FRESH container with its own `pg_roles`, so no two of these
-// role-creation statements can actually collide.
+// stripe.rls.test.ts/device.rls.test.ts/hosted.rls.test.ts's own probe roles. The unique name (rather
+// than one generic name reused across all four) is now load-bearing, not just grep-bait: the four RLS
+// suites share ONE cluster via the package globalSetup, whose `roles` create all four ONCE and
+// idempotently, so two same-named roles would be a real collision — the distinct names are what avoid
+// it. (Grep-ability is still a bonus: a permission error naming `rls_probe_reconcile` says which suite
+// it came from without opening the file.) The role is created in `src/testing/global-setup.ts`, not
+// here; see that file's header.
 const PROBE_ROLE = "rls_probe_reconcile";
 const PROBE_PASSWORD = "probe";
 
-// `timeoutMs` carries over this suite's own 180s hook timeout, which the helper's 60s default
-// would otherwise narrow — a container start includes pulling the image on a cold runner.
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-  timeoutMs: 180_000,
-});
+const suite = useTemplateDb({ template: "core_payments" });
 
 const OLD = new Date("2026-07-01T12:00:00Z");
 const NOW = new Date("2026-07-25T12:00:00Z");

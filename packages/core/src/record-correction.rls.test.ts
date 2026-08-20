@@ -1,24 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { recordCorrection } from "./record-correction.js";
 import type { RecordCorrectionInput } from "./record-correction.js";
 import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
-import { startRealPostgres } from "./testing/postgres.js";
 
 // Real Postgres, not PGlite, for the whole suite — mandatory here (design §7, CLAUDE.md §4). The
 // original-sale lookup carries NO tenant predicate (RLS-scoped, exactly as record-void.ts), so a
 // cross-tenant original is hidden by `FORCE ROW LEVEL SECURITY` alone. As a superuser (PGlite) the
 // same SELECT would return the row and the "not_found" answer would be wrong — which is the point.
-const postgres = useRealPostgres({
-  start: startRealPostgres,
-  // The container image may be pulled cold on a fresh CI runner; the package's other real-PG suite
-  // sets the same 180s for the same reason.
-  timeoutMs: 180_000,
-});
+const postgres = useTemplateDb({ template: "core_identity" });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
 

@@ -2,16 +2,16 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedVenue } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { recordDailyClose } from "./record-daily-close.js";
 import { verifyDailyCloseChain } from "./verify-daily-close-chain.js";
 import type { CashCountInput, DailyCloseRecord } from "./close-types.js";
-import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 
-// Real PostgreSQL via Testcontainers — deliberately NOT skipped when Docker is unavailable
-// (`startRealPostgres` throws rather than degrading to a skip). Both assertions turn on a mutation
+// Real PostgreSQL via Testcontainers — deliberately NOT skipped when Docker is unavailable (the
+// package's vitest `globalSetup` throws when Docker is absent rather than degrading to a skip). Both
+// assertions turn on a mutation
 // that bypasses the app-role immutability: `daily_closes` is append-only under app_user (REVOKE
 // UPDATE/DELETE) AND behind an append-only trigger, so the only way to tamper with or delete a
 // COMMITTED close is a privileged actor who can disable that trigger (session_replication_role =
@@ -23,7 +23,7 @@ import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgre
 
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 
-const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: CONTAINER_SETUP_TIMEOUT_MS });
+const suite = useTemplateDb({ template: "core" });
 
 let venue: SeededVenue;
 // A FRESH tenant/node/chain per test (seedVenue mints a new tenant): daily_closes is append-only and
