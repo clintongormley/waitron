@@ -117,6 +117,20 @@ export const en = {
   "schedule.status.accepted": "Accepted",
   "schedule.status.approved": "Approved",
   "schedule.status.rejected": "Rejected",
+  // Live floor (FP-1) — the till floor screen's chrome + occupancy copy. `t()` takes no params, so a
+  // count-bearing label is rendered as `${n} ${t(key)}` (the value + the suffix word), which is why
+  // these are suffix words rather than whole sentences. `floor.open` is the counter's nav control
+  // (mirrors `schedule.open`); `floor.title` names the screen itself.
+  "floor.open": "Floor",
+  "floor.title": "Floor",
+  "floor.back": "Back to counter",
+  "floor.zones": "Zones",
+  "floor.no_zone": "No zone",
+  "floor.capacity": "pax",
+  "floor.to_serve": "to serve",
+  "floor.line_count": "items",
+  "floor.pending_delivery": "to deliver",
+  "floor.free": "Free",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
   "person.suspended": "Account suspended, ask a manager",
@@ -226,6 +240,16 @@ export const es: Record<StringKey, string> = {
   "schedule.status.accepted": "Aceptado",
   "schedule.status.approved": "Aprobado",
   "schedule.status.rejected": "Rechazado",
+  "floor.open": "Sala",
+  "floor.title": "Sala",
+  "floor.back": "Volver a la caja",
+  "floor.zones": "Zonas",
+  "floor.no_zone": "Sin zona",
+  "floor.capacity": "pax",
+  "floor.to_serve": "por servir",
+  "floor.line_count": "art.",
+  "floor.pending_delivery": "por entregar",
+  "floor.free": "Libre",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "person.suspended": "Cuenta suspendida, avisa a un responsable",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",

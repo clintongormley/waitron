@@ -202,6 +202,35 @@ describe("till-floor-screen", () => {
     expect(el.shadowRoot!.querySelector('[data-table="t1"]')).toBeNull();
   });
 
+  it("keeps a table whose zone was deactivated (unknown zoneId) under 'Sin zona', never lost", async () => {
+    // `deactivateZone` is a soft `active=false` and never nulls a table's zoneId, so a table can carry
+    // a zoneId that is not among the ACTIVE zones. It must not vanish — least of all one owing money.
+    const { el } = await mount({
+      zones: [zone({ id: "z1", name: "Comedor" })],
+      tables: [
+        table({ id: "t1", zoneId: "z1" }),
+        table({
+          id: "tg",
+          label: "G",
+          zoneId: "ghost",
+          state: "open-tab",
+          hasOpenTab: true,
+          tabId: "wo-g",
+          tabLineCount: 1,
+          tabTotal: "20.00",
+        }),
+      ],
+    });
+    // Not on the default (Comedor) tab — its zone is not active…
+    expect(el.shadowRoot!.querySelector('[data-table="tg"]')).toBeNull();
+    // …but a "Sin zona" tab exists to catch it, and selecting it reveals the orphaned table.
+    const sinZona = el.shadowRoot!.querySelector<HTMLElement>('[data-zone="none"]')!;
+    expect(sinZona).not.toBeNull();
+    sinZona.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('[data-table="tg"]')).not.toBeNull();
+  });
+
   it("shows no 'Sin zona' tab when every table belongs to a zone", async () => {
     const { el } = await mount({
       zones: [zone({ id: "z1", name: "Comedor" })],

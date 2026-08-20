@@ -1,6 +1,7 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
+import { t } from "../i18n/t.js";
 import type { FloorZone, TableState } from "../api/client.js";
 
 /**
@@ -17,11 +18,11 @@ import type { FloorZone, TableState } from "../api/client.js";
  * only two props — the venue's {@link FloorZone}s and the live {@link TableState} read-model — and holds
  * no data of its own beyond which tab is showing; the app owns and refreshes both.
  *
- * SPANISH COPY. This is the Spanish deli's operator UI, and `apps/*` is out of the english-only guard's
- * scope (CLAUDE.md §3), so the user-facing labels here are Spanish LITERALS rather than `t()` keys — the
- * till's i18n catalogue (`i18n/strings.ts`) is out of this task's file scope, so no keys were added for
- * them. Identifiers stay English. A follow-up may lift these into the catalogue alongside a second-locale
- * pass; until then they read in the one locale the deli runs.
+ * COPY. Every user-facing label comes from the till's i18n catalogue (`i18n/strings.ts`) via `t()`, like
+ * the sibling screens — the `floor.*` keys. `t()` takes no params, so a count-bearing label is
+ * `${n} ${t(key)}` (value + suffix word). The shipped default locale is es-ES, so these render in Spanish
+ * ("Sala", "Libre", "por servir", "Sin zona"); the English base is the source of truth. Identifiers stay
+ * English. Zone names and totals are DATA and pass through verbatim.
  *
  * Lit + `@waitron/ui` `baseStyles` + theme tokens only — no hardcoded chrome colour/spacing, so the
  * screen follows the operator's theme exactly like every sibling till screen (the occupancy accent and
@@ -204,18 +205,29 @@ export class TillFloorScreen extends LitElement {
     this.dispatchEvent(new CustomEvent("back-to-counter", { bubbles: true, composed: true }));
   }
 
-  /** Select a zone tab (a zone id, or `null` for "Sin zona"). */
+  /** Select a zone tab (a zone id, or `null` for the "Sin zona" tab). */
   #selectZone(key: string | null): void {
     this.activeZone = key;
   }
 
-  /** The tabs to show: the zones by `displayOrder`, plus a "Sin zona" tab iff some table has no zone. */
-  #tabs(): { key: string | null; name: string }[] {
+  /**
+   * Whether a table belongs under the "Sin zona" tab: it has NO zone (`zoneId === null`), OR its zone is
+   * not among the currently-active ones. The second case is the reachability fix — `deactivateZone` is a
+   * soft `active = false` and never nulls a table's `zoneId`, so a table can point at a zone missing from
+   * {@link zones}; without catching it here, that table (open tab and all) would match no tab and vanish.
+   */
+  #isZoneless(table: TableState, knownZoneIds: Set<string>): boolean {
+    return table.zoneId === null || !knownZoneIds.has(table.zoneId);
+  }
+
+  /** The tabs to show: the active zones by `displayOrder`, plus a "Sin zona" tab iff some table is
+   * zoneless or points at a deactivated zone (see {@link #isZoneless}). */
+  #tabs(knownZoneIds: Set<string>): { key: string | null; name: string }[] {
     const zoneTabs = [...this.zones]
       .sort((a, b) => a.displayOrder - b.displayOrder)
       .map((z) => ({ key: z.id as string | null, name: z.name }));
-    const hasZoneless = this.tables.some((table) => table.zoneId === null);
-    return hasZoneless ? [...zoneTabs, { key: null, name: "Sin zona" }] : zoneTabs;
+    const hasZoneless = this.tables.some((table) => this.#isZoneless(table, knownZoneIds));
+    return hasZoneless ? [...zoneTabs, { key: null, name: t("floor.no_zone") }] : zoneTabs;
   }
 
   /** The active tab's key: the operator's pick, or the first tab when none has been made. */
@@ -224,20 +236,25 @@ export class TillFloorScreen extends LitElement {
   }
 
   override render() {
-    const tabs = this.#tabs();
+    const knownZoneIds = new Set(this.zones.map((z) => z.id));
+    const tabs = this.#tabs(knownZoneIds);
     const activeKey = this.#activeKey(tabs);
-    const visible = this.tables.filter((table) => table.zoneId === activeKey);
+    // The "Sin zona" tab (activeKey === null) gathers the zoneless AND the deactivated-zone tables; a
+    // real zone tab shows exactly its own tables.
+    const visible = this.tables.filter((table) =>
+      activeKey === null ? this.#isZoneless(table, knownZoneIds) : table.zoneId === activeKey,
+    );
     return html`
-      <section class="screen" aria-label="Sala">
+      <section class="screen" aria-label=${t("floor.title")}>
         <header class="head">
-          <h1 class="title">Sala</h1>
+          <h1 class="title">${t("floor.title")}</h1>
           <wt-button class="back" variant="secondary" @click=${() => this.#back()}>
-            Volver a la caja
+            ${t("floor.back")}
           </wt-button>
         </header>
         ${
           tabs.length > 0
-            ? html`<nav class="tabs" aria-label="Zonas">
+            ? html`<nav class="tabs" aria-label=${t("floor.zones")}>
                 ${tabs.map((tab) => this.#tab(tab, activeKey))}
               </nav>`
             : nothing
@@ -270,14 +287,18 @@ export class TillFloorScreen extends LitElement {
     >
       <span class="card-head">
         <span class="label">${table.label}</span>
-        ${table.capacity !== null ? html`<span class="capacity">${table.capacity} pax</span>` : nothing}
+        ${
+          table.capacity !== null
+            ? html`<span class="capacity">${table.capacity} ${t("floor.capacity")}</span>`
+            : nothing
+        }
       </span>
       ${this.#occupancy(table)}
       <span class="badges">
         ${
           table.pendingToServe > 0
             ? html`<span class="badge por-servir" data-por-servir
-                >${table.pendingToServe} por servir</span
+                >${table.pendingToServe} ${t("floor.to_serve")}</span
               >`
             : nothing
         }
@@ -305,14 +326,14 @@ export class TillFloorScreen extends LitElement {
       case "open-tab":
         return html`<span class="occupancy tab-open">
           <span class="total">${table.tabTotal} €</span>
-          <span class="lines">${table.tabLineCount} art.</span>
+          <span class="lines">${table.tabLineCount} ${t("floor.line_count")}</span>
         </span>`;
       case "delivery-pending":
         return html`<span class="occupancy delivery"
-          >${table.pendingDeliveries} por entregar</span
+          >${table.pendingDeliveries} ${t("floor.pending_delivery")}</span
         >`;
       case "free":
-        return html`<span class="occupancy free">Libre</span>`;
+        return html`<span class="occupancy free">${t("floor.free")}</span>`;
     }
   }
 }

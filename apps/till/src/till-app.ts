@@ -817,7 +817,8 @@ export class TillApp extends LitElement {
     this.screen = "table-order";
   }
 
-  /** Return from the schedule screen to the counter, basket intact. */
+  /** Return to the counter from a screen that emits `back-to-counter` — the schedule screen and (FP-1)
+   * the live-floor screen both do — basket intact (the basket is till-owned and survives the trip). */
   #onBackToCounter(): void {
     this.errorKey = undefined;
     this.screen = "counter";
