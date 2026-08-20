@@ -367,3 +367,84 @@ describe("mergeTabs join → one bill covering both tables", () => {
     expect(await saleCount(fromTab)).toBe(0); // the abandoned source files nothing
   });
 });
+
+/** True if `e` (or its cause) is a PostgreSQL deadlock (40P01). */
+function isDeadlock(e: unknown): boolean {
+  const code =
+    (e as { code?: string; cause?: { code?: string } })?.code ??
+    (e as { cause?: { code?: string } })?.cause?.code;
+  return code === "40P01";
+}
+
+describe("concurrent merge/move deadlock-safety (ascending-id FOR UPDATE lock order)", () => {
+  it("two reverse merges over the same two tabs serialise with NO 40P01 — one wins, the other gets tab.not_open", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const tA = await seedTable(cfg, "DL-A");
+    const tB = await seedTable(cfg, "DL-B");
+    const tabA = await openTabOn(cfg, tA, [{ productId: cafe.id, quantity: "1" }]);
+    const tabB = await openTabOn(cfg, tB, [{ productId: cafe.id, quantity: "1" }]);
+
+    const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
+    try {
+      const merge = (d: Database, into: string, from: string) =>
+        withTenant(d, cfg.tenantId, async (tx) => {
+          await asAppUser(tx);
+          await mergeTabs(tx, cfg, into, from, { freeSourceTable: true });
+        });
+
+      // Reverse orientations: A←B on one backend, B←A on the other. Both touch the SAME two dining_tables
+      // rows and the SAME two working_orders rows. What this proves TODAY: the two same-verb merges
+      // serialise cleanly — one wins, the other finds its source already abandoned (tab.not_open), with no
+      // 40P01. They serialise because `dining_tables.tab_id` is UNINDEXED, so both backends seq-scan the
+      // two rows in identical heap order and contend on the first — NOT because of the `.orderBy`, which a
+      // same-verb race like this cannot prove load-bearing (the hazard control below covers that hazard).
+      const results = await Promise.allSettled([
+        merge(connA, tabA, tabB),
+        merge(connB, tabB, tabA),
+      ]);
+
+      // No 40P01 in either outcome — the two same-verb merges serialised cleanly.
+      for (const r of results) {
+        if (r.status === "rejected") expect(isDeadlock(r.reason)).toBe(false);
+      }
+      // Exactly one merge committed; the loser found its source already abandoned → tab.not_open.
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      const loser = results.find((r) => r.status === "rejected") as
+        PromiseRejectedResult | undefined;
+      expect(loser?.reason).toMatchObject({ code: "tab.not_open" });
+    } finally {
+      await Promise.all([connA.close(), connB.close()]);
+    }
+  });
+
+  it("PROVES the hazard is real: cross-locking the two tables in OPPOSITE order deadlocks (40P01)", async () => {
+    // A deterministic control proving the GENERAL hazard is real: two backends that lock the same two
+    // rows in INCONSISTENT (inverted) order deadlock. connA locks A then B; connB locks B then A; both
+    // first locks succeed, then each second lock closes the cycle → Postgres kills one (40P01). This is
+    // why the verbs impose a fixed ascending-id lock order — a defensive, plan-independent guarantee that
+    // no two ops ever invert. It does NOT show the positive test above "relies on" that order: that test
+    // passes identically with the `.orderBy` removed, because the unindexed seq-scan already fixes heap
+    // order for both backends — the order only becomes load-bearing if a schema/plan change lets scan
+    // orders diverge.
+    const { cfg } = await setupVenue();
+    const tA = await seedTable(cfg, "HZ-A");
+    const tB = await seedTable(cfg, "HZ-B");
+    const [lo, hi] = [tA, tB].sort(); // ascending by id, so the verbs would always lock `lo` first
+    const [connA, connB] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
+    try {
+      const begin = (d: Database) => d.execute(sql`begin`);
+      const lock = (d: Database, id: string) =>
+        d.execute(sql`select 1 from dining_tables where id = ${id} for update`);
+      await Promise.all([begin(connA), begin(connB)]);
+      await Promise.all([lock(connA, lo), lock(connB, hi)]); // first locks: no contention
+      const settled = await Promise.allSettled([lock(connA, hi), lock(connB, lo)]); // cross → deadlock
+      expect(settled.some((r) => r.status === "rejected" && isDeadlock(r.reason))).toBe(true);
+    } finally {
+      await Promise.all([
+        connA.execute(sql`rollback`).catch(() => {}),
+        connB.execute(sql`rollback`).catch(() => {}),
+      ]);
+      await Promise.all([connA.close(), connB.close()]);
+    }
+  });
+});

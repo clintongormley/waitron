@@ -420,3 +420,27 @@ describe("mergeTabs join (freeSourceTable: false)", () => {
     expect(await linesOf(intoTab)).toHaveLength(2); // café + agua combined onto intoTab
   });
 });
+
+describe("mergeTabs guards", () => {
+  it("refuses merging a tab into itself (tab.merge_self)", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const t = await seedTable(cfg, "MS");
+    const tab = await openTabOn(cfg, t, [{ productId: cafeId, quantity: "1" }]);
+    await expect(
+      asApp(cfg, (tx) => mergeTabs(tx, cfg, tab, tab, { freeSourceTable: true })),
+    ).rejects.toMatchObject({ code: "tab.merge_self", params: { tabId: tab } });
+  });
+
+  it("refuses when either tab is not open (tab.not_open)", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const tInto = await seedTable(cfg, "NO-into");
+    const tFrom = await seedTable(cfg, "NO-from");
+    const intoTab = await openTabOn(cfg, tInto, [{ productId: cafeId, quantity: "1" }]);
+    const fromTab = await openTabOn(cfg, tFrom, [{ productId: cafeId, quantity: "1" }]);
+    // Abandon fromTab (owner write) → merge is refused, naming fromTab.
+    await db.execute(sql`update working_orders set status = 'abandoned' where id = ${fromTab}`);
+    await expect(
+      asApp(cfg, (tx) => mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true })),
+    ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId: fromTab } });
+  });
+});

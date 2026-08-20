@@ -756,8 +756,12 @@ export async function joinTable(
  * bill — the 4+4 JOIN case, and the joined table KEEPS its status, design §4).
  *
  * Locks the involved `dining_tables` rows (those covered by either tab) `FOR UPDATE` ASCENDING id, then
- * both `working_orders` rows `FOR UPDATE` ASCENDING id — the fixed lock order that makes two concurrent
- * table-service ops on the same tables serialise instead of deadlocking (proven §7).
+ * both `working_orders` rows `FOR UPDATE` ASCENDING id — a DEFENSIVE, plan-independent lock-order
+ * discipline. On the current UNINDEXED `dining_tables.tab_id` both backends seq-scan in identical heap
+ * order, so concurrent same-table ops serialise without deadlock and this order is NOT provable
+ * load-bearing by deletion (a §1 "both answers look alike" measurement); the discipline future-proofs
+ * against a schema/plan change that lets lock orders diverge. The deterministic hazard control (§7)
+ * proves the general inconsistent-order 40P01 hazard is real.
  *
  * ORDER MATTERS (Plan note 2): the re-point (step 2) precedes the abandon (step 3). The TS-2
  * `working_orders_clear_table_status` trigger fires on the `open → abandoned` transition and clears

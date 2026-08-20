@@ -392,12 +392,15 @@ declare module "@waitron/shared" {
      */
     "tab.already_open": { tableId: string };
     /**
-     * A working order a tab verb (`addTabRound`, `voidTabLine`) tried to modify is not an OPEN tab — it
-     * is not `open` (already settled/abandoned), no `dining_tables.tab_id` points at it (a walk-up or a
-     * counter delivery — a tab is an OPEN order a table points at, design §2b), or it names none (absent,
-     * or another tenant's, RLS-hidden). All report THIS one code, the fail-closed shape
-     * `working_order.not_open` uses for the held-order modify side. `tabId` — the caller-supplied uuid —
-     * is echoed and qualified to match the tab-verb vocabulary. `tab.*`, not `server.*`, for the reason
+     * A tab verb found the working order it was asked to modify is not an OPEN tab — it is not `open`
+     * (already settled/abandoned), no `dining_tables.tab_id` points at it (a walk-up or a counter
+     * delivery — a tab is an OPEN order a table points at, design §2b), or it names none (absent, or
+     * another tenant's, RLS-hidden). All the tab verbs share THIS one code for that state — the round/void
+     * guard and the TS-3 move/join/merge family alike — the fail-closed shape `working_order.not_open`
+     * uses for the held-order modify side. (A non-enumerating phrasing on purpose: the earlier
+     * `addTabRound`/`voidTabLine` list went stale the moment the move/join/merge verbs began throwing it
+     * too.) `tabId` — the caller-supplied uuid — is echoed and qualified to match the tab-verb
+     * vocabulary. `tab.*`, not `server.*`, for the reason
      * `tenant.not_found`'s note gives. Mapped to 409 (the order's state forbids the tab edit).
      */
     "tab.not_open": { tabId: string };
@@ -410,10 +413,12 @@ declare module "@waitron/shared" {
      */
     "tab.line_not_found": { tabId: string; lineNo: number };
     /**
-     * A merge named the SAME tab as both source and destination — there is nothing to combine.
-     * `mergeTabs` refuses it before locking anything. `tabId` — the caller-supplied uuid — is echoed
-     * (not a secret). Minimal placeholder declaration for TS-3 Task 4's `mergeTabs`; Task 6 owns the
-     * full docstring alongside its guard-by-deletion proof.
+     * A merge named the SAME tab as both source and destination — `mergeTabs(intoTabId === fromTabId)`.
+     * Refused before any line move or lock, because merging a tab into itself would move its own lines
+     * onto itself and then abandon it. `tabId` is the caller-supplied uuid (not a secret). `tab.*` names
+     * the DOMAIN CONCEPT (the running tab), never the throwing package (the rule `tenant.not_found`'s note
+     * gives). A request-shape error — the two arguments are equal regardless of any tab's STATE — so it
+     * is mapped to 400 (a bad request), distinct from the state-conflict `tab.not_open` (409).
      */
     "tab.merge_self": { tabId: string };
     /**
