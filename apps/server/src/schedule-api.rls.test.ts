@@ -2,14 +2,13 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, loginWithPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountScheduleApi } from "./schedule-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import { startRealPostgres } from "./testing/postgres.js";
 
 // Real Postgres, not PGlite: this suite proves the two properties PGlite CANNOT — every PGlite
 // connection is a superuser that bypasses FORCE RLS (CLAUDE.md §4), so both would be false passes.
@@ -21,7 +20,7 @@ import { startRealPostgres } from "./testing/postgres.js";
 //     the cross-person assertion below reddens.
 // The route mechanics (validation 400s, the domain codes) are proven hermetically in `schedule-api.test.ts`.
 const LOCALE = "es-ES";
-const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: 180_000 });
+const suite = useTemplateDb({ template: "manifest" });
 const noopLog: Logger = () => {};
 
 let nifCounter = 0;

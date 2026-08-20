@@ -1,8 +1,10 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll } from "vitest";
-import { createPgliteDb, type Database } from "../client.js";
+import { afterAll, beforeAll, inject } from "vitest";
+import { createPgliteDb, createPostgresDb, type Database } from "../client.js";
 import { runMigrations, type MigrationOptions } from "../migrate.js";
-import type { RealPostgres } from "./postgres.js";
+import { assertSafeIdentifier, probeRoleStatement, type ProbeRole } from "./identifiers.js";
+import { databaseUrl, roleUrl, type RealPostgres } from "./postgres.js";
+import type { SharedContainerHandle } from "./shared-container.js";
 
 /**
  * Suite lifecycle helpers: the hooks live HERE, not in the suites.
@@ -87,42 +89,11 @@ export interface RealPostgresSuiteOptions {
   timeoutMs?: number;
 }
 
-export interface ProbeRole {
-  name: string;
-  password: string;
-  inRole?: string;
-}
-
-/** Conservative, and deliberately narrower than SQL allows: what a test fixture actually uses. */
-const SAFE_TOKEN = /^[A-Za-z_][A-Za-z0-9_]*$/;
-
-/**
- * The `create role` a probing suite needs. Extracted so both branches are testable without a
- * container — the alternative is a Docker-gated test for one string.
- *
- * **Validates rather than escapes**, unlike `packages/provisioning/src/identifiers.ts`, which quotes
- * because it handles generated passwords and operator-supplied names. Here every value is a literal
- * in a test fixture, so a token that needs escaping is a mistake worth failing on rather than
- * accommodating. That package's `quoteIdent`/`quoteLiteral` are not reused because `@waitron/db`
- * cannot depend on `@waitron/provisioning` — the dependency runs the other way — and copying them
- * would make a fourth divergent copy of a helper this repo has already had trouble keeping in sync.
- *
- * The point is the same one that file makes: these fields are typed plain `string` on an exported
- * interface, so "callers only pass safe values" was a property of the callers, not of the code.
- */
-export function probeRoleStatement(probe: ProbeRole): string {
-  for (const [field, value] of [
-    ["name", probe.name],
-    ["password", probe.password],
-    ["inRole", probe.inRole],
-  ] as const) {
-    if (value !== undefined && !SAFE_TOKEN.test(value)) {
-      throw new Error(`probeRoleStatement: unsafe ${field} ${JSON.stringify(value)}`);
-    }
-  }
-  const inRole = probe.inRole === undefined ? "" : ` in role ${probe.inRole}`;
-  return `create role ${probe.name} login password '${probe.password}'${inRole}`;
-}
+// `ProbeRole`, `probeRoleStatement` and `assertSafeIdentifier` now live in the vitest-FREE
+// `./identifiers.js` so `shared-container.ts` can use them without dragging `vitest` into a
+// globalSetup's import graph (see that file's header). Imported above for this module's own use and
+// re-exported here so existing importers — which reached them through this module — are unaffected.
+export { assertSafeIdentifier, probeRoleStatement, type ProbeRole };
 
 export interface RealPostgresSuite {
   /** The running container. Throws if read before `beforeAll` has run. */
@@ -167,6 +138,173 @@ export function useRealPostgres(options: RealPostgresSuiteOptions): RealPostgres
     },
     get admin(): Database {
       if (admin === undefined) throw new Error("useRealPostgres: container not started");
+      return admin;
+    },
+  };
+}
+
+/**
+ * Monotonic within a worker PROCESS, so two suites in the same file get distinct clone names.
+ *
+ * It resets to 0 per test FILE — vitest's default `isolate: true` gives each file a fresh module
+ * context — which is why `process.pid` is in the name too: across concurrent forks the pid differs,
+ * and within one fork files run serially and each clone is DROPped in its own `afterAll` before the
+ * next file reuses a counter value, so `clone_<pid>_<n>` does not collide in practice. Chosen over
+ * `Math.random`/`Date.now` (allowed in test code, but non-deterministic) so a clone that ever leaks
+ * into `pg_database` is traceable to the run that made it.
+ */
+let cloneCounter = 0;
+
+/**
+ * Resolves the shared handle from the `getHandle` seam, defaulting to vitest's cross-worker
+ * `inject("sharedPg")` — the value a package's globalSetup passed to `provide("sharedPg", …)`.
+ *
+ * Separate from {@link useTemplateDb}'s hook, the same way `postgres.ts` keeps its `start` seam, so
+ * both arms are provable without standing up a globalSetup: a test points `getHandle` at a handle
+ * from its own {@link startSharedContainer}, and the production `inject` path is exercised here
+ * directly.
+ */
+export function resolveSharedHandle(
+  getHandle: (() => SharedContainerHandle | undefined) | undefined,
+): SharedContainerHandle {
+  // `inject("sharedPg")` is `undefined` when the package's vitest config never wired a `globalSetup`
+  // that `provide`s it — the likely misconfiguration when a suite is converted to useTemplateDb but
+  // its config is not. Throw the actionable cause here rather than let it surface three frames deep
+  // in `cloneTemplate` as `Cannot read properties of undefined (reading 'templates')`.
+  const handle = (getHandle ?? (() => inject("sharedPg")))();
+  if (handle === undefined) {
+    throw new Error(
+      "useTemplateDb: no shared container in scope. Wire the package's vitest `globalSetup` to a " +
+        'file that calls `startSharedContainer` and `provide("sharedPg", handle)`.',
+    );
+  }
+  return handle;
+}
+
+/**
+ * The template DATABASE name to clone for `name`, or a throw naming what IS available. Extracted so
+ * the not-found path is provable without a container — the alternative is a suite whose `beforeAll`
+ * throws, which reports as a failing suite rather than a passing assertion.
+ */
+export function pickTemplate(handle: SharedContainerHandle, name: string): string {
+  const template = handle.templates[name];
+  if (template === undefined) {
+    throw new Error(
+      `useTemplateDb: no template named ${JSON.stringify(name)}; startSharedContainer provided ` +
+        JSON.stringify(Object.keys(handle.templates)),
+    );
+  }
+  return template;
+}
+
+/**
+ * Creates `clone_<…>` from `template` on the container's admin connection and wraps it as a
+ * `RealPostgres` pointed at the CLONE. `stop()` DROPs the clone (never the shared container) with
+ * `WITH (FORCE)`. The path `lifecycle.test.ts` exercises closes every connection first — the suite's
+ * `afterAll` closes `admin` before `stop()` — so what is PROVEN is only that the drop of a
+ * connection-free clone succeeds; the `WITH (FORCE)` backstop, which would terminate a connection a
+ * suite forgot to close, is not separately exercised (it is the same parity the old
+ * `container.stop()` gave, which also force-killed survivors untested). `CREATE DATABASE … TEMPLATE`
+ * needs no connection to the template, which `startSharedContainer` guarantees by closing every
+ * migrator before it returns.
+ */
+async function cloneTemplate(
+  adminUri: string,
+  template: string,
+  cloneName: string,
+): Promise<RealPostgres> {
+  const admin = await createPostgresDb(adminUri);
+  try {
+    await admin.execute(sql.raw(`create database ${cloneName} template ${template}`));
+  } finally {
+    await admin.close();
+  }
+  const cloneUri = databaseUrl(adminUri, cloneName);
+  return {
+    uri: cloneUri,
+    connect: () => createPostgresDb(cloneUri),
+    connectAs: (role, password) => createPostgresDb(roleUrl(cloneUri, role, password)),
+    // DROP DATABASE cannot run while connected to its target, so the dropper connects to the admin
+    // URI's own database instead; WITH (FORCE) terminates any connection a suite forgot to close.
+    stop: async () => {
+      const dropper = await createPostgresDb(adminUri);
+      try {
+        await dropper.execute(sql.raw(`drop database if exists ${cloneName} with (force)`));
+      } finally {
+        await dropper.close();
+      }
+    },
+  };
+}
+
+export interface TemplateDbSuiteOptions {
+  /** Which named template — a key of the shared handle's `templates` — to clone for this suite. */
+  template: string;
+  /** Extra setup once the clone is up — doubles that wrap the admin connection, seeding a fixture. */
+  setup?: (context: { admin: Database; pg: RealPostgres }) => Promise<void>;
+  /**
+   * Deliberately no default, exactly as {@link RealPostgresSuiteOptions.timeoutMs}: passing a
+   * timeout to `beforeAll` OVERRIDES the package's `hookTimeout`, so a default here would silently
+   * narrow every suite that relies on its vitest config.
+   */
+  timeoutMs?: number;
+  /**
+   * Seam: where the shared handle comes from. Defaults to vitest `inject("sharedPg")`; a test
+   * points it at a handle from its own {@link startSharedContainer} so the helper needs no
+   * globalSetup to exercise end to end.
+   */
+  getHandle?: () => SharedContainerHandle;
+}
+
+/**
+ * The shared-container analogue of {@link useRealPostgres}: instead of booting and migrating a
+ * container per file, it CLONES a pre-migrated template database from the shared container (~26ms)
+ * and hands back the SAME `{ pg, admin }` shape, so a suite converts by swapping the constructor
+ * and nothing else — `pg.connect`/`connectAs`/`uri` and the `admin` seeding connection are
+ * unchanged, and `pg.stop()` drops the clone rather than stopping the container.
+ *
+ * There is deliberately no `probeRole` option, unlike `useRealPostgres`: a shared container is one
+ * cluster, so a role created per file would collide on the second file. Cluster roles are created
+ * ONCE, idempotently, in {@link startSharedContainer}'s `roles`; a suite reaches one with
+ * `pg.connectAs(name, password)`.
+ */
+export function useTemplateDb(options: TemplateDbSuiteOptions): RealPostgresSuite {
+  let pg: RealPostgres | undefined;
+  let admin: Database | undefined;
+
+  // Same discipline as useRealPostgres: each handle is assigned the instant it exists, so a later
+  // throw (a failing clone, a throwing setup) still leaves it closable in afterAll rather than
+  // leaking a clone DATABASE that nothing drops.
+  beforeAll(async () => {
+    const handle = resolveSharedHandle(options.getHandle);
+    const template = assertSafeIdentifier("template", pickTemplate(handle, options.template));
+    const cloneName = assertSafeIdentifier(
+      "clone name",
+      `clone_${process.pid}_${(cloneCounter += 1)}`,
+    );
+    pg = await cloneTemplate(handle.uri, template, cloneName);
+    admin = await pg.connect();
+    if (options.setup !== undefined) await options.setup({ admin, pg });
+  }, options.timeoutMs);
+
+  // Ordered and independently guarded, exactly as useRealPostgres: the admin connection is closed
+  // before the clone it lives in is dropped. pg.stop() here DROPs the clone, not the container.
+  afterAll(async () => {
+    const connection = admin;
+    const started = pg;
+    admin = undefined;
+    pg = undefined;
+    if (connection !== undefined) await connection.close();
+    if (started !== undefined) await started.stop();
+  });
+
+  return {
+    get pg(): RealPostgres {
+      if (pg === undefined) throw new Error("useTemplateDb: clone not started");
+      return pg;
+    },
+    get admin(): Database {
+      if (admin === undefined) throw new Error("useTemplateDb: clone not started");
       return admin;
     },
   };

@@ -2,14 +2,13 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { asAppUser, purchaseInvoiceVat, purchaseInvoices, sales, withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { addDecimal, decimal } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
-import { startRealPostgres } from "./testing/postgres.js";
 import { BOX_27, packAeatNumeric } from "./testing/dr303.js";
 import "./errors.js";
 
@@ -31,10 +30,7 @@ import "./errors.js";
 // contrast, has a single owner (`authorizeManager`), so its deletion flips test 2 cleanly.
 const LOCALE = "es-ES";
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  timeoutMs: 180_000,
-});
+const suite = useTemplateDb({ template: "manifest" });
 
 /** A no-op logger: only the HTTP responses and the produced bytes matter here. */
 const noopLog: Logger = () => {};

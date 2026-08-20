@@ -2,14 +2,13 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { DEFAULT_LAYOUT, DEFAULT_RECEIPT } from "@waitron/layouts";
 import type { LayoutDef } from "@waitron/layouts";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
-import { startRealPostgres } from "./testing/postgres.js";
 
 // Real Postgres, not PGlite: these routes are the dashboard's management surface, and everything they
 // do runs `withTenant` + `asAppUser` so RLS scopes each read/write to the dashboard's own tenant.
@@ -21,10 +20,7 @@ import { startRealPostgres } from "./testing/postgres.js";
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  timeoutMs: 180_000,
-});
+const suite = useTemplateDb({ template: "manifest" });
 
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};

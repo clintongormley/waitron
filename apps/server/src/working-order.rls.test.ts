@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -41,15 +41,15 @@ import {
   updateHeldOrder,
 } from "./working-order.js";
 import { collectOrder, payWorkingOrder } from "./till-sale.js";
-import { startRealPostgres } from "./testing/postgres.js";
 import "./errors.js";
 
 // Real Postgres, not PGlite — mandatory for THIS suite (CLAUDE.md §4). The idempotency + concurrency
 // properties are exactly what PGlite CANNOT show: it runs every connection as a superuser (bypassing
 // the RLS the app role writes under) and serialises every query onto ONE backend, so a "two concurrent
 // pays" test there is a FALSE pass, not a weak one. Every distinct-connection race below opens its own
-// backend via `suite.pg.connect()`, and `startRealPostgres` THROWS rather than skipping when Docker is
-// absent, so a vanished suite fails loudly instead of reporting a green that proves nothing.
+// backend via `suite.pg.connect()`, and the shared-container globalSetup (`testing/global-setup.ts`)
+// THROWS its `dockerRequired` message rather than skipping when Docker is absent, so a vanished suite
+// fails loudly instead of reporting a green that proves nothing.
 const LOCALE = "es-ES";
 
 // The accountable operator every placing/cancel amendment is attributed to. `order_amendments.actor_id`
@@ -58,7 +58,7 @@ const LOCALE = "es-ES";
 // joined.
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
-const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: 180_000 });
+const suite = useTemplateDb({ template: "manifest" });
 
 let backend: FiscalBackend;
 let clock: TrustedClock;

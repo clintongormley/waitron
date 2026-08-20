@@ -5,13 +5,12 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
-import { startRealPostgres } from "./testing/postgres.js";
 
 // Real Postgres, not PGlite: this suite proves the catalogue write group's RLS isolation and its
 // `person.manage` gate DIFFERENTIALLY, which PGlite cannot do — every PGlite connection is a superuser
@@ -23,10 +22,7 @@ import { startRealPostgres } from "./testing/postgres.js";
 // deletion receipts recorded on the blocks below.
 const LOCALE = "es-ES";
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  timeoutMs: 180_000,
-});
+const suite = useTemplateDb({ template: "manifest" });
 
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};

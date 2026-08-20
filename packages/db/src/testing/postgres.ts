@@ -122,6 +122,20 @@ export function roleUrl(uri: string, role: string, password: string): string {
 }
 
 /**
+ * `uri` with its database (the URL path) swapped for `database`, credentials and host untouched —
+ * the sibling of {@link roleUrl}, and the one place a caller that must reach a DIFFERENT database
+ * on the same cluster assembles that string. The shared-container helpers use it twice:
+ * `startSharedContainer` migrates each template into its own database, and `useTemplateDb` clones
+ * one per suite, so both derive a per-database URI from the container's admin URI through here
+ * rather than re-deriving the same mutation.
+ */
+export function databaseUrl(uri: string, database: string): string {
+  const u = new URL(uri);
+  u.pathname = `/${database}`;
+  return u.toString();
+}
+
+/**
  * Runs `sets` in order over one throwaway connection, closing it whether or not a set throws.
  *
  * Ordering across packages is the runtime's responsibility and nothing enforces it, so callers pass

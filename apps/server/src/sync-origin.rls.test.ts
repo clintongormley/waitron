@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { recordIncidentOnce } from "@waitron/core";
@@ -23,22 +23,19 @@ import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountRecipeApi } from "./recipe-api.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
-import { startRealPostgres } from "./testing/postgres.js";
 
 // Real Postgres, not PGlite: capture runs under FORCE ROW LEVEL SECURITY as the non-superuser app
-// role, which PGlite (superuser) bypasses — a false pass (CLAUDE.md §4). The full manifest runs
-// (startRealPostgres → applyMigrations over the whole manifest, `sync` last), so the container carries
-// the sync_capture triggers over the enrolled commercial tables (catalogues, payments, …).
+// role, which PGlite (superuser) bypasses — a false pass (CLAUDE.md §4). The full manifest runs once
+// in the globalSetup (`applyMigrations` over the whole manifest, `sync` last) into the `manifest`
+// template, so each clone this suite takes carries the sync_capture triggers over the enrolled
+// commercial tables (catalogues, payments, …).
 //
 // origin.gate.test.ts already proves withTenant's 4th arg reaches sync_log.origin_id for a raw write;
 // THIS suite guards that the real API call sites (fix B) actually pass cfg.nodeId / deps.nodeId, so the
 // enrolled writes those paths perform capture a real origin rather than the all-zero sentinel.
 const LOCALE = "es-ES";
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  timeoutMs: 180_000,
-});
+const suite = useTemplateDb({ template: "manifest" });
 
 /** A no-op logger: only the HTTP responses and the captured sync_log rows matter here. */
 const noopLog: Logger = () => {};
