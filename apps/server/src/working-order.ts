@@ -947,15 +947,34 @@ function grossLineTotal(grossUnit: string, quantity: string): string {
  * Both are checked for EVERY transfer BEFORE any move or split runs, so one bad entry in a batch
  * leaves the source untouched rather than half-transferred.
  *
- * Both tabs are locked `FOR UPDATE` in ASCENDING id order (`[fromTabId, toTabId].sort()` + `lockOpenTab`
- * each) — the same ordering discipline `mergeTabs`/`moveTabLines` acquire their `working_orders` locks
- * in, so a transfer racing another transfer (or a merge) on the same pair acquires the two rows in the
- * same order rather than cross-locking. `lockOpenTab` locks the `working_orders` row ONLY (its
- * `dining_tables` back-pointer read is an UNLOCKED select), so this verb takes no `dining_tables` lock
- * and is NOT in the `mergeTabs`-vs-pay `dining_tables`↔`working_orders` deadlock class. That ordering is
- * a defensive, plan-level discipline here, not a property THIS suite proves: `transfer-lines.test.ts`
- * runs on PGlite, a single backend that serialises every query, so a contention test on it is a false
- * pass — the real-Postgres race is `transfer-lines.rls.test.ts`'s job.
+ * Both tabs' `working_orders` rows are locked `FOR UPDATE` in ASCENDING id order:
+ * `[fromTabId, toTabId].sort()` then a `lockOpenTab` per id, each a SEPARATE `where id = X ... for update`.
+ * Two things that buys, at DIFFERENT strengths — kept apart deliberately:
+ *
+ * - PROVEN: a transfer racing ANOTHER transfer on the same pair serialises without deadlock. Both acquire
+ *   their two row locks lowest-id-first (the `.sort()` + `lockOpenTab` loop below), so the
+ *   reverse-orientation race — A→B against B→A — cannot form a lock cycle; one backend simply waits on the
+ *   lower id until the other commits. `transfer-lines.rls.test.ts` proves this on real Postgres by
+ *   DELETION: strip the `.sort()` (each transfer then locks in its own direction) and that race raises
+ *   `40P01 deadlock detected` in every looped iteration; restore it and the race goes green.
+ * - PROVEN: this verb holds NO `dining_tables` lock. `lockOpenTab` locks the `working_orders` row ONLY —
+ *   its `dining_tables` back-pointer read is an UNLOCKED select — so a transfer is NOT in the
+ *   `dining_tables`↔`working_orders` cross-lock class and cannot deadlock with pay/settle/abandon (those
+ *   lock `working_orders`, then `dining_tables` via the settle trigger; a transfer never holds a
+ *   `dining_tables` lock).
+ *
+ * NOT proven, and stated as such: a transfer racing a MERGE (or a direct `moveTabLines`) on the same pair.
+ * Those lock their two `working_orders` rows in a SINGLE statement (`where id = a or id = b order by id for
+ * update`), and PostgreSQL takes the row locks in SCAN order, applying the `order by` to the query OUTPUT
+ * afterwards — it does NOT promise the locks are ACQUIRED in id order. A two-row primary-key lookup very
+ * likely index-scans the key ascending, matching this verb's order, so the interaction is very likely safe
+ * and a reviewer could not reproduce a deadlock — but that is a property of the chosen PLAN, not a Postgres
+ * guarantee, so this is NOT claimed to be un-cross-lockable. It is also pre-fiscal (nothing is filed), and
+ * any 40P01 would surface as a caught, retryable error rather than corruption.
+ *
+ * That ascending-id discipline is defensive and plan-level, and this PGlite suite cannot itself prove it:
+ * `transfer-lines.test.ts` runs on a single backend that serialises every query, so a contention test on
+ * it is a false pass — the real-Postgres race is `transfer-lines.rls.test.ts`'s job.
  *
  * `lockOpenTab` requires each tab to be an OPEN working order some `dining_tables.tab_id` points at,
  * else `tab.not_open`; an absent/foreign (RLS-hidden) tab matches no row → the same fail-closed
@@ -1097,6 +1116,10 @@ export async function transferLines(
       // Destination: a NEW line inheriting every per-unit value, `quantity = transferred`, `line_total`
       // = round(transferred × locked gross). NEVER re-fetched from the catalogue.
       await tx.insert(workingOrderLines).values({
+        // cfg.tenantId is the source line's tenant here (moveTabLines stamps `line.tenantId`; same value):
+        // the source read above is RLS-filtered to current_tenant_id(), and
+        // working_order_lines_tenant_isolation's WITH CHECK rejects any other tenant_id on this INSERT — a
+        // cross-tenant value is unwritable, not a silent wrong-tenant row.
         tenantId: cfg.tenantId,
         workingOrderId: toTabId,
         lineNo: maxLineNo! + i + 1,
