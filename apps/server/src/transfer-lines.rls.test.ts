@@ -184,8 +184,14 @@ async function setupTwoTabs(): Promise<{
     await asAppUser(tx);
     const a = await createTable(tx, cfg, { label: "A" });
     const b = await createTable(tx, cfg, { label: "B" });
-    const ta = await openTab(tx, cfg, { tableId: a.id, lines: [{ productId: cafe.id, quantity: "4" }] });
-    const tb = await openTab(tx, cfg, { tableId: b.id, lines: [{ productId: cafe.id, quantity: "4" }] });
+    const ta = await openTab(tx, cfg, {
+      tableId: a.id,
+      lines: [{ productId: cafe.id, quantity: "4" }],
+    });
+    const tb = await openTab(tx, cfg, {
+      tableId: b.id,
+      lines: [{ productId: cafe.id, quantity: "4" }],
+    });
     return { tabA: ta.tabId, tabB: tb.tabId };
   });
   return { cfg, tabA, tabB, cafe };
@@ -289,7 +295,10 @@ describe("concurrent transferLines on the same pair serialise (ascending-id lock
       // looped iterations (connA holds A waiting on B while connB holds B waiting on A); restoring the sort
       // returns it to the green below. A GREEN with the sort in place is meaningless without that RED
       // control (CLAUDE.md §1).
-      const results = await Promise.allSettled([runOn(connA, tabA, tabB), runOn(connB, tabB, tabA)]);
+      const results = await Promise.allSettled([
+        runOn(connA, tabA, tabB),
+        runOn(connB, tabB, tabA),
+      ]);
       for (const r of results) {
         if (r.status === "rejected") expect(isDeadlock(r.reason)).toBe(false);
         expect(r.status).toBe("fulfilled"); // no 40P01; the serialised loser waited, it did not error
