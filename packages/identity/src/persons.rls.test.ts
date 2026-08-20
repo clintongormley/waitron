@@ -3,9 +3,8 @@ import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
 import { pgErrorCode } from "@waitron/db";
 import { hashPin } from "./verify-pin.js";
-import { startRealPostgres } from "./testing/postgres.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 
 // A non-superuser LOGIN role inheriting app_user's grants. Being non-superuser is what makes RLS
 // apply at all — a superuser bypasses FORCE ROW LEVEL SECURITY, which is why PGlite cannot prove any
@@ -17,10 +16,10 @@ const PROBE_PASSWORD = "probe";
 
 const PIN = hashPin("1234");
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-});
+// A clone of the `core_identity` template (CORE + IDENTITY); the probe connections below authenticate
+// as `identity_rls_probe`, a cluster-wide role the package globalSetup creates in place of the
+// per-file `probeRole` this suite passed before the shared container.
+const suite = useTemplateDb({ template: "core_identity" });
 
 describe("persons under real row-level security", () => {
   it("writes and reads its own tenant's person as a non-superuser app_user member", async () => {
