@@ -24,8 +24,15 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
-import { createTable } from "./tables.js";
-import { addTabRound, listTablesWithState, openTab, voidTabLine } from "./working-order.js";
+import { createTable, createZone, updateTable } from "./tables.js";
+import {
+  addTabRound,
+  listTablesWithState,
+  markLineServed,
+  openTab,
+  unmarkLineServed,
+  voidTabLine,
+} from "./working-order.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -294,6 +301,77 @@ describe("voidTabLine", () => {
   });
 });
 
+describe("markLineServed / unmarkLineServed", () => {
+  /** served_at per line_no — owner read (RLS bypassed). NULL until a runner marks the line served. */
+  async function servedAtByLine(tabId: string): Promise<Map<number, string | null>> {
+    const rows = await db
+      .select({ lineNo: workingOrderLines.lineNo, servedAt: workingOrderLines.servedAt })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId))
+      .orderBy(workingOrderLines.lineNo);
+    return new Map(rows.map((r) => [r.lineNo, r.servedAt]));
+  }
+
+  it("marks one line served, unmarks it, and refuses an unknown line (tab.line_not_found)", async () => {
+    const { cfg, cafeId, aguaId, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, {
+        tableId,
+        lines: [
+          { productId: cafeId, quantity: "1" },
+          { productId: aguaId, quantity: "1" },
+        ],
+      }),
+    );
+
+    // Mark line 1 served — only line 1 gets a timestamp; line 2 stays NULL.
+    await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
+    let served = await servedAtByLine(tabId);
+    expect(served.get(1)).not.toBeNull();
+    expect(served.get(2)).toBeNull();
+
+    // Unmark line 1 — cleared back to NULL.
+    await asApp(cfg, (tx) => unmarkLineServed(tx, cfg, tabId, 1));
+    served = await servedAtByLine(tabId);
+    expect(served.get(1)).toBeNull();
+
+    // An absent line_no on the tab → tab.line_not_found, for both verbs.
+    await expect(asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 99))).rejects.toMatchObject({
+      code: "tab.line_not_found",
+      params: { tabId, lineNo: 99 },
+    });
+    await expect(asApp(cfg, (tx) => unmarkLineServed(tx, cfg, tabId, 99))).rejects.toMatchObject({
+      code: "tab.line_not_found",
+      params: { tabId, lineNo: 99 },
+    });
+  });
+
+  it("refuses a settled tab and a walk-up that no table points at (tab.not_open)", async () => {
+    const { cfg, cafeId, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+    );
+    // Settled order → not open. lockOpenTab is the domain guard here; the require_open_parent trigger
+    // is the DB backstop for the served write on a non-open parent.
+    await db.execute(
+      sql`update working_orders set status = 'settled', settled_at = now() where id = ${tabId}`,
+    );
+    await expect(asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1))).rejects.toMatchObject({
+      code: "tab.not_open",
+      params: { tabId },
+    });
+
+    // A bare open walk-up (no table points at it) is NOT a tab — the isolating case for lockOpenTab's
+    // back-pointer check (the order IS open, so only that check refuses it).
+    const walkUp = randomUUID();
+    await bareOpenOrder(cfg, walkUp);
+    await expect(asApp(cfg, (tx) => markLineServed(tx, cfg, walkUp, 1))).rejects.toMatchObject({
+      code: "tab.not_open",
+      params: { tabId: walkUp },
+    });
+  });
+});
+
 describe("listTablesWithState (occupancy)", () => {
   it("reflects free → open-tab → free as a tab opens and pays", async () => {
     const { cfg, cafeId, tableId } = await setupVenue();
@@ -356,6 +434,45 @@ describe("listTablesWithState (occupancy)", () => {
     );
     const cleared = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(cleared[0]).toMatchObject({ state: "free", pendingDeliveries: 0 });
+  });
+
+  it("reports pendingToServe (unserved tab lines), 0 for a free table, and carries zoneId", async () => {
+    const { cfg, cafeId, aguaId, tableId } = await setupVenue();
+    const zone = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Comedor" }));
+    // A SECOND table with no tab — exercises the LEFT-join-reads-0 branch for a free table.
+    const freeTable = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T2" }));
+    await asApp(cfg, (tx) => updateTable(tx, cfg, tableId, { zoneId: zone.id }));
+
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, {
+        tableId,
+        lines: [
+          { productId: cafeId, quantity: "1" },
+          { productId: aguaId, quantity: "1" },
+        ],
+      }),
+    );
+
+    // Two unserved lines → pendingToServe 2; zoneId carried through; the FREE table reads 0 (LEFT-join).
+    let rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    expect(rows.find((t) => t.id === tableId)).toMatchObject({
+      zoneId: zone.id,
+      pendingToServe: 2,
+    });
+    expect(rows.find((t) => t.id === freeTable.id)).toMatchObject({
+      state: "free",
+      pendingToServe: 0,
+    });
+
+    // Serve one → N-1.
+    await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
+    rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    expect(rows.find((t) => t.id === tableId)!.pendingToServe).toBe(1);
+
+    // Serve the rest → 0.
+    await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 2));
+    rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
+    expect(rows.find((t) => t.id === tableId)!.pendingToServe).toBe(0);
   });
 
   it("open-tab dominates delivery-pending in the rolled-up state", async () => {
