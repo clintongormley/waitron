@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, ne, or, sql } from "drizzle-orm";
 import {
   AppError,
+  compareDecimal,
   decimal,
   MONEY_SCALE,
   multiplyDecimal,
@@ -918,24 +919,31 @@ function grossLineTotal(grossUnit: string, quantity: string): string {
  * Move SELECTED items from one open tab to another (design §3) — the transfer verb. Each entry of
  * `transfers` names a source `line_no` and optionally a `quantity`:
  *
- * - A WHOLE-line move (`quantity` omitted) is delegated to {@link moveTabLines}: the line's locked
- *   `working_order_lines.unit_price_gross` is carried across UNCHANGED (a move NEVER re-prices — that
- *   add-time locked column is what the filed sale is later rebuilt from) and it is appended at the
- *   destination's next `line_no`.
- * - A PARTIAL split (`quantity` given) REDUCES the named source line's quantity and INSERTS a NEW
- *   destination line inheriting every per-unit value from the source — `product_id`, `descriptions`,
- *   `unit_price` (net), `unit_price_gross` (locked gross), `vat_rate`, `category` — with
- *   `quantity = transferred`. Nothing is re-fetched from the catalogue: both the kept source line's and
- *   the new destination line's `line_total` are recomputed by {@link grossLineTotal} over the SAME
- *   locked `unit_price_gross`, so a catalogue price change after add moves NEITHER (the price-lock test
- *   proves this by changing the catalogue between the ring and the transfer). Quantity is conserved —
- *   `source.remaining + dest.transferred = original` — and a `weight` line splits identically, no
- *   special case. `line_total` is a per-line re-compute (each tab keeps `Σ line_total = its total`);
- *   pre-fiscal, so a sub-céntimo split rounding difference is harmless (design §3).
+ * - A WHOLE-line move (`quantity` omitted, OR equal to the line's own quantity) is delegated to
+ *   {@link moveTabLines}: the line's locked `working_order_lines.unit_price_gross` is carried across
+ *   UNCHANGED (a move NEVER re-prices — that add-time locked column is what the filed sale is later
+ *   rebuilt from) and it is appended at the destination's next `line_no`. Routing an equal-quantity
+ *   transfer here (rather than down the split path below) is deliberate: splitting the full quantity
+ *   would reduce the source to zero, which violates `working_order_lines_quantity_ck`
+ *   (`quantity <> 0`, orders.ts:188) — so the source line is REMOVED entirely, never left as a
+ *   zero-quantity remnant. `compareDecimal` makes the equality value-wise across scales, so an
+ *   explicit `"2"` transfer against a `"2.000"` line (and a weighed `"0.320"` against `"0.320"`) both
+ *   count as whole-line moves, identically to `quantity` omitted.
+ * - A PARTIAL split (`quantity` given and strictly less than the line's own quantity) REDUCES the
+ *   named source line's quantity and INSERTS a NEW destination line inheriting every per-unit value
+ *   from the source — `product_id`, `descriptions`, `unit_price` (net), `unit_price_gross` (locked
+ *   gross), `vat_rate`, `category` — with `quantity = transferred`. Nothing is re-fetched from the
+ *   catalogue: both the kept source line's and the new destination line's `line_total` are recomputed
+ *   by {@link grossLineTotal} over the SAME locked `unit_price_gross`, so a catalogue price change
+ *   after add moves NEITHER (the price-lock test proves this by changing the catalogue between the
+ *   ring and the transfer). Quantity is conserved — `source.remaining + dest.transferred = original`
+ *   — and a `weight` line splits identically, no special case. `line_total` is a per-line re-compute
+ *   (each tab keeps `Σ line_total = its total`); pre-fiscal, so a sub-céntimo split rounding
+ *   difference is harmless (design §3).
  *
- * The full-quantity-equals-whole-line refinement is Task 4, and the presence/range guards (the named
- * line exists, `0 < quantity < line.quantity`) are Task 5 — here a named line is ASSUMED present and any
- * given `quantity` valid, which is all the callers/tests pass.
+ * The presence/range guards (the named line exists, quantity is either omitted/equal-to-the-line or
+ * strictly within `0 < quantity < line.quantity`) are Task 5 — here a named line is ASSUMED present
+ * and any given `quantity` valid, which is all the callers/tests pass.
  *
  * Both tabs are locked `FOR UPDATE` in ASCENDING id order (`[fromTabId, toTabId].sort()` + `lockOpenTab`
  * each) — the same ordering discipline `mergeTabs`/`moveTabLines` acquire their `working_orders` locks
@@ -1007,14 +1015,22 @@ export async function transferLines(
     );
   const byLineNo = new Map(sourceLines.map((l) => [l.lineNo, l]));
 
-  // Partition: a WHOLE-line move (`quantity` omitted) vs a PARTIAL split (`quantity` given). The
-  // full-quantity refinement is Task 4; the presence/range guards are Task 5 — here the named line is
-  // assumed present and the quantity valid (the tests pass only valid input).
+  // Partition: a WHOLE-line move (`quantity` omitted, OR equal to the line's full quantity) vs a
+  // PARTIAL split (`quantity` given and strictly less). A quantity equal to the line's own quantity
+  // is routed to the whole-line path rather than the split path — splitting it would REDUCE the
+  // source to zero, which violates `working_order_lines_quantity_ck` (`quantity <> 0`, orders.ts:188).
+  // `compareDecimal` is value-wise across scales, so "2" == "2.000" and a weighed "0.320" == "0.320"
+  // both count as whole-line moves. The presence/range guards (named line exists, quantity in
+  // `0 < quantity < line.quantity` or omitted/equal) are Task 5 — here the named line is assumed
+  // present and any given quantity valid (the tests pass only valid input).
   const wholeLineNos: number[] = [];
   const partials: { line: (typeof sourceLines)[number]; quantity: string }[] = [];
   for (const t of transfers) {
     const line = byLineNo.get(t.lineNo)!;
-    if (t.quantity === undefined) {
+    if (
+      t.quantity === undefined ||
+      compareDecimal(decimal(t.quantity), decimal(line.quantity)) === 0
+    ) {
       wholeLineNos.push(t.lineNo);
     } else {
       partials.push({ line, quantity: t.quantity });

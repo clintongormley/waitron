@@ -317,3 +317,25 @@ describe("transferLines — partial split", () => {
     // sub-céntimo split difference would be harmless pre-fiscal, design §3.)
   });
 });
+
+describe("transferLines — full-quantity partial is a whole-line move", () => {
+  it("moving quantity EQUAL to the line's quantity leaves no zero remnant on the source", async () => {
+    const { cfg, cafeId, aguaId, tableAId, tableBId } = await setupVenue();
+    const tabA = await openTabWith(cfg, tableAId, [{ productId: cafeId, quantity: "2" }]);
+    const tabB = await openTabWith(cfg, tableBId, [{ productId: aguaId, quantity: "1" }]);
+
+    // Explicit quantity "2" == the whole line — must behave exactly like an omitted quantity.
+    await asApp(cfg, (tx) => transferLines(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: "2" }]));
+
+    const a = await linesOf(tabA);
+    const b = await linesOf(tabB);
+    expect(a).toEqual([]); // NO zero-quantity remnant left behind
+    expect(b.map((l) => l.productId)).toEqual([aguaId, cafeId]);
+    expect(b[1]).toMatchObject({
+      lineNo: 2,
+      quantity: "2.000",
+      unitPriceGross: "1.50",
+      lineTotal: "3.00",
+    });
+  });
+});
