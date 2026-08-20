@@ -1,14 +1,14 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { decimal } from "@waitron/shared";
 import { claimAcceptedOffline, insertAcceptedOffline } from "./store.js";
-import { startRealPostgres } from "./testing/postgres.js";
 import { freshNif, seedWorkingOrder } from "../test/seed.js";
 
-// vitest.config.ts's hookTimeout, which this container start had before the helper's 60s default.
-const postgres = useRealPostgres({ start: startRealPostgres, timeoutMs: 180_000 });
+// A clone of the `core_payments` template (CORE + PAYMENTS) from the shared container the package
+// globalSetup boots.
+const postgres = useTemplateDb({ template: "core_payments" });
 
 const SETTLED = new Date("2026-07-23T10:00:00Z");
 
