@@ -346,13 +346,14 @@ describe("markLineServed / unmarkLineServed", () => {
     });
   });
 
-  it("refuses a settled tab and a walk-up that no table points at (tab.not_open)", async () => {
+  it("refuses a settled tab (tab.not_open — the require_open_parent trigger is the DB backstop)", async () => {
     const { cfg, cafeId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
     );
-    // Settled order → not open. lockOpenTab is the domain guard here; the require_open_parent trigger
-    // is the DB backstop for the served write on a non-open parent.
+    // Settled order → not open. lockOpenTab's STATUS check refuses it — but strip that check and the DB
+    // `require_open_parent` trigger still rejects a served write on a non-open parent (a different wrong
+    // shape, but a refusal). So this branch alone does NOT isolate the domain guard; the next test does.
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = now() where id = ${tabId}`,
     );
@@ -360,14 +361,23 @@ describe("markLineServed / unmarkLineServed", () => {
       code: "tab.not_open",
       params: { tabId },
     });
+  });
 
-    // A bare open walk-up (no table points at it) is NOT a tab — the isolating case for lockOpenTab's
-    // back-pointer check (the order IS open, so only that check refuses it).
-    const walkUp = randomUUID();
-    await bareOpenOrder(cfg, walkUp);
-    await expect(asApp(cfg, (tx) => markLineServed(tx, cfg, walkUp, 1))).rejects.toMatchObject({
+  it("refuses an open order no table points at, carrying a real line — lockOpenTab's back-pointer is the sole gate (tab.not_open)", async () => {
+    const { cfg, cafeId, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+    );
+    // Orphan the tab: clear the dining_tables back-pointer while the order stays OPEN and keeps line 1.
+    // No DB trigger fires (the parent is still open) and the UPDATE would match a real row, so
+    // lockOpenTab's BACK-POINTER check is the ONLY thing that can refuse this — the isolating
+    // deletion-proof for it. Strip that check and the served write silently succeeds (verified: the
+    // guard-removed run resolves instead of rejecting). The zero-line walk-up used elsewhere cannot
+    // isolate it — a guard-removed UPDATE there matches 0 rows and errors tab.line_not_found regardless.
+    await db.execute(sql`update dining_tables set tab_id = null where id = ${tableId}`);
+    await expect(asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1))).rejects.toMatchObject({
       code: "tab.not_open",
-      params: { tabId: walkUp },
+      params: { tabId },
     });
   });
 });
