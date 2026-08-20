@@ -413,9 +413,11 @@ declare module "@waitron/shared" {
      */
     "tab.line_not_found": { tabId: string; lineNo: number };
     /**
-     * A merge named the SAME tab as both source and destination — `mergeTabs(intoTabId === fromTabId)`.
-     * Refused before any line move or lock, because merging a tab into itself would move its own lines
-     * onto itself and then abandon it. `tabId` is the caller-supplied uuid (not a secret). `tab.*` names
+     * A tab named as BOTH source and destination of a line-move — `mergeTabs(intoTabId === fromTabId)`,
+     * or the shared `moveTabLines(fromTabId === toTabId)` primitive that `mergeTabs` and (later) TS-4
+     * transfer call. Refused before any line move or lock: moving a tab's lines onto itself would move
+     * them then abandon it (`mergeTabs`), or append duplicates the trailing delete then removes wholesale,
+     * emptying the tab (`moveTabLines`). `tabId` is the caller-supplied uuid (not a secret). `tab.*` names
      * the DOMAIN CONCEPT (the running tab), never the throwing package (the rule `tenant.not_found`'s note
      * gives). A request-shape error — the two arguments are equal regardless of any tab's STATE — so it
      * is mapped to 400 (a bad request), distinct from the state-conflict `tab.not_open` (409).
