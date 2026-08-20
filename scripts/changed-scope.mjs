@@ -124,17 +124,18 @@ export const DASHBOARD_PACKAGE = "@waitron/dashboard";
 export const SERVER_PACKAGE = "@waitron/server";
 
 /**
- * The packages that have a test shard to themselves — the set `test-light` subtracts.
+ * The packages that have a single-package test shard to themselves — the set BOTH light shards
+ * subtract.
  *
- * ONE list rather than a name per gate, because `light` is defined against it: a package added here
- * without a shard of its own stops being tested altogether, and a shard added without an entry here
- * runs its package twice. `scripts/ci-workflow.test.mjs` checks both directions against ci.yml's
- * real `--filter` arguments and the real workspace, so neither drift can land silently.
+ * ONE list rather than a name per gate, because the light gates are defined against it: a package
+ * added here without a shard of its own stops being tested altogether, and a shard added without an
+ * entry here runs its package twice. `scripts/ci-workflow.test.mjs` checks both directions against
+ * ci.yml's real `--filter` arguments and the real workspace, so neither drift can land silently.
  *
- * `light` used to read "the scope holds something other than HEAVY_PACKAGE", which was the same
- * sentence as this list while the list had one entry. Generalising it rather than special-casing a
- * second name is what stops a scope of exactly {@waitron/ui} answering `light=true` — a runner and
- * a `pnpm install` for a selection that would then contain nothing to run, which is the shape the
+ * The light gate used to read "the scope holds something other than HEAVY_PACKAGE", which was the
+ * same sentence as this list while the list had one entry. Generalising it rather than special-casing
+ * a second name is what stops a scope of exactly {@waitron/ui} answering true — a runner and a
+ * `pnpm install` for a selection that would then contain nothing to run, which is the shape the
  * `runnable` guard in scripts/changed-packages.mjs was added to refuse.
  */
 export const OWN_SHARD_PACKAGES = [
@@ -143,6 +144,57 @@ export const OWN_SHARD_PACKAGES = [
   TILL_PACKAGE,
   DASHBOARD_PACKAGE,
   SERVER_PACKAGE,
+];
+
+/**
+ * The two halves of the "everything else" shard, run as test-light-a and test-light-b on separate
+ * runners in parallel. Together with OWN_SHARD_PACKAGES they PARTITION every workspace member: each
+ * non-own-shard member appears in exactly one of these two lists.
+ *
+ * Why two shards rather than one: test-light was CPU-bound, and its wall-clock floor is
+ * total-work ÷ the runner's cores, NOT the size of its biggest package. On the free public-repo
+ * 4-vCPU runner its ~1340s of v8-coverage work floored it near 390s, and splitting apps/server out
+ * (test-server) barely moved it — measured on PR #126's run 32421460693, test-light was still 391s
+ * with apps/server already gone. Two free 4-vCPU runners give 8 effective cores for $0 — larger
+ * runners are billed per-minute even on a public repo (8-vCPU ~$0.022/min, Jan-2026 rates) — so
+ * halving the work across them roughly halves the floor.
+ *
+ * The split is BALANCED BY MEASURED DURATION, read off run 32421460693's test-light log (its
+ * per-package `Duration` lines), with the two poles deliberately in different bins: fiscal-verifactu
+ * (233s) in A, payments (193s) in B. Bin totals came out ~666s (A) and ~670s (B). Those are
+ * wall-clock seconds on that one run, so they drift as suites grow — rebalance when a later run shows
+ * one shard dominating. The partition tests police the COVERAGE (every package once), never the
+ * balance.
+ *
+ * A NEW package must be added to exactly one of these lists. Forget, and it lands in NEITHER bin's
+ * exclusion set, so both shards select it and `scripts/ci-workflow.test.mjs`'s "nothing runs twice"
+ * assertion fails — loudly, on the pull request, not silently.
+ */
+export const LIGHT_A_PACKAGES = [
+  "@waitron/fiscal-verifactu",
+  "@waitron/core",
+  "@waitron/payments-stripe",
+  "@waitron/provisioning",
+  "@waitron/workforce",
+  "@waitron/scheduler",
+  "@waitron/purchasing",
+  "@waitron/sync",
+  "@waitron/fiscal",
+  "@waitron/verifactu",
+  "@waitron/bench-pglite",
+];
+
+export const LIGHT_B_PACKAGES = [
+  "@waitron/payments",
+  "@waitron/identity",
+  "@waitron/credentials",
+  "@waitron/reporting",
+  "@waitron/catalogue",
+  "@waitron/recipes",
+  "@waitron/workforce-es",
+  "@waitron/migrations",
+  "@waitron/layouts",
+  "@waitron/shared",
 ];
 
 /**
@@ -164,9 +216,13 @@ export const PACKAGES_WITHOUT_TESTS = ["@waitron/bench-pglite"];
 /** A gate that fires when one named package is in the resolved scope — six of the seven. */
 const membership = (packageName) => (inScope) => inScope.has(packageName);
 
-/** True when this package would give the LIGHT shard something to actually run. */
-const runsTests = (name) =>
-  !OWN_SHARD_PACKAGES.includes(name) && !PACKAGES_WITHOUT_TESTS.includes(name);
+/**
+ * True when `name` gives the named light bin something to actually run: a member of the bin that
+ * declares tests. PACKAGES_WITHOUT_TESTS contributes nothing to any shard, so a bin holding only
+ * those (or nothing) does not switch its gate on.
+ */
+const runsInLightShard = (bin) => (name) =>
+  bin.includes(name) && !PACKAGES_WITHOUT_TESTS.includes(name);
 
 /**
  * Every gated job, as a predicate over the resolved scope, in the order the CLI emits them.
@@ -181,17 +237,20 @@ const runsTests = (name) =>
  * `ui` joined them on a reproducible CI HANG rather than on cost — see UI_PACKAGE above for both
  * runs and what their logs do and do not show.
  *
- * `light` joined them for the same kind of reason as the mutation pair, and is the one gate that is
- * NOT membership of a named package, which is why an entry holds a PREDICATE rather than a package
- * name. test-light runs one `--filter "...<pkg>"` per changed package plus one `--filter "!<pkg>"`
- * per entry in OWN_SHARD_PACKAGES, so it has work exactly when the resolved scope holds a package
- * that both survives that subtraction and has a `test:coverage` script to run — false when the
- * whole of it has shards of its own, and false when the whole of it is in PACKAGES_WITHOUT_TESTS.
- * Read off run 30653487133 (`gh run view 30653487133 --json jobs`): gated on `code` alone,
- * test-light was that run's LONGEST job — 18:01:36 → 18:02:24, 48s — and its "Run the light shard"
- * step printed `None of the selected packages has a "test:coverage" script`. A runner, a `pnpm
- * install` and a `playwright install --with-deps chromium` for zero test execution, reported as
- * success.
+ * `light_a` and `light_b` joined them for the same kind of reason as the mutation pair, and are the
+ * two gates that are NOT membership of a named package, which is why each holds a PREDICATE. The
+ * "everything else" shard is split into two balanced halves (LIGHT_A_PACKAGES / LIGHT_B_PACKAGES)
+ * run on separate runners. test-light-a runs one `--filter "...<pkg>"` per changed package and then
+ * one `--filter "!<pkg>"` per package in OWN_SHARD_PACKAGES ∪ LIGHT_B_PACKAGES — its bin's whole
+ * complement — so it has work exactly when the resolved scope holds a package in LIGHT_A that has a
+ * `test:coverage` script, and test-light-b is the mirror. Each is false when its bin's share of the
+ * scope is empty, and false when that share is entirely in PACKAGES_WITHOUT_TESTS.
+ *
+ * Read off run 30653487133 (`gh run view 30653487133 --json jobs`), from when this was a single
+ * `light` gated on `code` alone: test-light was that run's LONGEST job — 18:01:36 → 18:02:24, 48s —
+ * and its "Run the light shard" step printed `None of the selected packages has a "test:coverage"
+ * script`. A runner, a `pnpm install` and a `playwright install --with-deps chromium` for zero test
+ * execution, reported as success — which is what a light gate exists to prevent, now once per half.
  *
  * The `inScope === null` fail-closed case is NOT a gate's business: `gateOutputs` applies it before
  * calling any predicate, so a predicate only ever sees a real Set and cannot forget the check.
@@ -206,7 +265,8 @@ export const SCOPE_GATES = [
   { output: "till", covers: membership(TILL_PACKAGE) },
   { output: "dashboard", covers: membership(DASHBOARD_PACKAGE) },
   { output: "server", covers: membership(SERVER_PACKAGE) },
-  { output: "light", covers: (inScope) => [...inScope].some(runsTests) },
+  { output: "light_a", covers: (inScope) => [...inScope].some(runsInLightShard(LIGHT_A_PACKAGES)) },
+  { output: "light_b", covers: (inScope) => [...inScope].some(runsInLightShard(LIGHT_B_PACKAGES)) },
   { output: "verifactu", covers: membership("@waitron/verifactu") },
   { output: "shared", covers: membership("@waitron/shared") },
 ];

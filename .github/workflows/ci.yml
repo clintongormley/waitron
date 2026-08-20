@@ -92,7 +92,8 @@ jobs:
       till: ${{ steps.gates.outputs.till }}
       dashboard: ${{ steps.gates.outputs.dashboard }}
       server: ${{ steps.gates.outputs.server }}
-      light: ${{ steps.gates.outputs.light }}
+      light_a: ${{ steps.gates.outputs.light_a }}
+      light_b: ${{ steps.gates.outputs.light_b }}
       verifactu: ${{ steps.gates.outputs.verifactu }}
       shared: ${{ steps.gates.outputs.shared }}
     steps:
@@ -767,32 +768,49 @@ jobs:
             | node scripts/changed-packages.mjs runnable test:coverage
           pnpm --filter "@waitron/dashboard" test:coverage
 
-  # Everything except the packages that have a shard of their own. --no-sort removes the dependency
-  # ordering, which earns nothing for tests: all 22 workspace members resolve to ./src/*.ts and no
-  # test imports a sibling's dist/, so nothing here consumes a build artefact. (`build` DOES need
-  # the ordering — this flag is on the test invocation only.)
+  # The "everything else" packages, split into two balanced halves run on separate free 4-vCPU
+  # runners IN PARALLEL — test-light-a and test-light-b. --no-sort removes the dependency ordering,
+  # which earns nothing for tests: every member resolves to ./src/*.ts and no test imports a
+  # sibling's dist/, so nothing here consumes a build artefact. (`build` DOES need the ordering —
+  # this flag is on the test invocation only.)
   #
-  # NO PLAYWRIGHT STEPS. @waitron/ui was the only Chromium consumer in this shard's selection and it
-  # now has test-ui; the three steps that resolved, cached and installed the browser moved there
-  # with it. What that saves, read off the two shard logs with
-  # `gh api repos/clintongormley/waitron/actions/jobs/<id>/logs` on 2026-08-01: the
-  # `playwright install --with-deps chromium` step spanned 08:44:29→08:44:41 in run 30692329110's
-  # test-light and 11:18:31→11:18:43 in run 30697414129's — about 12s each, plus the two steps
-  # before it. Both figures are cache-warm; a cold cache also downloads the browser.
-  test-light:
+  # WHY TWO. test-light was CPU-bound, and its wall-clock floor is total-work ÷ the runner's cores,
+  # NOT the size of its biggest package. On one free 4-vCPU runner its ~1340s of v8-coverage work
+  # floored it near 390s, and splitting apps/server out (test-server) barely moved it — on PR #126's
+  # run 32421460693 test-light was still 391s with apps/server already gone. Two free 4-vCPU runners
+  # give 8 effective cores for $0 (larger runners are billed per-minute even on a public repo), so
+  # halving the work across them roughly halves the floor. Membership and the balance rationale live
+  # on LIGHT_A_PACKAGES / LIGHT_B_PACKAGES in scripts/changed-scope.mjs.
+  #
+  # NO PLAYWRIGHT STEPS in either: the browser packages (ui/till/dashboard) each have their own
+  # shard, so nothing here launches Chromium.
+  #
+  # EACH SHARD SUBTRACTS ITS BIN'S COMPLEMENT — every package in OWN_SHARD_PACKAGES plus every
+  # package in the OTHER bin — rather than including its own bin. Subtraction is what INTERSECTS with
+  # the scope on a pull request: `--filter "...$pkg"` per changed package selects the scope, then
+  # `--filter "!<pkg>"` per complement package pares it down to this bin's share of it. An include
+  # list would UNION instead, running the whole bin for a one-package PR. Measured that subtraction
+  # subtracts rather than OR-s on 2026-08-05: `--filter "...@waitron/db"` gives 17 packages and
+  # adding `--filter "!@waitron/db"` gives the same 17 minus db. On a GLOBAL scope (main, an
+  # unattributable path, a diff we could not work out) the `...$pkg` includes are empty, so the
+  # complement subtraction alone selects the bin — the fail-CLOSED direction.
+  #
+  # scripts/ci-workflow.test.mjs asserts each shard's `!` filters equal OWN_SHARD_PACKAGES ∪ the
+  # other bin AND that the shards partition every test package exactly once, both against the real
+  # `pnpm ls` — so a bin-list edit here that disagrees with changed-scope.mjs cannot land silently.
+  #
+  # The guard runs BEFORE the tests so it fails in a second rather than after the suite: pnpm reports
+  # both "No projects matched the filters" and `None of the selected packages has a "test:coverage"
+  # script` on stdout with exit 0 (measured 2026-08-01, pnpm 9.15.0), so without it a shard can
+  # report success having run nothing. Read off run 30653487133, from when this was a single `light`
+  # gated on `code` alone: it was that run's longest job at 48s and printed exactly that message — a
+  # runner and a `pnpm install` for zero test execution, reported as success.
+  #
+  # REQUIRE_DOCKER + TESTCONTAINERS_RYUK_DISABLED as the old single shard set them: both bins hold
+  # real-Postgres packages that clone from @waitron/db's shared container.
+  test-light-a:
     needs: changes
-    # `light` is not a membership gate like the other six: the step below subtracts every package
-    # in OWN_SHARD_PACKAGES from the scope, so this job has work when the resolved scope holds a
-    # package that is neither one of those nor one of the members that declare no `test:coverage`
-    # script (PACKAGES_WITHOUT_TESTS — today just @waitron/bench-pglite, which is why a bench-only
-    # pull request skips this job instead of provisioning a runner to select nothing).
-    #
-    # It gated on `code` alone until this was added, which meant a code change touching no package
-    # at all still got a runner. Read off run 30653487133 (`gh run view 30653487133 --json jobs`):
-    # this job was that run's longest at 48s (18:01:36 → 18:02:24) and its "Run the light shard"
-    # step printed `None of the selected packages has a "test:coverage" script` — a `pnpm install`
-    # and a `playwright install --with-deps chromium` for zero test execution, reported as success.
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.light == 'true'
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.light_a == 'true'
     runs-on: ubuntu-latest
     env:
       REQUIRE_DOCKER: "1"
@@ -812,34 +830,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Exclusions SUBTRACT from the scoped set rather than being OR-ed with it — measured on
-      # 2026-08-05 in this workspace: `--filter "...@waitron/db"` gives 17 packages and adding
-      # `--filter "!@waitron/db"` gives the same 17 minus db (the identical sixteen names). That is
-      # what makes this shard "the scoped set, minus what the dedicated shards already ran". (The
-      # counts moved from 11/10 as the workspace grew — apps/till among the additions, since it
-      # depends on @waitron/catalogue which depends on @waitron/db — so they are dated rather than
-      # left to imply a fixed workspace.)
-      #
-      # One exclusion per package in OWN_SHARD_PACKAGES (scripts/changed-scope.mjs), and
-      # scripts/ci-workflow.test.mjs asserts these two lists are the same set — hand-editing one
-      # without the other either drops a package from every shard or runs it in two. On a GLOBAL
-      # scope these are the only filters, and what they select was read back from pnpm itself on
-      # 2026-08-08: `pnpm --filter "!@waitron/db" --filter "!@waitron/ui" --filter "!@waitron/till"
-      # --filter "!@waitron/dashboard" prepare` reports `Scope: 18 of 23 workspace projects` — the 22
-      # members minus those four, the 23rd project being the workspace root, which pnpm lists but
-      # never runs a script for.
-      #
-      # `scope=global` — main, an unattributable path, a diff we could not work out — leaves the
-      # positional parameters empty and runs the whole workspace minus db, which is the
-      # fail-CLOSED direction and the one the old `--filter "...[<base>]"` mechanism got wrong.
-      #
-      # Then the guard, BEFORE the tests so it fails in a second rather than after the suite: pnpm
-      # reports both "No projects matched the filters" and `None of the selected packages has a
-      # "test:coverage" script` on stdout with exit 0 (both measured on 2026-08-01, pnpm 9.15.0), so
-      # without it this step can report success having run nothing at all. It reads the SAME filters
-      # through `pnpm ls`, so it is measuring this run's real selection rather than restating the
-      # gate's opinion of it.
-      - name: Run the light shard
+      - name: Run the light-a shard
         env:
           SCOPE: ${{ needs.changes.outputs.scope }}
           PACKAGES: ${{ needs.changes.outputs.packages }}
@@ -854,11 +845,85 @@ jobs:
             for pkg in $PACKAGES; do set -- "$@" --filter "...$pkg"; done
           fi
           set +f
+          # OWN_SHARD_PACKAGES — subtracted by both light shards.
           set -- "$@" --filter "!@waitron/db"
           set -- "$@" --filter "!@waitron/ui"
           set -- "$@" --filter "!@waitron/till"
           set -- "$@" --filter "!@waitron/dashboard"
           set -- "$@" --filter "!@waitron/server"
+          # LIGHT_B_PACKAGES — the other bin, subtracted so what remains is bin A.
+          set -- "$@" --filter "!@waitron/payments"
+          set -- "$@" --filter "!@waitron/identity"
+          set -- "$@" --filter "!@waitron/credentials"
+          set -- "$@" --filter "!@waitron/reporting"
+          set -- "$@" --filter "!@waitron/catalogue"
+          set -- "$@" --filter "!@waitron/recipes"
+          set -- "$@" --filter "!@waitron/workforce-es"
+          set -- "$@" --filter "!@waitron/migrations"
+          set -- "$@" --filter "!@waitron/layouts"
+          set -- "$@" --filter "!@waitron/shared"
+
+          pnpm "$@" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:coverage
+          pnpm "$@" --no-sort test:coverage
+
+  # The mirror of test-light-a: the other balanced half. See test-light-a's comment for the full
+  # rationale (why two shards, why each subtracts its bin's complement rather than including its own
+  # bin, and the guard). This shard subtracts OWN_SHARD_PACKAGES ∪ LIGHT_A_PACKAGES so what remains
+  # is bin B.
+  test-light-b:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.light_b == 'true'
+    runs-on: ubuntu-latest
+    env:
+      REQUIRE_DOCKER: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run the light-b shard
+        env:
+          SCOPE: ${{ needs.changes.outputs.scope }}
+          PACKAGES: ${{ needs.changes.outputs.packages }}
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+        run: |
+          set -euo pipefail
+          set -f
+          set --
+          if [ "$SCOPE" = "packages" ] && [ -n "$PACKAGES" ]; then
+            for pkg in $PACKAGES; do set -- "$@" --filter "...$pkg"; done
+          fi
+          set +f
+          # OWN_SHARD_PACKAGES — subtracted by both light shards.
+          set -- "$@" --filter "!@waitron/db"
+          set -- "$@" --filter "!@waitron/ui"
+          set -- "$@" --filter "!@waitron/till"
+          set -- "$@" --filter "!@waitron/dashboard"
+          set -- "$@" --filter "!@waitron/server"
+          # LIGHT_A_PACKAGES — the other bin, subtracted so what remains is bin B.
+          set -- "$@" --filter "!@waitron/fiscal-verifactu"
+          set -- "$@" --filter "!@waitron/core"
+          set -- "$@" --filter "!@waitron/payments-stripe"
+          set -- "$@" --filter "!@waitron/provisioning"
+          set -- "$@" --filter "!@waitron/workforce"
+          set -- "$@" --filter "!@waitron/scheduler"
+          set -- "$@" --filter "!@waitron/purchasing"
+          set -- "$@" --filter "!@waitron/sync"
+          set -- "$@" --filter "!@waitron/fiscal"
+          set -- "$@" --filter "!@waitron/verifactu"
+          set -- "$@" --filter "!@waitron/bench-pglite"
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
@@ -967,7 +1032,8 @@ jobs:
       - test-ui
       - test-till
       - test-dashboard
-      - test-light
+      - test-light-a
+      - test-light-b
       - mutation-verifactu
       - mutation-shared
     runs-on: ubuntu-latest
