@@ -316,6 +316,11 @@ export async function startServer(env: Record<string, string | undefined>): Prom
     {
       db,
       cfg: { tenantId: till.tenantId },
+      // The venue's own config (tenant + location) the FP-1 zone/table config routes scope to — the
+      // SAME `till` config `mountTillApi` receives above, so the dashboard "Sala" surface and the till
+      // surface CRUD the same `floor_zones`/`dining_tables` under one location. Only tenant + location
+      // are read there (the fiscal ids are inert — these are config routes touching no fiscal path).
+      venueCfg: till,
       secureCookies,
       rpId: config.managementRpId,
       origin: config.managementOrigin,
