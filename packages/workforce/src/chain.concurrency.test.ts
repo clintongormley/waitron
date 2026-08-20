@@ -1,25 +1,24 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { captureError, pgErrorCode } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { appendToChain, type TimeEntryAppend } from "./chain.js";
 import { verifyChain, type VerifiableEntry } from "./chain-hash.js";
-import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
 
 const WRITERS = 20;
 
 /**
- * Real PostgreSQL via Testcontainers — deliberately NOT skipped when Docker is unavailable.
- * `startRealPostgres` throws rather than degrading to a skip: a concurrency suite that silently
- * vanishes reports a green CI run that proves nothing about the one property this file exists to
- * establish. PGlite serialises every query onto a single backend, so a contention test on it is a
- * FALSE pass, not a weak one — see ./chain.pglite-cannot-test-contention.test.ts for the mechanism.
- * If Docker genuinely is unavailable, every test below fails loudly with the thrown error, which is
- * the intended, load-bearing behaviour.
+ * Real PostgreSQL via the shared container — deliberately NOT skipped when Docker is unavailable.
+ * The package globalSetup's `dockerRequired` throws rather than degrading to a skip: a concurrency
+ * suite that silently vanishes reports a green CI run that proves nothing about the one property this
+ * file exists to establish. PGlite serialises every query onto a single backend, so a contention
+ * test on it is a FALSE pass, not a weak one — see ./chain.pglite-cannot-test-contention.test.ts for
+ * the mechanism. If Docker genuinely is unavailable, globalSetup fails loudly before any test runs,
+ * which is the intended, load-bearing behaviour.
  */
-const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: CONTAINER_SETUP_TIMEOUT_MS });
+const suite = useTemplateDb({ template: "core_identity_workforce" });
 
 let tenantId: string;
 let personId: string;

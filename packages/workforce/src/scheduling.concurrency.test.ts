@@ -1,17 +1,16 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { WorkforceBackend } from "./clocking.js";
-import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 import { insertRosterVersion, seedLocation, seedPerson } from "../test/fixtures.js";
 
 const PUBLISHERS = 6;
 
 /**
- * Real PostgreSQL via Testcontainers — deliberately NOT skipped when Docker is unavailable, the same
- * stance as chain.concurrency.test.ts. `publishRoster`'s `rosterVersionStatus` takes a
+ * Real PostgreSQL via the shared container — deliberately NOT skipped when Docker is unavailable, the
+ * same stance as chain.concurrency.test.ts. `publishRoster`'s `rosterVersionStatus` takes a
  * `SELECT … FOR UPDATE` row lock so concurrent publishes of ONE draft serialise: one flips it to
  * `published`, every other wakes on the released lock, re-reads `published`, and is refused. PGlite
  * serialises every query onto a single backend, so a contention test on it is a FALSE pass — the
@@ -19,7 +18,7 @@ const PUBLISHERS = 6;
  * publishes at once. Only distinct real backends can prove the lock does the work.
  */
 const backend = new WorkforceBackend();
-const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: CONTAINER_SETUP_TIMEOUT_MS });
+const suite = useTemplateDb({ template: "core_identity_workforce" });
 
 let tenantId: string;
 let locationId: string;
