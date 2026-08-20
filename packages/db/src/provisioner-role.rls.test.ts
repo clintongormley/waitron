@@ -1,54 +1,25 @@
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS } from "./migrations.js";
+import { describe, expect, it } from "vitest";
 import { captureError, pgErrorCode, pgErrorMessage } from "./testing/errors.js";
-import { useRealPostgres } from "./testing/lifecycle.js";
-import { runMigrationSets, startMigratedPostgres } from "./testing/postgres.js";
+import { useTemplateDb } from "./testing/lifecycle.js";
 
 const PASSWORD = "provisioner_suite_password";
 
 describe("tenant_provisioner", () => {
-  // `timeoutMs` restates this package's own vitest `hookTimeout` (120s), which the helper's 60s
-  // default would otherwise narrow: see vitest.config.ts — the figure covers pulling the Postgres
-  // image on a cold runner, which is measured in minutes rather than seconds.
-  const suite = useRealPostgres({
-    start: () =>
-      startMigratedPostgres({
-        dockerRequired:
-          "The tenant_provisioner suite requires a running Docker daemon. It cannot be skipped: " +
-          "PGlite runs every connection as a superuser, which bypasses both the grant check and " +
-          "the RLS policy this suite exists to tell apart.",
-        migrate: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
-      }),
-    timeoutMs: 120_000,
-  });
+  // A clone of the shared container's `core` template. Docker is required (the package globalSetup
+  // fails loudly without it): PGlite runs every connection as a superuser, bypassing both the grant
+  // check and the RLS policy this suite exists to tell apart.
+  const suite = useTemplateDb({ template: "core" });
 
-  // Three roles rather than the helper's single `probeRole`: what this suite compares is the
-  // MEMBERSHIP each one holds, so they have to be created as a set and read as a set. Registered
-  // after the helper's own hook, which vitest runs first — and which, if it throws, stops this one
-  // from running at all (verified on vitest 3.2.7), so `suite.admin` is never read unstarted.
-  beforeAll(async () => {
-    // Two LOGIN roles differing in ONE membership: the whole point of the suite is that the
-    // difference between them is the grant, not anything about RLS.
-    await suite.admin.execute(
-      sql.raw(
-        `create role provisioner_login login password '${PASSWORD}' in role app_user, tenant_provisioner`,
-      ),
-    );
-    await suite.admin.execute(
-      sql.raw(`create role app_only_login login password '${PASSWORD}' in role app_user`),
-    );
-    // A THIRD role, and the only one in this file that `GRANT app_user TO tenant_provisioner`
-    // (0011's own bottom statement) is actually load-bearing for: it is a member of
-    // `tenant_provisioner` ALONE, so everything `app_user` grants reaches it transitively or not
-    // at all. `provisioner_login` above holds `app_user` DIRECTLY, which is why deleting that GRANT
-    // from 0011 left this whole suite green before this role existed.
-    await suite.admin.execute(
-      sql.raw(
-        `create role provisioner_only_login login password '${PASSWORD}' in role tenant_provisioner`,
-      ),
-    );
-  });
+  // Three cluster roles this suite compares by the MEMBERSHIP each holds, created ONCE in the package
+  // globalSetup (a shared container is one cluster — a per-file `create role` set would collide on
+  // the second file). `provisioner_login` is a member of BOTH `app_user` and `tenant_provisioner`
+  // (an inRole array); `app_only_login` of `app_user` alone; `provisioner_only_login` of
+  // `tenant_provisioner` ALONE — the last is the only role `GRANT app_user TO tenant_provisioner`
+  // (0011's own bottom statement) is load-bearing for, since everything `app_user` grants reaches it
+  // transitively or not at all (`provisioner_login` holds `app_user` DIRECTLY, which is why deleting
+  // that GRANT from 0011 left this whole suite green before this role existed). Each connects below
+  // via `suite.pg.connectAs(name, PASSWORD)`.
 
   it("lets a member insert the tenant whose scope it adopts", async () => {
     const db = await suite.pg.connectAs("provisioner_login", PASSWORD);

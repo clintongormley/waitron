@@ -1,10 +1,8 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Database, Transaction } from "../client.js";
-import { CORE_MIGRATIONS } from "../migrations.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
-import { useRealPostgres } from "../testing/lifecycle.js";
-import { runMigrationSets, startMigratedPostgres } from "../testing/postgres.js";
+import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
 import { withTenant } from "../tenancy.js";
 import { locations, tenants } from "./tenants.js";
@@ -29,17 +27,7 @@ async function rollBackAfter(
 }
 
 describe("dining_tables schema (RLS + grants)", () => {
-  const suite = useRealPostgres({
-    start: () =>
-      startMigratedPostgres({
-        dockerRequired:
-          "The dining_tables RLS suite requires a running Docker daemon. It cannot be skipped: PGlite " +
-          "runs every connection as a superuser, bypassing the FORCE ROW LEVEL SECURITY and the grant " +
-          "shape (SELECT/INSERT/UPDATE, no DELETE) this suite exists to prove.",
-        migrate: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
-      }),
-    timeoutMs: 120_000,
-  });
+  const suite = useTemplateDb({ template: "core" });
 
   beforeAll(async () => {
     const admin = suite.admin;

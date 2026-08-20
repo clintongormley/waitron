@@ -1,10 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { beforeAll, afterAll, describe } from "vitest";
-import { sql } from "drizzle-orm";
-import { createPgliteDb, createPostgresDb, type Database } from "../client.js";
+import { createPgliteDb, type Database } from "../client.js";
 import { runMigrations } from "../migrate.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { startPostgresContainer, type StartedContainer } from "./postgres.js";
+import { cloneTemplate, nextCloneName, pickTemplate, resolveSharedHandle } from "./lifecycle.js";
+import type { RealPostgres } from "./postgres.js";
+import type { SharedContainerHandle } from "./shared-container.js";
 
 export interface Target {
   readonly name: "pglite" | "postgres";
@@ -24,16 +25,21 @@ export interface Target {
    * This isolation is NOT identical across targets, despite each call
    * returning a database no other test has touched. PGlite's `create()` boots
    * a fresh WASM cluster every time, so cluster-global objects (roles,
-   * tablespaces) are fresh too. The postgres target's `create()` makes a
-   * fresh DATABASE per test, but inside ONE shared container/cluster for the
-   * whole suite — cluster-global objects are therefore SHARED across every
-   * test that runs against this target, not reset. A migration that does
-   * `CREATE ROLE app_user` succeeds on the first test and then fails with
-   * `role "app_user" already exists` on the second test's migration — on
+   * tablespaces) are fresh too. The postgres target's `create()` clones a
+   * fresh DATABASE per test from the `core` template, but inside the ONE
+   * shared container/cluster the vitest globalSetup boots for the whole
+   * PACKAGE run — cluster-global objects are therefore SHARED across every
+   * test in the package that runs against postgres, not reset (even more
+   * widely than before, when the container was per-suite). A migration that
+   * does `CREATE ROLE app_user` succeeds on the first test and then fails
+   * with `role "app_user" already exists` on the second test's migration — on
    * postgres only, since PGlite cannot reproduce a shared cluster. Migrations
    * that create cluster-global objects MUST therefore do so idempotently
    * (e.g. `DO $$ BEGIN ... EXCEPTION WHEN duplicate_object THEN null; END $$;`
    * or an equivalent `IF NOT EXISTS` guard), never assume a clean cluster.
+   * (The template is migrated once, in the globalSetup, so a test never runs
+   * migrations against postgres itself — but the idempotency rule still holds
+   * for whatever the globalSetup's template migrator runs.)
    *
    * This is the ONLY way a test in this package should obtain a database.
    * There is deliberately no `target.db` property and no `target.db()`
@@ -83,12 +89,20 @@ const pgliteTarget: Target = {
 };
 
 function postgresTarget(): Target {
-  let container: StartedContainer | undefined;
-  let created = 0;
+  let handle: SharedContainerHandle | undefined;
+  let template: string | undefined;
+  // Every clone this target hands out, dropped in teardown() — the same lifecycle the per-suite
+  // container gave (its stop() removed all the databases created against it), now that the container
+  // is shared across the whole package run and no longer disposable per suite.
+  const clones: RealPostgres[] = [];
   return {
     name: "postgres",
     setup: async () => {
-      container = await startPostgresContainer();
+      // The shared container the package globalSetup booted and `provide`d; `resolveTargets` only
+      // reaches this target's setup when Docker is present, and the globalSetup would have died
+      // otherwise, so the handle is always here.
+      handle = resolveSharedHandle(undefined);
+      template = pickTemplate(handle, "core");
     },
     create: async () => {
       // Guards an ordering invariant describeEachTarget itself enforces
@@ -100,24 +114,32 @@ function postgresTarget(): Target {
       // caller outside this package's tests ever does construct one by hand.
       // Stryker disable next-line all
       /* v8 ignore next */
-      if (container === undefined) throw new Error("postgres target used before setup()");
-      // A fresh DATABASE per test rather than a fresh container: container
-      // start is measured in seconds, database creation in milliseconds. This
-      // is NOT the same isolation PGlite gets, though — see Target.create's
-      // doc comment: cluster-global objects (roles, tablespaces) are shared
-      // across every test that runs against this one container, not reset.
-      created += 1;
-      const name = `waitron_test_${created}`;
-      const admin = await createPostgresDb(container.uri);
-      await admin.execute(sql.raw(`create database ${name}`));
-      await admin.close();
-      const url = new URL(container.uri);
-      url.pathname = `/${name}`;
-      return migrated(await createPostgresDb(url.toString()));
+      if (!handle || !template) throw new Error("postgres target used before setup()");
+      // A ~26ms `CREATE DATABASE … TEMPLATE` clone of the pre-migrated `core` template, in place of
+      // the old `create database` + per-test CORE migration (~387ms). NOT the same isolation PGlite
+      // gets — see Target.create's doc comment: cluster-global objects (roles, tablespaces) are shared
+      // across every test in the whole package run against this one container, not reset.
+      const clone = await cloneTemplate(handle.uri, template, nextCloneName());
+      clones.push(clone);
+      return clone.connect();
     },
     teardown: async () => {
-      await container?.stop();
-      container = undefined;
+      // Drop every clone this target made (never the shared container). The consumer's own afterEach
+      // has already closed each `create()`d connection; stop() opens its own dropper and DROPs the
+      // clone database WITH (FORCE) regardless. allSettled, not a serial await loop: one clone whose
+      // drop rejects must not skip the rest (that would leak the others until globalTeardown), so
+      // every drop runs, `clones` is cleared either way, and the first failure is rethrown so a broken
+      // teardown still surfaces rather than passing silently.
+      const dropped = await Promise.allSettled(clones.map((clone) => clone.stop()));
+      clones.length = 0;
+      const failed = dropped.filter(
+        (result): result is PromiseRejectedResult => result.status === "rejected",
+      );
+      // Defensive: a `drop database if exists … with (force)` failing is not reachable through the
+      // public Target API (the same footing as the `used before setup()` guard above), so tests do
+      // not trigger it — but if one ever does, surface it rather than swallow it.
+      /* v8 ignore next */
+      if (failed.length > 0) throw failed[0].reason;
     },
   };
 }

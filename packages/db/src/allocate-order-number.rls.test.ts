@@ -3,11 +3,9 @@ import { expect, it } from "vitest";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { allocateOrderNumber } from "./allocate-order-number.js";
 import type { Database } from "./client.js";
-import { CORE_MIGRATIONS } from "./migrations.js";
 import { locations } from "./schema/tenants.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "./testing/errors.js";
-import { useRealPostgres } from "./testing/lifecycle.js";
-import { runMigrationSets, startMigratedPostgres } from "./testing/postgres.js";
+import { useTemplateDb } from "./testing/lifecycle.js";
 import { asAppUser } from "./testing/roles.js";
 import { seedNode, seedTenant } from "./testing/seed.js";
 import { withTenant } from "./tenancy.js";
@@ -22,27 +20,13 @@ const WRITERS = 20;
 //      superuser (every PGlite connection) bypasses RLS unconditionally.
 //   2. That concurrent allocators receive DISTINCT numbers — PGlite serialises
 //      every query onto one backend, so a race never happens.
-// startMigratedPostgres throws rather than degrading to a skip when Docker is
-// absent, so an environment without Docker fails loudly rather than silently
-// dropping the only coverage these properties have.
-const suite = useRealPostgres({
-  start: () =>
-    startMigratedPostgres({
-      dockerRequired:
-        "The allocateOrderNumber RLS/concurrency suite requires a running Docker daemon. It " +
-        "cannot be skipped: PGlite runs every connection as a superuser (bypassing the counter's " +
-        "FORCE ROW LEVEL SECURITY) and serialises all queries onto one backend, so it can prove " +
-        "neither the tenant isolation of the counter's write path nor that concurrent allocators " +
-        "receive distinct numbers.",
-      migrate: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
-    }),
-  // Restates this package's own 120s hookTimeout (vitest.config.ts), which the helper's absent
-  // default would otherwise leave to vitest's — the figure covers pulling the Postgres image on a
-  // cold runner.
-  timeoutMs: 120_000,
-});
+// A clone of the shared container's `core` template. Docker is required — the package globalSetup
+// fails loudly without it, never a silent skip — because the concurrency proof below needs the real
+// cluster's distinct backends (via `suite.pg.connect()`), which PGlite (all queries serialised onto
+// one backend) cannot give, nor can it show the counter's FORCE ROW LEVEL SECURITY as a non-superuser.
+const suite = useTemplateDb({ template: "core" });
 
-// The suite shares ONE migrated database across every test (useRealPostgres does not reset between
+// The suite shares ONE cloned database across every test (useTemplateDb does not reset between
 // them), and working_order_counters cannot be truncated back — its FK chain to `tenants` cascades
 // into append-only fiscal tables whose BEFORE TRUNCATE trigger blocks the wipe. So each test mints a
 // FRESH tenant + node instead (seedTenant uses a fresh NIF and a fresh uuid), leaving its rows

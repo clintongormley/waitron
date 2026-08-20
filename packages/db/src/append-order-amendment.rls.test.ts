@@ -3,11 +3,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import { appendOrderAmendment, type AppendAmendmentInput } from "./append-order-amendment.js";
 import type { Database, Transaction } from "./client.js";
-import { CORE_MIGRATIONS } from "./migrations.js";
 import { verifyAmendmentChain, type VerifiableAmendment } from "./order-amendment-hash.js";
 import { captureError, pgErrorCode } from "./testing/errors.js";
-import { useRealPostgres } from "./testing/lifecycle.js";
-import { runMigrationSets, startMigratedPostgres } from "./testing/postgres.js";
+import { useTemplateDb } from "./testing/lifecycle.js";
 import { seedNode } from "./testing/seed.js";
 import { withTenant } from "./tenancy.js";
 import { locations, tenants, tills } from "./schema/tenants.js";
@@ -59,19 +57,11 @@ async function rollBackAfter(
 }
 
 describe("order_amendments append helper", () => {
-  const suite = useRealPostgres({
-    start: () =>
-      startMigratedPostgres({
-        dockerRequired:
-          "The order_amendments append suite requires a running Docker daemon. It cannot be " +
-          "skipped: PGlite runs every connection as a superuser, which bypasses the FORCE ROW " +
-          "LEVEL SECURITY and the REVOKE this suite exists to prove on order_amendments.",
-        migrate: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
-      }),
-    // Restates this package's own vitest hookTimeout (120s), which the helper's absent default would
-    // otherwise leave at vitest's — covers pulling the Postgres image on a cold runner.
-    timeoutMs: 120_000,
-  });
+  // A clone of the shared container's `core` template. Docker is required (the package globalSetup
+  // fails loudly without it): the concurrency proof below opens distinct backends via
+  // `suite.pg.connect()`, and PGlite (one serialised backend, superuser) can show neither that nor
+  // the FORCE ROW LEVEL SECURITY / REVOKE this suite proves on order_amendments.
+  const suite = useTemplateDb({ template: "core" });
 
   // As the connection owner (superuser bypasses RLS — pure setup): two tenants, each with a
   // location, a till and a node. Working orders are seeded per-test (see openOrder).

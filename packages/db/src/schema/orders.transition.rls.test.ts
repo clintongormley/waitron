@@ -2,10 +2,8 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import type { Transaction } from "../client.js";
-import { CORE_MIGRATIONS } from "../migrations.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
-import { useRealPostgres } from "../testing/lifecycle.js";
-import { runMigrationSets, startMigratedPostgres } from "../testing/postgres.js";
+import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
 import { seedNode } from "../testing/seed.js";
 import { withTenant } from "../tenancy.js";
@@ -39,20 +37,7 @@ let productA = "";
 let nextOrderNumber = 1;
 
 describe("working_orders state machine (enforce_transition)", () => {
-  const suite = useRealPostgres({
-    start: () =>
-      startMigratedPostgres({
-        dockerRequired:
-          "The working-order state-machine suite requires a running Docker daemon. It cannot be " +
-          "skipped: it asserts the enforce_transition trigger's behaviour as the non-owner " +
-          "app_user role, and PGlite runs every connection as a superuser — a class of pass this " +
-          "suite must not accept (CLAUDE.md §4).",
-        migrate: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
-      }),
-    // Restates this package's own vitest hookTimeout (120s), which the helper's 60s default would
-    // otherwise narrow — the figure covers pulling the Postgres image on a cold runner.
-    timeoutMs: 120_000,
-  });
+  const suite = useTemplateDb({ template: "core" });
 
   // Every transition/line write under test runs through here: tenant A's GUC set, then SET ROLE
   // app_user — the deployment role, under RLS. The seed (below) and open() run as the owner instead.
