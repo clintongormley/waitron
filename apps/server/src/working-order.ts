@@ -925,7 +925,7 @@ function grossLineTotal(grossUnit: string, quantity: string): string {
  *   rebuilt from) and it is appended at the destination's next `line_no`. Routing an equal-quantity
  *   transfer here (rather than down the split path below) is deliberate: splitting the full quantity
  *   would reduce the source to zero, which violates `working_order_lines_quantity_ck`
- *   (`quantity <> 0`, orders.ts:188) — so the source line is REMOVED entirely, never left as a
+ *   (`quantity <> 0`, orders.ts:194) — so the source line is REMOVED entirely, never left as a
  *   zero-quantity remnant. `compareDecimal` makes the equality value-wise across scales, so an
  *   explicit `"2"` transfer against a `"2.000"` line (and a weighed `"0.320"` against `"0.320"`) both
  *   count as whole-line moves, identically to `quantity` omitted.
@@ -1018,7 +1018,7 @@ export async function transferLines(
   // Partition: a WHOLE-line move (`quantity` omitted, OR equal to the line's full quantity) vs a
   // PARTIAL split (`quantity` given and strictly less). A quantity equal to the line's own quantity
   // is routed to the whole-line path rather than the split path — splitting it would REDUCE the
-  // source to zero, which violates `working_order_lines_quantity_ck` (`quantity <> 0`, orders.ts:188).
+  // source to zero, which violates `working_order_lines_quantity_ck` (`quantity <> 0`, orders.ts:194).
   // `compareDecimal` is value-wise across scales, so "2" == "2.000" and a weighed "0.320" == "0.320"
   // both count as whole-line moves. The presence/range guards (named line exists, quantity in
   // `0 < quantity < line.quantity` or omitted/equal) are Task 5 — here the named line is assumed
