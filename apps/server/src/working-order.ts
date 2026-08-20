@@ -4,7 +4,16 @@
 import "./errors.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, ne, or, sql } from "drizzle-orm";
-import { AppError, type SaleId, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
+import {
+  AppError,
+  decimal,
+  MONEY_SCALE,
+  multiplyDecimal,
+  type SaleId,
+  subtractDecimal,
+  toScale,
+  workingOrderId as brandWorkingOrderId,
+} from "@waitron/shared";
 import {
   allocateOrderNumber,
   appendOrderAmendment,
@@ -891,13 +900,42 @@ export async function mergeTabs(
 }
 
 /**
- * Move SELECTED items from one open tab to another (design §3) — the transfer verb. `transfers` names
- * the source `line_no`s. In THIS task every named line moves as a WHOLE line, delegated to
- * {@link moveTabLines}: the line's locked `unit_price_gross` is carried across UNCHANGED (a move NEVER
- * re-prices — the add-time locked column is what the filed sale is later rebuilt from) and it is appended
- * at the destination's next `line_no`. The partial-quantity SPLIT path (`0 < quantity < line.quantity`)
- * is NOT YET implemented — Task 3 adds it; until then a `quantity` on a transfer is IGNORED and the whole
- * named line moves. So this task reads only `t.lineNo`, never `t.quantity`.
+ * The GROSS (VAT-inclusive) line total for `quantity` units at a LOCKED gross unit price, at
+ * {@link MONEY_SCALE}, half away from zero — the SAME composition `@waitron/catalogue`'s `priceRows`
+ * uses for a line's gross total (`toScale(multiplyDecimal(grossUnit, decimal(quantity)), MONEY_SCALE)`),
+ * which is what `priceBasket` writes at add-time and `priceLockedLines` recomputes at file-time. Used by
+ * {@link transferLines}' split path so a split line's `working_order_lines.line_total` is byte-identical
+ * to an add-time line's — the identical helper composition, over the line's OWN locked
+ * `working_order_lines.unit_price_gross`, never a catalogue re-read. Both arguments arrive as
+ * `numeric`-as-text (a stored `unit_price_gross`, a transfer or remainder quantity); `decimal()`
+ * validates each into the branded-`Decimal` helpers, and accepts an already-branded `Decimal` unchanged.
+ */
+function grossLineTotal(grossUnit: string, quantity: string): string {
+  return toScale(multiplyDecimal(decimal(grossUnit), decimal(quantity)), MONEY_SCALE);
+}
+
+/**
+ * Move SELECTED items from one open tab to another (design §3) — the transfer verb. Each entry of
+ * `transfers` names a source `line_no` and optionally a `quantity`:
+ *
+ * - A WHOLE-line move (`quantity` omitted) is delegated to {@link moveTabLines}: the line's locked
+ *   `working_order_lines.unit_price_gross` is carried across UNCHANGED (a move NEVER re-prices — that
+ *   add-time locked column is what the filed sale is later rebuilt from) and it is appended at the
+ *   destination's next `line_no`.
+ * - A PARTIAL split (`quantity` given) REDUCES the named source line's quantity and INSERTS a NEW
+ *   destination line inheriting every per-unit value from the source — `product_id`, `descriptions`,
+ *   `unit_price` (net), `unit_price_gross` (locked gross), `vat_rate`, `category` — with
+ *   `quantity = transferred`. Nothing is re-fetched from the catalogue: both the kept source line's and
+ *   the new destination line's `line_total` are recomputed by {@link grossLineTotal} over the SAME
+ *   locked `unit_price_gross`, so a catalogue price change after add moves NEITHER (the price-lock test
+ *   proves this by changing the catalogue between the ring and the transfer). Quantity is conserved —
+ *   `source.remaining + dest.transferred = original` — and a `weight` line splits identically, no
+ *   special case. `line_total` is a per-line re-compute (each tab keeps `Σ line_total = its total`);
+ *   pre-fiscal, so a sub-céntimo split rounding difference is harmless (design §3).
+ *
+ * The full-quantity-equals-whole-line refinement is Task 4, and the presence/range guards (the named
+ * line exists, `0 < quantity < line.quantity`) are Task 5 — here a named line is ASSUMED present and any
+ * given `quantity` valid, which is all the callers/tests pass.
  *
  * Both tabs are locked `FOR UPDATE` in ASCENDING id order (`[fromTabId, toTabId].sort()` + `lockOpenTab`
  * each) — the same ordering discipline `mergeTabs`/`moveTabLines` acquire their `working_orders` locks
@@ -920,15 +958,13 @@ export async function mergeTabs(
  *
  * A tx-level verb (takes the caller's `tx`, like `moveTabLines`/`mergeTabs`): the HTTP route opens the
  * `withTenant`/`asAppUser` transaction around it. Pre-fiscal — nothing is filed; each tab files its own
- * sale on its own pay (design §4). `_cfg` (the till config) is unused on the whole-line path and
- * underscore-prefixed so `noUnusedParameters` leaves it — an interface-shape parameter kept for the
- * uniform tab-verb signature the route layer calls, which the Task-3 split path will read for the new
- * destination line's `tenant_id`; `voidTabLine`/`joinTable` keep the same `TillConfig` parameter the
- * same way.
+ * sale on its own pay (design §4). `cfg` (the till config) supplies the `tenant_id` the split path
+ * stamps on each new destination line; `voidTabLine`/`joinTable` keep the same `TillConfig` parameter
+ * for the uniform tab-verb signature the route layer calls.
  */
 export async function transferLines(
   tx: Transaction,
-  _cfg: TillConfig,
+  cfg: TillConfig,
   fromTabId: string,
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
@@ -948,14 +984,88 @@ export async function transferLines(
     await lockOpenTab(tx, tabId);
   }
 
-  // Whole-line only in THIS task: move every named line intact (keeps its locked unit_price_gross,
-  // renumbers on the destination). The partial-split path is Task 3.
-  await moveTabLines(
-    tx,
-    fromTabId,
-    toTabId,
-    transfers.map((t) => t.lineNo),
-  );
+  // Read every named source line ONCE, under the lock, into a map. The per-unit locked values a split
+  // INHERITS come from here — never a catalogue re-read.
+  const named = transfers.map((t) => t.lineNo);
+  const sourceLines = await tx
+    .select({
+      lineNo: workingOrderLines.lineNo,
+      productId: workingOrderLines.productId,
+      descriptions: workingOrderLines.descriptions,
+      quantity: workingOrderLines.quantity,
+      unitPrice: workingOrderLines.unitPrice,
+      unitPriceGross: workingOrderLines.unitPriceGross,
+      vatRate: workingOrderLines.vatRate,
+      category: workingOrderLines.category,
+    })
+    .from(workingOrderLines)
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, fromTabId),
+        inArray(workingOrderLines.lineNo, named),
+      ),
+    );
+  const byLineNo = new Map(sourceLines.map((l) => [l.lineNo, l]));
+
+  // Partition: a WHOLE-line move (`quantity` omitted) vs a PARTIAL split (`quantity` given). The
+  // full-quantity refinement is Task 4; the presence/range guards are Task 5 — here the named line is
+  // assumed present and the quantity valid (the tests pass only valid input).
+  const wholeLineNos: number[] = [];
+  const partials: { line: (typeof sourceLines)[number]; quantity: string }[] = [];
+  for (const t of transfers) {
+    const line = byLineNo.get(t.lineNo)!;
+    if (t.quantity === undefined) {
+      wholeLineNos.push(t.lineNo);
+    } else {
+      partials.push({ line, quantity: t.quantity });
+    }
+  }
+
+  // Whole lines first: `moveTabLines` keeps each locked price and appends at the destination's next
+  // `line_no`(s).
+  if (wholeLineNos.length > 0) {
+    await moveTabLines(tx, fromTabId, toTabId, wholeLineNos);
+  }
+
+  // Then the splits. Allocate destination `line_no`s AFTER the moves (so they don't collide with moved
+  // rows): read the current max under the lock and hand out max+1, max+2, ... in order — the same
+  // per-tab allocation `addTabRound`/`moveTabLines` make, safe against the
+  // `(working_order_id, line_no)` unique because the destination row is held FOR UPDATE by the lock loop.
+  if (partials.length > 0) {
+    const [{ maxLineNo }] = await tx
+      .select({ maxLineNo: sql<number>`coalesce(max(${workingOrderLines.lineNo}), 0)::int` })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, toTabId));
+    for (let i = 0; i < partials.length; i++) {
+      const { line, quantity } = partials[i]!;
+      const remaining = subtractDecimal(decimal(line.quantity), decimal(quantity));
+      // Source line: quantity drops, `line_total` recomputed from the SAME locked gross (no re-price).
+      await tx
+        .update(workingOrderLines)
+        .set({ quantity: remaining, lineTotal: grossLineTotal(line.unitPriceGross, remaining) })
+        .where(
+          and(
+            eq(workingOrderLines.workingOrderId, fromTabId),
+            eq(workingOrderLines.lineNo, line.lineNo),
+          ),
+        );
+      // Destination: a NEW line inheriting every per-unit value, `quantity = transferred`, `line_total`
+      // = round(transferred × locked gross). NEVER re-fetched from the catalogue.
+      await tx.insert(workingOrderLines).values({
+        tenantId: cfg.tenantId,
+        workingOrderId: toTabId,
+        lineNo: maxLineNo! + i + 1,
+        productId: line.productId,
+        descriptions: line.descriptions,
+        quantity,
+        unitPrice: line.unitPrice,
+        unitPriceGross: line.unitPriceGross,
+        vatRate: line.vatRate,
+        lineTotal: grossLineTotal(line.unitPriceGross, quantity),
+        category: line.category,
+      });
+    }
+  }
 }
 
 /** One row of the held-orders list the counter shows to retrieve a parked order. */

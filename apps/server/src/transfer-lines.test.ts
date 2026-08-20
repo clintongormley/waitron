@@ -185,7 +185,12 @@ describe("transferLines — whole line", () => {
     expect(a).toEqual([]); // the café line left A entirely
     expect(b.map((l) => l.productId)).toEqual([aguaId, cafeId]);
     // Locked price preserved (café 1.50 gross → 2×1.50 = 3.00), NOT re-priced.
-    expect(b[1]).toMatchObject({ lineNo: 2, quantity: "2.000", unitPriceGross: "1.50", lineTotal: "3.00" });
+    expect(b[1]).toMatchObject({
+      lineNo: 2,
+      quantity: "2.000",
+      unitPriceGross: "1.50",
+      lineTotal: "3.00",
+    });
   });
 
   it("refuses transferring a tab to ITSELF (tab.transfer_self), changing nothing", async () => {
@@ -224,5 +229,91 @@ describe("transferLines — whole line", () => {
     ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId: parkedId } });
     expect(await linesOf(tabA)).toHaveLength(1); // café line untouched on A
     expect(await linesOf(parkedId)).toHaveLength(1); // parked order still holds only its agua line
+  });
+});
+
+describe("transferLines — partial split", () => {
+  it("splits a line: source quantity drops, a destination line appears at the SAME locked gross, quantity conserved", async () => {
+    const { cfg, cafeId, aguaId, tableAId, tableBId } = await setupVenue();
+    // Tab A: café×3 (line 1). Tab B: agua×1 (line 1) → the split lands at B line 2.
+    const tabA = await openTabWith(cfg, tableAId, [{ productId: cafeId, quantity: "3" }]);
+    const tabB = await openTabWith(cfg, tableBId, [{ productId: aguaId, quantity: "1" }]);
+
+    // Move 1 of the 3 coffees.
+    await asApp(cfg, (tx) => transferLines(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: "1" }]));
+
+    const a = await linesOf(tabA);
+    const b = await linesOf(tabB);
+    // Source: café line still present, quantity 3 → 2, line_total recomputed round(2×1.50)=3.00.
+    expect(a).toEqual([
+      expect.objectContaining({
+        lineNo: 1,
+        productId: cafeId,
+        quantity: "2.000",
+        unitPriceGross: "1.50",
+        lineTotal: "3.00",
+      }),
+    ]);
+    // Destination: NEW café line at B line 2, SAME locked gross 1.50, quantity 1, round(1×1.50)=1.50.
+    expect(b).toEqual([
+      expect.objectContaining({ lineNo: 1, productId: aguaId }),
+      expect.objectContaining({
+        lineNo: 2,
+        productId: cafeId,
+        quantity: "1.000",
+        unitPriceGross: "1.50",
+        lineTotal: "1.50",
+      }),
+    ]);
+    // Quantity conserved: 2 + 1 = the original 3. Money conserved for `each`: 3.00 + 1.50 = 4.50.
+  });
+
+  it("PRICE LOCK: a catalogue price change between ring and transfer re-prices NEITHER line", async () => {
+    const { cfg, cafeId, aguaId, tableAId, tableBId } = await setupVenue();
+    const tabA = await openTabWith(cfg, tableAId, [{ productId: cafeId, quantity: "3" }]);
+    const tabB = await openTabWith(cfg, tableBId, [{ productId: aguaId, quantity: "1" }]);
+
+    // Change the catalogue's café price AFTER the ring, BEFORE the transfer (owner write, bypasses RLS).
+    // If `transferLines` re-consulted the catalogue, the moved/kept line would jump to 9.99.
+    await db.execute(sql`update products set unit_price = '9.99' where id = ${cafeId}`);
+
+    await asApp(cfg, (tx) => transferLines(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: "1" }]));
+
+    const a = await linesOf(tabA);
+    const b = await linesOf(tabB);
+    // Both keep the ORIGINAL locked 1.50 — never 9.99. line_totals derived from 1.50, not the catalogue.
+    expect(a[0]).toMatchObject({ unitPriceGross: "1.50", quantity: "2.000", lineTotal: "3.00" });
+    expect(b[1]).toMatchObject({ unitPriceGross: "1.50", quantity: "1.000", lineTotal: "1.50" });
+  });
+
+  it("splits a WEIGHED (decimal-quantity) line the same way, conserving the weight", async () => {
+    const { cfg, jamonId, aguaId, tableAId, tableBId } = await setupVenue();
+    // Jamón 24.90/kg, 0.320 kg on tab A. Locked gross unit = 24.90; line_total round(0.320×24.90)=7.97.
+    const tabA = await openTabWith(cfg, tableAId, [{ productId: jamonId, quantity: "0.320" }]);
+    const tabB = await openTabWith(cfg, tableBId, [{ productId: aguaId, quantity: "1" }]);
+
+    // Move 0.120 kg of the jamón.
+    await asApp(cfg, (tx) =>
+      transferLines(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: "0.120" }]),
+    );
+
+    const a = await linesOf(tabA);
+    const b = await linesOf(tabB);
+    // Source: 0.320 − 0.120 = 0.200 kg, line_total round(0.200×24.90)=4.98.
+    expect(a[0]).toMatchObject({
+      productId: jamonId,
+      quantity: "0.200",
+      unitPriceGross: "24.90",
+      lineTotal: "4.98",
+    });
+    // Destination: 0.120 kg at the SAME 24.90/kg, line_total round(0.120×24.90)=2.99.
+    expect(b[1]).toMatchObject({
+      productId: jamonId,
+      quantity: "0.120",
+      unitPriceGross: "24.90",
+      lineTotal: "2.99",
+    });
+    // Weight conserved: 0.200 + 0.120 = 0.320. (Money 4.98+2.99=7.97 == original — exact here; a
+    // sub-céntimo split difference would be harmless pre-fiscal, design §3.)
   });
 });
