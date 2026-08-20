@@ -42,8 +42,11 @@ export const diningTables = pgTable(
     locationId: uuid("location_id").notNull(),
     // The human id shown on the floor ("12", "Terraza 3"). Unique within a venue (see below).
     label: text("label").notNull(),
-    // Optional grouping ("terrace" / "bar" / "inside") — a data value, not an identifier.
-    zone: text("zone"),
+    // The floor-plan zone this table sits in (FP-1), or NULL for none. Replaces the former free-text
+    // `zone` string with a reference to the authorable `floor_zones` config row. BARE column — its
+    // (tenant_id, zone_id) → floor_zones(tenant_id, id) tenant-consistent composite FK is hand-written
+    // in the paired --custom migration (the same shape as status_id below), not `.references()` here.
+    zoneId: uuid("zone_id"),
     // Covers. Nullable.
     capacity: integer("capacity"),
     active: boolean("active").notNull().default(true),
