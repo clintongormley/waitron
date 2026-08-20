@@ -124,6 +124,20 @@ export const DASHBOARD_PACKAGE = "@waitron/dashboard";
 export const SERVER_PACKAGE = "@waitron/server";
 
 /**
+ * The `test-fiscal-verifactu` shard's package: packages/fiscal-verifactu, isolated because it is
+ * ANTISOCIAL. It is the workspace's one `maxForks: 4` suite — thousands of real AEAT fixtures across
+ * 33 files — so it wants all four of a runner's cores to itself, and sharing a runner with other
+ * packages oversubscribes them all. Measured on the two-shard run 32425078097: fiscal-verifactu was
+ * 219s inside test-light-a's 270s while test-light-b, which held only single-fork packages, packed
+ * its ten into 127s. A runner of its own lets it run its `maxForks: 4` uncontended AND stops it
+ * inflating everything it would otherwise share a bin with. Unlike apps/server (whose split needed a
+ * singleFork→maxForks flip), no config change: fiscal-verifactu already multi-forks — see its
+ * vitest.config.ts. NOT to be confused with the `verifactu` gate, which is the mutation run over the
+ * separate packages/verifactu.
+ */
+export const FISCAL_VERIFACTU_PACKAGE = "@waitron/fiscal-verifactu";
+
+/**
  * The packages that have a single-package test shard to themselves — the set BOTH light shards
  * subtract.
  *
@@ -144,57 +158,61 @@ export const OWN_SHARD_PACKAGES = [
   TILL_PACKAGE,
   DASHBOARD_PACKAGE,
   SERVER_PACKAGE,
+  FISCAL_VERIFACTU_PACKAGE,
 ];
 
 /**
- * The two halves of the "everything else" shard, run as test-light-a and test-light-b on separate
- * runners in parallel. Together with OWN_SHARD_PACKAGES they PARTITION every workspace member: each
- * non-own-shard member appears in exactly one of these two lists.
+ * The two halves of the "everything else" shard — every member NOT in OWN_SHARD_PACKAGES — run as
+ * test-light-a and test-light-b on separate runners in parallel. Together with OWN_SHARD_PACKAGES
+ * they PARTITION every workspace member: each non-own-shard member appears in exactly one of these
+ * two lists.
  *
  * Why two shards rather than one: test-light was CPU-bound, and its wall-clock floor is
  * total-work ÷ the runner's cores, NOT the size of its biggest package. On the free public-repo
- * 4-vCPU runner its ~1340s of v8-coverage work floored it near 390s, and splitting apps/server out
- * (test-server) barely moved it — measured on PR #126's run 32421460693, test-light was still 391s
- * with apps/server already gone. Two free 4-vCPU runners give 8 effective cores for $0 — larger
- * runners are billed per-minute even on a public repo (8-vCPU ~$0.022/min, Jan-2026 rates) — so
- * halving the work across them roughly halves the floor.
+ * 4-vCPU runner its ~1340s of v8-coverage work floored it near 390s. Two free 4-vCPU runners give 8
+ * effective cores for $0 — larger runners are billed per-minute even on a public repo (8-vCPU
+ * ~$0.022/min, Jan-2026 rates) — so halving the work across them roughly halves the floor.
  *
- * The split is BALANCED BY MEASURED DURATION, read off run 32421460693's test-light log (its
- * per-package `Duration` lines), with the two poles deliberately in different bins: fiscal-verifactu
- * (233s) in A, payments (193s) in B. Bin totals came out ~666s (A) and ~670s (B). Those are
- * wall-clock seconds on that one run, so they drift as suites grow — rebalance when a later run shows
- * one shard dominating. The partition tests police the COVERAGE (every package once), never the
- * balance.
+ * BALANCED BY MEASURED DURATION, and REBALANCED once the first split proved the naive balance wrong.
+ * Per-package time is contention-dependent: on run 32425078097 the first cut put fiscal-verifactu
+ * (maxForks:4) alongside the other heavies in bin A, which oversubscribed that runner — bin A ran
+ * 270s against bin B's 127s. Two fixes followed: fiscal-verifactu moved to its own shard
+ * (FISCAL_VERIFACTU_PACKAGE above), and the remaining twenty were rebalanced on that run's
+ * dedicated-shard durations, where bin B's single-fork packages had shown their true uncontended
+ * times (payments 71s, identity 74s, credentials 47s — roughly half their contended figures). With
+ * the one maxForks:4 package gone the remainder is single-fork apart from @waitron/core, so the bins
+ * pack predictably; estimated totals ~370s each. These are wall-clock seconds that drift as suites
+ * grow — rebalance when a later run shows one shard dominating. The partition tests police the
+ * COVERAGE (every package once), never the balance.
  *
  * A NEW package must be added to exactly one of these lists. Forget, and it lands in NEITHER bin's
  * exclusion set, so both shards select it and `scripts/ci-workflow.test.mjs`'s "nothing runs twice"
  * assertion fails — loudly, on the pull request, not silently.
  */
 export const LIGHT_A_PACKAGES = [
-  "@waitron/fiscal-verifactu",
   "@waitron/core",
-  "@waitron/payments-stripe",
+  "@waitron/payments",
   "@waitron/provisioning",
-  "@waitron/workforce",
+  "@waitron/reporting",
   "@waitron/scheduler",
   "@waitron/purchasing",
   "@waitron/sync",
+  "@waitron/migrations",
   "@waitron/fiscal",
-  "@waitron/verifactu",
-  "@waitron/bench-pglite",
+  "@waitron/shared",
 ];
 
 export const LIGHT_B_PACKAGES = [
-  "@waitron/payments",
+  "@waitron/payments-stripe",
   "@waitron/identity",
+  "@waitron/workforce",
   "@waitron/credentials",
-  "@waitron/reporting",
   "@waitron/catalogue",
   "@waitron/recipes",
   "@waitron/workforce-es",
-  "@waitron/migrations",
   "@waitron/layouts",
-  "@waitron/shared",
+  "@waitron/verifactu",
+  "@waitron/bench-pglite",
 ];
 
 /**
@@ -265,6 +283,7 @@ export const SCOPE_GATES = [
   { output: "till", covers: membership(TILL_PACKAGE) },
   { output: "dashboard", covers: membership(DASHBOARD_PACKAGE) },
   { output: "server", covers: membership(SERVER_PACKAGE) },
+  { output: "fiscal_verifactu", covers: membership(FISCAL_VERIFACTU_PACKAGE) },
   { output: "light_a", covers: (inScope) => [...inScope].some(runsInLightShard(LIGHT_A_PACKAGES)) },
   { output: "light_b", covers: (inScope) => [...inScope].some(runsInLightShard(LIGHT_B_PACKAGES)) },
   { output: "verifactu", covers: membership("@waitron/verifactu") },

@@ -92,6 +92,7 @@ jobs:
       till: ${{ steps.gates.outputs.till }}
       dashboard: ${{ steps.gates.outputs.dashboard }}
       server: ${{ steps.gates.outputs.server }}
+      fiscal_verifactu: ${{ steps.gates.outputs.fiscal_verifactu }}
       light_a: ${{ steps.gates.outputs.light_a }}
       light_b: ${{ steps.gates.outputs.light_b }}
       verifactu: ${{ steps.gates.outputs.verifactu }}
@@ -577,6 +578,51 @@ jobs:
             | node scripts/changed-packages.mjs runnable test:coverage
           pnpm --filter "@waitron/server" test:coverage
 
+  # packages/fiscal-verifactu alone: the workspace's one ANTISOCIAL suite. It is the only maxForks:4
+  # package — thousands of real AEAT fixtures across 33 files — so it wants all four of a runner's
+  # cores to itself, and sharing a runner oversubscribes whatever is beside it. Measured on the
+  # two-shard run 32425078097 it was 219s inside test-light-a's 270s while the all-single-fork
+  # test-light-b packed ten packages into 127s. A runner of its own lets its maxForks:4 run
+  # uncontended AND stops it inflating its bin-mates. Unlike apps/server this needed no config change:
+  # fiscal-verifactu already multi-forks (packages/fiscal-verifactu/vitest.config.ts). See
+  # FISCAL_VERIFACTU_PACKAGE in scripts/changed-scope.mjs.
+  #
+  # REQUIRE_DOCKER + TESTCONTAINERS_RYUK_DISABLED as the other real-Postgres shards: it clones from
+  # @waitron/db's shared container. NOT the mutation-verifactu job — that is the separate
+  # packages/verifactu.
+  test-fiscal-verifactu:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true'
+    runs-on: ubuntu-latest
+    env:
+      REQUIRE_DOCKER: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The guard first, same reason as every shard: pnpm answers "nothing to do" with exit 0 and a
+      # line on stdout, so a shard whose filter selects nothing reports success having run no tests.
+      - name: Run the fiscal-verifactu shard
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+        run: |
+          set -euo pipefail
+          pnpm --filter "@waitron/fiscal-verifactu" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:coverage
+          pnpm --filter "@waitron/fiscal-verifactu" test:coverage
+
   # packages/ui alone, and the only job in this file that needs a browser.
   #
   # It was part of test-light until 2026-08-01, when that shard HUNG on it twice — the receipts, and
@@ -851,17 +897,18 @@ jobs:
           set -- "$@" --filter "!@waitron/till"
           set -- "$@" --filter "!@waitron/dashboard"
           set -- "$@" --filter "!@waitron/server"
+          set -- "$@" --filter "!@waitron/fiscal-verifactu"
           # LIGHT_B_PACKAGES — the other bin, subtracted so what remains is bin A.
-          set -- "$@" --filter "!@waitron/payments"
+          set -- "$@" --filter "!@waitron/payments-stripe"
           set -- "$@" --filter "!@waitron/identity"
+          set -- "$@" --filter "!@waitron/workforce"
           set -- "$@" --filter "!@waitron/credentials"
-          set -- "$@" --filter "!@waitron/reporting"
           set -- "$@" --filter "!@waitron/catalogue"
           set -- "$@" --filter "!@waitron/recipes"
           set -- "$@" --filter "!@waitron/workforce-es"
-          set -- "$@" --filter "!@waitron/migrations"
           set -- "$@" --filter "!@waitron/layouts"
-          set -- "$@" --filter "!@waitron/shared"
+          set -- "$@" --filter "!@waitron/verifactu"
+          set -- "$@" --filter "!@waitron/bench-pglite"
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
@@ -912,18 +959,18 @@ jobs:
           set -- "$@" --filter "!@waitron/till"
           set -- "$@" --filter "!@waitron/dashboard"
           set -- "$@" --filter "!@waitron/server"
-          # LIGHT_A_PACKAGES — the other bin, subtracted so what remains is bin B.
           set -- "$@" --filter "!@waitron/fiscal-verifactu"
+          # LIGHT_A_PACKAGES — the other bin, subtracted so what remains is bin B.
           set -- "$@" --filter "!@waitron/core"
-          set -- "$@" --filter "!@waitron/payments-stripe"
+          set -- "$@" --filter "!@waitron/payments"
           set -- "$@" --filter "!@waitron/provisioning"
-          set -- "$@" --filter "!@waitron/workforce"
+          set -- "$@" --filter "!@waitron/reporting"
           set -- "$@" --filter "!@waitron/scheduler"
           set -- "$@" --filter "!@waitron/purchasing"
           set -- "$@" --filter "!@waitron/sync"
+          set -- "$@" --filter "!@waitron/migrations"
           set -- "$@" --filter "!@waitron/fiscal"
-          set -- "$@" --filter "!@waitron/verifactu"
-          set -- "$@" --filter "!@waitron/bench-pglite"
+          set -- "$@" --filter "!@waitron/shared"
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
@@ -1029,6 +1076,7 @@ jobs:
       - typecheck
       - test-heavy
       - test-server
+      - test-fiscal-verifactu
       - test-ui
       - test-till
       - test-dashboard

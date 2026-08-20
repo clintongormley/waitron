@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   DASHBOARD_PACKAGE,
+  FISCAL_VERIFACTU_PACKAGE,
   HEAVY_PACKAGE,
   PACKAGES_WITHOUT_TESTS,
   SCOPE_GATES,
@@ -178,9 +179,23 @@ describe("gateOutputs", () => {
     expect(gates(packagesInScope("")).server).toBe("false");
   });
 
+  // The `fiscal_verifactu` gate exists for the same reason as `heavy`: packages/fiscal-verifactu has
+  // a shard of its own (test-fiscal-verifactu, isolated because it is the one maxForks:4 suite), so
+  // both light shards subtract it and something has to decide whether test-fiscal-verifactu runs.
+  // NOT the `verifactu` gate below, which is the mutation run over the separate packages/verifactu.
+  it("runs the fiscal-verifactu shard when @waitron/fiscal-verifactu is in scope, and not otherwise", () => {
+    expect(
+      gates(packagesInScope(ls("@waitron/fiscal-verifactu", "@waitron/db"))).fiscal_verifactu,
+    ).toBe("true");
+    expect(gates(packagesInScope(ls("@waitron/db", "@waitron/core"))).fiscal_verifactu).toBe(
+      "false",
+    );
+    expect(gates(packagesInScope("")).fiscal_verifactu).toBe("false");
+  });
+
   // light_a and light_b are the two gates that are NOT membership of a named package: each fires
   // when the resolved scope holds a package in its bin (LIGHT_A_PACKAGES / LIGHT_B_PACKAGES) that
-  // declares tests. @waitron/core is in bin A, @waitron/payments in bin B.
+  // declares tests. @waitron/core is in bin A, @waitron/identity in bin B.
   //
   // What made a light gate worth having, read off run 30653487133 with
   // `gh run view 30653487133 --json jobs`: gated on `code` alone, the single old test-light was that
@@ -192,13 +207,13 @@ describe("gateOutputs", () => {
     expect(a.light_a).toBe("true");
     expect(a.light_b).toBe("false");
 
-    const b = gates(packagesInScope(ls("@waitron/payments")));
+    const b = gates(packagesInScope(ls("@waitron/identity")));
     expect(b.light_a).toBe("false");
     expect(b.light_b).toBe("true");
 
     // A scope spanning both bins runs both, and an own-shard package alongside a bin package does
     // not suppress that bin's gate.
-    const both = gates(packagesInScope(ls("@waitron/core", "@waitron/payments", "@waitron/db")));
+    const both = gates(packagesInScope(ls("@waitron/core", "@waitron/identity", "@waitron/db")));
     expect(both.light_a).toBe("true");
     expect(both.light_b).toBe("true");
   });
@@ -232,7 +247,7 @@ describe("gateOutputs", () => {
 
   // A package with no `test:coverage` script gives its light shard nothing to do — it is subtracted
   // by pnpm rather than by a filter, but the shard is just as empty. @waitron/bench-pglite is in bin
-  // A, so this also proves the testless one does not switch light_a on by itself. Measured on
+  // B, so this also proves the testless one does not switch light_b on by itself. Measured on
   // 2026-08-01: `pnpm --filter "...@waitron/bench-pglite" test:coverage` prints `None of the selected
   // packages has a "test:coverage" script` and exits 0.
   it("does not switch a light gate on when its bin's only in-scope package declares no tests", () => {
@@ -242,11 +257,11 @@ describe("gateOutputs", () => {
   });
 
   it("runs a light gate when a testful package joins a test-less one in the SAME bin", () => {
-    // @waitron/bench-pglite (no tests) and @waitron/core both live in bin A: the testless one must
-    // not suppress the testful one.
-    const g = gates(packagesInScope(ls(...PACKAGES_WITHOUT_TESTS, "@waitron/core")));
-    expect(g.light_a).toBe("true");
-    expect(g.light_b).toBe("false");
+    // @waitron/bench-pglite (no tests) and @waitron/identity both live in bin B: the testless one
+    // must not suppress the testful one.
+    const g = gates(packagesInScope(ls(...PACKAGES_WITHOUT_TESTS, "@waitron/identity")));
+    expect(g.light_a).toBe("false");
+    expect(g.light_b).toBe("true");
   });
 
   // Fails closed like every other gate, and centrally: gateOutputs applies the `inScope === null`
@@ -271,6 +286,7 @@ describe("gateOutputs", () => {
     ["till", TILL_PACKAGE],
     ["dashboard", DASHBOARD_PACKAGE],
     ["server", SERVER_PACKAGE],
+    ["fiscal_verifactu", FISCAL_VERIFACTU_PACKAGE],
   ])(
     "gives a package with its own shard to the %s gate alone, never to a light gate",
     (gate, name) => {
@@ -282,6 +298,7 @@ describe("gateOutputs", () => {
         till: "false",
         dashboard: "false",
         server: "false",
+        fiscal_verifactu: "false",
         light_a: "false",
         light_b: "false",
         verifactu: "false",
@@ -309,17 +326,18 @@ describe("gateOutputs", () => {
     const scope = packagesInScope(
       ls("@waitron/verifactu", "@waitron/fiscal-verifactu", "@waitron/server"),
     );
-    // @waitron/verifactu and @waitron/fiscal-verifactu are both in bin A, so light_a fires and
-    // light_b does not; @waitron/server switches only `server`; the `verifactu` mutation gate fires
-    // alongside light_a because one package can legitimately switch on both.
+    // @waitron/fiscal-verifactu now has its own shard, so it switches `fiscal_verifactu` and neither
+    // light gate; @waitron/verifactu is in bin B, so it switches light_b AND the `verifactu` mutation
+    // gate (one package can legitimately switch on both); @waitron/server switches only `server`.
     expect(gates(scope)).toEqual({
       heavy: "false",
       ui: "false",
       till: "false",
       dashboard: "false",
       server: "true",
-      light_a: "true",
-      light_b: "false",
+      fiscal_verifactu: "true",
+      light_a: "false",
+      light_b: "true",
       verifactu: "true",
       shared: "false",
     });
@@ -387,6 +405,7 @@ describe("SCOPE_GATES", () => {
       "till",
       "dashboard",
       "server",
+      "fiscal_verifactu",
       "light_a",
       "light_b",
       "verifactu",
@@ -414,14 +433,14 @@ describe("the CLI", () => {
   };
 
   // One `pnpm ls` invocation answers every gate. The `changes` job appends this stdout verbatim to
-  // $GITHUB_OUTPUT, so the line ORDER does not matter to it but the line COUNT does — a tenth line
-  // here would become a tenth job output, and ci.yml declares exactly nine.
+  // $GITHUB_OUTPUT, so the line ORDER does not matter to it but the line COUNT does — an eleventh
+  // line here would become an eleventh job output, and ci.yml declares exactly ten.
   it("answers every gate from one pnpm ls result", () => {
     expect(run(ls("@waitron/db", "@waitron/shared")).stdout).toBe(
-      "heavy=true\nui=false\ntill=false\ndashboard=false\nserver=false\nlight_a=false\nlight_b=true\nverifactu=false\nshared=true\n",
+      "heavy=true\nui=false\ntill=false\ndashboard=false\nserver=false\nfiscal_verifactu=false\nlight_a=true\nlight_b=false\nverifactu=false\nshared=true\n",
     );
     expect(run(ls("@waitron/payments")).stdout).toBe(
-      "heavy=false\nui=false\ntill=false\ndashboard=false\nserver=false\nlight_a=false\nlight_b=true\nverifactu=false\nshared=false\n",
+      "heavy=false\nui=false\ntill=false\ndashboard=false\nserver=false\nfiscal_verifactu=false\nlight_a=true\nlight_b=false\nverifactu=false\nshared=false\n",
     );
   });
 
@@ -430,25 +449,25 @@ describe("the CLI", () => {
   // that package.
   it("reports no light work for a scope that is only @waitron/db", () => {
     expect(run(ls("@waitron/db")).stdout).toBe(
-      "heavy=true\nui=false\ntill=false\ndashboard=false\nserver=false\nlight_a=false\nlight_b=false\nverifactu=false\nshared=false\n",
+      "heavy=true\nui=false\ntill=false\ndashboard=false\nserver=false\nfiscal_verifactu=false\nlight_a=false\nlight_b=false\nverifactu=false\nshared=false\n",
     );
   });
 
   it("reports no light work for a scope that is only @waitron/ui", () => {
     expect(run(ls("@waitron/ui")).stdout).toBe(
-      "heavy=false\nui=true\ntill=false\ndashboard=false\nserver=false\nlight_a=false\nlight_b=false\nverifactu=false\nshared=false\n",
+      "heavy=false\nui=true\ntill=false\ndashboard=false\nserver=false\nfiscal_verifactu=false\nlight_a=false\nlight_b=false\nverifactu=false\nshared=false\n",
     );
   });
 
   it("reports no light work for a scope that is only @waitron/till", () => {
     expect(run(ls("@waitron/till")).stdout).toBe(
-      "heavy=false\nui=false\ntill=true\ndashboard=false\nserver=false\nlight_a=false\nlight_b=false\nverifactu=false\nshared=false\n",
+      "heavy=false\nui=false\ntill=true\ndashboard=false\nserver=false\nfiscal_verifactu=false\nlight_a=false\nlight_b=false\nverifactu=false\nshared=false\n",
     );
   });
 
   it("reports no light work for a scope that is only @waitron/dashboard", () => {
     expect(run(ls("@waitron/dashboard")).stdout).toBe(
-      "heavy=false\nui=false\ntill=false\ndashboard=true\nserver=false\nlight_a=false\nlight_b=false\nverifactu=false\nshared=false\n",
+      "heavy=false\nui=false\ntill=false\ndashboard=true\nserver=false\nfiscal_verifactu=false\nlight_a=false\nlight_b=false\nverifactu=false\nshared=false\n",
     );
   });
 
@@ -457,7 +476,16 @@ describe("the CLI", () => {
   // `--filter "!@waitron/server"` subtracts it. This is the CLI half of the split's light-side receipt.
   it("reports no light work for a scope that is only @waitron/server", () => {
     expect(run(ls("@waitron/server")).stdout).toBe(
-      "heavy=false\nui=false\ntill=false\ndashboard=false\nserver=true\nlight_a=false\nlight_b=false\nverifactu=false\nshared=false\n",
+      "heavy=false\nui=false\ntill=false\ndashboard=false\nserver=true\nfiscal_verifactu=false\nlight_a=false\nlight_b=false\nverifactu=false\nshared=false\n",
+    );
+  });
+
+  // packages/fiscal-verifactu likewise has its own shard (test-fiscal-verifactu), so a scope of only
+  // it switches `fiscal_verifactu` and leaves both light shards empty — and does NOT switch the
+  // `verifactu` mutation gate, which belongs to the separate packages/verifactu.
+  it("reports fiscal_verifactu work but no light work for a scope that is only @waitron/fiscal-verifactu", () => {
+    expect(run(ls("@waitron/fiscal-verifactu")).stdout).toBe(
+      "heavy=false\nui=false\ntill=false\ndashboard=false\nserver=false\nfiscal_verifactu=true\nlight_a=false\nlight_b=false\nverifactu=false\nshared=false\n",
     );
   });
 
@@ -467,7 +495,7 @@ describe("the CLI", () => {
   // `--filter "...[origin/main]"`, in both a worktree and a fresh clone.
   it("reads an empty pnpm ls result as no work for any gated job", () => {
     expect(run("").stdout).toBe(
-      "heavy=false\nui=false\ntill=false\ndashboard=false\nserver=false\nlight_a=false\nlight_b=false\nverifactu=false\nshared=false\n",
+      "heavy=false\nui=false\ntill=false\ndashboard=false\nserver=false\nfiscal_verifactu=false\nlight_a=false\nlight_b=false\nverifactu=false\nshared=false\n",
     );
   });
 
@@ -479,16 +507,16 @@ describe("the CLI", () => {
   // its own rather than falling through to whatever happens to be on stdin.
   it("emits every gate for an unscoped run, ignoring stdin entirely", () => {
     expect(run(ls("@waitron/payments"), "--unscoped").stdout).toBe(
-      "heavy=true\nui=true\ntill=true\ndashboard=true\nserver=true\nlight_a=true\nlight_b=true\nverifactu=true\nshared=true\n",
+      "heavy=true\nui=true\ntill=true\ndashboard=true\nserver=true\nfiscal_verifactu=true\nlight_a=true\nlight_b=true\nverifactu=true\nshared=true\n",
     );
     expect(run("", "--unscoped").stdout).toBe(
-      "heavy=true\nui=true\ntill=true\ndashboard=true\nserver=true\nlight_a=true\nlight_b=true\nverifactu=true\nshared=true\n",
+      "heavy=true\nui=true\ntill=true\ndashboard=true\nserver=true\nfiscal_verifactu=true\nlight_a=true\nlight_b=true\nverifactu=true\nshared=true\n",
     );
   });
 
   it("fails closed to every gate when pnpm ls output cannot be parsed", () => {
     expect(run("No projects matched the filters").stdout).toBe(
-      "heavy=true\nui=true\ntill=true\ndashboard=true\nserver=true\nlight_a=true\nlight_b=true\nverifactu=true\nshared=true\n",
+      "heavy=true\nui=true\ntill=true\ndashboard=true\nserver=true\nfiscal_verifactu=true\nlight_a=true\nlight_b=true\nverifactu=true\nshared=true\n",
     );
   });
 
@@ -502,7 +530,7 @@ describe("the CLI", () => {
   it("fails closed when pnpm reports its own error as JSON on stdout", () => {
     const pnpmError = '{"error":{"code":"pnpm","message":"Unsupported package selector: …"}}';
     expect(run(pnpmError).stdout).toBe(
-      "heavy=true\nui=true\ntill=true\ndashboard=true\nserver=true\nlight_a=true\nlight_b=true\nverifactu=true\nshared=true\n",
+      "heavy=true\nui=true\ntill=true\ndashboard=true\nserver=true\nfiscal_verifactu=true\nlight_a=true\nlight_b=true\nverifactu=true\nshared=true\n",
     );
   });
 
@@ -510,10 +538,10 @@ describe("the CLI", () => {
     // `pnpm ls` emits zero bytes and exits 0 when its filter matches nothing, so this is the
     // ordinary "this change touches no package" case and must SKIP rather than run everything.
     expect(run("[]").stdout).toBe(
-      "heavy=false\nui=false\ntill=false\ndashboard=false\nserver=false\nlight_a=false\nlight_b=false\nverifactu=false\nshared=false\n",
+      "heavy=false\nui=false\ntill=false\ndashboard=false\nserver=false\nfiscal_verifactu=false\nlight_a=false\nlight_b=false\nverifactu=false\nshared=false\n",
     );
     expect(run("").stdout).toBe(
-      "heavy=false\nui=false\ntill=false\ndashboard=false\nserver=false\nlight_a=false\nlight_b=false\nverifactu=false\nshared=false\n",
+      "heavy=false\nui=false\ntill=false\ndashboard=false\nserver=false\nfiscal_verifactu=false\nlight_a=false\nlight_b=false\nverifactu=false\nshared=false\n",
     );
   });
 
