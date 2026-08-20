@@ -128,8 +128,9 @@ describe("assertSafeIdentifier", () => {
 /**
  * The seam that lets `useTemplateDb` be tested without a globalSetup. A supplied `getHandle` is
  * used verbatim; omitting it falls through to vitest's cross-worker `inject("sharedPg")`, which
- * with no globalSetup providing it is `undefined` here — the assertion is that the default reads
- * exactly that channel and nothing else.
+ * with no globalSetup providing it is `undefined` here — so the default path both proves it reads
+ * that channel AND that an unprovided handle is turned into an actionable error rather than a
+ * `Cannot read properties of undefined` three frames deep in `cloneTemplate`.
  */
 describe("resolveSharedHandle", () => {
   it("uses a supplied getHandle verbatim", () => {
@@ -140,8 +141,10 @@ describe("resolveSharedHandle", () => {
     expect(resolveSharedHandle(() => handle)).toBe(handle);
   });
 
-  it("falls back to vitest inject('sharedPg') when getHandle is omitted", () => {
-    expect(resolveSharedHandle(undefined)).toBe(inject("sharedPg"));
+  it("throws an actionable error when no globalSetup provided a shared container", () => {
+    // This package wires no globalSetup, so `inject("sharedPg")` is undefined on the default path.
+    expect(inject("sharedPg")).toBeUndefined();
+    expect(() => resolveSharedHandle(undefined)).toThrowError(/no shared container in scope/);
   });
 });
 

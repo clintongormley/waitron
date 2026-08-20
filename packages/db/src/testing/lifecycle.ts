@@ -165,9 +165,20 @@ let cloneCounter = 0;
  * directly.
  */
 export function resolveSharedHandle(
-  getHandle: (() => SharedContainerHandle) | undefined,
+  getHandle: (() => SharedContainerHandle | undefined) | undefined,
 ): SharedContainerHandle {
-  return (getHandle ?? (() => inject("sharedPg")))();
+  // `inject("sharedPg")` is `undefined` when the package's vitest config never wired a `globalSetup`
+  // that `provide`s it — the likely misconfiguration when a suite is converted to useTemplateDb but
+  // its config is not. Throw the actionable cause here rather than let it surface three frames deep
+  // in `cloneTemplate` as `Cannot read properties of undefined (reading 'templates')`.
+  const handle = (getHandle ?? (() => inject("sharedPg")))();
+  if (handle === undefined) {
+    throw new Error(
+      "useTemplateDb: no shared container in scope. Wire the package's vitest `globalSetup` to a " +
+        'file that calls `startSharedContainer` and `provide("sharedPg", handle)`.',
+    );
+  }
+  return handle;
 }
 
 /**
