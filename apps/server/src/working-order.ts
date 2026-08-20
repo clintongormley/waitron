@@ -4,7 +4,17 @@
 import "./errors.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, ne, or, sql } from "drizzle-orm";
-import { AppError, type SaleId, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
+import {
+  AppError,
+  compareDecimal,
+  decimal,
+  MONEY_SCALE,
+  multiplyDecimal,
+  type SaleId,
+  subtractDecimal,
+  toScale,
+  workingOrderId as brandWorkingOrderId,
+} from "@waitron/shared";
 import {
   allocateOrderNumber,
   appendOrderAmendment,
@@ -888,6 +898,261 @@ export async function mergeTabs(
     .update(workingOrders)
     .set({ status: "abandoned" })
     .where(eq(workingOrders.id, fromTabId));
+}
+
+/**
+ * The GROSS (VAT-inclusive) line total for `quantity` units at a LOCKED gross unit price, at
+ * {@link MONEY_SCALE}, half away from zero — the SAME composition `@waitron/catalogue`'s `priceRows`
+ * uses for a line's gross total (`toScale(multiplyDecimal(grossUnit, decimal(quantity)), MONEY_SCALE)`),
+ * which is what `priceBasket` writes at add-time and `priceLockedLines` recomputes at file-time. Used by
+ * {@link transferLines}' split path so a split line's `working_order_lines.line_total` is byte-identical
+ * to an add-time line's — the identical helper composition, over the line's OWN locked
+ * `working_order_lines.unit_price_gross`, never a catalogue re-read. Both arguments arrive as
+ * `numeric`-as-text (a stored `unit_price_gross`, a transfer or remainder quantity); `decimal()`
+ * validates each into the branded-`Decimal` helpers, and accepts an already-branded `Decimal` unchanged.
+ */
+function grossLineTotal(grossUnit: string, quantity: string): string {
+  return toScale(multiplyDecimal(decimal(grossUnit), decimal(quantity)), MONEY_SCALE);
+}
+
+/**
+ * Move SELECTED items from one open tab to another (design §3) — the transfer verb. Each entry of
+ * `transfers` names a source `line_no` and optionally a `quantity`:
+ *
+ * - A WHOLE-line move (`quantity` omitted, OR equal to the line's own quantity) is delegated to
+ *   {@link moveTabLines}: the line's locked `working_order_lines.unit_price_gross` is carried across
+ *   UNCHANGED (a move NEVER re-prices — that add-time locked column is what the filed sale is later
+ *   rebuilt from) and it is appended at the destination's next `line_no`. Routing an equal-quantity
+ *   transfer here (rather than down the split path below) is deliberate: splitting the full quantity
+ *   would reduce the source to zero, which violates `working_order_lines_quantity_ck`
+ *   (`quantity <> 0`, orders.ts:194) — so the source line is REMOVED entirely, never left as a
+ *   zero-quantity remnant. `compareDecimal` makes the equality value-wise across scales, so an
+ *   explicit `"2"` transfer against a `"2.000"` line (and a weighed `"0.320"` against `"0.320"`) both
+ *   count as whole-line moves, identically to `quantity` omitted.
+ * - A PARTIAL split (`quantity` given and strictly less than the line's own quantity) REDUCES the
+ *   named source line's quantity and INSERTS a NEW destination line inheriting every per-unit value
+ *   from the source — `product_id`, `descriptions`, `unit_price` (net), `unit_price_gross` (locked
+ *   gross), `vat_rate`, `category` — with `quantity = transferred`. Nothing is re-fetched from the
+ *   catalogue: both the kept source line's and the new destination line's `line_total` are recomputed
+ *   by {@link grossLineTotal} over the SAME locked `unit_price_gross`, so a catalogue price change
+ *   after add moves NEITHER (the price-lock test proves this by changing the catalogue between the
+ *   ring and the transfer). Quantity is conserved — `source.remaining + dest.transferred = original`
+ *   — and a `weight` line splits identically, no special case. `line_total` is a per-line re-compute
+ *   (each tab keeps `Σ line_total = its total`); pre-fiscal, so a sub-céntimo split rounding
+ *   difference is harmless (design §3).
+ *
+ * Guarded (Task 5): a batch may name each source `line_no` AT MOST once (`tab.transfer_duplicate_line`,
+ * refused up front before any lock or write — a repeat would validate each entry against the STATIC
+ * pre-batch quantity snapshot and INVENT quantity, since the split sets the source to `original − q`
+ * rather than a cumulative decrement, and a whole-line + partial pair on one line is contradictory);
+ * every named `line_no` must exist on `fromTab` (`tab.line_not_found`); and any given `quantity` must
+ * be well-formed and satisfy `0 < quantity ≤ line.quantity` (`tab.transfer_quantity_invalid` — zero,
+ * negative, over-quantity, or a malformed decimal literal). All are checked for EVERY transfer BEFORE
+ * any move or split runs, so one bad entry in a batch leaves the source untouched rather than
+ * half-transferred.
+ *
+ * Both tabs' `working_orders` rows are locked `FOR UPDATE` in ASCENDING id order:
+ * `[fromTabId, toTabId].sort()` then a `lockOpenTab` per id, each a SEPARATE `where id = X ... for update`.
+ * Two things that buys, at DIFFERENT strengths — kept apart deliberately:
+ *
+ * - PROVEN: a transfer racing ANOTHER transfer on the same pair serialises without deadlock. Both acquire
+ *   their two row locks lowest-id-first (the `.sort()` + `lockOpenTab` loop below), so the
+ *   reverse-orientation race — A→B against B→A — cannot form a lock cycle; one backend simply waits on the
+ *   lower id until the other commits. `transfer-lines.rls.test.ts` proves this on real Postgres by
+ *   DELETION: strip the `.sort()` (each transfer then locks in its own direction) and that race raises
+ *   `40P01 deadlock detected` in every looped iteration; restore it and the race goes green.
+ * - PROVEN: this verb holds NO `dining_tables` lock. `lockOpenTab` locks the `working_orders` row ONLY —
+ *   its `dining_tables` back-pointer read is an UNLOCKED select — so a transfer is NOT in the
+ *   `dining_tables`↔`working_orders` cross-lock class and cannot deadlock with pay/settle/abandon (those
+ *   lock `working_orders`, then `dining_tables` via the settle trigger; a transfer never holds a
+ *   `dining_tables` lock).
+ *
+ * NOT proven, and stated as such: a transfer racing a MERGE (or a direct `moveTabLines`) on the same pair.
+ * Those lock their two `working_orders` rows in a SINGLE statement (`where id = a or id = b order by id for
+ * update`), and PostgreSQL takes the row locks in SCAN order, applying the `order by` to the query OUTPUT
+ * afterwards — it does NOT promise the locks are ACQUIRED in id order. A two-row primary-key lookup very
+ * likely index-scans the key ascending, matching this verb's order, so the interaction is very likely safe
+ * and a reviewer could not reproduce a deadlock — but that is a property of the chosen PLAN, not a Postgres
+ * guarantee, so this is NOT claimed to be un-cross-lockable. It is also pre-fiscal (nothing is filed), and
+ * any 40P01 would surface as a caught, retryable error rather than corruption.
+ *
+ * That ascending-id discipline is defensive and plan-level, and this PGlite suite cannot itself prove it:
+ * `transfer-lines.test.ts` runs on a single backend that serialises every query, so a contention test on
+ * it is a false pass — the real-Postgres race is `transfer-lines.rls.test.ts`'s job.
+ *
+ * `lockOpenTab` requires each tab to be an OPEN working order some `dining_tables.tab_id` points at,
+ * else `tab.not_open`; an absent/foreign (RLS-hidden) tab matches no row → the same fail-closed
+ * `tab.not_open`. (For a destination that is absent or closed, `moveTabLines` ALSO throws `tab.not_open`
+ * from its own status read — so that particular guard is backstopped, and the lock loop's own
+ * contribution is the stricter is-a-tab back-pointer check plus the explicit lock ordering.) A
+ * self-transfer (`fromTabId === toTabId`) is refused with `tab.transfer_self` BEFORE any lock — moving a
+ * tab's items to itself is a no-op the caller did not mean, and would take the same row `FOR UPDATE`
+ * twice (mirrors `mergeTabs`' `tab.merge_self` self-guard).
+ *
+ * A tx-level verb (takes the caller's `tx`, like `moveTabLines`/`mergeTabs`): the HTTP route opens the
+ * `withTenant`/`asAppUser` transaction around it. Pre-fiscal — nothing is filed; each tab files its own
+ * sale on its own pay (design §4). `cfg` (the till config) supplies the `tenant_id` the split path
+ * stamps on each new destination line; `voidTabLine`/`joinTable` keep the same `TillConfig` parameter
+ * for the uniform tab-verb signature the route layer calls.
+ */
+export async function transferLines(
+  tx: Transaction,
+  cfg: TillConfig,
+  fromTabId: string,
+  toTabId: string,
+  transfers: { lineNo: number; quantity?: string }[],
+): Promise<void> {
+  // A tab cannot transfer to itself — refused before any lock (which would take the row twice).
+  if (fromTabId === toTabId) {
+    throw new AppError("tab.transfer_self", { tabId: fromTabId });
+  }
+
+  // A batch may name each source line_no AT MOST once — refused before any lock or write. A repeated
+  // line_no does NOT conserve quantity: every entry is validated against the STATIC `byLineNo` snapshot
+  // of `line.quantity` below (never updated between entries) and the split write sets the source to
+  // `original − q` (a plain set, not a cumulative decrement), so two partial "1"s off a café×3 line
+  // both pass and the destination gains 1.000+1.000 while the source only drops to 2.000 — 4 from an
+  // original 3. A whole-line + partial pair on one line is worse and contradictory: `moveTabLines`
+  // DELETEs the line (moving it whole) and the split's `UPDATE ... WHERE line_no=…` then matches zero
+  // rows while its INSERT still fabricates a destination line. Neither shape folds into a cumulative
+  // decrement, so a duplicate is simply refused (a 400 request-shape fault), naming the FIRST line_no
+  // that repeats. This up-front guard also covers a duplicate WHOLE-line pair — already harmless via
+  // `moveTabLines`' `inArray` set semantics — which is fine/stricter.
+  const seenLineNos = new Set<number>();
+  for (const { lineNo } of transfers) {
+    if (seenLineNos.has(lineNo)) {
+      throw new AppError("tab.transfer_duplicate_line", { tabId: fromTabId, lineNo });
+    }
+    seenLineNos.add(lineNo);
+  }
+
+  // Lock BOTH tab rows FOR UPDATE in ascending id order. `.sort()` is lexicographic, which for the
+  // canonical lowercase uuids `randomUUID()`/`gen_random_uuid()` emit matches PostgreSQL's own byte
+  // ordering of `uuid` — so this IS ascending id order as the DB sees it. `lockOpenTab` throws
+  // `tab.not_open` for a row that is absent, closed, not a tab (no `dining_tables` back-pointer), or
+  // (RLS) another tenant's. The last two are what this loop enforces beyond `moveTabLines`' own open
+  // check below, which accepts any open order — see the isolating not-open test in transfer-lines.test.ts.
+  for (const tabId of [fromTabId, toTabId].sort()) {
+    await lockOpenTab(tx, tabId);
+  }
+
+  // Read every named source line ONCE, under the lock, into a map. The per-unit locked values a split
+  // INHERITS come from here — never a catalogue re-read.
+  const named = transfers.map((t) => t.lineNo);
+  const sourceLines = await tx
+    .select({
+      lineNo: workingOrderLines.lineNo,
+      productId: workingOrderLines.productId,
+      descriptions: workingOrderLines.descriptions,
+      quantity: workingOrderLines.quantity,
+      unitPrice: workingOrderLines.unitPrice,
+      unitPriceGross: workingOrderLines.unitPriceGross,
+      vatRate: workingOrderLines.vatRate,
+      category: workingOrderLines.category,
+    })
+    .from(workingOrderLines)
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, fromTabId),
+        inArray(workingOrderLines.lineNo, named),
+      ),
+    );
+  const byLineNo = new Map(sourceLines.map((l) => [l.lineNo, l]));
+
+  // Validate EVERY transfer before moving/splitting anything (Task 5), then partition: a WHOLE-line
+  // move (`quantity` omitted, OR equal to the line's full quantity) vs a PARTIAL split (`quantity`
+  // given and strictly less). A quantity equal to the line's own quantity is routed to the whole-line
+  // path rather than the split path — splitting it would REDUCE the source to zero, which violates
+  // `working_order_lines_quantity_ck` (`quantity <> 0`). `compareDecimal` is value-wise across scales,
+  // so "2" == "2.000" and a weighed "0.320" == "0.320" both count as whole-line moves.
+  const wholeLineNos: number[] = [];
+  const partials: { line: (typeof sourceLines)[number]; quantity: string }[] = [];
+  for (const t of transfers) {
+    const line = byLineNo.get(t.lineNo);
+    if (line === undefined) {
+      throw new AppError("tab.line_not_found", { tabId: fromTabId, lineNo: t.lineNo });
+    }
+    if (t.quantity === undefined) {
+      wholeLineNos.push(t.lineNo);
+      continue;
+    }
+    // Validate the requested quantity: a well-formed decimal in `0 < quantity ≤ line.quantity`. A
+    // malformed literal makes `decimal()` throw `shared.invalid_decimal` — treated as invalid and
+    // reported as the SAME domain code as an out-of-range one (one throw site), so a bad quantity
+    // never surfaces as that raw code or as a `working_order_lines_quantity_ck`/other DB CHECK violation.
+    let inRange: boolean;
+    try {
+      const q = decimal(t.quantity);
+      inRange =
+        compareDecimal(q, decimal("0")) > 0 && compareDecimal(q, decimal(line.quantity)) <= 0;
+    } catch {
+      inRange = false;
+    }
+    if (!inRange) {
+      throw new AppError("tab.transfer_quantity_invalid", {
+        tabId: fromTabId,
+        lineNo: t.lineNo,
+        quantity: t.quantity,
+      });
+    }
+    // Full quantity → a whole-line move (no zero remnant, Task 4); otherwise a split. The quantity is
+    // now known valid, so this re-compare's `decimal()` cannot throw.
+    if (compareDecimal(decimal(t.quantity), decimal(line.quantity)) === 0) {
+      wholeLineNos.push(t.lineNo);
+    } else {
+      partials.push({ line, quantity: t.quantity });
+    }
+  }
+
+  // Whole lines first: `moveTabLines` keeps each locked price and appends at the destination's next
+  // `line_no`(s).
+  if (wholeLineNos.length > 0) {
+    await moveTabLines(tx, fromTabId, toTabId, wholeLineNos);
+  }
+
+  // Then the splits. Allocate destination `line_no`s AFTER the moves (so they don't collide with moved
+  // rows): read the current max under the lock and hand out max+1, max+2, ... in order — the same
+  // per-tab allocation `addTabRound`/`moveTabLines` make, safe against the
+  // `(working_order_id, line_no)` unique because the destination row is held FOR UPDATE by the lock loop.
+  if (partials.length > 0) {
+    const [{ maxLineNo }] = await tx
+      .select({ maxLineNo: sql<number>`coalesce(max(${workingOrderLines.lineNo}), 0)::int` })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, toTabId));
+    for (let i = 0; i < partials.length; i++) {
+      const { line, quantity } = partials[i]!;
+      const remaining = subtractDecimal(decimal(line.quantity), decimal(quantity));
+      // Source line: quantity drops, `line_total` recomputed from the SAME locked gross (no re-price).
+      await tx
+        .update(workingOrderLines)
+        .set({ quantity: remaining, lineTotal: grossLineTotal(line.unitPriceGross, remaining) })
+        .where(
+          and(
+            eq(workingOrderLines.workingOrderId, fromTabId),
+            eq(workingOrderLines.lineNo, line.lineNo),
+          ),
+        );
+      // Destination: a NEW line inheriting every per-unit value, `quantity = transferred`, `line_total`
+      // = round(transferred × locked gross). NEVER re-fetched from the catalogue.
+      await tx.insert(workingOrderLines).values({
+        // cfg.tenantId is the source line's tenant here (moveTabLines stamps `line.tenantId`; same value):
+        // the source read above is RLS-filtered to current_tenant_id(), and
+        // working_order_lines_tenant_isolation's WITH CHECK rejects any other tenant_id on this INSERT — a
+        // cross-tenant value is unwritable, not a silent wrong-tenant row.
+        tenantId: cfg.tenantId,
+        workingOrderId: toTabId,
+        lineNo: maxLineNo! + i + 1,
+        productId: line.productId,
+        descriptions: line.descriptions,
+        quantity,
+        unitPrice: line.unitPrice,
+        unitPriceGross: line.unitPriceGross,
+        vatRate: line.vatRate,
+        lineTotal: grossLineTotal(line.unitPriceGross, quantity),
+        category: line.category,
+      });
+    }
+  }
 }
 
 /** One row of the held-orders list the counter shows to retrieve a parked order. */

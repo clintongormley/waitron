@@ -31,6 +31,7 @@ import {
   parkOrder,
   placeOrder,
   sendToPrep,
+  transferLines,
   updateHeldOrder,
   voidTabLine,
 } from "./working-order.js";
@@ -135,6 +136,16 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // reused for the non-open tab, absent/malformed target, and deactivated target the verbs also throw.
   "table.occupied": 409,
   "tab.merge_self": 400,
+  // Table service transfer (TS-4). A transfer named the SAME tab as source and destination is a
+  // request-shape fault, a 400 (`tab.transfer_self`), the same shape `tab.merge_self` uses; a `quantity`
+  // outside `0 < quantity ≤ line.quantity` (zero, negative, over-quantity, malformed) is also a 400
+  // (`tab.transfer_quantity_invalid`); a batch naming the same source `line_no` more than once is a 400
+  // too (`tab.transfer_duplicate_line`) — the ids may be valid, the request itself is malformed.
+  // `tab.not_open`/`tab.line_not_found` (already mapped above) are reused for a non-open tab and an
+  // unknown source `line_no`.
+  "tab.transfer_self": 400,
+  "tab.transfer_quantity_invalid": 400,
+  "tab.transfer_duplicate_line": 400,
   // Manual service status (TS-2). Setting a table's status can fail two ways: an unknown status id
   // (or a malformed one screened at the route) names no status → 404 (`status.not_found`); a
   // deactivated status may not be set → 409 (`status.inactive`) — the id is valid but the status's
@@ -805,6 +816,30 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         await mergeTabs(tx, deps.cfg, intoTabId, body.fromTabId, {
           freeSourceTable: body.freeSourceTable,
         });
+      });
+      return c.body(null, 200);
+    }),
+  );
+
+  // Move SELECTED items — whole lines or PART of a line — from one open tab to another (TS-4, design
+  // §3a). `:id` is the SOURCE tab; the body carries the destination and the line selection. SESSION-
+  // GUARDED. Both ids are `isUuid`-screened BEFORE any query — a malformed one passed into
+  // `eq(workingOrders.id, …)` would 22P02 → an opaque 500, so it is refused as `tab.not_open` (the SAME
+  // fail-closed code an absent/closed/foreign tab gets). `transferLines` is tx-level, so this route
+  // opens the `withTenant`/`asAppUser` transaction around it. Returns 200 with an empty body; the till
+  // re-reads the two tabs' state.
+  app.post("/api/tabs/:id/transfer", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const fromTabId = requireTabParam(c.req.param("id"));
+      const body = await c.req.json<{
+        toTabId: string;
+        transfers: { lineNo: number; quantity?: string }[];
+      }>();
+      if (!isUuid(body.toTabId)) throw new AppError("tab.not_open", { tabId: body.toTabId });
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await transferLines(tx, deps.cfg, fromTabId, body.toTabId, body.transfers);
       });
       return c.body(null, 200);
     }),

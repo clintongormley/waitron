@@ -424,6 +424,42 @@ declare module "@waitron/shared" {
      */
     "tab.merge_self": { tabId: string };
     /**
+     * A transfer named the SAME tab as source and destination (`fromTabId === toTabId`). Refused
+     * before any lock or line read — moving items from a tab to itself is a no-op the caller did not
+     * mean, and letting it through would take the same tab's row `FOR UPDATE` twice. `tabId` is the
+     * caller-supplied uuid (both ids are equal here), echoed because it is not a secret. A CLIENT
+     * request-shape fault (400), distinct from the state conflict `tab.not_open` (409): the ids are
+     * well-formed, they are just equal. `tab.*` names the DOMAIN CONCEPT, not the throwing package
+     * (`tenant.not_found`'s note gives the rule); never renamed once shipped.
+     */
+    "tab.transfer_self": { tabId: string };
+    /**
+     * A transfer named a `quantity` outside `0 < quantity ≤ line.quantity` (design §3): zero, negative,
+     * more than the line holds, or a malformed decimal literal. Refused before the split — a zero would
+     * leave a zero-quantity remnant (violating `working_order_lines_quantity_ck`), an over-quantity would
+     * invent stock, and a malformed value cannot be priced. `lineNo` and the offending `quantity` (the
+     * caller's own text, not a secret) are echoed so a translator can name what was attempted. A CLIENT
+     * request-shape fault (400), distinct from the state conflict `tab.not_open` (409). `tab.*` names the
+     * DOMAIN CONCEPT (`tenant.not_found`'s note gives the rule); never renamed once shipped.
+     */
+    "tab.transfer_quantity_invalid": { tabId: string; lineNo: number; quantity: string };
+    /**
+     * A transfer batch named the SAME source `line_no` more than once (design §3). Refused BEFORE any
+     * lock or write. A repeated line_no does not conserve quantity: every entry is validated against a
+     * STATIC pre-batch snapshot of the line's quantity (never updated between entries) and the split
+     * write sets the source to `original − q` rather than a cumulative decrement — so two partial "1"s
+     * off a café×3 line both pass and the destination gains 1+1 while the source only drops to 2 (4
+     * from 3). A whole-line + partial pair on one line is worse and contradictory ("move it all" AND
+     * "move part"): the whole-line move DELETEs the source line and the split's UPDATE then matches
+     * nothing while its INSERT still fabricates a destination line. Neither shape can be folded into a
+     * cumulative decrement, so a duplicate line_no is simply refused. `lineNo` is the FIRST line_no that
+     * repeats; `tabId` is the source tab. A CLIENT request-shape fault (400) — the batch is malformed
+     * regardless of any tab's STATE — the same shape `tab.transfer_self`/`tab.transfer_quantity_invalid`
+     * carry, distinct from the state conflict `tab.not_open` (409). `tab.*` names the DOMAIN CONCEPT
+     * (`tenant.not_found`'s note gives the rule); never renamed once shipped.
+     */
+    "tab.transfer_duplicate_line": { tabId: string; lineNo: number };
+    /**
      * No such service status for this tenant. `statusId` is a caller-supplied uuid the dashboard/till
      * already holds, not a secret — an id that matches nothing is unactionable if withheld (the rule
      * `tenant.not_found`'s note gives). `status.*` names the DOMAIN CONCEPT (a table's manual service
