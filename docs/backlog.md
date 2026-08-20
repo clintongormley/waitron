@@ -565,12 +565,10 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     (#116) is the reason-(a) reference — it kept `singleFork` for the coverage-v8 artifact, and under
     one fork the connection budget is a non-issue (one file at a time), so no `maxForks`. Pick per
     package; document which reason applies.
-  - **Follow-up (small): stale timeout comment in already-landed configs.** #116 (payments) and #117
-    (fiscal-verifactu) `vitest.config.ts` still say the container boot is "paid in a beforeAll / a
-    container cold pull" — but the boot moved to `globalSetup`; only a ~26ms clone (or a PGlite WASM
-    boot) is in `beforeAll` now. Copilot caught it on #118 and it was reworded there; the two landed
-    copies want the same one-line fix (batch into any later phase's PR). Future phases: use the
-    corrected wording from #118's config.
+  - **DONE (#125): stale timeout comments fixed.** #116/#117 `vitest.config.ts` no longer credit
+    `hookTimeout` with "a container cold pull paid in a beforeAll" — reworded to the #118 framing (the
+    boot is in `globalSetup`, which vitest does not bound by `hookTimeout`; the per-suite `beforeAll` is
+    a PGlite WASM boot or a ~26ms clone).
   - **Roles vs `asAppUser`, and what stays per-container.** RLS suites that `connectAs` a probe LOGIN
     role list it in `roles` (a `ProbeRole`; `inRole` takes `string | readonly string[]`; a role shared
     by several suites is created once — the `rls_probe` pattern). Suites that use `asAppUser` (SET ROLE
@@ -581,14 +579,23 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
     per-container/PGlite by design** (never converted): `db` `client`/`migrate`/`testing/postgres` and
     `provisioner-role.migration`, `migrations` `apply.concurrency`, the 3 `provisioning` `*.rls`,
     apps/server `dev-setup`.
-  - **A second small follow-up (besides the #116/#117 timeout comment above): `CLAUDE.md` §3's db
-    `exports` count is stale** — it says "enumerated: `.`, `./testing/postgres.js`, `./testing/seed.js`"
-    (3), but the map now has 5 (`+ ./testing/lifecycle.js`, `./testing/shared-container.js`, added
-    #112/#114). One-liner; fold into any later PR that touches `CLAUDE.md` (format-checked → normal PR flow).
-  - **CI-win aggregate measurement still to read off a real post-rollout `main` run.** The mechanism
-    (per-file ~1.5s boot → ~26ms clone) is proven and each suite's own drop was seen per-PR, but the
-    aggregate `test-light` / `test-heavy` shard reduction should be read off an unfiltered `main` run now
-    the whole rollout has landed (the plan's per-phase "measure the shard's CI drop" step).
+  - **DONE (#125): `CLAUDE.md` §3 db-`exports` list fixed** — now lists all entries (`.`,
+    `./testing/postgres.js`, `./testing/seed.js`, `./testing/lifecycle.js`,
+    `./testing/shared-container.js`) with the reason the last two were added, and NO hardcoded count
+    (the count is exactly what went stale).
+  - **CI-win MEASURED (2026-08-20, run 32417600304 — the first completed unfiltered post-rollout `main`
+    run).** Against the 2026-08-18 pre-rollout baseline (run 32177773446): **`test-heavy` (packages/db)
+    406s → 254s, −152s / −37%**; **`test-light` (everything else) 509s → 383s, −126s / −24%**. The
+    `test-light` figure is a conservative NET floor — the parallel table-service track (#119/#124) ADDED
+    apps/server tests in the same window, offsetting part of the conversion win, plus CI-runner variance;
+    `test-heavy` is cleaner (db untouched by that track). Cause is the mechanism: per-file ~1.5s
+    boot+migrate → ~26ms `CREATE DATABASE … TEMPLATE` clone.
+  - **BONUS (#125): fixed a CI concurrency bug the measurement surfaced.** `ci.yml`'s
+    `cancel-in-progress` was unconditionally `true`, so the `docs(backlog)` commit landed to `main`
+    after every merge cancelled the code merge's UNFILTERED `main` run mid-`test-light` every time —
+    §2's safety net never completed (#123's `6b97612` was cancelled 3m30s in). Now
+    `cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}` (never cancels `main`); still supersedes
+    feature-branch/PR runs. Run 32417600304 completing (not cancelled) is the proof.
   - **Do NOT drop `singleFork` where it exists to speed CI — it is load-bearing, not stale.** The
     `@vitest/coverage-v8` cross-fork branch-merge bug is NOT fixed on vitest 3.2.7: it under-merges
     coverage under `pnpm -r` oversubscription (payments **82% branches** in the whole-workspace run,
