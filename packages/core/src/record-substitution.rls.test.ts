@@ -1,25 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { recordSubstitution } from "./record-substitution.js";
 import type { RecordSubstitutionInput } from "./record-substitution.js";
 import { seedBareSale, seedTenant } from "../test/fixtures.js";
-import { startRealPostgres } from "./testing/postgres.js";
 
 // Real Postgres, not PGlite, for the whole suite — mandatory here (design §7, CLAUDE.md §4). The
 // substituted-ticket and series lookups either carry no tenant predicate (the ticket lookup,
 // RLS-scoped exactly as record-void.ts) or an explicit one AND RLS (the series), so a cross-tenant
 // row is hidden by `FORCE ROW LEVEL SECURITY` alone. As a superuser (PGlite) the same SELECTs would
 // return the row and the "not_found" answers would be wrong — which is the point.
-const postgres = useRealPostgres({
-  start: startRealPostgres,
-  // The container image may be pulled cold on a fresh CI runner; the package's other real-PG suites
-  // set the same 180s for the same reason.
-  timeoutMs: 180_000,
-});
+const postgres = useTemplateDb({ template: "core_identity" });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
 

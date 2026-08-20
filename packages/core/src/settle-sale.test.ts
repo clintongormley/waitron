@@ -11,24 +11,18 @@ import {
   withTenant,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { AppError, saleId as brandSaleId, tenantId as brandTenantId } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
 import { seedTenant } from "../test/fixtures.js";
 import { settleSale } from "./settle-sale.js";
 import type { SettleSaleInput } from "./settle-sale.js";
-import { startRealPostgres } from "./testing/postgres.js";
 
 // Real Postgres, not PGlite, for the whole suite — mandatory here (design §7, CLAUDE.md §4). The
 // cross-tenant `not_found` path needs a non-superuser role that RLS is FORCED against, and the
 // settlement race needs two callers on two backend processes; PGlite gives neither (its one
 // superuser backend bypasses RLS and serialises every query).
-const postgres = useRealPostgres({
-  start: startRealPostgres,
-  // The container image may be pulled cold on a fresh CI runner; the package's own real-PG suites
-  // set 180s for the same reason (see `useRealPostgres`'s note on why there is no default).
-  timeoutMs: 180_000,
-});
+const postgres = useTemplateDb({ template: "core_identity" });
 
 const SETTLED_AT = new Date("2026-08-01T12:00:00Z");
 

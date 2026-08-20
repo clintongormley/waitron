@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
   tenantId as brandTenantId,
@@ -13,21 +13,17 @@ import {
   insertCapturedPayment,
   listAcceptedOffline,
 } from "@waitron/payments";
-import { startRealPostgres } from "./testing/postgres.js";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { FakeStripeDevice } from "./testing/fake-stripe-device.js";
 import { StripeOnDeviceProvider } from "./device-provider.js";
 
+// The non-superuser LOGIN role this suite connects AS (`pg.connectAs`). It is created once,
+// cluster-wide, in the package's globalSetup (`src/testing/global-setup.ts`) — not per file, because
+// a shared container is one cluster — with `inRole: "app_user"`; see that file's header.
 const PROBE_ROLE = "rls_probe_device";
 const PROBE_PASSWORD = "probe";
 
-// `timeoutMs` restates this package's own vitest `hookTimeout` (180s), which the helper's 60s
-// default would otherwise narrow — a container start includes pulling the image on a cold runner.
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-  timeoutMs: 180_000,
-});
+const suite = useTemplateDb({ template: "core_payments" });
 
 const SETTLED = new Date("2026-07-24T10:00:00Z");
 // The provider's sync-origin node id — required option, value irrelevant here (this container migrates

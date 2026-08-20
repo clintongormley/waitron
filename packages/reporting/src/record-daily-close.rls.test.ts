@@ -2,16 +2,16 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { asAppUser, captureError, pgErrorCode, withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { isAppError } from "@waitron/shared";
 import { seedVenue } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { recordDailyClose } from "./record-daily-close.js";
 import type { CashCountInput, DailyCloseRecord } from "./close-types.js";
-import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 
-// Real PostgreSQL via Testcontainers — deliberately NOT skipped when Docker is unavailable
-// (`startRealPostgres` throws rather than degrading to a skip). Every assertion below turns on
+// Real PostgreSQL via Testcontainers — deliberately NOT skipped when Docker is unavailable (the
+// package's vitest `globalSetup` throws when Docker is absent rather than degrading to a skip). Every
+// assertion below turns on
 // something PGlite cannot show: PGlite serialises every query onto ONE backend, so the single-writer
 // FOR UPDATE lock reads the same, whether present or removed, and a "concurrency" test on it is a
 // FALSE pass. It also runs every connection as a superuser, so the append-only immutability and the
@@ -24,7 +24,7 @@ import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgre
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 const WRITERS = 10;
 
-const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: CONTAINER_SETUP_TIMEOUT_MS });
+const suite = useTemplateDb({ template: "core" });
 
 let venue: SeededVenue;
 // A FRESH tenant/node/chain per test (seedVenue mints a new tenant): daily_closes is append-only and

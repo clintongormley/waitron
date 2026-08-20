@@ -1,13 +1,12 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import type { TenantId } from "@waitron/shared";
 import { seedPurchaseInvoice, seedVenue } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { computeInputVat } from "./input-vat.js";
 import type { InputVatReturn } from "./types.js";
-import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 
 // Real PostgreSQL via Testcontainers — deliberately NOT skipped when Docker is unavailable. The
 // deducible aggregate (`computeInputVat`) is tenant-wide: RLS and the explicit `p.tenant_id` predicate
@@ -24,7 +23,7 @@ import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgre
 // The predicate is NOT redundant, though: under a superuser/BYPASSRLS connection — which the PGlite
 // suite uses for its predicate test — RLS does nothing and only the explicit predicate scopes. Both
 // layers are load-bearing, each in the environment the other cannot cover.
-const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: CONTAINER_SETUP_TIMEOUT_MS });
+const suite = useTemplateDb({ template: "core" });
 
 let venueA: SeededVenue;
 let venueB: SeededVenue;

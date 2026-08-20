@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
   tenantId as brandTenantId,
@@ -8,7 +8,6 @@ import {
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import { captureAttempting, getPaymentByRef, insertAttempting } from "@waitron/payments";
-import { startRealPostgres } from "./testing/postgres.js";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { FakeStripe } from "./testing/fake-stripe.js";
 import { StripeTerminalProvider } from "./provider.js";
@@ -20,16 +19,13 @@ import { StripeTerminalProvider } from "./provider.js";
 // place (0001_payments_rls.sql's REVOKE ALL + targeted GRANT). current_tenant_id() then reads
 // `app.tenant_id`, so with no GUC set the tenant-isolation policy matches zero rows. Mirrors
 // packages/payments/src/payments.rls.test.ts verbatim.
+// The role is created once, cluster-wide, in the package's globalSetup
+// (`src/testing/global-setup.ts`) — not per file, because a shared container is one cluster; this
+// suite connects AS it with `pg.connectAs`.
 const PROBE_ROLE = "rls_probe";
 const PROBE_PASSWORD = "probe";
 
-// `timeoutMs` restates this package's own vitest `hookTimeout` (180s), which the helper's 60s
-// default would otherwise narrow — a container start includes pulling the image on a cold runner.
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-  timeoutMs: 180_000,
-});
+const suite = useTemplateDb({ template: "core_payments" });
 
 const SETTLED = new Date("2026-07-22T10:00:00Z");
 

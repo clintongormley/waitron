@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
   tenantId as brandTenantId,
@@ -8,20 +8,16 @@ import {
 } from "@waitron/shared";
 import { getPaymentByRef, insertInitiated, resolvePaymentTenant } from "@waitron/payments";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
-import { startRealPostgres } from "./testing/postgres.js";
 import { FakeStripeHosted } from "./testing/fake-stripe-hosted.js";
 import { StripeHostedProvider } from "./hosted-provider.js";
 
+// The non-superuser LOGIN role this suite connects AS (`pg.connectAs`). It is created once,
+// cluster-wide, in the package's globalSetup (`src/testing/global-setup.ts`) — not per file, because
+// a shared container is one cluster — with `inRole: "app_user"`; see that file's header.
 const PROBE_ROLE = "rls_probe_hosted";
 const PROBE_PASSWORD = "probe";
 
-// `timeoutMs` carries over this suite's own 180s hook timeout, which the helper's 60s default
-// would otherwise narrow — a container start includes pulling the image on a cold runner.
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-  timeoutMs: 180_000,
-});
+const suite = useTemplateDb({ template: "core_payments" });
 
 describe("hosted initiated rows under real row-level security", () => {
   it("isolates an initiated stripe row by tenant and resolves it untenanted by session id", async () => {
