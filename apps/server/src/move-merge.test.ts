@@ -400,3 +400,23 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
     expect(await tabIdOf(tInto)).toBe(intoTab);
   });
 });
+
+describe("mergeTabs join (freeSourceTable: false)", () => {
+  it("keeps BOTH tables pointing at intoTab and PRESERVES a manual status on the joined table", async () => {
+    const { cfg, cafeId, aguaId } = await setupVenue();
+    const tInto = await seedTable(cfg, "JN-into");
+    const tFrom = await seedTable(cfg, "JN-from");
+    const intoTab = await openTabOn(cfg, tInto, [{ productId: cafeId, quantity: "1" }]);
+    const fromTab = await openTabOn(cfg, tFrom, [{ productId: aguaId, quantity: "1" }]);
+    // A status on the source table (TS-2 schema): a JOINED table keeps its status (design §4).
+    const status = await seedStatus(cfg, "VIP");
+    await db.execute(sql`update dining_tables set status_id = ${status} where id = ${tFrom}`);
+
+    await asApp(cfg, (tx) => mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: false }));
+
+    expect(await tabIdOf(tInto)).toBe(intoTab);
+    expect(await tabIdOf(tFrom)).toBe(intoTab); // both covered by the one bill
+    expect(await statusIdOf(tFrom)).toBe(status); // joined table KEEPS its status
+    expect(await linesOf(intoTab)).toHaveLength(2); // café + agua combined onto intoTab
+  });
+});

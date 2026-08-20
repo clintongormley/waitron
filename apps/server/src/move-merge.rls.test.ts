@@ -343,3 +343,27 @@ describe("mergeTabs → one registro (H2)", () => {
     expect(await filedSaleTotal(intoTab)).toBe("3.50");
   });
 });
+
+describe("mergeTabs join → one bill covering both tables", () => {
+  it("a join-merged tab files ONE sale covering the combined lines; both tables still point at intoTab", async () => {
+    const { cfg, cafe, agua } = await setupVenue();
+    const tInto = await seedTable(cfg, "JMP-into");
+    const tFrom = await seedTable(cfg, "JMP-from");
+    const intoTab = await openTabOn(cfg, tInto, [{ productId: cafe.id, quantity: "1" }]);
+    const fromTab = await openTabOn(cfg, tFrom, [{ productId: agua.id, quantity: "1" }]);
+
+    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: false });
+    });
+    expect(await tabIdOf(tFrom)).toBe(intoTab);
+
+    await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id: intoTab,
+      lines: [],
+      tender: { method: "cash", amount: "5.00" },
+    });
+    expect(await saleCount(intoTab)).toBe(1); // one bill for both tables
+    expect(await saleCount(fromTab)).toBe(0); // the abandoned source files nothing
+  });
+});
