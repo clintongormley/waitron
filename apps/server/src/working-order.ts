@@ -1054,31 +1054,27 @@ export async function transferLines(
       continue;
     }
     // Validate the requested quantity: a well-formed decimal in `0 < quantity ≤ line.quantity`. A
-    // malformed literal makes `decimal()` throw `shared.invalid_decimal` — caught here and reported
-    // as the SAME domain code as an out-of-range one, so a bad quantity never surfaces as that raw
-    // code or as a `working_order_lines_quantity_ck`/other DB CHECK violation.
-    let cmpZero: number;
-    let cmpFull: number;
+    // malformed literal makes `decimal()` throw `shared.invalid_decimal` — treated as invalid and
+    // reported as the SAME domain code as an out-of-range one (one throw site), so a bad quantity
+    // never surfaces as that raw code or as a `working_order_lines_quantity_ck`/other DB CHECK violation.
+    let inRange: boolean;
     try {
       const q = decimal(t.quantity);
-      cmpZero = compareDecimal(q, decimal("0"));
-      cmpFull = compareDecimal(q, decimal(line.quantity));
+      inRange =
+        compareDecimal(q, decimal("0")) > 0 && compareDecimal(q, decimal(line.quantity)) <= 0;
     } catch {
+      inRange = false;
+    }
+    if (!inRange) {
       throw new AppError("tab.transfer_quantity_invalid", {
         tabId: fromTabId,
         lineNo: t.lineNo,
         quantity: t.quantity,
       });
     }
-    if (cmpZero <= 0 || cmpFull > 0) {
-      throw new AppError("tab.transfer_quantity_invalid", {
-        tabId: fromTabId,
-        lineNo: t.lineNo,
-        quantity: t.quantity,
-      });
-    }
-    if (cmpFull === 0) {
-      // Full quantity — a whole-line move, no zero remnant (Task 4).
+    // Full quantity → a whole-line move (no zero remnant, Task 4); otherwise a split. The quantity is
+    // now known valid, so this re-compare's `decimal()` cannot throw.
+    if (compareDecimal(decimal(t.quantity), decimal(line.quantity)) === 0) {
       wholeLineNos.push(t.lineNo);
     } else {
       partials.push({ line, quantity: t.quantity });
