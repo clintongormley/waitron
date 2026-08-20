@@ -3,10 +3,8 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import { captureError, pgErrorCode } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
-import { runMigrationSets, startMigratedPostgres } from "@waitron/db/testing/postgres.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyBatch, type SyncLogRow } from "./apply.js";
 
 // Real Postgres, not PGlite: this suite proves the apply loop under a genuine non-superuser,
@@ -14,26 +12,13 @@ import { applyBatch, type SyncLogRow } from "./apply.js";
 // own tenant — PGlite connects as a superuser and bypasses all of it, a false pass (CLAUDE.md §4).
 // The whole migration manifest runs (including `sync` last), so the container carries sync_log +
 // sync_cursor + sync_capture + the 14 capture triggers over the enrolled commercial tables.
-const postgres = useRealPostgres({
-  start: () =>
-    startMigratedPostgres({
-      dockerRequired:
-        "The sync apply-gate suite requires a running Docker daemon. It cannot be skipped: PGlite " +
-        "connects as a superuser and bypasses FORCE ROW LEVEL SECURITY, so it cannot exercise the " +
-        "app-role WITH CHECK tenant fence, the sync_cursor grant path, or the non-superuser apply " +
-        "this suite exists to verify (CLAUDE.md §4).",
-      migrate: (uri) => runMigrationSets(uri, migrationOptionsFor(manifestSets(), null)),
-    }),
-  // The apply worker's role: a LOGIN role that is a member of BOTH app_user (INSERT/UPDATE/DELETE on
-  // the enrolled tables) AND sync_tailer (SELECT/INSERT/UPDATE on sync_cursor). This is the
-  // sanctioned path — app_user is never widened to reach sync_cursor (spec §7; CLAUDE.md §3). It is
-  // non-superuser and non-BYPASSRLS, so FORCE RLS genuinely applies to it (that is the whole point).
-  setup: async ({ admin }) => {
-    await admin.execute(sql.raw(`create role sync_applier login password 'ap' in role app_user`));
-    await admin.execute(sql.raw(`grant sync_tailer to sync_applier`));
-  },
-  timeoutMs: 180_000,
-});
+// The apply worker's role sync_applier — a LOGIN member of BOTH app_user (INSERT/UPDATE/DELETE on the
+// enrolled tables) AND sync_tailer (SELECT/INSERT/UPDATE on sync_cursor), the sanctioned path that
+// never widens app_user to reach sync_cursor (spec §7; CLAUDE.md §3), non-superuser so FORCE RLS
+// genuinely applies — is now created once in src/testing/global-setup.ts with both memberships in its
+// inRole array, shared across the gate suites: a shared cluster is one cluster, so a per-file `create
+// role` would collide on the second. Reached below with `connectAs("sync_applier", "ap")`.
+const postgres = useTemplateDb({ template: "manifest" });
 
 const uuid = (): string => randomUUID();
 
