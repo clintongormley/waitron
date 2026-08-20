@@ -635,6 +635,64 @@ export async function moveTabLines(
 }
 
 /**
+ * Assert a working order is an OPEN tab, else throw `tab.not_open` (design §3) — the one definition of
+ * "this tab is open" that `moveTab`/`joinTable` both gate on, so the check cannot drift between them. A
+ * single UNLOCKED status read: deliberately NOT `lockOpenTab`, which takes `FOR UPDATE` and checks a
+ * `dining_tables` back-pointer both verbs intentionally avoid (see their docstrings).
+ */
+async function assertTabOpen(tx: Transaction, tabId: string): Promise<void> {
+  const [tab] = await tx
+    .select({ status: workingOrders.status })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, tabId));
+  if (tab === undefined || tab.status !== "open") {
+    throw new AppError("tab.not_open", { tabId });
+  }
+}
+
+/**
+ * Assert a move/join TARGET table exists, is `active`, and is FREE — the one occupancy predicate the
+ * whole table-service feature rests on (design §3), shared by `moveTab`/`joinTable` so the three-way
+ * check cannot drift between them. `table` is the caller's already-fetched-and-`FOR UPDATE`-locked row
+ * (or undefined). "Free" = `tab_id` null OR pointing at a settled/abandoned order (a stale pointer,
+ * TS-1 §2b); a still-`open` pointed order throws `table.occupied` ("use merge"). Throws
+ * `table.not_found`/`table.inactive`/`table.occupied`, each naming the caller-supplied `tableId`.
+ */
+async function assertTableAvailable(
+  tx: Transaction,
+  table: { tabId: string | null; active: boolean } | undefined,
+  tableId: string,
+): Promise<void> {
+  if (table === undefined) {
+    throw new AppError("table.not_found", { tableId });
+  }
+  if (!table.active) {
+    throw new AppError("table.inactive", { tableId });
+  }
+  if (table.tabId !== null) {
+    const [pointed] = await tx
+      .select({ id: workingOrders.id })
+      .from(workingOrders)
+      .where(and(eq(workingOrders.id, table.tabId), eq(workingOrders.status, "open")));
+    if (pointed !== undefined) {
+      throw new AppError("table.occupied", { tableId });
+    }
+  }
+}
+
+/**
+ * Free every table currently covered by `tabId` — `tab_id` + `status_id → NULL` in one tenant-scoped
+ * statement. A turnover: the freed table's TS-2 manual status must not linger onto the next party
+ * (design §4). Shared by `moveTab` (freeing the source) and `mergeTabs`'s consolidate branch.
+ */
+async function freeTablesCoveredBy(tx: Transaction, cfg: TillConfig, tabId: string): Promise<void> {
+  await tx
+    .update(diningTables)
+    .set({ tabId: null, statusId: null })
+    .where(and(eq(diningTables.tenantId, cfg.tenantId), eq(diningTables.tabId, tabId)));
+}
+
+/**
  * Relocate a party to a free table (design §3). Validates `tabId` is an `open` working order
  * (`tab.not_open`) and `toTableId` is `active` (`table.not_found`/`table.inactive`) and FREE — its
  * `tab_id` is null or points at a settled/abandoned order (a stale pointer, TS-1 §2b), else
@@ -663,13 +721,7 @@ export async function moveTab(
   tabId: string,
   toTableId: string,
 ): Promise<void> {
-  const [tab] = await tx
-    .select({ status: workingOrders.status })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, tabId));
-  if (tab === undefined || tab.status !== "open") {
-    throw new AppError("tab.not_open", { tabId });
-  }
+  await assertTabOpen(tx, tabId);
 
   const involved = await tx
     .select({ id: diningTables.id, tabId: diningTables.tabId, active: diningTables.active })
@@ -677,30 +729,15 @@ export async function moveTab(
     .where(or(eq(diningTables.id, toTableId), eq(diningTables.tabId, tabId)))
     .orderBy(diningTables.id)
     .for("update");
+  await assertTableAvailable(
+    tx,
+    involved.find((t) => t.id === toTableId),
+    toTableId,
+  );
 
-  const target = involved.find((t) => t.id === toTableId);
-  if (target === undefined) {
-    throw new AppError("table.not_found", { tableId: toTableId });
-  }
-  if (!target.active) {
-    throw new AppError("table.inactive", { tableId: toTableId });
-  }
-  if (target.tabId !== null) {
-    const [pointed] = await tx
-      .select({ id: workingOrders.id })
-      .from(workingOrders)
-      .where(and(eq(workingOrders.id, target.tabId), eq(workingOrders.status, "open")));
-    if (pointed !== undefined) {
-      throw new AppError("table.occupied", { tableId: toTableId });
-    }
-  }
-
-  // Free the source table(s) the tab currently covers (tab_id + status_id → NULL), then point the
-  // target — clearing ITS status_id too, since the moved-in party turns the target over (openTab parity).
-  await tx
-    .update(diningTables)
-    .set({ tabId: null, statusId: null })
-    .where(and(eq(diningTables.tenantId, cfg.tenantId), eq(diningTables.tabId, tabId)));
+  // Free the source table(s) the tab currently covers, then point the target — clearing ITS status_id
+  // too, since the moved-in party turns the target over (openTab parity, design §4).
+  await freeTablesCoveredBy(tx, cfg, tabId);
   await tx
     .update(diningTables)
     .set({ tabId, statusId: null })
@@ -727,34 +764,14 @@ export async function joinTable(
   tabId: string,
   tableId: string,
 ): Promise<void> {
-  const [tab] = await tx
-    .select({ status: workingOrders.status })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, tabId));
-  if (tab === undefined || tab.status !== "open") {
-    throw new AppError("tab.not_open", { tabId });
-  }
+  await assertTabOpen(tx, tabId);
 
   const [table] = await tx
     .select({ id: diningTables.id, tabId: diningTables.tabId, active: diningTables.active })
     .from(diningTables)
     .where(eq(diningTables.id, tableId))
     .for("update");
-  if (table === undefined) {
-    throw new AppError("table.not_found", { tableId });
-  }
-  if (!table.active) {
-    throw new AppError("table.inactive", { tableId });
-  }
-  if (table.tabId !== null) {
-    const [pointed] = await tx
-      .select({ id: workingOrders.id })
-      .from(workingOrders)
-      .where(and(eq(workingOrders.id, table.tabId), eq(workingOrders.status, "open")));
-    if (pointed !== undefined) {
-      throw new AppError("table.occupied", { tableId });
-    }
-  }
+  await assertTableAvailable(tx, table, tableId);
 
   await tx.update(diningTables).set({ tabId }).where(eq(diningTables.id, tableId));
 }
@@ -817,14 +834,14 @@ export async function mergeTabs(
   }
 
   // 1. Move ALL of fromTab's lines onto intoTab (locked prices preserved), both still open.
+  //    moveTabLines re-locks + re-validates these two rows as open — a deliberate no-op re-lock here
+  //    (we already hold and checked them), because moveTabLines is a standalone primitive TS-4 calls
+  //    directly and must self-validate; the extra round trip is accepted rather than couple the two.
   await moveTabLines(tx, fromTabId, intoTabId);
 
   // 2. Re-point fromTab's table(s) BEFORE the abandon (Plan note 2).
   if (options.freeSourceTable) {
-    await tx
-      .update(diningTables)
-      .set({ tabId: null, statusId: null })
-      .where(and(eq(diningTables.tenantId, cfg.tenantId), eq(diningTables.tabId, fromTabId)));
+    await freeTablesCoveredBy(tx, cfg, fromTabId);
   } else {
     await tx
       .update(diningTables)
