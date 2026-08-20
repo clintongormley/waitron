@@ -3,9 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { Database } from "@waitron/db";
 import { pgErrorCode, withTenant } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPin } from "./verify-pin.js";
-import { startRealPostgres } from "./testing/postgres.js";
 
 // A non-superuser LOGIN role inheriting app_user's grants. Being non-superuser is what makes RLS
 // apply at all — a superuser bypasses row-level security outright, which is why PGlite cannot prove
@@ -14,10 +13,10 @@ import { startRealPostgres } from "./testing/postgres.js";
 const PROBE_ROLE = "identity_sessions_probe";
 const PROBE_PASSWORD = "probe";
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-});
+// A clone of the `core_identity` template (CORE + IDENTITY); the probe connections below authenticate
+// as `identity_sessions_probe`, a cluster-wide role the package globalSetup creates in place of the
+// per-file `probeRole` this suite passed before the shared container.
+const suite = useTemplateDb({ template: "core_identity" });
 
 // Seed a location → till → active person for `tenant`, run as the superuser owner (RLS bypassed —
 // pure setup, exactly like @waitron/db's seedTenant). Returns the ids a session references.

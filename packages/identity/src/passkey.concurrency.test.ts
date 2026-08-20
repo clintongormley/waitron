@@ -1,15 +1,15 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { captureError, pgErrorCode, withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 import { codeOf, seedPerson } from "../test/fixtures.js";
 
-// Real PostgreSQL via Testcontainers — deliberately NOT skippable. PGlite serialises every query onto
-// ONE backend (CLAUDE.md §4), so two "concurrent" finishes never actually overlap there and the
-// single-use race this file exists to prove cannot occur — a PGlite run of this suite would be a false
-// pass. `startRealPostgres` throws rather than degrading to a skip when Docker is absent.
+// Real PostgreSQL — deliberately NOT skippable. PGlite serialises every query onto ONE backend
+// (CLAUDE.md §4), so two "concurrent" finishes never actually overlap there and the single-use race
+// this file exists to prove cannot occur — a PGlite run of this suite would be a false pass. The
+// shared container this clones is booted in the package globalSetup, whose `dockerRequired` throws
+// with guidance rather than degrading to a skip when Docker is absent (see src/testing/global-setup.ts).
 //
 // Only the VERIFY call is mocked (a genuine authenticator response cannot be synthesised in a test);
 // the mock is made to BLOCK on a gate this suite controls, so one real `finishPasskeyAuthentication`
@@ -48,7 +48,7 @@ function authVerified(
   };
 }
 
-const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: CONTAINER_SETUP_TIMEOUT_MS });
+const suite = useTemplateDb({ template: "core_identity" });
 
 beforeEach(() => {
   mockVerifyAuth.mockReset();

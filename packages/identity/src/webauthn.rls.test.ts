@@ -2,8 +2,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { pgErrorCode, withTenant } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
-import { startRealPostgres } from "./testing/postgres.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedPerson } from "../test/fixtures.js";
 
 // A non-superuser LOGIN role inheriting app_user's grants. Being non-superuser is what makes RLS
@@ -14,10 +13,10 @@ import { seedPerson } from "../test/fixtures.js";
 const PROBE_ROLE = "identity_webauthn_probe";
 const PROBE_PASSWORD = "probe";
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-});
+// A clone of the `core_identity` template (CORE + IDENTITY); the probe connections below authenticate
+// as `identity_webauthn_probe`, a cluster-wide role the package globalSetup creates in place of the
+// per-file `probeRole` this suite passed before the shared container.
+const suite = useTemplateDb({ template: "core_identity" });
 
 // A base64url-ish credential id — the value is opaque to the database; only its uniqueness per tenant
 // and its isolation are under test here.
