@@ -2,10 +2,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { asAppUser, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { createIngredient } from "./ingredients.js";
 import { getProductRecipe, setProductRecipe } from "./recipes.js";
-import { startRealPostgres } from "./testing/postgres.js";
 import { seedProduct, seedVenue } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 
@@ -16,15 +15,14 @@ import type { SeededVenue } from "../test/fixtures.js";
 // lines), unlike `ingredients`, which the third test proves succeeds. current_tenant_id() reads
 // `app.tenant_id`, so a read under tenant B's GUC matches none of tenant A's lines. Real Postgres,
 // not PGlite, for the reason CLAUDE.md §4 gives: PGlite's superuser connection bypasses RLS and
-// would make this a false pass. Mirrors packages/catalogue/src/operations.rls.test.ts.
+// would make this a false pass. Mirrors packages/catalogue/src/operations.rls.test.ts. This suite and
+// ingredients.rls.test.ts connect as the SAME `rls_probe`, created once cluster-wide in the package's
+// globalSetup (`src/testing/global-setup.ts`) — not per file, because a shared container is one
+// cluster; see that file's header.
 const PROBE_ROLE = "rls_probe";
 const PROBE_PASSWORD = "probe";
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-  timeoutMs: 180_000,
-});
+const suite = useTemplateDb({ template: "core" });
 
 // A DIRECT single-table read of `recipe_lines`, bypassing the ingredients join that getProductRecipe
 // uses. This is what makes the isolation assertion bite on the `recipe_lines` tenant-isolation policy

@@ -1,27 +1,25 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { captureError, pgErrorMessage, withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { DEFAULTS } from "./derive.js";
 import { runDue } from "./run.js";
 import { FakeDuty } from "./testing/fake-duty.js";
-import { startRealPostgres } from "./testing/postgres.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
-// A non-superuser LOGIN role inheriting app_user's grants. Being non-superuser is what makes RLS
-// apply at all — a superuser bypasses FORCE ROW LEVEL SECURITY, which is why PGlite cannot prove
-// any of this. runDue touches three privileges on scheduled_runs: SELECT (readSnapshot), INSERT
-// (claimGap, enqueueSuccessor) and UPDATE (claimRow, completeRun). A missing grant on any one of
-// them is invisible under PGlite and only surfaces here.
+// A non-superuser LOGIN role inheriting app_user's grants, which this suite connects AS
+// (`pg.connectAs`). Being non-superuser is what makes RLS apply at all — a superuser bypasses FORCE
+// ROW LEVEL SECURITY, which is why PGlite cannot prove any of this. runDue touches three privileges
+// on scheduled_runs: SELECT (readSnapshot), INSERT (claimGap, enqueueSuccessor) and UPDATE (claimRow,
+// completeRun). A missing grant on any one of them is invisible under PGlite and only surfaces here.
+// The role is created once, cluster-wide, in the package's globalSetup (`src/testing/global-setup.ts`)
+// — not per file, because a shared container is one cluster; see that file's header.
 const PROBE_ROLE = "scheduler_rls_probe";
 const PROBE_PASSWORD = "probe";
 
 const NOW = new Date("2026-07-25T04:00:00Z");
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-});
+const suite = useTemplateDb({ template: "core_scheduler" });
 
 describe("the scheduler under real row-level security", () => {
   it("claims, runs and completes as a non-superuser app_user member", async () => {

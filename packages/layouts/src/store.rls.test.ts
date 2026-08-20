@@ -1,10 +1,8 @@
 import { asAppUser, captureError, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { CORE_MIGRATIONS } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
-import { runMigrationSets, startMigratedPostgres } from "@waitron/db/testing/postgres.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { IDENTITY_MIGRATIONS, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import type { PersonRoleValue } from "@waitron/identity";
 import { isAppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
@@ -21,7 +19,9 @@ import type { LayoutDef, ReceiptConfig } from "./types.js";
 // the superuser owner (RLS bypassed — pure setup); every store call runs under withTenant + asAppUser
 // so it is a genuine RLS subject, exactly as packages/db/src/schema/layouts.rls.test.ts and
 // packages/catalogue/src/operations.rls.test.ts do. Both migration sets are applied, core first,
-// because authorizeManager needs the identity tables and the store needs till_layouts.
+// because authorizeManager needs the identity tables and the store needs till_layouts — that pairing
+// now lives in the package's globalSetup's `core_identity` template (`src/testing/global-setup.ts`),
+// which this suite clones, in place of the INLINE `startMigratedPostgres` it used to run.
 
 // A sale-critical-complete layout (validateLayout requires product-grid + basket + total + tender-pay,
 // design D4). `columns` on the product grid is the one wired config key (design D6).
@@ -34,19 +34,7 @@ function saleLayout(columns: number): LayoutDef {
   ];
 }
 
-const suite = useRealPostgres({
-  start: () =>
-    startMigratedPostgres({
-      dockerRequired:
-        "The layouts store RLS suite requires a running Docker daemon. It cannot be skipped: " +
-        "PGlite runs every connection as a superuser, which bypasses FORCE ROW LEVEL SECURITY and " +
-        "the tenant-isolation policy this suite proves the store honours under the app role.",
-      migrate: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS, IDENTITY_MIGRATIONS]),
-    }),
-  // Restates this package's own hookTimeout (60s), covering the image pull on a cold runner, which
-  // useRealPostgres's own (absent) default would otherwise leave at vitest's 5s.
-  timeoutMs: 120_000,
-});
+const suite = useTemplateDb({ template: "core_identity" });
 
 /** Run `fn` as the non-owner app role, scoped to `tenantId` — the shape the management/till routes
  * wrap every store call in (withTenant + asAppUser). */

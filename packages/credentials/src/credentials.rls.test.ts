@@ -11,14 +11,16 @@ import {
   putCredential,
   rotateCredentials,
 } from "./store.js";
-import { startRealPostgres } from "./testing/postgres.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 
-// A non-superuser LOGIN role inheriting app_user's grants. Being non-superuser is what makes RLS
-// apply at all — a superuser bypasses FORCE ROW LEVEL SECURITY, which is why PGlite cannot prove
-// any of this. The vault touches four privileges on tenant_credentials: SELECT, INSERT, UPDATE
-// (the upsert) and DELETE. A missing grant on any one is invisible under PGlite.
+// A non-superuser LOGIN role inheriting app_user's grants, which this suite connects AS
+// (`pg.connectAs`). Being non-superuser is what makes RLS apply at all — a superuser bypasses FORCE
+// ROW LEVEL SECURITY, which is why PGlite cannot prove any of this. The vault touches four privileges
+// on tenant_credentials: SELECT, INSERT, UPDATE (the upsert) and DELETE. A missing grant on any one is
+// invisible under PGlite. The role is created once, cluster-wide, in the package's globalSetup
+// (`src/testing/global-setup.ts`) — not per file, because a shared container is one cluster; see that
+// file's header.
 const PROBE_ROLE = "credentials_rls_probe";
 const PROBE_PASSWORD = "probe";
 
@@ -34,10 +36,7 @@ const STRIPE = {
   cancelUrl: "https://example.test/no",
 };
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-});
+const suite = useTemplateDb({ template: "core_credentials" });
 
 describe("the vault under real row-level security", () => {
   it("writes and reads its own tenant's credential as a non-superuser app_user member", async () => {

@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { asAppUser, captureError, pgErrorCode, pgErrorMessage, withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -10,7 +10,6 @@ import {
   listCatalogues,
   listProducts,
 } from "./operations.js";
-import { startRealPostgres } from "./testing/postgres.js";
 import { seedVenue } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 
@@ -22,18 +21,13 @@ import type { SeededVenue } from "../test/fixtures.js";
 // GUC matches none of tenant A's rows. This suite runs on REAL Postgres: PGlite connects as a
 // superuser and so bypasses FORCE ROW LEVEL SECURITY, which would make an RLS/grant assertion a
 // false pass — CLAUDE.md §4 requires real Postgres for anything about privileges or RLS as the
-// deployment role. Mirrors packages/payments-stripe/src/stripe.rls.test.ts.
+// deployment role. Mirrors packages/payments-stripe/src/stripe.rls.test.ts. The role is created once,
+// cluster-wide, in the package's globalSetup (`src/testing/global-setup.ts`) — not per file, because a
+// shared container is one cluster; see that file's header.
 const PROBE_ROLE = "rls_probe";
 const PROBE_PASSWORD = "probe";
 
-// `timeoutMs` restates a 180s beforeAll for the container start (image pull on a cold runner); this
-// package's vitest hookTimeout is 60s, which the useRealPostgres default would otherwise leave in
-// force for the expensive start hook.
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-  timeoutMs: 180_000,
-});
+const suite = useTemplateDb({ template: "core" });
 
 describe("catalogue operations under real row-level security", () => {
   let tenantA: SeededVenue;
