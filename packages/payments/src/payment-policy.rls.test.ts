@@ -1,23 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { decimal } from "@waitron/shared";
 import { getPaymentByRef, insertAcceptedOffline } from "./store.js";
 import { getPaymentPolicy } from "./policy.js";
-import { startRealPostgres } from "./testing/postgres.js";
 import { seedPaymentPolicy, seedWorkingOrder } from "../test/seed.js";
 
-// A non-superuser LOGIN role distinct from payments.rls.test.ts's `rls_probe` so the two suites'
-// roles never collide if they were ever run against the same container/instance.
+// A non-superuser LOGIN role, distinct from payments.rls.test.ts's `rls_probe`: both now live in
+// the one shared cluster, so the names must differ. Being non-superuser is what makes RLS apply.
 const PROBE_ROLE = "rls_probe_policy";
 const PROBE_PASSWORD = "probe";
 
-// vitest.config.ts's hookTimeout, which this container start had before the helper's 60s default.
-const postgres = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-  timeoutMs: 180_000,
-});
+// A clone of the `core_payments` template (CORE + PAYMENTS); the probe connections below authenticate as
+// `rls_probe_policy`, a cluster-wide role the package globalSetup creates in place of the per-file
+// `probeRole` this suite passed before the shared container.
+const postgres = useTemplateDb({ template: "core_payments" });
 
 const SETTLED = new Date("2026-07-23T10:00:00Z");
 

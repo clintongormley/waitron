@@ -3,23 +3,34 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
-    // PGlite boots a WASM PostgreSQL and applies two migration sets, and payments.rls.test.ts /
-    // wiring.test.ts additionally pull and start a real Postgres container via Testcontainers.
-    // Vitest's default 5s testTimeout is a live risk for both reasons. Both costs are one-off, paid
-    // in a beforeAll, so hookTimeout — raised further than testTimeout, to a container cold pull on
-    // a slow CI runner — is the one that has to be generous; testTimeout covers the ordinary risk
-    // of a migration suite booting a second database inside a single `it`.
+    // globalSetup boots ONE shared Postgres container and migrates the `core_payments` template every
+    // real-PG suite clones (~26ms) instead of each file booting and migrating its own (~1.5s). See
+    // src/testing/global-setup.ts. Because it precedes every worker, a Docker-absent run now fails
+    // the whole package (that file's header explains the broadening).
+    globalSetup: ["./src/testing/global-setup.ts"],
+    // PGlite boots a WASM PostgreSQL and applies two migration sets, and the RLS / concurrency
+    // suites clone the shared container's migrated template (globalSetup, above). Vitest's default
+    // 5s testTimeout is a live risk for both reasons. Both costs are one-off, paid in a beforeAll,
+    // so hookTimeout — raised further than testTimeout, to a container cold pull on a slow CI runner
+    // — is the one that has to be generous; testTimeout covers the ordinary risk of a migration
+    // suite booting a second database inside a single `it`.
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
-    // Run the whole suite in ONE fork. @vitest/coverage-v8 under-merges BRANCH coverage across fork
-    // workers: a branch this package's tests cover in one worker but not in another is reported
-    // uncovered after the merge — proven, store.ts is 100% branch when store.test.ts runs alone but
-    // 83.78% in the parallel full run, and single-fork restores it to 100%. fiscal-verifactu hits
-    // the same v8 artifact but has thousands of real branches that dilute it below notice; this
-    // package is small enough that a handful of mis-merged branches sinks the ratio under the
-    // threshold. One fork = one coverage profile = an exact merge, at the cost of running the two
-    // container tests back-to-back rather than in parallel (a few seconds on a suite this size).
+    // Run the whole suite in ONE fork. This is here for the @vitest/coverage-v8 branch-merge
+    // artifact, NOT for the shared cluster's connection budget: v8 under-merges BRANCH coverage
+    // across fork workers, so a branch this package's tests cover in one worker but not another is
+    // reported uncovered after the merge — proven, store.ts is 100% branch when store.test.ts runs
+    // alone but 83.78% in the parallel full run, and single-fork restores it to 100%.
+    // fiscal-verifactu hits the same v8 artifact but has thousands of real branches that dilute it
+    // below notice; this package is small enough that a handful of mis-merged branches sinks the
+    // ratio under the threshold. One fork = one coverage profile = an exact merge, at the cost of
+    // running the container tests back-to-back rather than in parallel (a few seconds on a suite
+    // this size).
+    //
+    // A consequence, not the reason: singleFork also means only ONE test file runs at a time, so the
+    // shared cluster's single 100-connection budget is a non-issue here and needs no `maxForks` cap
+    // — unlike packages/db, which runs multi-fork and caps forks at 4 for exactly that budget.
     poolOptions: { forks: { singleFork: true } },
     coverage: {
       provider: "v8",

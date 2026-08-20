@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
   nodeId as brandNodeId,
@@ -22,7 +22,6 @@ import {
   settleInitiated,
 } from "./store.js";
 import { FakeAsyncProvider } from "./testing/fake-async-provider.js";
-import { startRealPostgres } from "./testing/postgres.js";
 import { freshNif, seedForSale } from "../test/seed.js";
 import type { SeededForSale } from "../test/seed.js";
 
@@ -33,7 +32,10 @@ import type { SeededForSale } from "../test/seed.js";
 // event via the acquired-signal pattern reversal.concurrency.test.ts / incident-dedup.concurrency
 // .test.ts use — reused here, not reinvented.
 
-const postgres = useRealPostgres({ start: startRealPostgres });
+// A clone of the `core_payments` template (CORE + PAYMENTS) from the shared container the package
+// globalSetup boots. `postgres.admin` is unchanged, so the second beforeAll below (which installs
+// the fake fiscal backend and providers on that connection) keeps working.
+const postgres = useTemplateDb({ template: "core_payments" });
 
 // Both doubles wrap the admin connection, so they cannot be built until the container is up —
 // hence a second hook rather than a module-level construction. `install` creates the fake backend's

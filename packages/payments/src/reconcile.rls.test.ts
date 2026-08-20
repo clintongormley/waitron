@@ -1,13 +1,12 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { decimal, tenantId as brandTenantId } from "@waitron/shared";
 import { recordIncidentOnce } from "@waitron/core";
 import { withTenant } from "@waitron/db";
 import { reconcilePayments, DEFAULT_SETTLEMENT_LAG_MS } from "./reconcile.js";
 import { insertCapturedPayment } from "./store.js";
 import { FakeSettlementReport } from "./testing/fake-settlement-report.js";
-import { startRealPostgres } from "./testing/postgres.js";
 import { seedWorkingOrder } from "../test/seed.js";
 
 // A non-superuser LOGIN role inheriting app_user's grants. Being non-superuser is what makes RLS
@@ -20,12 +19,10 @@ import { seedWorkingOrder } from "../test/seed.js";
 const PROBE_ROLE = "reconcile_rls_probe";
 const PROBE_PASSWORD = "probe";
 
-// vitest.config.ts's hookTimeout, which this container start had before the helper's 60s default.
-const postgres = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-  timeoutMs: 180_000,
-});
+// A clone of the `core_payments` template (CORE + PAYMENTS); the probe connections below authenticate as
+// `reconcile_rls_probe`, a cluster-wide role the package globalSetup creates in place of the
+// per-file `probeRole` this suite passed before the shared container.
+const postgres = useTemplateDb({ template: "core_payments" });
 
 const NOW = new Date("2026-07-25T12:00:00Z");
 /** Older than NOW - DEFAULT_SETTLEMENT_LAG_MS, so the in-flight tolerance has expired — the same
