@@ -279,6 +279,55 @@ export interface MyAbsence {
   createdAt: string;
 }
 
+/**
+ * One active floor-plan zone from `GET /api/zones` (FP-1). A LOCAL mirror of the server's `FloorZone`
+ * (`apps/server/src/tables.ts`), deliberately NOT imported — same bundle-decoupling rationale as every
+ * other type in this file. The till only READS zones to render the live floor; zone CRUD is the
+ * management API's, so this shape carries no create-side fields.
+ */
+export interface FloorZone {
+  id: string;
+  name: string;
+  displayOrder: number;
+  active: boolean;
+}
+
+/**
+ * One row of the live-floor occupancy read-model from `GET /api/tables/state` (FP-1, design §4). A LOCAL
+ * mirror of the server's `TableState` (`apps/server/src/working-order.ts`'s `listTablesWithState` return),
+ * NOT imported — same bundle-decoupling rationale as every other type in this file. The raw signals
+ * (`hasOpenTab`, `pendingDeliveries`, `pendingToServe`) sit alongside the rolled-up `state` so the floor
+ * plan can render a richer badge. `zoneId` is the `floor_zones` row this table sits in, or null. The
+ * `tabId`/`tabLineCount`/`tabTotal` trio is present iff a tab is open (`hasOpenTab`); `tabTotal` is the
+ * open tab's gross draft total as numeric(12,2) text. `status` is the table's MANUAL service status (a
+ * colour badge), independent of occupancy, or null. `pendingToServe` counts the open tab's lines still
+ * to deliver (`served_at IS NULL`); DISTINCT from `pendingDeliveries` (uncollected counter deliveries).
+ */
+export interface TableState {
+  id: string;
+  label: string;
+  zoneId: string | null;
+  capacity: number | null;
+  state: "free" | "open-tab" | "delivery-pending";
+  hasOpenTab: boolean;
+  tabId?: string;
+  tabLineCount?: number;
+  tabTotal?: string;
+  pendingDeliveries: number;
+  pendingToServe: number;
+  status: { id: string; label: string; color: string } | null;
+}
+
+/**
+ * `POST /api/tables/:id/tab` success (FP-1) — the newly opened tab's working-order id plus the per-node
+ * order number the counter sees. Mirrors the server's `openTab` return (`apps/server/src/working-order.ts`).
+ * `tabId` is the working-order id the live floor threads to `addTabRound`/`markLineServed`.
+ */
+export interface TabResult {
+  tabId: string;
+  orderNumber: number;
+}
+
 export class TillApi {
   readonly #baseUrl: string;
   readonly #fetchImpl: FetchLike;
@@ -445,6 +494,63 @@ export class TillApi {
    */
   listPrepQueue(): Promise<PrepQueueEntry[]> {
     return this.#request<PrepQueueEntry[]>("/api/prep-queue", "GET");
+  }
+
+  // --- Live floor (FP-1): zones, occupancy read-model, served markers, tab open/round. All
+  // SESSION-GUARDED reads/writes; `served_at` is a PRE-FISCAL operational field (design H2), so the
+  // served markers below touch no fiscal path. ---
+
+  /** The venue's ACTIVE floor-plan zones, by display order → `GET /api/zones` (FP-1). LIST-ONLY. */
+  listZones(): Promise<FloorZone[]> {
+    return this.#request<FloorZone[]>("/api/zones", "GET");
+  }
+
+  /**
+   * The live-floor occupancy read-model → `GET /api/tables/state` (FP-1, design §4). One row per active
+   * table with its derived `state`, the raw occupancy signals, the open tab's summary (when any), and the
+   * table's manual service status. Gathers tabs across NODES (a table lives at the venue, not the till).
+   */
+  getTablesState(): Promise<TableState[]> {
+    return this.#request<TableState[]>("/api/tables/state", "GET");
+  }
+
+  /**
+   * Mark ONE line of an open tab as DELIVERED (`served_at = now()`) → `POST
+   * /api/working-orders/:orderId/lines/:lineNo/served` (FP-1, design §3b). The live floor's "this went
+   * out" tap — an operational verb, PRE-FISCAL (design H2): it never enters `registros`/`computeHuella`.
+   * The server answers an empty 200; re-read `getTablesState` for the new "N still to serve" count.
+   */
+  async markLineServed(orderId: string, lineNo: number): Promise<void> {
+    await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}/served`, "POST");
+  }
+
+  /**
+   * Clear ONE line's delivered marker (`served_at = NULL`) → `DELETE
+   * /api/working-orders/:orderId/lines/:lineNo/served` (FP-1) — the inverse of {@link markLineServed},
+   * for a mis-tap. Same PRE-FISCAL note; the server answers an empty 200.
+   */
+  async unmarkLineServed(orderId: string, lineNo: number): Promise<void> {
+    await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}/served`, "DELETE");
+  }
+
+  /**
+   * Open the running tab on a table → `POST /api/tables/:tableId/tab` (FP-1, design §3a). `lines?` opens
+   * the tab with an initial round; absent, the tab opens empty (the body is `{}`, so the route still has
+   * JSON to parse). Returns the new tab's working-order id + order number. `table.not_found` /
+   * `table.inactive` / `tab.already_open` surface as a rejected `{ code }`.
+   */
+  openTab(tableId: string, lines?: SaleLine[]): Promise<TabResult> {
+    return this.#request<TabResult>(`/api/tables/${tableId}/tab`, "POST", { lines });
+  }
+
+  /**
+   * Append a priced round to an open tab → `POST /api/working-orders/:orderId/round` (FP-1, design §3b).
+   * Prices each new line at add-time and appends WITHOUT re-pricing the existing lines. `lines` carry no
+   * price — the server prices them. The server answers an empty 200; `tab.not_open` (a non-open/absent
+   * tab) / `sale.empty_basket` (no lines) surface as a rejected `{ code }`.
+   */
+  async addTabRound(orderId: string, lines: SaleLine[]): Promise<void> {
+    await this.#request<void>(`/api/working-orders/${orderId}/round`, "POST", { lines });
   }
 
   // --- Staff schedule (the till-session-gated request path, `apps/server/src/schedule-api.ts`). The

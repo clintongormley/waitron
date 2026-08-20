@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { TillApi, type MyAbsence, type MyShift, type MySwap, type TillProduct } from "./client.js";
+import {
+  TillApi,
+  type FloorZone,
+  type MyAbsence,
+  type MyShift,
+  type MySwap,
+  type TableState,
+  type TillProduct,
+} from "./client.js";
 
 /** A stub `fetch` reply: JSON body at the given status, content-type set like the server's. */
 function jsonResponse(body: unknown, status = 200): Response {
@@ -721,5 +729,169 @@ describe("TillApi", () => {
         note: null,
       }),
     ).rejects.toMatchObject({ code: "absence.overlaps" });
+  });
+
+  // --- Live floor (FP-1): zones, occupancy read-model, served markers, tab open/round ---
+
+  it("listZones GETs the venue's active floor-plan zones and returns them", async () => {
+    // Typed `FloorZone[]` so the mock is a compile-time proof the client shape carries every field
+    // the server sends (`id`, `name`, `displayOrder`, `active`).
+    const zones: FloorZone[] = [
+      { id: "z1", name: "Terraza", displayOrder: 0, active: true },
+      { id: "z2", name: "Interior", displayOrder: 1, active: true },
+    ];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(zones));
+
+    const r = await new TillApi("", fetchStub).listZones();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/zones",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual(zones);
+  });
+
+  it("getTablesState GETs the occupancy read-model, decoding zoneId + pendingToServe and the tab fields", async () => {
+    // Typed `TableState[]` so the mock is a compile-time proof the client mirror carries every field
+    // `listTablesWithState` returns. An open-tab row carries the optional `tabId`/`tabLineCount`/
+    // `tabTotal` and a manual `status`; a free row omits the tab fields and nulls zone/capacity/status
+    // — both shapes round-trip.
+    const rows: TableState[] = [
+      {
+        id: "t1",
+        label: "Mesa 1",
+        zoneId: "z1",
+        capacity: 4,
+        state: "open-tab",
+        hasOpenTab: true,
+        tabId: "wo9",
+        tabLineCount: 3,
+        tabTotal: "12.50",
+        pendingDeliveries: 0,
+        pendingToServe: 2,
+        status: { id: "s1", label: "Reservada", color: "#ff0000" },
+      },
+      {
+        id: "t2",
+        label: "Mesa 2",
+        zoneId: null,
+        capacity: null,
+        state: "free",
+        hasOpenTab: false,
+        pendingDeliveries: 0,
+        pendingToServe: 0,
+        status: null,
+      },
+    ];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(rows));
+
+    const r = await new TillApi("", fetchStub).getTablesState();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/tables/state",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual(rows);
+    // The two badge signals the floor screen renders survive the round-trip decoded.
+    expect(r[0]).toMatchObject({ zoneId: "z1", pendingToServe: 2 });
+  });
+
+  it("markLineServed POSTs the served path (empty 200 body, no request body)", async () => {
+    // The server answers with an EMPTY 200 body (`c.body(null, 200)`), so the client resolves void
+    // without JSON-parsing nothing.
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(new TillApi("", fetchStub).markLineServed("ord-1", 2)).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/ord-1/lines/2/served",
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    );
+    // An operational tap carries neither a request body nor a content-type header.
+    const init = fetchStub.mock.calls[0]![1] as RequestInit;
+    expect(init.body).toBeUndefined();
+    expect(init.headers).toBeUndefined();
+  });
+
+  it("unmarkLineServed DELETEs the served path (empty 200 body, no request body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(new TillApi("", fetchStub).unmarkLineServed("ord-1", 2)).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/ord-1/lines/2/served",
+      expect.objectContaining({ method: "DELETE", credentials: "include" }),
+    );
+    const init = fetchStub.mock.calls[0]![1] as RequestInit;
+    expect(init.body).toBeUndefined();
+    expect(init.headers).toBeUndefined();
+  });
+
+  it("openTab POSTs an initial round to the table's /tab route, returning { tabId, orderNumber }", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ tabId: "wo9", orderNumber: 12 }));
+    const api = new TillApi("", fetchStub);
+
+    const r = await api.openTab("tbl-1", [{ productId: "cafe", quantity: "2" }]);
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/tables/tbl-1/tab",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ lines: [{ productId: "cafe", quantity: "2" }] }),
+      }),
+    );
+    expect(r).toEqual({ tabId: "wo9", orderNumber: 12 });
+  });
+
+  it("openTab with no initial lines POSTs an empty-object body (tab opens empty)", async () => {
+    // `openTab(tableId)` omits `lines`; `JSON.stringify({ lines: undefined })` is `"{}"`, so the server
+    // reads `body.lines` as absent and opens the tab empty — the client still sends a JSON body so the
+    // route's `c.req.json()` has something to parse.
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ tabId: "wo9", orderNumber: 12 }));
+
+    await new TillApi("", fetchStub).openTab("tbl-1");
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/tables/tbl-1/tab",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      }),
+    );
+  });
+
+  it("addTabRound POSTs the round's lines to the order's /round route (empty 200 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    const api = new TillApi("", fetchStub);
+
+    await expect(
+      api.addTabRound("ord-1", [{ productId: "agua", quantity: "1" }]),
+    ).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/ord-1/round",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ lines: [{ productId: "agua", quantity: "1" }] }),
+      }),
+    );
+  });
+
+  it("addTabRound surfaces { code } when the tab is not open", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ error: { code: "tab.not_open" } }), { status: 409 }),
+      );
+
+    await expect(
+      new TillApi("", fetchStub).addTabRound("ord-1", [{ productId: "agua", quantity: "1" }]),
+    ).rejects.toMatchObject({ code: "tab.not_open" });
   });
 });
