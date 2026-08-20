@@ -1186,3 +1186,215 @@ describe("/api/working-orders/:id/cancel", () => {
     });
   });
 });
+
+// FP-1 Task 6 — the live-floor till surface: GET /api/zones (list-only), the mark/unmark-served
+// route, and the zoneId + pendingToServe fields Task 4 added to the /api/tables/state read. All
+// SESSION-GUARDED, all wrapped in `run`. served_at is a PRE-FISCAL operational field (design H2):
+// nothing here touches a fiscal path. A zone is SEEDED directly as the PGlite superuser (RLS bypassed
+// — pure setup, exactly as the location/till/node seeds in `setup` above; zone CRUD is the management
+// API's, Task 5), then read back / assigned through the app-role routes under test.
+describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, Task 6)", () => {
+  it("lists zones, marks a line served (2→1) and unmarks it (1→2), surfacing zoneId + pendingToServe in the state read", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+
+    // Seed one active floor zone in the till's own venue. `GET /api/zones` must read it back through
+    // the app role, and the table-create must accept it, so those two paths — not this insert — are
+    // under test. This is the only zone-seeding test in the suite, so "Comedor" cannot collide.
+    const zoneRow = await suite.db.execute<{ id: string }>(sql`
+      insert into floor_zones (tenant_id, location_id, name)
+      values (${cfg.tenantId}, ${cfg.locationId}, 'Comedor') returning id`);
+    const zoneId = zoneRow.rows[0]!.id;
+
+    // Create a table IN that zone through the till route, so `createTable`'s zoneId assignment (and its
+    // composite zone FK) is exercised — not a raw insert.
+    const tableRes = await app.request("/api/tables", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ label: "4", zoneId }),
+    });
+    expect(tableRes.status).toBe(200);
+    const { id: tableId } = (await tableRes.json()) as { id: string };
+
+    // Open a tab with TWO lines. `priceBasket` maps items 1:1 (it does NOT merge by product), so two
+    // lines of the one seeded product become line_no 1 and 2 — pendingToServe starts at 2.
+    const tabRes = await app.request(`/api/tables/${tableId}/tab`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        lines: [
+          { productId: aguaProduct.id, quantity: "1" },
+          { productId: aguaProduct.id, quantity: "1" },
+        ],
+      }),
+    });
+    expect(tabRes.status).toBe(200);
+    const { tabId } = (await tabRes.json()) as { tabId: string };
+
+    // GET /api/zones lists the active zone (session-gated, read through the app role, by display_order).
+    const zonesRes = await app.request("/api/zones", { headers: { cookie } });
+    expect(zonesRes.status).toBe(200);
+    const zones = (await zonesRes.json()) as {
+      id: string;
+      name: string;
+      displayOrder: number;
+      active: boolean;
+    }[];
+    expect(zones.map((z) => z.name)).toContain("Comedor");
+    expect(zones).toContainEqual({ id: zoneId, name: "Comedor", displayOrder: 0, active: true });
+
+    // Read this table's occupancy row out of the state read.
+    const stateOf = async () => {
+      const res = await app.request("/api/tables/state", { headers: { cookie } });
+      expect(res.status).toBe(200);
+      const rows = (await res.json()) as {
+        id: string;
+        zoneId: string | null;
+        pendingToServe: number;
+      }[];
+      return rows.find((t) => t.id === tableId)!;
+    };
+
+    // The state read carries the table's zoneId (Task 4) and its pending-to-serve count (2 unserved).
+    let state = await stateOf();
+    expect(state.zoneId).toBe(zoneId);
+    expect(state.pendingToServe).toBe(2);
+
+    // POST marks line 1 delivered — pendingToServe drops to 1. A 200 with an empty body.
+    const served = await app.request(`/api/working-orders/${tabId}/lines/1/served`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(served.status).toBe(200);
+    expect(await served.text()).toBe("");
+    state = await stateOf();
+    expect(state.pendingToServe).toBe(1);
+
+    // DELETE clears the marker again (the mis-tap inverse) — pendingToServe returns to 2.
+    const unserved = await app.request(`/api/working-orders/${tabId}/lines/1/served`, {
+      method: "DELETE",
+      headers: { cookie },
+    });
+    expect(unserved.status).toBe(200);
+    expect(await unserved.text()).toBe("");
+    state = await stateOf();
+    expect(state.pendingToServe).toBe(2);
+  });
+
+  it("REJECTS GET /api/zones + the served POST/DELETE with 401 session.required when no cookie is present", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const id = randomUUID();
+    // The guard runs FIRST on each route (before any DB work), so an unauthenticated list/mark/unmark
+    // all 401 with the one code. Deleting the `requireSession` call from any of them flips its case.
+    const cases = [
+      app.request("/api/zones"),
+      app.request(`/api/working-orders/${id}/lines/1/served`, { method: "POST" }),
+      app.request(`/api/working-orders/${id}/lines/1/served`, { method: "DELETE" }),
+    ];
+    for (const res of await Promise.all(cases)) {
+      expect(res.status).toBe(401);
+      expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+    }
+  });
+
+  it("served POST with a malformed :id is 409 tab.not_open, not an opaque 500", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+
+    // A non-UUID :id passed into `eq(workingOrders.id, id)` would 22P02 → an opaque 500; the tab screen
+    // refuses it first with the SAME code a non-open/absent tab gets from `markLineServed` (the
+    // fail-closed shape the sibling void-line route uses).
+    const res = await app.request("/api/working-orders/not-a-uuid/lines/1/served", {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "tab.not_open", params: { tabId: "not-a-uuid" } },
+    });
+  });
+
+  it("served POST with a :lineNo that is not an in-range int4 line number is 404 tab.line_not_found, not an opaque 500", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+
+    // A REAL open tab, so `markLineServed`'s `lockOpenTab` passes and the malformed :lineNo genuinely
+    // reaches the `where line_no = $n` UPDATE in the RED (screen-removed) state — the witness that the
+    // route screen, not the verb, is what refuses it. "abc"/"1.5"/NaN and "9999999999" (which clears
+    // `Number.isInteger` but exceeds int4's max) would raise `22P02`/`22003` → an opaque 500 there;
+    // "0" is below the 1-based floor. All four are refused BEFORE any query as the honest 404 an absent
+    // line gets — the same shape the sibling void-line route screens.
+    const tableRes = await app.request("/api/tables", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ label: "served-bad-lineno" }),
+    });
+    const { id: tableId } = (await tableRes.json()) as { id: string };
+    const tabRes = await app.request(`/api/tables/${tableId}/tab`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ lines: [{ productId: aguaProduct.id, quantity: "1" }] }),
+    });
+    const { tabId } = (await tabRes.json()) as { tabId: string };
+
+    for (const lineNo of ["abc", "1.5", "0", "9999999999"]) {
+      const res = await app.request(`/api/working-orders/${tabId}/lines/${lineNo}/served`, {
+        method: "POST",
+        headers: { cookie },
+      });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({ error: { code: "tab.line_not_found" } });
+    }
+  });
+
+  it("served POST naming a line that does not exist on a real open tab is 404 tab.line_not_found", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+
+    // A real open tab (one line), then a mark of line 99 — an in-range int4 that clears the route
+    // screen and reaches `markLineServed`, whose 0-row UPDATE throws `tab.line_not_found`. This is the
+    // verb's own guard, distinct from the route's range screen above.
+    const tableRes = await app.request("/api/tables", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ label: "served-99" }),
+    });
+    const { id: tableId } = (await tableRes.json()) as { id: string };
+    const tabRes = await app.request(`/api/tables/${tableId}/tab`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ lines: [{ productId: aguaProduct.id, quantity: "1" }] }),
+    });
+    const { tabId } = (await tabRes.json()) as { tabId: string };
+
+    const res = await app.request(`/api/working-orders/${tabId}/lines/99/served`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({
+      error: { code: "tab.line_not_found", params: { tabId, lineNo: 99 } },
+    });
+  });
+
+  it("served POST on a well-formed id that names no OPEN tab is 409 tab.not_open (markLineServed's own guard)", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+
+    // A valid uuid naming no open tab a table points at (never opened, or settled/abandoned/foreign):
+    // clears the route's isUuid screen, reaches `markLineServed`, whose `lockOpenTab` matches no row →
+    // tab.not_open (409).
+    const res = await app.request(`/api/working-orders/${randomUUID()}/lines/1/served`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "tab.not_open" } });
+  });
+});

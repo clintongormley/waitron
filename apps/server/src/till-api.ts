@@ -14,7 +14,14 @@ import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
 import { collectOrder, payWorkingOrderIntegrated, recordTillSale } from "./till-sale.js";
 import type { IntegratedPayRequest, TillSaleRequest, TillTender } from "./till-sale.js";
-import { createTable, deactivateTable, listTables, setTableStatus, updateTable } from "./tables.js";
+import {
+  createTable,
+  deactivateTable,
+  listTables,
+  listZones,
+  setTableStatus,
+  updateTable,
+} from "./tables.js";
 import {
   abandonHeldOrder,
   addTabRound,
@@ -25,6 +32,7 @@ import {
   listHeldOrders,
   listPrepQueue,
   listTablesWithState,
+  markLineServed,
   mergeTabs,
   moveTab,
   openTab,
@@ -32,6 +40,7 @@ import {
   placeOrder,
   sendToPrep,
   transferLines,
+  unmarkLineServed,
   updateHeldOrder,
   voidTabLine,
 } from "./working-order.js";
@@ -221,6 +230,26 @@ function requireTabParam(id: string): string {
     throw new AppError("tab.not_open", { tabId: id });
   }
   return id;
+}
+
+/**
+ * Screen a `:lineNo` path param as an in-range int4 line number before it reaches a query — the SAME
+ * shape the sibling `DELETE /api/working-orders/:id/lines/:lineNo` (voidTabLine) route screens inline,
+ * shared here by the served POST/DELETE. `line_no` is int4 (orders.ts) and `markLineServed`/
+ * `unmarkLineServed` bind it parameterised, so a non-numeric value (`NaN`) or a fractional one is
+ * refused before any query, and an integer ABOVE int4's max (which clears `Number.isInteger`) is too —
+ * un-screened it would reach `where line_no = $n` and raise `22003` (out of range), a non-AppError the
+ * boundary turns into an opaque `server.internal` 500. A line number that cannot exist names no line,
+ * so it is refused as `tab.line_not_found` (404) — the honest 404 an absent line gets, exactly as the
+ * verbs themselves throw for an in-range `line_no` matching nothing. `tabId` travels for the same
+ * fail-closed error shape the void-line route carries.
+ */
+function requireLineNo(tabId: string, raw: string): number {
+  const lineNo = Number(raw);
+  if (!Number.isInteger(lineNo) || lineNo < 1 || lineNo > 2_147_483_647) {
+    throw new AppError("tab.line_not_found", { tabId, lineNo });
+  }
+  return lineNo;
 }
 
 /**
@@ -650,7 +679,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The occupancy read-model (design §4). SESSION-GUARDED.
+  // The occupancy read-model (design §4). SESSION-GUARDED. Task 4 extended `listTablesWithState` so
+  // each row now carries `zoneId` (the table's floor zone) and `pendingToServe` (its open tab's lines
+  // still to serve); this route returns that shape DIRECTLY, so both flow through unchanged.
   app.get("/api/tables/state", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -659,6 +690,21 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         return listTablesWithState(tx, deps.cfg);
       });
       return c.json(state);
+    }),
+  );
+
+  // The venue's active floor-plan zones (FP-1, design §4). SESSION-GUARDED; RLS + the location filter
+  // scope `listZones` to this till's venue, ordered by `display_order`. LIST-ONLY: zone CRUD is the
+  // management API's (`POST/PATCH/DELETE /management-api/zones`, Task 5), so this surface throws none
+  // of the create-side codes (`zone.name_taken`) — the till only reads zones to render the live floor.
+  app.get("/api/zones", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const zones = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return listZones(tx, deps.cfg);
+      });
+      return c.json(zones);
     }),
   );
 
@@ -749,6 +795,44 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await voidTabLine(tx, deps.cfg, id, lineNo);
+      });
+      return c.body(null, 200);
+    }),
+  );
+
+  // Mark ONE line of an open tab as DELIVERED — `served_at = now()` (design §3b, FP-1), the live floor's
+  // "this went out" tap. SESSION-GUARDED; it is an OPERATIONAL verb a logged-in runner uses like ringing
+  // a sale, gated by the session (`requireSession`), NOT by a permission. `served_at` is a PRE-FISCAL
+  // operational field (design H2) — it never enters `registros`/`computeHuella`/`recordSale`, so this is
+  // a floor-ops route with no fiscal path. The `:id`/`:lineNo` screens are the SAME as the sibling
+  // void-line DELETE above (`requireTabParam` → `tab.not_open` on a malformed tab id; `requireLineNo` →
+  // `tab.line_not_found` on a non-int4/out-of-range one), so a bad param is a clean 4xx, never a
+  // `22P02`/`22003` 500. `markLineServed` still throws `tab.not_open` (a non-open/absent/foreign tab a
+  // table points at) / `tab.line_not_found` (an in-range line matching nothing) for the cases it reaches.
+  app.post("/api/working-orders/:id/lines/:lineNo/served", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = requireTabParam(c.req.param("id"));
+      const lineNo = requireLineNo(id, c.req.param("lineNo"));
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await markLineServed(tx, deps.cfg, id, lineNo);
+      });
+      return c.body(null, 200);
+    }),
+  );
+
+  // Clear ONE line's delivered marker — `served_at = NULL` (the inverse of the POST above, for a
+  // mis-tap). SESSION-GUARDED, same `:id`/`:lineNo` screens, same PRE-FISCAL note; `unmarkLineServed`
+  // throws the same `tab.not_open`/`tab.line_not_found` guards.
+  app.delete("/api/working-orders/:id/lines/:lineNo/served", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = requireTabParam(c.req.param("id"));
+      const lineNo = requireLineNo(id, c.req.param("lineNo"));
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await unmarkLineServed(tx, deps.cfg, id, lineNo);
       });
       return c.body(null, 200);
     }),
