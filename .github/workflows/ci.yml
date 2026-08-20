@@ -32,7 +32,17 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel superseded runs on feature branches / PRs (a force-push should supersede its own old run,
+  # saving CI minutes) but NEVER on `main`. The push-to-`main` run is the UNFILTERED full-suite
+  # verification CLAUDE.md §2 relies on to catch what a scoped PR run missed (a cross-package guard, a
+  # package outside the PR's scope). Our workflow lands a `docs(backlog)` commit directly to `main`
+  # within ~3min of every code merge, and the parallel feature track pushes too; with unconditional
+  # `cancel-in-progress: true` that next `main` push cancelled the code merge's run mid-`test-light`
+  # every time (verified: #123's `6b97612` run was cancelled 3m30s in, test-light/test-heavy never
+  # finished; the superseding docs commit's own run skips the shards), so §2's safety net never
+  # actually completed. Keeping `main` runs alive costs at most two concurrent full runs when two
+  # `main` pushes land close together — cheap next to a verification that never runs.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # Works out what the rest of the workflow needs to do. Everything below gates on its outputs.
