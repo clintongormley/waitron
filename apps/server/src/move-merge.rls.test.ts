@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   assignCatalogueToLocation,
@@ -9,6 +9,8 @@ import {
   listAvailableProducts,
 } from "@waitron/catalogue";
 import type { AvailableProduct } from "@waitron/catalogue";
+import { VerifactuBackend } from "@waitron/fiscal-verifactu";
+import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
@@ -21,9 +23,11 @@ import {
   tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
+import { deploymentEnvironment } from "./config.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { moveTab, openTab } from "./working-order.js";
+import { joinTable, moveTab, openTab } from "./working-order.js";
+import { payWorkingOrder } from "./till-sale.js";
 import "./errors.js";
 
 // Real Postgres, not PGlite — mandatory for THIS suite (CLAUDE.md §4). The concurrency property under
@@ -38,6 +42,29 @@ import "./errors.js";
 const LOCALE = "es-ES";
 
 const suite = useTemplateDb({ template: "manifest" });
+
+let backend: FiscalBackend;
+let clock: TrustedClock;
+
+/** The system wall clock, reported confident/anchored — the identical stub `till-sale.test.ts` uses. */
+function systemClock(): TrustedClock {
+  return {
+    now: () => {
+      const instant = new Date();
+      return {
+        instant,
+        offsetMinutes: -instant.getTimezoneOffset(),
+        confident: true,
+        confidence: "anchored",
+        anchorAgeSeconds: 0,
+      };
+    },
+    anchor: () => {
+      throw new Error("move-merge.rls.test: anchor() is not used by recordSale");
+    },
+    currentAnchor: () => null,
+  };
+}
 
 // Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
 // so each provisioned venue needs its own NIF — the same shape `working-order.rls.test.ts` uses.
@@ -166,6 +193,36 @@ async function tabIdOf(tableId: string): Promise<string | null> {
   return rows[0]!.tab_id;
 }
 
+/** How many `sales` rows reference this working order — read as the superuser owner (bypasses RLS). */
+async function saleCount(workingOrderId: string): Promise<number> {
+  const { rows } = await suite.admin.execute<{ count: string }>(sql`
+    select count(*)::text as count from sales where working_order_id = ${workingOrderId}
+  `);
+  return Number(rows[0]!.count);
+}
+
+/** The working order's own state — status + whether settled_at is set (the biconditional's witness). */
+async function orderState(id: string): Promise<{ status: string; settledAtSet: boolean }> {
+  const { rows } = await suite.admin.execute<{ status: string; settled: boolean }>(sql`
+    select status, (settled_at is not null) as settled from working_orders where id = ${id}
+  `);
+  return { status: rows[0]!.status, settledAtSet: rows[0]!.settled };
+}
+
+beforeAll(() => {
+  clock = systemClock();
+  backend = new VerifactuBackend({
+    clock,
+    db: suite.admin,
+    environment: deploymentEnvironment(process.env),
+    deploymentEnvironment: deploymentEnvironment(process.env),
+    resolveClient: () =>
+      Promise.reject(
+        new Error("move-merge.rls.test: resolveClient must never be called by recordSale"),
+      ),
+  });
+});
+
 describe("moveTab concurrency (the target FOR UPDATE lock IS the guard)", () => {
   it("two backends racing to move DIFFERENT tabs onto the SAME free table → one wins, the other gets table.occupied", async () => {
     const { cfg, cafe } = await setupVenue();
@@ -205,5 +262,29 @@ describe("moveTab concurrency (the target FOR UPDATE lock IS the guard)", () => 
     } finally {
       await Promise.all([connA.close(), connB.close()]);
     }
+  });
+});
+
+describe("joinTable → one bill", () => {
+  it("a joined tab files ONE sale covering both tables on pay", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const t1 = await seedTable(cfg, "JP1");
+    const t2 = await seedTable(cfg, "JP2");
+    const tabId = await openTabOn(cfg, t1, [{ productId: cafe.id, quantity: "1" }]);
+    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await joinTable(tx, cfg, tabId, t2);
+    });
+    expect(await tabIdOf(t2)).toBe(tabId); // the join linked t2 to the one tab (durable: settle clears status_id, not tab_id)
+
+    // Pay the one tab (a retrieved open order files from its stored locked lines).
+    await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id: tabId,
+      lines: [],
+      tender: { method: "cash", amount: "5.00" },
+    });
+
+    expect(await saleCount(tabId)).toBe(1); // exactly one bill for both tables
+    expect(await orderState(tabId)).toMatchObject({ status: "settled" });
   });
 });

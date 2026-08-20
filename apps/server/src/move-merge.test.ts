@@ -19,7 +19,7 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { moveTab, moveTabLines, openTab } from "./working-order.js";
+import { joinTable, moveTab, moveTabLines, openTab } from "./working-order.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -275,6 +275,74 @@ describe("moveTab", () => {
     );
     const dst2 = await seedTable(cfg, "G-dst2");
     await expect(asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst2))).rejects.toMatchObject({
+      code: "tab.not_open",
+      params: { tabId },
+    });
+  });
+});
+
+describe("joinTable", () => {
+  it("extends a tab's coverage to a free table: BOTH tables point at the one tab, no line-move", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const t1 = await seedTable(cfg, "J1");
+    const t2 = await seedTable(cfg, "J2");
+    const tabId = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
+
+    await asApp(cfg, (tx) => joinTable(tx, cfg, tabId, t2));
+
+    expect(await tabIdOf(t1)).toBe(tabId);
+    expect(await tabIdOf(t2)).toBe(tabId); // both point at the one tab — a join
+    expect(await linesOf(tabId)).toHaveLength(1); // the free table added no lines
+  });
+
+  it("refuses a target that already has an OPEN tab (table.occupied)", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const t1 = await seedTable(cfg, "JO1");
+    const t2 = await seedTable(cfg, "JO2");
+    const tabId = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
+    await openTabOn(cfg, t2, [{ productId: cafeId, quantity: "1" }]);
+    await expect(asApp(cfg, (tx) => joinTable(tx, cfg, tabId, t2))).rejects.toMatchObject({
+      code: "table.occupied",
+      params: { tableId: t2 },
+    });
+  });
+
+  it("treats a target with a STALE tab_id (settled order) as free and joins onto it", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const t1 = await seedTable(cfg, "JS1");
+    const t2 = await seedTable(cfg, "JS2");
+    const oldTab = await openTabOn(cfg, t2, [{ productId: cafeId, quantity: "1" }]);
+    // Settle t2's tab (owner write) — tab_id STILL points at it, but it is now stale/free (TS-1 §2b).
+    await db.execute(
+      sql`update working_orders set status = 'settled', settled_at = now() where id = ${oldTab}`,
+    );
+    const tabId = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
+
+    await asApp(cfg, (tx) => joinTable(tx, cfg, tabId, t2));
+    expect(await tabIdOf(t2)).toBe(tabId); // stale pointer overwritten by the join
+    expect(await tabIdOf(t1)).toBe(tabId); // t1 still covered — a join adds, it does not free
+  });
+
+  it("refuses an unknown/inactive target and a non-open tab", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const t1 = await seedTable(cfg, "JG1");
+    const t2 = await seedTable(cfg, "JG2");
+    const tabId = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
+    const missing = randomUUID();
+    await expect(asApp(cfg, (tx) => joinTable(tx, cfg, tabId, missing))).rejects.toMatchObject({
+      code: "table.not_found",
+      params: { tableId: missing },
+    });
+    await db.execute(sql`update dining_tables set active = false where id = ${t2}`);
+    await expect(asApp(cfg, (tx) => joinTable(tx, cfg, tabId, t2))).rejects.toMatchObject({
+      code: "table.inactive",
+      params: { tableId: t2 },
+    });
+    await db.execute(
+      sql`update working_orders set status = 'settled', settled_at = now() where id = ${tabId}`,
+    );
+    const t3 = await seedTable(cfg, "JG3");
+    await expect(asApp(cfg, (tx) => joinTable(tx, cfg, tabId, t3))).rejects.toMatchObject({
       code: "tab.not_open",
       params: { tabId },
     });

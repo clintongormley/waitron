@@ -693,6 +693,58 @@ export async function moveTab(
   await tx.update(diningTables).set({ tabId }).where(eq(diningTables.id, toTableId));
 }
 
+/**
+ * Extend a tab's coverage to a free table (design §3): validates `tabId` is an `open` working order
+ * (`tab.not_open`) and `tableId` is `active` and FREE (`table.not_found`/`table.inactive`/`table.occupied`),
+ * then points the free table's `tab_id` at the tab too — now BOTH the tab's original table(s) and this
+ * one point at it, a join. NO line-move (the free table had no tab) and NO status clear (nothing is
+ * freed — the table joins, it does not turn over; design §4). On pay the one tab files one sale; on
+ * settle the TS-2 trigger clears status on ALL its tables (keyed on `tab_id`).
+ *
+ * The target table is locked `FOR UPDATE` — the concurrency guard, exactly as `moveTab`'s: a second
+ * concurrent join onto the same free table blocks, then reads its set `tab_id` and is refused
+ * `table.occupied`. `_cfg` is unused (the row is addressed by id and RLS confines it to the tenant) but
+ * kept for signature symmetry with `moveTab`/`mergeTabs` — underscore-prefixed so `noUnusedParameters`
+ * leaves it, the repo convention `voidTabLine`/`deactivateTable` follow for an interface-shape parameter.
+ */
+export async function joinTable(
+  tx: Transaction,
+  _cfg: TillConfig,
+  tabId: string,
+  tableId: string,
+): Promise<void> {
+  const [tab] = await tx
+    .select({ status: workingOrders.status })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, tabId));
+  if (tab === undefined || tab.status !== "open") {
+    throw new AppError("tab.not_open", { tabId });
+  }
+
+  const [table] = await tx
+    .select({ id: diningTables.id, tabId: diningTables.tabId, active: diningTables.active })
+    .from(diningTables)
+    .where(eq(diningTables.id, tableId))
+    .for("update");
+  if (table === undefined) {
+    throw new AppError("table.not_found", { tableId });
+  }
+  if (!table.active) {
+    throw new AppError("table.inactive", { tableId });
+  }
+  if (table.tabId !== null) {
+    const [pointed] = await tx
+      .select({ id: workingOrders.id })
+      .from(workingOrders)
+      .where(and(eq(workingOrders.id, table.tabId), eq(workingOrders.status, "open")));
+    if (pointed !== undefined) {
+      throw new AppError("table.occupied", { tableId });
+    }
+  }
+
+  await tx.update(diningTables).set({ tabId }).where(eq(diningTables.id, tableId));
+}
+
 /** One row of the held-orders list the counter shows to retrieve a parked order. */
 export interface HeldOrderSummary {
   id: string;
