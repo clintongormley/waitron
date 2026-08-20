@@ -10,11 +10,11 @@ export default defineConfig({
     // the broadening).
     globalSetup: ["./src/testing/global-setup.ts"],
     // PGlite boots a WASM PostgreSQL and then applies two migration sets, and the concurrency / RLS /
-    // e2e suites clone the shared container's migrated template (globalSetup, above). Vitest's
-    // default 5s testTimeout is a live risk for both reasons. Both costs are one-off, paid in a
-    // beforeAll, so hookTimeout — raised further than testTimeout, to a container cold pull on a slow
-    // CI runner — is the one that has to be generous; testTimeout covers the ordinary risk of a
-    // migration suite booting a second database inside a single `it`.
+    // e2e suites clone the shared container's migrated template (globalSetup, above). Each per-suite
+    // cost is paid in a beforeAll — the PGlite WASM boot + migrations, or the real-PG ~26ms clone —
+    // so hookTimeout stays generous for the PGlite boot. The container boot/pull is NOT in a
+    // beforeAll: it moved to globalSetup, which vitest does not bound by hookTimeout. testTimeout
+    // covers the ordinary risk of a migration suite booting a second database inside a single `it`.
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],

@@ -348,8 +348,11 @@ tables and columns use the Veri*Factu vocabulary (`envios`, `estado`, `huella`, 
 decision.
 
 **`@waitron/db`'s `exports` map is enumerated, not a wildcard** — `.`, `./testing/postgres.js`,
-`./testing/seed.js`. A wildcard would publish the harness and give `asAppUser` a second import path.
-A consequence worth knowing: `apps/server` cannot deep-import `packages/db`'s `errors.ts`.
+`./testing/seed.js`, plus `./testing/lifecycle.js` and `./testing/shared-container.js` (the last two
+added by the shared-container test-tier rollout, #112/#114, so every package's `globalSetup` can
+import `useTemplateDb` / `startSharedContainer`). A wildcard would publish the whole harness and give
+`asAppUser` a second import path; enumerating exposes exactly the entry points that are needed and
+nothing more. A consequence worth knowing: `apps/server` cannot deep-import `packages/db`'s `errors.ts`.
 
 **Never build SQL by string concatenation — and know the one case where you must.** Drizzle
 parameterises every interpolated value in a `sql` template automatically, so `` sql`… ${value}` ``
