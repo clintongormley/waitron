@@ -10,6 +10,10 @@ export default defineConfig({
     // One fork: @vitest/coverage-v8 under-merges BRANCH coverage across fork workers. Same
     // finding as packages/payments and packages/scheduler.
     poolOptions: { forks: { singleFork: true } },
+    // Boots ONE shared container with a `manifest` template migrated through apps/server's
+    // production path; the converted real-Postgres suites clone it via `useTemplateDb` instead of
+    // booting per-file. See `src/testing/global-setup.ts`.
+    globalSetup: ["./src/testing/global-setup.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json-summary"],

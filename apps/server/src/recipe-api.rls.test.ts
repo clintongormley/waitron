@@ -2,14 +2,13 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { createCatalogue, createProduct } from "@waitron/catalogue";
 import type { Logger } from "./logger.js";
 import { mountRecipeApi } from "./recipe-api.js";
 import { MANAGEMENT_COOKIE } from "./management-session.js";
-import { startRealPostgres } from "./testing/postgres.js";
 
 // Real Postgres, not PGlite: this suite proves the recipe-authoring write group's RLS isolation and its
 // `recipe.manage` gate DIFFERENTIALLY, which PGlite cannot do — every PGlite connection is a superuser
@@ -21,10 +20,7 @@ import { startRealPostgres } from "./testing/postgres.js";
 // blocks below.
 const LOCALE = "es-ES";
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  timeoutMs: 180_000,
-});
+const suite = useTemplateDb({ template: "manifest" });
 
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};

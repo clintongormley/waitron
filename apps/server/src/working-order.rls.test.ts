@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -41,7 +41,6 @@ import {
   updateHeldOrder,
 } from "./working-order.js";
 import { collectOrder, payWorkingOrder } from "./till-sale.js";
-import { startRealPostgres } from "./testing/postgres.js";
 import "./errors.js";
 
 // Real Postgres, not PGlite — mandatory for THIS suite (CLAUDE.md §4). The idempotency + concurrency
@@ -58,7 +57,7 @@ const LOCALE = "es-ES";
 // joined.
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
-const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: 180_000 });
+const suite = useTemplateDb({ template: "manifest" });
 
 let backend: FiscalBackend;
 let clock: TrustedClock;

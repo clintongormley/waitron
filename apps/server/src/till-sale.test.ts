@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -29,7 +29,6 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import type { TillConfig } from "./till-config.js";
 import { recordTillSale } from "./till-sale.js";
-import { startRealPostgres } from "./testing/postgres.js";
 
 // Real Postgres, not PGlite: the whole point is a genuine chained fiscal record written by the app
 // role under RLS. PGlite runs every connection as a superuser, which bypasses RLS and cannot prove
@@ -38,7 +37,7 @@ import { startRealPostgres } from "./testing/postgres.js";
 // owner connection; provisioning runs as the owner.
 const LOCALE = "es-ES";
 
-const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: 180_000 });
+const suite = useTemplateDb({ template: "manifest" });
 
 let backend: FiscalBackend;
 let clock: TrustedClock;

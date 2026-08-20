@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -29,7 +29,6 @@ import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
 import { addTabRound, openTab } from "./working-order.js";
 import { payWorkingOrder, recordTillSale } from "./till-sale.js";
-import { startRealPostgres } from "./testing/postgres.js";
 import "./errors.js";
 
 // ── H2: the huella is independent of table/tab membership — the grep receipts (Task 7, TS-1) ──
@@ -73,7 +72,7 @@ import "./errors.js";
 // `createTable` and reads `open` working-order counts; Tasks 5/7/8 extend it.
 const LOCALE = "es-ES";
 
-const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: 180_000 });
+const suite = useTemplateDb({ template: "manifest" });
 
 // Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
 // so each provisioned venue needs its own NIF — the same shape `working-order.rls.test.ts` uses.
