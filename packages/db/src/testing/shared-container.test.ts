@@ -107,7 +107,14 @@ describe.runIf(dockerAvailable())("startSharedContainer against a real container
         core: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
         core_again: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
       },
-      roles: [{ name: "shared_probe", password: "probe_pw", inRole: "app_user" }],
+      // `shared_member` is a member of BOTH app_user and shared_probe — the two-membership case a
+      // single-`inRole` role cannot carry, expressed with an inRole ARRAY (apps/server's `sync_applier`
+      // is this shape). `shared_probe` precedes it, so it exists when `in role …, shared_probe` runs;
+      // `app_user` comes from the CORE template.
+      roles: [
+        { name: "shared_probe", password: "probe_pw", inRole: "app_user" },
+        { name: "shared_member", password: "member_pw", inRole: ["app_user", "shared_probe"] },
+      ],
     }));
   }, 120_000);
 
@@ -140,6 +147,27 @@ describe.runIf(dockerAvailable())("startSharedContainer against a real container
       } finally {
         await dropper.close();
       }
+    }
+  });
+
+  it("creates a role with several memberships from an inRole array, after the roles it references", async () => {
+    const admin = await createPostgresDb(handle.uri);
+    try {
+      // shared_member's `inRole: ["app_user", "shared_probe"]` produced BOTH memberships; the
+      // shared_probe one could only have been created after shared_probe itself, which precedes it
+      // in `roles`. The two rows are the observable proof of the array AND the ordering.
+      const result = await admin.execute<{ grp: string }>(
+        sql`select grp.rolname as grp from pg_auth_members m
+            join pg_roles member on member.oid = m.member
+            join pg_roles grp on grp.oid = m.roleid
+            where member.rolname = 'shared_member' order by grp.rolname`,
+      );
+      expect(result.rows.map((row) => (row as { grp: string }).grp)).toEqual([
+        "app_user",
+        "shared_probe",
+      ]);
+    } finally {
+      await admin.close();
     }
   });
 

@@ -4,13 +4,12 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { insertInitiated, resolvePaymentTenant } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { startRealPostgres } from "./testing/postgres.js";
 import { mountWebhook } from "./webhook.js";
 import type { WebhookDeps } from "./webhook.js";
 import {
@@ -30,11 +29,10 @@ const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 };
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-  timeoutMs: 180_000,
-});
+// A clone of the full-manifest template; the probe connections below authenticate as the
+// cluster-wide `server_webhook_probe` role the package globalSetup creates (in place of the per-file
+// `probeRole` this suite used before the shared container).
+const suite = useTemplateDb({ template: "manifest" });
 const ring = loadKeyRing(KEY_ENV);
 
 // The settling node's origin id, and the all-zero uuid capture defaults to when app.node_id is unset.

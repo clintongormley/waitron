@@ -5,25 +5,17 @@
 import { randomUUID } from "node:crypto";
 import { asAppUser, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { CORE_MIGRATIONS } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
-import { runMigrationSets, startMigratedPostgres } from "@waitron/db/testing/postgres.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import "./errors.js";
 
-const suite = useRealPostgres({
-  start: () =>
-    startMigratedPostgres({
-      dockerRequired:
-        "The clear-table-status trigger suite requires Docker: the AFTER-UPDATE trigger runs as the " +
-        "non-superuser app_user and its same-tenant UPDATE under RLS is a false pass on PGlite.",
-      migrate: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
-    }),
-  timeoutMs: 120_000,
-});
+// A clone of the CORE-only template. The AFTER-UPDATE trigger runs as the non-superuser app_user
+// and its same-tenant UPDATE under RLS is a false pass on PGlite, so this needs the real cluster the
+// shared container provides; a Docker-absent run fails at the package globalSetup, not here.
+const suite = useTemplateDb({ template: "core" });
 
 function asApp<T>(tenantId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTenant(suite.admin, tenantId, async (tx) => {

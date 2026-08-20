@@ -2,23 +2,21 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import { captureError, createPostgresDb, withTenant, type Database } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
-import { runMigrationSets } from "@waitron/db/testing/postgres.js";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { captureError, withTenant, type Database } from "@waitron/db";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { syncPullOnce, type HttpClient } from "@waitron/sync";
 import type { Logger } from "./logger.js";
 import { mountSyncApi } from "./sync-api.js";
-import { roleUrl, startRealPostgres } from "./testing/postgres.js";
 
-// Two-node end-to-end (design §5, §7). ONE postgres:18-alpine container holding TWO migrated
-// databases — `source` (the container default) and a second `target` created with CREATE DATABASE +
-// runMigrationSets — is the minimum that proves genuine CROSS-DB apply: two independent
-// sync_log/sync_cursor states, one container boot. The roles (app_user/sync_tailer members) are
-// cluster-global, so one set serves both databases. The HTTP wire is a real Hono `app.request` (a real
-// Request/Response carrying the exact NDJSON bytes) — a bound socket is deployment #9's TLS concern;
-// byte-identity is a property of the bytes, not the socket. Both sides act as the non-superuser
-// sync_reader/sync_applier under FORCE RLS (PGlite would be a false pass, CLAUDE.md §4).
+// Two-node end-to-end (design §5, §7). TWO manifest-migrated databases in the shared container, each
+// a `useTemplateDb` clone of the `manifest` template — `source` and `target` — are the minimum that
+// proves genuine CROSS-DB apply: two independent sync_log/sync_cursor states. Calling `useTemplateDb`
+// twice is how the harness gives a suite two managed databases; each clone is created and dropped by
+// its own hooks. The roles (app_user/sync_tailer members) are cluster-global (created once by the
+// package globalSetup), so one set serves both databases. The HTTP wire is a real Hono `app.request`
+// (a real Request/Response carrying the exact NDJSON bytes) — a bound socket is deployment #9's TLS
+// concern; byte-identity is a property of the bytes, not the socket. Both sides act as the
+// non-superuser sync_reader/sync_applier under FORCE RLS (PGlite would be a false pass, CLAUDE.md §4).
 const log: Logger = () => {};
 
 // Sync node ids (the origin markers + cursor keys), distinct from the nodes-table FK below.
@@ -39,17 +37,8 @@ const SERIES = "55555555-5555-4555-8555-555555555555";
 // suites; this e2e is the two-lane composition proof, spec §8/§4e).
 const WORKING_ORDER = "aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa";
 
-const postgres = useRealPostgres({
-  start: startRealPostgres,
-  setup: async ({ admin }) => {
-    await admin.execute(sql.raw(`create role app_login login password 'app_pw' in role app_user`));
-    await admin.execute(sql.raw(`create role sync_applier login password 'ap' in role app_user`));
-    await admin.execute(sql.raw(`grant sync_tailer to sync_applier`));
-    await admin.execute(sql.raw(`create role sync_reader login password 'rp'`));
-    await admin.execute(sql.raw(`grant sync_tailer to sync_reader`));
-  },
-  timeoutMs: 180_000,
-});
+const source = useTemplateDb({ template: "manifest" });
+const target = useTemplateDb({ template: "manifest" });
 
 let targetAdmin: Database;
 let targetApplier: Database;
@@ -144,26 +133,21 @@ const targetPaymentCount = async (id: string): Promise<string> => {
 };
 
 beforeAll(async () => {
-  await seedParents(postgres.admin); // source parents
-
-  const targetUrl = new URL(postgres.pg.uri);
-  targetUrl.pathname = "/sync_e2e_target";
-  const targetUri = targetUrl.toString();
-  await postgres.admin.execute(sql.raw(`create database sync_e2e_target`));
-  await runMigrationSets(targetUri, migrationOptionsFor(manifestSets(), null));
-
-  targetAdmin = await createPostgresDb(targetUri);
+  await seedParents(source.admin); // source parents
+  targetAdmin = target.admin;
   await seedParents(targetAdmin); // the SAME parents on the target so the sale's FKs resolve
-  targetApplier = await createPostgresDb(roleUrl(targetUri, "sync_applier", "ap"));
-  sourceReader = await postgres.pg.connectAs("sync_reader", "rp");
-  sourceWriter = await postgres.pg.connectAs("app_login", "app_pw");
-}, 180_000);
+  targetApplier = await target.pg.connectAs("sync_applier", "ap");
+  sourceReader = await source.pg.connectAs("sync_reader", "rp");
+  sourceWriter = await source.pg.connectAs("app_login", "app_pw");
+});
 
 afterAll(async () => {
+  // Only the `connectAs` handles this suite opened need closing here; the two admin connections and
+  // both clone databases are owned and torn down by the two `useTemplateDb` calls. `targetAdmin` is
+  // `target.admin`, so it must NOT be closed here — that would double-close.
   if (sourceWriter !== undefined) await sourceWriter.close();
   if (sourceReader !== undefined) await sourceReader.close();
   if (targetApplier !== undefined) await targetApplier.close();
-  if (targetAdmin !== undefined) await targetAdmin.close();
 });
 
 describe("two-node sync end-to-end over a real HTTP wire", () => {
@@ -194,7 +178,7 @@ describe("two-node sync end-to-end over a real HTTP wire", () => {
     expect(landed.rows[0]!.vat0).toBe("1.50");
 
     // The cursor advanced to the source's max seq for this origin.
-    const sourceMax = await postgres.admin.execute<{ seq: string }>(
+    const sourceMax = await source.admin.execute<{ seq: string }>(
       sql`select max(seq)::text as seq from sync_log where origin_id = ${NODE_A}::uuid`,
     );
     const cursor = await targetAdmin.execute<{ seq: string }>(
