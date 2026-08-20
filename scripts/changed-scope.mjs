@@ -109,6 +109,21 @@ export const TILL_PACKAGE = "@waitron/till";
 export const DASHBOARD_PACKAGE = "@waitron/dashboard";
 
 /**
+ * The `test-server` shard's package: apps/server, the workspace's largest suite.
+ *
+ * Unlike the three browser packages above, this split is a MEASURED PERFORMANCE one, not a hang
+ * mitigation. On the unfiltered `main` run 32417600304 (`gh run view 32417600304 --json jobs`)
+ * apps/server was 341.7s of test-light's 358s wall-clock — its 63-file suite, 277s of that test
+ * execution — so on its own it set test-light's floor, and no amount of re-sharding the other twenty
+ * packages could drop the shard below it. On a dedicated runner it stops being that floor, AND it
+ * runs MULTI-FORK there rather than singleFork: the @vitest/coverage-v8 branch under-merge that held
+ * apps/server to one fork is a `pnpm -r` CONTENTION artifact, which a runner it has to itself does
+ * not have. The receipt — single-fork vs multi-fork branch coverage, and the CI confirmation that it
+ * holds on a constrained 4-vCPU runner — is on apps/server/vitest.config.ts's poolOptions.
+ */
+export const SERVER_PACKAGE = "@waitron/server";
+
+/**
  * The packages that have a test shard to themselves — the set `test-light` subtracts.
  *
  * ONE list rather than a name per gate, because `light` is defined against it: a package added here
@@ -122,7 +137,13 @@ export const DASHBOARD_PACKAGE = "@waitron/dashboard";
  * a `pnpm install` for a selection that would then contain nothing to run, which is the shape the
  * `runnable` guard in scripts/changed-packages.mjs was added to refuse.
  */
-export const OWN_SHARD_PACKAGES = [HEAVY_PACKAGE, UI_PACKAGE, TILL_PACKAGE, DASHBOARD_PACKAGE];
+export const OWN_SHARD_PACKAGES = [
+  HEAVY_PACKAGE,
+  UI_PACKAGE,
+  TILL_PACKAGE,
+  DASHBOARD_PACKAGE,
+  SERVER_PACKAGE,
+];
 
 /**
  * Workspace members that deliberately declare no `test:coverage` script.
@@ -184,6 +205,7 @@ export const SCOPE_GATES = [
   { output: "ui", covers: membership(UI_PACKAGE) },
   { output: "till", covers: membership(TILL_PACKAGE) },
   { output: "dashboard", covers: membership(DASHBOARD_PACKAGE) },
+  { output: "server", covers: membership(SERVER_PACKAGE) },
   { output: "light", covers: (inScope) => [...inScope].some(runsTests) },
   { output: "verifactu", covers: membership("@waitron/verifactu") },
   { output: "shared", covers: membership("@waitron/shared") },

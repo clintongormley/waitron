@@ -91,6 +91,7 @@ jobs:
       ui: ${{ steps.gates.outputs.ui }}
       till: ${{ steps.gates.outputs.till }}
       dashboard: ${{ steps.gates.outputs.dashboard }}
+      server: ${{ steps.gates.outputs.server }}
       light: ${{ steps.gates.outputs.light }}
       verifactu: ${{ steps.gates.outputs.verifactu }}
       shared: ${{ steps.gates.outputs.shared }}
@@ -524,6 +525,57 @@ jobs:
             | node scripts/changed-packages.mjs runnable test:coverage
           pnpm --filter "@waitron/db" test:coverage
 
+  # apps/server alone: the workspace's LARGEST suite, split out of test-light on a measurement.
+  #
+  # On the unfiltered `main` run 32417600304 (`gh run view 32417600304 --json jobs`) apps/server was
+  # 341.7s of test-light's 358s wall-clock — 63 files, 277s of it test execution — so it alone set
+  # that shard's floor, and re-sharding the other twenty packages could not drop test-light below it.
+  # A runner of its own stops it being that floor. Unlike test-ui/till/dashboard this is a PERFORMANCE
+  # split, not a browser-hang mitigation — apps/server touches no browser. See SERVER_PACKAGE in
+  # scripts/changed-scope.mjs.
+  #
+  # The dedicated runner also lets apps/server run MULTI-FORK (apps/server/vitest.config.ts's
+  # poolOptions): the @vitest/coverage-v8 branch under-merge that held it to singleFork is a `pnpm -r`
+  # contention artifact a runner it has to itself does not have.
+  #
+  # REQUIRE_DOCKER + TESTCONTAINERS_RYUK_DISABLED exactly as test-heavy, and as test-light before it:
+  # apps/server's global-setup (src/testing/global-setup.ts) boots a shared Postgres container its
+  # real-PG suites clone from via useTemplateDb, so REQUIRE_DOCKER makes a runner without Docker fail
+  # loudly instead of skipping those suites.
+  test-server:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    env:
+      REQUIRE_DOCKER: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The guard first, same reason as the other shards: pnpm answers "nothing to do" with exit 0
+      # and a line on stdout, so a shard whose filter selects nothing reports success having run no
+      # tests.
+      - name: Run the server shard
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+        run: |
+          set -euo pipefail
+          pnpm --filter "@waitron/server" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:coverage
+          pnpm --filter "@waitron/server" test:coverage
+
   # packages/ui alone, and the only job in this file that needs a browser.
   #
   # It was part of test-light until 2026-08-01, when that shard HUNG on it twice — the receipts, and
@@ -806,6 +858,7 @@ jobs:
           set -- "$@" --filter "!@waitron/ui"
           set -- "$@" --filter "!@waitron/till"
           set -- "$@" --filter "!@waitron/dashboard"
+          set -- "$@" --filter "!@waitron/server"
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
@@ -910,6 +963,7 @@ jobs:
       - bundle-smoke
       - typecheck
       - test-heavy
+      - test-server
       - test-ui
       - test-till
       - test-dashboard

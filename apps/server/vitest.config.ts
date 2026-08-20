@@ -7,9 +7,19 @@ export default defineConfig({
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**", "src/**/*.preprod.test.ts"],
-    // One fork: @vitest/coverage-v8 under-merges BRANCH coverage across fork workers. Same
-    // finding as packages/payments and packages/scheduler.
-    poolOptions: { forks: { singleFork: true } },
+    // Multi-fork, capped at the CI runner's 4 vCPUs. apps/server runs on a DEDICATED runner
+    // (ci.yml's test-server), which is what makes this safe: the @vitest/coverage-v8 branch
+    // under-merge that held this package — and packages/payments and packages/scheduler — to
+    // singleFork is a `pnpm -r` CONTENTION artifact (many packages' forks starving one runner), not a
+    // property of multi-forking one package. Verified in isolation on 2026-08-20 against this suite,
+    // Docker up, nothing else running: single-fork and multi-fork branch coverage are IDENTICAL to
+    // the count (1619/1637 = 98.9%) at maxForks 4, and still 98.9% (1620/1638) at 18 forks. An
+    // under-merge drops `covered` while `total` holds — the opposite direction, and the shape
+    // packages/payments showed under `pnpm -r` load (branches fell to 82%). Local wall-clock 48.6s →
+    // 24.9s at 4 forks, 14.5s at 18. What isolation cannot prove is the CONSTRAINED case — 4 forks on
+    // a 4-vCPU runner under real Docker I/O — so this split's own test-server run is the confirmation
+    // that branch coverage still clears 95 there; see docs/backlog.md for that receipt.
+    poolOptions: { forks: { maxForks: 4 } },
     // Boots ONE shared container with a `manifest` template migrated through apps/server's
     // production path; the converted real-Postgres suites clone it via `useTemplateDb` instead of
     // booting per-file. See `src/testing/global-setup.ts`.
