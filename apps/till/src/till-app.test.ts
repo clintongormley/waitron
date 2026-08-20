@@ -6,13 +6,16 @@ import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
 import type { TillScheduleScreen } from "./screens/till-schedule-screen.js";
+import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillPrepQueue } from "./widgets/prep-queue.js";
 import type { TillProductGrid } from "./widgets/product-grid.js";
 import { LAYOUT_A, type LayoutDef } from "./layout.js";
 import type {
+  FloorZone,
   HeldOrderSummary,
   PayOutcome,
+  TableState,
   TillApi,
   TillProduct,
   TillSaleResult,
@@ -46,6 +49,35 @@ const heldSummary: HeldOrderSummary = {
   itemCount: 2,
   total: "3.00",
   openedAt: "2026-08-05T10:00:00.000Z",
+};
+
+const floorZone: FloorZone = { id: "z1", name: "Comedor", displayOrder: 0, active: true };
+
+const freeTable: TableState = {
+  id: "t1",
+  label: "1",
+  zoneId: "z1",
+  capacity: 4,
+  state: "free",
+  hasOpenTab: false,
+  pendingDeliveries: 0,
+  pendingToServe: 0,
+  status: null,
+};
+
+const openTable: TableState = {
+  id: "t2",
+  label: "2",
+  zoneId: "z1",
+  capacity: 4,
+  state: "open-tab",
+  hasOpenTab: true,
+  tabId: "wo-7",
+  tabLineCount: 2,
+  tabTotal: "12.00",
+  pendingDeliveries: 0,
+  pendingToServe: 1,
+  status: null,
 };
 
 const saleResult: TillSaleResult = {
@@ -120,6 +152,10 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     collectOrder: vi.fn().mockResolvedValue(saleResult),
     advancePrep: vi.fn().mockResolvedValue(undefined),
     listPrepQueue: vi.fn().mockResolvedValue([]),
+    // Live floor (FP-1): the app loads these on entering the floor and opens a tab on a table tap.
+    getTablesState: vi.fn().mockResolvedValue([]),
+    listZones: vi.fn().mockResolvedValue([]),
+    openTab: vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 }),
     logout: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;
@@ -137,6 +173,7 @@ const counter = (el: TillApp) =>
 const ticket = (el: TillApp) => el.shadowRoot!.querySelector<TillTicketView>("till-ticket-view");
 const schedule = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillScheduleScreen>("till-schedule-screen");
+const floor = (el: TillApp) => el.shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen");
 /** The pay widget nested inside the counter screen's OWN shadow root (7c per-mode control). */
 const tenderPay = (el: TillApp) =>
   counter(el)!.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
@@ -1058,6 +1095,135 @@ describe("till-app", () => {
     // The load-bearing assertion: the basket survives the whole counter → schedule → counter round trip.
     expect(store.lines).toHaveLength(2);
     expect(store.lines[0]!.product).toBe(cafe);
+  });
+
+  describe("live floor (FP-1)", () => {
+    it("show-floor loads the zones + occupancy read-model and shows the floor (basket preserved)", async () => {
+      const { el } = await mountApp({
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      const c = await toCounter(el);
+      const store = c.store;
+      store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "show-floor");
+      await flush(el);
+
+      expect(floor(el)).not.toBeNull();
+      expect(counter(el)).toBeNull();
+      expect(currentApi.getTablesState).toHaveBeenCalledOnce();
+      expect(currentApi.listZones).toHaveBeenCalledOnce();
+      // The loaded zones + tables reach the floor screen.
+      expect(floor(el)!.zones).toEqual([floorZone]);
+      expect(floor(el)!.tables).toEqual([freeTable]);
+      // Basket-preserving like the schedule nav: the half-built order survives the round trip.
+      expect(store.lines).toHaveLength(1);
+    });
+
+    it("show-floor degrades to an empty floor when the occupancy load fails (never blocks)", async () => {
+      const { el } = await mountApp({
+        getTablesState: vi.fn().mockRejectedValue({ code: "server.internal" }),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      const c = await toCounter(el);
+
+      emit(c, "show-floor");
+      await flush(el);
+
+      // A failed read shows the floor anyway (degrade gracefully), with tables left at their default.
+      expect(floor(el)).not.toBeNull();
+      expect(floor(el)!.tables).toEqual([]);
+    });
+
+    it("open-table on a FREE table opens a fresh tab and moves to the table-ordering screen", async () => {
+      const openTab = vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 });
+      const { el } = await mountApp({
+        getTablesState: vi.fn().mockResolvedValue([freeTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+        openTab,
+      });
+      const c = await toCounter(el);
+      emit(c, "show-floor");
+      await flush(el);
+
+      emit(floor(el)!, "open-table", { tableId: "t1", hasOpenTab: false });
+      await flush(el);
+
+      // A free table opens a NEW tab (a pre-fiscal working order) before transitioning.
+      expect(openTab).toHaveBeenCalledWith("t1");
+      expect(floor(el)).toBeNull();
+      // Task 9's screen is not built yet — the Ruling FP-D placeholder holds its slot, already pointed
+      // at the freshly-opened tab id (the app stored `openTab`'s new id in activeTabId).
+      const placeholder = el.shadowRoot!.querySelector('section[aria-busy="true"]');
+      expect(placeholder).not.toBeNull();
+      expect(placeholder!.getAttribute("data-order-id")).toBe("wo-new");
+    });
+
+    it("open-table on an OCCUPIED table resumes its tab WITHOUT opening a new one", async () => {
+      const openTab = vi.fn();
+      const { el } = await mountApp({
+        getTablesState: vi.fn().mockResolvedValue([openTable]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+        openTab,
+      });
+      const c = await toCounter(el);
+      emit(c, "show-floor");
+      await flush(el);
+
+      emit(floor(el)!, "open-table", { tableId: "t2", hasOpenTab: true });
+      await flush(el);
+
+      // An occupied table already has a tab — no fresh openTab, just the transition. The placeholder
+      // points at the RESUMED tab id (resolved from the read-model's tabId), not a new one.
+      expect(openTab).not.toHaveBeenCalled();
+      expect(floor(el)).toBeNull();
+      const placeholder = el.shadowRoot!.querySelector('section[aria-busy="true"]');
+      expect(placeholder).not.toBeNull();
+      expect(placeholder!.getAttribute("data-order-id")).toBe("wo-7");
+    });
+
+    it("open-table on an occupied table missing from the read-model transitions with no order id", async () => {
+      const openTab = vi.fn();
+      const { el } = await mountApp({
+        // The read-model is empty, so the tapped table can't be resolved to a tab id.
+        getTablesState: vi.fn().mockResolvedValue([]),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+        openTab,
+      });
+      const c = await toCounter(el);
+      emit(c, "show-floor");
+      await flush(el);
+
+      emit(floor(el)!, "open-table", { tableId: "t2", hasOpenTab: true });
+      await flush(el);
+
+      // A resume never opens a fresh tab; with no tab id resolved the placeholder carries none.
+      expect(openTab).not.toHaveBeenCalled();
+      const placeholder = el.shadowRoot!.querySelector('section[aria-busy="true"]');
+      expect(placeholder).not.toBeNull();
+      expect(placeholder!.hasAttribute("data-order-id")).toBe(false);
+    });
+
+    it("back-to-counter returns from the floor to the counter, basket intact", async () => {
+      const { el } = await mountApp();
+      const c = await toCounter(el);
+      const store = c.store;
+      store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "show-floor");
+      await flush(el);
+      expect(floor(el)).not.toBeNull();
+
+      emit(floor(el)!, "back-to-counter");
+      await flush(el);
+
+      expect(counter(el)).not.toBeNull();
+      expect(floor(el)).toBeNull();
+      expect(store.lines).toHaveLength(1);
+    });
   });
 
   it("a failed recordSale keeps the counter and the basket, showing a non-fatal error", async () => {

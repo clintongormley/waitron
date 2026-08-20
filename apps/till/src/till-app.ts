@@ -11,14 +11,17 @@ import "./screens/till-lock-screen.js";
 import "./screens/till-counter-screen.js";
 import "./screens/till-ticket-view.js";
 import "./screens/till-schedule-screen.js";
+import "./screens/till-floor-screen.js";
 import type { StringKey } from "./i18n/strings.js";
 import type {
+  FloorZone,
   HeldOrderSummary,
   OrderFlow,
   PayOutcome,
   PrepQueueEntry,
   PrepState,
   StaffMember,
+  TableState,
   TillInfo,
   TillProduct,
   TillSaleResult,
@@ -33,8 +36,12 @@ import type {
   ParkOrderDetail,
 } from "./widgets/tender-pay.js";
 
-/** The faces of the till: sign in, ring up, print, and the staff schedule. One at a time. */
-type Screen = "lock" | "counter" | "ticket" | "schedule";
+/**
+ * The faces of the till: sign in, ring up, print, the staff schedule, and (FP-1) the live floor and the
+ * per-table ordering screen. One at a time. `"table-order"` is added here by Task 8 so `#renderScreen`
+ * stays exhaustive (Ruling FP-D) — it renders a placeholder until Task 9 supplies `<till-table-order-screen>`.
+ */
+type Screen = "lock" | "counter" | "ticket" | "schedule" | "floor" | "table-order";
 
 /**
  * The quantity string to DISPLAY for a retrieved parked line. The server stores and returns every
@@ -156,6 +163,19 @@ export class TillApp extends LitElement {
    * parked orders, including ones parked on a different register.
    */
   @state() private heldOrders: HeldOrderSummary[] = [];
+  /** The venue's active floor-plan zones (FP-1), loaded on entering the floor screen and handed to it.
+   * Owned and refreshed by the app, like {@link heldOrders}. */
+  @state() private zones: FloorZone[] = [];
+  /** The live-floor occupancy read-model (FP-1), loaded on entering the floor screen and handed to it.
+   * Owned and refreshed by the app, like {@link heldOrders}. */
+  @state() private tables: TableState[] = [];
+  /**
+   * The working-order id of the tab the operator just opened or resumed from the floor (FP-1) — the
+   * `orderId` Task 9's table-ordering screen reads. Set by {@link TillApp.#onOpenTable}: `openTab`'s new
+   * id for a free table, or the read-model's {@link TableState.tabId} for an occupied one. A tab is a
+   * PRE-FISCAL working order (design H2) — opening one files no sale/registro/huella.
+   */
+  @state() private activeTabId?: string;
   /**
    * The location's pay-timing mode (7c prepare & collect, design §3), read once from `GET /api/till`
    * on boot (see `#boot`) — BEFORE login, since the counter needs it the moment it first renders.
@@ -755,6 +775,48 @@ export class TillApp extends LitElement {
     this.screen = "schedule";
   }
 
+  /**
+   * Show the live-floor screen (FP-1), loading the venue's zones and the live occupancy read-model first
+   * so the floor renders populated. Basket-preserving like the schedule nav (the basket is till-owned).
+   * Mirrors {@link TillApp.#onShowSchedule} plus a data load. A failed load is SWALLOWED — leaving the
+   * last-known (or empty) floor — rather than blocking the operator, the same degrade-gracefully shape
+   * {@link TillApp.#onLoggedIn} uses for the staff roster; the floor touches no fiscal path (design H2),
+   * so an empty floor is safe. Only writes reactive state, so no `isConnected` guard is needed (the app's
+   * DISCONNECT SAFETY note).
+   */
+  async #onShowFloor(): Promise<void> {
+    this.errorKey = undefined;
+    try {
+      const [tables, zones] = await Promise.all([this.api.getTablesState(), this.api.listZones()]);
+      this.tables = tables;
+      this.zones = zones;
+    } catch {
+      // Non-fatal: leave zones/tables at their last values (or empty), degrade gracefully (never rethrow).
+    }
+    this.screen = "floor";
+  }
+
+  /**
+   * The floor screen asked to open (or resume) a table's tab (FP-1). A FREE table opens a fresh tab via
+   * `openTab` — a PRE-FISCAL working order (design H2), never a sale/registro/huella — and the app
+   * remembers its new working-order id; an OCCUPIED table already has one, resolved from the read-model
+   * ({@link TableState.tabId}, present iff `hasOpenTab`). Either way the app moves to the table-ordering
+   * screen, which reads {@link activeTabId} (Task 9). Awaits `openTab` on the happy path like
+   * {@link TillApp.#onLoggedIn}'s `listProducts`.
+   */
+  async #onOpenTable(event: Event): Promise<void> {
+    const { tableId, hasOpenTab } = (event as CustomEvent<{ tableId: string; hasOpenTab: boolean }>)
+      .detail;
+    this.errorKey = undefined;
+    if (hasOpenTab) {
+      this.activeTabId = this.tables.find((table) => table.id === tableId)?.tabId;
+    } else {
+      const { tabId } = await this.api.openTab(tableId);
+      this.activeTabId = tabId;
+    }
+    this.screen = "table-order";
+  }
+
   /** Return from the schedule screen to the counter, basket intact. */
   #onBackToCounter(): void {
     this.errorKey = undefined;
@@ -805,6 +867,8 @@ export class TillApp extends LitElement {
         @discard-order=${(event: Event) => void this.#onDiscardOrder(event)}
         @new-sale=${() => this.#onNewSale()}
         @show-schedule=${() => this.#onShowSchedule()}
+        @show-floor=${() => void this.#onShowFloor()}
+        @open-table=${(event: Event) => void this.#onOpenTable(event)}
         @back-to-counter=${() => this.#onBackToCounter()}
         @logout=${() => void this.#onLogout()}
       >
@@ -847,6 +911,20 @@ export class TillApp extends LitElement {
           .staff=${this.staff}
           .operatorPersonId=${this.operatorPersonId}
         ></till-schedule-screen>`;
+      case "floor":
+        return html`<till-floor-screen
+          .zones=${this.zones}
+          .tables=${this.tables}
+        ></till-floor-screen>`;
+      // FP-1 Task 9 replaces this placeholder with <till-table-order-screen .orderId=${this.activeTabId}>.
+      // The pending tab id rides through as `data-order-id` so the field is read now (the real reader
+      // arrives in Task 9) and the placeholder already points at the tab the operator opened.
+      case "table-order":
+        return html`<section
+          class="till-screen"
+          aria-busy="true"
+          data-order-id=${this.activeTabId ?? nothing}
+        ></section>`;
     }
   }
 }
