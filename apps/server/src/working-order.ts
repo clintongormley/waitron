@@ -806,9 +806,10 @@ export async function joinTable(
  * sale/settle/abandon path: `payWorkingOrder` (till-sale.ts) locks the `working_orders` row `FOR UPDATE`,
  * then its settle UPDATE fires the 0050 `working_orders_clear_table_status` trigger, which UPDATEs
  * `dining_tables WHERE tab_id = NEW.id` — i.e. `working_orders` then `dining_tables`; `collectOrder`
- * (settle) and `abandonHeldOrder` (abandon) reach the two classes in that same order (their
- * abandon/settle UPDATE takes the `working_orders` row, then the trigger takes the `dining_tables`
- * rows). Acquiring in that identical order is what PREVENTS a mergeTabs-vs-pay/settle/abandon DEADLOCK:
+ * (settle, which locks its `working_orders` row with an explicit `SELECT … FOR UPDATE`) and
+ * `abandonHeldOrder` (abandon, via its conditional `UPDATE working_orders`) each lock the
+ * `working_orders` row BEFORE the same trigger touches `dining_tables` — the identical two-class order.
+ * Acquiring in that identical order is what PREVENTS a mergeTabs-vs-pay/settle/abandon DEADLOCK:
  * a concurrent merge and pay both take `working_orders` before `dining_tables`, so they cannot
  * cross-lock and trip a 40P01. THIS leg's order is load-bearing and proven — the concurrent merge/pay
  * race test (move-merge.rls.test.ts) asserts no 40P01, and by deletion the previous
