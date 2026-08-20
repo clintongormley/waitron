@@ -1,17 +1,18 @@
 import { asAppUser, captureError, pgErrorCode, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { startRealPostgres } from "./testing/postgres.js";
 import { insertTimeEntry, seedLocation, seedPerson } from "../test/fixtures.js";
 
 // REAL Postgres, not PGlite: the append-only floor lives in the app role's PRIVILEGE set, and
 // PGlite runs every connection as a superuser. The whole proof rests on running as `app_user`, which
 // the first test below pins down — a suite that forgot the role switch would pass green while
-// asserting nothing (CLAUDE.md §4, and the inmutabilidad.test.ts this mirrors).
-const suite = useRealPostgres({ start: startRealPostgres });
+// asserting nothing (CLAUDE.md §4, and the inmutabilidad.test.ts this mirrors). A clone of the
+// `core_identity_workforce` template (CORE + IDENTITY + WORKFORCE) from the shared container the
+// package globalSetup boots.
+const suite = useTemplateDb({ template: "core_identity_workforce" });
 
 let ctx: { tenantId: string; personId: string; locationId: string };
 

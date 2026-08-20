@@ -3,18 +3,18 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { pgErrorCode, withTenant } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
-import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 import { insertTimeEntry, seedLocation, seedPerson } from "../test/fixtures.js";
 
 /**
- * Real PostgreSQL via Testcontainers — deliberately NOT skipped when Docker is unavailable, exactly
- * as ./chain.concurrency.test.ts. PGlite serialises every query onto ONE backend (a single-backend
- * mutex, ./chain.pglite-cannot-test-contention.test.ts proves the mechanism), so two "concurrent"
- * clock-ins there never actually overlap and the TOCTOU this suite exists to catch is INVISIBLE — a
- * false pass, not a weak one (CLAUDE.md §4). `startRealPostgres` throws rather than degrading to a
- * skip, so a Docker-less run fails loudly instead of reporting a green that proves nothing.
+ * Real PostgreSQL via the shared container — deliberately NOT skipped when Docker is unavailable,
+ * exactly as ./chain.concurrency.test.ts. PGlite serialises every query onto ONE backend (a
+ * single-backend mutex, ./chain.pglite-cannot-test-contention.test.ts proves the mechanism), so two
+ * "concurrent" clock-ins there never actually overlap and the TOCTOU this suite exists to catch is
+ * INVISIBLE — a false pass, not a weak one (CLAUDE.md §4). The package globalSetup's `dockerRequired`
+ * throws rather than degrading to a skip, so a Docker-less run fails loudly instead of reporting a
+ * green that proves nothing.
  *
  * The bug (whole-branch review): each of `clockIn`/`clockOut`/`breakStart`/`breakEnd` reads the
  * worker's current shift state with an UNLOCKED select and then appends. `appendToChain` serialises
@@ -27,11 +27,11 @@ import { insertTimeEntry, seedLocation, seedPerson } from "../test/fixtures.js";
 const PROBE_ROLE = "workforce_clock_probe";
 const PROBE_PASSWORD = "probe";
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-  timeoutMs: CONTAINER_SETUP_TIMEOUT_MS,
-});
+// A clone of the `core_identity_workforce` template (CORE + IDENTITY + WORKFORCE); the probe
+// connections below authenticate as `workforce_clock_probe`, a cluster-wide role the package
+// globalSetup creates in place of the per-file `probeRole` this suite passed before the shared
+// container.
+const suite = useTemplateDb({ template: "core_identity_workforce" });
 
 const backend = new WorkforceBackend();
 

@@ -1,10 +1,9 @@
 import { asAppUser, captureError, pgErrorCode, withTenant } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { startRealPostgres } from "./testing/postgres.js";
 import {
   insertDraftShift,
   insertRosterVersion,
@@ -20,10 +19,12 @@ import {
 const PROBE_ROLE = "workforce_rls_probe";
 const PROBE_PASSWORD = "probe";
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-});
+// A clone of the `core_identity_workforce` template (CORE + IDENTITY + WORKFORCE); the probe
+// connections below authenticate as `workforce_rls_probe`, a cluster-wide role the package
+// globalSetup creates in place of the per-file `probeRole` this suite passed before the shared
+// container. That role is SHARED with rls.test.ts — both connectAs it — so it is created once for
+// the whole cluster rather than per file.
+const suite = useTemplateDb({ template: "core_identity_workforce" });
 
 class RollbackSignal extends Error {}
 
