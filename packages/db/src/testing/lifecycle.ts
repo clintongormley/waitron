@@ -144,16 +144,25 @@ export function useRealPostgres(options: RealPostgresSuiteOptions): RealPostgres
 }
 
 /**
- * Monotonic within a worker PROCESS, so two suites in the same file get distinct clone names.
+ * A fresh clone database name — the ONE place `clone_<pid>_<n>` is minted, shared by
+ * {@link useTemplateDb} and `harness.ts`'s `describeEachTarget`. The name is NOT unique over the
+ * process's whole life (see the reset below); what it guarantees is that no two clones LIVE at the
+ * same moment share a name. A counter per module (the first shape) would each start at 0 and hand out
+ * `clone_<pid>_1` from both the moment one file used both helpers, with two live clones colliding; a
+ * single exported generator draws both helpers from ONE counter, closing that.
  *
- * It resets to 0 per test FILE — vitest's default `isolate: true` gives each file a fresh module
- * context — which is why `process.pid` is in the name too: across concurrent forks the pid differs,
- * and within one fork files run serially and each clone is DROPped in its own `afterAll` before the
- * next file reuses a counter value, so `clone_<pid>_<n>` does not collide in practice. Chosen over
- * `Math.random`/`Date.now` (allowed in test code, but non-deterministic) so a clone that ever leaks
- * into `pg_database` is traceable to the run that made it.
+ * Monotonic within a worker PROCESS, but it resets to 0 per test FILE — vitest's default
+ * `isolate: true` gives each file a fresh module context — so a name DOES recur across files (the pid
+ * is stable within a process). That does not collide because within one fork files run serially and
+ * each clone is DROPped in its own `afterAll`/`teardown` before the next file reuses a counter value,
+ * and across concurrent forks the pid differs. `process.pid` is in the name for that cross-fork
+ * distinctness and, chosen over `Math.random`/`Date.now` (allowed in test code, but non-deterministic),
+ * so a clone that ever leaks into `pg_database` is traceable to the run that made it.
  */
 let cloneCounter = 0;
+export function nextCloneName(): string {
+  return assertSafeIdentifier("clone name", `clone_${process.pid}_${(cloneCounter += 1)}`);
+}
 
 /**
  * Resolves the shared handle from the `getHandle` seam, defaulting to vitest's cross-worker
@@ -207,12 +216,24 @@ export function pickTemplate(handle: SharedContainerHandle, name: string): strin
  * `container.stop()` gave, which also force-killed survivors untested). `CREATE DATABASE … TEMPLATE`
  * needs no connection to the template, which `startSharedContainer` guarantees by closing every
  * migrator before it returns.
+ *
+ * Exported because {@link useTemplateDb} is not the only shared-container consumer: `harness.ts`'s
+ * `describeEachTarget` clones a fresh database PER TEST from the same `core` template, tracks the
+ * returned handles, and `stop()`s each in its suite teardown — the fresh-DB-per-test contract that
+ * a single `useTemplateDb` (one clone per FILE) cannot express.
  */
-async function cloneTemplate(
+export async function cloneTemplate(
   adminUri: string,
   template: string,
   cloneName: string,
 ): Promise<RealPostgres> {
+  // Validate HERE, at the choke point, not in each caller. Both names reach a `CREATE DATABASE` /
+  // `DROP DATABASE` utility statement, which takes no placeholder, and `cloneTemplate` is exported
+  // with more than one caller (useTemplateDb, describeEachTarget) — "the callers only pass safe
+  // values" is a property of the callers, not the code (CLAUDE.md §3). Done before any connection
+  // opens, so an unsafe name throws without touching the server.
+  assertSafeIdentifier("template", template);
+  assertSafeIdentifier("clone name", cloneName);
   const admin = await createPostgresDb(adminUri);
   try {
     await admin.execute(sql.raw(`create database ${cloneName} template ${template}`));
@@ -277,12 +298,9 @@ export function useTemplateDb(options: TemplateDbSuiteOptions): RealPostgresSuit
   // leaking a clone DATABASE that nothing drops.
   beforeAll(async () => {
     const handle = resolveSharedHandle(options.getHandle);
-    const template = assertSafeIdentifier("template", pickTemplate(handle, options.template));
-    const cloneName = assertSafeIdentifier(
-      "clone name",
-      `clone_${process.pid}_${(cloneCounter += 1)}`,
-    );
-    pg = await cloneTemplate(handle.uri, template, cloneName);
+    // `cloneTemplate` validates both the template name and the clone name at its choke point, so no
+    // wrap is needed here.
+    pg = await cloneTemplate(handle.uri, pickTemplate(handle, options.template), nextCloneName());
     admin = await pg.connect();
     if (options.setup !== undefined) await options.setup({ admin, pg });
   }, options.timeoutMs);

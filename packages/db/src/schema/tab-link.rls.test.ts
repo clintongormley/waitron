@@ -3,10 +3,8 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import type { Database, Transaction } from "../client.js";
-import { CORE_MIGRATIONS } from "../migrations.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
-import { useRealPostgres } from "../testing/lifecycle.js";
-import { runMigrationSets, startMigratedPostgres } from "../testing/postgres.js";
+import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
 import { seedNode } from "../testing/seed.js";
 import { withTenant } from "../tenancy.js";
@@ -31,17 +29,7 @@ async function rollBackAfter(
 }
 
 describe("table↔tab link columns (mutual composite FKs)", () => {
-  const suite = useRealPostgres({
-    start: () =>
-      startMigratedPostgres({
-        dockerRequired:
-          "The tab-link suite requires Docker: PGlite runs every connection as a superuser (bypassing " +
-          "the app-role visibility check) and serialises queries; the two composite FKs are proven here " +
-          "by deletion within rolled-back transactions.",
-        migrate: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
-      }),
-    timeoutMs: 120_000,
-  });
+  const suite = useTemplateDb({ template: "core" });
 
   let nodeA = "";
   let orderSeq = 0;

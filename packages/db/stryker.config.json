@@ -10,5 +10,7 @@
   "reporters": ["clear-text", "progress", "html"],
   "htmlReporter": { "fileName": "reports/mutation/index.html" },
   "coverageAnalysis": "perTest",
-  "timeoutMS": 60000
+  "timeoutMS": 60000,
+  "ignoreStatic": true,
+  "dryRunTimeoutMinutes": 20
 }

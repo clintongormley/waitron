@@ -1,8 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS } from "../migrations.js";
-import { useRealPostgres } from "../testing/lifecycle.js";
-import { runMigrationSets, startMigratedPostgres } from "../testing/postgres.js";
+import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
 import { withTenant } from "../tenancy.js";
 import { catalogues } from "./catalogue.js";
@@ -25,19 +23,7 @@ const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const IMAGE = `${"a".repeat(64)}.webp`;
 
 describe("products.image under real row-level security", () => {
-  const suite = useRealPostgres({
-    start: () =>
-      startMigratedPostgres({
-        dockerRequired:
-          "The products.image RLS suite requires a running Docker daemon. It cannot be skipped: " +
-          "PGlite runs every connection as a superuser, which bypasses the FORCE ROW LEVEL " +
-          "SECURITY and the tenant-isolation policy this suite exists to prove cover products.image.",
-        migrate: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
-      }),
-    // Restates this package's own vitest hookTimeout (120s), covering the image pull on a cold
-    // runner, which the helper's 60s default would otherwise narrow.
-    timeoutMs: 120_000,
-  });
+  const suite = useTemplateDb({ template: "core" });
 
   let catalogueId = "";
 

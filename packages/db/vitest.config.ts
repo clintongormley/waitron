@@ -19,6 +19,26 @@ export default defineConfig({
     // download, not a boot, and it is the only thing in this package measured
     // in minutes.
     hookTimeout: 120_000,
+    // Boots ONE shared container and migrates a `core` template through this package's own
+    // `runMigrationSets` path; `describeEachTarget` and the converted `useRealPostgres` suites clone
+    // it (~26ms) instead of booting per file/per test. See `src/testing/global-setup.ts`.
+    globalSetup: ["./src/testing/global-setup.ts"],
+    // BOUNDED multi-fork — a cap, not this package's previous UNBOUNDED default and not `singleFork`.
+    // The shared container is ONE cluster on the default 100-connection budget (postgres.ts starts it
+    // with no override) where the old per-file containers each had their own 100. `createPostgresDb`
+    // pools to 10 connections each, and three suites open many backends against one clone: the
+    // lock-contention pair `allocate-order-number` (~20 separate `suite.pg.connect()` pools) and
+    // `append-order-amendment` (~10), plus `allocate-number`'s 20-concurrent-allocator test (~10, all
+    // on ONE pool, so capped at pool max). UNBOUNDED forks crowd the one budget — measured worst case
+    // ~94/100 at 18 forks, too close to rely on (the passes-once / fails-under-load flake). Capping at
+    // 4 keeps the worst case ~46-50 (~21 + ~11 + ~11 + a normal fork's ~3) with wide margin at the
+    // default ceiling, so it needs no `max_connections` change to the shared `startPostgresContainer`
+    // primitive — and 4 is ALSO CI's core count (`test-heavy` on a 2-4 vCPU runner), so the cap costs
+    // the CI gate essentially nothing while recovering most of the ~2.6x `singleFork` left on the table
+    // (measured 137s→50s at 4 forks / 42s at 18 forks locally). NOT the `@vitest/coverage-v8`
+    // branch-merge reason apps/server/payments/scheduler carry: this shard runs alone and passed
+    // coverage multi-fork at far more than 4 forks for its whole history.
+    poolOptions: { forks: { maxForks: 4 } },
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json-summary"],
@@ -87,6 +107,11 @@ export default defineConfig({
         "drizzle/**",
         "drizzle.config.ts",
         "src/english-only.ts",
+        // The globalSetup runs in the main process, before/outside the worker coverage collection, so
+        // it is test tooling that never appears in (and must not be held to) the per-test coverage —
+        // the same role apps/server excludes its whole `src/testing/**` for. The rest of
+        // `src/testing/**` stays measured here, deliberately (see the note above on describeEachTarget).
+        "src/testing/global-setup.ts",
       ],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },

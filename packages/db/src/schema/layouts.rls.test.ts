@@ -1,9 +1,7 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS } from "../migrations.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
-import { useRealPostgres } from "../testing/lifecycle.js";
-import { runMigrationSets, startMigratedPostgres } from "../testing/postgres.js";
+import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
 import { withTenant } from "../tenancy.js";
 import { tenants } from "./tenants.js";
@@ -21,19 +19,7 @@ const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
 
 describe("till_layouts under real row-level security", () => {
-  const suite = useRealPostgres({
-    start: () =>
-      startMigratedPostgres({
-        dockerRequired:
-          "The till_layouts RLS suite requires a running Docker daemon. It cannot be skipped: " +
-          "PGlite runs every connection as a superuser, which bypasses the FORCE ROW LEVEL " +
-          "SECURITY and the tenant-isolation policy this suite exists to prove cover till_layouts.",
-        migrate: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
-      }),
-    // Restates this package's own vitest hookTimeout (120s), covering the image pull on a cold
-    // runner, which the helper's 60s default would otherwise narrow.
-    timeoutMs: 120_000,
-  });
+  const suite = useTemplateDb({ template: "core" });
 
   beforeAll(async () => {
     await suite.admin.insert(tenants).values([

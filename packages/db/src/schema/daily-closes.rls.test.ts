@@ -1,10 +1,8 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
-import { CORE_MIGRATIONS } from "../migrations.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
-import { useRealPostgres } from "../testing/lifecycle.js";
-import { runMigrationSets, startMigratedPostgres } from "../testing/postgres.js";
+import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
 import { seedNode } from "../testing/seed.js";
 import { withTenant } from "../tenancy.js";
@@ -76,19 +74,7 @@ function insertCloseSql(opts: {
 class RollbackSignal extends Error {}
 
 describe("frozen daily close schema under real row-level security", () => {
-  const suite = useRealPostgres({
-    start: () =>
-      startMigratedPostgres({
-        dockerRequired:
-          "The frozen daily close schema suite requires a running Docker daemon. It cannot be " +
-          "skipped: PGlite runs every connection as a superuser, which bypasses the FORCE ROW " +
-          "LEVEL SECURITY and the append-only triggers this suite exists to prove on daily_closes.",
-        migrate: (uri) => runMigrationSets(uri, [CORE_MIGRATIONS]),
-      }),
-    // Restates this package's own vitest hookTimeout (120s), which the helper's 60s default would
-    // otherwise narrow — the figure covers pulling the Postgres image on a cold runner.
-    timeoutMs: 120_000,
-  });
+  const suite = useTemplateDb({ template: "core" });
 
   // Scaffolding seeded once as the owner (superuser bypasses RLS — pure setup). Registered after the
   // helper's own hook, which vitest runs first; if it throws this one never runs, so `suite.admin`
