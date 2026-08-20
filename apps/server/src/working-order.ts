@@ -652,7 +652,10 @@ export async function moveTabLines(
  *
  * The freed source table(s) get `tab_id → NULL` AND `status_id → NULL` in one statement — a move is a
  * turnover for the source, so its TS-2 manual status must not linger onto the next party (design §4).
- * The TS-2 settle-trigger does not fire on a move (the tab stays open), so the clear is EXPLICIT here.
+ * The TARGET table is turned over too: pointing the tab at it also clears its `status_id → NULL`, so a
+ * stale status left from the target's PREVIOUS party does not linger onto the moved-in one — exactly as
+ * `openTab` clears status when a fresh tab opens on a table (design §4). The TS-2 settle-trigger does
+ * not fire on a move (the tab stays open), so both clears are EXPLICIT here.
  */
 export async function moveTab(
   tx: Transaction,
@@ -692,12 +695,16 @@ export async function moveTab(
     }
   }
 
-  // Free the source table(s) the tab currently covers (tab_id + status_id → NULL), then point the target.
+  // Free the source table(s) the tab currently covers (tab_id + status_id → NULL), then point the
+  // target — clearing ITS status_id too, since the moved-in party turns the target over (openTab parity).
   await tx
     .update(diningTables)
     .set({ tabId: null, statusId: null })
     .where(and(eq(diningTables.tenantId, cfg.tenantId), eq(diningTables.tabId, tabId)));
-  await tx.update(diningTables).set({ tabId }).where(eq(diningTables.id, toTableId));
+  await tx
+    .update(diningTables)
+    .set({ tabId, statusId: null })
+    .where(eq(diningTables.id, toTableId));
 }
 
 /**

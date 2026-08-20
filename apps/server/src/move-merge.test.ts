@@ -233,6 +233,22 @@ describe("moveTab", () => {
     expect(await linesOf(tabId)).toHaveLength(1);
   });
 
+  it("clears a manual status on the TARGET table: the moved-in party turns it over", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const src = await seedTable(cfg, "T-src");
+    const dst = await seedTable(cfg, "T-dst");
+    const tabId = await openTabOn(cfg, src, [{ productId: cafeId, quantity: "1" }]);
+    // A stale manual status left on the free DESTINATION (TS-2 schema) — from its previous party —
+    // must NOT linger onto the moved-in party; the move turns the target over, exactly as openTab does.
+    const status = await seedStatus(cfg, "Needs cleaning");
+    await db.execute(sql`update dining_tables set status_id = ${status} where id = ${dst}`);
+
+    await asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst));
+
+    expect(await tabIdOf(dst)).toBe(tabId);
+    expect(await statusIdOf(dst)).toBeNull(); // target turned over → status cleared (design §4)
+  });
+
   it("refuses a target that already has an OPEN tab (table.occupied)", async () => {
     const { cfg, cafeId } = await setupVenue();
     const src = await seedTable(cfg, "O-src");
