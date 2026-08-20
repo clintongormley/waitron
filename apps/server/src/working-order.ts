@@ -547,8 +547,13 @@ export async function voidTabLine(
  * add-time `unit_price_gross` is what the filed sale is later rebuilt from, orders.ts:153), then deletes
  * them from `fromTab`.
  *
- * Both tabs are locked `FOR UPDATE` in ASCENDING id order — deadlock-safe with every other table-service
- * verb — and their status read off the locked copies: a non-`open` parent is refused `tab.not_open`
+ * Both tabs are locked `FOR UPDATE` in ASCENDING `id` order — a DEFENSIVE, plan-independent lock-order
+ * discipline, NOT a deadlock-safety property any concurrent test at this level exercises: this primitive's
+ * only caller today (`mergeTabs`) has already serialised the racing backends on its `dining_tables` lock
+ * before `moveTabLines` runs, so no `moveTabLines`-level race ever reaches this ordering (do not reuse
+ * `mergeTabs`'s unindexed-`tab_id` seq-scan argument here — this locks `working_orders`, whose `id` is
+ * its PRIMARY KEY, orders.ts:53, not the unindexed column that argument turns on).
+ * Their status is read off the locked copies: a non-`open` parent is refused `tab.not_open`
  * (moving lines under a settled/abandoned order would violate `working_order_lines_require_open_parent`
  * anyway). The lock on `toTab` also serialises `line_no` allocation the way `addTabRound`'s per-tab lock
  * does, so a concurrent append/move cannot collide on the `(working_order_id, line_no)` unique
@@ -637,7 +642,9 @@ export async function moveTabLines(
  * the tab. NO line-move, no fiscal effect.
  *
  * Locks the involved `dining_tables` rows (target + the tab's current source table(s)) `FOR UPDATE` in
- * ASCENDING id order — the deadlock-safe lock order every table-service verb shares. Locking the target
+ * ASCENDING `id` order — a DEFENSIVE, plan-independent lock-order discipline shared across the
+ * table-service verbs, NOT a deadlock-safety property any concurrent test exercises (this verb's race
+ * test proves the single TARGET-row lock below, not the multi-row ordering). Locking the target
  * is the concurrency guard: a second concurrent move onto the same free table blocks, then re-reads its
  * now-set `tab_id` and is refused `table.occupied` (proven by deletion of this lock — §7). The tab's own
  * `working_orders` row is NOT locked (a move neither settles nor abandons it — unlike merge); a race

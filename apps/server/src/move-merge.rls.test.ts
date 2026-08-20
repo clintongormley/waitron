@@ -277,8 +277,15 @@ describe("moveTab concurrency (the target FOR UPDATE lock IS the guard)", () => 
         code: "table.occupied",
         params: { tableId: target },
       });
-      // Exactly one of the two tabs now covers the target; the other's source is untouched.
+      // Exactly one of the two tabs now covers the target (the winner's).
       expect(await tabIdOf(target)).not.toBeNull();
+      // ...and exactly ONE source table was freed — the winner's (moveTab clears its old `tab_id` on the
+      // relocate); the loser threw before any write, so its source is UNTOUCHED and still points at its tab.
+      // Backend-agnostic: the winner is non-deterministic, so we assert only that ONE source turned over and
+      // the OTHER did not — never which.
+      const sources = await Promise.all([tabIdOf(srcA), tabIdOf(srcB)]);
+      expect(sources.filter((id) => id === null)).toHaveLength(1); // the winner's source turned over
+      expect(sources.filter((id) => id !== null)).toHaveLength(1); // the loser's source untouched
     } finally {
       await Promise.all([connA.close(), connB.close()]);
     }
@@ -394,10 +401,13 @@ describe("concurrent merge/move deadlock-safety (ascending-id FOR UPDATE lock or
 
       // Reverse orientations: A←B on one backend, B←A on the other. Both touch the SAME two dining_tables
       // rows and the SAME two working_orders rows. What this proves TODAY: the two same-verb merges
-      // serialise cleanly — one wins, the other finds its source already abandoned (tab.not_open), with no
-      // 40P01. They serialise because `dining_tables.tab_id` is UNINDEXED, so both backends seq-scan the
-      // two rows in identical heap order and contend on the first — NOT because of the `.orderBy`, which a
-      // same-verb race like this cannot prove load-bearing (the hazard control below covers that hazard).
+      // serialise cleanly — one wins, the other finds its DESTINATION (`into`) tab already abandoned and is
+      // refused `tab.not_open`, with no 40P01. (mergeTabs abandons its OWN `from` tab; under reverse
+      // orientation the winner's `from` IS the loser's `into`, so the loser trips on its `into` open-status
+      // check — error `tabId = intoTabId` — while its own source stays open.) They serialise because
+      // `dining_tables.tab_id` is UNINDEXED, so both backends seq-scan the two rows in identical heap order
+      // and contend on the first — NOT because of the `.orderBy`, which a same-verb race like this cannot
+      // prove load-bearing (the hazard control below covers that hazard).
       const results = await Promise.allSettled([
         merge(connA, tabA, tabB),
         merge(connB, tabB, tabA),
@@ -407,7 +417,7 @@ describe("concurrent merge/move deadlock-safety (ascending-id FOR UPDATE lock or
       for (const r of results) {
         if (r.status === "rejected") expect(isDeadlock(r.reason)).toBe(false);
       }
-      // Exactly one merge committed; the loser found its source already abandoned → tab.not_open.
+      // Exactly one merge committed; the loser found its DESTINATION (`into`) tab already abandoned → tab.not_open.
       expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
       const loser = results.find((r) => r.status === "rejected") as
         PromiseRejectedResult | undefined;
