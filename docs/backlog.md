@@ -60,6 +60,7 @@ One line per landed PR, newest first. The git log, the linked designs/plans, and
 detail — **this file is not a history** (see *How to keep this file honest*). Open follow-ups from
 these live under *Debt and odd jobs*; their designs/plans stay in `docs/superpowers/`.
 
+- **#114** CI test-tier speedup, **phase 2** — converts **`@waitron/db`** (the biggest remaining real-PG shard) off per-file/per-test containers. The linchpin: **`describeEachTarget`** (16 files) booted a container PER SUITE and migrated CORE PER TEST — it now reads the shared container a new package `globalSetup` provides and clones a pre-migrated `core` template per test (~26ms vs ~387ms), tracking clones and dropping them in `teardown()`; the **12 `useRealPostgres` suites** → `useTemplateDb({ template: "core" })`, their 3 provisioner roles moved to the globalSetup. **`cloneTemplate` exported** from lifecycle.ts and reused by `describeEachTarget` (the fresh-DB-per-test need one clone-per-file `useTemplateDb` can't express — the reuse the #113 review predicted), now **validating its identifiers at its own §3 choke point** (exported ⇒ two callers, so safety is a property of the code not the callers) with two guard tests. A single **`nextCloneName()`** owns the clone-name counter for both helpers (two per-module counters would collide if a file mixed them). **`maxForks: 4`** (bounded multi-fork), NOT `singleFork`: this shard runs alone and passed coverage multi-fork, so not the coverage-v8 reason — it's the shared cluster's one 100-connection budget vs the contention suites' ~20/~10/~10 backends; a cap of 4 keeps worst-case ~46-50 (no `max_connections` change), matches CI's 2-4 vCPU count, and recovers most of the 2.65x the efficiency reviewer **measured** `singleFork` was costing (137s→50s local). `useRealPostgres` gains a direct home-file test (the converted suites no longer cover it; it stays a live export for the not-yet-converted packages). **Docker is now required for the whole package** (like apps/server — its RLS/provisioner suites needed it regardless; `resolveTargets`' degrade-to-PGlite stays a pure, unit-tested function). Special cases stay per-container/PGlite by design: `client`/`migrate`/`testing/postgres` (container+migrator primitives) and `provisioner-role.migration` (PGlite, needs a clean cluster). Full suite **39 files / 533 tests**, coverage 100/98.7/100/100; **test-heavy 4m30s on CI** (from the plan's ~357s baseline). finish-branch simplify (4 agents) + two reviewers (**no correctness defect** — connection math / clone-name collision / clone lifecycle / role parity / TEMPLATE parity all verified) + **Copilot** (robust `allSettled` teardown + a `nextCloneName` doc fix; both resolved). **Also carries the `mutation-db` stryker fix** (`ignoreStatic` + `dryRunTimeoutMinutes`) — see *Debt* → mutation-db. **No migration, non-fiscal (H2 clean).** [plan](superpowers/plans/2026-08-19-shared-test-container.md).
 - **#113** CI test-tier speedup, **phase 1b** — converts the **9 remaining `apps/server` real-PG suites** #112 left on per-file containers to the shared-container harness: the `manifest` template for `boot` / `pass` / `till-api` / `till-sale-integrated` / `webhook` / `sync-api` / `sync-e2e`, a `core` (CORE-only) template for `clear-table-status`, and a `core_identity` (CORE+IDENTITY) template for `service-statuses` — each ~1.5–2.4s per-file boot+migrate → a ~26ms clone. The shared model grew two things, both **generalising an existing mechanism rather than adding a special case**: (1) **`ProbeRole.inRole` widened to `string | readonly string[]`** (emits `in role a, b`, the syntax already used in `provisioner-role.rls.test.ts`) so `sync_applier`'s dual `app_user`+`sync_tailer` membership is a plain `roles` entry — a `setup`-hook escape hatch was first built + TDD'd, then **deleted** in favour of this by the finish-branch simplify pass; (2) apps/server's `globalSetup` migrates all three templates + creates the **8 cluster roles once/idempotently**, in place of the per-file `probeRole`/`setup` role creation that would collide on one shared cluster. `sync-e2e`'s two databases both come from `useTemplateDb` (a second clone), not a hand-rolled create+migrate+drop. Full apps/server suite **57 files / 762 tests**, coverage 99.66/98.88/99/99.66 (unchanged); pre-push ran `test:coverage` across **21 of 27 packages** (`@waitron/db` + dependents) green, so the `ProbeRole` widening breaks no consumer. Two finish-branch reviewers (**no correctness defect** — LIFO teardown safety + all six shared-cluster hazards verified) + **Copilot** (no findings); the reviewers caught 3 stale comments (§1 class), fixed. `dev-setup` (bare) + the raw-container primitive tests stay per-container by design. **Keeps `singleFork`.** **No migration, non-fiscal (H2 clean).** Remaining rollout (P2..Pn) under *Debt* → CI test-tier. [plan](superpowers/plans/2026-08-19-shared-test-container.md).
 - **#111** CI — drop `--with-deps` from the Playwright browser shards (resolves the former *Debt* → *CI Playwright apt slowness* item): `test-ui`, `test-till`, `test-dashboard` (+ `mutation.yml`'s weekly `@waitron/ui` job) restored the `~/.cache/ms-playwright` browser-binary cache then ran `playwright install --with-deps chromium` — the cache covers the binary but never the OS libraries `--with-deps` apt-installs on the clean-VM-per-run, so that apt step ran **every** run. It was the shard long pole (12–17s cache-warm, up to **601s** tail on run 32277880914) and it **hung twice landing #110**; the browser download itself is untouched. Dropped to plain `playwright install chromium`: `ubuntu-latest` already ships Chromium's libs, so it's a **~1s** binary check on a cache hit / a download on a miss and **no apt at all**. **Proven, not asserted** — a `.github/` change resolves to global scope, so run 32357687333 (the rebased head that landed) ran all three browser shards, each **launched Chromium and passed** with the flag gone, install step **1s** each (from 12–13s); `mutation.yml` proven the same way on dispatch run 32304224136 (install 1s, `mutation` job green). Rejected `--with-deps`-on-cache-miss (browser cache and VM apt state are independent → a missing lib still breaks every cache-*hit* run, and would pass on the version-bump PR that misses the cache then fail everything after it), caching the apt layer, and `--only-shell` (changes the browser binary the suites run against). Step comments carry the receipt + the restore path if a future image/Playwright bump drops a lib. **Copilot**: no findings. **No migration, non-fiscal (H2 clean).** Surfaced a pre-existing `mutation-db` failure — see *Debt*.
 - **#112** CI test-tier speedup, **phase 1** — shared-container + template-DB clone harness: every real-PG test *file* booted its own container + migrated it (measured 2026-08-19 on `postgres:18-alpine`: **1118ms boot + 387ms migration ≈ 1.5s/file**, ~130 files), which is why `test-light` — dominated by **apps/server at 458s** — is CI's critical path and `packages/db` is ~406s; a `CREATE DATABASE … TEMPLATE` clone is **~26ms**. New `@waitron/db` harness: `startSharedContainer` (a package vitest `globalSetup` boots ONE container, migrates a named template per migration-set, creates cluster roles once/idempotently, optional `dockerRequired` message) + `useTemplateDb` (per-suite clone, same `{pg, admin}` shape as `useRealPostgres`, force-drops the clone) + a **vitest-free** `identifiers.ts` (so a globalSetup importing the harness doesn't transitively pull `vitest`, which throws at globalSetup module-load — found the hard way). apps/server gets a globalSetup migrating a `manifest` template + **14 of 24** real-PG suites (manifest + `asAppUser`-only) converted; **apps/server 458s → 424s on CI** (~34s from 14 files; ~2.4s/file on CI vs ~1.1s local — proof the lever works, the bulk is still ahead). **Keeps `singleFork`** (see *Debt* → CI test-tier: it is load-bearing, not stale). TDD, guards by deletion; two finish-branch reviewers (no correctness defect — isolation / GUC-leak / clone-collision / teardown / TEMPLATE-precondition / vitest-free-graph all verified) + **Copilot** (`resolveSharedHandle` now throws an actionable unwired-globalSetup error) all resolved. **No migration, non-fiscal (H2 clean).** Remaining rollout under *Debt* → CI test-tier. [plan](superpowers/plans/2026-08-19-shared-test-container.md).
@@ -522,27 +523,41 @@ progress remotely.
 
 Carried from finished work. None of it blocks anything; all of it makes later work cheaper.
 
-- **CI test-tier speedup — remaining rollout (from #112 phase 1 + #113 phase 1b).** The
-  shared-container / template-DB harness is landed and proven across **all** of apps/server (phase 1
-  = the 14 manifest/`asAppUser`-only suites, #112; phase 1b = the 9 that needed
-  role/grant/multi-template handling, #113). What remains is the other real-PG packages.
-  Plan + per-phase steps: `docs/superpowers/plans/2026-08-19-shared-test-container.md`.
-  - **`ProbeRole.inRole` now takes `string | readonly string[]`** (#113) — a role needing several
-    memberships (`sync_applier`: `app_user` + `sync_tailer`) is a plain `roles` entry, no `setup`
-    hook. Reuse it in the P2..Pn globalSetups rather than reinventing a per-package grant.
-  - **P2..Pn — the other 15 real-PG packages.** Convert `useRealPostgres` → `useTemplateDb` per package,
-    and rework `describeEachTarget`'s per-test `create()` (currently `create database` + migrate) to a
-    template clone. **`packages/db` is the next-biggest single target (~357s on CI).** Each phase: add
-    the package's globalSetup with its template set(s) + roles, convert its files, verify its suites +
-    the cross-package guards (`fiscal-verifactu` `inmutabilidad`, tenant isolation, concurrency
-    distinct-backend), measure the shard's CI drop. `dev-setup` (bare — the code under test IS the
-    migrator) and the raw-container primitive tests (`db` `client`/`migrate`/`postgres`, `migrations`
-    `apply.concurrency`, the 3 `provisioning` `*.rls` suites) stay per-container by design.
-  - **Do NOT drop `singleFork` to speed CI — it is load-bearing, not stale.** The `@vitest/coverage-v8`
-    cross-fork branch-merge bug is NOT fixed on vitest 3.2.7: it under-merges coverage under `pnpm -r`
-    oversubscription (payments **82% branches** in the whole-workspace run, 100% isolated; the pre-push
-    hook caught it 2026-08-19). An isolated per-package multi-fork run passes and proves *nothing* about
-    the concurrent case — the dead end this speedup started from.
+- **CI test-tier speedup — remaining rollout (from #112 phase 1 + #113 phase 1b + #114 phase 2).** The
+  shared-container / template-DB harness is landed and proven across **all** of apps/server (#112 = the
+  14 manifest/`asAppUser`-only suites; #113 = the 9 that needed role/grant/multi-template handling) AND
+  **`@waitron/db`** (#114 — the `describeEachTarget` seam + the 12 `useRealPostgres` suites). What
+  remains is the other real-PG packages. Plan + per-phase steps:
+  `docs/superpowers/plans/2026-08-19-shared-test-container.md`.
+  - **Reusable primitives now in place (from #113/#114), don't reinvent per package:**
+    `ProbeRole.inRole` takes `string | readonly string[]` (a multi-membership role like `sync_applier`
+    is a plain `roles` entry, no `setup` hook); `cloneTemplate` is **exported** from `lifecycle.ts` and
+    validates its own identifiers (§3), so a package that needs a **fresh DB per test** (a
+    `describeEachTarget`-style seam) reuses it — `packages/db`'s `harness.ts` `postgresTarget` is the
+    reference implementation (clone per test, track, drop all in `teardown()` via `allSettled`);
+    `nextCloneName()` mints the shared clone-name; `useTemplateDb` covers the one-clone-per-file case.
+  - **Fork mode is a per-package call, not a default.** Two distinct reasons force fewer forks, and
+    they are NOT the same: (a) the `@vitest/coverage-v8` cross-fork branch-merge bug (below) needs
+    `singleFork` where a package runs under `pnpm -r` oversubscription; (b) a shared container is ONE
+    cluster on the default 100-connection budget, so a package whose suites open many backends needs
+    the concurrency bounded. `packages/db` (#114) hit (b) not (a) — it runs alone and passed coverage
+    multi-fork — so it uses `maxForks: 4` (worst-case ~46-50 conns, keeps most of multi-fork's speed)
+    rather than serializing. Pick per package; document which reason applies.
+  - **P3..Pn — the remaining ~14 real-PG packages** (payments, fiscal-verifactu, workforce, sync,
+    identity, reporting, payments-stripe, core, scheduler, recipes, catalogue, credentials, purchasing,
+    layouts, workforce-es). Each phase: add the package's globalSetup with its template set(s) + roles,
+    convert its files (and any `describeEachTarget`-style seam via the exported `cloneTemplate`), verify
+    its suites + the cross-package guards (`fiscal-verifactu` `inmutabilidad`, tenant isolation,
+    concurrency distinct-backend), measure the shard's CI drop. The raw-container primitive tests
+    (`db` `client`/`migrate`/`postgres`, `migrations` `apply.concurrency`, the 3 `provisioning` `*.rls`
+    suites, apps/server `dev-setup`) stay per-container by design.
+  - **Do NOT drop `singleFork` where it exists to speed CI — it is load-bearing, not stale.** The
+    `@vitest/coverage-v8` cross-fork branch-merge bug is NOT fixed on vitest 3.2.7: it under-merges
+    coverage under `pnpm -r` oversubscription (payments **82% branches** in the whole-workspace run,
+    100% isolated; the pre-push hook caught it 2026-08-19). An isolated per-package multi-fork run
+    passes and proves *nothing* about the concurrent case — the dead end this speedup started from.
+    (`packages/db`'s `maxForks: 4` is the *other* lever — connection budget, reason (b) above — and is
+    safe there only because that shard runs alone; it is not a licence to drop `singleFork` elsewhere.)
 - **Dashboard slice 1a follow-ups (#67, identity auth foundation). None blocking; each deferred with a
   reason during the SDD build / finish-branch / Copilot review chain.**
   - **`totp_secret` is stored PLAINTEXT and `app_user` holds SELECT on `persons`.** A TOTP secret must
@@ -1149,6 +1164,12 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   Playwright trace. Guarded by `scripts/ci-workflow.test.mjs` (the three shards cover every
   `test:coverage` member exactly once).
 - **`mutation-db` weekly job is red — diagnosed 2026-08-20, deferred to the #112 db-suite speedup.**
+  **Update 2026-08-20: unblocked — #114 (phase 2) landed the fast db suite AND both config keys below
+  (`ignoreStatic` + `dryRunTimeoutMinutes`) in `packages/db/stryker.config.json`.** A mechanism-preview
+  `mutation.yml` dispatch ran against the pre-merge branch (checks: dry-run fits the 20-min budget, the
+  globalSetup↔Stryker seam doesn't boot N containers, it completes + publishes a score); the
+  **authoritative** close is a run against `main` now that #114 is in, owned by the session that
+  diagnosed this. Remaining below is that session's to verify + close.
   `.github/workflows/mutation.yml`'s `mutation-db` job (Stryker over `@waitron/db`) has **never**
   completed — every run died at the 5-min mark: 30788893341 (08-03), 31358752142 (08-10), 31997079174
   (08-17), dispatch 32304224136 (08-19) — while the sibling `@waitron/ui` `mutation` job passes.
