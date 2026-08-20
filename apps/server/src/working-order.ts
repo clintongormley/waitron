@@ -1867,7 +1867,9 @@ export async function listPrepQueue(
 export interface TableState {
   id: string;
   label: string;
-  zone: string | null;
+  /** The `floor_zones` row this table sits in (FP-1), or null — the successor to the former free-text
+   *  `zone` string (a composite FK to `floor_zones`, not an arbitrary label). */
+  zoneId: string | null;
   capacity: number | null;
   state: "free" | "open-tab" | "delivery-pending";
   hasOpenTab: boolean;
@@ -1902,7 +1904,7 @@ export async function listTablesWithState(
   const result = await tx.execute<{
     id: string;
     label: string;
-    zone: string | null;
+    zone_id: string | null;
     capacity: number | null;
     tab_id: string | null;
     tab_line_count: number;
@@ -1913,7 +1915,7 @@ export async function listTablesWithState(
     status_color: string | null;
   }>(sql`
     select
-      dt.id, dt.label, dt.zone, dt.capacity,
+      dt.id, dt.label, dt.zone_id, dt.capacity,
       tab.id as tab_id,
       coalesce(tab.line_count, 0)::int as tab_line_count,
       tab.tab_total,
@@ -1954,7 +1956,7 @@ export async function listTablesWithState(
     return {
       id: r.id,
       label: r.label,
-      zone: r.zone,
+      zoneId: r.zone_id,
       capacity: r.capacity,
       state,
       hasOpenTab,

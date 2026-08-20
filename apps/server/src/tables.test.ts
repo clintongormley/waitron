@@ -13,7 +13,17 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
-import { createTable, deactivateTable, listTables, updateTable } from "./tables.js";
+import {
+  createTable,
+  createZone,
+  deactivateTable,
+  deactivateZone,
+  isZoneFkViolation,
+  listTables,
+  listZones,
+  updateTable,
+  updateZone,
+} from "./tables.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -54,15 +64,32 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
 }
 
 describe("table CRUD", () => {
-  it("creates a table and lists it (active, by label)", async () => {
+  it("creates a table WITH a zone and lists it (active, by label)", async () => {
     const cfg = await setupVenue();
+    // A table with a zone now points at a real `floor_zones` row (the FK), not a free-text string.
+    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terraza" }));
     const { id } = await asApp(cfg, (tx) =>
-      createTable(tx, cfg, { label: "12", zone: "terrace", capacity: 4 }),
+      createTable(tx, cfg, { label: "12", zoneId, capacity: 4 }),
     );
     const tables = await asApp(cfg, (tx) => listTables(tx, cfg));
     expect(tables).toEqual([
-      expect.objectContaining({ id, label: "12", zone: "terrace", capacity: 4, active: true }),
+      expect.objectContaining({ id, label: "12", zoneId, capacity: 4, active: true }),
     ]);
+  });
+
+  it("creates a table WITHOUT a zone (zoneId null)", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "no-zone" }));
+    const [t] = await asApp(cfg, (tx) => listTables(tx, cfg));
+    expect(t).toMatchObject({ id, label: "no-zone", zoneId: null });
+  });
+
+  it("createTable with an unknown zoneId throws zone.not_found (the zone FK, not table.label_taken)", async () => {
+    const cfg = await setupVenue();
+    const zoneId = randomUUID();
+    await expect(
+      asApp(cfg, (tx) => createTable(tx, cfg, { label: "orphan", zoneId })),
+    ).rejects.toMatchObject({ code: "zone.not_found", params: { zoneId } });
   });
 
   it("refuses a duplicate label in the same venue (table.label_taken)", async () => {
@@ -76,11 +103,22 @@ describe("table CRUD", () => {
 
   it("updates a table's fields", async () => {
     const cfg = await setupVenue();
+    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Barra" }));
     const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "3" }));
-    // All three optional fields supplied, so the patch-builder's label/zone/capacity branches all fire.
-    await asApp(cfg, (tx) => updateTable(tx, cfg, id, { label: "3A", zone: "bar", capacity: 6 }));
+    // All three optional fields supplied, so the patch-builder's label/zoneId/capacity branches all fire.
+    await asApp(cfg, (tx) => updateTable(tx, cfg, id, { label: "3A", zoneId, capacity: 6 }));
     const [t] = await asApp(cfg, (tx) => listTables(tx, cfg));
-    expect(t).toMatchObject({ id, label: "3A", zone: "bar", capacity: 6 });
+    expect(t).toMatchObject({ id, label: "3A", zoneId, capacity: 6 });
+  });
+
+  it("updateTable with an unknown zoneId throws zone.not_found (the zone FK, not table.label_taken)", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "u" }));
+    const zoneId = randomUUID();
+    await expect(asApp(cfg, (tx) => updateTable(tx, cfg, id, { zoneId }))).rejects.toMatchObject({
+      code: "zone.not_found",
+      params: { zoneId },
+    });
   });
 
   it("updateTable throws table.not_found for an unknown id", async () => {
@@ -114,9 +152,10 @@ describe("table CRUD", () => {
     const cfg = await setupVenue();
     // A location id that names no row: the composite (tenant_id, location_id) FK
     // `dining_tables_location_fk` rejects the insert with a 23503 foreign-key violation — NOT the
-    // 23505 label unique. So `isUniqueViolation` is false and `createTable` must rethrow the raw
-    // driver error rather than mistranslating any failure into `table.label_taken` (the false branch
-    // of its catch — the other side of the duplicate-label test's prove-by-deletion).
+    // 23505 label unique NOR the `dining_tables_zone_fk` the zone check matches on. So both
+    // `isUniqueViolation` and `isZoneFkViolation` are false and `createTable` must rethrow the raw
+    // driver error rather than mistranslating any failure into `table.label_taken`/`zone.not_found`
+    // (the false branch of both catch checks — the other side of the two prove-by-deletion tests).
     const badCfg: TillConfig = { ...cfg, locationId: brandLocationId(randomUUID()) };
     const err = await asApp(cfg, (tx) => createTable(tx, badCfg, { label: "5" })).catch(
       (e: unknown) => e,
@@ -136,5 +175,142 @@ describe("table CRUD", () => {
     ).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(Error); // rejected (a resolved void would fail this)
     expect(err).not.toBeInstanceOf(AppError); // a raw driver error, not a domain translation
+  });
+});
+
+describe("zone CRUD", () => {
+  it("creates, lists (ordered by display_order, active-only), renames, deactivates a zone", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) =>
+      createZone(tx, cfg, { name: "Comedor", displayOrder: 1 }),
+    );
+    await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terraza", displayOrder: 0 }));
+    // Ordered by display_order: Terraza (0) before Comedor (1).
+    expect((await asApp(cfg, (tx) => listZones(tx, cfg))).map((z) => z.name)).toEqual([
+      "Terraza",
+      "Comedor",
+    ]);
+    await asApp(cfg, (tx) => updateZone(tx, cfg, id, { name: "Salón", displayOrder: 2 }));
+    // Renamed and reordered (Terraza 0, Salón 2), both still active.
+    expect((await asApp(cfg, (tx) => listZones(tx, cfg))).map((z) => z.name)).toEqual([
+      "Terraza",
+      "Salón",
+    ]);
+    await asApp(cfg, (tx) => deactivateZone(tx, cfg, id));
+    // Inactive hidden.
+    expect((await asApp(cfg, (tx) => listZones(tx, cfg))).map((z) => z.name)).toEqual(["Terraza"]);
+  });
+
+  it("listZones returns exactly the FloorZone shape (id/name/displayOrder/active — no createdAt)", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) =>
+      createZone(tx, cfg, { name: "Comedor", displayOrder: 3 }),
+    );
+    const [z] = await asApp(cfg, (tx) => listZones(tx, cfg));
+    expect(z).toEqual({ id, name: "Comedor", displayOrder: 3, active: true });
+  });
+
+  it("createZone defaults displayOrder to 0 when omitted", async () => {
+    const cfg = await setupVenue();
+    await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Solo" }));
+    const [z] = await asApp(cfg, (tx) => listZones(tx, cfg));
+    expect(z).toMatchObject({ name: "Solo", displayOrder: 0 });
+  });
+
+  it("rejects a duplicate name (zone.name_taken) and an unknown id (zone.not_found)", async () => {
+    const cfg = await setupVenue();
+    await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Comedor" }));
+    await expect(
+      asApp(cfg, (tx) => createZone(tx, cfg, { name: "Comedor" })),
+    ).rejects.toMatchObject({ code: "zone.name_taken", params: { name: "Comedor" } });
+    const missing = randomUUID();
+    await expect(
+      asApp(cfg, (tx) => updateZone(tx, cfg, missing, { name: "X" })),
+    ).rejects.toMatchObject({ code: "zone.not_found", params: { zoneId: missing } });
+  });
+
+  it("updateZone surfaces a name collision as zone.name_taken", async () => {
+    const cfg = await setupVenue();
+    await asApp(cfg, (tx) => createZone(tx, cfg, { name: "A" }));
+    const { id } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "B" }));
+    await expect(asApp(cfg, (tx) => updateZone(tx, cfg, id, { name: "A" }))).rejects.toMatchObject({
+      code: "zone.name_taken",
+      params: { name: "A" },
+    });
+  });
+
+  it("updateZone reactivates and reorders (the active + displayOrder patch branches)", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) =>
+      createZone(tx, cfg, { name: "Patio", displayOrder: 5 }),
+    );
+    await asApp(cfg, (tx) => deactivateZone(tx, cfg, id));
+    expect(await asApp(cfg, (tx) => listZones(tx, cfg))).toEqual([]);
+    await asApp(cfg, (tx) => updateZone(tx, cfg, id, { active: true, displayOrder: 9 }));
+    expect(await asApp(cfg, (tx) => listZones(tx, cfg))).toEqual([
+      { id, name: "Patio", displayOrder: 9, active: true },
+    ]);
+  });
+
+  it("deactivateZone throws zone.not_found for an unknown id", async () => {
+    const cfg = await setupVenue();
+    const missing = randomUUID();
+    await expect(asApp(cfg, (tx) => deactivateZone(tx, cfg, missing))).rejects.toMatchObject({
+      code: "zone.not_found",
+      params: { zoneId: missing },
+    });
+  });
+
+  it("createZone rethrows a NON-unique DB error raw, not as zone.name_taken", async () => {
+    const cfg = await setupVenue();
+    // 10_000_000_000 overflows the int4 `display_order` column (22003 numeric_value_out_of_range) —
+    // NOT the name unique. So `isUniqueViolation` is false and `createZone` rethrows the raw driver
+    // error rather than mistranslating it (the false branch of its catch — the negative control the
+    // sibling create/update verbs each carry).
+    const err = await asApp(cfg, (tx) =>
+      createZone(tx, cfg, { name: "Big", displayOrder: 10_000_000_000 }),
+    ).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error); // rejected (a resolved {id} would fail this)
+    expect(err).not.toBeInstanceOf(AppError); // a raw driver error, not a domain translation
+  });
+
+  it("updateZone rethrows a NON-unique DB error raw, not as zone.name_taken", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Ord" }));
+    // 10_000_000_000 overflows the int4 `display_order` column (22003 numeric_value_out_of_range) —
+    // NOT the name unique. So `isUniqueViolation` is false and `updateZone` rethrows the raw driver
+    // error rather than mistranslating it (the false branch of its catch).
+    const err = await asApp(cfg, (tx) =>
+      updateZone(tx, cfg, id, { displayOrder: 10_000_000_000 }),
+    ).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error); // rejected (a resolved void would fail this)
+    expect(err).not.toBeInstanceOf(AppError); // a raw driver error, not a domain translation
+  });
+});
+
+// The FK-name check createTable/updateTable use to tell the zone FK apart from the sibling
+// location/status FKs. Crafted-error unit tests (no DB) pin every branch — the real-DB tests above
+// already prove the true path (a bad zoneId → zone.not_found) and the location-FK false path.
+describe("isZoneFkViolation", () => {
+  it("matches a 23503 on dining_tables_zone_fk, at the top level and nested under .cause", () => {
+    expect(isZoneFkViolation({ code: "23503", constraint: "dining_tables_zone_fk" })).toBe(true);
+    // Drizzle wraps the driver error; the real code/constraint live one level down under `.cause`.
+    expect(
+      isZoneFkViolation({ cause: { code: "23503", constraint: "dining_tables_zone_fk" } }),
+    ).toBe(true);
+  });
+
+  it("does NOT match a sibling constraint, a different code, a non-object, or a self-referential cause", () => {
+    // The location FK is a 23503 too, but a different constraint — must stay raw.
+    expect(isZoneFkViolation({ code: "23503", constraint: "dining_tables_location_fk" })).toBe(
+      false,
+    );
+    expect(isZoneFkViolation({ code: "23505", constraint: "dining_tables_zone_fk" })).toBe(false);
+    expect(isZoneFkViolation(null)).toBe(false);
+    expect(isZoneFkViolation("nope")).toBe(false);
+    // A self-referential cause must terminate the walk rather than spin forever.
+    const selfRef: { cause?: unknown } = {};
+    selfRef.cause = selfRef;
+    expect(isZoneFkViolation(selfRef)).toBe(false);
   });
 });

@@ -126,6 +126,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "table.not_found": 404,
   "table.label_taken": 409,
   "table.inactive": 409,
+  // Floor-plan zone (FP-1). The table create/patch routes now accept a `zoneId`; one naming no
+  // `floor_zones` row (or another tenant's, RLS-hidden) surfaces `zone.not_found` — a 404, the same
+  // shape `table.not_found`/`status.not_found` use for an absent referenced row. (`zone.name_taken`
+  // is thrown only by the zone CRUD verbs, which have no route surface yet, so it is not mapped here
+  // until the task that wires those routes — an unmapped code would default to 400, not 409.)
+  "zone.not_found": 404,
   "tab.already_open": 409,
   "tab.not_open": 409,
   "tab.line_not_found": 404,
@@ -617,11 +623,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   // Create a dining table. SESSION-GUARDED. `createTable` throws table.label_taken (→ 409) on a
-  // duplicate label. The client sends { label, zone?, capacity? }.
+  // duplicate label, or zone.not_found (→ 404) when `zoneId` names no floor_zones row. The client
+  // sends { label, zoneId?, capacity? }.
   app.post("/api/tables", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const body = await c.req.json<{ label: string; zone?: string; capacity?: number }>();
+      const body = await c.req.json<{ label: string; zoneId?: string; capacity?: number }>();
       requireCapacity(body.capacity);
       const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
@@ -655,14 +662,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Edit a table (label/zone/capacity). SESSION-GUARDED. A malformed :id is screened to
-  // table.not_found (→ 404) rather than a 500; `updateTable` throws table.not_found / table.label_taken.
+  // Edit a table (label/zoneId/capacity). SESSION-GUARDED. A malformed :id is screened to
+  // table.not_found (→ 404) rather than a 500; `updateTable` throws table.not_found / table.label_taken,
+  // or zone.not_found (→ 404) when `zoneId` names no floor_zones row.
   app.patch("/api/tables/:id", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      const body = await c.req.json<{ label?: string; zone?: string; capacity?: number }>();
+      const body = await c.req.json<{ label?: string; zoneId?: string; capacity?: number }>();
       requireCapacity(body.capacity);
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);

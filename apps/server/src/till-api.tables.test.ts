@@ -40,6 +40,10 @@ let ana: { id: string };
 // (`openTab`/`addTabRound` price it and the `check_locales` trigger demands its `es-ES` description
 // key match the location's `es-ES` locale).
 let productId: string;
+// A real `floor_zones` row in the counter location — a table's `zoneId` is now a composite FK to
+// `floor_zones`, not a free-text string, so the create/patch table tests point at THIS id. (The zone
+// CRUD verbs have no HTTP route yet — that is a later FP-1 task — so it is seeded directly here.)
+let seededZoneId: string;
 
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
@@ -83,6 +87,10 @@ const suite = usePgliteDb({
       return p;
     });
     productId = product.id;
+    const zone = await db.execute<{ id: string }>(sql`
+      insert into floor_zones (tenant_id, location_id, name)
+      values (${tenantId}, ${loc.rows[0]!.id}, 'Terraza') returning id`);
+    seededZoneId = zone.rows[0]!.id;
     cfg = makeCfg(tenantId, till.rows[0]!.id, loc.rows[0]!.id, nodeId);
   },
 });
@@ -189,7 +197,7 @@ describe("table + tab routes", () => {
   it("POST /api/tables creates and GET /api/tables lists it", async () => {
     const create = await request("/api/tables", {
       method: "POST",
-      body: JSON.stringify({ label: "12", zone: "terrace", capacity: 4 }),
+      body: JSON.stringify({ label: "12", zoneId: seededZoneId, capacity: 4 }),
     });
     expect(create.status).toBe(200);
     const { id } = (await create.json()) as { id: string };
@@ -197,7 +205,22 @@ describe("table + tab routes", () => {
     // Membership, not an exact one-element array: the suite's PGlite db persists across tests, so an
     // exact-list assertion would be order-reliant (§4). `.toContainEqual` holds no matter what other
     // table-creating tests have run.
-    expect(list).toContainEqual(expect.objectContaining({ id, label: "12", active: true }));
+    expect(list).toContainEqual(
+      expect.objectContaining({ id, label: "12", zoneId: seededZoneId, active: true }),
+    );
+  });
+
+  it("POST /api/tables with an unknown zoneId → 404 zone.not_found", async () => {
+    // The table create route now forwards `zoneId` to `createTable`; one naming no `floor_zones` row
+    // trips the composite `dining_tables_zone_fk` (23503), surfaced as the domain `zone.not_found`
+    // (404 via the STATUS map) rather than an opaque 500. A real zoneId is proven by the create test
+    // above; this is its negative counterpart.
+    const res = await request("/api/tables", {
+      method: "POST",
+      body: JSON.stringify({ label: "orphan-zone", zoneId: randomUUID() }),
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
   });
 
   it("POST /api/tables with a duplicate label → 409 table.label_taken", async () => {
@@ -250,11 +273,11 @@ describe("table + tab routes", () => {
     expect(await res.json()).toMatchObject({ error: { code: "table.not_found" } });
   });
 
-  it("PATCH /api/tables/:id edits a real table (label/zone/capacity) and returns an empty 200", async () => {
+  it("PATCH /api/tables/:id edits a real table (label/zoneId/capacity) and returns an empty 200", async () => {
     const { id } = (await (
       await request("/api/tables", {
         method: "POST",
-        body: JSON.stringify({ label: "20", zone: "bar", capacity: 2 }),
+        body: JSON.stringify({ label: "20", zoneId: seededZoneId, capacity: 2 }),
       })
     ).json()) as { id: string };
 
@@ -268,10 +291,14 @@ describe("table + tab routes", () => {
     const list = (await (await request("/api/tables")).json()) as {
       id: string;
       label: string;
-      zone: string | null;
+      zoneId: string | null;
       capacity: number | null;
     }[];
-    expect(list.find((t) => t.id === id)).toMatchObject({ label: "20A", zone: "bar", capacity: 6 });
+    expect(list.find((t) => t.id === id)).toMatchObject({
+      label: "20A",
+      zoneId: seededZoneId,
+      capacity: 6,
+    });
   });
 
   it("DELETE /api/tables/:id deactivates a real table (it leaves the active list)", async () => {
