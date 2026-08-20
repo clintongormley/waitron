@@ -437,3 +437,64 @@ describe("transferLines — guards", () => {
     expect(await linesOf(tabB)).toHaveLength(1); // no new line appended
   });
 });
+
+describe("transferLines — duplicate line_no in the batch", () => {
+  // A batch naming the SAME source line_no twice does NOT conserve quantity, because every entry is
+  // validated against the STATIC pre-batch snapshot of `line.quantity` (never updated between entries)
+  // and the split write sets the source to `original − q` (a plain set, NOT a cumulative decrement).
+  // Two partial "1"s off a café×3 line both pass (each ≤ the stale 3), the source ends at 3−1=2, and
+  // TWO 1-unit destination lines are inserted → 4 cafés from an original 3. Rejected UP FRONT, before
+  // any lock or write, so both tabs are untouched. Reported with the first line_no that repeats. The
+  // deletion-proof (remove the guard, rerun, watch this RED with dest gaining 1.000+1.000) is in the
+  // fix report.
+  it("rejects a partial+partial batch repeating a line_no (tab.transfer_duplicate_line), conserving quantity", async () => {
+    const { cfg, cafeId, aguaId, tableAId, tableBId } = await setupVenue();
+    const tabA = await openTabWith(cfg, tableAId, [{ productId: cafeId, quantity: "3" }]);
+    const tabB = await openTabWith(cfg, tableBId, [{ productId: aguaId, quantity: "1" }]);
+    await expect(
+      asApp(cfg, (tx) =>
+        transferLines(tx, cfg, tabA, tabB, [
+          { lineNo: 1, quantity: "1" },
+          { lineNo: 1, quantity: "1" },
+        ]),
+      ),
+    ).rejects.toMatchObject({
+      code: "tab.transfer_duplicate_line",
+      params: { tabId: tabA, lineNo: 1 },
+    });
+    // Both tabs UNCHANGED — the café×3 stayed whole on the source and the destination kept only its
+    // original agua line (no fabricated 1.000+1.000 café).
+    expect(await linesOf(tabA)).toEqual([
+      expect.objectContaining({ lineNo: 1, productId: cafeId, quantity: "3.000" }),
+    ]);
+    expect(await linesOf(tabB)).toEqual([
+      expect.objectContaining({ lineNo: 1, productId: aguaId }),
+    ]);
+  });
+
+  // The whole-line + partial pair on one line is CONTRADICTORY ("move the whole line" AND "move part
+  // of it"), which a cumulative-decrement fold cannot express — moveTabLines DELETEs source line 1
+  // (moving it whole), then the split's `UPDATE ... WHERE line_no=1` matches ZERO rows while its
+  // INSERT still fires → a fabricated destination line. The up-front duplicate guard refuses the batch
+  // before EITHER path runs, which is why the guard rejects a repeated line_no uniformly rather than
+  // trying to reconcile the two shapes.
+  it("rejects a whole-line+partial batch repeating a line_no (tab.transfer_duplicate_line), conserving quantity", async () => {
+    const { cfg, cafeId, aguaId, tableAId, tableBId } = await setupVenue();
+    const tabA = await openTabWith(cfg, tableAId, [{ productId: cafeId, quantity: "3" }]);
+    const tabB = await openTabWith(cfg, tableBId, [{ productId: aguaId, quantity: "1" }]);
+    await expect(
+      asApp(cfg, (tx) =>
+        transferLines(tx, cfg, tabA, tabB, [{ lineNo: 1 }, { lineNo: 1, quantity: "1" }]),
+      ),
+    ).rejects.toMatchObject({
+      code: "tab.transfer_duplicate_line",
+      params: { tabId: tabA, lineNo: 1 },
+    });
+    expect(await linesOf(tabA)).toEqual([
+      expect.objectContaining({ lineNo: 1, productId: cafeId, quantity: "3.000" }),
+    ]);
+    expect(await linesOf(tabB)).toEqual([
+      expect.objectContaining({ lineNo: 1, productId: aguaId }),
+    ]);
+  });
+});

@@ -941,11 +941,15 @@ function grossLineTotal(grossUnit: string, quantity: string): string {
  *   (each tab keeps `Σ line_total = its total`); pre-fiscal, so a sub-céntimo split rounding
  *   difference is harmless (design §3).
  *
- * Guarded (Task 5): every named `line_no` must exist on `fromTab` (`tab.line_not_found`), and any
- * given `quantity` must be well-formed and satisfy `0 < quantity ≤ line.quantity`
- * (`tab.transfer_quantity_invalid` — zero, negative, over-quantity, or a malformed decimal literal).
- * Both are checked for EVERY transfer BEFORE any move or split runs, so one bad entry in a batch
- * leaves the source untouched rather than half-transferred.
+ * Guarded (Task 5): a batch may name each source `line_no` AT MOST once (`tab.transfer_duplicate_line`,
+ * refused up front before any lock or write — a repeat would validate each entry against the STATIC
+ * pre-batch quantity snapshot and INVENT quantity, since the split sets the source to `original − q`
+ * rather than a cumulative decrement, and a whole-line + partial pair on one line is contradictory);
+ * every named `line_no` must exist on `fromTab` (`tab.line_not_found`); and any given `quantity` must
+ * be well-formed and satisfy `0 < quantity ≤ line.quantity` (`tab.transfer_quantity_invalid` — zero,
+ * negative, over-quantity, or a malformed decimal literal). All are checked for EVERY transfer BEFORE
+ * any move or split runs, so one bad entry in a batch leaves the source untouched rather than
+ * half-transferred.
  *
  * Both tabs' `working_orders` rows are locked `FOR UPDATE` in ASCENDING id order:
  * `[fromTabId, toTabId].sort()` then a `lockOpenTab` per id, each a SEPARATE `where id = X ... for update`.
@@ -1001,6 +1005,25 @@ export async function transferLines(
   // A tab cannot transfer to itself — refused before any lock (which would take the row twice).
   if (fromTabId === toTabId) {
     throw new AppError("tab.transfer_self", { tabId: fromTabId });
+  }
+
+  // A batch may name each source line_no AT MOST once — refused before any lock or write. A repeated
+  // line_no does NOT conserve quantity: every entry is validated against the STATIC `byLineNo` snapshot
+  // of `line.quantity` below (never updated between entries) and the split write sets the source to
+  // `original − q` (a plain set, not a cumulative decrement), so two partial "1"s off a café×3 line
+  // both pass and the destination gains 1.000+1.000 while the source only drops to 2.000 — 4 from an
+  // original 3. A whole-line + partial pair on one line is worse and contradictory: `moveTabLines`
+  // DELETEs the line (moving it whole) and the split's `UPDATE ... WHERE line_no=…` then matches zero
+  // rows while its INSERT still fabricates a destination line. Neither shape folds into a cumulative
+  // decrement, so a duplicate is simply refused (a 400 request-shape fault), naming the FIRST line_no
+  // that repeats. This up-front guard also covers a duplicate WHOLE-line pair — already harmless via
+  // `moveTabLines`' `inArray` set semantics — which is fine/stricter.
+  const seenLineNos = new Set<number>();
+  for (const { lineNo } of transfers) {
+    if (seenLineNos.has(lineNo)) {
+      throw new AppError("tab.transfer_duplicate_line", { tabId: fromTabId, lineNo });
+    }
+    seenLineNos.add(lineNo);
   }
 
   // Lock BOTH tab rows FOR UPDATE in ascending id order. `.sort()` is lexicographic, which for the

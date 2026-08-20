@@ -312,4 +312,23 @@ describe("POST /api/tabs/:id/transfer", () => {
       error: { code: "tab.line_not_found", params: { tabId: tabA, lineNo: 99 } },
     });
   });
+
+  it("400 tab.transfer_duplicate_line when the batch names a line_no twice", async () => {
+    const { app, tabA, tabB, cookie } = await setupTabsApp("3");
+    const res = await app.request(`/api/tabs/${tabA}/transfer`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        toTabId: tabB,
+        transfers: [
+          { lineNo: 1, quantity: "1" },
+          { lineNo: 1, quantity: "1" },
+        ],
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "tab.transfer_duplicate_line", params: { tabId: tabA, lineNo: 1 } },
+    });
+  });
 });

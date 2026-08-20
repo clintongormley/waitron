@@ -139,11 +139,13 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // Table service transfer (TS-4). A transfer named the SAME tab as source and destination is a
   // request-shape fault, a 400 (`tab.transfer_self`), the same shape `tab.merge_self` uses; a `quantity`
   // outside `0 < quantity ≤ line.quantity` (zero, negative, over-quantity, malformed) is also a 400
-  // (`tab.transfer_quantity_invalid`) — the ids may be valid, the request itself is malformed.
+  // (`tab.transfer_quantity_invalid`); a batch naming the same source `line_no` more than once is a 400
+  // too (`tab.transfer_duplicate_line`) — the ids may be valid, the request itself is malformed.
   // `tab.not_open`/`tab.line_not_found` (already mapped above) are reused for a non-open tab and an
   // unknown source `line_no`.
   "tab.transfer_self": 400,
   "tab.transfer_quantity_invalid": 400,
+  "tab.transfer_duplicate_line": 400,
   // Manual service status (TS-2). Setting a table's status can fail two ways: an unknown status id
   // (or a malformed one screened at the route) names no status → 404 (`status.not_found`); a
   // deactivated status may not be set → 409 (`status.inactive`) — the id is valid but the status's
