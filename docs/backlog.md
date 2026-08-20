@@ -1147,16 +1147,32 @@ Carried from finished work. None of it blocks anything; all of it makes later wo
   hangs in `test-ui` too, the cause is inside the suite and the next move is a per-test timeout + a
   Playwright trace. Guarded by `scripts/ci-workflow.test.mjs` (the three shards cover every
   `test:coverage` member exactly once).
-- **`mutation-db` weekly job is red — pre-existing, not a merge gate.** `.github/workflows/mutation.yml`'s
-  `mutation-db` job (Stryker over `@waitron/db`'s WASM-Postgres suite) has failed on **every** scheduled
-  run on `main` since at least 2026-08-03 — runs 30788893341 (08-03), 31358752142 (08-10),
-  31997079174 (08-17) — while the sibling `@waitron/ui` `mutation` job passes each time. Surfaced
-  landing #111: the dispatched mutation run's overall failure was this job, and #111's diff never
-  touches it (byte-identical to `main`). The job publishes a score rather than gating (no
-  `thresholds.break`) and the workflow is weekly / `workflow_dispatch` only — **not** in the `ci`
-  aggregate — so it blocks nothing, but the db mutation score has been unpublished for weeks. Needs a
-  look at *why* it fails (crash / timeout / OOM over WASM Postgres), separately from any Playwright
-  work. Non-blocking.
+- **`mutation-db` weekly job is red — diagnosed 2026-08-20, deferred to the #112 db-suite speedup.**
+  `.github/workflows/mutation.yml`'s `mutation-db` job (Stryker over `@waitron/db`) has **never**
+  completed — every run died at the 5-min mark: 30788893341 (08-03), 31358752142 (08-10), 31997079174
+  (08-17), dispatch 32304224136 (08-19) — while the sibling `@waitron/ui` `mutation` job passes.
+  Publishes a score rather than gating (no `thresholds.break`), weekly / `workflow_dispatch` only,
+  **not** in the `ci` aggregate → blocks nothing. Three confirmed causes; the config half is a
+  two-line fix, but the run stays too slow for CI's 6h limit until the db suite is faster, so the fix
+  is **deferred to the #112 shared-container rollout** (user call 2026-08-20):
+  - **(1) Dry-run timeout.** Stryker runs the whole db suite once (perTest coverage) before mutating;
+    32 of 39 files boot real Postgres (`describeEachTarget` = PGlite + Testcontainers), so a single
+    run is ~4m40s local / >5min CI, past Stryker's default `dryRunTimeoutMinutes: 5` — CI log reads
+    `Initial test run timed out!` at 5:01. **Fix:** add `dryRunTimeoutMinutes: 20` to
+    `packages/db/stryker.config.json` (`timeoutMS: 60000` is already set there for the same slowness;
+    the *separate* dry-run timeout was overlooked).
+  - **(2) Static mutants.** Stryker's own warning: `Detected 1157 static mutants (77% of total)
+    estimated to take 99% of the time`. db is mostly import-time Drizzle schema; Stryker reruns the
+    whole suite per static mutant → ~5-8h ETA. **Fix:** add `ignoreStatic: true` (Stryker's own
+    recommendation) → drops to ~709 behavioural mutants.
+  - **(3) The blocker — suite speed.** Even with (1)+(2) applied and measured locally, the ~709
+    non-static mutants take **~1h+ locally**, dominated by *surviving* mutants that rerun their full
+    real-PG covering tests (container boot each) → very likely >6h on CI's slower runners. The lever
+    is db-test speed: once #112's shared-container / template-clone harness (~26ms clone vs ~1-2s
+    container boot) reaches `packages/db`'s own suite, apply (1)+(2) and the run should complete.
+    Declined alternatives (2026-08-20 user call): a PGlite-only mutation target (loses RLS /
+    tenant-isolation mutation coverage — fiscal-critical) and a narrowed `mutate` scope (drops
+    meaningful mutants). Non-blocking.
 - **`test-light` reports `success` without naming what it ran.** The skip-empty-scope half is done;
   what remains is the *reporting* — a shard that ran two packages and one that ran the whole workspace
   both report `success`, and only the step log tells them apart. Make the job name the packages it
