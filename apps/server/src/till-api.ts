@@ -21,9 +21,12 @@ import {
   advancePrep,
   cancelPlacedOrder,
   getHeldOrder,
+  joinTable,
   listHeldOrders,
   listPrepQueue,
   listTablesWithState,
+  mergeTabs,
+  moveTab,
   openTab,
   parkOrder,
   placeOrder,
@@ -125,6 +128,13 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "tab.already_open": 409,
   "tab.not_open": 409,
   "tab.line_not_found": 404,
+  // Table service move/join/merge (TS-3). A move/join onto a table already covered by a STILL-OPEN tab
+  // is a 409 (`table.occupied`) — the id is valid but the target's STATE (occupied) forbids it, the
+  // same 409 shape `tab.already_open` uses; a merge of a tab into ITSELF is a request-shape fault, a
+  // 400 (`tab.merge_self`). `tab.not_open`/`table.not_found`/`table.inactive` (already mapped above) are
+  // reused for the non-open tab, absent/malformed target, and deactivated target the verbs also throw.
+  "table.occupied": 409,
+  "tab.merge_self": 400,
   // Manual service status (TS-2). Setting a table's status can fail two ways: an unknown status id
   // (or a malformed one screened at the route) names no status → 404 (`status.not_found`); a
   // deactivated status may not be set → 409 (`status.inactive`) — the id is valid but the status's
@@ -181,6 +191,19 @@ function requireCapacity(capacity: number | undefined): void {
   if (!Number.isInteger(capacity) || capacity < 0 || capacity > 2_147_483_647) {
     throw new AppError("management.request_invalid", { field: "capacity" });
   }
+}
+
+/**
+ * Screen a tab `:id` path param as a UUID before it reaches a query — a malformed id passed into
+ * `eq(workingOrders.id, id)` would `22P02` → an opaque 500 (the fail-closed shape the working-order
+ * routes' `requireUuidId` uses). A non-UUID names no open tab exactly as legitimately as an absent one,
+ * so it is refused with `tab.not_open` (409). See Plan note 3 on the param key (`tabId`).
+ */
+function requireTabParam(id: string): string {
+  if (!isUuid(id)) {
+    throw new AppError("tab.not_open", { tabId: id });
+  }
+  return id;
 }
 
 /**
@@ -728,6 +751,60 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await setTableStatus(tx, deps.cfg, id, statusId);
+      });
+      return c.body(null, 200);
+    }),
+  );
+
+  // Relocate a tab to a free table (TS-3, design §3a). SESSION-GUARDED. The tab `:id` and the body
+  // `toTableId` are both isUuid-screened before any query — a malformed tab id → `tab.not_open` (409),
+  // a malformed target → `table.not_found` (404), never a 500. The verb runs on a fresh
+  // withTenant/asAppUser transaction (RLS scopes it to this till's tenant). Returns 200 empty.
+  app.post("/api/tabs/:id/move", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const tabId = requireTabParam(c.req.param("id"));
+      const body = await c.req.json<{ toTableId: string }>();
+      if (!isUuid(body.toTableId))
+        throw new AppError("table.not_found", { tableId: body.toTableId });
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await moveTab(tx, deps.cfg, tabId, body.toTableId);
+      });
+      return c.body(null, 200);
+    }),
+  );
+
+  // Extend a tab's coverage to a free table (TS-3, a join). SESSION-GUARDED; same isUuid screening as
+  // move. Returns 200 empty.
+  app.post("/api/tabs/:id/join", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const tabId = requireTabParam(c.req.param("id"));
+      const body = await c.req.json<{ tableId: string }>();
+      if (!isUuid(body.tableId)) throw new AppError("table.not_found", { tableId: body.tableId });
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await joinTable(tx, deps.cfg, tabId, body.tableId);
+      });
+      return c.body(null, 200);
+    }),
+  );
+
+  // Combine two tabs onto one bill (TS-3). SESSION-GUARDED. The destination tab `:id` and the body
+  // `fromTabId` are both isUuid-screened → `tab.not_open` on a malformed id; a self-merge is
+  // `tab.merge_self` (400), a non-open tab `tab.not_open` (409), both from `mergeTabs`. Returns 200 empty.
+  app.post("/api/tabs/:id/merge", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const intoTabId = requireTabParam(c.req.param("id"));
+      const body = await c.req.json<{ fromTabId: string; freeSourceTable: boolean }>();
+      if (!isUuid(body.fromTabId)) throw new AppError("tab.not_open", { tabId: body.fromTabId });
+      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await mergeTabs(tx, deps.cfg, intoTabId, body.fromTabId, {
+          freeSourceTable: body.freeSourceTable,
+        });
       });
       return c.body(null, 200);
     }),

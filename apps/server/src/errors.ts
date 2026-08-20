@@ -369,6 +369,18 @@ declare module "@waitron/shared" {
      */
     "table.inactive": { tableId: string };
     /**
+     * A move/join TARGET dining table already has an OPEN tab, so a party may not be relocated or
+     * extended onto it — use `mergeTabs` to combine the two bills instead (design §3). A table is "free"
+     * when its `tab_id` is null or points at a settled/abandoned order (a stale pointer, TS-1 §2b);
+     * `table.occupied` fires only when it points at a STILL-OPEN order. `moveTab`/`joinTable` take the
+     * target `dining_tables` row `FOR UPDATE`, so two concurrent moves onto one free table serialise and
+     * the loser surfaces THIS code (the lock is the guard — there is no partial-unique). `tableId` — the
+     * occupied target — is caller-supplied, not a secret. `table.*` names the DOMAIN CONCEPT (the dining
+     * table), never the throwing package (the rule `tenant.not_found`'s note gives). Mapped to 409 (the
+     * table's state forbids the move), the sibling of TS-1's `tab.already_open`.
+     */
+    "table.occupied": { tableId: string };
+    /**
      * A table's `tab_id` already points at an OPEN working order, so a second tab may not be opened (at
      * most one open tab per table, design §2b). `openTab` takes the `dining_tables` row `FOR UPDATE` and
      * checks its `tab_id`; that per-table lock — there is NO partial-unique now — is the concurrency
@@ -380,12 +392,15 @@ declare module "@waitron/shared" {
      */
     "tab.already_open": { tableId: string };
     /**
-     * A working order a tab verb (`addTabRound`, `voidTabLine`) tried to modify is not an OPEN tab — it
-     * is not `open` (already settled/abandoned), no `dining_tables.tab_id` points at it (a walk-up or a
-     * counter delivery — a tab is an OPEN order a table points at, design §2b), or it names none (absent,
-     * or another tenant's, RLS-hidden). All report THIS one code, the fail-closed shape
-     * `working_order.not_open` uses for the held-order modify side. `tabId` — the caller-supplied uuid —
-     * is echoed and qualified to match the tab-verb vocabulary. `tab.*`, not `server.*`, for the reason
+     * A tab verb found the working order it was asked to modify is not an OPEN tab — it is not `open`
+     * (already settled/abandoned), no `dining_tables.tab_id` points at it (a walk-up or a counter
+     * delivery — a tab is an OPEN order a table points at, design §2b), or it names none (absent, or
+     * another tenant's, RLS-hidden). All the tab verbs share THIS one code for that state — the round/void
+     * guard and the TS-3 move/join/merge family alike — the fail-closed shape `working_order.not_open`
+     * uses for the held-order modify side. (A non-enumerating phrasing on purpose: the earlier
+     * `addTabRound`/`voidTabLine` list went stale the moment the move/join/merge verbs began throwing it
+     * too.) `tabId` — the caller-supplied uuid — is echoed and qualified to match the tab-verb
+     * vocabulary. `tab.*`, not `server.*`, for the reason
      * `tenant.not_found`'s note gives. Mapped to 409 (the order's state forbids the tab edit).
      */
     "tab.not_open": { tabId: string };
@@ -397,6 +412,17 @@ declare module "@waitron/shared" {
      * Mapped to 404 (the line named does not exist).
      */
     "tab.line_not_found": { tabId: string; lineNo: number };
+    /**
+     * A tab named as BOTH source and destination of a line-move — `mergeTabs(intoTabId === fromTabId)`,
+     * or the shared `moveTabLines(fromTabId === toTabId)` primitive that `mergeTabs` and (later) TS-4
+     * transfer call. Refused before any line move or lock: moving a tab's lines onto itself would move
+     * them then abandon it (`mergeTabs`), or append duplicates the trailing delete then removes wholesale,
+     * emptying the tab (`moveTabLines`). `tabId` is the caller-supplied uuid (not a secret). `tab.*` names
+     * the DOMAIN CONCEPT (the running tab), never the throwing package (the rule `tenant.not_found`'s note
+     * gives). A request-shape error — the two arguments are equal regardless of any tab's STATE — so it
+     * is mapped to 400 (a bad request), distinct from the state-conflict `tab.not_open` (409).
+     */
+    "tab.merge_self": { tabId: string };
     /**
      * No such service status for this tenant. `statusId` is a caller-supplied uuid the dashboard/till
      * already holds, not a secret — an id that matches nothing is unactionable if withheld (the rule

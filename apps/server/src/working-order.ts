@@ -3,7 +3,7 @@
 // used here). See the note atop `errors.ts`.
 import "./errors.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { AppError, type SaleId, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import {
   allocateOrderNumber,
@@ -486,8 +486,8 @@ async function lockOpenTab(tx: Transaction, tabId: string): Promise<void> {
  * Concurrency (load-bearing for QR ordering — multiple guests append to one shared tab at once): the tab
  * row is taken `FOR UPDATE` by {@link lockOpenTab}, which serialises concurrent writers to this tab on
  * the `working_orders` row lock, so the `max(line_no)+1` read-then-insert below cannot interleave. A
- * naïve `max(line_no)+1` without the lock races and collides on the `(working_order_id, line_no)` unique
- * (`orders.ts:192`) — a real-PG concurrent test proves it by deletion of the lock.
+ * naïve `max(line_no)+1` without the lock races and collides on the `working_order_lines`
+ * `(working_order_id, line_no)` unique — a real-PG concurrent test proves it by deletion of the lock.
  */
 export async function addTabRound(
   tx: Transaction,
@@ -537,6 +537,357 @@ export async function voidTabLine(
   if (deleted.length === 0) {
     throw new AppError("tab.line_not_found", { tabId, lineNo });
   }
+}
+
+/**
+ * Move working-order lines from one OPEN tab to another (design §3) — the shared primitive `mergeTabs`
+ * calls with ALL lines and TS-4 (transfer) will call with a subset, so it is written general now to
+ * avoid a TS-4 refactor. Reads the named lines (default all), APPENDS them onto `toTab` at the next
+ * `line_no`s with every locked price column carried across UNCHANGED (a move NEVER re-prices — the
+ * add-time `working_order_lines.unit_price_gross` column is what the filed sale is later rebuilt from),
+ * then deletes them from `fromTab`.
+ *
+ * Refuses a self-transfer (`fromTabId === toTabId`) with `tab.merge_self` BEFORE any read or write. In
+ * the "move all" shape (no `lineNos`) a self-transfer would append every line as a duplicate and then
+ * the trailing delete — keyed on `workingOrderId = fromTabId`, which is now ALSO `toTabId` — would match
+ * BOTH the originals and the just-inserted duplicates, emptying the tab. `mergeTabs` already guards this
+ * at its own top, but `moveTabLines` is the exported primitive TS-4 (transfer) calls directly, so the
+ * guard lives here too, reusing the `tab.merge_self` code (one tab named as both ends — the same concept).
+ *
+ * Both tabs are locked `FOR UPDATE` in ASCENDING `id` order — a DEFENSIVE, plan-independent lock-order
+ * discipline, NOT a deadlock-safety property any concurrent test at THIS level exercises: this primitive's
+ * only caller today (`mergeTabs`) has already taken both `working_orders` row locks (in this same
+ * ascending-id order) before `moveTabLines` runs, so the re-lock here is a deliberate no-op and no
+ * `moveTabLines`-level race reaches this ordering. (mergeTabs's OWN lock order — `working_orders` before
+ * `dining_tables` — is what carries the merge-vs-pay deadlock safety; see there.) These locks are on
+ * `working_orders`, whose `id` is its PRIMARY KEY, so `mergeTabs`'s unindexed-`tab_id` seq-scan argument
+ * does not apply to this leg. Their status is read off the locked copies: a non-`open` parent is refused
+ * `tab.not_open` (moving lines under a settled/abandoned order would violate
+ * `working_order_lines_require_open_parent` anyway). The lock on `toTab` also serialises `line_no`
+ * allocation the way `addTabRound`'s per-tab lock does, so a concurrent append/move cannot collide on the
+ * `working_order_lines` `(working_order_id, line_no)` unique. Runs on the CALLER's transaction under its
+ * tenant/app_user scope.
+ */
+export async function moveTabLines(
+  tx: Transaction,
+  fromTabId: string,
+  toTabId: string,
+  lineNos?: number[],
+): Promise<void> {
+  // Refuse a self-transfer before any read/write (see the docstring): the "move all" shape would append
+  // every line as a duplicate and then delete BOTH copies, emptying the tab. mergeTabs guards this too,
+  // but this primitive is called directly by TS-4. Reuses tab.merge_self — one tab named as both ends.
+  if (fromTabId === toTabId) {
+    throw new AppError("tab.merge_self", { tabId: fromTabId });
+  }
+  const locked = await tx
+    .select({ id: workingOrders.id, status: workingOrders.status })
+    .from(workingOrders)
+    .where(or(eq(workingOrders.id, fromTabId), eq(workingOrders.id, toTabId)))
+    .orderBy(workingOrders.id)
+    .for("update");
+  const from = locked.find((r) => r.id === fromTabId);
+  const to = locked.find((r) => r.id === toTabId);
+  if (from === undefined || from.status !== "open") {
+    throw new AppError("tab.not_open", { tabId: fromTabId });
+  }
+  if (to === undefined || to.status !== "open") {
+    throw new AppError("tab.not_open", { tabId: toTabId });
+  }
+
+  const sourceWhere =
+    lineNos === undefined
+      ? eq(workingOrderLines.workingOrderId, fromTabId)
+      : and(
+          eq(workingOrderLines.workingOrderId, fromTabId),
+          inArray(workingOrderLines.lineNo, lineNos),
+        );
+
+  // Read the lines to move (locked price columns kept verbatim), in line_no order.
+  const source = await tx
+    .select({
+      tenantId: workingOrderLines.tenantId,
+      productId: workingOrderLines.productId,
+      descriptions: workingOrderLines.descriptions,
+      quantity: workingOrderLines.quantity,
+      unitPrice: workingOrderLines.unitPrice,
+      unitPriceGross: workingOrderLines.unitPriceGross,
+      vatRate: workingOrderLines.vatRate,
+      lineTotal: workingOrderLines.lineTotal,
+      category: workingOrderLines.category,
+    })
+    .from(workingOrderLines)
+    .where(sourceWhere)
+    .orderBy(workingOrderLines.lineNo);
+
+  // The next free line_no on the destination, allocated under the toTab lock above (no race).
+  const [agg] = await tx
+    .select({ next: sql<number>`coalesce(max(${workingOrderLines.lineNo}), 0)::int` })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, toTabId));
+  const base = agg!.next;
+
+  // Append onto the destination, then delete from the source. Guarded: an EMPTY source (or empty subset)
+  // has nothing to insert and `tx.insert(...).values([])` errors — the same guard createOpenOrder uses.
+  if (source.length > 0) {
+    await tx.insert(workingOrderLines).values(
+      source.map((line, i) => ({
+        tenantId: line.tenantId,
+        workingOrderId: toTabId,
+        lineNo: base + i + 1,
+        productId: line.productId,
+        descriptions: line.descriptions,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        unitPriceGross: line.unitPriceGross,
+        vatRate: line.vatRate,
+        lineTotal: line.lineTotal,
+        category: line.category,
+      })),
+    );
+  }
+  await tx.delete(workingOrderLines).where(sourceWhere);
+}
+
+/**
+ * Assert a working order is an OPEN tab, else throw `tab.not_open` (design §3) — the one definition of
+ * "this tab is open" that `moveTab`/`joinTable` both gate on, so the check cannot drift between them. A
+ * single UNLOCKED status read: deliberately NOT `lockOpenTab`, which takes `FOR UPDATE` and checks a
+ * `dining_tables` back-pointer both verbs intentionally avoid (see their docstrings).
+ */
+async function assertTabOpen(tx: Transaction, tabId: string): Promise<void> {
+  const [tab] = await tx
+    .select({ status: workingOrders.status })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, tabId));
+  if (tab === undefined || tab.status !== "open") {
+    throw new AppError("tab.not_open", { tabId });
+  }
+}
+
+/**
+ * Assert a move/join TARGET table exists, is `active`, and is FREE — the one occupancy predicate the
+ * whole table-service feature rests on (design §3), shared by `moveTab`/`joinTable` so the three-way
+ * check cannot drift between them. `table` is the caller's already-fetched-and-`FOR UPDATE`-locked row
+ * (or undefined). "Free" = `tab_id` null OR pointing at a settled/abandoned order (a stale pointer,
+ * TS-1 §2b); a still-`open` pointed order throws `table.occupied` ("use merge"). Throws
+ * `table.not_found`/`table.inactive`/`table.occupied`, each naming the caller-supplied `tableId`.
+ */
+async function assertTableAvailable(
+  tx: Transaction,
+  table: { tabId: string | null; active: boolean } | undefined,
+  tableId: string,
+): Promise<void> {
+  if (table === undefined) {
+    throw new AppError("table.not_found", { tableId });
+  }
+  if (!table.active) {
+    throw new AppError("table.inactive", { tableId });
+  }
+  if (table.tabId !== null) {
+    const [pointed] = await tx
+      .select({ id: workingOrders.id })
+      .from(workingOrders)
+      .where(and(eq(workingOrders.id, table.tabId), eq(workingOrders.status, "open")));
+    if (pointed !== undefined) {
+      throw new AppError("table.occupied", { tableId });
+    }
+  }
+}
+
+/**
+ * Free every table currently covered by `tabId` — `tab_id` + `status_id → NULL` in one tenant-scoped
+ * statement. A turnover: the freed table's TS-2 manual status must not linger onto the next party
+ * (design §4). Shared by `moveTab` (freeing the source) and `mergeTabs`'s consolidate branch.
+ */
+async function freeTablesCoveredBy(tx: Transaction, cfg: TillConfig, tabId: string): Promise<void> {
+  await tx
+    .update(diningTables)
+    .set({ tabId: null, statusId: null })
+    .where(and(eq(diningTables.tenantId, cfg.tenantId), eq(diningTables.tabId, tabId)));
+}
+
+/**
+ * Relocate a party to a free table (design §3). Validates `tabId` is an `open` working order
+ * (`tab.not_open`) and `toTableId` is `active` (`table.not_found`/`table.inactive`) and FREE — its
+ * `tab_id` is null or points at a settled/abandoned order (a stale pointer, TS-1 §2b), else
+ * `table.occupied` ("use merge"). Then frees the tab's current source table(s) and points the target at
+ * the tab. NO line-move, no fiscal effect.
+ *
+ * Locks the involved `dining_tables` rows (target + the tab's current source table(s)) `FOR UPDATE` in
+ * ASCENDING `id` order — a DEFENSIVE, plan-independent lock-order discipline shared across the
+ * table-service verbs, NOT a deadlock-safety property any concurrent test exercises (this verb's race
+ * test proves the single TARGET-row lock below, not the multi-row ordering). Locking the target
+ * is the concurrency guard: a second concurrent move onto the same free table blocks, then re-reads its
+ * now-set `tab_id` and is refused `table.occupied` (proven by deletion of this lock — §7). The tab's own
+ * `working_orders` row is NOT locked (a move neither settles nor abandons it — unlike merge); a race
+ * with a concurrent pay leaves at worst a harmless stale pointer, which the occupancy read ignores.
+ *
+ * The freed source table(s) get `tab_id → NULL` AND `status_id → NULL` in one statement — a move is a
+ * turnover for the source, so its TS-2 manual status must not linger onto the next party (design §4).
+ * The TARGET table is turned over too: pointing the tab at it also clears its `status_id → NULL`, so a
+ * stale status left from the target's PREVIOUS party does not linger onto the moved-in one — exactly as
+ * `openTab` clears status when a fresh tab opens on a table (design §4). The TS-2 settle-trigger does
+ * not fire on a move (the tab stays open), so both clears are EXPLICIT here.
+ */
+export async function moveTab(
+  tx: Transaction,
+  cfg: TillConfig,
+  tabId: string,
+  toTableId: string,
+): Promise<void> {
+  await assertTabOpen(tx, tabId);
+
+  const involved = await tx
+    .select({ id: diningTables.id, tabId: diningTables.tabId, active: diningTables.active })
+    .from(diningTables)
+    .where(or(eq(diningTables.id, toTableId), eq(diningTables.tabId, tabId)))
+    .orderBy(diningTables.id)
+    .for("update");
+  await assertTableAvailable(
+    tx,
+    involved.find((t) => t.id === toTableId),
+    toTableId,
+  );
+
+  // Free the source table(s) the tab currently covers, then point the target — clearing ITS status_id
+  // too, since the moved-in party turns the target over (openTab parity, design §4).
+  await freeTablesCoveredBy(tx, cfg, tabId);
+  await tx
+    .update(diningTables)
+    .set({ tabId, statusId: null })
+    .where(eq(diningTables.id, toTableId));
+}
+
+/**
+ * Extend a tab's coverage to a free table (design §3): validates `tabId` is an `open` working order
+ * (`tab.not_open`) and `tableId` is `active` and FREE (`table.not_found`/`table.inactive`/`table.occupied`),
+ * then points the free table's `tab_id` at the tab too — now BOTH the tab's original table(s) and this
+ * one point at it, a join. NO line-move (the free table had no tab) and NO status clear (nothing is
+ * freed — the table joins, it does not turn over; design §4). On pay the one tab files one sale; on
+ * settle the TS-2 trigger clears status on ALL its tables (keyed on `tab_id`).
+ *
+ * The target table is locked `FOR UPDATE` — the concurrency guard, exactly as `moveTab`'s: a second
+ * concurrent join onto the same free table blocks, then reads its set `tab_id` and is refused
+ * `table.occupied`. `_cfg` is unused (the row is addressed by id and RLS confines it to the tenant) but
+ * kept for signature symmetry with `moveTab`/`mergeTabs` — underscore-prefixed so `noUnusedParameters`
+ * leaves it, the repo convention `voidTabLine`/`deactivateTable` follow for an interface-shape parameter.
+ */
+export async function joinTable(
+  tx: Transaction,
+  _cfg: TillConfig,
+  tabId: string,
+  tableId: string,
+): Promise<void> {
+  await assertTabOpen(tx, tabId);
+
+  const [table] = await tx
+    .select({ id: diningTables.id, tabId: diningTables.tabId, active: diningTables.active })
+    .from(diningTables)
+    .where(eq(diningTables.id, tableId))
+    .for("update");
+  await assertTableAvailable(tx, table, tableId);
+
+  await tx.update(diningTables).set({ tabId }).where(eq(diningTables.id, tableId));
+}
+
+/**
+ * Combine two tabs onto one bill (design §3). Validates both are DISTINCT (`tab.merge_self`) `open`
+ * working orders (`tab.not_open`), then moves ALL of `fromTab`'s lines onto `intoTab`, re-points
+ * `fromTab`'s table(s), and abandons the now-empty `fromTab`. The merged `intoTab` (holding every line)
+ * files ONE sale on pay; `fromTab`, abandoned and empty, files nothing — no double-file (H2, §5).
+ *
+ * `freeSourceTable = true` frees the source table (`tab_id` + `status_id → NULL` — the 2+2 CONSOLIDATE
+ * case, the source turns over); `false` re-points it at `intoTab` (both tables now covered by the one
+ * bill — the 4+4 JOIN case, and the joined table KEEPS its status, design §4).
+ *
+ * Lock order — both `working_orders` rows `FOR UPDATE` ASCENDING id FIRST, THEN the involved
+ * `dining_tables` rows (those covered by either tab) `FOR UPDATE` ASCENDING id. This MATCHES the
+ * sale/settle/abandon path: `payWorkingOrder` (till-sale.ts) locks the `working_orders` row `FOR UPDATE`,
+ * then its settle UPDATE fires the 0050 `working_orders_clear_table_status` trigger, which UPDATEs
+ * `dining_tables WHERE tab_id = NEW.id` — i.e. `working_orders` then `dining_tables`; `collectOrder`
+ * (settle, which locks its `working_orders` row with an explicit `SELECT … FOR UPDATE`) and
+ * `abandonHeldOrder` (abandon, via its conditional `UPDATE working_orders`) each lock the
+ * `working_orders` row BEFORE the same trigger touches `dining_tables` — the identical two-class order.
+ * Acquiring in that identical order is what PREVENTS a mergeTabs-vs-pay/settle/abandon DEADLOCK:
+ * a concurrent merge and pay both take `working_orders` before `dining_tables`, so they cannot
+ * cross-lock and trip a 40P01. THIS leg's order is load-bearing and proven — the concurrent merge/pay
+ * race test (move-merge.rls.test.ts) asserts no 40P01, and by deletion the previous
+ * `dining_tables`-first order reproduces the 40P01 against the real trigger.
+ *
+ * The `dining_tables` leg's OWN ascending-id order is, by contrast, DEFENSIVE not proven load-bearing:
+ * for a merge-vs-merge (same-verb) race the `dining_tables` lock is on the UNINDEXED `tab_id`, so both
+ * backends seq-scan the two rows in identical heap order and serialise on the first regardless of the
+ * `.orderBy`. The ascending-id discipline on that leg only future-proofs against a schema/plan change
+ * that lets scan orders diverge; a same-verb race cannot prove it load-bearing (a §1 "both answers look
+ * alike" measurement). The deterministic hazard control (move-merge.rls.test.ts) proves the general
+ * inconsistent-order 40P01 hazard is real.
+ *
+ * ORDER MATTERS (Plan note 2): the re-point (step 2) precedes the abandon (step 3). The TS-2
+ * `working_orders_clear_table_status` trigger fires on the `open → abandoned` transition and clears
+ * `status_id` WHERE `tab_id = fromTabId`; because step 2 has already re-pointed every such table away
+ * from `fromTabId`, that trigger matches nothing. Were the abandon first, it would clear the status on a
+ * table that stays JOINED (`freeSourceTable:false`) — contradicting design §4.
+ */
+export async function mergeTabs(
+  tx: Transaction,
+  cfg: TillConfig,
+  intoTabId: string,
+  fromTabId: string,
+  options: { freeSourceTable: boolean },
+): Promise<void> {
+  if (intoTabId === fromTabId) {
+    throw new AppError("tab.merge_self", { tabId: intoTabId });
+  }
+
+  // Lock order (see the docstring): both working_orders rows FIRST (ascending id), THEN the involved
+  // dining_tables rows (ascending id) — the SAME order the sale/settle/abandon path acquires them in
+  // (payWorkingOrder locks working_orders, then the 0050 settle trigger updates dining_tables), so a
+  // concurrent merge and pay cannot cross-lock into a 40P01. The status check throws before the
+  // dining_tables lock, so a non-open (or RLS-hidden foreign) tab is refused holding only working_orders.
+  const tabs = await tx
+    .select({ id: workingOrders.id, status: workingOrders.status })
+    .from(workingOrders)
+    .where(or(eq(workingOrders.id, intoTabId), eq(workingOrders.id, fromTabId)))
+    .orderBy(workingOrders.id)
+    .for("update");
+  const into = tabs.find((t) => t.id === intoTabId);
+  const from = tabs.find((t) => t.id === fromTabId);
+  if (into === undefined || into.status !== "open") {
+    throw new AppError("tab.not_open", { tabId: intoTabId });
+  }
+  if (from === undefined || from.status !== "open") {
+    throw new AppError("tab.not_open", { tabId: fromTabId });
+  }
+  await tx
+    .select({ id: diningTables.id })
+    .from(diningTables)
+    .where(or(eq(diningTables.tabId, intoTabId), eq(diningTables.tabId, fromTabId)))
+    .orderBy(diningTables.id)
+    .for("update");
+
+  // 1. Move ALL of fromTab's lines onto intoTab (locked prices preserved), both still open.
+  //    moveTabLines re-locks + re-validates these two rows as open — a deliberate no-op re-lock here
+  //    (we already hold and checked them), because moveTabLines is a standalone primitive TS-4 calls
+  //    directly and must self-validate; the extra round trip is accepted rather than couple the two.
+  await moveTabLines(tx, fromTabId, intoTabId);
+
+  // 2. Re-point fromTab's table(s) BEFORE the abandon (Plan note 2).
+  if (options.freeSourceTable) {
+    await freeTablesCoveredBy(tx, cfg, fromTabId);
+  } else {
+    await tx
+      .update(diningTables)
+      .set({ tabId: intoTabId })
+      .where(and(eq(diningTables.tenantId, cfg.tenantId), eq(diningTables.tabId, fromTabId)));
+  }
+
+  // 3. Abandon the now-empty fromTab (open → abandoned; the working_orders_enforce_transition state
+  //    machine permits it).
+  await tx
+    .update(workingOrders)
+    .set({ status: "abandoned" })
+    .where(eq(workingOrders.id, fromTabId));
 }
 
 /** One row of the held-orders list the counter shows to retrieve a parked order. */
