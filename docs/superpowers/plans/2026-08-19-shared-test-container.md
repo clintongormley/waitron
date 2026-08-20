@@ -38,11 +38,12 @@ speedup; fork count stays 1.
 Cross-file container sharing REQUIRES `globalSetup` — vitest's default `isolate: true` gives each file a
 fresh module context, so a module-level singleton is re-created per file (no sharing).
 
-1. **`setupSharedContainer(options)`** (new, in `@waitron/db/testing`), used from a per-package
-   `globalSetup`: boot ONE container; migrate a **named template per distinct migration-set** the package
-   uses; create the package's extra cluster roles **idempotently** (`DO $$ … EXCEPTION WHEN
+1. **`startSharedContainer(options)`** (new, in `@waitron/db/testing/shared-container.js`), used from a
+   per-package `globalSetup`: boot ONE container; migrate a **named template per distinct migration-set**
+   the package uses; create the package's extra cluster roles **idempotently** (`DO $$ … EXCEPTION WHEN
    duplicate_object`); `provide('sharedPg', { uri, templates })`. Return the teardown (globalSetup's
-   return value = globalTeardown) that stops the container.
+   return value = globalTeardown) that stops the container. Takes an optional `dockerRequired` message,
+   rethrown in place of the raw daemon error when `start()` fails (mirrors `startMigratedPostgres`).
 2. **`useTemplateDb(options)`** (new): the shared-container analogue of `useRealPostgres`, SAME returned
    shape `{ pg, admin }`. `beforeAll`: read injected `{ uri, templates }`; `CREATE DATABASE
    clone_<unique> TEMPLATE <template[name]>`; connect admin; `setup`. `afterAll`: close, `DROP DATABASE`
@@ -56,11 +57,16 @@ fresh module context, so a module-level singleton is re-created per file (no sha
 
 ## Phases (one PR each)
 
-- **P1 — foundation + apps/server (this PR).** Build `setupSharedContainer` + `useTemplateDb` +
-  idempotent role creation (TDD, against a real container). Convert apps/server's 24 real-PG files (21
-  wrapper + 3 inline; NOT `dev-setup.test.ts`). apps/server needs 3 templates (full-manifest, CORE+
-  IDENTITY, CORE) + roles (`app_user_probe`, RUNTIME role, sync roles). Verify every suite + the RLS /
-  concurrency / cross-till guards pass, coverage clears 98/95, and **measure test-server's CI drop**.
+- **P1 — foundation + apps/server (this PR).** Build `startSharedContainer` + `useTemplateDb` +
+  idempotent role creation (TDD, against a real container). **Delivered:** the foundation plus the 14
+  apps/server files that need only `asAppUser` (one `manifest` template, no per-file roles), converted to
+  `useTemplateDb({ template: "manifest" })`; full apps/server suite (57 files / 762 tests) green, coverage
+  99.66/98.88/99/99.66. **Deferred to later phases** (each needs handling the shared model must grow
+  first): `boot.test.ts` (per-DB grants + spawned server), the sync `setup`+grant suites (`sync-api`,
+  `sync-e2e`), the `probeRole` suites (`pass`, `till-api`, `till-sale-integrated`, `webhook`), the
+  CORE / CORE+IDENTITY-template suites (`clear-table-status`, `service-statuses`), and `dev-setup` (bare).
+  These stay on `useRealPostgres` (per-file container) meanwhile. Measure test-server's CI drop off the
+  PR's own run.
 - **P2..Pn — roll out per package** against the proven pattern: db (`describeEachTarget` + 12 inline),
   then fiscal-verifactu, payments, workforce, sync, identity, reporting, payments-stripe, core,
   scheduler, recipes, catalogue, credentials, purchasing, layouts, workforce-es. Each PR: add

@@ -47,8 +47,9 @@ import "./errors.js";
 // properties are exactly what PGlite CANNOT show: it runs every connection as a superuser (bypassing
 // the RLS the app role writes under) and serialises every query onto ONE backend, so a "two concurrent
 // pays" test there is a FALSE pass, not a weak one. Every distinct-connection race below opens its own
-// backend via `suite.pg.connect()`, and `startRealPostgres` THROWS rather than skipping when Docker is
-// absent, so a vanished suite fails loudly instead of reporting a green that proves nothing.
+// backend via `suite.pg.connect()`, and the shared-container globalSetup (`testing/global-setup.ts`)
+// THROWS its `dockerRequired` message rather than skipping when Docker is absent, so a vanished suite
+// fails loudly instead of reporting a green that proves nothing.
 const LOCALE = "es-ES";
 
 // The accountable operator every placing/cancel amendment is attributed to. `order_amendments.actor_id`

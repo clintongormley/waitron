@@ -62,11 +62,12 @@ import "./errors.js";
 // Real Postgres, not PGlite — mandatory for THIS suite (CLAUDE.md §4). The per-table `FOR UPDATE`
 // concurrency guard is exactly what PGlite CANNOT show: it runs every connection as a superuser and
 // serialises every query onto ONE backend, so a "two concurrent openTabs" test there is a FALSE pass,
-// not a weak one. The race below opens its own backend via `suite.pg.connect()`, and
-// `startRealPostgres` THROWS rather than skipping when Docker is absent, so a vanished suite fails
-// loudly instead of reporting a green that proves nothing.
+// not a weak one. The race below opens its own backend via `suite.pg.connect()`, and the
+// shared-container globalSetup (`testing/global-setup.ts`) THROWS its `dockerRequired` message rather
+// than skipping when Docker is absent, so a vanished suite fails loudly instead of reporting a green
+// that proves nothing.
 //
-// This scaffolding (`useRealPostgres` `suite`, `nextNif`, `tillConfigFromVenue`, `setupVenue`) is
+// This scaffolding (`useTemplateDb` `suite`, `nextNif`, `tillConfigFromVenue`, `setupVenue`) is
 // verb-agnostic (owner-read SQL + venue setup), a sibling of `working-order.rls.test.ts`. Each task
 // adds only the verb imports and owner-read helpers IT uses — this task imports `openTab` +
 // `createTable` and reads `open` working-order counts; Tasks 5/7/8 extend it.

@@ -189,10 +189,13 @@ export function pickTemplate(handle: SharedContainerHandle, name: string): strin
 /**
  * Creates `clone_<…>` from `template` on the container's admin connection and wraps it as a
  * `RealPostgres` pointed at the CLONE. `stop()` DROPs the clone (never the shared container) with
- * `WITH (FORCE)`, so a suite that leaves a `connectAs` connection open still tears down — verified
- * against a real container in `lifecycle.test.ts`: the force-drop terminates the lingering backend
- * and the DROP succeeds. `CREATE DATABASE … TEMPLATE` needs no connection to the template, which
- * `startSharedContainer` guarantees by closing every migrator before it returns.
+ * `WITH (FORCE)`. The path `lifecycle.test.ts` exercises closes every connection first — the suite's
+ * `afterAll` closes `admin` before `stop()` — so what is PROVEN is only that the drop of a
+ * connection-free clone succeeds; the `WITH (FORCE)` backstop, which would terminate a connection a
+ * suite forgot to close, is not separately exercised (it is the same parity the old
+ * `container.stop()` gave, which also force-killed survivors untested). `CREATE DATABASE … TEMPLATE`
+ * needs no connection to the template, which `startSharedContainer` guarantees by closing every
+ * migrator before it returns.
  */
 async function cloneTemplate(
   adminUri: string,

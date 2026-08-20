@@ -54,6 +54,15 @@ export interface SharedContainerOptions {
    */
   roles?: readonly ProbeRole[];
   /**
+   * Why a globalSetup that cannot reach Docker fails loudly, thrown verbatim in place of the raw
+   * testcontainers error when `start()` rejects. Optional — the foundation's own tests do not need
+   * a friendly message — but a package globalSetup should pass one: without it a Docker-absent run
+   * dies at globalSetup with a bare daemon error and no guidance, and because globalSetup precedes
+   * every worker, the WHOLE package suite dies, hermetic files included. Mirrors
+   * {@link startMigratedPostgres}'s required `dockerRequired`, for the same reason.
+   */
+  dockerRequired?: string;
+  /**
    * Seam — see `postgres.ts`'s `StartedContainer`. Defaults to a real Testcontainers PostgreSQL;
    * a test overrides it to prove the container-lifecycle paths (stop-on-failure, teardown) without
    * a daemon.
@@ -102,15 +111,24 @@ export function idempotentRoleStatement(role: ProbeRole): string {
  * a failing migration, role, or identifier check stops the container before rethrowing — the same
  * stop-on-failure `startMigratedPostgres` uses, and it matters for the same reason (with
  * `TESTCONTAINERS_RYUK_DISABLED=true`, mandatory for this repo's local runs, nothing else reaps a
- * leaked container). A failure of `start()` itself leaves no container to stop and simply
- * propagates.
+ * leaked container). A failure of `start()` itself leaves no container to stop; it rethrows
+ * `dockerRequired` when the caller gave one, else the raw error.
  */
 export async function startSharedContainer(options: SharedContainerOptions): Promise<{
   handle: SharedContainerHandle;
   teardown: () => Promise<void>;
 }> {
   const start = options.start ?? startPostgresContainer;
-  const container = await start();
+  let container: StartedContainer;
+  try {
+    container = await start();
+  } catch (cause) {
+    // A start() failure leaves no container to stop; rethrow the caller's guidance if it gave any,
+    // rather than the raw testcontainers "cannot connect to the Docker daemon" that a globalSetup
+    // would otherwise surface with no hint.
+    if (options.dockerRequired !== undefined) throw new Error(options.dockerRequired, { cause });
+    throw cause;
+  }
   try {
     const templates: Record<string, string> = {};
     for (const [name, migrate] of Object.entries(options.templates)) {

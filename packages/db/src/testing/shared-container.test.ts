@@ -61,6 +61,25 @@ describe("startSharedContainer without a container", () => {
     ).rejects.toThrow("Docker daemon");
   });
 
+  it("rethrows `dockerRequired` in place of a raw start() failure, keeping the cause", async () => {
+    const raw = new Error("Cannot connect to the Docker daemon");
+    await expect(
+      startSharedContainer({
+        templates: {},
+        dockerRequired: "start Docker first",
+        start: () => Promise.reject(raw),
+      }),
+    ).rejects.toThrow("start Docker first");
+    // The raw daemon error is preserved as the cause, not discarded.
+    await startSharedContainer({
+      templates: {},
+      dockerRequired: "start Docker first",
+      start: () => Promise.reject(raw),
+    }).catch((error: unknown) => {
+      expect((error as { cause?: unknown }).cause).toBe(raw);
+    });
+  });
+
   it("returns the container uri and leaves it running until teardown", async () => {
     const stop = vi.fn(async () => {});
     const { handle, teardown } = await startSharedContainer({

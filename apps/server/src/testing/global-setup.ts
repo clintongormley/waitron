@@ -13,9 +13,19 @@ import { startSharedContainer } from "@waitron/db/testing/shared-container.js";
  *
  * A globalSetup's return value is its globalTeardown, so returning `teardown` stops the container
  * once the run finishes.
+ *
+ * Because globalSetup runs before every worker, a Docker-absent run dies HERE, taking the whole
+ * apps/server suite (hermetic files included) with it — so `dockerRequired` carries the same
+ * message `testing/postgres.ts` used, turning a raw testcontainers daemon error into guidance.
+ * PGlite is not a fallback: it runs every connection as a superuser and cannot show the
+ * non-superuser deployment role these suites exist to exercise.
  */
 export default async function ({ provide }: GlobalSetupContext) {
   const { handle, teardown } = await startSharedContainer({
+    dockerRequired:
+      "apps/server's real-Postgres suites require a running Docker daemon. They cannot be " +
+      "skipped: PGlite runs every connection as a superuser, so it cannot show whether this " +
+      "host works as the non-superuser deployment role.",
     templates: {
       manifest: (uri) => applyMigrations(uri, migrationOptionsFor(manifestSets(), null)),
     },

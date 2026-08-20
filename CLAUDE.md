@@ -370,7 +370,7 @@ defence is explicit, never implicit:
 
 - **escape** — `quoteIdent`/`quoteLiteral` (`packages/provisioning/src/identifiers.ts`), for values
   that may legitimately be arbitrary, such as a generated password;
-- **validate and throw** — `probeRoleStatement` (`packages/db/src/testing/lifecycle.ts`), for values
+- **validate and throw** — `probeRoleStatement` (`packages/db/src/testing/identifiers.ts`), for values
   that should only ever be fixtures, where anything needing an escape is a bug worth failing on.
 
 Either is acceptable; **neither being present is not**, and "the callers only pass safe values" is a
