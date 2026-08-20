@@ -941,9 +941,11 @@ function grossLineTotal(grossUnit: string, quantity: string): string {
  *   (each tab keeps `Σ line_total = its total`); pre-fiscal, so a sub-céntimo split rounding
  *   difference is harmless (design §3).
  *
- * The presence/range guards (the named line exists, quantity is either omitted/equal-to-the-line or
- * strictly within `0 < quantity < line.quantity`) are Task 5 — here a named line is ASSUMED present
- * and any given `quantity` valid, which is all the callers/tests pass.
+ * Guarded (Task 5): every named `line_no` must exist on `fromTab` (`tab.line_not_found`), and any
+ * given `quantity` must be well-formed and satisfy `0 < quantity ≤ line.quantity`
+ * (`tab.transfer_quantity_invalid` — zero, negative, over-quantity, or a malformed decimal literal).
+ * Both are checked for EVERY transfer BEFORE any move or split runs, so one bad entry in a batch
+ * leaves the source untouched rather than half-transferred.
  *
  * Both tabs are locked `FOR UPDATE` in ASCENDING id order (`[fromTabId, toTabId].sort()` + `lockOpenTab`
  * each) — the same ordering discipline `mergeTabs`/`moveTabLines` acquire their `working_orders` locks
@@ -1015,22 +1017,49 @@ export async function transferLines(
     );
   const byLineNo = new Map(sourceLines.map((l) => [l.lineNo, l]));
 
-  // Partition: a WHOLE-line move (`quantity` omitted, OR equal to the line's full quantity) vs a
-  // PARTIAL split (`quantity` given and strictly less). A quantity equal to the line's own quantity
-  // is routed to the whole-line path rather than the split path — splitting it would REDUCE the
-  // source to zero, which violates `working_order_lines_quantity_ck` (`quantity <> 0`, orders.ts:194).
-  // `compareDecimal` is value-wise across scales, so "2" == "2.000" and a weighed "0.320" == "0.320"
-  // both count as whole-line moves. The presence/range guards (named line exists, quantity in
-  // `0 < quantity < line.quantity` or omitted/equal) are Task 5 — here the named line is assumed
-  // present and any given quantity valid (the tests pass only valid input).
+  // Validate EVERY transfer before moving/splitting anything (Task 5), then partition: a WHOLE-line
+  // move (`quantity` omitted, OR equal to the line's full quantity) vs a PARTIAL split (`quantity`
+  // given and strictly less). A quantity equal to the line's own quantity is routed to the whole-line
+  // path rather than the split path — splitting it would REDUCE the source to zero, which violates
+  // `working_order_lines_quantity_ck` (`quantity <> 0`). `compareDecimal` is value-wise across scales,
+  // so "2" == "2.000" and a weighed "0.320" == "0.320" both count as whole-line moves.
   const wholeLineNos: number[] = [];
   const partials: { line: (typeof sourceLines)[number]; quantity: string }[] = [];
   for (const t of transfers) {
-    const line = byLineNo.get(t.lineNo)!;
-    if (
-      t.quantity === undefined ||
-      compareDecimal(decimal(t.quantity), decimal(line.quantity)) === 0
-    ) {
+    const line = byLineNo.get(t.lineNo);
+    if (line === undefined) {
+      throw new AppError("tab.line_not_found", { tabId: fromTabId, lineNo: t.lineNo });
+    }
+    if (t.quantity === undefined) {
+      wholeLineNos.push(t.lineNo);
+      continue;
+    }
+    // Validate the requested quantity: a well-formed decimal in `0 < quantity ≤ line.quantity`. A
+    // malformed literal makes `decimal()` throw `shared.invalid_decimal` — caught here and reported
+    // as the SAME domain code as an out-of-range one, so a bad quantity never surfaces as that raw
+    // code or as a `working_order_lines_quantity_ck`/other DB CHECK violation.
+    let cmpZero: number;
+    let cmpFull: number;
+    try {
+      const q = decimal(t.quantity);
+      cmpZero = compareDecimal(q, decimal("0"));
+      cmpFull = compareDecimal(q, decimal(line.quantity));
+    } catch {
+      throw new AppError("tab.transfer_quantity_invalid", {
+        tabId: fromTabId,
+        lineNo: t.lineNo,
+        quantity: t.quantity,
+      });
+    }
+    if (cmpZero <= 0 || cmpFull > 0) {
+      throw new AppError("tab.transfer_quantity_invalid", {
+        tabId: fromTabId,
+        lineNo: t.lineNo,
+        quantity: t.quantity,
+      });
+    }
+    if (cmpFull === 0) {
+      // Full quantity — a whole-line move, no zero remnant (Task 4).
       wholeLineNos.push(t.lineNo);
     } else {
       partials.push({ line, quantity: t.quantity });

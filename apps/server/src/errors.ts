@@ -434,6 +434,16 @@ declare module "@waitron/shared" {
      */
     "tab.transfer_self": { tabId: string };
     /**
+     * A transfer named a `quantity` outside `0 < quantity ≤ line.quantity` (design §3): zero, negative,
+     * more than the line holds, or a malformed decimal literal. Refused before the split — a zero would
+     * leave a zero-quantity remnant (violating `working_order_lines_quantity_ck`), an over-quantity would
+     * invent stock, and a malformed value cannot be priced. `lineNo` and the offending `quantity` (the
+     * caller's own text, not a secret) are echoed so a translator can name what was attempted. A CLIENT
+     * request-shape fault (400), distinct from the state conflict `tab.not_open` (409). `tab.*` names the
+     * DOMAIN CONCEPT (`tenant.not_found`'s note gives the rule); never renamed once shipped.
+     */
+    "tab.transfer_quantity_invalid": { tabId: string; lineNo: number; quantity: string };
+    /**
      * No such service status for this tenant. `statusId` is a caller-supplied uuid the dashboard/till
      * already holds, not a secret — an id that matches nothing is unactionable if withheld (the rule
      * `tenant.not_found`'s note gives). `status.*` names the DOMAIN CONCEPT (a table's manual service

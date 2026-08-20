@@ -339,3 +339,61 @@ describe("transferLines — full-quantity partial is a whole-line move", () => {
     });
   });
 });
+
+describe("transferLines — guards", () => {
+  it("throws tab.line_not_found for a line_no not on the source tab, changing nothing", async () => {
+    const { cfg, cafeId, aguaId, tableAId, tableBId } = await setupVenue();
+    const tabA = await openTabWith(cfg, tableAId, [{ productId: cafeId, quantity: "2" }]);
+    const tabB = await openTabWith(cfg, tableBId, [{ productId: aguaId, quantity: "1" }]);
+    await expect(
+      asApp(cfg, (tx) => transferLines(tx, cfg, tabA, tabB, [{ lineNo: 99, quantity: "1" }])),
+    ).rejects.toMatchObject({ code: "tab.line_not_found", params: { tabId: tabA, lineNo: 99 } });
+    expect(await linesOf(tabA)).toHaveLength(1);
+    expect(await linesOf(tabB)).toHaveLength(1);
+  });
+
+  it("throws tab.transfer_quantity_invalid for zero, negative, over-quantity, or malformed", async () => {
+    const { cfg, cafeId, aguaId, tableAId, tableBId } = await setupVenue();
+    const tabA = await openTabWith(cfg, tableAId, [{ productId: cafeId, quantity: "3" }]);
+    const tabB = await openTabWith(cfg, tableBId, [{ productId: aguaId, quantity: "1" }]);
+    for (const bad of ["0", "-1", "4", "0.000", "abc"]) {
+      await expect(
+        asApp(cfg, (tx) => transferLines(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: bad }])),
+      ).rejects.toMatchObject({
+        code: "tab.transfer_quantity_invalid",
+        params: { tabId: tabA, lineNo: 1, quantity: bad },
+      });
+    }
+    // Nothing moved on any of the rejections.
+    expect((await linesOf(tabA))[0]).toMatchObject({ quantity: "3.000" });
+    expect(await linesOf(tabB)).toHaveLength(1);
+  });
+
+  // Validate-before-mutate: the guard loop only classifies transfers into wholeLineNos/partials — it
+  // performs no write — so a bad entry ANYWHERE in the batch throws before the whole-line move or the
+  // split loop (both AFTER the guard loop) ever runs. Puts the valid entry FIRST, so this also proves
+  // that queuing it (pushing onto `partials`) is not itself a write: were the loop instead validating
+  // and writing entry-by-entry, this transfer's split would already have landed by the time the second
+  // entry's tab.line_not_found fires.
+  it("validates every transfer before moving/splitting any of them — a bad entry leaves BOTH tabs unchanged", async () => {
+    const { cfg, cafeId, aguaId, tableAId, tableBId } = await setupVenue();
+    const tabA = await openTabWith(cfg, tableAId, [
+      { productId: cafeId, quantity: "3" },
+      { productId: aguaId, quantity: "2" },
+    ]);
+    const tabB = await openTabWith(cfg, tableBId, [{ productId: aguaId, quantity: "1" }]);
+    await expect(
+      asApp(cfg, (tx) =>
+        transferLines(tx, cfg, tabA, tabB, [
+          { lineNo: 1, quantity: "1" }, // valid partial split
+          { lineNo: 99, quantity: "1" }, // unknown line_no
+        ]),
+      ),
+    ).rejects.toMatchObject({ code: "tab.line_not_found", params: { tabId: tabA, lineNo: 99 } });
+    const a = await linesOf(tabA);
+    expect(a).toHaveLength(2);
+    expect(a[0]).toMatchObject({ quantity: "3.000" }); // NOT split down to 2.000
+    expect(a[1]).toMatchObject({ quantity: "2.000" });
+    expect(await linesOf(tabB)).toHaveLength(1); // no new line appended
+  });
+});
