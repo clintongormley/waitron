@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant, workingOrderLines } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  asAppUser,
+  withTenant,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -10,6 +16,7 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
+  updateProduct,
 } from "@waitron/catalogue";
 import {
   locationId as brandLocationId,
@@ -19,7 +26,7 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { joinTable, moveTab, moveTabLines, openTab } from "./working-order.js";
+import { joinTable, mergeTabs, moveTab, moveTabLines, openTab } from "./working-order.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -346,5 +353,50 @@ describe("joinTable", () => {
       code: "tab.not_open",
       params: { tabId },
     });
+  });
+});
+
+describe("mergeTabs consolidate (freeSourceTable: true)", () => {
+  it("combines fromTab's lines onto intoTab with LOCKED prices preserved, abandons+empties fromTab, frees the source", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const tInto = await seedTable(cfg, "C-into");
+    const tFrom = await seedTable(cfg, "C-from");
+    // intoTab: café at 1.50. Then raise the catalogue price and open fromTab: café at 9.99. A re-price
+    // would make both 9.99; the move must keep each line's OWN locked gross (the load-bearing check).
+    const intoTab = await openTabOn(cfg, tInto, [{ productId: cafeId, quantity: "1" }]);
+    await asApp(cfg, (tx) => updateProduct(tx, cafeId, { unitPrice: "9.99" }));
+    const fromTab = await openTabOn(cfg, tFrom, [{ productId: cafeId, quantity: "1" }]);
+    // A manual status on the source (TS-2 schema) must clear when it is freed.
+    const status = await seedStatus(cfg, "Needs cleaning");
+    await db.execute(sql`update dining_tables set status_id = ${status} where id = ${tFrom}`);
+
+    await asApp(cfg, (tx) => mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true }));
+
+    // intoTab holds both café lines, EACH at its own locked gross (1.50 and 9.99).
+    const dest = await linesOf(intoTab);
+    expect(dest.map((l) => l.gross).sort()).toEqual(["1.50", "9.99"]);
+    // fromTab is abandoned and empty; the source table is freed and its status cleared.
+    const [{ status: fromStatus }] = await db
+      .select({ status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, fromTab));
+    expect(fromStatus).toBe("abandoned");
+    expect(await linesOf(fromTab)).toHaveLength(0);
+    expect(await tabIdOf(tFrom)).toBeNull();
+    expect(await statusIdOf(tFrom)).toBeNull();
+    expect(await tabIdOf(tInto)).toBe(intoTab); // intoTab's own table unchanged
+  });
+
+  it("the join branch (freeSourceTable: false) re-points the source table at intoTab (covered for branch)", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const tInto = await seedTable(cfg, "CB-into");
+    const tFrom = await seedTable(cfg, "CB-from");
+    const intoTab = await openTabOn(cfg, tInto, [{ productId: cafeId, quantity: "1" }]);
+    const fromTab = await openTabOn(cfg, tFrom, [{ productId: cafeId, quantity: "1" }]);
+
+    await asApp(cfg, (tx) => mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: false }));
+
+    expect(await tabIdOf(tFrom)).toBe(intoTab); // source table now covered by intoTab (a join)
+    expect(await tabIdOf(tInto)).toBe(intoTab);
   });
 });

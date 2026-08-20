@@ -745,6 +745,82 @@ export async function joinTable(
   await tx.update(diningTables).set({ tabId }).where(eq(diningTables.id, tableId));
 }
 
+/**
+ * Combine two tabs onto one bill (design §3). Validates both are DISTINCT (`tab.merge_self`) `open`
+ * working orders (`tab.not_open`), then moves ALL of `fromTab`'s lines onto `intoTab`, re-points
+ * `fromTab`'s table(s), and abandons the now-empty `fromTab`. The merged `intoTab` (holding every line)
+ * files ONE sale on pay; `fromTab`, abandoned and empty, files nothing — no double-file (H2, §5).
+ *
+ * `freeSourceTable = true` frees the source table (`tab_id` + `status_id → NULL` — the 2+2 CONSOLIDATE
+ * case, the source turns over); `false` re-points it at `intoTab` (both tables now covered by the one
+ * bill — the 4+4 JOIN case, and the joined table KEEPS its status, design §4).
+ *
+ * Locks the involved `dining_tables` rows (those covered by either tab) `FOR UPDATE` ASCENDING id, then
+ * both `working_orders` rows `FOR UPDATE` ASCENDING id — the fixed lock order that makes two concurrent
+ * table-service ops on the same tables serialise instead of deadlocking (proven §7).
+ *
+ * ORDER MATTERS (Plan note 2): the re-point (step 2) precedes the abandon (step 3). The TS-2
+ * `working_orders_clear_table_status` trigger fires on the `open → abandoned` transition and clears
+ * `status_id` WHERE `tab_id = fromTabId`; because step 2 has already re-pointed every such table away
+ * from `fromTabId`, that trigger matches nothing. Were the abandon first, it would clear the status on a
+ * table that stays JOINED (`freeSourceTable:false`) — contradicting design §4.
+ */
+export async function mergeTabs(
+  tx: Transaction,
+  cfg: TillConfig,
+  intoTabId: string,
+  fromTabId: string,
+  options: { freeSourceTable: boolean },
+): Promise<void> {
+  if (intoTabId === fromTabId) {
+    throw new AppError("tab.merge_self", { tabId: intoTabId });
+  }
+
+  // Lock order: involved dining_tables rows (ascending id), then both working_orders rows (ascending id).
+  await tx
+    .select({ id: diningTables.id })
+    .from(diningTables)
+    .where(or(eq(diningTables.tabId, intoTabId), eq(diningTables.tabId, fromTabId)))
+    .orderBy(diningTables.id)
+    .for("update");
+  const tabs = await tx
+    .select({ id: workingOrders.id, status: workingOrders.status })
+    .from(workingOrders)
+    .where(or(eq(workingOrders.id, intoTabId), eq(workingOrders.id, fromTabId)))
+    .orderBy(workingOrders.id)
+    .for("update");
+  const into = tabs.find((t) => t.id === intoTabId);
+  const from = tabs.find((t) => t.id === fromTabId);
+  if (into === undefined || into.status !== "open") {
+    throw new AppError("tab.not_open", { tabId: intoTabId });
+  }
+  if (from === undefined || from.status !== "open") {
+    throw new AppError("tab.not_open", { tabId: fromTabId });
+  }
+
+  // 1. Move ALL of fromTab's lines onto intoTab (locked prices preserved), both still open.
+  await moveTabLines(tx, fromTabId, intoTabId);
+
+  // 2. Re-point fromTab's table(s) BEFORE the abandon (Plan note 2).
+  if (options.freeSourceTable) {
+    await tx
+      .update(diningTables)
+      .set({ tabId: null, statusId: null })
+      .where(and(eq(diningTables.tenantId, cfg.tenantId), eq(diningTables.tabId, fromTabId)));
+  } else {
+    await tx
+      .update(diningTables)
+      .set({ tabId: intoTabId })
+      .where(and(eq(diningTables.tenantId, cfg.tenantId), eq(diningTables.tabId, fromTabId)));
+  }
+
+  // 3. Abandon the now-empty fromTab (open → abandoned; the transition trigger permits it, orders.ts:36-48).
+  await tx
+    .update(workingOrders)
+    .set({ status: "abandoned" })
+    .where(eq(workingOrders.id, fromTabId));
+}
+
 /** One row of the held-orders list the counter shows to retrieve a parked order. */
 export interface HeldOrderSummary {
   id: string;

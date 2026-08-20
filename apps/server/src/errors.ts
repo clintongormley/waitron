@@ -410,6 +410,13 @@ declare module "@waitron/shared" {
      */
     "tab.line_not_found": { tabId: string; lineNo: number };
     /**
+     * A merge named the SAME tab as both source and destination — there is nothing to combine.
+     * `mergeTabs` refuses it before locking anything. `tabId` — the caller-supplied uuid — is echoed
+     * (not a secret). Minimal placeholder declaration for TS-3 Task 4's `mergeTabs`; Task 6 owns the
+     * full docstring alongside its guard-by-deletion proof.
+     */
+    "tab.merge_self": { tabId: string };
+    /**
      * No such service status for this tenant. `statusId` is a caller-supplied uuid the dashboard/till
      * already holds, not a secret — an id that matches nothing is unactionable if withheld (the rule
      * `tenant.not_found`'s note gives). `status.*` names the DOMAIN CONCEPT (a table's manual service

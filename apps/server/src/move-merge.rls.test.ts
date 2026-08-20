@@ -26,7 +26,7 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { joinTable, moveTab, openTab } from "./working-order.js";
+import { joinTable, mergeTabs, moveTab, openTab } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
 import "./errors.js";
 
@@ -209,6 +209,26 @@ async function orderState(id: string): Promise<{ status: string; settledAtSet: b
   return { status: rows[0]!.status, settledAtSet: rows[0]!.settled };
 }
 
+/** How many chained `registros_facturacion` rows exist for this working order's sale (superuser read). */
+async function registroCount(workingOrderId: string): Promise<number> {
+  const { rows } = await suite.admin.execute<{ count: string }>(sql`
+    select count(*)::text as count
+    from registros_facturacion r
+    join sales s on s.id = r.sale_id
+    where s.working_order_id = ${workingOrderId}
+  `);
+  return Number(rows[0]!.count);
+}
+
+/** The IMMUTABLE filed `sales.total` for this working order's sale — read as the owner (bypasses RLS).
+ *  The witness that a retrieved order files at the LOCKED price, not a re-price at pay. */
+async function filedSaleTotal(workingOrderId: string): Promise<string> {
+  const { rows } = await suite.admin.execute<{ total: string }>(sql`
+    select total from sales where working_order_id = ${workingOrderId}
+  `);
+  return rows[0]!.total;
+}
+
 beforeAll(() => {
   clock = systemClock();
   backend = new VerifactuBackend({
@@ -286,5 +306,40 @@ describe("joinTable → one bill", () => {
 
     expect(await saleCount(tabId)).toBe(1); // exactly one bill for both tables
     expect(await orderState(tabId)).toMatchObject({ status: "settled" });
+  });
+});
+
+describe("mergeTabs → one registro (H2)", () => {
+  it("a merged-then-paid tab yields exactly ONE registros_facturacion row; the source tab files nothing", async () => {
+    const { cfg, cafe, agua } = await setupVenue();
+    const tInto = await seedTable(cfg, "MR-into");
+    const tFrom = await seedTable(cfg, "MR-from");
+    const intoTab = await openTabOn(cfg, tInto, [{ productId: cafe.id, quantity: "1" }]);
+    const fromTab = await openTabOn(cfg, tFrom, [{ productId: agua.id, quantity: "1" }]);
+
+    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true });
+    });
+
+    // fromTab is abandoned and files nothing — never reaches settled, so no double-file (CLAUDE.md §5).
+    expect(await orderState(fromTab)).toMatchObject({ status: "abandoned" });
+    expect(await saleCount(fromTab)).toBe(0);
+
+    // Pay the merged intoTab → exactly one sale + one chained registro for the combined bill.
+    await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id: intoTab,
+      lines: [],
+      tender: { method: "cash", amount: "5.00" },
+    });
+    expect(await saleCount(intoTab)).toBe(1);
+    expect(await registroCount(intoTab)).toBe(1);
+    expect(await registroCount(fromTab)).toBe(0);
+    // The FILED sale reflects BOTH lines — café 1.50 (intoTab) + agua 2.00 (moved from fromTab) = 3.50.
+    // This is the load-bearing check: without it, a merge that silently moved NOTHING would still pass
+    // every count above (intoTab files its lone café for 1.50; fromTab stays abandoned/unfiled 0/0), so
+    // the moved line's fiscal contribution to the AEAT-filed total would go unproven — an under-report
+    // that is unrepairable once chained (CLAUDE.md §5). A line-drop leaves this at 1.50.
+    expect(await filedSaleTotal(intoTab)).toBe("3.50");
   });
 });
