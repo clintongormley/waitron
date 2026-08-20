@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { VerifactuBackend } from "./backend.js";
 import { appendToChain } from "./chain.js";
 import { envios } from "./schema/envios.js";
-import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 import { altaFor, seedSale, seedTill, type SeededTill } from "./testing/seed.js";
 import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
@@ -14,11 +13,11 @@ import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixt
 const PROBE_ROLE = "rls_probe";
 const PROBE_PASSWORD = "probe";
 
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: PROBE_ROLE, password: PROBE_PASSWORD, inRole: "app_user" },
-  timeoutMs: CONTAINER_SETUP_TIMEOUT_MS,
-});
+// A clone of the `core_fiscal` template (CORE + FISCAL); the probe connection below authenticates as
+// `rls_probe`, a cluster-wide role the package globalSetup creates once and shares with
+// rectificativa-columns.rls / canje-columns.rls, in place of the per-file `probeRole` this suite
+// passed before the shared container.
+const suite = useTemplateDb({ template: "core_fiscal" });
 
 describe("pendingCount under real row-level security", () => {
   it("counts the tenant's pending records when run as an RLS-subject role", async () => {

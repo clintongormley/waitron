@@ -3,16 +3,42 @@ import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/con
 export default defineConfig({
   test: {
     globals: true,
-    // PGlite boots a WASM PostgreSQL and then applies two migration sets, and
-    // chain.concurrency.test.ts additionally pulls and starts a real Postgres container via
-    // Testcontainers. Vitest's default 5s testTimeout is a live risk for both reasons. Both costs
-    // are one-off, paid in a beforeAll, so hookTimeout — raised further than testTimeout, to a
-    // container cold pull on a slow CI runner — is the one that has to be generous; testTimeout
-    // covers the ordinary risk of a migration suite booting a second database inside a single
-    // `it`.
+    // globalSetup boots ONE shared Postgres container and migrates the `core_fiscal` template every
+    // real-PG suite clones (~26ms) instead of each file booting and migrating its own (~1.5s). See
+    // src/testing/global-setup.ts. Because it precedes every worker, a Docker-absent run now fails
+    // the whole package — the PGlite-only inmutabilidad.test.ts included (that file's header explains
+    // the broadening).
+    globalSetup: ["./src/testing/global-setup.ts"],
+    // PGlite boots a WASM PostgreSQL and then applies two migration sets, and the concurrency / RLS /
+    // e2e suites clone the shared container's migrated template (globalSetup, above). Vitest's
+    // default 5s testTimeout is a live risk for both reasons. Both costs are one-off, paid in a
+    // beforeAll, so hookTimeout — raised further than testTimeout, to a container cold pull on a slow
+    // CI runner — is the one that has to be generous; testTimeout covers the ordinary risk of a
+    // migration suite booting a second database inside a single `it`.
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
+    // BOUNDED multi-fork — the connection-budget lever, the same reason `packages/db` caps its own
+    // forks, NOT `singleFork`/coverage-v8. Unlike packages/payments, this package does NOT need
+    // `singleFork` for the @vitest/coverage-v8 branch-merge artifact: it has thousands of real
+    // branches that dilute that mis-merge below the 95% gate (payments' config note records the same
+    // asymmetry from the other side — a small package where a handful of mis-merged branches sinks
+    // the ratio). So it runs multi-fork, and its concurrency suites open many backends against the
+    // ONE shared cluster's default 100-connection budget the old per-file containers did not share.
+    // The peak driver: chain.concurrency and chain.node-rekey.concurrency each open `WRITERS = 20`
+    // pools at once, and `createPostgresDb` EAGERLY probes+releases one backend per pool
+    // (client.ts:118) which lingers idle (~10s), so all 20 are held live across the test window; those
+    // files' admin pools also fan out toward their max of 10 under concurrent seeding, so a heavy file
+    // peaks ~30. Pinning the exact cross-fork peak is fragile (many short-lived pools with idle
+    // retention); a conservative worst case at maxForks: 4 — two ~30 heavy files plus a couple of
+    // lighter ones — lands around 70-80, under the EFFECTIVE budget of ~97 (the stock 100 minus
+    // superuser_reserved_connections=3), so 4 needs no `max_connections` bump to the shared
+    // `startPostgresContainer`. That margin is thinner than packages/db's, so the load-bearing proof is
+    // deliberately EMPIRICAL, not this arithmetic and not an isolated local pass: the full suite passes
+    // green under maxForks: 4, and the unfiltered `main` run is where a real exhaustion ("too many
+    // clients already") would surface. 4 also matches CI's ubuntu-latest runner vCPU count (this
+    // package runs on the `test-light` shard). Same lever and cap as packages/db.
+    poolOptions: { forks: { maxForks: 4 } },
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json-summary"],

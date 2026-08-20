@@ -1,10 +1,9 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { captureError, pgErrorCode } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { appendToChain } from "./chain.js";
 import { registerSif } from "./registro-sif.js";
-import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 import {
   altaFor,
   seedNodesForSifContention,
@@ -20,18 +19,20 @@ let node: SeededTill;
 let other: SeededTill;
 
 /**
- * Real PostgreSQL via Testcontainers — deliberately NOT `describe.skipIf(!dockerAvailable)`
- * anywhere in this file. `startRealPostgres` (./testing/postgres.ts) throws rather than degrading
- * to a skip when Docker is unavailable: a concurrency suite that silently vanishes reports a green
- * CI run that proves nothing about the one property this file exists to establish (spec's own
- * framing, restated in ./chain.pglite-cannot-test-contention.test.ts). If Docker genuinely is
- * unavailable in this environment, EVERY test below fails loudly with that thrown error, which is
- * the intended, load-bearing behaviour — not a defect in this file.
+ * Real PostgreSQL via a clone of the shared container's `core_fiscal` template — deliberately NOT
+ * `describe.skipIf(!dockerAvailable)` anywhere in this file. Docker-absence throws rather than
+ * degrading to a skip: the throw now happens at the package globalSetup
+ * (`src/testing/global-setup.ts`'s `dockerRequired`), which precedes every worker, instead of at a
+ * per-file container start. A concurrency suite that silently vanishes reports a green CI run that
+ * proves nothing about the one property this file exists to establish (spec's own framing, restated
+ * in ./chain.pglite-cannot-test-contention.test.ts). If Docker genuinely is unavailable in this
+ * environment, the WHOLE package fails loudly with that thrown error, which is the intended,
+ * load-bearing behaviour — not a defect in this file.
  *
  * Keyed by NODE (node-id rekey, 2026-08-03): the chain is per-node, so a busy node must never stall
  * a quiet one, and the head lock is on the per-node `cadenas` row.
  */
-const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: CONTAINER_SETUP_TIMEOUT_MS });
+const suite = useTemplateDb({ template: "core_fiscal" });
 
 // No truncate-and-reseed here: registros_facturacion's append-only trigger
 // (registros_facturacion_block_truncate) fires on a CASCADEd TRUNCATE from `tenants` too, and

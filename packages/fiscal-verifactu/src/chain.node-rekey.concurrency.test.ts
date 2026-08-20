@@ -2,13 +2,12 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
 import { asAppUser, captureError, pgErrorCode, withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
 import { currentSif, registerSif } from "./registro-sif.js";
 import { VerifactuBackend } from "./backend.js";
-import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 import {
   addTillToNode,
   altaFor,
@@ -27,10 +26,11 @@ const WRITERS = 20;
  * (#33: the SIF is the node). Real PostgreSQL via Testcontainers, deliberately never a PGlite
  * fallback: PGlite serialises every query onto one backend, so a concurrency suite there is a false
  * pass, and PGlite is superuser, so it cannot show the non-superuser app role under RLS (CLAUDE.md
- * §4). `startRealPostgres` THROWS rather than skipping when Docker is unavailable, so a vanished
- * suite fails loudly instead of reporting a green that proves nothing.
+ * §4). Docker-absence THROWS rather than skipping when Docker is unavailable — now at the package
+ * globalSetup (`src/testing/global-setup.ts`'s `dockerRequired`), which precedes every worker — so a
+ * vanished suite fails loudly instead of reporting a green that proves nothing.
  */
-const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: CONTAINER_SETUP_TIMEOUT_MS });
+const suite = useTemplateDb({ template: "core_fiscal" });
 
 // No truncate-and-reseed: registros_facturacion's append-only trigger blocks even a CASCADEd
 // TRUNCATE from `tenants`. `seedTill` mints a FRESH tenant (and nif, and node) per call, so each

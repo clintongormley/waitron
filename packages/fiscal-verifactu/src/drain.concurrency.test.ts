@@ -1,10 +1,9 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { asAppUser, withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
 import { VerifactuBackend } from "./backend.js";
-import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 
@@ -19,21 +18,21 @@ const DRAIN_PROBE_ROLE = "drain_probe";
 const DRAIN_PROBE_PASSWORD = "probe";
 
 /**
- * Real PostgreSQL via Testcontainers — deliberately NOT `describe.skipIf(!dockerAvailable)`
- * anywhere in this file, for the same reason `chain.concurrency.test.ts` gives (see that file's
- * own doc comment and `startRealPostgres`'s): a concurrency suite that silently vanishes when
- * Docker is absent reports a green run that proves nothing about the ONE property this file
- * exists to establish — that `claimBatch`'s `FOR UPDATE SKIP LOCKED` prevents two concurrent
- * drainers from ever submitting the same record twice. PGlite cannot substitute for this: it
- * serialises every "concurrent" query onto one backend process
- * (`chain.pglite-cannot-test-contention.test.ts`), which would make this suite pass vacuously
- * whether or not the locking clause is even present.
+ * Real PostgreSQL via a clone of the shared container's `core_fiscal` template — deliberately NOT
+ * `describe.skipIf(!dockerAvailable)` anywhere in this file, for the same reason
+ * `chain.concurrency.test.ts` gives: a concurrency suite that silently vanishes when Docker is absent
+ * reports a green run that proves nothing about the ONE property this file exists to establish — that
+ * `claimBatch`'s `FOR UPDATE SKIP LOCKED` prevents two concurrent drainers from ever submitting the
+ * same record twice. PGlite cannot substitute for this: it serialises every "concurrent" query onto
+ * one backend process (`chain.pglite-cannot-test-contention.test.ts`), which would make this suite
+ * pass vacuously whether or not the locking clause is even present. Docker-absence now fails loudly at
+ * the package globalSetup (`src/testing/global-setup.ts`'s `dockerRequired`), which precedes every
+ * worker, rather than at a per-file container start.
+ *
+ * The probe connections below authenticate as `drain_probe`, a cluster-wide role the globalSetup
+ * creates in place of the per-file `probeRole` this suite passed before the shared container.
  */
-const suite = useRealPostgres({
-  start: startRealPostgres,
-  probeRole: { name: DRAIN_PROBE_ROLE, password: DRAIN_PROBE_PASSWORD, inRole: "app_user" },
-  timeoutMs: CONTAINER_SETUP_TIMEOUT_MS,
-});
+const suite = useTemplateDb({ template: "core_fiscal" });
 
 // More than one row, but well within one envío (MAX_REGISTROS_POR_ENVIO = 1000) — this suite is
 // not about batching (drain.test.ts's own "1001-split" describe covers that), it is about whether

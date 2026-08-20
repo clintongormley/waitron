@@ -53,8 +53,8 @@ export interface SifRegistration {
  * "postgres")` gate). It is covered on real PostgreSQL instead, and directly:
  * `chain.concurrency.test.ts`'s "registerSif's installation-number counter under real contention"
  * fires 20 concurrent registrations across 20 distinct nodes of one obligado and asserts they mint
- * 1..20 exactly once each. That suite reaches its container through
- * `@waitron/db/testing/postgres.js`, like every other real-Postgres suite in this package.
+ * 1..20 exactly once each. That suite runs on a clone of the shared container's `core_fiscal`
+ * template (`src/testing/global-setup.ts`), like every other real-Postgres suite in this package.
  */
 async function mintNumeroInstalacion(
   tx: Transaction,

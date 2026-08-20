@@ -9,10 +9,9 @@ import { fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
-import { CONTAINER_SETUP_TIMEOUT_MS, startRealPostgres } from "./testing/postgres.js";
 import { seedSale, seedTill, type SeededTill } from "./testing/seed.js";
 import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 
 /**
  * The end-to-end counterpart to `./correction-path.e2e.test.ts`, for
@@ -33,7 +32,8 @@ import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
  * double-counting: `TipoFactura=F3` + `FacturasSustituidas`, not negation), and it advances the same
  * chain the tickets sit on with its own `pendiente` sidecar.
  */
-const suite = useRealPostgres({ start: startRealPostgres, timeoutMs: CONTAINER_SETUP_TIMEOUT_MS });
+// A clone of the shared container's `core_fiscal` template (CORE + FISCAL).
+const suite = useTemplateDb({ template: "core_fiscal" });
 
 let backend: VerifactuBackend;
 let till: SeededTill;
