@@ -19,7 +19,7 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { moveTabLines, openTab } from "./working-order.js";
+import { moveTab, moveTabLines, openTab } from "./working-order.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -104,6 +104,30 @@ async function openTabOn(
   return asApp(cfg, (tx) => openTab(tx, cfg, { tableId, lines }).then((r) => r.tabId));
 }
 
+/** The dining table's current tab_id — owner read (bypasses RLS). */
+async function tabIdOf(tableId: string): Promise<string | null> {
+  const { rows } = await db.execute<{ tab_id: string | null }>(
+    sql`select tab_id from dining_tables where id = ${tableId}`,
+  );
+  return rows[0]!.tab_id;
+}
+
+/** The dining table's current status_id — owner read (bypasses RLS). Consumes TS-2's status_id column. */
+async function statusIdOf(tableId: string): Promise<string | null> {
+  const { rows } = await db.execute<{ status_id: string | null }>(
+    sql`select status_id from dining_tables where id = ${tableId}`,
+  );
+  return rows[0]!.status_id;
+}
+
+/** Seed one active table_service_statuses row (TS-2 schema) as the owner; returns its id. */
+async function seedStatus(cfg: TillConfig, label: string): Promise<string> {
+  const { rows } = await db.execute<{ id: string }>(sql`
+    insert into table_service_statuses (tenant_id, label, color)
+    values (${cfg.tenantId}, ${label}, '#ff0000') returning id`);
+  return rows[0]!.id;
+}
+
 /** A tab's lines as { lineNo, productId, unitPriceGross }, in line_no order — owner read. */
 async function linesOf(
   tabId: string,
@@ -179,6 +203,80 @@ describe("moveTabLines", () => {
     await expect(asApp(cfg, (tx) => moveTabLines(tx, from, to))).rejects.toMatchObject({
       code: "tab.not_open",
       params: { tabId: to },
+    });
+  });
+});
+
+describe("moveTab", () => {
+  it("relocates a tab to a free table: source freed + its status cleared, target points at the tab", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const src = await seedTable(cfg, "Src");
+    const dst = await seedTable(cfg, "Dst");
+    const tabId = await openTabOn(cfg, src, [{ productId: cafeId, quantity: "1" }]);
+    // A manual "bill requested" status on the source (TS-2 schema) must NOT linger onto the next party.
+    const status = await seedStatus(cfg, "Bill requested");
+    await db.execute(sql`update dining_tables set status_id = ${status} where id = ${src}`);
+
+    await asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst));
+
+    expect(await tabIdOf(src)).toBeNull();
+    expect(await statusIdOf(src)).toBeNull(); // freed → status cleared (design §4)
+    expect(await tabIdOf(dst)).toBe(tabId);
+    // No line-move, no fiscal effect: the tab still carries its one line and stays open.
+    expect(await linesOf(tabId)).toHaveLength(1);
+  });
+
+  it("refuses a target that already has an OPEN tab (table.occupied)", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const src = await seedTable(cfg, "O-src");
+    const dst = await seedTable(cfg, "O-dst");
+    const tabId = await openTabOn(cfg, src, [{ productId: cafeId, quantity: "1" }]);
+    await openTabOn(cfg, dst, [{ productId: cafeId, quantity: "1" }]); // dst now occupied
+    await expect(asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst))).rejects.toMatchObject({
+      code: "table.occupied",
+      params: { tableId: dst },
+    });
+  });
+
+  it("treats a target with a STALE tab_id (settled order) as free and moves onto it", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const src = await seedTable(cfg, "St-src");
+    const dst = await seedTable(cfg, "St-dst");
+    const oldTab = await openTabOn(cfg, dst, [{ productId: cafeId, quantity: "1" }]);
+    // Settle dst's tab (owner write) — tab_id STILL points at it, but it is now stale/free (TS-1 §2b).
+    await db.execute(
+      sql`update working_orders set status = 'settled', settled_at = now() where id = ${oldTab}`,
+    );
+    const tabId = await openTabOn(cfg, src, [{ productId: cafeId, quantity: "1" }]);
+
+    await asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst));
+    expect(await tabIdOf(dst)).toBe(tabId); // stale pointer overwritten
+    expect(await tabIdOf(src)).toBeNull();
+  });
+
+  it("refuses an unknown/inactive target and a non-open tab", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const src = await seedTable(cfg, "G-src");
+    const dst = await seedTable(cfg, "G-dst");
+    const tabId = await openTabOn(cfg, src, [{ productId: cafeId, quantity: "1" }]);
+    const missing = randomUUID();
+    await expect(asApp(cfg, (tx) => moveTab(tx, cfg, tabId, missing))).rejects.toMatchObject({
+      code: "table.not_found",
+      params: { tableId: missing },
+    });
+    await db.execute(sql`update dining_tables set active = false where id = ${dst}`);
+    await expect(asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst))).rejects.toMatchObject({
+      code: "table.inactive",
+      params: { tableId: dst },
+    });
+    // A settled tab cannot be moved.
+    await db.execute(
+      sql`update working_orders set status = 'settled', settled_at = now() where id = ${tabId}`,
+    );
+    const dst2 = await seedTable(cfg, "G-dst2");
+    await expect(asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst2))).rejects.toMatchObject({
+      code: "tab.not_open",
+      params: { tabId },
     });
   });
 });

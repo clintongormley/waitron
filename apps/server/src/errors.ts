@@ -369,6 +369,18 @@ declare module "@waitron/shared" {
      */
     "table.inactive": { tableId: string };
     /**
+     * A move/join TARGET dining table already has an OPEN tab, so a party may not be relocated or
+     * extended onto it — use `mergeTabs` to combine the two bills instead (design §3). A table is "free"
+     * when its `tab_id` is null or points at a settled/abandoned order (a stale pointer, TS-1 §2b);
+     * `table.occupied` fires only when it points at a STILL-OPEN order. `moveTab`/`joinTable` take the
+     * target `dining_tables` row `FOR UPDATE`, so two concurrent moves onto one free table serialise and
+     * the loser surfaces THIS code (the lock is the guard — there is no partial-unique). `tableId` — the
+     * occupied target — is caller-supplied, not a secret. `table.*` names the DOMAIN CONCEPT (the dining
+     * table), never the throwing package (the rule `tenant.not_found`'s note gives). Mapped to 409 (the
+     * table's state forbids the move), the sibling of TS-1's `tab.already_open`.
+     */
+    "table.occupied": { tableId: string };
+    /**
      * A table's `tab_id` already points at an OPEN working order, so a second tab may not be opened (at
      * most one open tab per table, design §2b). `openTab` takes the `dining_tables` row `FOR UPDATE` and
      * checks its `tab_id`; that per-table lock — there is NO partial-unique now — is the concurrency

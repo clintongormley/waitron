@@ -629,6 +629,70 @@ export async function moveTabLines(
   await tx.delete(workingOrderLines).where(sourceWhere);
 }
 
+/**
+ * Relocate a party to a free table (design §3). Validates `tabId` is an `open` working order
+ * (`tab.not_open`) and `toTableId` is `active` (`table.not_found`/`table.inactive`) and FREE — its
+ * `tab_id` is null or points at a settled/abandoned order (a stale pointer, TS-1 §2b), else
+ * `table.occupied` ("use merge"). Then frees the tab's current source table(s) and points the target at
+ * the tab. NO line-move, no fiscal effect.
+ *
+ * Locks the involved `dining_tables` rows (target + the tab's current source table(s)) `FOR UPDATE` in
+ * ASCENDING id order — the deadlock-safe lock order every table-service verb shares. Locking the target
+ * is the concurrency guard: a second concurrent move onto the same free table blocks, then re-reads its
+ * now-set `tab_id` and is refused `table.occupied` (proven by deletion of this lock — §7). The tab's own
+ * `working_orders` row is NOT locked (a move neither settles nor abandons it — unlike merge); a race
+ * with a concurrent pay leaves at worst a harmless stale pointer, which the occupancy read ignores.
+ *
+ * The freed source table(s) get `tab_id → NULL` AND `status_id → NULL` in one statement — a move is a
+ * turnover for the source, so its TS-2 manual status must not linger onto the next party (design §4).
+ * The TS-2 settle-trigger does not fire on a move (the tab stays open), so the clear is EXPLICIT here.
+ */
+export async function moveTab(
+  tx: Transaction,
+  cfg: TillConfig,
+  tabId: string,
+  toTableId: string,
+): Promise<void> {
+  const [tab] = await tx
+    .select({ status: workingOrders.status })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, tabId));
+  if (tab === undefined || tab.status !== "open") {
+    throw new AppError("tab.not_open", { tabId });
+  }
+
+  const involved = await tx
+    .select({ id: diningTables.id, tabId: diningTables.tabId, active: diningTables.active })
+    .from(diningTables)
+    .where(or(eq(diningTables.id, toTableId), eq(diningTables.tabId, tabId)))
+    .orderBy(diningTables.id)
+    .for("update");
+
+  const target = involved.find((t) => t.id === toTableId);
+  if (target === undefined) {
+    throw new AppError("table.not_found", { tableId: toTableId });
+  }
+  if (!target.active) {
+    throw new AppError("table.inactive", { tableId: toTableId });
+  }
+  if (target.tabId !== null) {
+    const [pointed] = await tx
+      .select({ id: workingOrders.id })
+      .from(workingOrders)
+      .where(and(eq(workingOrders.id, target.tabId), eq(workingOrders.status, "open")));
+    if (pointed !== undefined) {
+      throw new AppError("table.occupied", { tableId: toTableId });
+    }
+  }
+
+  // Free the source table(s) the tab currently covers (tab_id + status_id → NULL), then point the target.
+  await tx
+    .update(diningTables)
+    .set({ tabId: null, statusId: null })
+    .where(and(eq(diningTables.tenantId, cfg.tenantId), eq(diningTables.tabId, tabId)));
+  await tx.update(diningTables).set({ tabId }).where(eq(diningTables.id, toTableId));
+}
+
 /** One row of the held-orders list the counter shows to retrieve a parked order. */
 export interface HeldOrderSummary {
   id: string;
