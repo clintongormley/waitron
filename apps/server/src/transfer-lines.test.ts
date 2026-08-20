@@ -19,7 +19,7 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { moveTabLines, openTab } from "./working-order.js";
+import { moveTabLines, openTab, parkOrder, transferLines } from "./working-order.js";
 import "./errors.js";
 
 // PGlite, not real Postgres: this suite proves the WRITE behaviour of `transferLines` and
@@ -168,5 +168,61 @@ describe("moveTabLines — subset", () => {
       unitPriceGross: "1.50",
       lineTotal: "3.00",
     });
+  });
+});
+
+describe("transferLines — whole line", () => {
+  it("moves an entire line to the other tab, keeping its locked unit_price_gross, source line gone", async () => {
+    const { cfg, cafeId, aguaId, tableAId, tableBId } = await setupVenue();
+    const tabA = await openTabWith(cfg, tableAId, [{ productId: cafeId, quantity: "2" }]);
+    const tabB = await openTabWith(cfg, tableBId, [{ productId: aguaId, quantity: "1" }]);
+
+    // Whole line = `quantity` omitted.
+    await asApp(cfg, (tx) => transferLines(tx, cfg, tabA, tabB, [{ lineNo: 1 }]));
+
+    const a = await linesOf(tabA);
+    const b = await linesOf(tabB);
+    expect(a).toEqual([]); // the café line left A entirely
+    expect(b.map((l) => l.productId)).toEqual([aguaId, cafeId]);
+    // Locked price preserved (café 1.50 gross → 2×1.50 = 3.00), NOT re-priced.
+    expect(b[1]).toMatchObject({ lineNo: 2, quantity: "2.000", unitPriceGross: "1.50", lineTotal: "3.00" });
+  });
+
+  it("refuses transferring a tab to ITSELF (tab.transfer_self), changing nothing", async () => {
+    const { cfg, cafeId, tableAId } = await setupVenue();
+    const tabA = await openTabWith(cfg, tableAId, [{ productId: cafeId, quantity: "2" }]);
+    await expect(
+      asApp(cfg, (tx) => transferLines(tx, cfg, tabA, tabA, [{ lineNo: 1 }])),
+    ).rejects.toMatchObject({ code: "tab.transfer_self", params: { tabId: tabA } });
+    expect(await linesOf(tabA)).toHaveLength(1); // untouched
+  });
+
+  it("refuses when the destination is not an open tab (tab.not_open)", async () => {
+    const { cfg, cafeId, tableAId } = await setupVenue();
+    const tabA = await openTabWith(cfg, tableAId, [{ productId: cafeId, quantity: "2" }]);
+    const notATab = randomUUID(); // no working_orders row, no dining_tables back-pointer
+    await expect(
+      asApp(cfg, (tx) => transferLines(tx, cfg, tabA, notATab, [{ lineNo: 1 }])),
+    ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId: notATab } });
+    expect(await linesOf(tabA)).toHaveLength(1); // untouched
+  });
+
+  // Isolates transferLines' OWN lock-loop guard from moveTabLines' backstop. The absent-destination
+  // test above passes even with the lock loop deleted, because moveTabLines' own status read throws
+  // tab.not_open for a missing working_orders row too. A PARKED walk-up is the discriminating case: it
+  // IS an open working order (moveTabLines would happily move lines INTO it), but NO dining_tables row
+  // points at it, so it is not a TAB — only lockOpenTab's back-pointer check rejects it. Delete the lock
+  // loop and THIS test fails (the café line lands in the parked order); keep it and the transfer is
+  // refused tab.not_open. Design §3: a transfer moves items between two TABS, never into a walk-up.
+  it("refuses transferring INTO an open order no table points at — a parked walk-up (tab.not_open)", async () => {
+    const { cfg, cafeId, aguaId, tableAId } = await setupVenue();
+    const tabA = await openTabWith(cfg, tableAId, [{ productId: cafeId, quantity: "2" }]);
+    const parkedId = randomUUID();
+    await parkOrder({ db }, cfg, { id: parkedId, lines: [{ productId: aguaId, quantity: "1" }] });
+    await expect(
+      asApp(cfg, (tx) => transferLines(tx, cfg, tabA, parkedId, [{ lineNo: 1 }])),
+    ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId: parkedId } });
+    expect(await linesOf(tabA)).toHaveLength(1); // café line untouched on A
+    expect(await linesOf(parkedId)).toHaveLength(1); // parked order still holds only its agua line
   });
 });

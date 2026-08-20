@@ -424,6 +424,16 @@ declare module "@waitron/shared" {
      */
     "tab.merge_self": { tabId: string };
     /**
+     * A transfer named the SAME tab as source and destination (`fromTabId === toTabId`). Refused
+     * before any lock or line read — moving items from a tab to itself is a no-op the caller did not
+     * mean, and letting it through would take the same tab's row `FOR UPDATE` twice. `tabId` is the
+     * caller-supplied uuid (both ids are equal here), echoed because it is not a secret. A CLIENT
+     * request-shape fault (400), distinct from the state conflict `tab.not_open` (409): the ids are
+     * well-formed, they are just equal. `tab.*` names the DOMAIN CONCEPT, not the throwing package
+     * (`tenant.not_found`'s note gives the rule); never renamed once shipped.
+     */
+    "tab.transfer_self": { tabId: string };
+    /**
      * No such service status for this tenant. `statusId` is a caller-supplied uuid the dashboard/till
      * already holds, not a secret — an id that matches nothing is unactionable if withheld (the rule
      * `tenant.not_found`'s note gives). `status.*` names the DOMAIN CONCEPT (a table's manual service

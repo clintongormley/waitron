@@ -890,6 +890,74 @@ export async function mergeTabs(
     .where(eq(workingOrders.id, fromTabId));
 }
 
+/**
+ * Move SELECTED items from one open tab to another (design §3) — the transfer verb. `transfers` names
+ * the source `line_no`s. In THIS task every named line moves as a WHOLE line, delegated to
+ * {@link moveTabLines}: the line's locked `unit_price_gross` is carried across UNCHANGED (a move NEVER
+ * re-prices — the add-time locked column is what the filed sale is later rebuilt from) and it is appended
+ * at the destination's next `line_no`. The partial-quantity SPLIT path (`0 < quantity < line.quantity`)
+ * is NOT YET implemented — Task 3 adds it; until then a `quantity` on a transfer is IGNORED and the whole
+ * named line moves. So this task reads only `t.lineNo`, never `t.quantity`.
+ *
+ * Both tabs are locked `FOR UPDATE` in ASCENDING id order (`[fromTabId, toTabId].sort()` + `lockOpenTab`
+ * each) — the same ordering discipline `mergeTabs`/`moveTabLines` acquire their `working_orders` locks
+ * in, so a transfer racing another transfer (or a merge) on the same pair acquires the two rows in the
+ * same order rather than cross-locking. `lockOpenTab` locks the `working_orders` row ONLY (its
+ * `dining_tables` back-pointer read is an UNLOCKED select), so this verb takes no `dining_tables` lock
+ * and is NOT in the `mergeTabs`-vs-pay `dining_tables`↔`working_orders` deadlock class. That ordering is
+ * a defensive, plan-level discipline here, not a property THIS suite proves: `transfer-lines.test.ts`
+ * runs on PGlite, a single backend that serialises every query, so a contention test on it is a false
+ * pass — the real-Postgres race is `transfer-lines.rls.test.ts`'s job.
+ *
+ * `lockOpenTab` requires each tab to be an OPEN working order some `dining_tables.tab_id` points at,
+ * else `tab.not_open`; an absent/foreign (RLS-hidden) tab matches no row → the same fail-closed
+ * `tab.not_open`. (For a destination that is absent or closed, `moveTabLines` ALSO throws `tab.not_open`
+ * from its own status read — so that particular guard is backstopped, and the lock loop's own
+ * contribution is the stricter is-a-tab back-pointer check plus the explicit lock ordering.) A
+ * self-transfer (`fromTabId === toTabId`) is refused with `tab.transfer_self` BEFORE any lock — moving a
+ * tab's items to itself is a no-op the caller did not mean, and would take the same row `FOR UPDATE`
+ * twice (mirrors `mergeTabs`' `tab.merge_self` self-guard).
+ *
+ * A tx-level verb (takes the caller's `tx`, like `moveTabLines`/`mergeTabs`): the HTTP route opens the
+ * `withTenant`/`asAppUser` transaction around it. Pre-fiscal — nothing is filed; each tab files its own
+ * sale on its own pay (design §4). `_cfg` (the till config) is unused on the whole-line path and
+ * underscore-prefixed so `noUnusedParameters` leaves it — an interface-shape parameter kept for the
+ * uniform tab-verb signature the route layer calls, which the Task-3 split path will read for the new
+ * destination line's `tenant_id`; `voidTabLine`/`joinTable` keep the same `TillConfig` parameter the
+ * same way.
+ */
+export async function transferLines(
+  tx: Transaction,
+  _cfg: TillConfig,
+  fromTabId: string,
+  toTabId: string,
+  transfers: { lineNo: number; quantity?: string }[],
+): Promise<void> {
+  // A tab cannot transfer to itself — refused before any lock (which would take the row twice).
+  if (fromTabId === toTabId) {
+    throw new AppError("tab.transfer_self", { tabId: fromTabId });
+  }
+
+  // Lock BOTH tab rows FOR UPDATE in ascending id order. `.sort()` is lexicographic, which for the
+  // canonical lowercase uuids `randomUUID()`/`gen_random_uuid()` emit matches PostgreSQL's own byte
+  // ordering of `uuid` — so this IS ascending id order as the DB sees it. `lockOpenTab` throws
+  // `tab.not_open` for a row that is absent, closed, not a tab (no `dining_tables` back-pointer), or
+  // (RLS) another tenant's. The last two are what this loop enforces beyond `moveTabLines`' own open
+  // check below, which accepts any open order — see the isolating not-open test in transfer-lines.test.ts.
+  for (const tabId of [fromTabId, toTabId].sort()) {
+    await lockOpenTab(tx, tabId);
+  }
+
+  // Whole-line only in THIS task: move every named line intact (keeps its locked unit_price_gross,
+  // renumbers on the destination). The partial-split path is Task 3.
+  await moveTabLines(
+    tx,
+    fromTabId,
+    toTabId,
+    transfers.map((t) => t.lineNo),
+  );
+}
+
 /** One row of the held-orders list the counter shows to retrieve a parked order. */
 export interface HeldOrderSummary {
   id: string;
