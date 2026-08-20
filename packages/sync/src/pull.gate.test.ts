@@ -1,10 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
-import { runMigrationSets, startMigratedPostgres } from "@waitron/db/testing/postgres.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { encodeBatch } from "./wire.js";
 import { syncPullOnce, type HttpClient } from "./pull.js";
 import type { SyncLogRow } from "./apply.js";
@@ -13,21 +11,12 @@ import type { SyncLogRow } from "./apply.js";
 // (app_user + sync_tailer member) so FORCE RLS genuinely applies — PGlite (superuser) bypasses it, a
 // false pass (CLAUDE.md §4). The http seam is faked: this suite proves the client wiring (cursor read
 // → fetch → apply → cursor advance → idempotent redelivery), not the socket (that is Task 10's e2e).
-const postgres = useRealPostgres({
-  start: () =>
-    startMigratedPostgres({
-      dockerRequired:
-        "The sync pull-gate suite requires a running Docker daemon. It cannot be skipped: PGlite " +
-        "connects as a superuser and bypasses FORCE ROW LEVEL SECURITY, so it cannot exercise the " +
-        "non-superuser apply syncPullOnce drives (CLAUDE.md §4).",
-      migrate: (uri) => runMigrationSets(uri, migrationOptionsFor(manifestSets(), null)),
-    }),
-  setup: async ({ admin }) => {
-    await admin.execute(sql.raw(`create role sync_applier login password 'ap' in role app_user`));
-    await admin.execute(sql.raw(`grant sync_tailer to sync_applier`));
-  },
-  timeoutMs: 180_000,
-});
+// The apply worker's role sync_applier — a LOGIN member of BOTH app_user (write the enrolled tables)
+// and sync_tailer (read sync_cursor) — is now created once in src/testing/global-setup.ts with both
+// memberships in its inRole array, shared across the gate suites: a shared cluster is one cluster, so
+// a per-file `create role` would collide on the second. Reached below with `connectAs("sync_applier",
+// "ap")`.
+const postgres = useTemplateDb({ template: "manifest" });
 
 const uuid = (): string => randomUUID();
 

@@ -2,34 +2,20 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { captureError, pgErrorCode, pgErrorMessage } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
-import { runMigrationSets, startMigratedPostgres } from "@waitron/db/testing/postgres.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyBatch } from "./apply.js";
 
 // Real Postgres, not PGlite: the redelivery guard proof needs the apply loop under a genuine
 // non-superuser, non-BYPASSRLS role (FORCE RLS actually fences it) and the real business BEFORE
 // triggers that migration 0037 gates — PGlite bypasses all of it, a false pass (CLAUDE.md §4). The
 // whole manifest runs (0037 included, `sync` last), so the container carries the gated triggers.
-const postgres = useRealPostgres({
-  start: () =>
-    startMigratedPostgres({
-      dockerRequired:
-        "The sync redelivery-gate suite requires a running Docker daemon. It cannot be skipped: it " +
-        "proves that the business BEFORE-triggers are gated on app.sync_apply under the real " +
-        "non-superuser apply role, which PGlite (superuser, bypasses FORCE RLS) cannot exercise " +
-        "(CLAUDE.md §4).",
-      migrate: (uri) => runMigrationSets(uri, migrationOptionsFor(manifestSets(), null)),
-    }),
-  // The apply worker's role: a LOGIN role that is a member of BOTH app_user AND sync_tailer — the
-  // sanctioned path (spec §7; CLAUDE.md §3, never widen app_user to reach sync_cursor).
-  setup: async ({ admin }) => {
-    await admin.execute(sql.raw(`create role sync_applier login password 'ap' in role app_user`));
-    await admin.execute(sql.raw(`grant sync_tailer to sync_applier`));
-  },
-  timeoutMs: 180_000,
-});
+// The apply worker's role sync_applier — a LOGIN member of BOTH app_user AND sync_tailer, the
+// sanctioned path (spec §7; CLAUDE.md §3, never widen app_user to reach sync_cursor) — is now created
+// once in src/testing/global-setup.ts with both memberships in its inRole array, shared across the
+// gate suites: a shared cluster is one cluster, so a per-file `create role` would collide on the
+// second. Reached below with `connectAs("sync_applier", "ap")`.
+const postgres = useTemplateDb({ template: "manifest" });
 
 const uuid = (): string => randomUUID();
 

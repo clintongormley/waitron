@@ -7,31 +7,21 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
-import { runMigrationSets, startMigratedPostgres } from "@waitron/db/testing/postgres.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
 // Real Postgres, not PGlite: this suite proves sync_log's FORCE ROW LEVEL SECURITY, the app role's
 // INSERT-only grant, the sync_tailer read path and echo suppression under a genuine non-superuser
 // role — PGlite connects as a superuser and bypasses all of it, so it is a false pass here
 // (CLAUDE.md §4). The whole migration manifest runs (now including `sync` last), so the container
 // carries sync_log + sync_capture + the 14 capture triggers over the enrolled commercial tables.
-const postgres = useRealPostgres({
-  start: () =>
-    startMigratedPostgres({
-      dockerRequired:
-        "The sync capture-gate suite requires a running Docker daemon. It cannot be skipped: " +
-        "PGlite connects as a superuser and bypasses FORCE ROW LEVEL SECURITY, so it cannot " +
-        "exercise sync_log's tenant-isolation policy, the app-role INSERT-only grant, or the " +
-        "sync_tailer read path this suite exists to verify (CLAUDE.md §4).",
-      migrate: (uri) => runMigrationSets(uri, migrationOptionsFor(manifestSets(), null)),
-    }),
-  // The deployment role: a non-superuser, non-BYPASSRLS LOGIN role inheriting app_user's grants, so
-  // FORCE RLS actually applies to it. Mirrors packages/payments/src/payments.rls.test.ts's probe.
-  probeRole: { name: "app_login", password: "app_pw", inRole: "app_user" },
-  timeoutMs: 180_000,
-});
+// The deployment role app_login — a non-superuser, non-BYPASSRLS LOGIN member of app_user, so FORCE
+// RLS actually applies to it — is now created once in src/testing/global-setup.ts and shared across
+// the gate suites: a shared cluster is one cluster, so a per-file `create role` would collide on the
+// second suite. The suite reaches it below with `postgres.pg.connectAs("app_login", "app_pw")`, and
+// reads back per-tenant as `tailer_login` (a sync_tailer member, likewise created once in
+// global-setup and shared with retention.gate).
+const postgres = useTemplateDb({ template: "manifest" });
 
 // A producing node's id — capture writes it into sync_log.origin_id from the app.node_id GUC.
 const NODE_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -318,13 +308,11 @@ describe("the generic capture trigger over the commercial lane", () => {
       await app.close();
     }
 
-    // The dedicated reader: a LOGIN role that is a member of sync_tailer. Under tenant A it sees the
-    // tenant-A row and NOT the tenant-B row; under tenant B the reverse (the control). That is the
-    // FORCE-RLS policy holding under a genuine RLS-subject role, both directions.
-    await postgres.admin.execute(sql.raw(`drop role if exists tailer_login`));
-    await postgres.admin.execute(
-      sql.raw(`create role tailer_login login password 'tp' in role sync_tailer`),
-    );
+    // The dedicated reader: `tailer_login`, a LOGIN member of sync_tailer created once in
+    // src/testing/global-setup.ts (shared with retention.gate — a shared cluster is one cluster, so a
+    // per-file create would collide, and a per-file drop/recreate would churn a role retention.gate
+    // also uses). Under tenant A it sees the tenant-A row and NOT the tenant-B row; under tenant B the
+    // reverse (the control) — the FORCE-RLS policy holding under a genuine RLS-subject role.
     const tailer = await postgres.pg.connectAs("tailer_login", "tp");
     try {
       const underA = await withTenant(tailer, a, (tx) =>

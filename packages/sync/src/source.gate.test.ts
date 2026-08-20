@@ -1,10 +1,8 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
-import { runMigrationSets, startMigratedPostgres } from "@waitron/db/testing/postgres.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readSyncLogSince } from "./source.js";
 
 // NOTE: `catalogues` is an ENROLLED table, so seedBase's own catalogue INSERT (as admin, no node id)
@@ -17,25 +15,12 @@ import { readSyncLogSince } from "./source.js";
 // sync_tailer role, which PGlite (superuser) bypasses — a false pass (CLAUDE.md §4). The full manifest
 // runs (`sync` last), so the container carries sync_log + sync_capture over the enrolled tables. The
 // reader is a sync_tailer MEMBER LOGIN role, the sanctioned per-tenant read path (spec §7).
-const postgres = useRealPostgres({
-  start: () =>
-    startMigratedPostgres({
-      dockerRequired:
-        "The sync source-read suite requires a running Docker daemon. It cannot be skipped: PGlite " +
-        "connects as a superuser and bypasses FORCE ROW LEVEL SECURITY, so it cannot exercise the " +
-        "sync_log_tenant_isolation policy this suite drives as a non-superuser sync_tailer member " +
-        "(CLAUDE.md §4).",
-      migrate: (uri) => runMigrationSets(uri, migrationOptionsFor(manifestSets(), null)),
-    }),
-  // An app-role LOGIN role to CAPTURE writes (INSERT on sync_log via app_user), and a sync_tailer
-  // member LOGIN role to READ them back per-tenant. Both non-superuser so FORCE RLS genuinely applies.
-  setup: async ({ admin }) => {
-    await admin.execute(sql.raw(`create role app_login login password 'app_pw' in role app_user`));
-    await admin.execute(sql.raw(`create role sync_reader login password 'rp'`));
-    await admin.execute(sql.raw(`grant sync_tailer to sync_reader`));
-  },
-  timeoutMs: 180_000,
-});
+// Two roles, now created once in src/testing/global-setup.ts and shared across the gate suites (a
+// shared cluster is one cluster, so a per-file `create role` would collide on the second): app_login,
+// an app_user member that CAPTURES writes via app_user's INSERT on sync_log, and sync_reader, a
+// sync_tailer member that READS them back per-tenant. Both non-superuser, so FORCE RLS genuinely
+// applies. Reached below with `connectAs("app_login", "app_pw")` / `connectAs("sync_reader", "rp")`.
+const postgres = useTemplateDb({ template: "manifest" });
 
 const NODE_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 

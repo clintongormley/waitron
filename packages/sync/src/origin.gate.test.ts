@@ -1,10 +1,8 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTenant, type Database } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
-import { runMigrationSets, startMigratedPostgres } from "@waitron/db/testing/postgres.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
 // Real Postgres, not PGlite: capture runs under FORCE ROW LEVEL SECURITY as the non-superuser app
 // role, which PGlite (superuser) bypasses — a false pass here (CLAUDE.md §4). Unlike capture.gate,
@@ -12,19 +10,11 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 // through the PRODUCTION `withTenant` from @waitron/db, so it is the test that proves Task 5's
 // wiring — that the real helper's optional node id reaches `app.node_id` and lands in
 // `sync_log.origin_id`.
-const postgres = useRealPostgres({
-  start: () =>
-    startMigratedPostgres({
-      dockerRequired:
-        "The sync origin-gate suite requires a running Docker daemon. It cannot be skipped: PGlite " +
-        "connects as a superuser and bypasses FORCE ROW LEVEL SECURITY, so it cannot exercise the " +
-        "capture trigger under the non-superuser app role this suite drives through withTenant " +
-        "(CLAUDE.md §4).",
-      migrate: (uri) => runMigrationSets(uri, migrationOptionsFor(manifestSets(), null)),
-    }),
-  probeRole: { name: "app_login", password: "app_pw", inRole: "app_user" },
-  timeoutMs: 180_000,
-});
+// The deployment role app_login — a non-superuser, non-BYPASSRLS LOGIN member of app_user, so FORCE
+// RLS applies to it — is now created once in src/testing/global-setup.ts and shared across the gate
+// suites: a shared cluster is one cluster, so a per-file `create role` would collide on the second.
+// Reached below with `postgres.pg.connectAs("app_login", "app_pw")`.
+const postgres = useTemplateDb({ template: "manifest" });
 
 // A producing node's id, and the all-zero uuid capture defaults origin to when app.node_id is unset.
 const NODE_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";

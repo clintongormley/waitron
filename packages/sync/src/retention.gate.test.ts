@@ -1,10 +1,8 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTenant } from "@waitron/db";
-import { useRealPostgres } from "@waitron/db/testing/lifecycle.js";
-import { runMigrationSets, startMigratedPostgres } from "@waitron/db/testing/postgres.js";
+import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { lagFor, pruneSyncLog } from "./retention.js";
 import type { SyncLane } from "./registry.js";
 
@@ -14,32 +12,12 @@ import type { SyncLane } from "./registry.js";
 // it could not tell a working permissive policy from a missing one (CLAUDE.md §4). The whole
 // migration manifest runs (including `sync`, now 0000 + 0001), so the container carries sync_log +
 // sync_cursor + the sync_retention role and its policy.
-const postgres = useRealPostgres({
-  start: () =>
-    startMigratedPostgres({
-      dockerRequired:
-        "The sync retention-gate suite requires a running Docker daemon. It cannot be skipped: " +
-        "PGlite connects as a superuser and bypasses FORCE ROW LEVEL SECURITY, so it cannot exercise " +
-        "the non-superuser sync_retention prune or prove the per-role permissive policy is what makes " +
-        "the cross-tenant DELETE possible — the whole point of this suite (CLAUDE.md §4).",
-      migrate: (uri) => runMigrationSets(uri, migrationOptionsFor(manifestSets(), null)),
-    }),
-  // Two non-superuser, non-BYPASSRLS LOGIN members created once the container is up:
-  //  - sync_pruner: a member of sync_retention — the role the prune/lag actually run as, so FORCE RLS
-  //    genuinely applies and the sync_log_retention permissive policy is exercised as intended.
-  //  - tailer_login: a member of sync_tailer — used only to prove the new retention policy did NOT
-  //    leak into sync_tailer (a tailer member must still see only its own tenant).
-  // Neither role is widened by hand; each inherits its group's grants (CLAUDE.md §3 "never widen").
-  setup: async ({ admin }) => {
-    await admin.execute(
-      sql.raw(`create role sync_pruner login password 'pp' in role sync_retention`),
-    );
-    await admin.execute(
-      sql.raw(`create role tailer_login login password 'tp' in role sync_tailer`),
-    );
-  },
-  timeoutMs: 180_000,
-});
+// The sync_pruner (a sync_retention member — the role the prune/lag run as, so FORCE RLS genuinely
+// applies and the sync_log_retention permissive policy is exercised) and tailer_login (a sync_tailer
+// member, used only to prove the retention policy did NOT leak into sync_tailer) roles are now
+// created once in src/testing/global-setup.ts — a shared cluster is one cluster, so a per-file
+// `create role` would collide on the second suite. Neither is widened by hand (CLAUDE.md §3).
+const postgres = useTemplateDb({ template: "manifest" });
 
 // One producing origin (gate 7 is single-origin), and two subscribers matching the findings doc.
 const ORIGIN = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
