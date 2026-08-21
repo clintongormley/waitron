@@ -3,8 +3,22 @@ import { customElement, property, state } from "lit/decorators.js";
 // `baseStyles` also loads the `@waitron/ui` barrel, which registers `<wt-floor-canvas>` and
 // `<wt-table-token>` (self-registering `wt-*` components) — the map view and the tray consume them by
 // tag below. The type-only imports carry the canvas's copy/table/placement-event shapes.
-import { GRID_STEP, baseStyles, clampPermille } from "@waitron/ui";
-import type { FloorCanvasCopy, FloorTable, PlacementChange, PlacementClear } from "@waitron/ui";
+import {
+  baseStyles,
+  buildZoneTabs,
+  defaultTraySlot,
+  floorTrayStyles,
+  isTableZoneless,
+  resolveActiveTabKey,
+  toFloorTable,
+} from "@waitron/ui";
+import type {
+  FloorCanvasCopy,
+  FloorTable,
+  PlacementChange,
+  PlacementClear,
+  ZoneTab,
+} from "@waitron/ui";
 import { t } from "../i18n/t.js";
 import type { FloorZone, TableState, TillApi } from "../api/client.js";
 
@@ -59,6 +73,7 @@ import type { FloorZone, TableState, TillApi } from "../api/client.js";
 export class TillFloorScreen extends LitElement {
   static override styles = [
     baseStyles,
+    floorTrayStyles,
     css`
       :host {
         display: block;
@@ -98,39 +113,12 @@ export class TillFloorScreen extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      /* The map view: the shared canvas with the unplaced-tables tray stacked beneath it. */
+      /* The map view: the shared canvas with the unplaced-tables tray stacked beneath it. The tray's
+         own rules (.tray / .tray-label / .tray-item) live in @waitron/ui's shared floorTrayStyles. */
       .map {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-3);
-      }
-
-      .tray {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: stretch;
-        gap: var(--wt-space-2);
-        padding: var(--wt-space-2);
-        border: 1px dashed var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-      }
-
-      .tray-label {
-        width: 100%;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      /* The tray token is the tappable element; the shared <wt-table-token> inside carries the visual. */
-      .tray-item {
-        margin: 0;
-        padding: 0;
-        border: 0;
-        background: transparent;
-        color: inherit;
-        font: inherit;
-        cursor: pointer;
       }
 
       /* A responsive grid: cards flow to fill the width, wrapping onto new rows on a narrow till. */
@@ -366,23 +354,11 @@ export class TillFloorScreen extends LitElement {
     this.dispatchEvent(new CustomEvent("floor-refresh", { bubbles: true, composed: true }));
   }
 
-  /** Map a read-model row to the shared canvas/token's {@link FloorTable} shape. Unplaced tables (the
-   * tray) have null coordinates the token ignores, so they default to 0 for the required fields. */
+  /** Map a read-model row to the shared canvas/token's {@link FloorTable} shape via the shared
+   * {@link toFloorTable}. A `TableState` carries both the placement half and the live occupancy half, so
+   * it is passed as both arguments; unplaced tables (the tray) have null coordinates the token ignores. */
   #toFloorTable(table: TableState): FloorTable {
-    return {
-      id: table.id,
-      label: table.label,
-      capacity: table.capacity,
-      posX: table.posX ?? 0,
-      posY: table.posY ?? 0,
-      shape: table.shape,
-      rotation: table.rotation,
-      zoneId: table.zoneId,
-      state: table.state,
-      tabTotal: table.tabTotal ?? null,
-      pendingToServe: table.pendingToServe,
-      status: table.status,
-    };
+    return toFloorTable(table, table);
   }
 
   /** The till's Spanish copy for the shared canvas (its edit-mode inspector + token suffix words). Only
@@ -402,44 +378,26 @@ export class TillFloorScreen extends LitElement {
     };
   }
 
-  /**
-   * Whether a table belongs under the "Sin zona" tab: it has NO zone (`zoneId === null`), OR its zone is
-   * not among the currently-active ones. The second case is the reachability fix — `deactivateZone` is a
-   * soft `active = false` and never nulls a table's `zoneId`, so a table can point at a zone missing from
-   * {@link zones}; without catching it here, that table (open tab and all) would match no tab and vanish.
-   */
-  #isZoneless(table: TableState, knownZoneIds: Set<string>): boolean {
-    return table.zoneId === null || !knownZoneIds.has(table.zoneId);
-  }
-
-  /** The tabs to show: the active zones by `displayOrder`, plus a "Sin zona" tab iff some table is
-   * zoneless or points at a deactivated zone (see {@link #isZoneless}). */
-  #tabs(knownZoneIds: Set<string>): { key: string | null; name: string }[] {
-    const zoneTabs = [...this.zones]
-      .sort((a, b) => a.displayOrder - b.displayOrder)
-      .map((z) => ({ key: z.id as string | null, name: z.name }));
-    const hasZoneless = this.tables.some((table) => this.#isZoneless(table, knownZoneIds));
-    return hasZoneless ? [...zoneTabs, { key: null, name: t("floor.no_zone") }] : zoneTabs;
-  }
-
-  /** The active tab's key: the operator's pick, or the first tab when none has been made. */
-  #activeKey(tabs: { key: string | null }[]): string | null | undefined {
-    return this.activeZone === undefined ? tabs[0]?.key : this.activeZone;
-  }
-
   override render() {
     const knownZoneIds = new Set(this.zones.map((z) => z.id));
-    const tabs = this.#tabs(knownZoneIds);
-    const activeKey = this.#activeKey(tabs);
+    // The tabs (active zones by displayOrder + a trailing "Sin zona" tab when needed) and the active
+    // key come from the shared @waitron/ui helpers; the screen owns only the Spanish no-zone LABEL.
+    const tabs = buildZoneTabs(this.zones, this.tables, t("floor.no_zone"));
+    const activeKey = resolveActiveTabKey(this.activeZone, tabs);
     // The "Sin zona" tab (activeKey === null) gathers the zoneless AND the deactivated-zone tables; a
     // real zone tab shows exactly its own tables.
     const visible = this.tables.filter((table) =>
-      activeKey === null ? this.#isZoneless(table, knownZoneIds) : table.zoneId === activeKey,
+      activeKey === null ? isTableZoneless(table, knownZoneIds) : table.zoneId === activeKey,
     );
-    // The default view is data-driven per active zone (map once the zone has any placed table); a
-    // manual toggle pins an override for the session.
-    const view: "map" | "list" =
-      this.viewOverride ?? (visible.some((table) => table.posX != null) ? "map" : "list");
+    // Derive placed/unplaced ONCE here (the map view re-uses both, and the view default reads them):
+    // the four placement columns are written/nulled together, so `placed.length > 0` is exactly the
+    // "this zone has any placed table" the map/list default turns on. A manual toggle pins an override.
+    const placed = visible.filter(
+      (table): table is TableState & { posX: number; posY: number } =>
+        table.posX != null && table.posY != null,
+    );
+    const unplaced = visible.filter((table) => table.posX == null);
+    const view: "map" | "list" = this.viewOverride ?? (placed.length > 0 ? "map" : "list");
     return html`
       <section class="screen" aria-label=${t("floor.title")}>
         <header class="head">
@@ -479,7 +437,7 @@ export class TillFloorScreen extends LitElement {
         }
         ${
           view === "map"
-            ? this.#map(visible)
+            ? this.#map(placed, unplaced)
             : html`<div class="grid">${visible.map((table) => this.#card(table))}</div>`
         }
       </section>
@@ -487,17 +445,15 @@ export class TillFloorScreen extends LitElement {
   }
 
   /**
-   * The MAP view: the shared `<wt-floor-canvas>` drawing the PLACED tables (a type-guard filter narrows
-   * `posX`/`posY` to non-null before mapping), with the active zone's UNPLACED tables in a tray strip
-   * beneath. `placement-change` / `placement-clear` are persisted here; a canvas `open-table` is
-   * re-emitted with the resolved `hasOpenTab` ({@link #onCanvasOpen}).
+   * The MAP view: the shared `<wt-floor-canvas>` drawing the PLACED tables, with the active zone's
+   * UNPLACED tables in a tray strip beneath. Both sets are derived ONCE in {@link render} and passed in
+   * (never recomputed here). `placement-change` / `placement-clear` are persisted here; a canvas
+   * `open-table` is re-emitted with the resolved `hasOpenTab` ({@link #onCanvasOpen}).
    */
-  #map(visible: TableState[]): TemplateResult {
-    const placed = visible.filter(
-      (table): table is TableState & { posX: number; posY: number } =>
-        table.posX != null && table.posY != null,
-    );
-    const unplaced = visible.filter((table) => table.posX == null);
+  #map(
+    placed: (TableState & { posX: number; posY: number })[],
+    unplaced: TableState[],
+  ): TemplateResult {
     return html`
       <div class="map">
         <wt-floor-canvas
@@ -559,11 +515,11 @@ export class TillFloorScreen extends LitElement {
    */
   async #placeFromTray(table: TableState, placed: TableState[]): Promise<void> {
     if (this.api === undefined) return;
-    const posX = clampPermille(500 + placed.length * GRID_STEP);
+    const { posX, posY } = defaultTraySlot(placed.length);
     try {
       await this.api.setTablePlacement(table.id, {
         posX,
-        posY: 500,
+        posY,
         shape: "round",
         rotation: 0,
         zoneId: table.zoneId,
@@ -574,10 +530,7 @@ export class TillFloorScreen extends LitElement {
     this.#requestFloorRefresh();
   }
 
-  #tab(
-    tab: { key: string | null; name: string },
-    activeKey: string | null | undefined,
-  ): TemplateResult {
+  #tab(tab: ZoneTab, activeKey: string | null | undefined): TemplateResult {
     const active = tab.key === activeKey;
     return html`<wt-button
       class="tab"

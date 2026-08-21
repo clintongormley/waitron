@@ -471,6 +471,9 @@ describe("floor-screen — Plano editor (FP-2)", () => {
       zoneId: "z1",
     });
     expect(api.listTables).toHaveBeenCalledTimes(2); // initial + reload after the write
+    // A placement cannot change the zone list, so the reload re-fetches only tables — zones stay at
+    // their single initial load.
+    expect(api.listZones).toHaveBeenCalledOnce();
   });
 
   it("clears a placement via clearPlacement, then reloads", async () => {
@@ -488,6 +491,33 @@ describe("floor-screen — Plano editor (FP-2)", () => {
     await flush(el);
     expect(api.clearPlacement).toHaveBeenCalledWith("t1");
     expect(api.listTables).toHaveBeenCalledTimes(2);
+    // Only the tables are re-fetched on a placement clear; the zone list is left untouched.
+    expect(api.listZones).toHaveBeenCalledOnce();
+  });
+
+  it("surfaces a failed table reload after a placement write as the localised errorKey banner", async () => {
+    // The placement write lands, but the follow-up tables-only reload rejects: the failure surfaces as
+    // the localised errorKey banner (the reconcile-to-server-truth shape #load had, kept in #loadTables),
+    // never swallowed. The first listTables (initial load) resolves; the reload (second call) rejects.
+    const listTables = vi
+      .fn()
+      .mockResolvedValueOnce(Z1_TABLES.map((t) => ({ ...t })))
+      .mockRejectedValueOnce({ code: "server.internal" });
+    const api = stubApi({ listTables }, ZONES, Z1_TABLES);
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    await openPlano(el);
+    canvasOf(el).dispatchEvent(
+      new CustomEvent("placement-clear", {
+        detail: { tableId: "t1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(api.clearPlacement).toHaveBeenCalledWith("t1");
+    expect(errorKey(el)).toBe("server.internal");
+    expect(q(el, "[role=alert]")?.textContent).toContain(codeMessage("server.internal", "es-ES"));
   });
 
   it("tap-to-places an unplaced tray table at a default position, then reloads", async () => {
@@ -507,6 +537,8 @@ describe("floor-screen — Plano editor (FP-2)", () => {
       zoneId: "z1",
     });
     expect(api.listTables).toHaveBeenCalledTimes(2);
+    // Tap-to-place goes through the same placement path, so it too re-fetches only the tables.
+    expect(api.listZones).toHaveBeenCalledOnce();
   });
 
   it("surfaces a rejected placement (placement.invalid) as a localised role=alert, never the raw code", async () => {

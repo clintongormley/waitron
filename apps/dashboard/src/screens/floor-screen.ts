@@ -4,7 +4,15 @@ import { customElement, property, state } from "lit/decorators.js";
 // `<wt-table-token>` — the FP-2 shared components the Plano tab consumes by tag. `GRID_STEP` /
 // `clampPermille` size the tap-to-place default slot; the type-only imports carry the canvas's
 // copy / table / placement-event shapes.
-import { GRID_STEP, baseStyles, clampPermille } from "@waitron/ui";
+import {
+  baseStyles,
+  buildZoneTabs,
+  defaultTraySlot,
+  floorTrayStyles,
+  isTableZoneless,
+  resolveActiveTabKey,
+  toFloorTable,
+} from "@waitron/ui";
 import type { FloorCanvasCopy, FloorTable, PlacementChange, PlacementClear } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -72,6 +80,7 @@ export class FloorScreen extends LitElement {
   static override styles = [
     baseStyles,
     selectStyles,
+    floorTrayStyles,
     css`
       :host {
         display: block;
@@ -136,37 +145,13 @@ export class FloorScreen extends LitElement {
         gap: var(--wt-space-2);
         margin-bottom: var(--wt-space-4);
       }
-      /* The Plano tab: the canvas with its unplaced-tables tray stacked beneath it. */
+      /* The Plano tab: the canvas with its unplaced-tables tray stacked beneath it. The tray's own
+         rules (.tray / .tray-label / .tray-item) live in @waitron/ui's shared floorTrayStyles. */
       .plano,
       .map {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-3);
-      }
-      .tray {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: stretch;
-        gap: var(--wt-space-2);
-        padding: var(--wt-space-2);
-        border: 1px dashed var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-      }
-      .tray-label {
-        width: 100%;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-        font-weight: var(--wt-font-weight-bold);
-      }
-      /* The tray token is the tappable element; the shared <wt-table-token> inside carries the visual. */
-      .tray-item {
-        margin: 0;
-        padding: 0;
-        border: 0;
-        background: transparent;
-        color: inherit;
-        font: inherit;
-        cursor: pointer;
       }
     `,
   ];
@@ -193,8 +178,25 @@ export class FloorScreen extends LitElement {
     void this.#load();
   }
 
+  /** Map loaded API table rows into the editor's local `EditableTable` shape. Shared by `#load` (the
+   * full reload) and `#loadTables` (the placement-only reload) so the mapping lives in one place. */
+  #toEditableTables(tables: DashboardTable[]): EditableTable[] {
+    return tables.map((t) => ({
+      id: t.id,
+      label: t.label,
+      capacity: t.capacity,
+      zoneId: t.zoneId,
+      posX: t.posX ?? null,
+      posY: t.posY ?? null,
+      shape: t.shape ?? null,
+      rotation: t.rotation ?? null,
+    }));
+  }
+
   /** Load the configured zones + tables into editable rows. A rejection becomes the `errorKey` banner
-   * rather than an unhandled rejection. */
+   * rather than an unhandled rejection. Used on connect and after every mutation that can change the
+   * ZONE list (create/save/deactivate a zone or table); the placement handlers use the narrower
+   * {@link #loadTables} instead. */
   async #load(): Promise<void> {
     this.errorKey = null;
     try {
@@ -204,16 +206,21 @@ export class FloorScreen extends LitElement {
         name: z.name,
         displayOrder: z.displayOrder,
       }));
-      this.tables = tables.map((t: DashboardTable) => ({
-        id: t.id,
-        label: t.label,
-        capacity: t.capacity,
-        zoneId: t.zoneId,
-        posX: t.posX ?? null,
-        posY: t.posY ?? null,
-        shape: t.shape ?? null,
-        rotation: t.rotation ?? null,
-      }));
+      this.tables = this.#toEditableTables(tables);
+    } catch (error) {
+      this.errorKey = codeOf(error);
+    }
+  }
+
+  /** Reload ONLY the tables — the narrower resync the PLACEMENT handlers use. A placement write mutates
+   * only `dining_tables` (it merely READS `floor_zones` to validate the target zone is active), so the
+   * zone LIST is guaranteed unchanged across an edit and re-fetching it via {@link #load} would be a
+   * wasted GET per edit. Still re-fetches the TABLE rows (never a local patch) so the client picks up any
+   * server-clamped placement values. A rejection becomes the `errorKey` banner, exactly like `#load`. */
+  async #loadTables(): Promise<void> {
+    this.errorKey = null;
+    try {
+      this.tables = this.#toEditableTables(await this.api.listTables());
     } catch (error) {
       this.errorKey = codeOf(error);
     }
@@ -475,14 +482,15 @@ export class FloorScreen extends LitElement {
   // `errorKey` banner (a `placement.invalid` mapped to localised copy) rather than being swallowed — the
   // dashboard SURFACES the fault, where the till reconciles silently.
 
-  /** Persist a canvas placement edit (`placement-change`) via the management route, then reload. A
-   * rejection (e.g. `placement.invalid`, `zone.not_found`) becomes the `errorKey` banner. */
+  /** Persist a canvas placement edit (`placement-change`) via the management route, then reload only the
+   * tables (a placement cannot change the zone list — see {@link #loadTables}). A rejection (e.g.
+   * `placement.invalid`, `zone.not_found`) becomes the `errorKey` banner. */
   async #setPlacement(detail: PlacementChange): Promise<void> {
     this.errorKey = null;
     const { tableId, posX, posY, shape, rotation, zoneId } = detail;
     try {
       await this.api.setTablePlacement(tableId, { posX, posY, shape, rotation, zoneId });
-      await this.#load();
+      await this.#loadTables();
     } catch (error) {
       this.errorKey = codeOf(error);
     }
@@ -493,12 +501,13 @@ export class FloorScreen extends LitElement {
     void this.#setPlacement((event as CustomEvent<PlacementChange>).detail);
   }
 
-  /** Un-place a table (the canvas's `placement-clear`) via the management route, then reload. */
+  /** Un-place a table (the canvas's `placement-clear`) via the management route, then reload only the
+   * tables (a placement cannot change the zone list — see {@link #loadTables}). */
   async #clearTablePlacement(tableId: string): Promise<void> {
     this.errorKey = null;
     try {
       await this.api.clearPlacement(tableId);
-      await this.#load();
+      await this.#loadTables();
     } catch (error) {
       this.errorKey = codeOf(error);
     }
@@ -518,36 +527,23 @@ export class FloorScreen extends LitElement {
    * is the table's own zone. A rejected write surfaces the `errorKey` banner via {@link #setPlacement}.
    */
   async #placeFromTray(tbl: EditableTable, placedCount: number): Promise<void> {
-    const posX = clampPermille(500 + placedCount * GRID_STEP);
+    const { posX, posY } = defaultTraySlot(placedCount);
     await this.#setPlacement({
       tableId: tbl.id,
       posX,
-      posY: 500,
+      posY,
       shape: tbl.shape ?? "round",
       rotation: tbl.rotation ?? 0,
       zoneId: tbl.zoneId,
     });
   }
 
-  /** Map an editable table to the shared canvas/token's {@link FloorTable} shape. The dashboard editor
-   * has no live occupancy read-model, so `state`/`pendingToServe`/`tabTotal`/`status` are the neutral
-   * "free" defaults — the token renders just the label + covers. Unplaced tables (null coords) default
-   * to 0 for the required fields the token ignores in the tray. */
+  /** Map an editable table to the shared canvas/token's {@link FloorTable} shape via the shared
+   * {@link toFloorTable}. The dashboard editor has no live occupancy read-model, so the occupancy half
+   * is the neutral "free" defaults — the token renders just the label + covers. Unplaced tables (null
+   * coords) default to 0 for the required fields the token ignores in the tray. */
   #toFloorTable(tbl: EditableTable): FloorTable {
-    return {
-      id: tbl.id,
-      label: tbl.label,
-      capacity: tbl.capacity,
-      posX: tbl.posX ?? 0,
-      posY: tbl.posY ?? 0,
-      shape: tbl.shape,
-      rotation: tbl.rotation,
-      zoneId: tbl.zoneId,
-      state: "free",
-      tabTotal: null,
-      pendingToServe: 0,
-      status: null,
-    };
+    return toFloorTable(tbl, { state: "free", tabTotal: null, pendingToServe: 0, status: null });
   }
 
   /** The dashboard's Spanish copy for the shared canvas (its edit-mode inspector + token suffix words).
@@ -565,30 +561,6 @@ export class FloorScreen extends LitElement {
       shapeSquare: t("floor.shape_square"),
       shapeRect: t("floor.shape_rect"),
     };
-  }
-
-  /** Whether a table belongs under the "Sin zona" sub-tab: it has NO zone, OR its zone is not among the
-   * active ones (a table can point at a deactivated zone — `deactivateZone` never nulls a table's
-   * `zoneId` — and without catching it here that table would match no sub-tab and vanish). Mirrors the
-   * till's `#isZoneless`. */
-  #isZoneless(tbl: EditableTable, knownZoneIds: Set<string>): boolean {
-    return tbl.zoneId === null || !knownZoneIds.has(tbl.zoneId);
-  }
-
-  /** The Plano sub-tabs: the active zones by `displayOrder`, plus a "Sin zona" tab iff some table is
-   * zoneless or points at a deactivated zone. */
-  #zoneTabs(knownZoneIds: Set<string>): { key: string | null; name: string }[] {
-    const zoneTabs = [...this.zones]
-      .sort((a, b) => a.displayOrder - b.displayOrder)
-      .map((z) => ({ key: z.id as string | null, name: z.name }));
-    const hasZoneless = this.tables.some((tbl) => this.#isZoneless(tbl, knownZoneIds));
-    return hasZoneless ? [...zoneTabs, { key: null, name: t("floor.zoneless") }] : zoneTabs;
-  }
-
-  /** The active sub-tab's key: the manager's pick, or the first tab when none has been made. Called only
-   * with a non-empty `tabs`. */
-  #activeZoneKey(tabs: { key: string | null }[]): string | null {
-    return this.activeZone === undefined ? tabs[0]!.key : this.activeZone;
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────────────────────────────
@@ -685,13 +657,15 @@ export class FloorScreen extends LitElement {
    * its UNPLACED tables in a tray beneath (tap-to-place). */
   #renderPlano(): TemplateResult {
     const knownZoneIds = new Set(this.zones.map((z) => z.id));
-    const tabs = this.#zoneTabs(knownZoneIds);
-    const activeKey = tabs.length === 0 ? undefined : this.#activeZoneKey(tabs);
+    // The sub-tabs (active zones by displayOrder + a trailing "Sin zona" tab when needed) and the active
+    // key come from the shared @waitron/ui helpers; the screen owns only the Spanish no-zone LABEL.
+    const tabs = buildZoneTabs(this.zones, this.tables, t("floor.zoneless"));
+    const activeKey = resolveActiveTabKey(this.activeZone, tabs);
     // The "Sin zona" tab (activeKey === null) gathers the zoneless AND deactivated-zone tables; a real
     // zone tab shows exactly its own tables. When there are no tabs at all (no zones, no tables) nothing
     // is visible and the canvas draws empty.
     const visible = this.tables.filter((tbl) =>
-      activeKey === null ? this.#isZoneless(tbl, knownZoneIds) : tbl.zoneId === activeKey,
+      activeKey === null ? isTableZoneless(tbl, knownZoneIds) : tbl.zoneId === activeKey,
     );
     const placed = visible.filter((tbl) => tbl.posX != null);
     const unplaced = visible.filter((tbl) => tbl.posX == null);
