@@ -39,3 +39,32 @@ describe("the placement error code carries its declared params", () => {
     expect(error.params).toEqual({ field: "posX" });
   });
 });
+
+// KDS-1 (Task 2) station config + routing. As with the zone/placement blocks above, each `it` only
+// proves the code is REGISTERED with the right param SHAPE — the construction typechecks solely
+// because errors.ts's `declare module` augmentation is loaded (the side-effect import above). The real
+// throwers are kitchen.ts's config verbs (name_taken/not_found) and — from Task 3 — the fire-time
+// station resolver (no_default). Each param NAME follows a shipped sibling so the family stays uniform:
+// `name` mirrors zone.name_taken/table.label_taken; `stationId` the qualified domain-record not_found
+// family (table.not_found's `tableId`, zone.not_found's `zoneId`); `locationId` the venue's own id.
+describe("the station error codes carry their declared params", () => {
+  it("constructs station.name_taken with the operator-supplied name, matching zone.name_taken's shape", () => {
+    const error = new AppError("station.name_taken", { name: "Cocina" });
+    expect(error.code).toBe("station.name_taken");
+    expect(error.params).toEqual({ name: "Cocina" });
+  });
+
+  it("constructs station.not_found with the qualified stationId, matching zone.not_found's shape", () => {
+    const stationId = "22222222-2222-2222-2222-222222222222";
+    const error = new AppError("station.not_found", { stationId });
+    expect(error.code).toBe("station.not_found");
+    expect(error.params).toEqual({ stationId });
+  });
+
+  it("constructs station.no_default naming the misconfigured location", () => {
+    const locationId = "33333333-3333-3333-3333-333333333333";
+    const error = new AppError("station.no_default", { locationId });
+    expect(error.code).toBe("station.no_default");
+    expect(error.params).toEqual({ locationId });
+  });
+});

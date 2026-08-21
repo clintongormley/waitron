@@ -508,6 +508,54 @@ declare module "@waitron/shared" {
      */
     "zone.name_taken": { name: string };
     /**
+     * A kitchen-station name already exists in this venue (KDS-1) — the `(tenant_id, location_id, name)`
+     * unique (`kitchen_stations_name_key`) rejected the insert/update. `name` is the operator-supplied
+     * human label ("Cocina", "Plancha", "Barra"), not a secret, so echoing it is what makes the error
+     * actionable — the same shape `zone.name_taken`'s `name` and `table.label_taken`'s `label` use,
+     * named `name` to match the column `kitchen_stations.name` actually carries. `station.*`, not
+     * `server.*`, for the reason `tenant.not_found`'s note above gives (the prefix names the DOMAIN
+     * CONCEPT — a kitchen station — never the throwing package). Mapped to 409 by the route surface
+     * Task 7 wires the station config verbs into, matching `zone.name_taken`. Never renamed once shipped.
+     */
+    "station.name_taken": { name: string };
+    /**
+     * No such kitchen station for this tenant + venue (KDS-1), OR one that is DEACTIVATED. `createStation`
+     * maps only a NAME collision (above); the by-id verbs — `updateStation`, `deactivateStation`,
+     * `setDefaultStation`, and the routing verbs `setCategoryStation`/`setProductStation` — throw THIS when
+     * the station id names none this venue may reach (absent, another tenant's that RLS hides, or another
+     * VENUE's of the same tenant — the config verbs are `cfg.locationId`-scoped) or names a real but
+     * `active = false` row. All of those fold into the one code, the same fail-closed shape
+     * `zone.not_found`/`status.not_found`/`table.not_found` use — to a caller picking a routing/default
+     * target, "gone", "foreign" and "retired" are the same fact ("there is no live station here to use").
+     * The inactive case is deliberately folded in (not a distinct `station.inactive`): the spec enumerates
+     * only name_taken/not_found/no_default for KDS-1, and a routing target that cannot be used reads the
+     * same whether it is absent or retired — unlike `table.inactive`/`status.inactive`, which exist because
+     * a deactivated row is still addressable by the CRUD editor there.
+     *
+     * `stationId` is echoed because it is a caller-supplied uuid the dashboard/till already holds, not a
+     * secret — an id that matches nothing is unactionable if withheld (the rule `tenant.not_found`'s note
+     * gives). Qualified `stationId` to match the domain-record not_found family (`table.not_found`'s
+     * `tableId`, `zone.not_found`'s `zoneId`, `status.not_found`'s `statusId`). `station.*`, not `server.*`,
+     * for the reason `tenant.not_found`'s note gives. Mapped to 404. Never renamed once shipped.
+     */
+    "station.not_found": { stationId: string };
+    /**
+     * A line was fired to the kitchen but its venue has NO default kitchen station (KDS-1, §2b). Station
+     * resolution is `product.station_id ?? category.station_id ?? the location's default station`; when a
+     * line resolves neither a product- nor category-level route AND the location has no `is_default`
+     * station, there is nowhere to send the food. This is a MISCONFIGURATION the venue must fix, so firing
+     * FAILS LOUD with this code rather than silently dropping the line from the kitchen (§2b: "fail loud,
+     * do not silently drop food"). Declared here in Task 2 with the other `station.*` codes; the sole
+     * thrower is Task 3's fire-time resolver (`fireLines`) — no verb in this task throws it yet.
+     *
+     * `locationId` names the misconfigured venue and is echoed because it is the venue's OWN id, already in
+     * the till's config, not a secret — naming which location has no default is exactly what makes the
+     * error actionable. `station.*` names the DOMAIN CONCEPT (a kitchen station, or here its absence),
+     * never the throwing package (`tenant.not_found`'s note gives the rule). A configuration conflict that
+     * blocks firing → mapped to 409 by the fire route's surface in Task 7. Never renamed once shipped.
+     */
+    "station.no_default": { locationId: string };
+    /**
      * A table-placement field failed validation (FP-2 spatial floor plan) — `setTablePlacement`'s
      * per-field guards: a `posX`/`posY` outside `0..1000`, a `rotation` outside `0..359`, or a
      * `shape` naming no `floor_table_shape` enum member. A missing/inactive table or zone is NOT this
