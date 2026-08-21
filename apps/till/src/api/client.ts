@@ -328,6 +328,25 @@ export interface TabResult {
   orderNumber: number;
 }
 
+/**
+ * One line of an open tab from `GET /api/working-orders/:id/lines` (FP-1, design §3b) — what the
+ * table-order screen renders per line. A LOCAL mirror of the server's `TabLine`
+ * (`apps/server/src/working-order.ts`), deliberately NOT imported — same bundle-decoupling rationale as
+ * every other type in this file. DISTINCT from {@link HeldOrder}'s `lines` (`productId` + `quantity`
+ * only, for a basket rebuild that RE-prices): a tab does NOT re-price, so `unitPriceGross` is the gross
+ * unit price LOCKED at add-time, carried back verbatim — never a catalogue recompute. `servedAt` is the
+ * pre-fiscal served marker (`null` ⇒ "Pendiente de servir", a timestamp ⇒ "Servido"). `productId` only —
+ * the screen resolves names from its own catalogue prop, mirroring `HeldOrder`. `quantity`/
+ * `unitPriceGross` are decimal strings as the server sends them.
+ */
+export interface TabLine {
+  lineNo: number;
+  productId: string;
+  quantity: string;
+  unitPriceGross: string;
+  servedAt: string | null;
+}
+
 export class TillApi {
   readonly #baseUrl: string;
   readonly #fetchImpl: FetchLike;
@@ -551,6 +570,30 @@ export class TillApi {
    */
   async addTabRound(orderId: string, lines: SaleLine[]): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/round`, "POST", { lines });
+  }
+
+  /**
+   * Read one open tab's lines for the table-order screen → `GET /api/working-orders/:orderId/lines`
+   * (FP-1, design §3b). Each line carries its `lineNo`, `productId`, `quantity`, the LOCKED gross unit
+   * price (`unitPriceGross` — a tab does NOT re-price, so this is the add-time lock, never a recompute)
+   * and its `servedAt` marker (null ⇒ still to serve). A non-open/absent tab rejects with
+   * `{ code: "tab.not_open" }`; the screen resolves product names from its own catalogue prop
+   * (`TabLine` carries `productId` only, mirroring {@link retrieveWorkingOrder}).
+   */
+  getTabLines(orderId: string): Promise<TabLine[]> {
+    return this.#request<TabLine[]>(`/api/working-orders/${orderId}/lines`, "GET");
+  }
+
+  /**
+   * Set (or clear) a table's MANUAL service status → `POST /api/tables/:tableId/status` (FP-1, design
+   * §3b). Keyed by TABLE id, not order id — the status is a property of the table, independent of any
+   * open tab. `statusId` null CLEARS the badge (a first-class value the route accepts, sent as an
+   * explicit null). An unknown/malformed status id rejects `{ code: "status.not_found" }`, a
+   * deactivated one `{ code: "status.inactive" }`, a bad table id `{ code: "table.not_found" }`. The
+   * server answers an empty 200; re-read `getTablesState` for the new badge.
+   */
+  async setTableStatus(tableId: string, statusId: string | null): Promise<void> {
+    await this.#request<void>(`/api/tables/${tableId}/status`, "POST", { statusId });
   }
 
   // --- Staff schedule (the till-session-gated request path, `apps/server/src/schedule-api.ts`). The

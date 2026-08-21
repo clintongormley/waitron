@@ -5,6 +5,7 @@ import {
   type MyAbsence,
   type MyShift,
   type MySwap,
+  type TabLine,
   type TableState,
   type TillProduct,
 } from "./client.js";
@@ -893,5 +894,103 @@ describe("TillApi", () => {
     await expect(
       new TillApi("", fetchStub).addTabRound("ord-1", [{ productId: "agua", quantity: "1" }]),
     ).rejects.toMatchObject({ code: "tab.not_open" });
+  });
+
+  it("getTabLines GETs the open tab's lines, decoding the locked price + served state per line", async () => {
+    // Typed `TabLine[]` so the mock is a compile-time proof the client mirror carries every field the
+    // server sends (`lineNo`, `productId`, `quantity`, `unitPriceGross`, `servedAt`). A served line
+    // carries a timestamp, an unserved one `null` — the two floor states the table-order screen renders
+    // ("Servido" vs "Pendiente de servir"). `unitPriceGross` is the LOCKED gross unit, not a re-price.
+    const lines: TabLine[] = [
+      {
+        lineNo: 1,
+        productId: "cafe",
+        quantity: "1.000",
+        unitPriceGross: "1.50",
+        servedAt: "2026-08-06T10:00:00.000Z",
+      },
+      {
+        lineNo: 2,
+        productId: "agua",
+        quantity: "2.000",
+        unitPriceGross: "2.00",
+        servedAt: null,
+      },
+    ];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(lines));
+
+    const r = await new TillApi("", fetchStub).getTabLines("ord-1");
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/ord-1/lines",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual(lines);
+    // The served-state signal survives the round-trip decoded per line.
+    expect(r[0]!.servedAt).not.toBeNull();
+    expect(r[1]!.servedAt).toBeNull();
+  });
+
+  it("getTabLines surfaces { code } when the tab is not open", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ error: { code: "tab.not_open" } }), { status: 409 }),
+      );
+
+    await expect(new TillApi("", fetchStub).getTabLines("ord-1")).rejects.toMatchObject({
+      code: "tab.not_open",
+    });
+  });
+
+  it("setTableStatus POSTs { statusId } to the TABLE's /status route (empty 200 body)", async () => {
+    // The server answers with an EMPTY 200 body (`c.body(null, 200)`), so the client resolves void
+    // without JSON-parsing nothing. Keyed by TABLE id (not order id) — a manual service status is a
+    // property of the table, independent of any open tab.
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(
+      new TillApi("", fetchStub).setTableStatus("tbl-1", "st-1"),
+    ).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/tables/tbl-1/status",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ statusId: "st-1" }),
+      }),
+    );
+  });
+
+  it("setTableStatus POSTs { statusId: null } to CLEAR a table's status", async () => {
+    // `null` is a first-class value the route accepts (`statusId: string | null`) — clearing the badge,
+    // not an absent field — so it must ride the body as an explicit null.
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+
+    await new TillApi("", fetchStub).setTableStatus("tbl-1", null);
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/tables/tbl-1/status",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ statusId: null }),
+      }),
+    );
+  });
+
+  it("setTableStatus surfaces { code } for an unknown status", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ error: { code: "status.not_found" } }), { status: 404 }),
+      );
+
+    await expect(new TillApi("", fetchStub).setTableStatus("tbl-1", "gone")).rejects.toMatchObject({
+      code: "status.not_found",
+    });
   });
 });
