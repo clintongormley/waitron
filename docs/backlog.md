@@ -436,8 +436,8 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
   `record-sale.ts`/`backend.ts`. Full guard sweep green — `inmutabilidad` shows `floor_zones`
   relforcerowsecurity = true, db/server `test:coverage`, the root tree-wide guards, and
   lint/typecheck/format all pass; no pinned list (manifest / `GENERIC_PACKAGES` / `vocabulary-scope`)
-  changed. Deferred follow-ups under *Debt* → floor plan FP-1. **FP-2 is now BUILT (2026-08-21, on
-  `feat/floor-plan-fp2`; the shipped `#NNN` row is added at land):** the **spatial canvas** (T5 — a
+  changed. Deferred follow-ups under *Debt* → floor plan FP-1. **FP-2 is now BUILT + LANDED (#128,
+  2026-08-21):** the **spatial canvas** (T5 — a
   shared `@waitron/ui` `wt-floor-canvas` with positioned tokens, snap/rotate/keyboard-nudge, the FP-1
   occupancy token extracted verbatim, a11y both themes), the till **map/list toggle + unplaced tray +
   on-till "Editar plano"** (T6), and the **dashboard per-zone floor editor** (T7). **Placement UX is
@@ -529,7 +529,7 @@ are greenfield and product-heavy, so they are **specced with the owner and run s
 
 Build order: the **table-service core (TS-1 → TS-5) is specced + planned** (2026-08-17), and **the whole
 floor-plan surface (FP-1 operable live floor + FP-2 spatial canvas/editor) is now specced + planned**
-too (2026-08-17); TS-1/TS-2 landed (#97/#103) so FP-1 was buildable (FP-1 before FP-2), and **both FP slices are now BUILT (FP-1 #127 + FP-2, 2026-08-21) — the floor-plan surface is complete**. **KDS-1** (stations + routing + the
+too (2026-08-17); TS-1/TS-2 landed (#97/#103) so FP-1 was buildable (FP-1 before FP-2), and **both FP slices are now BUILT (FP-1 #127 + FP-2 #128, 2026-08-21) — the floor-plan surface is complete**. **KDS-1** (stations + routing + the
 per-line ticket rework + station display + ready→floor) is **now specced + planned** too (2026-08-17),
 build-blocked on TS-1 + FP-1 and reworking shipped #63. **Bookings-1** (staff reservations + seat-opens-a-tab
 + reserved-on-floor) is **now specced + planned** too (2026-08-17); its core is independent, the seat/floor
