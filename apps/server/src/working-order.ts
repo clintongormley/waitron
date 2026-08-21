@@ -740,6 +740,56 @@ async function assertTabOpen(tx: Transaction, tabId: string): Promise<void> {
   }
 }
 
+/** One line of an OPEN tab, for the table-order screen (FP-1, design §3b). `unitPriceGross` is the gross
+ *  unit price LOCKED at add-time (`working_order_lines.unit_price_gross`), NOT a re-price; `servedAt` is
+ *  the pre-fiscal served marker (`null` ⇒ "Pendiente de servir", a timestamp ⇒ "Servido"). Carries the
+ *  `productId` only — no product name, mirroring `HeldOrder`: the screen resolves names from its own
+ *  catalogue prop. `quantity` is numeric(_,3) text, `unitPriceGross` numeric(_,2) text. */
+export interface TabLine {
+  lineNo: number;
+  productId: string;
+  quantity: string;
+  unitPriceGross: string;
+  servedAt: string | null;
+}
+
+/**
+ * Read one OPEN tab's lines for the table-order screen (FP-1, design §3b), in `line_no` order — each
+ * line's `line_no`, `product_id`, `quantity`, its LOCKED gross unit price (`unit_price_gross`) and its
+ * `served_at` marker. A dedicated read, distinct from `getHeldOrder`/`HeldOrder` (which returns
+ * `product_id` + `quantity` only, for a basket rebuild that RE-prices): a tab does NOT re-price, so this
+ * MUST return the STORED `unit_price_gross` the line locked at add-time (`addTabRound`/`openTab` via
+ * `priceOrderLines`), never a catalogue recompute — a re-price would misreport a locked tab. Names no
+ * product (the screen resolves names from its own catalogue prop), mirroring `HeldOrder`'s productId-only
+ * philosophy.
+ *
+ * Gated by {@link assertTabOpen} (an absent or non-`open` order → `tab.not_open`), the SAME unlocked
+ * status read `moveTab`/`joinTable` use — deliberately NOT `lockOpenTab`: this is a READ, so it takes no
+ * `FOR UPDATE` write lock and needs no `dining_tables` back-pointer check. RLS confines the tenant (the
+ * read runs as `app_user` under `withTenant`); `_cfg` is unused — the read is by tab id, RLS-scoped —
+ * but kept for the uniform `(tx, cfg, …)` tab-verb signature the route calls, underscore-prefixed the way
+ * {@link voidTabLine}/{@link markLineServed} keep it. PRE-FISCAL (design H2, ruling R4): `served_at` is an
+ * operational floor field never read into a filed record; this touches nothing fiscal.
+ */
+export async function readTabLines(
+  tx: Transaction,
+  _cfg: TillConfig,
+  tabId: string,
+): Promise<TabLine[]> {
+  await assertTabOpen(tx, tabId);
+  return tx
+    .select({
+      lineNo: workingOrderLines.lineNo,
+      productId: workingOrderLines.productId,
+      quantity: workingOrderLines.quantity,
+      unitPriceGross: workingOrderLines.unitPriceGross,
+      servedAt: workingOrderLines.servedAt,
+    })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, tabId))
+    .orderBy(workingOrderLines.lineNo);
+}
+
 /**
  * Assert a move/join TARGET table exists, is `active`, and is FREE — the one occupancy predicate the
  * whole table-service feature rests on (design §3), shared by `moveTab`/`joinTable` so the three-way

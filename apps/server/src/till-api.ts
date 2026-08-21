@@ -38,6 +38,7 @@ import {
   openTab,
   parkOrder,
   placeOrder,
+  readTabLines,
   sendToPrep,
   transferLines,
   unmarkLineServed,
@@ -797,6 +798,24 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         await voidTabLine(tx, deps.cfg, id, lineNo);
       });
       return c.body(null, 200);
+    }),
+  );
+
+  // Read ONE open tab's lines for the table-order screen (design §3b, FP-1) — per line: `lineNo`,
+  // `productId`, `quantity`, the LOCKED gross unit price (`unitPriceGross`) and the `servedAt` marker.
+  // SESSION-GUARDED. A READ, so no FOR UPDATE lock (`readTabLines` uses `assertTabOpen`, not
+  // `lockOpenTab`). Malformed :id → `tab.not_open` (a bad id names no open tab), the SAME `requireTabParam`
+  // screen the served routes use; `readTabLines` throws `tab.not_open` for a non-open/absent tab. Returns
+  // `TabLine[]`. A tab does NOT re-price — the STORED locked gross rides back verbatim (see `readTabLines`).
+  app.get("/api/working-orders/:id/lines", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = requireTabParam(c.req.param("id"));
+      const lines = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return readTabLines(tx, deps.cfg, id);
+      });
+      return c.json(lines);
     }),
   );
 

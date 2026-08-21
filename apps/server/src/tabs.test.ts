@@ -30,6 +30,7 @@ import {
   listTablesWithState,
   markLineServed,
   openTab,
+  readTabLines,
   unmarkLineServed,
   voidTabLine,
 } from "./working-order.js";
@@ -378,6 +379,84 @@ describe("markLineServed / unmarkLineServed", () => {
     await expect(asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1))).rejects.toMatchObject({
       code: "tab.not_open",
       params: { tabId },
+    });
+  });
+});
+
+describe("readTabLines", () => {
+  it("reads an open tab's lines in line_no order with locked gross price, quantity and served state", async () => {
+    const { cfg, cafeId, aguaId, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, {
+        tableId,
+        lines: [
+          { productId: cafeId, quantity: "1" },
+          { productId: aguaId, quantity: "2" },
+        ],
+      }),
+    );
+    // Serve line 1 — its served_at becomes a timestamp; line 2 stays NULL (the two floor states the
+    // table-order screen renders "Servido" vs "Pendiente de servir").
+    await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
+
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    expect(lines).toHaveLength(2);
+    // numeric(_,3) quantity, numeric(_,2) gross unit, product id (no name — the screen resolves it).
+    expect(lines[0]).toMatchObject({
+      lineNo: 1,
+      productId: cafeId,
+      quantity: "1.000",
+      unitPriceGross: "1.50",
+    });
+    expect(lines[0]!.servedAt).not.toBeNull();
+    expect(lines[1]).toMatchObject({
+      lineNo: 2,
+      productId: aguaId,
+      quantity: "2.000",
+      unitPriceGross: "2.00",
+      servedAt: null,
+    });
+  });
+
+  it("returns the STORED locked gross price, never a re-price after the catalogue changes", async () => {
+    const { cfg, cafeId, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+    );
+    // Change the catalogue price AFTER the line locked its gross at 1.50 (a tab does NOT re-price —
+    // addTabRound/openTab stamp unit_price_gross at add-time). A read that recomputed from the
+    // catalogue would report 9.99 and misreport the locked tab; readTabLines must return the LOCK.
+    await asApp(cfg, (tx) =>
+      tx.execute(sql`update products set unit_price = '9.99' where id = ${cafeId}`),
+    );
+    const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
+    expect(lines[0]!.unitPriceGross).toBe("1.50");
+  });
+
+  it("returns [] for an open tab with no lines", async () => {
+    const { cfg, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    expect(await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId))).toEqual([]);
+  });
+
+  it("refuses a settled tab and an absent id (tab.not_open — assertTabOpen, an UNLOCKED read)", async () => {
+    const { cfg, cafeId, tableId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTab(tx, cfg, { tableId, lines: [{ productId: cafeId, quantity: "1" }] }),
+    );
+    // Settled → not open (owner write, RLS bypassed — pure setup).
+    await db.execute(
+      sql`update working_orders set status = 'settled', settled_at = now() where id = ${tabId}`,
+    );
+    await expect(asApp(cfg, (tx) => readTabLines(tx, cfg, tabId))).rejects.toMatchObject({
+      code: "tab.not_open",
+      params: { tabId },
+    });
+    // An absent id names nothing.
+    const missing = randomUUID();
+    await expect(asApp(cfg, (tx) => readTabLines(tx, cfg, missing))).rejects.toMatchObject({
+      code: "tab.not_open",
+      params: { tabId: missing },
     });
   });
 });

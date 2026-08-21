@@ -379,6 +379,50 @@ describe("table + tab routes", () => {
     expect(state.find((t) => t.id === id)).toMatchObject({ state: "open-tab", tabLineCount: 1 });
   });
 
+  it("GET /api/working-orders/:id/lines reads an open tab's lines with locked price + served state", async () => {
+    const { id } = (await (
+      await request("/api/tables", { method: "POST", body: JSON.stringify({ label: "9" }) })
+    ).json()) as { id: string };
+    const { tabId } = (await (
+      await request(`/api/tables/${id}/tab`, {
+        method: "POST",
+        body: JSON.stringify({ lines: [{ productId, quantity: "1" }] }),
+      })
+    ).json()) as { tabId: string };
+    // A second round so there are two lines, then serve line 1 (the two floor states the screen renders).
+    await request(`/api/working-orders/${tabId}/round`, {
+      method: "POST",
+      body: JSON.stringify({ lines: [{ productId, quantity: "2" }] }),
+    });
+    await request(`/api/working-orders/${tabId}/lines/1/served`, { method: "POST" });
+
+    const res = await request(`/api/working-orders/${tabId}/lines`);
+    expect(res.status).toBe(200);
+    const lines = (await res.json()) as {
+      lineNo: number;
+      productId: string;
+      quantity: string;
+      unitPriceGross: string;
+      servedAt: string | null;
+    }[];
+    expect(lines).toHaveLength(2);
+    // Seeded product is 1.50; the locked gross unit rides back verbatim, quantity at numeric(_,3).
+    expect(lines[0]).toMatchObject({
+      lineNo: 1,
+      productId,
+      quantity: "1.000",
+      unitPriceGross: "1.50",
+    });
+    expect(lines[0]!.servedAt).not.toBeNull();
+    expect(lines[1]).toMatchObject({ lineNo: 2, quantity: "2.000", servedAt: null });
+  });
+
+  it("a malformed :id on the lines read route → 409 tab.not_open (not a 500)", async () => {
+    const res = await request("/api/working-orders/not-a-uuid/lines");
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "tab.not_open" } });
+  });
+
   it("a malformed :id on the round route → 409 tab.not_open (not a 500)", async () => {
     const res = await request("/api/working-orders/not-a-uuid/round", {
       method: "POST",
@@ -464,6 +508,7 @@ describe("table + tab routes", () => {
         headers: json,
         body: JSON.stringify({ lines: [] }),
       }),
+      noAuth.request(`/api/working-orders/${id}/lines`),
       noAuth.request(`/api/working-orders/${id}/lines/1`, { method: "DELETE" }),
     ];
     for (const res of await Promise.all(cases)) {
