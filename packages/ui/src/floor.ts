@@ -69,12 +69,12 @@ export interface Placement {
   zoneId: string | null;
 }
 
-/** The `placement-change` event detail: a {@link Placement} tagged with the table it belongs to. */
+/** The `wt-placement-change` event detail: a {@link Placement} tagged with the table it belongs to. */
 export interface PlacementChange extends Placement {
   tableId: string;
 }
 
-/** The `placement-clear` event detail: the table whose placement is being removed. */
+/** The `wt-placement-clear` event detail: the table whose placement is being removed. */
 export interface PlacementClear {
   tableId: string;
 }
@@ -97,9 +97,11 @@ export function snapToGrid(value: number, step: number = GRID_STEP): number {
   return Math.round(value / step) * step;
 }
 
-/** Snaps a rotation to the nearest {@link ROTATION_STEP} detent, wrapped into `[0, 360)`. */
+/** Snaps a rotation to the nearest {@link ROTATION_STEP} detent, wrapped into `[0, 360)`. The double
+ *  modulo normalizes a NEGATIVE input too — a bare `% 360` leaves `-8` at `-15`, breaking the contract —
+ *  so any degree, positive or negative, resolves into `[0, 360)`. */
 export function snapRotation(deg: number): number {
-  return (Math.round(deg / ROTATION_STEP) * ROTATION_STEP) % 360;
+  return (((Math.round(deg / ROTATION_STEP) * ROTATION_STEP) % 360) + 360) % 360;
 }
 
 /** Pins a permille coordinate into the canvas's `0..1000` range. */
@@ -156,15 +158,19 @@ export function buildZoneTabs(
 }
 
 /**
- * The active tab's key: an explicit `requested` pick wins (a zone id, or `null` for the no-zone tab);
- * `undefined` (nothing picked yet) falls back to the FIRST tab's key, or `undefined` when there are no
- * tabs at all. Kept distinct from a zone id so the default tracks the current tab order.
+ * The active tab's key: an explicit `requested` pick wins WHEN it still names a tab in `tabs` (a zone
+ * id, or `null` for the no-zone tab); `undefined` (nothing picked yet) — and a stale `requested` naming
+ * a tab no longer present (its zone was deactivated/removed, or the no-zone tab is gone) — both fall
+ * back to the FIRST tab's key, or `undefined` when there are no tabs at all. Without the staleness
+ * check a dropped selection would filter every table against a dead key, blanking the floor. Kept
+ * distinct from a zone id so the default tracks the current tab order.
  */
 export function resolveActiveTabKey(
   requested: string | null | undefined,
   tabs: readonly ZoneTab[],
 ): string | null | undefined {
-  return requested === undefined ? tabs[0]?.key : requested;
+  if (requested !== undefined && tabs.some((tab) => tab.key === requested)) return requested;
+  return tabs[0]?.key;
 }
 
 /** A table's spatial placement as either screen holds it — the input half of {@link toFloorTable}. */

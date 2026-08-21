@@ -65,6 +65,16 @@ test("snapRotation snaps to the nearest 15 degrees and wraps at 360", () => {
   expect(snapRotation(375)).toBe(15);
 });
 
+test("snapRotation normalizes a negative rotation into the [0, 360) contract", () => {
+  // The exported helper's documented contract is [0, 360) for ANY input. The rotate control only ever
+  // ADDS +STEP so a negative never reaches it through the UI today, but the helper is exported and its
+  // contract must hold: -8 snaps to the -15 detent, which must wrap UP to 345, never stay negative.
+  expect(snapRotation(-8)).toBe(345);
+  expect(snapRotation(-7)).toBe(0);
+  expect(snapRotation(-15)).toBe(345);
+  expect(snapRotation(-360)).toBe(0);
+});
+
 test("clampPermille pins a coordinate into the 0..1000 canvas range", () => {
   expect(clampPermille(-40)).toBe(0);
   expect(clampPermille(500)).toBe(500);
@@ -155,6 +165,22 @@ test("resolveActiveTabKey honours an explicit request, including the null no-zon
   ];
   expect(resolveActiveTabKey("z1", tabs)).toBe("z1");
   expect(resolveActiveTabKey(null, tabs)).toBeNull();
+});
+
+test("resolveActiveTabKey falls back to the first tab when the requested key is no longer present", () => {
+  // A zone the operator had selected can be deactivated/removed, leaving `requested` naming a tab that
+  // is gone; without this fallback both screens filter every table against a dead key → an empty floor.
+  const tabs = [
+    { key: "z1", name: "A" },
+    { key: "z2", name: "B" },
+  ];
+  expect(resolveActiveTabKey("z9", tabs)).toBe("z1");
+});
+
+test("resolveActiveTabKey falls back to the first tab when a null request has no no-zone tab", () => {
+  // `null` (the no-zone tab) is equally stale once every table has a zone and the no-zone tab is gone.
+  const tabs = [{ key: "z1", name: "A" }];
+  expect(resolveActiveTabKey(null, tabs)).toBe("z1");
 });
 
 // toFloorTable: the placement half maps verbatim (null coords default to 0); the occupancy half is
