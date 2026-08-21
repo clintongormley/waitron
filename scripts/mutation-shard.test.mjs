@@ -144,9 +144,14 @@ describe("the CLI rejects bad input loudly", () => {
   });
 
   it("fails when a shard would select no files (more shards than slices)", () => {
-    // 43 mutate slices (40 whole files + sales split into 3) into 44 shards → the last is empty;
-    // must not print an empty --mutate list that would make stryker a confusing no-op.
-    const r = run("44", "44");
+    // Derive the shard count from the LIVE slice count (shard 1 of 1 emits every slice) rather than
+    // hard-coding it — `@waitron/db` grows, and a fixed number silently stops exceeding the slice
+    // count once it does (FP-1's `floor_zones` schema tripped the former literal `44`). One more
+    // shard than there are slices guarantees the HIGHEST-index shard is empty (greedy packs slices
+    // into the lowest-index shards), so requesting it must fail loudly, never print an empty
+    // --mutate list that would make stryker a confusing no-op.
+    const n = String(shardFiles(1, 1).length + 1);
+    const r = run(n, n);
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/no files/i);
     expect(r.stdout.trim()).toBe("");
