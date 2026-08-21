@@ -935,6 +935,11 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (body.zoneId !== undefined) {
         if (typeof body.zoneId !== "string")
           throw new AppError("management.request_invalid", { field: "zoneId" });
+        // A string-typed but MALFORMED zoneId passes the `typeof` screen above, then un-screened reaches
+        // the `zone_id` uuid column → `22P02` → opaque 500. Screen it as a UUID and give it the SAME
+        // `zone.not_found` a well-formed-but-missing zoneId gets (the composite FK's 23503, mapped in the
+        // verb) — the till surface's create/patch routes screen it identically.
+        if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
         zoneId = body.zoneId;
       }
       const capacity = parseCapacity(body.capacity);
@@ -983,6 +988,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (body.zoneId !== undefined) {
         if (typeof body.zoneId !== "string")
           throw new AppError("management.request_invalid", { field: "zoneId" });
+        // Screen a string-typed but MALFORMED zoneId as a UUID (same as the POST route above): un-screened
+        // it reaches the `zone_id` uuid column → `22P02` → opaque 500, so it gets the SAME `zone.not_found`
+        // a well-formed-but-missing zoneId does.
+        if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
         patch.zoneId = body.zoneId;
       }
       if (body.capacity !== undefined) {

@@ -223,6 +223,20 @@ describe("table + tab routes", () => {
     expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
   });
 
+  it("POST /api/tables with a MALFORMED zoneId → 404 zone.not_found (isUuid guard, not an opaque 22P02 500)", async () => {
+    // A non-UUID `zoneId` string is screened to the domain `zone.not_found` (→ 404) BEFORE any DB work —
+    // the SAME code a well-formed-but-missing zoneId gets (the test above), so a bad zone reads the same
+    // whether it is malformed or merely absent. Without the `isUuid` screen the string reaches the
+    // `zone_id` uuid column and PostgreSQL raises `22P02 (invalid_text_representation)`, a non-AppError the
+    // boundary turns into an opaque `server.internal` 500 — the prove-by-deletion (drop the screen → 500).
+    const res = await request("/api/tables", {
+      method: "POST",
+      body: JSON.stringify({ label: "bad-zone", zoneId: "not-a-uuid" }),
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
+  });
+
   it("POST /api/tables with a duplicate label → 409 table.label_taken", async () => {
     await request("/api/tables", { method: "POST", body: JSON.stringify({ label: "7" }) });
     const dup = await request("/api/tables", {
@@ -271,6 +285,26 @@ describe("table + tab routes", () => {
     });
     expect(res.status).toBe(404);
     expect(await res.json()).toMatchObject({ error: { code: "table.not_found" } });
+  });
+
+  it("PATCH /api/tables/:id with a MALFORMED zoneId → 404 zone.not_found (isUuid guard, not an opaque 22P02 500)", async () => {
+    // The twin of the malformed-:id screen above, one field over: a present-but-non-UUID `zoneId` in the
+    // body is screened to `zone.not_found` (→ 404) BEFORE `updateTable`, the SAME code a well-formed-but-
+    // missing zoneId gets. Without the screen the string reaches the `zone_id` uuid column → `22P02` →
+    // opaque `server.internal` 500 (the prove-by-deletion). A real table id is used so the id screen passes
+    // and the zoneId screen is what fires.
+    const { id } = (await (
+      await request("/api/tables", {
+        method: "POST",
+        body: JSON.stringify({ label: "bad-zone-patch" }),
+      })
+    ).json()) as { id: string };
+    const res = await request(`/api/tables/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ zoneId: "not-a-uuid" }),
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
   });
 
   it("PATCH /api/tables/:id edits a real table (label/zoneId/capacity) and returns an empty 200", async () => {

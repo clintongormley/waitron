@@ -491,6 +491,20 @@ describe("/management-api/tables", () => {
     expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
   });
 
+  it("POST with a MALFORMED zoneId → 404 zone.not_found (isUuid guard, not an opaque 22P02 500)", async () => {
+    // A present, string-typed but non-UUID `zoneId` passes the `typeof` screen (that catches only the
+    // WRONG-TYPE case, e.g. `123`), so without the `isUuid` screen it reaches the `zone_id` uuid column and
+    // PostgreSQL raises `22P02` → an opaque `server.internal` 500. It is screened to the SAME
+    // `zone.not_found` a well-formed-but-missing zoneId gets (test above) — the prove-by-deletion.
+    const res = await req(
+      "/tables",
+      { method: "POST", body: JSON.stringify({ label: unique("z"), zoneId: "not-a-uuid" }) },
+      managerCookie,
+    );
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
+  });
+
   it("POST body screens: null → field label, array → field body, non-string label/zoneId, bad capacity", async () => {
     // A `null` body coerces to `{}` (`?? {}`), then the label screen fires (field "body" is only for a
     // non-object truthy body such as an array) — the same null-body discipline the sibling routes follow.
@@ -594,6 +608,26 @@ describe("/management-api/tables", () => {
     const res = await req(
       `/tables/${id}`,
       { method: "PATCH", body: JSON.stringify({ zoneId: "00000000-0000-4000-8000-000000000000" }) },
+      managerCookie,
+    );
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
+  });
+
+  it("PATCH with a MALFORMED zoneId → 404 zone.not_found (isUuid guard, not an opaque 22P02 500)", async () => {
+    // The twin of the POST screen above: a present, string-typed but non-UUID `zoneId` in the patch is
+    // screened to `zone.not_found` (→ 404) BEFORE `updateTable`, the SAME code a well-formed-but-missing
+    // zoneId gets. Without the screen the string reaches the `zone_id` uuid column → `22P02` → opaque 500.
+    const { id } = (await (
+      await req(
+        "/tables",
+        { method: "POST", body: JSON.stringify({ label: unique("t") }) },
+        managerCookie,
+      )
+    ).json()) as { id: string };
+    const res = await req(
+      `/tables/${id}`,
+      { method: "PATCH", body: JSON.stringify({ zoneId: "not-a-uuid" }) },
       managerCookie,
     );
     expect(res.status).toBe(404);

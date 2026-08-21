@@ -661,6 +661,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const body = await c.req.json<{ label: string; zoneId?: string; capacity?: number }>();
       requireCapacity(body.capacity);
+      // Screen a present `zoneId` as a UUID BEFORE the DB touch — the twin of the `:id` screen on the
+      // sibling routes, one field over. A well-formed-but-missing zoneId already surfaces
+      // `zone.not_found` (the composite FK's 23503, `isZoneFkViolation`); a MALFORMED one un-screened
+      // reaches the `zone_id` uuid column and raises `22P02` → an opaque `server.internal` 500, so it
+      // gets the SAME domain `zone.not_found`. An ABSENT zoneId (`undefined`) is a legitimate unassigned
+      // table and is left alone.
+      if (body.zoneId !== undefined && !isUuid(body.zoneId))
+        throw new AppError("zone.not_found", { zoneId: body.zoneId });
       const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return createTable(tx, deps.cfg, body);
@@ -735,6 +743,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
       const body = await c.req.json<{ label?: string; zoneId?: string; capacity?: number }>();
       requireCapacity(body.capacity);
+      // Screen a present `zoneId` as a UUID BEFORE the DB touch — same as the create route above and the
+      // `:id` screen on this route: a malformed zoneId un-screened reaches the `zone_id` uuid column →
+      // `22P02` → opaque 500, so it gets the SAME `zone.not_found` a well-formed-but-missing one does. An
+      // ABSENT zoneId is left alone (an unassigned table, legitimate).
+      if (body.zoneId !== undefined && !isUuid(body.zoneId))
+        throw new AppError("zone.not_found", { zoneId: body.zoneId });
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await updateTable(tx, deps.cfg, id, body);
