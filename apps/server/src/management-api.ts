@@ -287,8 +287,9 @@ function parseDisplayOrder(value: unknown): number | undefined {
  * PATCH leaves it untouched); a PRESENT value must be a non-negative integer NUMBER in int4 range, else
  * it is refused as `management.request_invalid` naming the FIELD (never the value). The `typeof` screen
  * comes first (matching `parseDisplayOrder`), so a non-number such as `null` is REJECTED rather than
- * coerced; the int4 upper bound closes the same opaque-500-on-overflow class (`plazas` is a Postgres
- * `integer`). The same rule `till-api.ts`'s `requireCapacity` applies to the operator table routes.
+ * coerced; the int4 upper bound closes the same opaque-500-on-overflow class (`capacity` is a Postgres
+ * `integer`; "Plazas" is only its Spanish UI label). The same rule `till-api.ts`'s `requireCapacity`
+ * applies to the operator table routes.
  */
 function parseCapacity(value: unknown): number | undefined {
   if (value === undefined) return undefined;

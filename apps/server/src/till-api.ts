@@ -140,8 +140,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // Floor-plan zone (FP-1). The table create/patch routes now accept a `zoneId`; one naming no
   // `floor_zones` row (or another tenant's, RLS-hidden) surfaces `zone.not_found` — a 404, the same
   // shape `table.not_found`/`status.not_found` use for an absent referenced row. (`zone.name_taken`
-  // is thrown only by the zone CRUD verbs, which have no route surface yet, so it is not mapped here
-  // until the task that wires those routes — an unmapped code would default to 400, not 409.)
+  // is thrown only by the zone CRUD verbs, which the MANAGEMENT API exposes and maps there; the till
+  // surface only LISTS zones (`GET /api/zones`) and never creates/renames one, so it never throws it.)
   "zone.not_found": 404,
   "tab.already_open": 409,
   "tab.not_open": 409,
