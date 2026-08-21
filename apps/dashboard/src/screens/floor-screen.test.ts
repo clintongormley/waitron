@@ -378,7 +378,7 @@ describe("floor-screen", () => {
  * The dashboard is manager-only (a management session gates the whole screen), so there is NO
  * operator-role gate — the editor is always available (unlike the till, which gates on `canEdit`). A
  * placed table (posX ≠ null) draws on the canvas; an unplaced one sits in a tray and is tap-to-placed.
- * `placement-change` persists via `setTablePlacement` then reloads; `placement-clear` via
+ * `wt-placement-change` persists via `setTablePlacement` then reloads; `wt-placement-clear` via
  * `clearPlacement`; a `placement.invalid` rejection surfaces the localised `role="alert"` banner (never
  * the raw code). The FP-1 Zonas/Mesas config panels are ADDITIVE-unchanged: they stay the default tab.
  */
@@ -456,7 +456,7 @@ describe("floor-screen — Plano editor (FP-2)", () => {
     await flush(el);
     await openPlano(el);
     canvasOf(el).dispatchEvent(
-      new CustomEvent("placement-change", {
+      new CustomEvent("wt-placement-change", {
         detail: { tableId: "t1", posX: 200, posY: 300, shape: "rect", rotation: 90, zoneId: "z1" },
         bubbles: true,
         composed: true,
@@ -482,7 +482,7 @@ describe("floor-screen — Plano editor (FP-2)", () => {
     await flush(el);
     await openPlano(el);
     canvasOf(el).dispatchEvent(
-      new CustomEvent("placement-clear", {
+      new CustomEvent("wt-placement-clear", {
         detail: { tableId: "t1" },
         bubbles: true,
         composed: true,
@@ -508,7 +508,7 @@ describe("floor-screen — Plano editor (FP-2)", () => {
     await flush(el);
     await openPlano(el);
     canvasOf(el).dispatchEvent(
-      new CustomEvent("placement-clear", {
+      new CustomEvent("wt-placement-clear", {
         detail: { tableId: "t1" },
         bubbles: true,
         composed: true,
@@ -551,7 +551,7 @@ describe("floor-screen — Plano editor (FP-2)", () => {
     await flush(el);
     await openPlano(el);
     canvasOf(el).dispatchEvent(
-      new CustomEvent("placement-change", {
+      new CustomEvent("wt-placement-change", {
         detail: { tableId: "t1", posX: 5000, posY: 0, shape: "round", rotation: 0, zoneId: "z1" },
         bubbles: true,
         composed: true,
@@ -574,7 +574,7 @@ describe("floor-screen — Plano editor (FP-2)", () => {
     await flush(el);
     await openPlano(el);
     canvasOf(el).dispatchEvent(
-      new CustomEvent("placement-clear", {
+      new CustomEvent("wt-placement-clear", {
         detail: { tableId: "t1" },
         bubbles: true,
         composed: true,

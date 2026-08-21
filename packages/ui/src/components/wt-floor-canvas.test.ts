@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "vitest";
-import { cleanup, mount, mountInShadowRoot } from "../test-helpers.js";
+import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import type { FloorTable, PlacementChange, PlacementClear } from "../floor.js";
 import "./wt-floor-canvas.js";
 
@@ -96,7 +96,7 @@ test("tapping a table asks the app to open it (composed, bubbling)", async () =>
   await el.updateComplete;
   let received: string | undefined;
   document.addEventListener(
-    "open-table",
+    "wt-open-table",
     (e) => {
       received = (e as CustomEvent<{ tableId: string }>).detail.tableId;
     },
@@ -135,7 +135,7 @@ test("without grid snap a drag reports the raw dropped position", async () => {
 test("a tap in edit mode selects the table instead of opening it", async () => {
   const el = await mountCanvas([oneTable("t1")], { editable: true });
   let opened = false;
-  el.addEventListener("open-table", () => {
+  el.addEventListener("wt-open-table", () => {
     opened = true;
   });
   tokenEl(el, "t1").click();
@@ -181,7 +181,7 @@ test("deactivating clears the table's placement", async () => {
   tokenEl(el, "t1").click();
   await el.updateComplete;
   let cleared: PlacementClear | undefined;
-  el.addEventListener("placement-clear", (e) => {
+  el.addEventListener("wt-placement-clear", (e) => {
     cleared = (e as CustomEvent<PlacementClear>).detail;
   });
   el.shadowRoot!.querySelector<HTMLElement>(".deactivate")!.click();
@@ -240,7 +240,7 @@ test("without grid snap an arrow key nudges by a fine step", async () => {
 test("a non-arrow key does not move the table", async () => {
   const el = await mountCanvas([oneTable("t1")], { editable: true });
   let moved = false;
-  el.addEventListener("placement-change", () => {
+  el.addEventListener("wt-placement-change", () => {
     moved = true;
   });
   tokenEl(el, "t1").dispatchEvent(
@@ -252,7 +252,7 @@ test("a non-arrow key does not move the table", async () => {
 test("view mode ignores keyboard nudges and pointer drags", async () => {
   const el = await mountCanvas([oneTable("t1")]);
   let changed = false;
-  el.addEventListener("placement-change", () => {
+  el.addEventListener("wt-placement-change", () => {
     changed = true;
   });
   const tok = tokenEl(el, "t1");
@@ -283,7 +283,7 @@ test("view mode ignores keyboard nudges and pointer drags", async () => {
 test("a pointer tap without movement does not emit a placement change", async () => {
   const el = await mountCanvas([oneTable("t1")], { editable: true });
   let changed = false;
-  el.addEventListener("placement-change", () => {
+  el.addEventListener("wt-placement-change", () => {
     changed = true;
   });
   const tok = tokenEl(el, "t1");
@@ -358,7 +358,7 @@ test("a stray second pointer does not move the dragging table", async () => {
   const r = tok.getBoundingClientRect();
   const canvas = el.shadowRoot!.querySelector<HTMLElement>(".canvas")!.getBoundingClientRect();
   let changed = false;
-  el.addEventListener("placement-change", () => {
+  el.addEventListener("wt-placement-change", () => {
     changed = true;
   });
   // Pointer 1 owns the gesture; a wandering pointer 2 must be ignored entirely.
@@ -415,13 +415,117 @@ test("an arrow-key nudge at the edge stays clamped in range", async () => {
   expect(up.posY).toBe(0);
 });
 
+test("a second pointerdown mid-drag is ignored, so the first drag still commits", async () => {
+  // Two tables: pointer 1 owns a drag on t1; a stray pointer 2 pressing t2 mid-gesture must NOT seize
+  // `#drag` — otherwise pointer 1's pointerup no longer matches the owner and its drop is lost entirely.
+  const el = await mountCanvas(
+    [oneTable("t1", { posX: 500, posY: 500 }), oneTable("t2", { posX: 200, posY: 200 })],
+    { editable: true, gridSnap: true },
+  );
+  const changes: PlacementChange[] = [];
+  el.addEventListener("wt-placement-change", (e) =>
+    changes.push((e as CustomEvent<PlacementChange>).detail),
+  );
+  const canvas = el.shadowRoot!.querySelector<HTMLElement>(".canvas")!.getBoundingClientRect();
+  const t1 = tokenEl(el, "t1").getBoundingClientRect();
+  const t2 = tokenEl(el, "t2").getBoundingClientRect();
+  tokenEl(el, "t1").dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      pointerId: 1,
+      clientX: t1.left + t1.width / 2,
+      clientY: t1.top + t1.height / 2,
+    }),
+  );
+  // Pointer 2 tries to begin a second drag while the first is live — it must be ignored.
+  tokenEl(el, "t2").dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      pointerId: 2,
+      clientX: t2.left + t2.width / 2,
+      clientY: t2.top + t2.height / 2,
+    }),
+  );
+  window.dispatchEvent(
+    new PointerEvent("pointermove", {
+      bubbles: true,
+      pointerId: 1,
+      clientX: canvas.left + canvas.width * 0.6,
+      clientY: canvas.top + canvas.height * 0.6,
+    }),
+  );
+  window.dispatchEvent(
+    new PointerEvent("pointerup", {
+      bubbles: true,
+      pointerId: 1,
+      clientX: canvas.left + canvas.width * 0.6,
+      clientY: canvas.top + canvas.height * 0.6,
+    }),
+  );
+  // Exactly one commit, and it is pointer 1's table — pointer 2 started nothing.
+  expect(changes).toHaveLength(1);
+  expect(changes[0]!.tableId).toBe("t1");
+});
+
+test("a pointercancel aborts the drag without committing a placement", async () => {
+  const el = await mountCanvas([oneTable("t1", { posX: 500, posY: 500 })], {
+    editable: true,
+    gridSnap: true,
+  });
+  let changed = false;
+  el.addEventListener("wt-placement-change", () => {
+    changed = true;
+  });
+  const tok = tokenEl(el, "t1");
+  const r = tok.getBoundingClientRect();
+  const canvas = el.shadowRoot!.querySelector<HTMLElement>(".canvas")!.getBoundingClientRect();
+  tok.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      pointerId: 1,
+      clientX: r.left + r.width / 2,
+      clientY: r.top + r.height / 2,
+    }),
+  );
+  window.dispatchEvent(
+    new PointerEvent("pointermove", {
+      bubbles: true,
+      pointerId: 1,
+      clientX: canvas.left + canvas.width * 0.9,
+      clientY: canvas.top + canvas.height * 0.9,
+    }),
+  );
+  // The OS cancels the gesture: no placement is committed…
+  window.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, pointerId: 1 }));
+  expect(changed).toBe(false);
+  // …and the gesture is fully torn down, so a late pointerup cannot commit a stale drop.
+  window.dispatchEvent(
+    new PointerEvent("pointerup", {
+      bubbles: true,
+      pointerId: 1,
+      clientX: canvas.left + canvas.width * 0.9,
+      clientY: canvas.top + canvas.height * 0.9,
+    }),
+  );
+  expect(changed).toBe(false);
+});
+
+test("the canvas chrome follows a --wt-* token override on the host", async () => {
+  // The design-system contract for a new primitive: a host token override reaches the shadow chrome.
+  // The `.canvas` border is `1px solid var(--wt-color-border)`, so overriding that token repaints it.
+  const el = await mountCanvas([oneTable("t1")]);
+  host.style.setProperty("--wt-color-border", "rgb(9, 8, 7)");
+  const canvas = el.shadowRoot!.querySelector<HTMLElement>(".canvas")!;
+  expect(getComputedStyle(canvas).borderColor).toBe("rgb(9, 8, 7)");
+});
+
 // --- helpers ---
 
 /** Runs `act`, then resolves with the next placement-change detail it triggers. */
 function withPlacementChange(el: Canvas, act: () => void): Promise<PlacementChange> {
   return new Promise<PlacementChange>((resolve) => {
     el.addEventListener(
-      "placement-change",
+      "wt-placement-change",
       (e) => resolve((e as CustomEvent<PlacementChange>).detail),
       { once: true },
     );

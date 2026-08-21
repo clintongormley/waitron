@@ -67,7 +67,7 @@ interface DragState {
 
 /** The three per-table event handlers a token binds. Memoised (see {@link WtFloorCanvas.#handlersOf}). */
 interface TableHandlers {
-  tap: () => void;
+  tap: (e: Event) => void;
   down: (e: PointerEvent) => void;
   key: (e: KeyboardEvent) => void;
 }
@@ -76,12 +76,13 @@ interface TableHandlers {
  * The shared spatial floor plan (FP-2). In VIEW mode it lays every placed table out on a fixed-aspect
  * (3:2) canvas at its `posX`/`posY` permille coordinates, each rendered with the shared
  * `<wt-table-token>` so the map and the till's list card can never drift; tapping a table asks the app
- * to open its tab (`open-table`). In EDIT mode (`.editable`) a table can be dragged (snapping to a 50‰
- * grid when `.gridSnap`), reshaped from a palette, rotated in 15° detents, re-homed to another zone
+ * to open its tab (`wt-open-table`). In EDIT mode (`.editable`) a table can be dragged (snapping to a
+ * 50‰ grid when `.gridSnap`), reshaped from a palette, rotated in 15° detents, re-homed to another zone
  * by id (the inspector emits the target `zoneId`; a name-based picker is a consuming app's job — no
- * `.zones` prop is supplied yet), or cleared from the plan; every gesture emits `placement-change`
- * (or `placement-clear`). Tables stay
- * keyboard-reachable — each is a real `<button>`, and the arrow keys nudge the focused one.
+ * `.zones` prop is supplied yet), or cleared from the plan; every gesture emits `wt-placement-change`
+ * (or `wt-placement-clear`). The events carry the `wt-` prefix the house convention uses (`wt-dialog`
+ * emits `wt-close`), so a consumer never sees a bare `placement-change` from the shadow boundary.
+ * Tables stay keyboard-reachable — each is a real `<button>`, and the arrow keys nudge the focused one.
  *
  * The component is CONTROLLED: it never mutates `.tables`, it only reports the intent. The parent owns
  * the data and re-feeds `.tables` after persisting a change.
@@ -286,7 +287,7 @@ export class WtFloorCanvas extends LitElement {
       this.#tableHandlers.clear();
       for (const table of this.tables) {
         this.#tableHandlers.set(table.id, {
-          tap: () => this.#onTap(table),
+          tap: (e: Event) => this.#onTap(e, table),
           down: (e: PointerEvent) => this.#onPointerDown(e, table),
           key: (e: KeyboardEvent) => this.#onKeyDown(e, table),
         });
@@ -381,14 +382,17 @@ export class WtFloorCanvas extends LitElement {
 
   // --- interaction ---
 
-  /** A plain tap: open the table (view) or select it for the inspector (edit). */
-  #onTap(t: FloorTable): void {
+  /** A plain tap: open the table (view) or select it for the inspector (edit). Stops the NATIVE click
+   *  before re-emitting so a consumer above the shadow boundary sees only the intentional
+   *  `wt-open-table`, never the raw composed click alongside it. */
+  #onTap(e: Event, t: FloorTable): void {
+    e.stopPropagation();
     if (this.editable) {
       this.selectedId = t.id;
       return;
     }
     this.dispatchEvent(
-      new CustomEvent("open-table", {
+      new CustomEvent("wt-open-table", {
         detail: { tableId: t.id },
         bubbles: true,
         composed: true,
@@ -398,6 +402,9 @@ export class WtFloorCanvas extends LitElement {
 
   #onPointerDown(e: PointerEvent, t: FloorTable): void {
     if (!this.editable) return;
+    // Ignore a second pointerdown while a drag is already live: replacing `#drag`'s owner would strand
+    // the first pointer's pointerup (it no longer matches the owner), leaving the gesture half-torn-down.
+    if (this.#drag !== null) return;
     e.preventDefault();
     this.#drag = {
       table: t,
@@ -408,6 +415,7 @@ export class WtFloorCanvas extends LitElement {
     };
     window.addEventListener("pointermove", this.#onPointerMove);
     window.addEventListener("pointerup", this.#onPointerUp);
+    window.addEventListener("pointercancel", this.#onPointerCancel);
   }
 
   readonly #onPointerMove = (e: PointerEvent): void => {
@@ -432,11 +440,19 @@ export class WtFloorCanvas extends LitElement {
     this.#emitPlacement({ ...this.#placementOf(drag.table), posX, posY });
   };
 
+  /** A cancelled gesture (touch/pen interrupted by the OS) leaves no drop to commit: run the SAME
+   *  cleanup as pointerup but emit nothing, so `#drag`/`draft` never linger stale after the cancel. */
+  readonly #onPointerCancel = (e: PointerEvent): void => {
+    if (this.#drag !== null && e.pointerId !== this.#drag.pointerId) return;
+    this.#endDrag();
+  };
+
   #endDrag(): void {
     this.#drag = null;
     this.draft = null;
     window.removeEventListener("pointermove", this.#onPointerMove);
     window.removeEventListener("pointerup", this.#onPointerUp);
+    window.removeEventListener("pointercancel", this.#onPointerCancel);
   }
 
   /** Maps a pointer position to permille coordinates via the drag's start offset. */
@@ -490,7 +506,7 @@ export class WtFloorCanvas extends LitElement {
   #onDeactivate(t: FloorTable): void {
     const detail: PlacementClear = { tableId: t.id };
     this.dispatchEvent(
-      new CustomEvent("placement-clear", { detail, bubbles: true, composed: true }),
+      new CustomEvent("wt-placement-clear", { detail, bubbles: true, composed: true }),
     );
   }
 
@@ -508,7 +524,7 @@ export class WtFloorCanvas extends LitElement {
 
   #emitPlacement(detail: PlacementChange): void {
     this.dispatchEvent(
-      new CustomEvent("placement-change", { detail, bubbles: true, composed: true }),
+      new CustomEvent("wt-placement-change", { detail, bubbles: true, composed: true }),
     );
   }
 }

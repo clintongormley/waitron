@@ -406,10 +406,10 @@ describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () =>
     expect(refreshed).toBe(true);
   });
 
-  it("re-emits a canvas open-table with hasOpenTab resolved from the read-model", async () => {
-    // The shared canvas emits `open-table { tableId }` only; the screen must resolve `hasOpenTab` from
-    // the read-model so the app resumes an EXISTING tab rather than minting a second one on an
-    // occupied table.
+  it("re-emits a canvas wt-open-table as open-table with hasOpenTab resolved from the read-model", async () => {
+    // The shared canvas emits `wt-open-table { tableId }` only; the screen must resolve `hasOpenTab`
+    // from the read-model and re-emit the app-facing `open-table` so the app resumes an EXISTING tab
+    // rather than minting a second one on an occupied table.
     const el = await mountFloor({
       tables: [
         placed("t1", {
@@ -423,7 +423,7 @@ describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () =>
     });
     const seen = captureOpenTable(el);
     el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
-      new CustomEvent("open-table", {
+      new CustomEvent("wt-open-table", {
         detail: { tableId: "t1" },
         bubbles: true,
         composed: true,
@@ -454,7 +454,7 @@ describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () =>
     const api = fakeTillApi();
     const el = await mountFloor({ role: "manager", api, editing: true, tables: [placed("t1")] });
     el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
-      new CustomEvent("placement-change", {
+      new CustomEvent("wt-placement-change", {
         detail: { tableId: "t1", posX: 100, posY: 100, shape: "round", rotation: 0, zoneId: "z1" },
         bubbles: true,
         composed: true,
@@ -470,7 +470,7 @@ describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () =>
     const api = fakeTillApi();
     const el = await mountFloor({ role: "manager", api, editing: true, tables: [placed("t1")] });
     el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
-      new CustomEvent("placement-clear", {
+      new CustomEvent("wt-placement-clear", {
         detail: { tableId: "t1" },
         bubbles: true,
         composed: true,
@@ -485,7 +485,7 @@ describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () =>
     let refreshed = false;
     el.addEventListener("floor-refresh", () => (refreshed = true));
     el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
-      new CustomEvent("placement-change", {
+      new CustomEvent("wt-placement-change", {
         detail: { tableId: "t1", posX: 100, posY: 100, shape: "round", rotation: 0, zoneId: "z1" },
         bubbles: true,
         composed: true,
@@ -506,7 +506,7 @@ describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () =>
     let refreshed = false;
     el.addEventListener("floor-refresh", () => (refreshed = true));
     el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
-      new CustomEvent("placement-change", {
+      new CustomEvent("wt-placement-change", {
         detail: { tableId: "t1", posX: 100, posY: 100, shape: "round", rotation: 0, zoneId: "z1" },
         bubbles: true,
         composed: true,
@@ -524,7 +524,7 @@ describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () =>
     let refreshed = false;
     el.addEventListener("floor-refresh", () => (refreshed = true));
     el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
-      new CustomEvent("placement-clear", {
+      new CustomEvent("wt-placement-clear", {
         detail: { tableId: "t1" },
         bubbles: true,
         composed: true,

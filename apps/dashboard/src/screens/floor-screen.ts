@@ -482,7 +482,7 @@ export class FloorScreen extends LitElement {
   // `errorKey` banner (a `placement.invalid` mapped to localised copy) rather than being swallowed — the
   // dashboard SURFACES the fault, where the till reconciles silently.
 
-  /** Persist a canvas placement edit (`placement-change`) via the management route, then reload only the
+  /** Persist a canvas placement edit (`wt-placement-change`) via the management route, then reload only the
    * tables (a placement cannot change the zone list — see {@link #loadTables}). A rejection (e.g.
    * `placement.invalid`, `zone.not_found`) becomes the `errorKey` banner. */
   async #setPlacement(detail: PlacementChange): Promise<void> {
@@ -501,7 +501,7 @@ export class FloorScreen extends LitElement {
     void this.#setPlacement((event as CustomEvent<PlacementChange>).detail);
   }
 
-  /** Un-place a table (the canvas's `placement-clear`) via the management route, then reload only the
+  /** Un-place a table (the canvas's `wt-placement-clear`) via the management route, then reload only the
    * tables (a placement cannot change the zone list — see {@link #loadTables}). */
   async #clearTablePlacement(tableId: string): Promise<void> {
     this.errorKey = null;
@@ -683,8 +683,8 @@ export class FloorScreen extends LitElement {
             .tables=${placed.map((tbl) => this.#toFloorTable(tbl))}
             .editable=${true}
             .copy=${this.#canvasCopy()}
-            @placement-change=${(e: Event) => this.#onPlacementChange(e)}
-            @placement-clear=${(e: Event) => this.#onPlacementClear(e)}
+            @wt-placement-change=${(e: Event) => this.#onPlacementChange(e)}
+            @wt-placement-clear=${(e: Event) => this.#onPlacementClear(e)}
           ></wt-floor-canvas>
           ${
             unplaced.length > 0

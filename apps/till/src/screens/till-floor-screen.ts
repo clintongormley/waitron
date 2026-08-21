@@ -40,8 +40,8 @@ import type { FloorZone, TableState, TillApi } from "../api/client.js";
  *    The default when the active zone has no placed table.
  *
  * A manager (an operator holding `till.configure`, surfaced as {@link canEdit}) also gets an "Editar
- * plano" toggle: entering edit mode passes `.editable` to the canvas, whose `placement-change` /
- * `placement-clear` this screen persists through the ON-TILL route ({@link TillApi.setTablePlacement} /
+ * plano" toggle: entering edit mode passes `.editable` to the canvas, whose `wt-placement-change` /
+ * `wt-placement-clear` this screen persists through the ON-TILL route ({@link TillApi.setTablePlacement} /
  * {@link TillApi.clearPlacement}) and then asks the app to refresh. Client hiding is convenience only —
  * the server re-checks the gate (FP-2 Task 4).
  *
@@ -238,16 +238,18 @@ export class TillFloorScreen extends LitElement {
   @property({ attribute: false }) tables: TableState[] = [];
   /**
    * The HTTP face of the till (FP-2), threaded from the app — used ONLY in edit mode, to persist a
-   * canvas `placement-change` / `placement-clear` through the on-till route. Optional: the view-only
+   * canvas `wt-placement-change` / `wt-placement-clear` through the on-till route. Optional: the view-only
    * floor (and every FP-1 test) never touches it, so it may be absent, and the placement handlers
    * no-op when it is.
    */
   @property({ attribute: false }) api?: TillApi;
   /**
    * Whether the operator may edit the plan — true iff they hold `till.configure` (a manager/admin,
-   * spec §3). Threaded from the app (which owns the role→permission mapping, mirroring the server's
-   * `authorize(till.configure)` gate). Gates the "Editar plano" toggle's visibility ONLY; the server
-   * re-checks the gate on every placement write (FP-2 Task 4), so this is convenience, not security.
+   * spec §3). Threaded from the app, which sets it from the session's SERVER-COMPUTED
+   * `canConfigureTill` capability (`till-api.ts` derives it via `roleHasPermission`; the client no
+   * longer mirrors a role→permission table, which would silently drift from the server's `permissions.ts`).
+   * Gates the "Editar plano" toggle's visibility ONLY; the server re-checks the gate on every placement
+   * write (FP-2 Task 4), so this is convenience, not security.
    */
   @property({ attribute: false }) canEdit = false;
 
@@ -302,10 +304,10 @@ export class TillFloorScreen extends LitElement {
   }
 
   /**
-   * The shared canvas emits `open-table { tableId }` only (it has no read-model). Stop that terse event
-   * and re-emit the FP-1 `open-table { tableId, hasOpenTab }` from THIS screen, resolving `hasOpenTab`
-   * from the read-model — so the app resumes an existing tab rather than minting a second one on an
-   * occupied table.
+   * The shared canvas emits `wt-open-table { tableId }` only (it has no read-model). Stop that terse
+   * event and re-emit the FP-1 `open-table { tableId, hasOpenTab }` from THIS screen (the app-facing
+   * event, unprefixed), resolving `hasOpenTab` from the read-model — so the app resumes an existing tab
+   * rather than minting a second one on an occupied table.
    */
   #onCanvasOpen(event: Event): void {
     event.stopPropagation();
@@ -333,7 +335,7 @@ export class TillFloorScreen extends LitElement {
     this.#requestFloorRefresh();
   }
 
-  /** Un-place a table (the canvas's `placement-clear`) via {@link TillApi.clearPlacement}, then refresh.
+  /** Un-place a table (the canvas's `wt-placement-clear`) via {@link TillApi.clearPlacement}, then refresh.
    * Same swallow-and-reconcile shape as {@link #onPlacementChange}. */
   async #onPlacementClear(event: Event): Promise<void> {
     event.stopPropagation();
@@ -447,8 +449,8 @@ export class TillFloorScreen extends LitElement {
   /**
    * The MAP view: the shared `<wt-floor-canvas>` drawing the PLACED tables, with the active zone's
    * UNPLACED tables in a tray strip beneath. Both sets are derived ONCE in {@link render} and passed in
-   * (never recomputed here). `placement-change` / `placement-clear` are persisted here; a canvas
-   * `open-table` is re-emitted with the resolved `hasOpenTab` ({@link #onCanvasOpen}).
+   * (never recomputed here). `wt-placement-change` / `wt-placement-clear` are persisted here; a canvas
+   * `wt-open-table` is re-emitted as `open-table` with the resolved `hasOpenTab` ({@link #onCanvasOpen}).
    */
   #map(
     placed: (TableState & { posX: number; posY: number })[],
@@ -460,9 +462,9 @@ export class TillFloorScreen extends LitElement {
           .tables=${placed.map((table) => this.#toFloorTable(table))}
           .editable=${this.editing}
           .copy=${this.#canvasCopy()}
-          @open-table=${(event: Event) => this.#onCanvasOpen(event)}
-          @placement-change=${(event: Event) => void this.#onPlacementChange(event)}
-          @placement-clear=${(event: Event) => void this.#onPlacementClear(event)}
+          @wt-open-table=${(event: Event) => this.#onCanvasOpen(event)}
+          @wt-placement-change=${(event: Event) => void this.#onPlacementChange(event)}
+          @wt-placement-clear=${(event: Event) => void this.#onPlacementClear(event)}
         ></wt-floor-canvas>
         ${
           unplaced.length > 0
